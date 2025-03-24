@@ -6,8 +6,8 @@ import { format } from 'date-fns';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
-import { getAllUsers, updateUser, deleteUser } from '@/lib/firebaseService';
-import { User } from '@/types';
+import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo } from '@/lib/firebaseService';
+import { User, JobCode } from '@/types';
 
 export default function UserManage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -17,6 +17,14 @@ export default function UserManage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<User>>({});
+  const [userJobCodes, setUserJobCodes] = useState<JobCode[]>([]);
+  const [allJobCodes, setAllJobCodes] = useState<JobCode[]>([]);
+  const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
+  const [selectedJobCodeId, setSelectedJobCodeId] = useState<string>('');
+  const [allGenerations, setAllGenerations] = useState<string[]>([]);
+  const [selectedGeneration, setSelectedGeneration] = useState<string>('');
+  const [filteredJobCodes, setFilteredJobCodes] = useState<JobCode[]>([]);
+  const [showUserList, setShowUserList] = useState(true);
 
   // 사용자 목록 불러오기
   useEffect(() => {
@@ -53,10 +61,47 @@ export default function UserManage() {
     setFilteredUsers(filtered);
   }, [searchTerm, users]);
 
+  // 화면 너비에 따라 사용자 목록 표시 여부 결정
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) { // md 브레이크포인트
+        setShowUserList(true);
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    handleResize(); // 초기 로드 시 실행
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
   // 사용자 선택 핸들러
-  const handleSelectUser = (user: User) => {
+  const handleSelectUser = async (user: User) => {
     setSelectedUser(user);
     setIsEditing(false);
+    
+    // 모바일에서는 사용자 선택 시 목록 숨기기
+    if (window.innerWidth < 768) {
+      setShowUserList(false);
+    }
+    
+    // 사용자의 직무 경험 정보 로드
+    if (user.jobExperiences && user.jobExperiences.length > 0) {
+      setIsLoadingJobCodes(true);
+      try {
+        const jobCodesInfo = await getUserJobCodesInfo(user.jobExperiences);
+        setUserJobCodes(jobCodesInfo);
+      } catch (error) {
+        console.error('직무 경험 정보 로드 오류:', error);
+        toast.error('직무 경험 정보를 불러오는 중 오류가 발생했습니다.');
+      } finally {
+        setIsLoadingJobCodes(false);
+      }
+    } else {
+      setUserJobCodes([]);
+    }
   };
 
   // 사용자 편집 모드 시작
@@ -130,6 +175,140 @@ export default function UserManage() {
     }
   };
 
+  // 모든 직무 코드 로드 (수정)
+  useEffect(() => {
+    const loadAllJobCodes = async () => {
+      try {
+        const codes = await getAllJobCodes();
+        setAllJobCodes(codes);
+        
+        // 모든 generation 추출 (중복 제거 및 정렬)
+        const generations = Array.from(new Set(codes.map(code => code.generation)));
+        // 정렬 (예: G25, G24, ... 내림차순)
+        generations.sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, ''));
+          const numB = parseInt(b.replace(/\D/g, ''));
+          return numB - numA; // 내림차순 정렬
+        });
+        
+        setAllGenerations(generations);
+      } catch (error) {
+        console.error('직무 코드 로드 오류:', error);
+      }
+    };
+    
+    loadAllJobCodes();
+  }, []);
+
+  // 선택된 generation이 변경될 때 코드 필터링
+  useEffect(() => {
+    if (!selectedGeneration) {
+      setFilteredJobCodes([]);
+      return;
+    }
+    
+    const filtered = allJobCodes.filter(code => code.generation === selectedGeneration);
+    
+    // 코드 기준으로 정렬
+    filtered.sort((a, b) => {
+      if (a.code < b.code) return -1;
+      if (a.code > b.code) return 1;
+      return 0;
+    });
+    
+    setFilteredJobCodes(filtered);
+    setSelectedJobCodeId(''); // 선택 초기화
+  }, [selectedGeneration, allJobCodes]);
+
+  // 직무 경험 추가 핸들러
+  const handleAddJobExperience = async () => {
+    if (!selectedUser || !selectedJobCodeId) return;
+    
+    // 이미 가지고 있는 경험인지 확인
+    if (selectedUser.jobExperiences.includes(selectedJobCodeId)) {
+      toast.error('이미 등록된 직무 경험입니다.');
+      return;
+    }
+    
+    try {
+      // 새 경험 배열 생성
+      const updatedExperiences = [...selectedUser.jobExperiences, selectedJobCodeId];
+      
+      // 사용자 정보 업데이트
+      await updateUser(selectedUser.userId, { jobExperiences: updatedExperiences });
+      
+      // 추가된 직무 정보 가져오기
+      const addedJobCode = allJobCodes.find(code => code.id === selectedJobCodeId);
+      
+      if (addedJobCode) {
+        // 로컬 상태 업데이트
+        setUserJobCodes(prev => [...prev, addedJobCode]);
+        
+        // users 배열 업데이트
+        setUsers(prevUsers => 
+          prevUsers.map(user => 
+            user.userId === selectedUser.userId 
+              ? { ...user, jobExperiences: updatedExperiences } 
+              : user
+          )
+        );
+        
+        // selectedUser 업데이트
+        setSelectedUser({
+          ...selectedUser,
+          jobExperiences: updatedExperiences
+        });
+        
+        toast.success('직무 경험이 추가되었습니다.');
+        setSelectedJobCodeId(''); // 선택 초기화
+      }
+    } catch (error) {
+      console.error('직무 경험 추가 오류:', error);
+      toast.error('직무 경험 추가 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 직무 경험 삭제 핸들러
+  const handleRemoveJobExperience = async (jobCodeId: string) => {
+    if (!selectedUser) return;
+    
+    try {
+      // 삭제 후 남은 경험 배열 생성
+      const updatedExperiences = selectedUser.jobExperiences.filter(id => id !== jobCodeId);
+      
+      // 사용자 정보 업데이트
+      await updateUser(selectedUser.userId, { jobExperiences: updatedExperiences });
+      
+      // 로컬 상태 업데이트
+      setUserJobCodes(prev => prev.filter(code => code.id !== jobCodeId));
+      
+      // users 배열 업데이트
+      setUsers(prevUsers => 
+        prevUsers.map(user => 
+          user.userId === selectedUser.userId 
+            ? { ...user, jobExperiences: updatedExperiences } 
+            : user
+        )
+      );
+      
+      // selectedUser 업데이트
+      setSelectedUser({
+        ...selectedUser,
+        jobExperiences: updatedExperiences
+      });
+      
+      toast.success('직무 경험이 삭제되었습니다.');
+    } catch (error) {
+      console.error('직무 경험 삭제 오류:', error);
+      toast.error('직무 경험 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 뒤로 가기 핸들러
+  const handleBackToList = () => {
+    setShowUserList(true);
+  };
+
   // 날짜 포맷팅 함수
   const formatDate = (timestamp: { seconds: number } | undefined) => {
     if (!timestamp) return '-';
@@ -138,12 +317,12 @@ export default function UserManage() {
 
   return (
     <Layout requireAuth requireAdmin>
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">사용자 관리</h1>
+          <h1 className="text-xl md:text-2xl font-bold">사용자 관리</h1>
         </div>
 
-        <div className="mb-6">
+        <div className={`${showUserList ? 'block' : 'hidden md:block'} mb-6`}>
           <div className="relative">
             <input
               type="text"
@@ -169,9 +348,9 @@ export default function UserManage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:grid md:grid-cols-3 md:gap-6">
             {/* 사용자 목록 */}
-            <div className="md:col-span-1">
+            <div className={`md:col-span-1 ${showUserList ? 'block' : 'hidden md:block'}`}>
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <div className="p-4 border-b flex justify-between items-center">
                   <h2 className="font-medium text-gray-900">사용자 목록</h2>
@@ -183,7 +362,7 @@ export default function UserManage() {
                     {searchTerm ? '검색 결과가 없습니다.' : '사용자가 없습니다.'}
                   </div>
                 ) : (
-                  <div className="divide-y overflow-y-auto max-h-[600px]">
+                  <div className="divide-y overflow-y-auto max-h-[calc(100vh-250px)]">
                     {filteredUsers.map((user) => (
                       <div 
                         key={user.userId}
@@ -204,11 +383,11 @@ export default function UserManage() {
                               <span className="text-gray-500">{user.name.charAt(0)}</span>
                             </div>
                           )}
-                          <div>
-                            <h3 className="font-medium text-gray-900">{user.name}</h3>
-                            <p className="text-sm text-gray-500">{user.email || user.phoneNumber}</p>
-                            <div className="flex items-center mt-1">
-                              <span className={`px-2 py-0.5 text-xs rounded-full ${
+                          <div className="flex-grow min-w-0">
+                            <h3 className="font-medium text-gray-900 truncate">{user.name}</h3>
+                            <p className="text-sm text-gray-500 truncate">{user.email || user.phoneNumber}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                 user.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
                                 'bg-gray-100 text-gray-800'
@@ -216,7 +395,7 @@ export default function UserManage() {
                                 {user.role === 'admin' ? '관리자' : 
                                  user.role === 'mentor' ? '멘토' : '사용자'}
                               </span>
-                              <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 user.status === 'active' ? 'bg-green-100 text-green-800' :
                                 user.status === 'inactive' ? 'bg-red-100 text-red-800' :
                                 'bg-yellow-100 text-yellow-800'
@@ -235,14 +414,27 @@ export default function UserManage() {
             </div>
 
             {/* 사용자 상세 정보 */}
-            <div className="md:col-span-2">
+            <div className={`md:col-span-2 ${showUserList ? 'hidden md:block' : 'block'}`}>
               {selectedUser ? (
                 <div className="bg-white rounded-lg shadow">
+                  {/* 모바일에서만 보이는 뒤로가기 버튼 */}
+                  <div className="md:hidden p-4 border-b">
+                    <button
+                      className="flex items-center text-blue-600"
+                      onClick={handleBackToList}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                      </svg>
+                      사용자 목록으로
+                    </button>
+                  </div>
+                  
                   {isEditing ? (
-                    // 편집 폼
-                    <div className="p-6">
+                    // 편집 폼 - 모바일 최적화
+                    <div className="p-4 md:p-6">
                       <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-gray-900">사용자 정보 편집</h2>
+                        <h2 className="text-lg md:text-xl font-bold text-gray-900">사용자 정보 편집</h2>
                         <div className="flex gap-2">
                           <Button
                             variant="secondary"
@@ -330,9 +522,9 @@ export default function UserManage() {
                       </div>
                     </div>
                   ) : (
-                    // 상세 정보 보기
-                    <div className="p-6">
-                      <div className="flex justify-between items-start mb-6">
+                    // 상세 정보 보기 - 모바일 최적화
+                    <div className="p-4 md:p-6">
+                      <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-6 gap-4">
                         <div className="flex items-center">
                           {selectedUser.profileImage ? (
                             <img 
@@ -345,10 +537,10 @@ export default function UserManage() {
                               <span className="text-gray-500 text-xl">{selectedUser.name.charAt(0)}</span>
                             </div>
                           )}
-                          <div>
-                            <h2 className="text-xl font-bold text-gray-900">{selectedUser.name}</h2>
-                            <div className="flex items-center mt-1">
-                              <span className={`px-2 py-0.5 text-xs rounded-full ${
+                          <div className="min-w-0">
+                            <h2 className="text-xl font-bold text-gray-900 truncate">{selectedUser.name}</h2>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                 selectedUser.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
                                 'bg-gray-100 text-gray-800'
@@ -356,7 +548,7 @@ export default function UserManage() {
                                 {selectedUser.role === 'admin' ? '관리자' : 
                                  selectedUser.role === 'mentor' ? '멘토' : '사용자'}
                               </span>
-                              <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.status === 'active' ? 'bg-green-100 text-green-800' :
                                 selectedUser.status === 'inactive' ? 'bg-red-100 text-red-800' :
                                 'bg-yellow-100 text-yellow-800'
@@ -367,7 +559,7 @@ export default function UserManage() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 self-end md:self-start">
                           <Button
                             variant="secondary"
                             size="sm"
@@ -388,7 +580,7 @@ export default function UserManage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 border-t pt-4">
                         <div>
                           <p className="text-sm text-gray-500">이메일</p>
-                          <p className="text-gray-900">{selectedUser.email || '-'}</p>
+                          <p className="text-gray-900 break-words">{selectedUser.email || '-'}</p>
                         </div>
                         <div>
                           <p className="text-sm text-gray-500">전화번호</p>
@@ -396,7 +588,7 @@ export default function UserManage() {
                         </div>
                         <div className="md:col-span-2">
                           <p className="text-sm text-gray-500">주소</p>
-                          <p className="text-gray-900">
+                          <p className="text-gray-900 break-words">
                             {selectedUser.address ? `${selectedUser.address} ${selectedUser.addressDetail || ''}` : '-'}
                           </p>
                         </div>
@@ -425,12 +617,109 @@ export default function UserManage() {
                           </p>
                         </div>
                       </div>
+
+                      {/* 직무 경험 섹션 - 모바일 최적화 */}
+                      <div className="mt-4 border-t pt-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <p className="text-sm text-gray-500">직무 경험</p>
+                        </div>
+                        
+                        {isLoadingJobCodes ? (
+                          <div className="py-2">
+                            <div className="animate-pulse h-4 bg-gray-200 rounded w-24"></div>
+                          </div>
+                        ) : userJobCodes.length === 0 ? (
+                          <p className="text-gray-500">등록된 직무 경험이 없습니다.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            {userJobCodes.map(jobCode => (
+                              <div key={jobCode.id} className="flex items-center bg-blue-50 text-blue-800 px-3 py-1 rounded-full text-sm max-w-full group relative">
+                                <span className="truncate mr-1" title={`${jobCode.generation} ${jobCode.code} - ${jobCode.name}`}>
+                                  {jobCode.generation} {jobCode.code} - {jobCode.name}
+                                </span>
+                                <button
+                                  onClick={() => handleRemoveJobExperience(jobCode.id!)}
+                                  className="ml-auto flex-shrink-0 text-blue-600 hover:text-blue-800 focus:outline-none"
+                                  aria-label="직무 경험 삭제"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                                {/* 모바일에서 호버 시 전체 텍스트 보기 */}
+                                <div className="absolute hidden group-hover:block left-0 bottom-full mb-1 bg-gray-800 text-white p-2 rounded text-xs whitespace-normal max-w-xs z-10">
+                                  {jobCode.generation} {jobCode.code} - {jobCode.name}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* 직무 경험 추가 UI - 모바일 최적화 */}
+                        <div className="flex flex-col gap-2 mt-3">
+                          {/* 기수 선택 */}
+                          <div className="w-full">
+                            <select
+                              value={selectedGeneration}
+                              onChange={(e) => setSelectedGeneration(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">기수 선택...</option>
+                              {allGenerations.map(gen => (
+                                <option key={gen} value={gen}>
+                                  {gen}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          {/* 직무 코드 선택 및 추가 버튼 */}
+                          <div className="flex gap-2">
+                            <select
+                              value={selectedJobCodeId}
+                              onChange={(e) => setSelectedJobCodeId(e.target.value)}
+                              className="flex-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-ellipsis"
+                              disabled={!selectedGeneration || filteredJobCodes.length === 0}
+                              style={{ maxWidth: 'calc(100% - 70px)', textOverflow: 'ellipsis' }}
+                            >
+                              <option value="">직무 코드 선택...</option>
+                              {filteredJobCodes.map(jobCode => (
+                                <option 
+                                  key={jobCode.id} 
+                                  value={jobCode.id}
+                                  title={`${jobCode.code} - ${jobCode.name}`} // 툴크으로 전체 텍스트 표시
+                                >
+                                  {jobCode.code} - {jobCode.name}
+                                </option>
+                              ))}
+                            </select>
+                            
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handleAddJobExperience}
+                              disabled={!selectedJobCodeId}
+                              className="whitespace-nowrap"
+                            >
+                              추가
+                            </Button>
+                          </div>
+                          
+                          {filteredJobCodes.length === 0 && selectedGeneration && (
+                            <p className="text-sm text-gray-500">선택한 기수에 해당하는 직무가 없습니다.</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="bg-white rounded-lg shadow p-10 text-center">
-                  <p className="text-gray-500">좌측에서 사용자를 선택해 주세요.</p>
+                <div className="bg-white rounded-lg shadow p-6 md:p-10 text-center">
+                  <p className="text-gray-500">
+                    {window.innerWidth < 768 ? 
+                      "사용자를 선택해 주세요." : 
+                      "좌측에서 사용자를 선택해 주세요."}
+                  </p>
                 </div>
               )}
             </div>

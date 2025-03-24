@@ -403,7 +403,8 @@ export default function JobGenerate() {
                         <div>
                           <h3 className="font-medium text-gray-900">{jobCode.name}</h3>
                           <p className="text-sm text-gray-500 mt-1">
-                            {jobCode.generation} - {jobCode.code}
+                            {/* {jobCode.generation} */}
+                            {jobCode.code}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
                             {formatDate(jobCode.startDate)} ~ {formatDate(jobCode.endDate)}
