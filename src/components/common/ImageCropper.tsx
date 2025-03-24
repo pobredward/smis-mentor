@@ -7,6 +7,7 @@ interface ImageCropperProps {
   file: File;
   onCropComplete: (croppedFile: File) => void;
   onCancel: () => void;
+  aspectRatio?: number; // 추가: 가로세로 비율(기본값: 1)
 }
 
 // 이미지가 로드될 때 초기 크롭 영역 계산
@@ -163,7 +164,8 @@ async function getCroppedImg(
 const ImageCropper: React.FC<ImageCropperProps> = ({ 
   file, 
   onCropComplete, 
-  onCancel 
+  onCancel,
+  aspectRatio = 1 // 기본값 1 (정사각형)
 }) => {
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -217,15 +219,15 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     // 이미지 정보 출력
     console.log('Image loaded:', { width, height });
     
-    // 1:1 비율 강제 적용 (정사각형)
-    const newCrop = centerAspectCrop(width, height, 1);
+    // aspectRatio 프로퍼티 사용
+    const newCrop = centerAspectCrop(width, height, aspectRatio);
     setCrop(newCrop);
     setCompletedCrop({
       unit: 'px',
       x: newCrop.x,
       y: newCrop.y,
       width: newCrop.width,
-      height: newCrop.width, // 정사각형 유지
+      height: newCrop.width / aspectRatio, // aspectRatio 적용
     } as PixelCrop);
   }
   
@@ -264,7 +266,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
                 crop={crop}
                 onChange={(percentCrop) => setCrop(percentCrop)}
                 onComplete={(c) => setCompletedCrop(c)}
-                aspect={1} // 항상 1:1 비율 적용 (정사각형)
+                aspect={aspectRatio} // aspectRatio 프로퍼티 사용
                 circularCrop={false}
                 keepSelection={true}
                 className="max-h-[400px] mx-auto"
