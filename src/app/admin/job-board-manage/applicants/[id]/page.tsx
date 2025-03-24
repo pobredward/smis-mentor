@@ -109,8 +109,8 @@ export default function ApplicantsManage({ params }: { params: Promise<{ id: str
       
       // 면접 상태가 pending으로 변경될 때 기본 면접 정보를 자동으로 적용
       if (field === 'interviewStatus' && value === 'pending' && jobBoard) {
-        const updateData: Record<string, any> = { 
-          [field]: value 
+        const updateData: Partial<ApplicationHistory> = { 
+          [field]: value as 'pending'
         };
         
         // 공고에 저장된 기본 면접 정보가 있으면 적용
@@ -141,7 +141,7 @@ export default function ApplicantsManage({ params }: { params: Promise<{ id: str
                   interviewLink: updateData.interviewLink,
                   interviewDuration: updateData.interviewDuration,
                   interviewNote: updateData.interviewNote
-                } 
+                } as ApplicationWithUser
               : app
           )
         );
@@ -154,7 +154,7 @@ export default function ApplicantsManage({ params }: { params: Promise<{ id: str
               interviewLink: updateData.interviewLink,
               interviewDuration: updateData.interviewDuration,
               interviewNote: updateData.interviewNote
-            } : null
+            } as ApplicationWithUser : null
           );
         }
       } else {

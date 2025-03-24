@@ -101,7 +101,7 @@ export default function SignUpDetails() {
       
       if (existingUser && existingUser.status === 'temp') {
         // Firebase Auth에 사용자 등록
-        const userCredential = await signUp(email, decodeURIComponent(password));
+        // const userCredential = await signUp(email, decodeURIComponent(password));
         
         const now = Timestamp.now();
         
@@ -127,7 +127,7 @@ export default function SignUpDetails() {
         router.push('/');
       } else {
         // 임시 사용자가 없는 경우 새 사용자 생성
-        const userCredential = await signUp(email, decodeURIComponent(password));
+        // const userCredential = await signUp(email, decodeURIComponent(password));
 
         const now = Timestamp.now();
 
