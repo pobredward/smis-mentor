@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import DaumPostcode, { Address } from 'react-daum-postcode';
 import toast from 'react-hot-toast';
-import { signUp, getUserByPhone, updateUser, createUser } from '@/lib/firebaseService';
+import { getUserByPhone, updateUser, createUser } from '@/lib/firebaseService';
 import { getUserInfoFromRRN } from '@/utils/userUtils';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
