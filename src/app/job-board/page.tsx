@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
+// import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
-import Button from '@/components/common/Button';
+// import Button from '@/components/common/Button';
 import { getActiveJobBoards } from '@/lib/firebaseService';
 import { JobBoard } from '@/types';
 
@@ -17,7 +17,7 @@ type JobBoardWithId = JobBoard & { id: string };
 export default function JobBoardList() {
   const [jobBoards, setJobBoards] = useState<JobBoardWithId[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { userData } = useAuth();
+  // const { userData } = useAuth();
   const router = useRouter();
 
   // 공고 목록 불러오기
