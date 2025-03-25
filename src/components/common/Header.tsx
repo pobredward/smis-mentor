@@ -53,7 +53,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            {/* 햄버거 메뉴 버튼 (모바일) - 왼쪽으로 이동 */}
+            {/* 햄버거 메뉴 버튼 (모바일) */}
             <button
               className="md:hidden hamburger-button p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -73,29 +73,41 @@ export default function Header() {
                 />
               </svg>
             </button>
+            
+            {/* 왼쪽 네비게이션 - 공고 목록 */}
+            <nav className="hidden md:flex items-center ml-4">
+              <Link href="/job-board" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
+                공고 목록
+              </Link>
+            </nav>
           </div>
           
-          {/* 데스크탑 네비게이션 */}
-          <nav className="hidden md:flex items-center space-x-4">
-            <Link href="/job-board" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-              공고 목록
+          {/* 가운데 로고 */}
+          <div className="flex items-center justify-center">
+            <Link href="/" className="text-xl font-bold text-blue-600">
+              SMIS
             </Link>
-            {userData?.role === 'admin' && (
-              <Link href="/admin" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                관리자 대시보드
-              </Link>
-            )}
-            {currentUser && userData?.role !== 'admin' && (
-              <Link href="/profile/job-apply" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                지원 현황
-              </Link>
-            )}
-          </nav>
+          </div>
           
+          {/* 오른쪽 영역 - 로그인 관련 */}
           <div className="flex items-center">
+            {/* 관리자 메뉴 */}
+            <nav className="hidden md:flex items-center">
+              {userData?.role === 'admin' && (
+                <Link href="/admin" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
+                  관리자
+                </Link>
+              )}
+              {currentUser && userData?.role !== 'admin' && (
+                <Link href="/profile/job-apply" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
+                  지원 현황
+                </Link>
+              )}
+            </nav>
+            
             {/* 프로필 아이콘 (로그인 상태일 때) */}
             {currentUser ? (
-              <div className="relative" ref={dropdownRef}>
+              <div className="relative ml-4" ref={dropdownRef}>
                 <button
                   onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
                   className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 focus:outline-none"

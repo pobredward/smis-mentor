@@ -96,9 +96,8 @@ export default function JobBoardList() {
                       {board.refGeneration}
                     </span>
                   </div>
-                  <h3 className="font-medium text-lg sm:text-xl text-gray-900 mb-2">{board.title}</h3>
-                  <p className="text-gray-500 text-sm mb-4 line-clamp-3">{board.description}</p>
-                  <div className="flex flex-col sm:flex-row justify-between text-sm mt-auto">
+                  <h3 className="font-medium text-lg sm:text-xl text-gray-900 mb-4">{board.title}</h3>
+                  <div className="flex flex-col sm:flex-row justify-between text-sm">
                     <div className="text-gray-500 mb-1 sm:mb-0">
                       면접 일정: {board.interviewDates.length}개
                     </div>

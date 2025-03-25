@@ -24,7 +24,9 @@ import {
   ref, 
   uploadBytesResumable, 
   getDownloadURL, 
-  deleteObject 
+  deleteObject,
+  getStorage,
+  uploadBytes
 } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
 import { User, JobCode, JobBoard, ApplicationHistory, JobExperience } from '@/types';
@@ -599,12 +601,15 @@ export const getUsersByJobCode = async (generation: string, code: string) => {
 
 // JobCode 관련 함수
 export const getAllJobCodes = async () => {
+  const querySnapshot = await getDocs(collection(db, 'jobCodes'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as JobCode }));
+};
+
+export const getJobCodeById = async (jobCodeId: string) => {
   try {
-    const querySnapshot = await getDocs(collection(db, 'jobCodes'));
-    return querySnapshot.docs.map(doc => ({ 
-      id: doc.id, 
-      ...doc.data() as JobCode 
-    }));
+    const jobCodeDoc = await getDoc(doc(db, 'jobCodes', jobCodeId));
+    if (!jobCodeDoc.exists()) return null;
+    return { id: jobCodeDoc.id, ...jobCodeDoc.data() as JobCode };
   } catch (error) {
     console.error('업무 코드 조회 실패:', error);
     throw error;
@@ -638,5 +643,23 @@ export const updateJobCode = async (jobCodeId: string, jobCodeData: Partial<JobC
   } catch (error) {
     console.error('업무 코드 업데이트 실패:', error);
     throw error;
+  }
+};
+
+// 이미지 업로드 함수
+export const uploadImage = async (file: File): Promise<string> => {
+  try {
+    const storage = getStorage();
+    const timestamp = Date.now();
+    const fileName = `job-board-images/${timestamp}_${file.name}`;
+    const storageRef = ref(storage, fileName);
+    
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    
+    return downloadURL;
+  } catch (error) {
+    console.error('이미지 업로드 오류:', error);
+    throw new Error('이미지 업로드에 실패했습니다.');
   }
 }; 

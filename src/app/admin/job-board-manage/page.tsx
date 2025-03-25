@@ -292,7 +292,7 @@ export default function JobBoardManage() {
           customInterviewDateAllowed: formData.customInterviewDateAllowed,
           refEduDates: eduDates,
           interviewBaseLink: formData.interviewBaseLink || undefined,
-          interviewBaseDuration,
+          interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
           interviewBaseNote: formData.interviewBaseNote || undefined
         }, 'admin');
         
@@ -309,7 +309,7 @@ export default function JobBoardManage() {
           customInterviewDateAllowed: formData.customInterviewDateAllowed,
           refEduDates: eduDates,
           interviewBaseLink: formData.interviewBaseLink || undefined,
-          interviewBaseDuration,
+          interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
           interviewBaseNote: formData.interviewBaseNote || undefined
         });
         

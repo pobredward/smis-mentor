@@ -20,6 +20,7 @@ import {
   updateJobBoard 
 } from '@/lib/firebaseService';
 import { JobCode, JobBoard } from '@/types';
+import RichTextEditor from '@/components/common/RichTextEditor';
 
 const jobBoardSchema = z.object({
   refJobCodeId: z.string().min(1, '업무 코드를 선택해주세요.'),
@@ -27,14 +28,15 @@ const jobBoardSchema = z.object({
   description: z.string().min(1, '설명을 입력해주세요.'),
   interviewDates: z.array(
     z.object({
-      date: z.string().min(1, '면접 날짜를 입력해주세요.')
+      date: z.string().min(1, '면접 날짜를 입력해주세요.'),
+      time: z.string().min(1, '면접 시간을 입력해주세요.')
     })
   ).min(1, '최소 하나 이상의 면접 날짜가 필요합니다.'),
   customInterviewDateAllowed: z.boolean(),
   interviewBaseLink: z.string().optional(),
   interviewBaseDuration: z.string().optional(),
   interviewBaseNote: z.string().optional(),
-  status: z.string().optional(),
+  status: z.enum(['active', 'closed']).optional(),
 });
 
 type JobBoardFormValues = z.infer<typeof jobBoardSchema>;
@@ -44,6 +46,8 @@ export default function JobBoardWrite() {
   const [isLoading, setIsLoading] = useState(false);
   const [jobBoards, setJobBoards] = useState<JobBoardWithId[]>([]);
   const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
+  const [selectedGeneration, setSelectedGeneration] = useState<string>('');
+  const [filteredJobCodes, setFilteredJobCodes] = useState<JobCode[]>([]);
   const [selectedJobCode, setSelectedJobCode] = useState<JobCode | null>(null);
   const [selectedJobBoard, setSelectedJobBoard] = useState<JobBoardWithId | null>(null);
   const [isCreating, setIsCreating] = useState(true);
@@ -58,11 +62,12 @@ export default function JobBoardWrite() {
     control, 
     watch, 
     reset,
+    setValue,
     formState: { errors } 
   } = useForm<JobBoardFormValues>({
     resolver: zodResolver(jobBoardSchema),
     defaultValues: {
-      interviewDates: [{ date: '' }],
+      interviewDates: [{ date: '', time: '' }],
       customInterviewDateAllowed: false,
       status: 'active'
     }
@@ -75,6 +80,15 @@ export default function JobBoardWrite() {
 
   const selectedJobCodeId = watch('refJobCodeId');
 
+  // 기수 선택 핸들러
+  const handleGenerationChange = (generation: string) => {
+    setSelectedGeneration(generation);
+    const filtered = jobCodes.filter(code => code.generation === generation);
+    setFilteredJobCodes(filtered);
+    setValue('refJobCodeId', ''); // 업무 선택 초기화
+    setSelectedJobCode(null);
+  };
+
   // 업무 코드 및 공고 목록 불러오기
   useEffect(() => {
     const loadData = async () => {
@@ -84,6 +98,20 @@ export default function JobBoardWrite() {
         // 업무 코드 로드
         const codes = await getAllJobCodes();
         setJobCodes(codes);
+        
+        // 기수 목록 생성 (내림차순 정렬)
+        const generations = Array.from(new Set(codes.map(code => code.generation)))
+          .sort((a, b) => {
+            // G25, G24와 같은 형식일 경우 숫자만 추출하여 비교
+            const numA = parseInt(a.replace(/\D/g, ''));
+            const numB = parseInt(b.replace(/\D/g, ''));
+            return numB - numA;
+          });
+
+        if (generations.length > 0) {
+          setSelectedGeneration(generations[0]);
+          setFilteredJobCodes(codes.filter(code => code.generation === generations[0]));
+        }
         
         // 공고 목록 로드
         const boards = await getAllJobBoards();
@@ -131,7 +159,7 @@ export default function JobBoardWrite() {
       refJobCodeId: '',
       title: '',
       description: '',
-      interviewDates: [{ date: '' }],
+      interviewDates: [{ date: '', time: '' }],
       customInterviewDateAllowed: false,
       interviewBaseLink: '',
       interviewBaseDuration: '',
@@ -146,17 +174,21 @@ export default function JobBoardWrite() {
     setIsCreating(false);
     setShowForm(true);
     
-    // 면접 날짜를 문자열로 변환
-    const interviewDatesStrings = jobBoard.interviewDates.map(timestamp => 
-      formatDate(timestamp).split('T')[0]
-    );
+    // 면접 날짜를 날짜와 시간으로 분리
+    const interviewDatesFormatted = jobBoard.interviewDates.map(timestamp => {
+      const date = timestamp.toDate();
+      return {
+        date: format(date, 'yyyy-MM-dd'),
+        time: format(date, 'HH:mm')
+      };
+    });
     
     // 폼 값 설정
     reset({
       refJobCodeId: jobBoard.refJobCodeId,
       title: jobBoard.title,
       description: jobBoard.description,
-      interviewDates: interviewDatesStrings.map(date => ({ date })),
+      interviewDates: interviewDatesFormatted,
       customInterviewDateAllowed: jobBoard.customInterviewDateAllowed,
       interviewBaseLink: jobBoard.interviewBaseLink || '',
       interviewBaseDuration: jobBoard.interviewBaseDuration !== undefined ? String(jobBoard.interviewBaseDuration) : '',
@@ -175,71 +207,64 @@ export default function JobBoardWrite() {
       return;
     }
 
+    if (!selectedJobCode) {
+      toast.error('유효한 업무 코드를 선택해주세요.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // 선택된 JobCode 정보 가져오기
-      if (!selectedJobCode) {
-        toast.error('유효한 업무 코드를 선택해주세요.');
-        setIsLoading(false);
-        return;
-      }
-
-      // 날짜 변환
-      const interviewDates = data.interviewDates.map(d => Timestamp.fromDate(new Date(d.date)));
-      
-      // 교육 날짜 가져오기
-      const eduDates = selectedJobCode?.eduDates || [];
-      
-      // 면접 소요시간 숫자로 변환
-      const interviewBaseDuration = data.interviewBaseDuration && data.interviewBaseDuration !== '' 
-        ? parseInt(data.interviewBaseDuration, 10) 
-        : undefined;
+      // 면접 날짜와 시간을 Timestamp로 변환
+      const interviewDatesTimestamps = data.interviewDates
+        .filter(d => d.date && d.time) // 빈 날짜/시간 제거
+        .map(d => {
+          const [date] = d.date.split('T');
+          const combinedDateTime = `${date}T${d.time}:00`;
+          return Timestamp.fromDate(new Date(combinedDateTime));
+        });
 
       if (isCreating) {
         // 공고 생성
         await createJobBoard({
+          title: data.title,
+          description: data.description,
           refJobCodeId: data.refJobCodeId,
           refGeneration: selectedJobCode.generation,
           refCode: selectedJobCode.code,
-          title: data.title,
-          description: data.description,
           status: 'active',
-          interviewDates,
+          interviewDates: interviewDatesTimestamps,
           customInterviewDateAllowed: data.customInterviewDateAllowed,
-          refEduDates: eduDates,
-          interviewBaseLink: data.interviewBaseLink,
-          interviewBaseDuration,
-          interviewBaseNote: data.interviewBaseNote,
+          refEduDates: [],
+          interviewBaseLink: data.interviewBaseLink && data.interviewBaseLink.trim() !== '' ? data.interviewBaseLink : '',
+          interviewBaseDuration: data.interviewBaseDuration && data.interviewBaseDuration.trim() !== '' ? parseInt(data.interviewBaseDuration) : 0,
+          interviewBaseNote: data.interviewBaseNote && data.interviewBaseNote.trim() !== '' ? data.interviewBaseNote : ''
         }, currentUser.uid);
 
-        toast.success('공고가 성공적으로 생성되었습니다.');
-      } else if (selectedJobBoard) {
+        toast.success('공고가 성공적으로 등록되었습니다.');
+      } else {
         // 공고 수정
-        await updateJobBoard(selectedJobBoard.jobBoardId, {
+        if (!selectedJobBoard) {
+          toast.error('수정할 공고를 찾을 수 없습니다.');
+          return;
+        }
+
+        await updateJobBoard(selectedJobBoard.id, {
+          title: data.title,
+          description: data.description,
           refJobCodeId: data.refJobCodeId,
           refGeneration: selectedJobCode.generation,
           refCode: selectedJobCode.code,
-          title: data.title,
-          description: data.description,
-          status: data.status as 'active' | 'closed',
-          interviewDates,
+          status: data.status,
+          interviewDates: interviewDatesTimestamps,
           customInterviewDateAllowed: data.customInterviewDateAllowed,
-          refEduDates: eduDates,
-          interviewBaseLink: data.interviewBaseLink || undefined,
-          interviewBaseDuration,
-          interviewBaseNote: data.interviewBaseNote || undefined,
+          interviewBaseLink: data.interviewBaseLink && data.interviewBaseLink.trim() !== '' ? data.interviewBaseLink : '',
+          interviewBaseDuration: data.interviewBaseDuration && data.interviewBaseDuration.trim() !== '' ? parseInt(data.interviewBaseDuration) : 0,
+          interviewBaseNote: data.interviewBaseNote && data.interviewBaseNote.trim() !== '' ? data.interviewBaseNote : ''
         });
 
         toast.success('공고가 성공적으로 수정되었습니다.');
       }
-
-      // 리셋 및 새로고침
-      setShowForm(false);
-      setSelectedJobBoard(null);
-      router.refresh();
-      
-      // 페이지 데이터 새로고침
-      window.location.reload();
+      router.push('/admin/job-board-manage');
     } catch (error) {
       console.error('공고 저장 오류:', error);
       toast.error('공고 저장 중 오류가 발생했습니다.');
@@ -257,19 +282,25 @@ export default function JobBoardWrite() {
 
   // 날짜 입력 필드 추가
   const addInterviewDate = () => {
-    append({ date: '' });
+    append({ date: '', time: '' });
   };
 
-  // 날짜 포맷팅 함수
+  // 날짜 포맷팅 함수 (시간 포함)
   const formatDate = (timestamp: Timestamp) => {
     const date = timestamp.toDate();
-    return date.toISOString().split('T')[0];
+    return format(date, "yyyy-MM-dd'T'HH:mm", { locale: ko });
+  };
+
+  // 날짜만 포맷팅하는 함수
+  const formatDateOnly = (timestamp: Timestamp) => {
+    const date = timestamp.toDate();
+    return format(date, 'yyyy년 MM월 dd일 (EEE)', { locale: ko });
   };
 
   // 사용자 친화적인 날짜 포맷팅
   const formatReadableDate = (timestamp: Timestamp) => {
     const date = timestamp.toDate();
-    return format(date, 'yyyy년 MM월 dd일 (EEE)', { locale: ko });
+    return format(date, 'yyyy년 MM월 dd일 (EEE) HH:mm', { locale: ko });
   };
 
   return (
@@ -297,21 +328,47 @@ export default function JobBoardWrite() {
             
             <form onSubmit={handleSubmit(onSubmit)}>
               <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-medium mb-2">업무 선택</label>
-                <select
-                  {...register('refJobCodeId')}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">업무를 선택해주세요</option>
-                  {jobCodes.map((jobCode) => (
-                    <option key={jobCode.id} value={jobCode.id}>
-                      {jobCode.generation} - {jobCode.code} - {jobCode.name}
-                    </option>
-                  ))}
-                </select>
-                {errors.refJobCodeId && (
-                  <p className="mt-1 text-sm text-red-600">{errors.refJobCodeId.message}</p>
-                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">기수 선택</label>
+                    <select
+                      value={selectedGeneration}
+                      onChange={(e) => handleGenerationChange(e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {Array.from(new Set(jobCodes.map(code => code.generation)))
+                        .sort((a, b) => {
+                          const numA = parseInt(a.replace(/\D/g, ''));
+                          const numB = parseInt(b.replace(/\D/g, ''));
+                          return numB - numA;
+                        })
+                        .map((generation) => (
+                          <option key={generation} value={generation}>
+                            {generation}
+                          </option>
+                        ))
+                      }
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">업무 선택</label>
+                    <select
+                      {...register('refJobCodeId')}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">업무를 선택해주세요</option>
+                      {filteredJobCodes.map((jobCode) => (
+                        <option key={jobCode.id} value={jobCode.id}>
+                          {jobCode.code} - {jobCode.name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.refJobCodeId && (
+                      <p className="mt-1 text-sm text-red-600">{errors.refJobCodeId.message}</p>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {selectedJobCode && (
@@ -320,14 +377,14 @@ export default function JobBoardWrite() {
                   <p><span className="font-medium">기수:</span> {selectedJobCode.generation}</p>
                   <p><span className="font-medium">코드:</span> {selectedJobCode.code}</p>
                   <p><span className="font-medium">이름:</span> {selectedJobCode.name}</p>
-                  <p><span className="font-medium">기간:</span> {formatDate(selectedJobCode.startDate)} ~ {formatDate(selectedJobCode.endDate)}</p>
+                  <p><span className="font-medium">기간:</span> {formatDateOnly(selectedJobCode.startDate)} ~ {formatDateOnly(selectedJobCode.endDate)}</p>
                   <p><span className="font-medium">위치:</span> {selectedJobCode.location}</p>
                   <div>
                     <p className="font-medium">교육 날짜:</p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {selectedJobCode.eduDates.map((date, index) => (
                         <span key={index} className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded">
-                          {formatDate(date)}
+                          {formatDateOnly(date)}
                         </span>
                       ))}
                     </div>
@@ -360,12 +417,11 @@ export default function JobBoardWrite() {
 
               <div className="mb-4">
                 <label className="block text-gray-700 text-sm font-medium mb-2">공고 설명</label>
-                <textarea
-                  {...register('description')}
-                  rows={6}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <RichTextEditor
+                  content={watch('description')}
+                  onChange={(content) => setValue('description', content)}
                   placeholder="공고에 대한 상세 설명을 입력하세요"
-                ></textarea>
+                />
                 {errors.description && (
                   <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
                 )}
@@ -373,7 +429,7 @@ export default function JobBoardWrite() {
 
               <div className="mb-4">
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-gray-700 text-sm font-medium">면접 날짜</label>
+                  <label className="block text-gray-700 text-sm font-medium">면접 날짜 및 시간</label>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -386,11 +442,20 @@ export default function JobBoardWrite() {
                 
                 {fields.map((field, index) => (
                   <div key={field.id} className="flex gap-2 mb-2">
-                    <input
-                      type="date"
-                      {...register(`interviewDates.${index}.date`)}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    <div className="flex-1">
+                      <input
+                        type="date"
+                        {...register(`interviewDates.${index}.date`)}
+                        className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="time"
+                        {...register(`interviewDates.${index}.time`)}
+                        className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
                     {index > 0 && (
                       <button
                         type="button"
@@ -403,7 +468,7 @@ export default function JobBoardWrite() {
                   </div>
                 ))}
                 {errors.interviewDates && (
-                  <p className="mt-1 text-sm text-red-600">최소 하나 이상의 면접 날짜가 필요합니다.</p>
+                  <p className="mt-1 text-sm text-red-600">최소 하나 이상의 면접 날짜와 시간이 필요합니다.</p>
                 )}
               </div>
 
@@ -522,7 +587,7 @@ export default function JobBoardWrite() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleEditJobBoard(board)}
+                              onClick={() => router.push(`/job-board/${board.jobBoardId}?edit=true`)}
                             >
                               수정
                             </Button>
