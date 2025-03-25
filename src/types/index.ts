@@ -4,7 +4,10 @@ export type User = {
   userId: string;
   name: string;
   phoneNumber: string;
-  jobExperiences: string[];
+  jobExperiences: Array<{
+    id: string;
+    group: string;
+  }>;
   email: string;
   password: string;
   address: string;
@@ -35,6 +38,7 @@ export interface JobCode {
   startDate: Timestamp;
   endDate: Timestamp;
   location: string;
+  group?: string;
 }
 
 export type JobExperience = {

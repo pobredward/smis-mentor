@@ -7,6 +7,9 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getAllJobCodes, getUsersByJobCode } from '@/lib/firebaseService';
 import { JobCode, User } from '@/types';
+import { formatPhoneNumber } from '@/components/common/PhoneInput';
+
+type UserWithGroupInfo = User & { groupName?: string };
 
 export default function UserCheck() {
   const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
@@ -14,9 +17,35 @@ export default function UserCheck() {
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
   const [codesForGeneration, setCodesForGeneration] = useState<JobCode[]>([]);
   const [selectedCode, setSelectedCode] = useState<string>('');
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserWithGroupInfo[]>([]);
+  const [groupedUsers, setGroupedUsers] = useState<Record<string, UserWithGroupInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  
+  // 그룹 순서 정의
+  const groupOrder = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
+  
+  // 그룹 이름 매핑
+  const groupLabels: Record<string, string> = {
+    'junior': '주니어',
+    'middle': '미들',
+    'senior': '시니어',
+    'spring': '스프링',
+    'summer': '서머',
+    'autumn': '어텀',
+    'winter': '윈터'
+  };
+  
+  // 그룹 색상 매핑
+  const groupColors: Record<string, { bg: string, text: string }> = {
+    'junior': { bg: 'bg-green-100', text: 'text-green-800' },
+    'middle': { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+    'senior': { bg: 'bg-red-100', text: 'text-red-800' },
+    'spring': { bg: 'bg-blue-100', text: 'text-blue-800' },
+    'summer': { bg: 'bg-purple-100', text: 'text-purple-800' },
+    'autumn': { bg: 'bg-orange-100', text: 'text-orange-800' },
+    'winter': { bg: 'bg-pink-100', text: 'text-pink-800' }
+  };
   
   // 모든 JobCode 및 Generation 로드
   useEffect(() => {
@@ -74,18 +103,78 @@ export default function UserCheck() {
     }
   }, [selectedGeneration, jobCodes]);
 
-  // 선택된 기수와 코드에 따라 사용자 로드
+  // 선택된 기수와 코드에 따라 사용자 로드 및 그룹화
   useEffect(() => {
     const loadUsers = async () => {
       if (!selectedGeneration || !selectedCode) {
         setUsers([]);
+        setGroupedUsers({});
         return;
       }
       
       try {
         setIsLoading(true);
         const usersData = await getUsersByJobCode(selectedGeneration, selectedCode);
-        setUsers(usersData);
+        
+        // 각 사용자의 그룹 정보 가져오기
+        const enrichedUsers = await Promise.all(
+          usersData.map(async (user) => {
+            if (user.jobExperiences && user.jobExperiences.length > 0) {
+              try {
+                // jobExperiences에서 현재 선택된 코드에 해당하는 경험 찾기
+                let jobGroup = 'junior'; // 기본값
+                
+                // 새 형식 (객체 배열)인 경우
+                if (typeof user.jobExperiences[0] === 'object') {
+                  // 선택된 코드와 일치하는 경험 찾기
+                  const relevantExperience = user.jobExperiences.find(exp => {
+                    // jobCode 찾기
+                    const jobCode = jobCodes.find(code => 
+                      code.generation === selectedGeneration && 
+                      code.code === selectedCode
+                    );
+                    
+                    return jobCode && exp.id === jobCode.id;
+                  });
+                  
+                  if (relevantExperience && 'group' in relevantExperience) {
+                    jobGroup = relevantExperience.group;
+                  }
+                }
+                
+                // 그룹 이름 추가
+                return { ...user, groupName: jobGroup };
+              } catch (error) {
+                console.error('사용자 그룹 정보 로드 오류:', error);
+                return { ...user, groupName: 'junior' }; // 오류 시 기본값
+              }
+            }
+            
+            // 기본 그룹 할당
+            return { ...user, groupName: 'junior' };
+          })
+        );
+        
+        // 사용자를 그룹별로 정렬
+        const grouped: Record<string, UserWithGroupInfo[]> = {};
+        
+        // 그룹별 빈 배열 초기화
+        groupOrder.forEach(group => {
+          grouped[group] = [];
+        });
+        
+        // 사용자를 그룹별로 분류
+        enrichedUsers.forEach(user => {
+          const group = user.groupName || 'junior';
+          if (grouped[group]) {
+            grouped[group].push(user);
+          } else {
+            grouped['junior'].push(user); // 알 수 없는 그룹은 기본값으로
+          }
+        });
+        
+        setUsers(enrichedUsers);
+        setGroupedUsers(grouped);
       } catch (error) {
         console.error('사용자 로드 오류:', error);
         toast.error('사용자 정보를 불러오는 중 오류가 발생했습니다.');
@@ -95,7 +184,7 @@ export default function UserCheck() {
     };
 
     loadUsers();
-  }, [selectedGeneration, selectedCode]);
+  }, [selectedGeneration, selectedCode, jobCodes]);
 
   // 사용자 선택 핸들러 (모달 표시)
   const handleSelectUser = (user: User) => {
@@ -113,11 +202,58 @@ export default function UserCheck() {
     return format(new Date(timestamp.seconds * 1000), 'yyyy-MM-dd');
   };
 
+  // 사용자 카드 렌더링 함수
+  const renderUserCard = (user: UserWithGroupInfo) => (
+    <div
+      className="bg-white rounded-lg shadow overflow-hidden cursor-pointer transform transition hover:scale-105 flex flex-col"
+      onClick={() => handleSelectUser(user)}
+    >
+      <div className="aspect-square w-full bg-gray-200 relative">
+        {user.profileImage ? (
+          <img
+            src={user.profileImage}
+            alt={user.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+            <span className="text-4xl sm:text-5xl font-bold text-blue-300">{user.name.charAt(0)}</span>
+          </div>
+        )}
+        <div className="absolute top-1 right-1">
+          <span className={`text-[9px] sm:text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-full ${
+            user.groupName && groupColors[user.groupName] 
+              ? `${groupColors[user.groupName].bg} ${groupColors[user.groupName].text}`
+              : 'bg-gray-100 text-gray-800'
+          }`}>
+            {user.groupName && groupLabels[user.groupName] 
+              ? groupLabels[user.groupName] 
+              : '주니어'}
+          </span>
+        </div>
+      </div>
+      <div className="p-3 sm:p-4 flex-grow">
+        <h3 className="font-bold text-base sm:text-lg text-gray-900">{user.name}</h3>
+        <p className="text-xs sm:text-sm text-gray-500 truncate">{user.phoneNumber ? formatPhoneNumber(user.phoneNumber) : '-'}</p>
+      </div>
+    </div>
+  );
+
   return (
     <Layout requireAuth requireAdmin>
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">사용자 조회</h1>
+          <div className="flex items-center">
+            <button
+              onClick={() => window.location.href = '/admin'}
+              className="mr-3 text-blue-600 hover:text-blue-800 focus:outline-none flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <h1 className="text-2xl font-bold">사용자 조회</h1>
+          </div>
           <p className="text-gray-500 mt-1">업무 코드별로 사용자를 조회합니다.</p>
         </div>
 
@@ -176,42 +312,36 @@ export default function UserCheck() {
                 <p className="text-gray-500">해당 업무 코드에 맞는 사용자가 없습니다.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {users.map(user => (
-                  <div
-                    key={user.userId}
-                    className="bg-white rounded-lg shadow overflow-hidden cursor-pointer transform transition hover:scale-105"
-                    onClick={() => handleSelectUser(user)}
-                  >
-                    <div className="h-48 bg-gray-200 relative">
-                      {user.profileImage ? (
-                        <img
-                          src={user.profileImage}
-                          alt={user.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-                          <span className="text-5xl font-bold text-blue-300">{user.name.charAt(0)}</span>
-                        </div>
-                      )}
-                      <div className="absolute top-2 right-2">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                          user.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {user.role === 'admin' ? '관리자' : 
-                           user.role === 'mentor' ? '멘토' : '사용자'}
+              <div className="space-y-8">
+                {groupOrder.map(group => {
+                  const usersInGroup = groupedUsers[group] || [];
+                  
+                  if (usersInGroup.length === 0) {
+                    return null;
+                  }
+                  
+                  return (
+                    <div key={group} className="bg-white rounded-lg shadow-md p-4">
+                      <div className="flex items-center mb-4">
+                        <h2 className="text-lg font-bold">
+                          {groupLabels[group]}
+                        </h2>
+                        <span className={`ml-2 text-sm px-2 py-0.5 rounded-full ${groupColors[group].bg} ${groupColors[group].text}`}>
+                          {usersInGroup.length}명
                         </span>
                       </div>
+                      
+                      {/* 그리드 레이아웃: 모바일에서는 3개, 데스크탑에서는 6개 */}
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
+                        {usersInGroup.map(user => (
+                          <div key={user.userId || `user-${user.name}-${Math.random()}`}>
+                            {renderUserCard(user)}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="p-4">
-                      <h3 className="font-bold text-lg text-gray-900">{user.name}</h3>
-                      <p className="text-sm text-gray-500 truncate">{user.email || user.phoneNumber}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -237,15 +367,19 @@ export default function UserCheck() {
                     )}
                     <div>
                       <h2 className="text-xl font-bold text-gray-900">{selectedUser.name}</h2>
+                      <p className="text-gray-600 text-sm">{selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}</p>
                       <div className="flex items-center mt-1">
-                        <span className={`px-2 py-0.5 text-xs rounded-full ${
-                          selectedUser.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                          selectedUser.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {selectedUser.role === 'admin' ? '관리자' : 
-                           selectedUser.role === 'mentor' ? '멘토' : '사용자'}
-                        </span>
+                        {/* 그룹 정보 표시 */}
+                        {selectedUser && 
+                          'groupName' in selectedUser && 
+                          typeof selectedUser.groupName === 'string' && 
+                          selectedUser.groupName && (
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              groupColors[selectedUser.groupName as keyof typeof groupColors].bg} ${groupColors[selectedUser.groupName as keyof typeof groupColors].text
+                            }`}>
+                              {groupLabels[selectedUser.groupName as keyof typeof groupLabels]}
+                            </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -270,7 +404,7 @@ export default function UserCheck() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">전화번호</p>
-                    <p className="text-gray-900">{selectedUser.phoneNumber || '-'}</p>
+                    <p className="text-gray-900">{selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}</p>
                   </div>
                   <div className="md:col-span-2">
                     <p className="text-sm text-gray-500">주소</p>

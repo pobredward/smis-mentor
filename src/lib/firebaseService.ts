@@ -98,24 +98,42 @@ export const deleteUser = async (userId: string) => {
   }
 };
 
-export const getUserJobCodesInfo = async (jobExperiences: string[]) => {
+export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, group: string}> | string[]) => {
   try {
     if (!jobExperiences || jobExperiences.length === 0) return [];
     
     console.log('=== getUserJobCodesInfo 호출 ===');
     console.log('검색할 jobExperiences:', jobExperiences);
     
+    // 배열 형식 확인 및 ID 추출
+    const jobIds = jobExperiences.map(exp => {
+      // 새 형식 (객체)인 경우
+      if (typeof exp === 'object' && exp !== null && 'id' in exp) {
+        return exp.id;
+      }
+      // 이전 형식 (문자열)인 경우 - 하위 호환성 유지
+      return exp as string;
+    });
+    
     // 병렬로 처리할 작업 배열
-    const tasks = jobExperiences.map(async (idOrCode) => {
+    const tasks = jobIds.map(async (idOrCode, index) => {
       try {
+        // 그룹 정보 준비 (새 형식인 경우에만 포함)
+        const group = typeof jobExperiences[index] === 'object' && 'group' in jobExperiences[index]
+          ? (jobExperiences[index] as {id: string, group: string}).group
+          : undefined;
+        
         // 1. 먼저 jobCodes 컬렉션에서 직접 ID로 조회
         const jobCodeDoc = await getDoc(doc(db, 'jobCodes', idOrCode));
         
         if (jobCodeDoc.exists()) {
           console.log(`'${idOrCode}'는 jobCodes 컬렉션의 문서 ID입니다.`);
+          
+          // 그룹 정보와 함께 반환
           return {
             id: jobCodeDoc.id,
-            ...jobCodeDoc.data() as JobCode
+            ...jobCodeDoc.data() as JobCode,
+            ...(group ? { group } : {})
           };
         }
         
@@ -143,7 +161,8 @@ export const getUserJobCodesInfo = async (jobExperiences: string[]) => {
             console.log(`jobExperience에서 참조하는 JobCode 찾음: ${jobExperience.refGeneration}-${jobExperience.refCode}`);
             return {
               id: jobCodeSnapshot.docs[0].id,
-              ...jobCodeSnapshot.docs[0].data() as JobCode
+              ...jobCodeSnapshot.docs[0].data() as JobCode,
+              ...(group ? { group } : {})
             };
           } else {
             console.log(`jobExperience가 참조하는 JobCode를 찾을 수 없음: ${jobExperience.refGeneration}-${jobExperience.refCode}`);
@@ -165,7 +184,8 @@ export const getUserJobCodesInfo = async (jobExperiences: string[]) => {
             console.log(`코드 '${idOrCode}'에 해당하는 JobCode 찾음: ${jobCode.generation}-${jobCode.code}`);
             return {
               id: jobCodeSnapshot.docs[0].id,
-              ...jobCode
+              ...jobCode,
+              ...(group ? { group } : {})
             };
           } else {
             console.log(`코드 '${idOrCode}'에 해당하는 JobCode를 찾을 수 없음`);
@@ -180,7 +200,7 @@ export const getUserJobCodesInfo = async (jobExperiences: string[]) => {
     
     // 모든 작업 완료 대기
     const results = await Promise.all(tasks);
-    const filteredResults = results.filter(code => code !== null) as JobCode[];
+    const filteredResults = results.filter(code => code !== null) as (JobCode & { group?: string })[];
     console.log(`검색 결과: ${filteredResults.length}개의 JobCode를 찾았습니다.`);
     return filteredResults;
   } catch (error) {
@@ -431,7 +451,8 @@ export const uploadProfileImage = async (userId: string, file: File): Promise<st
 export const createTempUser = async (
   name: string,
   phoneNumber: string,
-  jobExperienceIds: string[]
+  jobExperienceIds: string[],
+  jobExperienceGroups: string[] = []
 ) => {
   try {
     // 동일한 이름과 전화번호를 가진 사용자가 있는지 확인
@@ -448,13 +469,19 @@ export const createTempUser = async (
       throw new Error('이미 등록된 유저입니다');
     }
     
+    // JobExperiences 객체 배열 생성
+    const jobExperiences = jobExperienceIds.map((id, index) => ({
+      id,
+      group: index < jobExperienceGroups.length ? jobExperienceGroups[index] : 'junior' // 기본값으로 'junior' 사용
+    }));
+    
     // Firestore에 임시 사용자 정보 저장
     const userData: Omit<User, 'userId' | 'createdAt' | 'updatedAt'> = {
       email: '',
       name,
       phoneNumber,
       role: 'user',
-      jobExperiences: jobExperienceIds,
+      jobExperiences,
       password: '',
       address: '',
       addressDetail: '',
@@ -542,18 +569,17 @@ export const getUsersByJobCode = async (generation: string, code: string) => {
     // jobCodes에서 찾은 문서 ID
     const jobCodeId = jobCodeSnapshot.docs[0].id;
     
-    // 해당 jobCodeId를 jobExperiences 배열에 포함하는 사용자 조회
+    // 해당 jobCodeId를 jobExperiences 배열의 id 필드에 포함하는 사용자 조회
+    // 새로운 구조에서는 where 쿼리 대신 get 후 필터링 방식 사용
     const usersRef = collection(db, 'users');
-    const userQuery = query(
-      usersRef,
-      where('jobExperiences', 'array-contains', jobCodeId)
-    );
-    
-    const userSnapshot = await getDocs(userQuery);
+    const userSnapshot = await getDocs(usersRef);
     
     userSnapshot.forEach((doc) => {
       const userData = doc.data() as User;
-      users.push(userData);
+      // jobExperiences 배열에서 id 필드가 jobCodeId와 일치하는 항목이 있는지 확인
+      if (userData.jobExperiences && userData.jobExperiences.some(exp => exp.id === jobCodeId)) {
+        users.push(userData);
+      }
     });
     
     // 기존 방식으로 찾은 사용자들도 추가 (중복 제거)

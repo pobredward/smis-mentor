@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import React from 'react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
+import PhoneInput, { formatPhoneNumber } from '@/components/common/PhoneInput';
 import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo } from '@/lib/firebaseService';
 import { User, JobCode } from '@/types';
 
@@ -25,6 +27,17 @@ export default function UserManage() {
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
   const [filteredJobCodes, setFilteredJobCodes] = useState<JobCode[]>([]);
   const [showUserList, setShowUserList] = useState(true);
+  const [selectedJobGroup, setSelectedJobGroup] = useState<string>('junior');
+
+  const jobGroups = [
+    { value: 'junior', label: '주니어' },
+    { value: 'middle', label: '미들' },
+    { value: 'senior', label: '시니어' },
+    { value: 'spring', label: '스프링' },
+    { value: 'summer', label: '서머' },
+    { value: 'autumn', label: '어텀' },
+    { value: 'winter', label: '윈터' }
+  ];
 
   // 사용자 목록 불러오기
   useEffect(() => {
@@ -121,10 +134,13 @@ export default function UserManage() {
     setIsEditing(true);
   };
 
-  // 편집 폼 데이터 변경 핸들러
-  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  // 수정 폼 데이터 변경 핸들러
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { target: { name: string; value: string } }) => {
     const { name, value } = e.target;
-    setEditFormData(prev => ({ ...prev, [name]: value }));
+    setEditFormData({
+      ...editFormData,
+      [name]: value
+    });
   };
 
   // 사용자 업데이트 핸들러
@@ -225,14 +241,31 @@ export default function UserManage() {
     if (!selectedUser || !selectedJobCodeId) return;
     
     // 이미 가지고 있는 경험인지 확인
-    if (selectedUser.jobExperiences.includes(selectedJobCodeId)) {
+    const hasExperience = selectedUser.jobExperiences.some(exp => 
+      typeof exp === 'string' 
+        ? exp === selectedJobCodeId 
+        : exp.id === selectedJobCodeId
+    );
+    
+    if (hasExperience) {
       toast.error('이미 등록된 직무 경험입니다.');
       return;
     }
     
     try {
+      // 새 경험 객체 생성
+      const newExperience = {
+        id: selectedJobCodeId,
+        group: selectedJobGroup
+      };
+      
       // 새 경험 배열 생성
-      const updatedExperiences = [...selectedUser.jobExperiences, selectedJobCodeId];
+      const updatedExperiences = [
+        ...selectedUser.jobExperiences.map(exp => 
+          typeof exp === 'string' ? { id: exp, group: 'junior' } : exp
+        ),
+        newExperience
+      ];
       
       // 사용자 정보 업데이트
       await updateUser(selectedUser.userId, { jobExperiences: updatedExperiences });
@@ -241,8 +274,11 @@ export default function UserManage() {
       const addedJobCode = allJobCodes.find(code => code.id === selectedJobCodeId);
       
       if (addedJobCode) {
+        // 그룹 정보 추가
+        const jobCodeWithGroup = { ...addedJobCode, group: selectedJobGroup };
+        
         // 로컬 상태 업데이트
-        setUserJobCodes(prev => [...prev, addedJobCode]);
+        setUserJobCodes(prev => [...prev, jobCodeWithGroup]);
         
         // users 배열 업데이트
         setUsers(prevUsers => 
@@ -274,7 +310,10 @@ export default function UserManage() {
     
     try {
       // 삭제 후 남은 경험 배열 생성
-      const updatedExperiences = selectedUser.jobExperiences.filter(id => id !== jobCodeId);
+      const updatedExperiences = selectedUser.jobExperiences
+        .filter(exp => typeof exp === 'string' 
+          ? exp !== jobCodeId 
+          : exp.id !== jobCodeId);
       
       // 사용자 정보 업데이트
       await updateUser(selectedUser.userId, { jobExperiences: updatedExperiences });
@@ -315,11 +354,183 @@ export default function UserManage() {
     return format(new Date(timestamp.seconds * 1000), 'yyyy-MM-dd HH:mm');
   };
 
+  // 직무 경험 섹션 UI
+  const renderJobExperiencesSection = () => {
+    return (
+      <div className="mt-4 border-t pt-4">
+        <div className="flex justify-between items-center mb-2">
+          <p className="text-sm text-gray-500">직무 경험</p>
+        </div>
+        
+        {isLoadingJobCodes ? (
+          <div className="py-2">
+            <div className="animate-pulse h-4 bg-gray-200 rounded w-24"></div>
+          </div>
+        ) : userJobCodes.length === 0 ? (
+          <p className="text-gray-500">등록된 직무 경험이 없습니다.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {userJobCodes.map(jobCode => (
+              <div key={jobCode.id} className="flex items-center bg-blue-50 text-blue-800 px-3 py-1 rounded-full text-sm max-w-full group relative">
+                <div className="flex items-center">
+                  <span className="truncate mr-1" title={`${jobCode.generation} ${jobCode.code} - ${jobCode.name}`}>
+                    {jobCode.generation} {jobCode.name}
+                  </span>
+                  {jobCode.group && (
+                    <span key={`group-${jobCode.id}-${jobCode.group}`} className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                      jobCode.group === 'junior' ? 'bg-green-100 text-yellow-800' :
+                      jobCode.group === 'middle' ? 'bg-yellow-100 text-green-800' :
+                      jobCode.group === 'senior' ? 'bg-red-100 text-purple-800' :
+                      jobCode.group === 'spring' ? 'bg-blue-100 text-yellow-800' :
+                      jobCode.group === 'summer' ? 'bg-purple-100 text-green-800' :
+                      jobCode.group === 'autumn' ? 'bg-orange-100 text-red-800' :
+                      'bg-pink-100 text-purple-800'
+                    }`}>
+                      {jobCode.group === 'junior' ? (
+                        <React.Fragment key={`group-text-${jobCode.id}-junior`}>주니어</React.Fragment>
+                      ) : jobCode.group === 'middle' ? (
+                        <React.Fragment key={`group-text-${jobCode.id}-middle`}>미들</React.Fragment>
+                      ) : jobCode.group === 'senior' ? (
+                        <React.Fragment key={`group-text-${jobCode.id}-senior`}>시니어</React.Fragment>
+                      ) : jobCode.group === 'spring' ? (
+                        <React.Fragment key={`group-text-${jobCode.id}-spring`}>스프링</React.Fragment>
+                      ) : jobCode.group === 'summer' ? (
+                        <React.Fragment key={`group-text-${jobCode.id}-summer`}>서머</React.Fragment>
+                      ) : jobCode.group === 'autumn' ? (
+                        <React.Fragment key={`group-text-${jobCode.id}-autumn`}>어텀</React.Fragment>
+                      ) : (
+                        <React.Fragment key={`group-text-${jobCode.id}-winter`}>윈터</React.Fragment>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleRemoveJobExperience(jobCode.id!)}
+                  className="ml-auto flex-shrink-0 text-blue-600 hover:text-blue-800 focus:outline-none"
+                  aria-label="직무 경험 삭제"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                {/* 모바일에서 호버 시 전체 텍스트 보기 */}
+                <div className="absolute hidden group-hover:block left-0 bottom-full mb-1 bg-gray-800 text-white p-2 rounded text-xs whitespace-normal max-w-xs z-10">
+                  {jobCode.generation} {jobCode.code} - {jobCode.name}
+                  {jobCode.group && (
+                    <span key={`tooltip-${jobCode.id}-${jobCode.group}`} className="ml-1">
+                      ({jobCode.group === 'junior' ? (
+                        <React.Fragment key={`tooltip-text-${jobCode.id}-junior`}>주니어</React.Fragment>
+                      ) : jobCode.group === 'middle' ? (
+                        <React.Fragment key={`tooltip-text-${jobCode.id}-middle`}>미들</React.Fragment>
+                      ) : jobCode.group === 'senior' ? (
+                        <React.Fragment key={`tooltip-text-${jobCode.id}-senior`}>시니어</React.Fragment>
+                      ) : jobCode.group === 'spring' ? (
+                        <React.Fragment key={`tooltip-text-${jobCode.id}-spring`}>스프링</React.Fragment>
+                      ) : jobCode.group === 'summer' ? (
+                        <React.Fragment key={`tooltip-text-${jobCode.id}-summer`}>서머</React.Fragment>
+                      ) : jobCode.group === 'autumn' ? (
+                        <React.Fragment key={`tooltip-text-${jobCode.id}-autumn`}>어텀</React.Fragment>
+                      ) : (
+                        <React.Fragment key={`tooltip-text-${jobCode.id}-winter`}>윈터</React.Fragment>
+                      )})
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* 직무 경험 추가 UI */}
+        <div className="flex flex-col gap-2 mt-3">
+          {/* 기수 선택 */}
+          <div className="w-full">
+            <select
+              value={selectedGeneration}
+              onChange={(e) => setSelectedGeneration(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">기수 선택...</option>
+              {allGenerations.map(gen => (
+                <option key={gen} value={gen}>
+                  {gen}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {/* 직무 코드 선택 및 그룹 선택 */}
+          <div className="flex flex-col md:flex-row gap-2">
+            <div className="w-full md:w-1/2">
+              <select
+                value={selectedJobCodeId}
+                onChange={(e) => setSelectedJobCodeId(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-ellipsis"
+                disabled={!selectedGeneration || filteredJobCodes.length === 0}
+                style={{ maxWidth: '100%', textOverflow: 'ellipsis' }}
+              >
+                <option value="">직무 코드 선택...</option>
+                {filteredJobCodes.map(jobCode => (
+                  <option 
+                    key={jobCode.id} 
+                    value={jobCode.id}
+                    title={`${jobCode.code} - ${jobCode.name}`}
+                  >
+                    {jobCode.code} - {jobCode.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* 그룹 선택 */}
+            <div className="w-full md:w-1/4">
+              <select
+                value={selectedJobGroup}
+                onChange={(e) => setSelectedJobGroup(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {jobGroups.map((group, index) => (
+                  <option key={`group-option-${group.value}-${index}`} value={group.value}>
+                    {group.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleAddJobExperience}
+              disabled={!selectedJobCodeId}
+              className="whitespace-nowrap md:w-1/4"
+            >
+              추가
+            </Button>
+          </div>
+          
+          {filteredJobCodes.length === 0 && selectedGeneration && (
+            <p className="text-sm text-gray-500" key="no-jobs-message">선택한 기수에 해당하는 직무가 없습니다.</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Layout requireAuth requireAdmin>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl md:text-2xl font-bold">사용자 관리</h1>
+          <div className="flex items-center">
+            <button
+              onClick={() => window.location.href = '/admin'}
+              className="mr-3 text-blue-600 hover:text-blue-800 focus:outline-none flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <h1 className="text-xl md:text-2xl font-bold">사용자 관리</h1>
+          </div>
         </div>
 
         <div className={`${showUserList ? 'block' : 'hidden md:block'} mb-6`}>
@@ -363,9 +574,9 @@ export default function UserManage() {
                   </div>
                 ) : (
                   <div className="divide-y overflow-y-auto max-h-[calc(100vh-250px)]">
-                    {filteredUsers.map((user) => (
+                    {filteredUsers.map((user, index) => (
                       <div 
-                        key={user.userId}
+                        key={user.userId || `user-${user.name}-${user.phoneNumber}-${index}`}
                         className={`p-4 cursor-pointer hover:bg-gray-50 ${
                           selectedUser?.userId === user.userId ? 'bg-blue-50' : ''
                         }`}
@@ -387,21 +598,21 @@ export default function UserManage() {
                             <h3 className="font-medium text-gray-900 truncate">{user.name}</h3>
                             <p className="text-sm text-gray-500 truncate">{user.email || user.phoneNumber}</p>
                             <div className="flex flex-wrap gap-1 mt-1">
-                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                              <span key={`role-${user.userId || index}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                 user.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
                                 'bg-gray-100 text-gray-800'
                               }`}>
                                 {user.role === 'admin' ? '관리자' : 
-                                 user.role === 'mentor' ? '멘토' : '사용자'}
+                                  user.role === 'mentor' ? '멘토' : '사용자'}
                               </span>
-                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                              <span key={`status-${user.userId || index}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 user.status === 'active' ? 'bg-green-100 text-green-800' :
                                 user.status === 'inactive' ? 'bg-red-100 text-red-800' :
                                 'bg-yellow-100 text-yellow-800'
                               }`}>
                                 {user.status === 'active' ? '활성' : 
-                                 user.status === 'inactive' ? '비활성' : '임시'}
+                                  user.status === 'inactive' ? '비활성' : '임시'}
                               </span>
                             </div>
                           </div>
@@ -468,12 +679,11 @@ export default function UserManage() {
                           value={editFormData.email || ''}
                           onChange={handleEditFormChange}
                         />
-                        <FormInput
+                        <PhoneInput
                           label="전화번호"
                           name="phoneNumber"
-                          type="text"
                           value={editFormData.phoneNumber || ''}
-                          onChange={handleEditFormChange}
+                          onChange={(value) => handleEditFormChange({ target: { name: 'phoneNumber', value } })}
                         />
                         <div className="md:col-span-2">
                           <FormInput
@@ -540,7 +750,7 @@ export default function UserManage() {
                           <div className="min-w-0">
                             <h2 className="text-xl font-bold text-gray-900 truncate">{selectedUser.name}</h2>
                             <div className="flex flex-wrap gap-1 mt-1">
-                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                              <span key={`detail-role-${selectedUser.userId}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                 selectedUser.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
                                 'bg-gray-100 text-gray-800'
@@ -548,7 +758,7 @@ export default function UserManage() {
                                 {selectedUser.role === 'admin' ? '관리자' : 
                                  selectedUser.role === 'mentor' ? '멘토' : '사용자'}
                               </span>
-                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                              <span key={`detail-status-${selectedUser.userId}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.status === 'active' ? 'bg-green-100 text-green-800' :
                                 selectedUser.status === 'inactive' ? 'bg-red-100 text-red-800' :
                                 'bg-yellow-100 text-yellow-800'
@@ -584,7 +794,9 @@ export default function UserManage() {
                         </div>
                         <div>
                           <p className="text-sm text-gray-500">전화번호</p>
-                          <p className="text-gray-900">{selectedUser.phoneNumber || '-'}</p>
+                          <p className="text-gray-900">
+                            {selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}
+                          </p>
                         </div>
                         <div className="md:col-span-2">
                           <p className="text-sm text-gray-500">주소</p>
@@ -619,97 +831,7 @@ export default function UserManage() {
                       </div>
 
                       {/* 직무 경험 섹션 - 모바일 최적화 */}
-                      <div className="mt-4 border-t pt-4">
-                        <div className="flex justify-between items-center mb-2">
-                          <p className="text-sm text-gray-500">직무 경험</p>
-                        </div>
-                        
-                        {isLoadingJobCodes ? (
-                          <div className="py-2">
-                            <div className="animate-pulse h-4 bg-gray-200 rounded w-24"></div>
-                          </div>
-                        ) : userJobCodes.length === 0 ? (
-                          <p className="text-gray-500">등록된 직무 경험이 없습니다.</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {userJobCodes.map(jobCode => (
-                              <div key={jobCode.id} className="flex items-center bg-blue-50 text-blue-800 px-3 py-1 rounded-full text-sm max-w-full group relative">
-                                <span className="truncate mr-1" title={`${jobCode.generation} ${jobCode.code} - ${jobCode.name}`}>
-                                  {jobCode.generation} {jobCode.code} - {jobCode.name}
-                                </span>
-                                <button
-                                  onClick={() => handleRemoveJobExperience(jobCode.id!)}
-                                  className="ml-auto flex-shrink-0 text-blue-600 hover:text-blue-800 focus:outline-none"
-                                  aria-label="직무 경험 삭제"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                                {/* 모바일에서 호버 시 전체 텍스트 보기 */}
-                                <div className="absolute hidden group-hover:block left-0 bottom-full mb-1 bg-gray-800 text-white p-2 rounded text-xs whitespace-normal max-w-xs z-10">
-                                  {jobCode.generation} {jobCode.code} - {jobCode.name}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        
-                        {/* 직무 경험 추가 UI - 모바일 최적화 */}
-                        <div className="flex flex-col gap-2 mt-3">
-                          {/* 기수 선택 */}
-                          <div className="w-full">
-                            <select
-                              value={selectedGeneration}
-                              onChange={(e) => setSelectedGeneration(e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">기수 선택...</option>
-                              {allGenerations.map(gen => (
-                                <option key={gen} value={gen}>
-                                  {gen}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          
-                          {/* 직무 코드 선택 및 추가 버튼 */}
-                          <div className="flex gap-2">
-                            <select
-                              value={selectedJobCodeId}
-                              onChange={(e) => setSelectedJobCodeId(e.target.value)}
-                              className="flex-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-ellipsis"
-                              disabled={!selectedGeneration || filteredJobCodes.length === 0}
-                              style={{ maxWidth: 'calc(100% - 70px)', textOverflow: 'ellipsis' }}
-                            >
-                              <option value="">직무 코드 선택...</option>
-                              {filteredJobCodes.map(jobCode => (
-                                <option 
-                                  key={jobCode.id} 
-                                  value={jobCode.id}
-                                  title={`${jobCode.code} - ${jobCode.name}`} // 툴크으로 전체 텍스트 표시
-                                >
-                                  {jobCode.code} - {jobCode.name}
-                                </option>
-                              ))}
-                            </select>
-                            
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={handleAddJobExperience}
-                              disabled={!selectedJobCodeId}
-                              className="whitespace-nowrap"
-                            >
-                              추가
-                            </Button>
-                          </div>
-                          
-                          {filteredJobCodes.length === 0 && selectedGeneration && (
-                            <p className="text-sm text-gray-500">선택한 기수에 해당하는 직무가 없습니다.</p>
-                          )}
-                        </div>
-                      </div>
+                      {renderJobExperiencesSection()}
                     </div>
                   )}
                 </div>

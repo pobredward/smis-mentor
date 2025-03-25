@@ -114,7 +114,28 @@ export default function UserProfilePage({ params }: { params: Promise<{ userId: 
               <div className="space-y-2">
                 {jobCodes.map((jobCode) => (
                   <div key={jobCode.id} className="p-3 border rounded-md">
-                    <p className="font-semibold">{jobCode.name}</p>
+                    <div className="flex items-center mb-1">
+                      <p className="font-semibold">{jobCode.name}</p>
+                      {jobCode.group && (
+                        <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
+                          jobCode.group === 'junior' ? 'bg-green-100 text-green-800' :
+                          jobCode.group === 'middle' ? 'bg-yellow-100 text-yellow-800' :
+                          jobCode.group === 'senior' ? 'bg-red-100 text-red-800' :
+                          jobCode.group === 'spring' ? 'bg-blue-100 text-blue-800' :
+                          jobCode.group === 'summer' ? 'bg-purple-100 text-purple-800' :
+                          jobCode.group === 'autumn' ? 'bg-orange-100 text-orange-800' :
+                          'bg-pink-100 text-pink-800'
+                        }`}>
+                          {jobCode.group === 'junior' ? '주니어' :
+                           jobCode.group === 'middle' ? '미들' : 
+                           jobCode.group === 'senior' ? '시니어' :
+                           jobCode.group === 'spring' ? '스프링' :
+                           jobCode.group === 'summer' ? '서머' :
+                           jobCode.group === 'autumn' ? '어텀' :
+                           '윈터'}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600">{jobCode.generation}</p>
                     <p className="text-sm text-gray-600">
                       {new Date(jobCode.startDate.seconds * 1000).toLocaleDateString()} ~ 

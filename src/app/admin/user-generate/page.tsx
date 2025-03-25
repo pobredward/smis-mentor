@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
 import { createTempUser, getAllJobCodes } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
+import PhoneInput from '@/components/common/PhoneInput';
 import Button from '@/components/common/Button';
 import { JobCode } from '@/types';
 
@@ -16,7 +17,8 @@ const tempUserSchema = z.object({
   phoneNumber: z.string().min(10, '유효한 휴대폰 번호를 입력해주세요.').max(11, '유효한 휴대폰 번호를 입력해주세요.'),
   jobExperiences: z.array(
     z.object({
-      value: z.string().min(1, '참가 이력을 선택해주세요.')
+      value: z.string().min(1, '참가 이력을 선택해주세요.'),
+      group: z.string().min(1, '그룹을 선택해주세요.')
     })
   ).min(1, '최소 하나 이상의 업무 참가 이력이 필요합니다.'),
 });
@@ -32,6 +34,17 @@ export default function UserGenerate() {
   const [selectedGenerations, setSelectedGenerations] = useState<string[]>([]);
   const [filteredJobCodes, setFilteredJobCodes] = useState<Record<number, JobCode[]>>({});
 
+  // 그룹 옵션 정의
+  const jobGroups = [
+    { value: 'junior', label: '주니어' },
+    { value: 'middle', label: '미들' },
+    { value: 'senior', label: '시니어' },
+    { value: 'spring', label: '스프링' },
+    { value: 'summer', label: '서머' },
+    { value: 'autumn', label: '어텀' },
+    { value: 'winter', label: '윈터' },
+  ];
+
   const {
     register,
     handleSubmit,
@@ -42,7 +55,7 @@ export default function UserGenerate() {
   } = useForm<TempUserFormValues>({
     resolver: zodResolver(tempUserSchema),
     defaultValues: {
-      jobExperiences: [{ value: '' }],
+      jobExperiences: [{ value: '', group: 'junior' }],
     },
   });
 
@@ -117,11 +130,12 @@ export default function UserGenerate() {
   const onSubmit = async (data: TempUserFormValues) => {
     setIsLoading(true);
     try {
-      // 업무 코드 배열로 변환
-      const jobExperiences = data.jobExperiences.map(exp => exp.value);
+      // 업무 코드 배열과 그룹 배열로 변환
+      const jobExperienceIds = data.jobExperiences.map(exp => exp.value);
+      const jobExperienceGroups = data.jobExperiences.map(exp => exp.group);
       
       // 임시 사용자 생성
-      await createTempUser(data.name, data.phoneNumber, jobExperiences);
+      await createTempUser(data.name, data.phoneNumber, jobExperienceIds, jobExperienceGroups);
       
       toast.success('임시 사용자가 성공적으로 생성되었습니다.');
       setIsSuccess(true);
@@ -130,7 +144,7 @@ export default function UserGenerate() {
       reset({
         name: '',
         phoneNumber: '',
-        jobExperiences: [{ value: '' }],
+        jobExperiences: [{ value: '', group: 'junior' }],
       });
       setSelectedGenerations([]);
     } catch (error) {
@@ -148,7 +162,7 @@ export default function UserGenerate() {
   };
 
   const handleAddJobExperience = () => {
-    append({ value: '' });
+    append({ value: '', group: 'junior' });
     setSelectedGenerations([...selectedGenerations, '']);
   };
 
@@ -163,7 +177,17 @@ export default function UserGenerate() {
     <Layout requireAuth requireAdmin>
       <div className="max-w-xl mx-auto px-4 sm:px-6">
         <div className="mb-8">
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900">임시 사용자 생성</h1>
+          <div className="flex items-center">
+            <button
+              onClick={() => window.location.href = '/admin'}
+              className="mr-3 text-blue-600 hover:text-blue-800 focus:outline-none flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">임시 사용자 생성</h1>
+          </div>
           <p className="mt-1 text-sm text-gray-600">이름, 휴대폰 번호, 업무 참가 이력을 입력하여 임시 사용자를 생성합니다.</p>
         </div>
 
@@ -182,12 +206,19 @@ export default function UserGenerate() {
             {...register('name')}
           />
 
-          <FormInput
-            label="휴대폰 번호"
-            type="tel"
-            placeholder="'-' 없이 입력하세요"
-            error={errors.phoneNumber?.message}
-            {...register('phoneNumber')}
+          <Controller
+            name="phoneNumber"
+            control={control}
+            render={({ field, fieldState }) => (
+              <PhoneInput
+                label="휴대폰 번호"
+                value={field.value}
+                onChange={field.onChange}
+                error={fieldState.error?.message}
+                returnRawValue={true}
+                placeholder="휴대폰 번호를 입력하세요"
+              />
+            )}
           />
 
           <div className="mb-4">
@@ -221,9 +252,9 @@ export default function UserGenerate() {
                       </select>
                     </div>
                     
-                    {/* 직무 코드 선택 */}
-                    <div className="flex items-start">
-                      <div className="flex-1 min-w-0">
+                    {/* 직무 코드 및 그룹 선택 */}
+                    <div className="flex flex-col md:flex-row gap-2">
+                      <div className="flex-1 min-w-0 md:w-3/5">
                         <label className="block text-xs text-gray-500 mb-1">직무 코드 선택</label>
                         <select
                           className={`w-full px-3 py-2 border ${
@@ -245,18 +276,38 @@ export default function UserGenerate() {
                           ))}
                         </select>
                       </div>
-                      {index > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveJobExperience(index)}
-                          className="ml-2 mt-6 p-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 flex-shrink-0"
-                          aria-label="직무 경험 삭제"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      )}
+                      
+                      {/* 그룹 선택 */}
+                      <div className="md:w-2/5">
+                        <label className="block text-xs text-gray-500 mb-1">그룹 선택</label>
+                        <div className="flex items-center gap-2">
+                          <select
+                            className={`w-full px-3 py-2 border ${
+                              errors.jobExperiences?.[index]?.group ? 'border-red-500' : 'border-gray-300'
+                            } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                            {...register(`jobExperiences.${index}.group`)}
+                          >
+                            {jobGroups.map(group => (
+                              <option key={group.value} value={group.value}>
+                                {group.label}
+                              </option>
+                            ))}
+                          </select>
+                          
+                          {index > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveJobExperience(index)}
+                              className="ml-auto p-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 flex-shrink-0"
+                              aria-label="직무 경험 삭제"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     
                     {filteredJobCodes[index]?.length === 0 && selectedGenerations[index] && (
@@ -266,6 +317,12 @@ export default function UserGenerate() {
                     {errors.jobExperiences?.[index]?.value && (
                       <p className="mt-1 text-xs text-red-600">
                         {errors.jobExperiences?.[index]?.value?.message}
+                      </p>
+                    )}
+                    
+                    {errors.jobExperiences?.[index]?.group && (
+                      <p className="mt-1 text-xs text-red-600">
+                        {errors.jobExperiences?.[index]?.group?.message}
                       </p>
                     )}
                   </div>

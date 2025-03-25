@@ -110,7 +110,28 @@ export default function ProfilePage() {
                 {jobCodes.map((job) => (
                   <div key={job.id} className="border rounded-md p-3">
                     <div className="flex flex-col sm:flex-row sm:justify-between mb-2">
-                      <h3 className="font-medium text-gray-900">{job.name}</h3>
+                      <div className="flex items-center">
+                        <h3 className="font-medium text-gray-900">{job.name}</h3>
+                        {job.group && (
+                          <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
+                            job.group === 'junior' ? 'bg-green-100 text-green-800' :
+                            job.group === 'middle' ? 'bg-yellow-100 text-yellow-800' :
+                            job.group === 'senior' ? 'bg-red-100 text-red-800' :
+                            job.group === 'spring' ? 'bg-blue-100 text-blue-800' :
+                            job.group === 'summer' ? 'bg-purple-100 text-purple-800' :
+                            job.group === 'autumn' ? 'bg-orange-100 text-orange-800' :
+                            'bg-pink-100 text-pink-800'
+                          }`}>
+                            {job.group === 'junior' ? '주니어' :
+                             job.group === 'middle' ? '미들' : 
+                             job.group === 'senior' ? '시니어' :
+                             job.group === 'spring' ? '스프링' :
+                             job.group === 'summer' ? '서머' :
+                             job.group === 'autumn' ? '어텀' :
+                             '윈터'}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-sm text-gray-500">{job.code}</span>
                     </div>
                     <p className="text-sm text-gray-600">{job.generation}</p>

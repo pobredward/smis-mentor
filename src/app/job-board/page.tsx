@@ -63,7 +63,7 @@ export default function JobBoardList() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">업무 공고</h1>
             <p className="mt-1 text-sm text-gray-600">현재 모집 중인 업무 공고를 확인하고 지원해보세요.</p>
           </div>
-          {userData?.role === 'admin' && (
+          {/* {userData?.role === 'admin' && (
             <Button
               variant="primary"
               onClick={() => router.push('/admin/job-board-write')}
@@ -71,7 +71,7 @@ export default function JobBoardList() {
             >
               공고 생성 & 수정
             </Button>
-          )}
+          )} */}
         </div>
 
         {isLoading ? (
@@ -93,7 +93,7 @@ export default function JobBoardList() {
                 <div className="p-4 sm:p-6 flex-grow">
                   <div className="mb-2">
                     <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 text-xs rounded-full">
-                      {board.refGeneration} ({board.refCode})
+                      {board.refGeneration}
                     </span>
                   </div>
                   <h3 className="font-medium text-lg sm:text-xl text-gray-900 mb-2">{board.title}</h3>

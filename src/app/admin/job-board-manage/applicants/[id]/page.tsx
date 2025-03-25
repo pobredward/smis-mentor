@@ -330,20 +330,28 @@ export default function ApplicantsManage({ params }: { params: Promise<{ id: str
   };
   
   return (
-    <Layout requireAdmin>
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8 flex items-center">
-          <button
-            onClick={() => router.push('/admin/job-board-manage')}
-            className="mr-4 text-gray-600 hover:text-gray-900"
-          >
-            &larr; 공고 관리로 돌아가기
-          </button>
-          
+    <Layout requireAuth requireAdmin>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center">
+          <div className="mb-4 sm:mb-0">
+            <div className="flex items-center">
+              <button
+                onClick={() => router.push('/admin/job-board-manage')}
+                className="mr-3 text-blue-600 hover:text-blue-800 focus:outline-none flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">지원 유저 관리</h1>
+            </div>
+            <p className="mt-1 text-sm text-gray-600">지원자 정보와 지원 현황을 관리할 수 있습니다.</p>
+          </div>
           {jobBoard && (
-            <h1 className="text-2xl font-bold text-gray-900">
-              {jobBoard.title} - 지원자 관리 ({applications.length}명)
-            </h1>
+            <div className="flex flex-col">
+              <div className="text-lg font-semibold text-gray-900">{jobBoard.title}</div>
+              <div className="text-sm text-gray-500">{jobBoard.refGeneration} {jobBoard.refCode}</div>
+            </div>
           )}
         </div>
         
