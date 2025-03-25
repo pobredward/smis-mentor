@@ -275,9 +275,9 @@ export default function JobBoardManage() {
       const selectedJobCode = jobCodes.find(code => code.id === formData.refJobCodeId);
       const eduDates = selectedJobCode?.eduDates || [];
       
-      // interviewBaseDuration을 숫자로 변환
-      const interviewBaseDuration = formData.interviewBaseDuration ? 
-        Number(formData.interviewBaseDuration) : undefined;
+      // // interviewBaseDuration을 숫자로 변환
+      // const interviewBaseDuration = formData.interviewBaseDuration ? 
+      //   Number(formData.interviewBaseDuration) : undefined;
       
       if (isCreating) {
         // 새 공고 생성

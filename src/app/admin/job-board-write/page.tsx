@@ -285,11 +285,11 @@ export default function JobBoardWrite() {
     append({ date: '', time: '' });
   };
 
-  // 날짜 포맷팅 함수 (시간 포함)
-  const formatDate = (timestamp: Timestamp) => {
-    const date = timestamp.toDate();
-    return format(date, "yyyy-MM-dd'T'HH:mm", { locale: ko });
-  };
+  // // 날짜 포맷팅 함수 (시간 포함)
+  // const formatDate = (timestamp: Timestamp) => {
+  //   const date = timestamp.toDate();
+  //   return format(date, "yyyy-MM-dd'T'HH:mm", { locale: ko });
+  // };
 
   // 날짜만 포맷팅하는 함수
   const formatDateOnly = (timestamp: Timestamp) => {
