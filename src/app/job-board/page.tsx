@@ -9,8 +9,8 @@ import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
 // import Button from '@/components/common/Button';
-import { getActiveJobBoards } from '@/lib/firebaseService';
-import { JobBoard } from '@/types';
+import { getActiveJobBoards, getJobCodeById } from '@/lib/firebaseService';
+import { JobBoard, JobCodeWithId } from '@/types';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -18,6 +18,7 @@ export default function JobBoardList() {
   const [jobBoards, setJobBoards] = useState<JobBoardWithId[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedLocation, setSelectedLocation] = useState<'all' | 'korea' | 'overseas'>('all');
+  const [jobCodesMap, setJobCodesMap] = useState<{[key: string]: JobCodeWithId}>({});
   // const { userData } = useAuth();
   const router = useRouter();
 
@@ -33,6 +34,19 @@ export default function JobBoardList() {
           b.createdAt.seconds - a.createdAt.seconds
         );
         
+        // JobCode 정보도 함께 가져오기
+        const jobCodeIds = sortedBoards.map(board => board.refJobCodeId);
+        const uniqueJobCodeIds = [...new Set(jobCodeIds)];
+        
+        const jobCodesData: {[key: string]: JobCodeWithId} = {};
+        for (const id of uniqueJobCodeIds) {
+          const jobCode = await getJobCodeById(id);
+          if (jobCode) {
+            jobCodesData[id] = jobCode;
+          }
+        }
+        
+        setJobCodesMap(jobCodesData);
         setJobBoards(sortedBoards);
       } catch (error) {
         console.error('공고 정보 로드 오류:', error);
@@ -53,7 +67,7 @@ export default function JobBoardList() {
   // 날짜 포맷팅 함수
   const formatDate = (timestamp: Timestamp) => {
     const date = timestamp.toDate();
-    return format(date, 'yyyy년 MM월 dd일 (EEE)', { locale: ko });
+    return format(date, 'yyyy.MM.dd(EEE)', { locale: ko });
   };
 
   return (
@@ -66,6 +80,17 @@ export default function JobBoardList() {
           </div>
           
           <div className="mt-4 flex gap-3">
+            <div 
+              onClick={() => setSelectedLocation('all')}
+              className={`px-4 py-2 rounded-lg cursor-pointer transition-all duration-300 ${
+                selectedLocation === 'all'
+                  ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-500'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <span className="text-sm font-medium">전체</span>
+            </div>
+            
             <div 
               onClick={() => setSelectedLocation('korea')}
               className={`px-4 py-2 rounded-lg cursor-pointer transition-all duration-300 ${
@@ -135,14 +160,20 @@ export default function JobBoardList() {
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        {formatDate(board.educationStartDate)} ~ {formatDate(board.educationEndDate)}
+                        {jobCodesMap[board.refJobCodeId] ? 
+                          `${formatDate(jobCodesMap[board.refJobCodeId].startDate)} ~ ${formatDate(jobCodesMap[board.refJobCodeId].endDate)}` : 
+                          formatDate(board.educationStartDate) + ' ~ ' + formatDate(board.educationEndDate)
+                        }
                       </div>
                       <div className="flex items-center text-sm text-gray-600">
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        {board.jobCode}
+                        {jobCodesMap[board.refJobCodeId] ? 
+                          jobCodesMap[board.refJobCodeId].location : 
+                          board.jobCode
+                        }
                       </div>
                     </div>
                   </div>
