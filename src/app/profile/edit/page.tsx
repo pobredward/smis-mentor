@@ -23,8 +23,8 @@ const profileSchema = z.object({
   gender: z.enum(['M', 'F'], {
     errorMap: () => ({ message: '성별을 선택해주세요.' }),
   }),
-  selfIntroduction: z.string().optional(),
-  jobMotivation: z.string().optional(),
+  selfIntroduction: z.string().max(500, '자기소개는 500자 이내로 작성해주세요.').optional(),
+  jobMotivation: z.string().max(500, '지원 동기는 500자 이내로 작성해주세요.').optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -65,6 +65,8 @@ export default function EditProfilePage() {
   // 현재 입력된 이메일과 전화번호를 실시간으로 감시
   const currentEmail = watch('email');
   const currentPhone = watch('phoneNumber');
+  const currentSelfIntro = watch('selfIntroduction') || '';
+  const currentJobMotivation = watch('jobMotivation') || '';
 
   // 사용자 데이터로 폼 초기화
   useEffect(() => {
@@ -390,15 +392,34 @@ export default function EditProfilePage() {
 
               <div className="w-full mb-4">
                 <label className="block text-gray-700 text-sm font-medium mb-1">자기소개</label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
-                  placeholder="간단한 자기소개를 입력하세요"
-                  {...register('selfIntroduction')}
-                />
+                <div className="relative">
+                  <textarea
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
+                    placeholder="간단한 자기소개를 입력하세요"
+                    maxLength={500}
+                    {...register('selfIntroduction')}
+                  />
+                  <div className="absolute bottom-2 right-2 text-xs text-gray-500">
+                    {currentSelfIntro.length}/500자
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">자기소개는 500자 이내로 작성해주세요.</p>
               </div>
 
               <div className="w-full mb-4">
                 <label className="block text-gray-700 text-sm font-medium mb-1">지원 동기</label>
+                <div className="relative">
+                  <textarea
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
+                    placeholder="업무 지원 동기를 입력하세요"
+                    maxLength={500}
+                    {...register('jobMotivation')}
+                  />
+                  <div className="absolute bottom-2 right-2 text-xs text-gray-500">
+                    {currentJobMotivation.length}/500자
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요.</p>
                 <textarea
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
                   placeholder="업무 지원 동기를 입력하세요"

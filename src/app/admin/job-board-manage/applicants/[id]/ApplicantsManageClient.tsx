@@ -174,20 +174,58 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     );
   };
 
-  const handleStatusChange = async (applicationId: string, newStatus: string) => {
+  const handleStatusChange = async (applicationId: string, newStatus: string, statusType: 'application' | 'interview' | 'final') => {
     if (!selectedApplication) return;
 
     try {
       setIsLoading(true);
       const applicationRef = doc(db, 'applicationHistories', applicationId);
       
-      await updateDoc(applicationRef, {
-        applicationStatus: newStatus,
-        updatedAt: new Date()
-      });
+      const updateData: Partial<ApplicationHistory> = {
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+
+      // 상태 타입에 따라 업데이트할 필드 설정
+      switch (statusType) {
+        case 'application':
+          updateData.applicationStatus = newStatus as 'pending' | 'accepted' | 'rejected';
+          // 서류 불합격 시 면접과 최종 상태 초기화
+          if (newStatus === 'rejected') {
+            updateData.interviewStatus = undefined;
+            updateData.finalStatus = undefined;
+          }
+          break;
+        case 'interview':
+          updateData.interviewStatus = newStatus as 'pending' | 'passed' | 'failed';
+          // 면접 불합격 시 최종 상태 초기화
+          if (newStatus === 'failed') {
+            updateData.finalStatus = undefined;
+          }
+          break;
+        case 'final':
+          updateData.finalStatus = newStatus as 'finalAccepted' | 'finalRejected';
+          break;
+      }
+
+      await updateDoc(applicationRef, updateData);
+
+      // 로컬 상태 업데이트
+      const updatedApplication: ApplicationWithUser = {
+        ...selectedApplication,
+        ...updateData
+      };
+
+      // applications 배열 업데이트
+      setApplications(prevApplications => 
+        prevApplications.map(app => 
+          app.id === applicationId ? updatedApplication : app
+        )
+      );
+
+      // 선택된 지원자 상태 업데이트
+      setSelectedApplication(updatedApplication);
 
       toast.success('상태가 업데이트되었습니다.');
-      await loadData();
     } catch (error) {
       console.error('상태 업데이트 오류:', error);
       toast.error('상태 업데이트 중 오류가 발생했습니다.');
@@ -197,29 +235,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   };
 
   const handleInterviewStatusChange = async (applicationId: string, newStatus: string) => {
-    if (!selectedApplication) return;
+    await handleStatusChange(applicationId, newStatus, 'interview');
+  };
 
-    try {
-      setIsLoading(true);
-      const applicationRef = doc(db, 'applicationHistories', applicationId);
-      
-      await updateDoc(applicationRef, {
-        interviewStatus: newStatus,
-        updatedAt: new Date()
-      });
-
-      toast.success('면접 상태가 업데이트되었습니다.');
-      await loadData();
-    } catch (error) {
-      console.error('면접 상태 업데이트 오류:', error);
-      toast.error('면접 상태 업데이트 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleFinalStatusChange = async (applicationId: string, newStatus: string) => {
+    await handleStatusChange(applicationId, newStatus, 'final');
   };
 
   const handleSaveInterviewInfo = async () => {
-    if (!selectedApplication) return;
+    if (!selectedApplication || !interviewDate || !interviewTime) return;
 
     try {
       setIsLoading(true);
@@ -227,16 +251,33 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       
       const interviewDateTime = new Date(`${interviewDate}T${interviewTime}`);
       
-      await updateDoc(applicationRef, {
-        interviewDateTime,
-        interviewLink: interviewBaseLink,
-        interviewDuration: parseInt(interviewBaseDuration) || 30,
-        interviewNotes: interviewBaseNotes,
-        updatedAt: new Date()
-      });
+      const updateData: Partial<ApplicationHistory> = {
+        interviewDateTime: Timestamp.fromDate(interviewDateTime),
+        interviewBaseLink,
+        interviewBaseDuration: interviewBaseDuration ? parseInt(interviewBaseDuration) : 30,
+        interviewBaseNotes,
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+
+      await updateDoc(applicationRef, updateData);
+
+      // 로컬 상태 업데이트
+      const updatedApplication: ApplicationWithUser = {
+        ...selectedApplication,
+        ...updateData
+      };
+
+      // applications 배열 업데이트
+      setApplications(prevApplications => 
+        prevApplications.map(app => 
+          app.id === selectedApplication.id ? updatedApplication : app
+        )
+      );
+
+      // 선택된 지원자 상태 업데이트
+      setSelectedApplication(updatedApplication);
 
       toast.success('면접 정보가 저장되었습니다.');
-      await loadData();
     } catch (error) {
       console.error('면접 정보 저장 오류:', error);
       toast.error('면접 정보 저장 중 오류가 발생했습니다.');
@@ -252,13 +293,30 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       setIsLoading(true);
       const applicationRef = doc(db, 'applicationHistories', selectedApplication.id);
       
-      await updateDoc(applicationRef, {
+      const updateData: Partial<ApplicationHistory> = {
         interviewFeedback: feedbackText,
-        updatedAt: new Date()
-      });
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+
+      await updateDoc(applicationRef, updateData);
+
+      // 로컬 상태 업데이트
+      const updatedApplication: ApplicationWithUser = {
+        ...selectedApplication,
+        ...updateData
+      };
+
+      // applications 배열 업데이트
+      setApplications(prevApplications => 
+        prevApplications.map(app => 
+          app.id === selectedApplication.id ? updatedApplication : app
+        )
+      );
+
+      // 선택된 지원자 상태 업데이트
+      setSelectedApplication(updatedApplication);
 
       toast.success('면접 피드백이 저장되었습니다.');
-      await loadData();
     } catch (error) {
       console.error('면접 피드백 저장 오류:', error);
       toast.error('면접 피드백 저장 중 오류가 발생했습니다.');
@@ -498,7 +556,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         </label>
                         <select
                           value={selectedApplication.applicationStatus}
-                          onChange={(e) => handleStatusChange(selectedApplication.id, e.target.value)}
+                          onChange={(e) => handleStatusChange(selectedApplication.id, e.target.value, 'application')}
                           className="w-full p-2 border border-gray-300 rounded-md"
                           disabled={isLoading}
                         >
@@ -525,97 +583,13 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         </select>
                       </div>
                       
-                      {/* 면접 정보 입력 폼 */}
-                      {selectedApplication.interviewStatus === 'pending' && (
-                        <div className="col-span-3 mt-4 p-4 bg-blue-50 rounded-lg">
-                          <h3 className="text-md font-medium text-blue-800 mb-3">면접 정보</h3>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 날짜
-                              </label>
-                              <input
-                                type="date"
-                                value={interviewDate}
-                                onChange={(e) => setInterviewDate(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md"
-                              />
-                            </div>
-                            
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 시간
-                              </label>
-                              <input
-                                type="time"
-                                value={interviewTime}
-                                onChange={(e) => setInterviewTime(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md"
-                              />
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 링크
-                              </label>
-                              <input
-                                type="text"
-                                value={interviewBaseLink}
-                                onChange={(e) => setInterviewBaseLink(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md"
-                                placeholder="https://zoom.us/j/..."
-                              />
-                            </div>
-                            
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 시간 (분)
-                              </label>
-                              <input
-                                type="number"
-                                value={interviewBaseDuration}
-                                onChange={(e) => setInterviewBaseDuration(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md"
-                                placeholder="30"
-                              />
-                            </div>
-                          </div>
-                          
-                          <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              면접 안내사항
-                            </label>
-                            <textarea
-                              value={interviewBaseNotes}
-                              onChange={(e) => setInterviewBaseNotes(e.target.value)}
-                              rows={3}
-                              className="w-full p-2 border border-gray-300 rounded-md"
-                              placeholder="면접 준비사항 등을 입력하세요..."
-                            />
-                          </div>
-                          
-                          <div className="mt-4 flex justify-end">
-                            <Button
-                              variant="primary"
-                              onClick={handleSaveInterviewInfo}
-                              isLoading={isLoading}
-                            >
-                              면접 정보 저장
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                      
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           최종 상태
                         </label>
                         <select
                           value={selectedApplication.finalStatus || ''}
-                          onChange={(e) => handleStatusChange(selectedApplication.id, e.target.value)}
+                          onChange={(e) => handleFinalStatusChange(selectedApplication.id, e.target.value)}
                           className="w-full p-2 border border-gray-300 rounded-md"
                           disabled={isLoading || selectedApplication.interviewStatus !== 'passed'}
                         >
@@ -625,6 +599,91 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         </select>
                       </div>
                     </div>
+                    
+                    {/* 면접 정보 입력 폼 */}
+                    {selectedApplication.interviewStatus === 'pending' && (
+                      <div className="col-span-3 mt-4 p-4 bg-blue-50 rounded-lg">
+                        <h3 className="text-md font-medium text-blue-800 mb-3">면접 정보</h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              면접 날짜
+                            </label>
+                            <input
+                              type="date"
+                              value={interviewDate}
+                              onChange={(e) => setInterviewDate(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              면접 시간
+                            </label>
+                            <input
+                              type="time"
+                              value={interviewTime}
+                              onChange={(e) => setInterviewTime(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              면접 링크
+                            </label>
+                            <input
+                              type="text"
+                              value={interviewBaseLink}
+                              onChange={(e) => setInterviewBaseLink(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md"
+                              placeholder="https://zoom.us/j/..."
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              면접 시간 (분)
+                            </label>
+                            <input
+                              type="number"
+                              value={interviewBaseDuration}
+                              onChange={(e) => setInterviewBaseDuration(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md"
+                              placeholder="30"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="mb-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            면접 참고사항
+                          </label>
+                          <textarea
+                            value={interviewBaseNotes}
+                            onChange={(e) => setInterviewBaseNotes(e.target.value)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            rows={3}
+                            placeholder="면접 참고사항을 입력하세요..."
+                          />
+                        </div>
+                        
+                        <div className="flex justify-end">
+                          <Button
+                            variant="primary"
+                            onClick={handleSaveInterviewInfo}
+                            isLoading={isLoading}
+                            disabled={isLoading || !interviewDate || !interviewTime}
+                          >
+                            면접 정보 저장
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* 면접 피드백 */}
                     <div className="mt-6">

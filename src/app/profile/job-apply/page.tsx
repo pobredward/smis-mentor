@@ -51,6 +51,20 @@ export default function JobApplyStatus() {
           })
         );
         
+        // 디버깅을 위한 면접 정보 출력
+        applicationsWithJobDetails.forEach(app => {
+          if (app.applicationStatus === 'accepted' && app.interviewStatus === 'pending') {
+            console.log('면접 정보:', {
+              applicationId: app.applicationHistoryId,
+              interviewDate: app.interviewDate,
+              interviewDateTime: app.interviewDateTime,
+              interviewBaseLink: app.interviewBaseLink,
+              interviewBaseDuration: app.interviewBaseDuration,
+              interviewBaseNotes: app.interviewBaseNotes
+            });
+          }
+        });
+        
         setApplications(applicationsWithJobDetails);
       } catch (error) {
         console.error('지원 내역 로드 오류:', error);
@@ -185,15 +199,60 @@ export default function JobApplyStatus() {
                   </div>
                   
                   {/* 면접 링크 버튼 (서류 합격이고 interviewBaseLink가 있을 때만 표시) */}
-                  {app.applicationStatus === 'accepted' && app.interviewStatus === 'pending' && app.interviewBaseLink && (
-                    <a
-                      href={app.interviewBaseLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      면접 링크 바로가기
-                    </a>
+                  {app.applicationStatus === 'accepted' && app.interviewStatus === 'pending' && app.jobBoard && (
+                    <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                      <h4 className="text-sm font-medium text-blue-900 mb-3">면접 정보</h4>
+                      
+                      {/* 면접 일시 */}
+                      {(app.interviewDate || app.interviewDateTime) && (
+                        <div className="mb-2">
+                          <p className="text-sm text-blue-800">
+                            <span className="font-medium">면접 일시:</span>{' '}
+                            {formatDate(app.interviewDate || app.interviewDateTime)}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* 면접 링크 */}
+                      {app.jobBoard.interviewBaseLink && (
+                        <div className="mb-2">
+                          <p className="text-sm text-blue-800 mb-1">
+                            <span className="font-medium">면접 링크:</span>
+                          </p>
+                          <a
+                            href={app.jobBoard.interviewBaseLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            면접 참여하기
+                          </a>
+                        </div>
+                      )}
+                      
+                      {/* 면접 시간 */}
+                      {app.jobBoard.interviewBaseDuration && (
+                        <div className="mb-2">
+                          <p className="text-sm text-blue-800">
+                            <span className="font-medium">예상 소요 시간:</span>{' '}
+                            {app.jobBoard.interviewBaseDuration}분
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* 면접 참고사항 */}
+                      {app.jobBoard.interviewBaseNotes && (
+                        <div className="mt-3">
+                          <p className="text-sm font-medium text-blue-800 mb-1">참고사항:</p>
+                          <div className="text-sm text-blue-700 bg-blue-100 p-3 rounded-md whitespace-pre-line">
+                            {app.jobBoard.interviewBaseNotes}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                   
                   {/* 상태 표시 */}
