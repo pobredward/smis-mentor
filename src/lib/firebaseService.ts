@@ -10,7 +10,8 @@ import {
   deleteDoc, 
   Timestamp,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  limit as firestoreLimit
 } from 'firebase/firestore';
 import { 
   signOut as firebaseSignOut, 
@@ -785,5 +786,27 @@ export const deleteReview = async (reviewId: string) => {
   } catch (error) {
     console.error('리뷰를 삭제하는 중 오류가 발생했습니다:', error);
     throw error;
+  }
+};
+
+export const getRecentReviews = async (limit: number = 3): Promise<Review[]> => {
+  try {
+    const reviewsQuery = query(
+      collection(db, 'reviews'),
+      orderBy('createdAt', 'desc'),
+      firestoreLimit(limit)
+    );
+    
+    const querySnapshot = await getDocs(reviewsQuery);
+    return querySnapshot.docs.map((doc) => {
+      const data = doc.data() as Omit<Review, 'id'>;
+      return {
+        ...data,
+        id: doc.id,
+      } as Review;
+    });
+  } catch (error) {
+    console.error('최신 리뷰를 가져오는 중 오류가 발생했습니다:', error);
+    return [];
   }
 }; 
