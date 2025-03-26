@@ -50,24 +50,15 @@ export default function ProfilePage() {
   return (
     <Layout requireAuth>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-0">내 프로필</h1>
-          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-            <Button
-              variant="outline"
-              onClick={() => router.push('/profile/edit')}
-              className="w-full sm:w-auto"
-            >
-              프로필 수정
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => router.push('/profile/job-apply')}
-              className="w-full sm:w-auto"
-            >
-              지원 내역
-            </Button>
-          </div>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold">내 프로필</h1>
+          <Button
+            variant="outline"
+            onClick={() => router.push('/profile/edit')}
+            className="text-sm px-3 py-1.5"
+          >
+            프로필 수정
+          </Button>
         </div>
 
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">

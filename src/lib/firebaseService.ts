@@ -240,10 +240,20 @@ export const getActiveJobBoards = async () => {
     const q = query(jobBoardsRef, where('status', '==', 'active'));
     const querySnapshot = await getDocs(q);
     
-    return querySnapshot.docs.map(doc => ({ 
-      id: doc.id, 
-      ...doc.data() as JobBoard 
-    } as JobBoardWithId));
+    // JobBoard 데이터와 함께 JobCode의 korea 값을 가져오기
+    const jobBoards = await Promise.all(querySnapshot.docs.map(async (docSnapshot) => {
+      const jobBoardData = docSnapshot.data() as JobBoard;
+      const jobCodeDoc = await getDoc(doc(db, 'jobCodes', jobBoardData.refJobCodeId));
+      const jobCodeData = jobCodeDoc.data() as JobCode;
+      
+      return { 
+        id: docSnapshot.id, 
+        ...jobBoardData,
+        korea: jobCodeData.korea  // JobCode의 korea 값을 사용
+      } as JobBoardWithId;
+    }));
+    
+    return jobBoards;
   } catch (error) {
     console.error('활성화된 공고 조회 실패:', error);
     throw error;

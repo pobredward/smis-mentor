@@ -420,11 +420,6 @@ export default function EditProfilePage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요.</p>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
-                  placeholder="업무 지원 동기를 입력하세요"
-                  {...register('jobMotivation')}
-                />
               </div>
             </div>
 

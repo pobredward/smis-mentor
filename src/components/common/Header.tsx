@@ -52,10 +52,10 @@ export default function Header() {
     <header className="bg-white shadow-md relative z-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex items-center">
-            {/* 햄버거 메뉴 버튼 (모바일) */}
+          {/* 모바일 햄버거 메뉴 버튼 */}
+          <div className="flex items-center md:hidden">
             <button
-              className="md:hidden hamburger-button p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
+              className="hamburger-button p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
             >
               <svg
@@ -73,22 +73,26 @@ export default function Header() {
                 />
               </svg>
             </button>
-            
-            {/* 왼쪽 네비게이션 - 공고 목록 */}
-            <nav className="hidden md:flex items-center ml-4">
-              <Link href="/job-board" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                공고 목록
-              </Link>
-            </nav>
           </div>
-          
-          {/* 가운데 로고 */}
-          <div className="flex items-center justify-center">
+
+          {/* 로고 */}
+          <div className={`flex items-center ${!currentUser ? 'md:ml-0' : ''} ${currentUser ? 'md:ml-0' : ''}`}>
             <Link href="/" className="text-xl font-bold text-blue-600">
               SMIS
             </Link>
+            {/* 데스크탑 네비게이션 메뉴 */}
+            <nav className="hidden md:flex items-center ml-8 space-x-6">
+              <Link href="/job-board" className="text-sm font-medium text-gray-700 hover:text-gray-900">
+                공고 목록
+              </Link>
+              {currentUser && userData?.role !== 'admin' && (
+                <Link href="/profile/job-apply" className="text-sm font-medium text-gray-700 hover:text-gray-900">
+                  지원 현황
+                </Link>
+              )}
+            </nav>
           </div>
-          
+
           {/* 오른쪽 영역 - 로그인 관련 */}
           <div className="flex items-center">
             {/* 관리자 메뉴 */}
@@ -98,15 +102,10 @@ export default function Header() {
                   관리자
                 </Link>
               )}
-              {currentUser && userData?.role !== 'admin' && (
-                <Link href="/profile/job-apply" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
-                  지원 현황
-                </Link>
-              )}
             </nav>
             
             {/* 프로필 아이콘 (로그인 상태일 때) */}
-            {currentUser ? (
+            {currentUser ?
               <div className="relative ml-4" ref={dropdownRef}>
                 <button
                   onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
@@ -143,13 +142,7 @@ export default function Header() {
                     >
                       내 정보
                     </Link>
-                    <Link 
-                      href="/profile/job-apply" 
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsProfileDropdownOpen(false)}
-                    >
-                      지원 현황
-                    </Link>
+                    
                     <button
                       onClick={() => {
                         setIsProfileDropdownOpen(false);
@@ -162,7 +155,7 @@ export default function Header() {
                   </div>
                 )}
               </div>
-            ) : (
+            :
               <div className="hidden md:flex space-x-4">
                 <Link
                   href="/sign-in"
@@ -177,7 +170,7 @@ export default function Header() {
                   회원가입
                 </Link>
               </div>
-            )}
+            }
           </div>
         </div>
       </div>
@@ -207,16 +200,7 @@ export default function Header() {
         
         <nav className="p-4">
           <ul className="space-y-2">
-            <li>
-              <Link
-                href="/job-board"
-                className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                공고 목록
-              </Link>
-            </li>
-            {userData?.role === 'admin' && (
+          {userData?.role === 'admin' && (
               <li>
                 <Link
                   href="/admin"
@@ -227,8 +211,16 @@ export default function Header() {
                 </Link>
               </li>
             )}
-            {currentUser && userData?.role !== 'admin' && (
-              <li>
+            <li>
+              <Link
+                href="/job-board"
+                className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                공고 목록
+              </Link>
+            </li>
+            <li>
                 <Link
                   href="/profile/job-apply"
                   className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
@@ -237,41 +229,6 @@ export default function Header() {
                   지원 현황
                 </Link>
               </li>
-            )}
-            {!currentUser ? (
-              <>
-                <li>
-                  <Link
-                    href="/sign-in"
-                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    로그인
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/sign-up"
-                    className="block px-3 py-2 rounded-md text-base font-medium bg-blue-600 text-white hover:bg-blue-700"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    회원가입
-                  </Link>
-                </li>
-              </>
-            ) : (
-              <li>
-                <button
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    handleSignOut();
-                  }}
-                  className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
-                >
-                  로그아웃
-                </button>
-              </li>
-            )}
           </ul>
         </nav>
       </div>
