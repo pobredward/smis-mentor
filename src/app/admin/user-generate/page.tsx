@@ -10,7 +10,7 @@ import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import PhoneInput from '@/components/common/PhoneInput';
 import Button from '@/components/common/Button';
-import { JobCode } from '@/types';
+import { JobCodeWithId, JobGroup } from '@/types';
 
 const tempUserSchema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
@@ -28,11 +28,11 @@ type TempUserFormValues = z.infer<typeof tempUserSchema>;
 export default function UserGenerate() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
+  const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(true);
   const [allGenerations, setAllGenerations] = useState<string[]>([]);
   const [selectedGenerations, setSelectedGenerations] = useState<string[]>([]);
-  const [filteredJobCodes, setFilteredJobCodes] = useState<Record<number, JobCode[]>>({});
+  const [filteredJobCodes, setFilteredJobCodes] = useState<Record<number, JobCodeWithId[]>>({});
 
   // 그룹 옵션 정의
   const jobGroups = [
@@ -43,6 +43,7 @@ export default function UserGenerate() {
     { value: 'summer', label: '서머' },
     { value: 'autumn', label: '어텀' },
     { value: 'winter', label: '윈터' },
+    { value: 'common', label: '공통' }
   ];
 
   const {
@@ -93,7 +94,7 @@ export default function UserGenerate() {
 
   // 선택된 generation이 변경될 때 코드 필터링
   useEffect(() => {
-    const newFilteredCodes: Record<number, JobCode[]> = {};
+    const newFilteredCodes: Record<number, JobCodeWithId[]> = {};
     
     fields.forEach((_, index) => {
       const selectedGen = selectedGenerations[index];
@@ -135,7 +136,7 @@ export default function UserGenerate() {
       const jobExperienceGroups = data.jobExperiences.map(exp => exp.group);
       
       // 임시 사용자 생성
-      await createTempUser(data.name, data.phoneNumber, jobExperienceIds, jobExperienceGroups);
+      await createTempUser(data.name, data.phoneNumber, jobExperienceIds, jobExperienceGroups as JobGroup[]);
       
       toast.success('임시 사용자가 성공적으로 생성되었습니다.');
       setIsSuccess(true);

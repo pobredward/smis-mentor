@@ -3,35 +3,56 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
-import { getJobBoardById, createApplication, updateJobBoard, deleteJobBoard, getJobCodeById } from '@/lib/firebaseService';
-import { JobBoard, JobCode } from '@/types';
+import { getJobBoardById, deleteJobBoard, getJobCodeById, getAllJobCodes, createApplication } from '@/lib/firebaseService';
+import { JobBoardWithId, JobCodeWithId } from '@/types';
 import RichTextEditor from '@/components/common/RichTextEditor';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import FormInput from '@/components/common/FormInput';
 
-type JobBoardWithId = JobBoard & { id: string };
+// 날짜 포맷팅 함수
+const formatDateOnly = (timestamp: Timestamp | null | undefined): string => {
+  if (!timestamp?.toDate) return '-';
+  return format(timestamp.toDate(), 'yyyy년 MM월 dd일 (EEE)', { locale: ko });
+};
+
+const formatDateTime = (timestamp: Timestamp | null | undefined): string => {
+  if (!timestamp?.toDate) return '-';
+  return format(timestamp.toDate(), 'yyyy년 MM월 dd일 (EEE) HH:mm', { locale: ko });
+};
 
 export default function JobBoardDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [jobBoard, setJobBoard] = useState<JobBoardWithId | null>(null);
-  const [jobCode, setJobCode] = useState<JobCode | null>(null);
+  const [jobCode, setJobCode] = useState<JobCodeWithId | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [customDate, setCustomDate] = useState<string>('');
-  const [isApplying, setIsApplying] = useState(false);
-  const [hasApplied, setHasApplied] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editedDescription, setEditedDescription] = useState('');
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedStatus, setEditedStatus] = useState<'active' | 'closed'>('active');
+  const [editedInterviewDates, setEditedInterviewDates] = useState<{ start: string; end: string }[]>([]);
+  const [editedInterviewBaseDuration, setEditedInterviewBaseDuration] = useState(30);
+  const [editedInterviewBaseLink, setEditedInterviewBaseLink] = useState('');
+  const [editedInterviewBaseNotes, setEditedInterviewBaseNotes] = useState('');
+  const [selectedInterviewDate, setSelectedInterviewDate] = useState<string | null>(null);
+  const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
+  const [selectedGeneration, setSelectedGeneration] = useState<string>('');
+  const [filteredJobCodes, setFilteredJobCodes] = useState<JobCodeWithId[]>([]);
+  const [editedJobCodeId, setEditedJobCodeId] = useState('');
+
   const { userData } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedDescription, setEditedDescription] = useState('');
 
   useEffect(() => {
-    const loadJobBoard = async () => {
+    const loadData = async () => {
       try {
         setIsLoading(true);
         const board = await getJobBoardById(id);
@@ -42,19 +63,70 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
           return;
         }
         
-        if (board.status !== 'active') {
+        if (board.status !== 'active' && userData?.role !== 'admin') {
           toast.error('마감된 공고입니다.');
           router.push('/job-board');
           return;
         }
         
         setJobBoard(board);
+        setEditedTitle(board.title);
+        setEditedStatus(board.status);
         setEditedDescription(board.description);
+        setEditedJobCodeId(board.refJobCodeId);
+        
+        // 면접 기본정보 초기화
+        setEditedInterviewBaseLink(board.interviewBaseLink || '');
+        setEditedInterviewBaseDuration(board.interviewBaseDuration || 30);
+        setEditedInterviewBaseNotes(board.interviewBaseNotes || '');
 
-        // 업무 코드 정보 로드
-        const code = await getJobCodeById(board.refJobCodeId);
-        if (code) {
-          setJobCode(code);
+        // jobCode 정보 로드
+        if (board.refJobCodeId) {
+          const jobCodeData = await getJobCodeById(board.refJobCodeId);
+          setJobCode(jobCodeData);
+          if (jobCodeData) {
+            setSelectedGeneration(jobCodeData.generation);
+          }
+        }
+
+        // 모든 업무 코드 로드
+        const codes = await getAllJobCodes();
+        setJobCodes(codes);
+        
+        // 현재 기수의 업무 코드 필터링
+        if (jobCode) {
+          const filtered = codes.filter(code => code.generation === jobCode.generation);
+          setFilteredJobCodes(filtered);
+        }
+
+        // interviewDates 설정
+        if (board.interviewDates && Array.isArray(board.interviewDates)) {
+          const formattedDates = board.interviewDates
+            .filter(date => date && date.start && date.end)
+            .map(date => {
+              try {
+                const startDate = date.start instanceof Timestamp ? 
+                  date.start.toDate() : 
+                  new Date(date.start);
+                
+                const endDate = date.end instanceof Timestamp ? 
+                  date.end.toDate() : 
+                  new Date(date.end);
+
+                return {
+                  start: startDate.toISOString().slice(0, 16),
+                  end: endDate.toISOString().slice(0, 16)
+                };
+              } catch (error) {
+                console.error('날짜 변환 오류:', error);
+                return null;
+              }
+            })
+            .filter(date => date !== null);
+
+          setEditedInterviewDates(formattedDates);
+        } else {
+          setEditedInterviewDates([]);
         }
 
         // URL에 edit=true가 있으면 수정 모드로 전환
@@ -70,99 +142,70 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       }
     };
 
-    loadJobBoard();
+    loadData();
   }, [id, router, searchParams, userData?.role]);
 
-  // 날짜 선택 핸들러
-  const handleDateSelect = (date: string) => {
-    setSelectedDate(date);
-    if (date === 'custom') {
-      setCustomDate('');
-    }
+  // 기수 선택 핸들러
+  const handleGenerationChange = (generation: string) => {
+    setSelectedGeneration(generation);
+    const filtered = jobCodes.filter(code => code.generation === generation);
+    setFilteredJobCodes(filtered);
+    setEditedJobCodeId('');
+    setJobCode(null);
   };
 
-  // 지원 핸들러
-  const handleApply = async () => {
-    if (!userData) {
-      toast.error('로그인 후 지원할 수 있습니다.');
-      router.push('/login');
-      return;
-    }
-
-    if (!jobBoard) {
-      toast.error('공고 정보가 없습니다.');
-      return;
-    }
-
-    if (!selectedDate) {
-      toast.error('면접 희망 날짜를 선택해주세요.');
-      return;
-    }
-
-    // 자기소개 및 지원 동기 작성 여부 확인 메시지
-    if (!confirm('자기소개 및 지원 동기는 프로필에서 완전히 수정한 후에 지원해야 합니다. 한 번 지원하면 되돌릴 수 없습니다. 계속하시겠습니까?')) {
-      return;
-    }
-
-    // 선택된 날짜 처리
-    let interviewDate: Timestamp | undefined;
-    if (selectedDate === 'custom') {
-      if (!customDate) {
-        toast.error('커스텀 면접 날짜를 입력해주세요.');
-        return;
-      }
-      interviewDate = Timestamp.fromDate(new Date(customDate));
+  // 업무 코드 선택 핸들러
+  const handleJobCodeChange = async (jobCodeId: string) => {
+    setEditedJobCodeId(jobCodeId);
+    if (jobCodeId) {
+      const selectedJobCode = await getJobCodeById(jobCodeId);
+      setJobCode(selectedJobCode);
     } else {
-      const selectedDateIndex = parseInt(selectedDate, 10);
-      interviewDate = jobBoard.interviewDates[selectedDateIndex];
-    }
-
-    try {
-      setIsApplying(true);
-      
-      // 지원 정보 생성
-      await createApplication({
-        applicationStatus: 'pending',
-        refJobBoardId: jobBoard.jobBoardId,
-        refUserId: userData.userId,
-        interviewDate,
-      });
-      
-      toast.success('신청이 완료되었습니다. 검토 후 개별 연락 드리겠습니다.');
-      setHasApplied(true);
-      router.push('/profile/job-apply'); // 지원 내역 페이지로 이동
-    } catch (error) {
-      console.error('지원 오류:', error);
-      toast.error('지원 중 오류가 발생했습니다.');
-    } finally {
-      setIsApplying(false);
+      setJobCode(null);
     }
   };
 
   const handleSave = async () => {
-    if (!jobBoard) return;
+    if (!jobBoard || !jobCode) return;
 
     try {
-      setIsLoading(true);
-      await updateJobBoard(jobBoard.jobBoardId, {
+      const docRef = doc(db, 'jobBoards', id);
+      await updateDoc(docRef, {
+        title: editedTitle,
         description: editedDescription,
-        interviewDates: jobBoard.interviewDates // 기존 면접 일정 유지
+        status: editedStatus,
+        refJobCodeId: editedJobCodeId,
+        generation: jobCode.generation,
+        jobCode: jobCode.code,
+        interviewDates: editedInterviewDates
+          .filter(date => date.start && date.end)
+          .map(date => ({
+            start: Timestamp.fromDate(new Date(date.start)),
+            end: Timestamp.fromDate(new Date(date.end))
+          })),
+        interviewBaseDuration: Number(editedInterviewBaseDuration) || 30,
+        interviewBaseLink: editedInterviewBaseLink || '',
+        interviewBaseNotes: editedInterviewBaseNotes || '',
+        interviewPassword: jobBoard.interviewPassword || '',
+        educationStartDate: jobCode.startDate,
+        educationEndDate: jobCode.endDate,
+        updatedAt: Timestamp.now()
       });
+
+      const updatedDocSnap = await getDoc(docRef);
+      if (updatedDocSnap.exists()) {
+        const data = updatedDocSnap.data();
+        setJobBoard({ id: updatedDocSnap.id, ...data } as JobBoardWithId);
+      }
       
-      setJobBoard({
-        ...jobBoard,
-        description: editedDescription
-      });
       setIsEditing(false);
-      toast.success('공고가 성공적으로 수정되었습니다.');
+      toast.success('공고가 수정되었습니다.');
       
       // URL에서 edit 파라미터 제거
       router.replace(`/job-board/${id}`);
     } catch (error) {
       console.error('공고 수정 오류:', error);
       toast.error('공고 수정 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -171,7 +214,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
 
     try {
       setIsLoading(true);
-      await deleteJobBoard(jobBoard.jobBoardId);
+      await deleteJobBoard(jobBoard.id);
       toast.success('공고가 성공적으로 삭제되었습니다.');
       router.push('/admin/job-board-write');
     } catch (error) {
@@ -182,35 +225,95 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
 
   const handleCancel = () => {
     setIsEditing(false);
-    setEditedDescription(jobBoard?.description || '');
+    if (jobBoard) {
+      setEditedTitle(jobBoard.title);
+      setEditedStatus(jobBoard.status);
+      setEditedDescription(jobBoard.description);
+      setEditedJobCodeId(jobBoard.refJobCodeId);
+      
+      // 면접 기본정보 초기화
+      setEditedInterviewBaseLink(jobBoard.interviewBaseLink || '');
+      setEditedInterviewBaseDuration(jobBoard.interviewBaseDuration || 30);
+      setEditedInterviewBaseNotes(jobBoard.interviewBaseNotes || '');
+      
+      // interviewDates 초기화
+      if (jobBoard.interviewDates && Array.isArray(jobBoard.interviewDates)) {
+        const formattedDates = jobBoard.interviewDates
+          .filter(date => date && date.start && date.end)
+          .map(date => {
+            try {
+              const startDate = date.start instanceof Timestamp ? 
+                date.start.toDate() : 
+                new Date(date.start);
+              
+              const endDate = date.end instanceof Timestamp ? 
+                date.end.toDate() : 
+                new Date(date.end);
+
+              return {
+                start: startDate.toISOString().slice(0, 16),
+                end: endDate.toISOString().slice(0, 16)
+              };
+            } catch (error) {
+              console.error('날짜 변환 오류:', error);
+              return null;
+            }
+          })
+          .filter(date => date !== null);
+
+        setEditedInterviewDates(formattedDates);
+      } else {
+        setEditedInterviewDates([]);
+      }
+    }
     router.replace(`/job-board/${id}`);
   };
 
-  // 날짜 포맷팅 함수 (시간 포함)
-  const formatDate = (timestamp: Timestamp) => {
-    const date = timestamp.toDate();
-    return format(date, 'yyyy년 MM월 dd일 (EEE) HH:mm', { locale: ko });
-  };
+  const handleApply = async () => {
+    if (!userData || !jobBoard) {
+      toast.error('로그인이 필요합니다.');
+      router.push('/login');
+      return;
+    }
 
-  // 날짜만 포맷팅하는 함수
-  const formatDateOnly = (timestamp: Timestamp) => {
-    const date = timestamp.toDate();
-    return format(date, 'yyyy년 MM월 dd일 (EEE)', { locale: ko });
-  };
+    if (!userData.selfIntroduction || !userData.jobMotivation) {
+      toast.error('자기소개서와 지원동기를 먼저 작성해주세요.');
+      router.push('/profile');
+      return;
+    }
 
-  // 과거 날짜인지 체크하는 함수
-  const isPastDate = (timestamp: Timestamp): boolean => {
-    const now = new Date();
-    const date = timestamp.toDate();
-    // 현재 시간과 비교할 때 분 단위까지 고려
-    now.setSeconds(0, 0);
-    date.setSeconds(0, 0);
-    return date < now;
+    if (!selectedInterviewDate) {
+      toast.error('면접 일정을 선택해주세요.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // 면접 일정 파싱
+      const [startMillis] = selectedInterviewDate.split('-').map(Number);
+      const interviewDate = new Timestamp(Math.floor(startMillis / 1000), 0);
+
+      await createApplication({
+        refJobBoardId: jobBoard.id,
+        refUserId: userData.userId,
+        applicationStatus: 'pending',
+        interviewDate
+      });
+
+      toast.success('지원이 완료되었습니다.');
+      router.push('/profile/job-apply');
+    } catch (error) {
+      console.error('지원 오류:', error);
+      toast.error('지원 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         {isLoading ? (
           <div className="flex justify-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
@@ -229,225 +332,421 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
         ) : (
           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
             <div className="p-4 sm:p-6">
-              {/* 공고 헤더 */}
-              <div className="mb-6 pb-6 border-b border-gray-200">
-                <div className="mb-2">
-                  <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 text-xs rounded-full">
-                    {jobBoard.refGeneration}
-                  </span>
-                </div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">{jobBoard.title}</h1>
-                <div className="text-sm text-gray-500">
-                  등록일: {formatDate(jobBoard.createdAt)}
-                </div>
-              </div>
-              
-              {/* 업무 정보 */}
-              {jobCode && !isEditing && (
-                <div className="mb-8 p-4 bg-gray-50 rounded-lg">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4">업무 정보</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">캠프 이름</p>
-                      <p className="font-medium">{jobCode.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">업무 코드</p>
-                      <p className="font-medium">{jobCode.code}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">캠프 기간</p>
-                      <p className="font-medium">
-                        {formatDateOnly(jobCode.startDate)} ~ {formatDateOnly(jobCode.endDate)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">캠프 위치</p>
-                      <p className="font-medium">{jobCode.location}</p>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <p className="text-sm text-gray-600 mb-1">교육 일정</p>
-                      <div className="flex flex-wrap gap-2">
-                        {jobCode.eduDates.map((date, index) => (
-                          <span 
-                            key={index}
-                            className="inline-block px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded"
-                          >
-                            {formatDateOnly(date)}
-                          </span>
-                        ))}
+              {isEditing ? (
+                <div className="space-y-6">
+                  <div className="mb-6">
+                    <h2 className="text-xl font-bold mb-4">공고 수정</h2>
+                    
+                    {/* 기수 및 업무 선택 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">기수 선택</label>
+                        <select
+                          value={selectedGeneration}
+                          onChange={(e) => handleGenerationChange(e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {Array.from(new Set(jobCodes.map(code => code.generation)))
+                            .sort((a, b) => {
+                              const numA = parseInt(a.replace(/\D/g, ''));
+                              const numB = parseInt(b.replace(/\D/g, ''));
+                              return numB - numA;
+                            })
+                            .map((generation) => (
+                              <option key={generation} value={generation}>
+                                {generation}
+                              </option>
+                            ))
+                          }
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">업무 선택</label>
+                        <select
+                          value={editedJobCodeId}
+                          onChange={(e) => handleJobCodeChange(e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">업무를 선택해주세요</option>
+                          {filteredJobCodes.map((code) => (
+                            <option key={code.id} value={code.id}>
+                              {code.code} - {code.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
-              
-              {/* 공고 본문 */}
-              <div className="mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 mb-3">공고 내용</h2>
-                {isEditing ? (
-                  <div className="mb-4">
-                    <RichTextEditor
-                      content={editedDescription}
-                      onChange={setEditedDescription}
-                      placeholder="공고 내용을 입력하세요"
-                    />
-                    <div className="flex justify-end gap-2 mt-4">
+
+                    {/* 선택된 업무 정보 */}
+                    {jobCode && (
+                      <div className="mb-4 p-3 bg-gray-50 rounded-md">
+                        <h3 className="font-medium text-gray-700 mb-2">선택된 업무 정보</h3>
+                        <p><span className="font-medium">기수:</span> {jobCode.generation}</p>
+                        <p><span className="font-medium">코드:</span> {jobCode.code}</p>
+                        <p><span className="font-medium">이름:</span> {jobCode.name}</p>
+                        <p><span className="font-medium">기간:</span> {formatDateOnly(jobCode.startDate)} ~ {formatDateOnly(jobCode.endDate)}</p>
+                        <p><span className="font-medium">위치:</span> {jobCode.location}</p>
+                        <div>
+                          <p className="font-medium">교육 날짜:</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {jobCode.eduDates.map((date, index) => (
+                              <span key={index} className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded">
+                                {formatDateOnly(date)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 공고 제목 및 상태 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <FormInput
+                        label="공고 제목"
+                        type="text"
+                        value={editedTitle}
+                        onChange={(e) => setEditedTitle(e.target.value)}
+                        placeholder="공고 제목을 입력하세요"
+                      />
+
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">공고 상태</label>
+                        <select
+                          value={editedStatus}
+                          onChange={(e) => setEditedStatus(e.target.value as 'active' | 'closed')}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="active">모집중</option>
+                          <option value="closed">마감</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* 공고 내용 */}
+                    <div className="mb-4">
+                      <label className="block text-gray-700 text-sm font-medium mb-2">공고 내용</label>
+                      <RichTextEditor
+                        content={editedDescription}
+                        onChange={setEditedDescription}
+                      />
+                    </div>
+
+                    {/* 면접 일정 */}
+                    <div>
+                      <h3 className="text-lg font-medium mb-2">면접 일정</h3>
+                      {editedInterviewDates.map((date, index) => (
+                        <div key={index} className="flex gap-2 mb-2">
+                          <input
+                            type="datetime-local"
+                            value={date.start}
+                            onChange={(e) => {
+                              const newDates = [...editedInterviewDates];
+                              newDates[index] = { ...newDates[index], start: e.target.value };
+                              setEditedInterviewDates(newDates);
+                            }}
+                            className="border rounded px-2 py-1"
+                          />
+                          <span className="self-center">~</span>
+                          <input
+                            type="datetime-local"
+                            value={date.end}
+                            onChange={(e) => {
+                              const newDates = [...editedInterviewDates];
+                              newDates[index] = { ...newDates[index], end: e.target.value };
+                              setEditedInterviewDates(newDates);
+                            }}
+                            className="border rounded px-2 py-1"
+                          />
+                          <Button
+                            variant="danger"
+                            onClick={() => {
+                              const newDates = editedInterviewDates.filter((_, i) => i !== index);
+                              setEditedInterviewDates(newDates);
+                            }}
+                          >
+                            삭제
+                          </Button>
+                        </div>
+                      ))}
                       <Button
                         variant="secondary"
-                        onClick={handleCancel}
+                        onClick={() => {
+                          setEditedInterviewDates([
+                            ...editedInterviewDates,
+                            { start: '', end: '' }
+                          ]);
+                        }}
+                        className="mt-2"
                       >
+                        면접 일정 추가
+                      </Button>
+                    </div>
+
+                    {/* 면접 정보 */}
+                    <div className="mt-6">
+                      <h3 className="text-lg font-medium mb-4">면접 정보</h3>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            면접 링크
+                          </label>
+                          <input
+                            type="text"
+                            value={editedInterviewBaseLink}
+                            onChange={(e) => setEditedInterviewBaseLink(e.target.value)}
+                            className="w-full p-2 border rounded"
+                            placeholder="https://zoom.us/j/..."
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            면접 시간 (분)
+                          </label>
+                          <input
+                            type="number"
+                            value={editedInterviewBaseDuration}
+                            onChange={(e) => setEditedInterviewBaseDuration(Number(e.target.value))}
+                            className="w-full p-2 border rounded"
+                            placeholder="30"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          면접 안내사항
+                        </label>
+                        <textarea
+                          value={editedInterviewBaseNotes}
+                          onChange={(e) => setEditedInterviewBaseNotes(e.target.value)}
+                          rows={3}
+                          className="w-full p-2 border rounded"
+                          placeholder="면접 준비사항 등을 입력하세요..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 mt-6">
+                      <Button variant="secondary" onClick={handleCancel}>
                         취소
                       </Button>
-                      <Button
-                        variant="primary"
-                        onClick={handleSave}
-                        isLoading={isLoading}
-                      >
+                      <Button variant="primary" onClick={handleSave}>
                         저장
                       </Button>
                     </div>
                   </div>
-                ) : (
-                  <div 
-                    className="prose prose-slate max-w-none [&>h1]:text-4xl [&>h1]:font-bold [&>h1]:mb-4 [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:mb-3 [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:mb-2 [&>p]:whitespace-pre-wrap [&>p:empty]:h-[1em] [&>p:empty]:block [&>p]:min-h-[1.5em]"
-                    dangerouslySetInnerHTML={{ __html: jobBoard.description }}
-                  >
+                </div>
+              ) : (
+                <>
+                  {/* 공고 헤더 */}
+                  <div className="mb-6 pb-6 border-b border-gray-200">
+                    <div className="text-lg font-semibold text-gray-900">{jobBoard.title}</div>
+                    <div className="text-sm text-gray-500">{jobBoard.generation}</div>
                   </div>
-                )}
-              </div>
-              
-              {/* 면접 날짜 선택 */}
-              {!isEditing && (
-                <div className="mb-8">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-3">면접 일정</h2>
-                  
-                  {jobBoard.interviewDates.length === 0 ? (
-                    <div className="text-gray-500">면접 일정이 없습니다.</div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {jobBoard.interviewDates.map((date, index) => (
-                        <div 
-                          key={index}
-                          className={`border rounded-md p-3 ${
-                            selectedDate === index.toString()
-                              ? 'border-blue-500 bg-blue-50' 
-                              : 'border-gray-300 hover:border-gray-400'
-                          } 
-                          ${isPastDate(date) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                          onClick={() => !isPastDate(date) && handleDateSelect(index.toString())}
-                        >
-                          <div className="flex items-center">
-                            <div className={`w-4 h-4 rounded-full mr-2 ${
-                              selectedDate === index.toString() ? 'bg-blue-500' : 'bg-gray-300'
-                            }`}></div>
-                            <div className="flex-1">
-                              <div className="text-sm font-medium">{formatDate(date)}</div>
-                              {isPastDate(date) && (
-                                <span className="text-xs text-red-600">지난 일정</span>
-                              )}
+
+                  {/* 캠프 정보 */}
+                  {jobCode && (
+                    <div className="mb-8 p-4 bg-gray-50 rounded-lg">
+                      <h2 className="text-lg font-semibold text-gray-900 mb-4">캠프 정보</h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-gray-600 mb-1">캠프 이름</p>
+                          <p className="font-medium">{jobCode.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600 mb-1">캠프 위치</p>
+                          <p className="font-medium">{jobCode.location}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600 mb-1">캠프 기간</p>
+                          <p className="font-medium">
+                            {formatDateOnly(jobCode.startDate)} ~ {formatDateOnly(jobCode.endDate)}
+                          </p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <p className="text-sm text-gray-600 mb-1">교육 일정</p>
+                          <div className="flex flex-wrap gap-2">
+                            {jobCode.eduDates.map((date, index) => (
+                              <span 
+                                key={index}
+                                className="inline-block px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded"
+                              >
+                                {formatDateOnly(date)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 공고 본문 */}
+                  <div className="mb-8">
+                    <div
+                      className="prose prose-slate max-w-none [&>h1]:text-4xl [&>h1]:font-bold [&>h1]:mb-4 [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:mb-3 [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:mb-2 [&>p]:whitespace-pre-wrap [&>p:empty]:h-[1em] [&>p:empty]:block [&>p]:min-h-[1.5em] [&>ul]:list-disc [&>ul]:pl-[1.625em] [&>ol]:list-decimal [&>ol]:pl-[1.625em]"
+                      dangerouslySetInnerHTML={{ __html: jobBoard.description }}
+                    />
+                  </div>
+
+                  {/* 면접 일정 */}
+                  {jobBoard.interviewDates && Array.isArray(jobBoard.interviewDates) && jobBoard.interviewDates.length > 0 && (
+                    <div className="mb-8">
+                      <h2 className="text-lg font-semibold text-gray-900 mb-4">면접 일정 선택</h2>
+                      <div className="grid grid-cols-1 gap-2">
+                        {jobBoard.interviewDates
+                          .filter(date => date && date.start && date.end)
+                          .map((date, index) => {
+                            try {
+                              const startDate = date.start instanceof Timestamp ? 
+                                date.start : 
+                                Timestamp.fromDate(new Date(date.start));
+                              
+                              const endDate = date.end instanceof Timestamp ? 
+                                date.end : 
+                                Timestamp.fromDate(new Date(date.end));
+
+                              const dateKey = `${startDate.toMillis()}-${endDate.toMillis()}`;
+                              
+                              return (
+                                <div 
+                                  key={index}
+                                  className={`p-3 border rounded-lg transition-colors cursor-pointer ${
+                                    selectedInterviewDate === dateKey
+                                      ? 'bg-blue-50 border-blue-500'
+                                      : 'hover:bg-gray-50'
+                                  }`}
+                                  onClick={() => setSelectedInterviewDate(dateKey)}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <input
+                                      type="radio"
+                                      name="interviewDate"
+                                      checked={selectedInterviewDate === dateKey}
+                                      onChange={() => setSelectedInterviewDate(dateKey)}
+                                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <div>
+                                      <p className="font-medium">
+                                        {formatDateTime(startDate)} ~ {formatDateTime(endDate)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            } catch (error) {
+                              console.error('날짜 렌더링 오류:', error);
+                              return null;
+                            }
+                          })
+                          .filter(Boolean)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 지원하기 섹션 */}
+                  {userData && jobBoard.status === 'active' && (
+                    <div className="mt-8 pt-8 border-t border-gray-200">
+                      <div className="mb-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-2">지원하기</h2>
+                        <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                          <div className="flex items-start">
+                            <div className="flex-shrink-0">
+                              <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <div className="ml-3">
+                              <h3 className="text-sm font-medium text-blue-800">지원 전 확인사항</h3>
+                              <div className="mt-2 text-sm text-blue-700">
+                                <p className="mb-1">• 지원하기 전에 <button onClick={() => router.push('/profile')} className="text-blue-600 hover:text-blue-800 font-medium">내 정보</button>에서 자기소개서와 지원동기를 작성해주세요.</p>
+                                <p className="mb-1">• 면접 일정을 반드시 선택해주세요.</p>
+                                <p>• 지원 후에는 <button onClick={() => router.push('/profile/job-apply')} className="text-blue-600 hover:text-blue-800 font-medium">지원 현황</button>에서 진행 상태를 확인할 수 있습니다.</p>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      ))}
+
+                        {!userData.selfIntroduction || !userData.jobMotivation ? (
+                          <div className="text-center py-6 bg-gray-50 rounded-lg">
+                            <p className="text-gray-600 mb-4">지원하기 전에 자기소개서와 지원동기를 작성해주세요.</p>
+                            <Button
+                              variant="primary"
+                              onClick={() => router.push('/profile')}
+                            >
+                              내 정보 작성하기
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-6">
+                            <div>
+                              <h3 className="text-sm font-medium text-gray-900 mb-2">자기소개서 미리보기</h3>
+                              <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-line text-sm text-gray-700">
+                                {userData.selfIntroduction}
+                              </div>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-medium text-gray-900 mb-2">지원동기 미리보기</h3>
+                              <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-line text-sm text-gray-700">
+                                {userData.jobMotivation}
+                              </div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Button
+                                variant="primary"
+                                onClick={handleApply}
+                                disabled={!selectedInterviewDate || isSubmitting}
+                                className="w-full sm:w-auto"
+                              >
+                                {isSubmitting ? '지원 중...' : '지원하기'}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
-                </div>
-              )}
-              
-              {/* 지원 버튼 */}
-              {!isEditing && (
-                <>
-                  {userData && jobBoard.status === 'active' ? (
-                    <div className="mt-6 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                      <Button 
-                        variant="primary" 
-                        onClick={handleApply}
-                        disabled={!selectedDate || isApplying || hasApplied || (selectedDate !== 'custom' && selectedDate !== '' && isPastDate(jobBoard.interviewDates[parseInt(selectedDate, 10)]))}
-                        className="w-full sm:w-auto"
-                      >
-                        {isApplying ? '처리 중...' : hasApplied ? '이미 지원됨' : '지원하기'}
-                      </Button>
-                      <Button 
-                        variant="secondary"
-                        onClick={() => router.push('/job-board')}
-                        className="w-full sm:w-auto"
-                      >
-                        목록으로 돌아가기
-                      </Button>
-                    </div>
-                  ) : !userData ? (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-6">
-                      <div className="flex">
-                        <div className="flex-shrink-0">
-                          <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                        <div className="ml-3 flex flex-col sm:flex-row sm:items-center">
-                          {/* <h3 className="text-sm font-medium text-yellow-800 mr-2">로그인 후 지원하기</h3> */}
-                          <Button 
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => router.push('/sign-in')}
-                            className="mt-2 sm:mt-0"
+
+                  {userData?.role === 'admin' && (
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="success"
+                          onClick={() => setIsEditing(true)}
+                          className="px-4"
+                        >
+                          수정
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={handleDelete}
+                          className="px-4"
+                        >
+                          삭제
+                        </Button>
+                        {jobBoard.status === 'active' ? (
+                          <Button
+                            variant="danger-dark"
+                            onClick={() => router.push(`/admin/job-board-manage?close=${id}`)}
+                            className="px-4"
                           >
-                            로그인 후 지원
+                            공고 마감
                           </Button>
-                        </div>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            onClick={() => router.push(`/admin/job-board-manage?activate=${id}`)}
+                            className="px-4"
+                          >
+                            공고 활성화
+                          </Button>
+                        )}
                       </div>
                     </div>
-                  ) : jobBoard.status !== 'active' ? (
-                    <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
-                      <div className="flex">
-                        <div className="flex-shrink-0">
-                          <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                        <div className="ml-3">
-                          <h3 className="text-sm font-medium text-red-800">지원 마감된 공고입니다</h3>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
+                  )}
                 </>
-              )}
-              
-              {/* 관리자 버튼 */}
-              {userData?.role === 'admin' && !isEditing && (
-                <div className="mt-8 pt-6 border-t border-gray-200">
-                  <h3 className="text-sm font-medium text-gray-500 mb-3">관리자 기능</h3>
-                  <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                    <Button
-                      variant="primary"
-                      onClick={() => setIsEditing(true)}
-                    >
-                      공고 수정
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={handleDelete}
-                    >
-                      공고 삭제
-                    </Button>
-                    {jobBoard.status === 'active' ? (
-                      <Button
-                        variant="secondary"
-                        onClick={() => router.push(`/admin/job-board-manage?close=${id}`)}
-                      >
-                        공고 마감
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="secondary"
-                        onClick={() => router.push(`/admin/job-board-manage?activate=${id}`)}
-                      >
-                        공고 활성화
-                      </Button>
-                    )}
-                  </div>
-                </div>
               )}
             </div>
           </div>

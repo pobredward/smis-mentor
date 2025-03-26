@@ -180,6 +180,8 @@ export default function JobGenerate() {
           startDate,
           endDate,
           location: data.location,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
         });
 
         toast.success('업무가 성공적으로 생성되었습니다.');

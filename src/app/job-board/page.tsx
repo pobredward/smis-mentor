@@ -86,14 +86,14 @@ export default function JobBoardList() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {jobBoards.map((board) => (
               <div 
-                key={board.jobBoardId}
+                key={board.id}
                 className="bg-white rounded-lg shadow overflow-hidden cursor-pointer hover:shadow-lg transition-shadow duration-200 flex flex-col"
-                onClick={() => handleSelectBoard(board.jobBoardId)}
+                onClick={() => handleSelectBoard(board.id)}
               >
                 <div className="p-4 sm:p-6 flex-grow">
                   <div className="mb-2">
                     <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 text-xs rounded-full">
-                      {board.refGeneration}
+                      {board.generation}
                     </span>
                   </div>
                   <h3 className="font-medium text-lg sm:text-xl text-gray-900 mb-4">{board.title}</h3>

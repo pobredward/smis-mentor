@@ -6,16 +6,16 @@ import { format } from 'date-fns';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getAllJobCodes, getUsersByJobCode } from '@/lib/firebaseService';
-import { JobCode, User } from '@/types';
+import { JobCodeWithId, User } from '@/types';
 import { formatPhoneNumber } from '@/components/common/PhoneInput';
 
 type UserWithGroupInfo = User & { groupName?: string };
 
 export default function UserCheck() {
-  const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
+  const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [generations, setGenerations] = useState<string[]>([]);
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
-  const [codesForGeneration, setCodesForGeneration] = useState<JobCode[]>([]);
+  const [codesForGeneration, setCodesForGeneration] = useState<JobCodeWithId[]>([]);
   const [selectedCode, setSelectedCode] = useState<string>('');
   const [users, setUsers] = useState<UserWithGroupInfo[]>([]);
   const [groupedUsers, setGroupedUsers] = useState<Record<string, UserWithGroupInfo[]>>({});
@@ -33,7 +33,7 @@ export default function UserCheck() {
     'spring': '스프링',
     'summer': '서머',
     'autumn': '어텀',
-    'winter': '윈터'
+    'winter': '윈터',
   };
   
   // 그룹 색상 매핑
@@ -400,45 +400,36 @@ export default function UserCheck() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 border-t pt-4">
                   <div>
                     <p className="text-sm text-gray-500">이메일</p>
-                    <p className="text-gray-900">{selectedUser.email || '-'}</p>
+                    <p className="text-gray-900 break-words">{selectedUser.email || '-'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">전화번호</p>
-                    <p className="text-gray-900">{selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}</p>
+                    <p className="text-gray-900">
+                      {selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}
+                    </p>
                   </div>
                   <div className="md:col-span-2">
                     <p className="text-sm text-gray-500">주소</p>
-                    <p className="text-gray-900">
+                    <p className="text-gray-900 break-words">
                       {selectedUser.address ? `${selectedUser.address} ${selectedUser.addressDetail || ''}` : '-'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">성별</p>
+                    <p className="text-sm text-gray-500">이메일 인증</p>
                     <p className="text-gray-900">
-                      {selectedUser.gender === 'M' ? '남성' : 
-                       selectedUser.gender === 'F' ? '여성' : '-'}
+                      {selectedUser.isEmailVerified ? '인증됨' : '미인증'}
                     </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">나이</p>
-                    <p className="text-gray-900">{selectedUser.age || '-'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">가입일</p>
                     <p className="text-gray-900">{formatDate(selectedUser.createdAt)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">마지막 로그인</p>
-                    <p className="text-gray-900">{formatDate(selectedUser.lastLoginAt)}</p>
+                    <p className="text-sm text-gray-500">정보 업데이트</p>
+                    <p className="text-gray-900">{formatDate(selectedUser.updatedAt)}</p>
                   </div>
                   <div className="md:col-span-2 mt-2">
                     <p className="text-sm text-gray-500">자기소개</p>
-                    <p className="text-gray-900 whitespace-pre-line">
-                      {selectedUser.selfIntroduction || '-'}
-                    </p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-500">지원 동기</p>
                     <p className="text-gray-900 whitespace-pre-line">
                       {selectedUser.jobMotivation || '-'}
                     </p>

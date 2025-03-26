@@ -124,15 +124,18 @@ export default function UserProfilePage({ params }: { params: Promise<{ userId: 
                           jobCode.group === 'spring' ? 'bg-blue-100 text-blue-800' :
                           jobCode.group === 'summer' ? 'bg-purple-100 text-purple-800' :
                           jobCode.group === 'autumn' ? 'bg-orange-100 text-orange-800' :
-                          'bg-pink-100 text-pink-800'
+                          jobCode.group === 'winter' ? 'bg-pink-100 text-pink-800' :
+                          jobCode.group === 'common' ? 'bg-gray-100 text-gray-800' :
+                          'bg-gray-100 text-gray-800'
                         }`}>
                           {jobCode.group === 'junior' ? '주니어' :
-                           jobCode.group === 'middle' ? '미들' : 
+                           jobCode.group === 'middle' ? '미들' :
                            jobCode.group === 'senior' ? '시니어' :
                            jobCode.group === 'spring' ? '스프링' :
                            jobCode.group === 'summer' ? '서머' :
                            jobCode.group === 'autumn' ? '어텀' :
-                           '윈터'}
+                           jobCode.group === 'winter' ? '윈터' :
+                           '공통'}
                         </span>
                       )}
                     </div>

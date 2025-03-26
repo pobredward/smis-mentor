@@ -13,6 +13,7 @@ import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import { Timestamp } from 'firebase/firestore';
+import { signUp, sendVerificationEmail } from '@/lib/firebaseService';
 
 const detailsSchema = z.object({
   address: z.string().min(1, '주소를 입력해주세요.'),
@@ -101,7 +102,9 @@ export default function SignUpDetails() {
       
       if (existingUser && existingUser.status === 'temp') {
         // Firebase Auth에 사용자 등록
-        // const userCredential = await signUp(email, decodeURIComponent(password));
+        const userCredential = await signUp(email, decodeURIComponent(password));
+        // 이메일 인증 메일 발송
+        await sendVerificationEmail(userCredential.user);
         
         const now = Timestamp.now();
         
@@ -123,11 +126,13 @@ export default function SignUpDetails() {
           lastLoginAt: now
         });
         
-        toast.success('회원가입이 완료되었습니다.');
+        toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
         router.push('/');
       } else {
-        // 임시 사용자가 없는 경우 새 사용자 생성
-        // const userCredential = await signUp(email, decodeURIComponent(password));
+        // Firebase Auth에 사용자 등록
+        const userCredential = await signUp(email, decodeURIComponent(password));
+        // 이메일 인증 메일 발송
+        await sendVerificationEmail(userCredential.user);
 
         const now = Timestamp.now();
 
@@ -155,7 +160,7 @@ export default function SignUpDetails() {
           lastLoginAt: now
         });
 
-        toast.success('회원가입이 완료되었습니다.');
+        toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
         router.push('/');
       }
     } catch (error) {

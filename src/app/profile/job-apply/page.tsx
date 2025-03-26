@@ -168,7 +168,7 @@ export default function JobApplyStatus() {
                       {app.jobBoard?.title || '삭제된 공고'}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {app.jobBoard?.refGeneration} ({app.jobBoard?.refCode})
+                      {app.jobBoard?.generation}기 ({app.jobBoard?.jobCode})
                     </p>
                   </div>
                   
@@ -184,29 +184,16 @@ export default function JobApplyStatus() {
                     </div>
                   </div>
                   
-                  {/* 면접 링크 버튼 (서류 합격이고 interviewLink가 있을 때만 표시) */}
-                  {app.applicationStatus === 'accepted' && app.interviewStatus === 'pending' && app.interviewLink && (
-                    <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm font-medium text-blue-800 mb-2">화상 면접 정보</p>
-                      {app.interviewNote && (
-                        <p className="text-xs text-gray-700 mb-2 whitespace-pre-line">{app.interviewNote}</p>
-                      )}
-                      {app.interviewDuration && (
-                        <p className="text-xs text-gray-700 mb-2">예상 소요시간: {app.interviewDuration}분</p>
-                      )}
-                      <a 
-                        href={app.interviewLink} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="w-full mt-2 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-                          <path d="M14 6a2 2 0 012-2h2a2 2 0 012 2v8a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z" />
-                        </svg>
-                        화상 면접 참여하기
-                      </a>
-                    </div>
+                  {/* 면접 링크 버튼 (서류 합격이고 interviewBaseLink가 있을 때만 표시) */}
+                  {app.applicationStatus === 'accepted' && app.interviewStatus === 'pending' && app.interviewBaseLink && (
+                    <a
+                      href={app.interviewBaseLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      면접 링크 바로가기
+                    </a>
                   )}
                   
                   {/* 상태 표시 */}

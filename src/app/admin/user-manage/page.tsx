@@ -8,8 +8,19 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
 import PhoneInput, { formatPhoneNumber } from '@/components/common/PhoneInput';
-import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo } from '@/lib/firebaseService';
-import { User, JobCode } from '@/types';
+import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode } from '@/lib/firebaseService';
+import { JobCodeWithId, JobCodeWithGroup, JobGroup, User } from '@/types';
+import { Timestamp } from 'firebase/firestore';
+
+type EditFormData = {
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+  address?: string;
+  addressDetail?: string;
+  role?: User['role'];
+  status?: User['status'];
+};
 
 export default function UserManage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -18,16 +29,16 @@ export default function UserManage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editFormData, setEditFormData] = useState<Partial<User>>({});
-  const [userJobCodes, setUserJobCodes] = useState<JobCode[]>([]);
-  const [allJobCodes, setAllJobCodes] = useState<JobCode[]>([]);
-  const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
+  const [editFormData, setEditFormData] = useState<EditFormData>({});
+  const [allJobCodes, setAllJobCodes] = useState<JobCodeWithId[]>([]);
+  const [userJobCodes, setUserJobCodes] = useState<JobCodeWithGroup[]>([]);
   const [selectedJobCodeId, setSelectedJobCodeId] = useState<string>('');
+  const [selectedGroup, setSelectedGroup] = useState<JobGroup>('junior');
   const [allGenerations, setAllGenerations] = useState<string[]>([]);
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
-  const [filteredJobCodes, setFilteredJobCodes] = useState<JobCode[]>([]);
+  const [filteredJobCodes, setFilteredJobCodes] = useState<JobCodeWithId[]>([]);
   const [showUserList, setShowUserList] = useState(true);
-  const [selectedJobGroup, setSelectedJobGroup] = useState<string>('junior');
+  const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
 
   const jobGroups = [
     { value: 'junior', label: '주니어' },
@@ -36,25 +47,25 @@ export default function UserManage() {
     { value: 'spring', label: '스프링' },
     { value: 'summer', label: '서머' },
     { value: 'autumn', label: '어텀' },
-    { value: 'winter', label: '윈터' }
+    { value: 'winter', label: '윈터' },
+    { value: 'common', label: '공통' }
   ];
 
   // 사용자 목록 불러오기
   useEffect(() => {
     const loadUsers = async () => {
+      setIsLoading(true);
       try {
-        setIsLoading(true);
-        const allUsers = await getAllUsers();
-        setUsers(allUsers);
-        setFilteredUsers(allUsers);
+        const fetchedUsers = await getAllUsers();
+        setUsers(fetchedUsers);
+        setFilteredUsers(fetchedUsers);
       } catch (error) {
-        console.error('사용자 정보 로드 오류:', error);
+        console.error('사용자 목록 로딩 실패:', error);
         toast.error('사용자 정보를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
       }
     };
-
     loadUsers();
   }, []);
 
@@ -100,6 +111,10 @@ export default function UserManage() {
       setShowUserList(false);
     }
     
+    // 선택 초기화
+    setSelectedJobCodeId('');
+    setSelectedGeneration('');
+    
     // 사용자의 직무 경험 정보 로드
     if (user.jobExperiences && user.jobExperiences.length > 0) {
       setIsLoadingJobCodes(true);
@@ -128,7 +143,7 @@ export default function UserManage() {
       address: selectedUser.address,
       addressDetail: selectedUser.addressDetail,
       role: selectedUser.role,
-      status: selectedUser.status,
+      status: selectedUser.status
     });
     
     setIsEditing(true);
@@ -137,10 +152,10 @@ export default function UserManage() {
   // 수정 폼 데이터 변경 핸들러
   const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { target: { name: string; value: string } }) => {
     const { name, value } = e.target;
-    setEditFormData({
-      ...editFormData,
+    setEditFormData(prev => ({
+      ...prev,
       [name]: value
-    });
+    }));
   };
 
   // 사용자 업데이트 핸들러
@@ -158,7 +173,7 @@ export default function UserManage() {
       );
       
       setUsers(updatedUsers);
-      setSelectedUser({ ...selectedUser, ...editFormData });
+      setSelectedUser(prev => prev ? { ...prev, ...editFormData } : null);
       setIsEditing(false);
       
       toast.success('사용자 정보가 업데이트되었습니다.');
@@ -237,109 +252,72 @@ export default function UserManage() {
   }, [selectedGeneration, allJobCodes]);
 
   // 직무 경험 추가 핸들러
-  const handleAddJobExperience = async () => {
+  const handleAddJobCode = async () => {
     if (!selectedUser || !selectedJobCodeId) return;
     
-    // 이미 가지고 있는 경험인지 확인
-    const hasExperience = selectedUser.jobExperiences.some(exp => 
-      typeof exp === 'string' 
-        ? exp === selectedJobCodeId 
-        : exp.id === selectedJobCodeId
-    );
-    
-    if (hasExperience) {
-      toast.error('이미 등록된 직무 경험입니다.');
-      return;
-    }
-    
     try {
-      // 새 경험 객체 생성
-      const newExperience = {
-        id: selectedJobCodeId,
-        group: selectedJobGroup
-      };
+      const updatedJobExperiences = await addUserJobCode(selectedUser.userId, selectedJobCodeId, selectedGroup);
       
-      // 새 경험 배열 생성
-      const updatedExperiences = [
-        ...selectedUser.jobExperiences.map(exp => 
-          typeof exp === 'string' ? { id: exp, group: 'junior' } : exp
-        ),
-        newExperience
-      ];
+      // 사용자 목록 업데이트
+      setUsers(prevUsers => prevUsers.map(user => 
+        user.userId === selectedUser.userId 
+          ? { ...user, jobExperiences: updatedJobExperiences }
+          : user
+      ));
       
-      // 사용자 정보 업데이트
-      await updateUser(selectedUser.userId, { jobExperiences: updatedExperiences });
+      // 선택된 사용자 업데이트
+      setSelectedUser(prev => prev ? {
+        ...prev,
+        jobExperiences: updatedJobExperiences
+      } : null);
       
-      // 추가된 직무 정보 가져오기
-      const addedJobCode = allJobCodes.find(code => code.id === selectedJobCodeId);
+      // 직무 코드 목록 새로고침
+      const jobCodes = await getUserJobCodesInfo(updatedJobExperiences);
+      setUserJobCodes(jobCodes);
       
-      if (addedJobCode) {
-        // 그룹 정보 추가
-        const jobCodeWithGroup = { ...addedJobCode, group: selectedJobGroup };
-        
-        // 로컬 상태 업데이트
-        setUserJobCodes(prev => [...prev, jobCodeWithGroup]);
-        
-        // users 배열 업데이트
-        setUsers(prevUsers => 
-          prevUsers.map(user => 
-            user.userId === selectedUser.userId 
-              ? { ...user, jobExperiences: updatedExperiences } 
-              : user
-          )
-        );
-        
-        // selectedUser 업데이트
-        setSelectedUser({
-          ...selectedUser,
-          jobExperiences: updatedExperiences
-        });
-        
-        toast.success('직무 경험이 추가되었습니다.');
-        setSelectedJobCodeId(''); // 선택 초기화
-      }
+      // 선택 초기화
+      setSelectedJobCodeId('');
+      setSelectedGeneration('');
+      
+      toast.success('직무 코드가 추가되었습니다.');
     } catch (error) {
-      console.error('직무 경험 추가 오류:', error);
-      toast.error('직무 경험 추가 중 오류가 발생했습니다.');
+      console.error('직무 코드 추가 실패:', error);
+      toast.error('직무 코드 추가에 실패했습니다.');
     }
   };
 
   // 직무 경험 삭제 핸들러
-  const handleRemoveJobExperience = async (jobCodeId: string) => {
+  const handleRemoveJobCode = async (jobCodeId: string) => {
     if (!selectedUser) return;
     
     try {
-      // 삭제 후 남은 경험 배열 생성
-      const updatedExperiences = selectedUser.jobExperiences
-        .filter(exp => typeof exp === 'string' 
-          ? exp !== jobCodeId 
-          : exp.id !== jobCodeId);
+      const updatedJobExperiences = selectedUser.jobExperiences?.filter(exp => 
+        exp.id !== jobCodeId
+      ) || [];
       
-      // 사용자 정보 업데이트
-      await updateUser(selectedUser.userId, { jobExperiences: updatedExperiences });
+      await updateUser(selectedUser.userId, { jobExperiences: updatedJobExperiences });
       
-      // 로컬 상태 업데이트
-      setUserJobCodes(prev => prev.filter(code => code.id !== jobCodeId));
+      // 사용자 목록 업데이트
+      setUsers(prevUsers => prevUsers.map(user => 
+        user.userId === selectedUser.userId 
+          ? { ...user, jobExperiences: updatedJobExperiences }
+          : user
+      ));
       
-      // users 배열 업데이트
-      setUsers(prevUsers => 
-        prevUsers.map(user => 
-          user.userId === selectedUser.userId 
-            ? { ...user, jobExperiences: updatedExperiences } 
-            : user
-        )
-      );
+      // 선택된 사용자 업데이트
+      setSelectedUser(prev => prev ? {
+        ...prev,
+        jobExperiences: updatedJobExperiences
+      } : null);
       
-      // selectedUser 업데이트
-      setSelectedUser({
-        ...selectedUser,
-        jobExperiences: updatedExperiences
-      });
+      // 직무 코드 목록 새로고침
+      const jobCodes = await getUserJobCodesInfo(updatedJobExperiences);
+      setUserJobCodes(jobCodes);
       
-      toast.success('직무 경험이 삭제되었습니다.');
+      toast.success('직무 코드가 제거되었습니다.');
     } catch (error) {
-      console.error('직무 경험 삭제 오류:', error);
-      toast.error('직무 경험 삭제 중 오류가 발생했습니다.');
+      console.error('직무 코드 제거 실패:', error);
+      toast.error('직무 코드 제거에 실패했습니다.');
     }
   };
 
@@ -349,7 +327,7 @@ export default function UserManage() {
   };
 
   // 날짜 포맷팅 함수
-  const formatDate = (timestamp: { seconds: number } | undefined) => {
+  const formatDate = (timestamp: Timestamp | undefined) => {
     if (!timestamp) return '-';
     return format(new Date(timestamp.seconds * 1000), 'yyyy-MM-dd HH:mm');
   };
@@ -377,35 +355,30 @@ export default function UserManage() {
                     {jobCode.generation} {jobCode.name}
                   </span>
                   {jobCode.group && (
-                    <span key={`group-${jobCode.id}-${jobCode.group}`} className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
                       jobCode.group === 'junior' ? 'bg-green-100 text-yellow-800' :
                       jobCode.group === 'middle' ? 'bg-yellow-100 text-green-800' :
                       jobCode.group === 'senior' ? 'bg-red-100 text-purple-800' :
                       jobCode.group === 'spring' ? 'bg-blue-100 text-yellow-800' :
                       jobCode.group === 'summer' ? 'bg-purple-100 text-green-800' :
                       jobCode.group === 'autumn' ? 'bg-orange-100 text-red-800' :
-                      'bg-pink-100 text-purple-800'
+                      jobCode.group === 'winter' ? 'bg-pink-100 text-purple-800' :
+                      jobCode.group === 'common' ? 'bg-gray-100 text-gray-800' :
+                      'bg-gray-100 text-gray-800'
                     }`}>
-                      {jobCode.group === 'junior' ? (
-                        <React.Fragment key={`group-text-${jobCode.id}-junior`}>주니어</React.Fragment>
-                      ) : jobCode.group === 'middle' ? (
-                        <React.Fragment key={`group-text-${jobCode.id}-middle`}>미들</React.Fragment>
-                      ) : jobCode.group === 'senior' ? (
-                        <React.Fragment key={`group-text-${jobCode.id}-senior`}>시니어</React.Fragment>
-                      ) : jobCode.group === 'spring' ? (
-                        <React.Fragment key={`group-text-${jobCode.id}-spring`}>스프링</React.Fragment>
-                      ) : jobCode.group === 'summer' ? (
-                        <React.Fragment key={`group-text-${jobCode.id}-summer`}>서머</React.Fragment>
-                      ) : jobCode.group === 'autumn' ? (
-                        <React.Fragment key={`group-text-${jobCode.id}-autumn`}>어텀</React.Fragment>
-                      ) : (
-                        <React.Fragment key={`group-text-${jobCode.id}-winter`}>윈터</React.Fragment>
-                      )}
+                      {jobCode.group === 'junior' ? '주니어' :
+                       jobCode.group === 'middle' ? '미들' :
+                       jobCode.group === 'senior' ? '시니어' :
+                       jobCode.group === 'spring' ? '스프링' :
+                       jobCode.group === 'summer' ? '서머' :
+                       jobCode.group === 'autumn' ? '어텀' :
+                       jobCode.group === 'winter' ? '윈터' :
+                       '공통'}
                     </span>
                   )}
                 </div>
                 <button
-                  onClick={() => handleRemoveJobExperience(jobCode.id!)}
+                  onClick={() => handleRemoveJobCode(jobCode.id)}
                   className="ml-auto flex-shrink-0 text-blue-600 hover:text-blue-800 focus:outline-none"
                   aria-label="직무 경험 삭제"
                 >
@@ -417,22 +390,15 @@ export default function UserManage() {
                 <div className="absolute hidden group-hover:block left-0 bottom-full mb-1 bg-gray-800 text-white p-2 rounded text-xs whitespace-normal max-w-xs z-10">
                   {jobCode.generation} {jobCode.code} - {jobCode.name}
                   {jobCode.group && (
-                    <span key={`tooltip-${jobCode.id}-${jobCode.group}`} className="ml-1">
-                      ({jobCode.group === 'junior' ? (
-                        <React.Fragment key={`tooltip-text-${jobCode.id}-junior`}>주니어</React.Fragment>
-                      ) : jobCode.group === 'middle' ? (
-                        <React.Fragment key={`tooltip-text-${jobCode.id}-middle`}>미들</React.Fragment>
-                      ) : jobCode.group === 'senior' ? (
-                        <React.Fragment key={`tooltip-text-${jobCode.id}-senior`}>시니어</React.Fragment>
-                      ) : jobCode.group === 'spring' ? (
-                        <React.Fragment key={`tooltip-text-${jobCode.id}-spring`}>스프링</React.Fragment>
-                      ) : jobCode.group === 'summer' ? (
-                        <React.Fragment key={`tooltip-text-${jobCode.id}-summer`}>서머</React.Fragment>
-                      ) : jobCode.group === 'autumn' ? (
-                        <React.Fragment key={`tooltip-text-${jobCode.id}-autumn`}>어텀</React.Fragment>
-                      ) : (
-                        <React.Fragment key={`tooltip-text-${jobCode.id}-winter`}>윈터</React.Fragment>
-                      )})
+                    <span className="ml-1">
+                      ({jobCode.group === 'junior' ? '주니어' :
+                       jobCode.group === 'middle' ? '미들' :
+                       jobCode.group === 'senior' ? '시니어' :
+                       jobCode.group === 'spring' ? '스프링' :
+                       jobCode.group === 'summer' ? '서머' :
+                       jobCode.group === 'autumn' ? '어텀' :
+                       jobCode.group === 'winter' ? '윈터' :
+                       '공통'})
                     </span>
                   )}
                 </div>
@@ -485,8 +451,8 @@ export default function UserManage() {
             {/* 그룹 선택 */}
             <div className="w-full md:w-1/4">
               <select
-                value={selectedJobGroup}
-                onChange={(e) => setSelectedJobGroup(e.target.value)}
+                value={selectedGroup}
+                onChange={(e) => setSelectedGroup(e.target.value as JobGroup)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {jobGroups.map((group, index) => (
@@ -500,7 +466,7 @@ export default function UserManage() {
             <Button
               variant="primary"
               size="sm"
-              onClick={handleAddJobExperience}
+              onClick={handleAddJobCode}
               disabled={!selectedJobCodeId}
               className="whitespace-nowrap md:w-1/4"
             >
@@ -811,10 +777,6 @@ export default function UserManage() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-500">마지막 로그인</p>
-                          <p className="text-gray-900">{formatDate(selectedUser.lastLoginAt)}</p>
-                        </div>
-                        <div>
                           <p className="text-sm text-gray-500">가입일</p>
                           <p className="text-gray-900">{formatDate(selectedUser.createdAt)}</p>
                         </div>
@@ -825,7 +787,7 @@ export default function UserManage() {
                         <div className="md:col-span-2 mt-2">
                           <p className="text-sm text-gray-500">자기소개</p>
                           <p className="text-gray-900 whitespace-pre-line">
-                            {selectedUser.selfIntroduction || '-'}
+                            {selectedUser.jobMotivation || '-'}
                           </p>
                         </div>
                       </div>

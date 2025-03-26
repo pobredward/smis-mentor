@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
@@ -15,17 +13,16 @@ import {
   createJobBoard,
   getAllJobCodes
 } from '@/lib/firebaseService';
-import { JobBoard, ApplicationHistory, JobCode } from '@/types';
+import { JobBoardWithId, ApplicationHistoryWithId, JobCodeWithId } from '@/types';
 
-type JobBoardWithApplications = JobBoard & { 
-  id: string;
-  applications: (ApplicationHistory & { id: string })[];
+type JobBoardWithApplications = JobBoardWithId & { 
+  applications: ApplicationHistoryWithId[];
   applicationsCount: number;
 };
 
 export default function JobBoardManage() {
   const [jobBoards, setJobBoards] = useState<JobBoardWithApplications[]>([]);
-  const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
+  const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -36,13 +33,12 @@ export default function JobBoardManage() {
     title: '',
     description: '',
     refJobCodeId: '',
-    refGeneration: '',
-    refCode: '',
+    generation: '',
+    jobCode: '',
     interviewDates: [''],
-    customInterviewDateAllowed: false,
     interviewBaseLink: '',
     interviewBaseDuration: '',
-    interviewBaseNote: '',
+    interviewBaseNotes: '',
     status: 'active'
   });
   
@@ -65,14 +61,14 @@ export default function JobBoardManage() {
         const jobBoardsWithApplications = await Promise.all(
           boards.map(async (board) => {
             try {
-              const applications = await getApplicationsByJobBoardId(board.jobBoardId);
+              const applications = await getApplicationsByJobBoardId(board.id);
               return {
                 ...board,
                 applications,
                 applicationsCount: applications.length
               };
             } catch (error) {
-              console.error(`지원 정보 로드 오류 (${board.jobBoardId}):`, error);
+              console.error(`지원 정보 로드 오류 (${board.id}):`, error);
               return {
                 ...board,
                 applications: [],
@@ -124,30 +120,27 @@ export default function JobBoardManage() {
   // 날짜 포맷팅 함수
   const formatDate = (timestamp: Timestamp) => {
     const date = timestamp.toDate();
-    return format(date, 'yyyy년 MM월 dd일 (EEE)', { locale: ko });
+    // 로컬 시간대로 변환
+    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+    return localDate.toISOString().split('T')[0];
   };
   
   // 공고 수정 핸들러
   const handleEditJobBoard = (jobBoard: JobBoardWithApplications) => {
+    console.log('Editing job board:', jobBoard);
     setSelectedJobBoard(jobBoard);
     setIsCreating(false);
-    
-    // 면접 날짜를 문자열로 변환
-    const interviewDatesStrings = jobBoard.interviewDates.map(timestamp => 
-      formatDate(timestamp).split(' ')[0]
-    );
     
     setFormData({
       title: jobBoard.title,
       description: jobBoard.description,
       refJobCodeId: jobBoard.refJobCodeId,
-      refGeneration: jobBoard.refGeneration,
-      refCode: jobBoard.refCode,
-      interviewDates: interviewDatesStrings,
-      customInterviewDateAllowed: jobBoard.customInterviewDateAllowed,
+      generation: jobBoard.generation,
+      jobCode: jobBoard.jobCode,
+      interviewDates: jobBoard.interviewDates.map(date => formatDate(date.start)),
       interviewBaseLink: jobBoard.interviewBaseLink || '',
-      interviewBaseDuration: jobBoard.interviewBaseDuration !== undefined ? String(jobBoard.interviewBaseDuration) : '',
-      interviewBaseNote: jobBoard.interviewBaseNote || '',
+      interviewBaseDuration: jobBoard.interviewBaseDuration ? String(jobBoard.interviewBaseDuration) : '',
+      interviewBaseNotes: jobBoard.interviewBaseNotes || '',
       status: jobBoard.status
     });
   };
@@ -157,12 +150,12 @@ export default function JobBoardManage() {
     if (window.confirm('이 공고를 마감하시겠습니까?')) {
       try {
         setIsSubmitting(true);
-        await updateJobBoard(jobBoard.jobBoardId, { status: 'closed' });
+        await updateJobBoard(jobBoard.id, { status: 'closed' });
         
         // 상태 업데이트
         setJobBoards(prevBoards => 
           prevBoards.map(board => 
-            board.jobBoardId === jobBoard.jobBoardId 
+            board.id === jobBoard.id 
               ? { ...board, status: 'closed' } 
               : board
           )
@@ -186,12 +179,12 @@ export default function JobBoardManage() {
     if (window.confirm('이 공고를 다시 활성화하시겠습니까?')) {
       try {
         setIsSubmitting(true);
-        await updateJobBoard(jobBoard.jobBoardId, { status: 'active' });
+        await updateJobBoard(jobBoard.id, { status: 'active' });
         
         // 상태 업데이트
         setJobBoards(prevBoards => 
           prevBoards.map(board => 
-            board.jobBoardId === jobBoard.jobBoardId 
+            board.id === jobBoard.id 
               ? { ...board, status: 'active' } 
               : board
           )
@@ -250,67 +243,65 @@ export default function JobBoardManage() {
   // 폼 제출 핸들러
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // 필수 필드 확인
-    if (!formData.title.trim() || !formData.description.trim() || !formData.refJobCodeId) {
+    if (!formData.title || !formData.description || !formData.refJobCodeId) {
       toast.error('필수 항목을 모두 입력해주세요.');
       return;
     }
-    
-    // 모든 면접 날짜가 입력되었는지 확인
-    if (formData.interviewDates.some(date => !date)) {
-      toast.error('모든 면접 날짜를 입력해주세요.');
-      return;
-    }
-    
+
     try {
       setIsSubmitting(true);
-      
-      // 면접 날짜를 Timestamp로 변환
-      const interviewDatesTimestamps = formData.interviewDates.map(dateStr => 
-        Timestamp.fromDate(new Date(dateStr))
-      );
-      
-      // 교육 날짜 가져오기
-      const selectedJobCode = jobCodes.find(code => code.id === formData.refJobCodeId);
-      const eduDates = selectedJobCode?.eduDates || [];
-      
-      // // interviewBaseDuration을 숫자로 변환
-      // const interviewBaseDuration = formData.interviewBaseDuration ? 
-      //   Number(formData.interviewBaseDuration) : undefined;
-      
+
       if (isCreating) {
         // 새 공고 생성
-        await createJobBoard({
+        const newJobBoardData = {
           title: formData.title,
           description: formData.description,
           refJobCodeId: formData.refJobCodeId,
-          refGeneration: formData.refGeneration,
-          refCode: formData.refCode,
-          status: 'active',
-          interviewDates: interviewDatesTimestamps,
-          customInterviewDateAllowed: formData.customInterviewDateAllowed,
-          refEduDates: eduDates,
-          interviewBaseLink: formData.interviewBaseLink || undefined,
+          generation: formData.generation,
+          jobCode: formData.jobCode,
+          status: 'active' as const,
+          interviewDates: formData.interviewDates.map(date => {
+            const localDate = new Date(date);
+            // UTC 시간으로 변환
+            const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+            return {
+              start: Timestamp.fromDate(utcDate),
+              end: Timestamp.fromDate(utcDate)
+            };
+          }),
+          interviewBaseLink: formData.interviewBaseLink || '',
           interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
-          interviewBaseNote: formData.interviewBaseNote || undefined
-        }, 'admin');
+          interviewBaseNotes: formData.interviewBaseNotes || '',
+          interviewPassword: '',
+          educationStartDate: Timestamp.now(),
+          educationEndDate: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        };
+
+        await createJobBoard(newJobBoardData);
         
         toast.success('공고가 성공적으로 생성되었습니다.');
       } else if (selectedJobBoard) {
         // 기존 공고 수정
-        await updateJobBoard(selectedJobBoard.jobBoardId, {
+        await updateJobBoard(selectedJobBoard.id, {
           title: formData.title,
           description: formData.description,
           refJobCodeId: formData.refJobCodeId,
-          refGeneration: formData.refGeneration,
-          refCode: formData.refCode,
-          interviewDates: interviewDatesTimestamps,
-          customInterviewDateAllowed: formData.customInterviewDateAllowed,
-          refEduDates: eduDates,
-          interviewBaseLink: formData.interviewBaseLink || undefined,
+          generation: formData.generation,
+          jobCode: formData.jobCode,
+          interviewDates: formData.interviewDates.map(date => {
+            const localDate = new Date(date);
+            // UTC 시간으로 변환
+            const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+            return {
+              start: Timestamp.fromDate(utcDate),
+              end: Timestamp.fromDate(utcDate)
+            };
+          }),
+          interviewBaseLink: formData.interviewBaseLink || '',
           interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
-          interviewBaseNote: formData.interviewBaseNote || undefined
+          interviewBaseNotes: formData.interviewBaseNotes || '',
+          updatedAt: Timestamp.now()
         });
         
         toast.success('공고가 성공적으로 수정되었습니다.');
@@ -322,13 +313,12 @@ export default function JobBoardManage() {
         title: '',
         description: '',
         refJobCodeId: '',
-        refGeneration: '',
-        refCode: '',
+        generation: '',
+        jobCode: '',
         interviewDates: [''],
-        customInterviewDateAllowed: false,
         interviewBaseLink: '',
         interviewBaseDuration: '',
-        interviewBaseNote: '',
+        interviewBaseNotes: '',
         status: 'active'
       });
       
@@ -382,13 +372,12 @@ export default function JobBoardManage() {
                 title: '',
                 description: '',
                 refJobCodeId: '',
-                refGeneration: '',
-                refCode: '',
+                generation: '',
+                jobCode: '',
                 interviewDates: [''],
-                customInterviewDateAllowed: false,
                 interviewBaseLink: '',
                 interviewBaseDuration: '',
-                interviewBaseNote: '',
+                interviewBaseNotes: '',
                 status: 'active'
               });
             }}
@@ -517,20 +506,6 @@ export default function JobBoardManage() {
                 </div>
               </div>
 
-              {/* 커스텀 면접일 허용 */}
-              <div className="mb-6">
-                <label className="inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="customInterviewDateAllowed"
-                    checked={formData.customInterviewDateAllowed}
-                    onChange={(e) => handleChange(e)}
-                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                  />
-                  <span className="ml-2 text-gray-700">지원자 커스텀 면접 날짜 허용</span>
-                </label>
-              </div>
-              
               {/* 면접 기본 정보 섹션 */}
               <div className="mb-6 border-t pt-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">면접 기본 정보</h3>
@@ -566,8 +541,8 @@ export default function JobBoardManage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">기본 면접 안내사항</label>
                   <textarea
-                    name="interviewBaseNote"
-                    value={formData.interviewBaseNote}
+                    name="interviewBaseNotes"
+                    value={formData.interviewBaseNotes}
                     onChange={(e) => handleChange(e)}
                     rows={3}
                     className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -622,11 +597,11 @@ export default function JobBoardManage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {jobBoards.map((board) => (
-                    <tr key={board.jobBoardId} className="hover:bg-gray-50">
+                    <tr key={board.id} className="hover:bg-gray-50">
                       <td className="px-4 sm:px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-medium text-gray-900">{board.title}</span>
-                          <span className="text-sm text-gray-500">{board.refGeneration} ({board.refCode})</span>
+                          <span className="text-sm text-gray-500">{board.generation}기 ({board.jobCode})</span>
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">

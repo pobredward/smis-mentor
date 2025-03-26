@@ -1,45 +1,55 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type User = {
+export interface User {
+  id: string;
   userId: string;
   name: string;
-  phoneNumber: string;
-  jobExperiences: Array<{
-    id: string;
-    group: string;
-  }>;
   email: string;
+  phone?: string;
+  phoneNumber: string;
   password: string;
   address: string;
   addressDetail: string;
-  rrnFront: string;
-  rrnLast: string;
-  gender: 'M' | 'F' | '';
-  age: number;
-  agreedPersonal: boolean;
-  profileImage: string;
   role: 'user' | 'mentor' | 'admin';
+  jobExperiences?: Array<{id: string, group: JobGroup}>;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  lastLoginAt?: Timestamp;
+  age?: number;
+  agreedTerms: boolean;
+  agreedPersonal: boolean;
+  profileImage: string;
   status: 'temp' | 'active' | 'inactive';
   isEmailVerified: boolean;
-  lastLoginAt: Timestamp;
-  selfIntroduction: string;
+  isPhoneVerified: boolean;
+  isProfileCompleted: boolean;
+  isTermsAgreed: boolean;
+  isPersonalAgreed: boolean;
+  isAddressVerified: boolean;
+  isProfileImageUploaded: boolean;
   jobMotivation: string;
+  selfIntroduction?: string;
   feedback: string;
-};
+}
+
+export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common';
 
 export interface JobCode {
-  id?: string;
-  generation: string;
-  code: string;
   name: string;
-  eduDates: Timestamp[];
+  code: string;
+  generation: string;
+  location: string;
   startDate: Timestamp;
   endDate: Timestamp;
-  location: string;
-  group?: string;
+  eduDates: Timestamp[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  group?: JobGroup;
 }
+
+export type JobCodeWithId = JobCode & { id: string };
+
+export type JobCodeWithGroup = JobCodeWithId & { group: JobGroup };
 
 export type JobExperience = {
   jobExperienceId: string;
@@ -48,23 +58,25 @@ export type JobExperience = {
   refCode: string;
 };
 
-export type JobBoard = {
-  jobBoardId: string;
-  refJobCodeId: string;
-  refGeneration: string;
-  refCode: string;
+export interface JobBoard {
   title: string;
   description: string;
-  createdAt: Timestamp;
-  createdBy: string;
   status: 'active' | 'closed';
-  interviewDates: Timestamp[];
-  customInterviewDateAllowed: boolean;
-  refEduDates: Timestamp[];
-  interviewBaseLink?: string;
-  interviewBaseDuration?: number;
-  interviewBaseNote?: string;
-};
+  generation: string;
+  jobCode: string;
+  refJobCodeId: string;
+  interviewDates: { start: Timestamp; end: Timestamp }[];
+  interviewBaseDuration: number;
+  interviewBaseLink: string;
+  interviewPassword: string;
+  interviewBaseNotes: string;
+  educationStartDate: Timestamp;
+  educationEndDate: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export type JobBoardWithId = JobBoard & { id: string };
 
 export interface ApplicationHistory {
   applicationHistoryId: string;
@@ -75,8 +87,13 @@ export interface ApplicationHistory {
   refJobBoardId: string;
   refUserId: string;
   interviewDate?: Timestamp;
+  interviewDateTime?: Timestamp;
   interviewFeedback?: string;
-  interviewLink?: string;
-  interviewDuration?: number;
-  interviewNote?: string;
-} 
+  interviewBaseLink?: string;
+  interviewBaseDuration?: number;
+  interviewBaseNotes?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export type ApplicationHistoryWithId = ApplicationHistory & { id: string }; 
