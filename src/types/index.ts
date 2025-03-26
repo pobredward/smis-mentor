@@ -30,6 +30,8 @@ export interface User {
   jobMotivation: string;
   selfIntroduction?: string;
   feedback: string;
+  gender?: 'M' | 'F';
+  rrnFront?: string;
 }
 
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common';

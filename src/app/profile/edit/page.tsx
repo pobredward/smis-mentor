@@ -30,7 +30,7 @@ const profileSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
 export default function EditProfilePage() {
-  const { userData } = useAuth();
+  const { userData, refreshUserData } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showPostcode, setShowPostcode] = useState(false);
@@ -113,6 +113,10 @@ export default function EditProfilePage() {
       
       const downloadURL = await uploadProfileImage(userData.userId, croppedFile);
       setProfileImageUrl(downloadURL);
+      
+      // 사용자 데이터 갱신
+      await refreshUserData();
+      
       toast.success('프로필 이미지가 업로드되었습니다.');
     } catch (error) {
       console.error('이미지 업로드 오류:', error);
@@ -196,6 +200,9 @@ export default function EditProfilePage() {
         selfIntroduction: data.selfIntroduction || '',
         jobMotivation: data.jobMotivation || '',
       });
+
+      // 사용자 데이터 갱신
+      await refreshUserData();
 
       toast.success('프로필이 성공적으로 업데이트되었습니다.');
       router.push('/profile');

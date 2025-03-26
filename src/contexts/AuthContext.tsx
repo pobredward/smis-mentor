@@ -10,12 +10,14 @@ type AuthContextType = {
   currentUser: FirebaseUser | null;
   userData: User | null;
   loading: boolean;
+  refreshUserData: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   userData: null,
   loading: true,
+  refreshUserData: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -28,6 +30,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refreshUserData = async () => {
+    if (currentUser?.email) {
+      try {
+        const userRecord = await getUserByEmail(currentUser.email);
+        if (userRecord) {
+          setUserData(userRecord as unknown as User);
+        }
+      } catch (error) {
+        console.error('Failed to refresh user data:', error);
+      }
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -56,6 +71,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     currentUser,
     userData,
     loading,
+    refreshUserData,
   };
 
   return (
