@@ -25,6 +25,7 @@ const jobCodeSchema = z.object({
   startDate: z.string().min(1, '시작 날짜를 입력해주세요.'),
   endDate: z.string().min(1, '종료 날짜를 입력해주세요.'),
   location: z.string().min(1, '위치를 입력해주세요.'),
+  korea: z.string(),
 });
 
 type JobCodeFormValues = z.infer<typeof jobCodeSchema>;
@@ -50,6 +51,7 @@ export default function JobGenerate() {
     resolver: zodResolver(jobCodeSchema),
     defaultValues: {
       eduDates: [{ date: '' }],
+      korea: 'true',
     },
   });
 
@@ -124,6 +126,7 @@ export default function JobGenerate() {
     setValue('startDate', formatDate(jobCode.startDate));
     setValue('endDate', formatDate(jobCode.endDate));
     setValue('location', jobCode.location);
+    setValue('korea', jobCode.korea ? 'true' : 'false');
     
     // 교육 날짜 배열 설정 (useFieldArray)
     replace(eduDatesArray);
@@ -143,6 +146,7 @@ export default function JobGenerate() {
       startDate: '',
       endDate: '',
       location: '',
+      korea: 'true',
     });
   };
 
@@ -155,17 +159,20 @@ export default function JobGenerate() {
       const startDate = Timestamp.fromDate(new Date(data.startDate));
       const endDate = Timestamp.fromDate(new Date(data.endDate));
 
+      const formData = {
+        generation: data.generation,
+        code: data.code,
+        name: data.name,
+        eduDates,
+        startDate,
+        endDate,
+        location: data.location,
+        korea: data.korea === 'true',
+      };
+
       if (isEditing && editingJobCode) {
         // 업무 코드 수정
-        await updateJobCode(editingJobCode.id, {
-          generation: data.generation,
-          code: data.code,
-          name: data.name,
-          eduDates,
-          startDate,
-          endDate,
-          location: data.location,
-        });
+        await updateJobCode(editingJobCode.id, formData);
         
         toast.success('업무가 성공적으로 수정되었습니다.');
         setIsEditing(false);
@@ -173,13 +180,7 @@ export default function JobGenerate() {
       } else {
         // 신규 업무 코드 생성
         await createJobCode({
-          generation: data.generation,
-          code: data.code,
-          name: data.name,
-          eduDates,
-          startDate,
-          endDate,
-          location: data.location,
+          ...formData,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         });
@@ -196,6 +197,7 @@ export default function JobGenerate() {
         startDate: '',
         endDate: '',
         location: '',
+        korea: 'true',
       });
 
       // 목록 새로고침
@@ -335,6 +337,19 @@ export default function JobGenerate() {
                 {...register('location')}
               />
 
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-medium mb-1">
+                  근무 지역
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  {...register('korea')}
+                >
+                  <option value="true">국내</option>
+                  <option value="false">해외</option>
+                </select>
+              </div>
+
               <div className="mt-6 flex justify-end space-x-3">
                 {isEditing && (
                   <Button
@@ -413,6 +428,9 @@ export default function JobGenerate() {
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
                             위치: {jobCode.location}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            지역: {jobCode.korea ? '국내' : '해외'}
                           </p>
                         </div>
                         <div className="flex space-x-2">

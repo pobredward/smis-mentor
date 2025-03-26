@@ -35,6 +35,7 @@ export default function JobBoardManage() {
     refJobCodeId: '',
     generation: '',
     jobCode: '',
+    korea: true,
     interviewDates: [''],
     interviewBaseLink: '',
     interviewBaseDuration: '',
@@ -137,6 +138,7 @@ export default function JobBoardManage() {
       refJobCodeId: jobBoard.refJobCodeId,
       generation: jobBoard.generation,
       jobCode: jobBoard.jobCode,
+      korea: jobBoard.korea,
       interviewDates: jobBoard.interviewDates.map(date => formatDate(date.start)),
       interviewBaseLink: jobBoard.interviewBaseLink || '',
       interviewBaseDuration: jobBoard.interviewBaseDuration ? String(jobBoard.interviewBaseDuration) : '',
@@ -223,14 +225,13 @@ export default function JobBoardManage() {
   
   // 폼 필드 업데이트
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
-    
-    if (type === 'checkbox') {
-      const checked = (e.target as HTMLInputElement).checked;
-      setFormData(prev => ({ ...prev, [name]: checked }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // korea 필드 업데이트
+  const handleKoreaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData(prev => ({ ...prev, korea: e.target.value === 'true' }));
   };
   
   // 면접 날짜 업데이트
@@ -259,6 +260,7 @@ export default function JobBoardManage() {
           refJobCodeId: formData.refJobCodeId,
           generation: formData.generation,
           jobCode: formData.jobCode,
+          korea: formData.korea,
           status: 'active' as const,
           interviewDates: formData.interviewDates.map(date => {
             const localDate = new Date(date);
@@ -289,6 +291,7 @@ export default function JobBoardManage() {
           refJobCodeId: formData.refJobCodeId,
           generation: formData.generation,
           jobCode: formData.jobCode,
+          korea: formData.korea,
           interviewDates: formData.interviewDates.map(date => {
             const localDate = new Date(date);
             // UTC 시간으로 변환
@@ -315,6 +318,7 @@ export default function JobBoardManage() {
         refJobCodeId: '',
         generation: '',
         jobCode: '',
+        korea: true,
         interviewDates: [''],
         interviewBaseLink: '',
         interviewBaseDuration: '',
@@ -374,6 +378,7 @@ export default function JobBoardManage() {
                 refJobCodeId: '',
                 generation: '',
                 jobCode: '',
+                korea: true,
                 interviewDates: [''],
                 interviewBaseLink: '',
                 interviewBaseDuration: '',
@@ -406,8 +411,9 @@ export default function JobBoardManage() {
                     업무 구분
                   </label>
                   <select
+                    name="refJobCodeId"
                     value={formData.refJobCodeId}
-                    onChange={(e) => handleChange(e)}
+                    onChange={handleChange}
                     className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
@@ -420,21 +426,38 @@ export default function JobBoardManage() {
                   </select>
                 </div>
 
-                {/* 공고 상태 */}
+                {/* 국내/해외 선택 */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    공고 상태
+                    근무 지역
                   </label>
                   <select
-                    value={formData.status}
-                    onChange={(e) => handleChange(e)}
+                    name="korea"
+                    value={formData.korea.toString()}
+                    onChange={handleKoreaChange}
                     className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
-                    <option value="active">모집중</option>
-                    <option value="closed">마감</option>
+                    <option value="true">국내</option>
+                    <option value="false">해외</option>
                   </select>
                 </div>
+              </div>
+
+              {/* 공고 상태 */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  공고 상태
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => handleChange(e)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="active">모집중</option>
+                  <option value="closed">마감</option>
+                </select>
               </div>
 
               {/* 공고 제목 */}
@@ -591,6 +614,7 @@ export default function JobBoardManage() {
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">공고</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">기간</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지역</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지원자</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
                   </tr>
@@ -614,6 +638,15 @@ export default function JobBoardManage() {
                             : 'bg-red-100 text-red-800'
                         }`}>
                           {board.status === 'active' ? '모집중' : '마감'}
+                        </span>
+                      </td>
+                      <td className="px-4 sm:px-6 py-4">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          board.korea
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {board.korea ? '국내' : '해외'}
                         </span>
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-sm text-gray-500">

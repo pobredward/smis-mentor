@@ -47,6 +47,7 @@ export interface JobCode {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   group?: JobGroup;
+  korea: boolean;
 }
 
 export type JobCodeWithId = JobCode & { id: string };
@@ -67,6 +68,7 @@ export interface JobBoard {
   generation: string;
   jobCode: string;
   refJobCodeId: string;
+  korea: boolean;
   interviewDates: { start: Timestamp; end: Timestamp }[];
   interviewBaseDuration: number;
   interviewBaseLink: string;
