@@ -114,12 +114,23 @@ export default function ReviewsPage() {
     reviewsByGeneration[review.generation].push(review);
   });
 
-  // 기수 내림차순으로 정렬 (26기, 25기, 24기 순)
+  // 기수 정렬 - 문자열이 숫자보다 위에 오도록, 문자열은 알파벳 순으로 정렬
   const sortedGenerations = Object.keys(reviewsByGeneration).sort((a, b) => {
-    // 기수 번호만 추출 (예: "25기" -> 25)
-    const numA = parseInt(a.replace(/[^0-9]/g, ''), 10);
-    const numB = parseInt(b.replace(/[^0-9]/g, ''), 10);
-    return numB - numA; // 내림차순 정렬
+    // 숫자 부분만 추출
+    const numA = a.replace(/[^0-9]/g, '');
+    const numB = b.replace(/[^0-9]/g, '');
+    
+    // 둘 다 숫자가 있는 경우 (예: "25기", "26기")
+    if (numA && numB) {
+      return parseInt(numB, 10) - parseInt(numA, 10); // 숫자 내림차순
+    }
+    
+    // 한쪽만 숫자가 있는 경우
+    if (numA && !numB) return 1; // 숫자가 없는 것(문자열)이 위로
+    if (!numA && numB) return -1; // 숫자가 없는 것(문자열)이 위로
+    
+    // 둘 다 숫자가 없는 경우 알파벳 순 정렬
+    return a.localeCompare(b);
   });
 
   return (
