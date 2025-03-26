@@ -100,4 +100,19 @@ export interface ApplicationHistory {
   updatedAt: Timestamp;
 }
 
-export type ApplicationHistoryWithId = ApplicationHistory & { id: string }; 
+export type ApplicationHistoryWithId = ApplicationHistory & { id: string };
+
+export interface Review {
+  id: string;
+  title: string;
+  content: string;
+  author: {
+    id: string;
+    name: string;
+    profileImage?: string;
+  };
+  generation: string;
+  jobCode: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+} 

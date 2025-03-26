@@ -272,7 +272,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   const handleApply = async () => {
     if (!userData || !jobBoard) {
       toast.error('로그인이 필요합니다.');
-      router.push('/login');
+      router.push('/sign-in');
       return;
     }
 

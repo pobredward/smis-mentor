@@ -85,11 +85,14 @@ export default function Header() {
               <Link href="/job-board" className="text-sm font-medium text-gray-700 hover:text-gray-900">
                 공고 목록
               </Link>
-              {currentUser && userData?.role !== 'admin' && (
+              {/* {currentUser && userData?.role !== 'admin' && ( */}
                 <Link href="/profile/job-apply" className="text-sm font-medium text-gray-700 hover:text-gray-900">
                   지원 현황
                 </Link>
-              )}
+              {/* )} */}
+              <Link href="/reviews" className="text-sm font-medium text-gray-700 hover:text-gray-900">
+                참여 후기
+              </Link>
             </nav>
           </div>
 
@@ -229,6 +232,15 @@ export default function Header() {
                   지원 현황
                 </Link>
               </li>
+            <li>
+              <Link
+                href="/reviews"
+                className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                참여 후기
+              </Link>
+            </li>
           </ul>
         </nav>
       </div>

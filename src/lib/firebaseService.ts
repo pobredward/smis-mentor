@@ -9,7 +9,8 @@ import {
   updateDoc, 
   deleteDoc, 
   Timestamp,
-  orderBy
+  orderBy,
+  serverTimestamp
 } from 'firebase/firestore';
 import { 
   signOut as firebaseSignOut, 
@@ -29,7 +30,7 @@ import {
   uploadBytes
 } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
-import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup } from '@/types';
+import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup, Review } from '@/types';
 
 // User 관련 함수
 export const createUser = async (userData: Omit<User, 'userId' | 'id'>) => {
@@ -704,6 +705,85 @@ export const addUserJobCode = async (userId: string, jobCodeId: string, group: J
     return updatedJobExperiences;
   } catch (error) {
     console.error('직무 코드 추가 실패:', error);
+    throw error;
+  }
+};
+
+// 리뷰 관련 함수
+export const getReviews = async () => {
+  try {
+    const reviewsQuery = query(
+      collection(db, 'reviews'),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(reviewsQuery);
+    return querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+  } catch (error) {
+    console.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
+    throw error;
+  }
+};
+
+export const getReviewById = async (reviewId: string) => {
+  try {
+    const reviewDoc = await getDoc(doc(db, 'reviews', reviewId));
+    if (reviewDoc.exists()) {
+      return {
+        id: reviewDoc.id,
+        ...reviewDoc.data(),
+      };
+    } else {
+      throw new Error('해당 리뷰를 찾을 수 없습니다.');
+    }
+  } catch (error) {
+    console.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
+    throw error;
+  }
+};
+
+export const addReview = async (reviewData: Omit<Review, 'id' | 'createdAt' | 'updatedAt'>) => {
+  try {
+    const timestamp = serverTimestamp();
+    
+    const reviewRef = await addDoc(collection(db, 'reviews'), {
+      ...reviewData,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    
+    return reviewRef.id;
+  } catch (error) {
+    console.error('리뷰를 추가하는 중 오류가 발생했습니다:', error);
+    throw error;
+  }
+};
+
+export const updateReview = async (reviewId: string, reviewData: Partial<Omit<Review, 'id' | 'createdAt' | 'updatedAt'>>) => {
+  try {
+    const reviewRef = doc(db, 'reviews', reviewId);
+    
+    await updateDoc(reviewRef, {
+      ...reviewData,
+      updatedAt: serverTimestamp(),
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('리뷰를 업데이트하는 중 오류가 발생했습니다:', error);
+    throw error;
+  }
+};
+
+export const deleteReview = async (reviewId: string) => {
+  try {
+    await deleteDoc(doc(db, 'reviews', reviewId));
+    return true;
+  } catch (error) {
+    console.error('리뷰를 삭제하는 중 오류가 발생했습니다:', error);
     throw error;
   }
 }; 
