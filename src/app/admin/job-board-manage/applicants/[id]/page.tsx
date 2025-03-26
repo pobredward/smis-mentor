@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   description: '지원자 정보와 지원 현황을 관리할 수 있습니다.',
 };
 
-export default function Page({ params }: { params: { id: string } }) {
-  return <ApplicantsManageClient jobBoardId={params.id} />;
+interface PageProps {
+  params: { id: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
+}
+
+export default async function Page(props: PageProps) {
+  const { id } = props.params;
+  return <ApplicantsManageClient jobBoardId={id} />;
 } 
