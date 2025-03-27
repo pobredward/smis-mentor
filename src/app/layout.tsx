@@ -46,7 +46,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" data-theme="light" className="light">
+      <head>
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            // 사용자의 테마 설정을 무시하고 항상 라이트 테마 적용
+            document.documentElement.classList.remove('dark');
+            document.documentElement.classList.add('light');
+            localStorage.setItem('theme', 'light');
+          `
+        }} />
+      </head>
       <body className={inter.className}>
         <AuthProvider>
           <Toaster position="top-center" reverseOrder={false} />

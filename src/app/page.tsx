@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Layout from '@/components/common/Layout';
 import { useAuth } from '@/contexts/AuthContext';
-import { getActiveJobBoards, getJobCodeById, getRecentReviews, getApplicationsByUserId, getJobBoardById } from '@/lib/firebaseService';
+import { getActiveJobBoards, getJobCodeById, getBestReviews, getApplicationsByUserId, getJobBoardById } from '@/lib/firebaseService';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
@@ -47,12 +47,12 @@ export default function Home() {
           }
         }
         
-        // 후기 데이터 가져오기
-        const recentReviews = await getRecentReviews(3); // 최신 3개만 가져오기
+        // Best 후기 데이터 가져오기
+        const bestReviews = await getBestReviews(3); // Best 후기 3개만 가져오기
         
         setJobCodesMap(jobCodesData);
         setJobBoards(sortedBoards);
-        setReviews(recentReviews);
+        setReviews(bestReviews);
       } catch (error) {
         console.error('데이터 로드 오류:', error);
       } finally {
@@ -185,7 +185,7 @@ export default function Home() {
       
 
       {/* 공고 목록 섹션 */}
-      <div className="bg-gray-50 py-4 md:py-16 mb-6 px-4 sm:px-6 lg:px-8">
+      <div className="bg-gray-50 py-4 md:py-8 mb-6 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-6 md:mb-8">
             <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">
@@ -275,7 +275,7 @@ export default function Home() {
 
 
       {/* 지원 현황 섹션 */}
-      <div className="bg-gray-50 py-12 md:py-16 px-4 sm:px-6 lg:px-8">
+      <div className="bg-gray-50 py-12 md:py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 sm:mb-8">
             <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">
@@ -428,7 +428,7 @@ export default function Home() {
       </div>
 
       {/* 내 프로필 관리 섹션 */}
-      <div className="bg-white py-12 md:py-16 px-4 sm:px-6 lg:px-8">
+      <div className="bg-white py-12 md:py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
 
           
@@ -461,8 +461,8 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-6 md:mb-8">
             <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">
-                멘토 참여 후기
-              </h2>
+              멘토 참여 후기
+            </h2>
             <Link
               href="/reviews"
               className="inline-flex items-center text-blue-600 hover:text-blue-700"
@@ -472,7 +472,6 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
               </svg>
             </Link>
-            
           </div>
           
           {isLoading ? (
@@ -489,7 +488,7 @@ export default function Home() {
                 <Link
                   key={review.id}
                   href="/reviews"
-                  className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 p-6"
+                  className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 p-6 h-full flex flex-col"
                 >
                   <div className="mb-4">
                     <span className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-full bg-blue-100 text-blue-800">
@@ -499,7 +498,7 @@ export default function Home() {
                   <h3 className="text-xl font-semibold text-gray-900 mb-3">
                     {review.title}
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                  <p className="text-sm text-gray-600 mb-4 line-clamp-3 flex-grow">
                     {review.content?.replace(/<[^>]*>?/gm, '') || '내용 없음'}
                   </p>
                   <p className="text-sm text-gray-500">{formatDate(review.createdAt)}</p>

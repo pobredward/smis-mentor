@@ -828,4 +828,32 @@ export const getRecentReviews = async (limit: number = 3): Promise<Review[]> => 
     console.error('최신 리뷰를 가져오는 중 오류가 발생했습니다:', error);
     return [];
   }
+};
+
+export const getBestReviews = async (limit: number = 3): Promise<Review[]> => {
+  try {
+    // 인덱스가 필요한 복합 쿼리 대신 모든 리뷰를 가져와서 클라이언트에서 필터링
+    const reviewsQuery = query(
+      collection(db, 'reviews'),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(reviewsQuery);
+    const allReviews = querySnapshot.docs.map((doc) => {
+      const data = doc.data() as Omit<Review, 'id'>;
+      return {
+        ...data,
+        id: doc.id,
+      } as Review;
+    });
+    
+    // 클라이언트에서 "Best 후기" 필터링 수행
+    const bestReviews = allReviews.filter(review => review.generation === 'Best 후기');
+    
+    // 지정된 개수만큼 반환
+    return bestReviews.slice(0, limit);
+  } catch (error) {
+    console.error('Best 후기를 가져오는 중 오류가 발생했습니다:', error);
+    return [];
+  }
 }; 
