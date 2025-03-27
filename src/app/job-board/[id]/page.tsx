@@ -709,6 +709,35 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
+                  {!userData && jobBoard.status === 'active' && (
+                    <div className="mt-8 pt-8 border-t border-gray-200">
+                      <div className="text-center py-8 bg-gray-50 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">지원하려면 로그인이 필요합니다</h3>
+                        <p className="text-gray-600 mb-6">
+                          로그인 후 이 공고에 지원할 수 있습니다.<br />
+                          아직 회원이 아니신가요? 가입 후 멘토로 활동해보세요!
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                          <Button
+                            variant="primary"
+                            onClick={() => router.push('/sign-in')}
+                          >
+                            로그인하기
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => router.push('/sign-up')}
+                          >
+                            회원가입하기
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {userData?.role === 'admin' && (
                     <div className="mt-8 pt-6 border-t border-gray-200">
                       <div className="flex justify-end gap-2">

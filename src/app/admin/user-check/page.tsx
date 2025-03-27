@@ -415,6 +415,25 @@ export default function UserCheck() {
                     </p>
                   </div>
                   <div>
+                    <p className="text-sm text-gray-500">성별</p>
+                    <p className="text-gray-900">
+                      {selectedUser.gender === 'M' ? '남성' : selectedUser.gender === 'F' ? '여성' : '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">나이</p>
+                    <p className="text-gray-900">
+                      {selectedUser.age ? `${selectedUser.age}세` : '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">주민등록번호</p>
+                    <p className="text-gray-900">
+                      {selectedUser.rrnFront && selectedUser.rrnLast ? 
+                        `${selectedUser.rrnFront}-${selectedUser.rrnLast}` : '-'}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-sm text-gray-500">이메일 인증</p>
                     <p className="text-gray-900">
                       {selectedUser.isEmailVerified ? '인증됨' : '미인증'}
@@ -428,12 +447,92 @@ export default function UserCheck() {
                     <p className="text-sm text-gray-500">정보 업데이트</p>
                     <p className="text-gray-900">{formatDate(selectedUser.updatedAt)}</p>
                   </div>
-                  <div className="md:col-span-2 mt-2">
-                    <p className="text-sm text-gray-500">자기소개</p>
-                    <p className="text-gray-900 whitespace-pre-line">
-                      {selectedUser.jobMotivation || '-'}
-                    </p>
+                </div>
+
+                {/* 학교 정보 섹션 */}
+                <div className="mt-6 border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-3">학교 정보</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4">
+                    <div>
+                      <p className="text-sm text-gray-500">학교</p>
+                      <p className="text-gray-900">{selectedUser.university || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">학년</p>
+                      <p className="text-gray-900">{selectedUser.grade ? `${selectedUser.grade}학년` : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">휴학 상태</p>
+                      <p className="text-gray-900">{selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">전공 (1전공)</p>
+                      <p className="text-gray-900">{selectedUser.major1 || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">전공 (2전공/부전공)</p>
+                      <p className="text-gray-900">{selectedUser.major2 || '없음'}</p>
+                    </div>
                   </div>
+                </div>
+
+                {/* 업무 경력 정보 */}
+                <div className="mt-6 border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-3">업무 경력</h3>
+                  {selectedUser.jobExperiences && selectedUser.jobExperiences.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedUser.jobExperiences.map((exp, idx) => {
+                        // 해당 경력에 맞는 JobCode 찾기
+                        const jobCode = jobCodes.find(code => code.id === exp.id);
+                        
+                        return (
+                          <div key={idx} className="bg-blue-50 text-blue-800 px-3 py-2 rounded-lg">
+                            <span>{exp.group ? `[${
+                              exp.group === 'junior' ? '주니어' :
+                              exp.group === 'middle' ? '미들' :
+                              exp.group === 'senior' ? '시니어' :
+                              exp.group === 'spring' ? '스프링' :
+                              exp.group === 'summer' ? '서머' :
+                              exp.group === 'autumn' ? '어텀' :
+                              exp.group === 'winter' ? '윈터' :
+                              '공통'
+                            }] ` : ''}
+                            {jobCode ? `${jobCode.generation} ${jobCode.name}` : exp.id}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500">등록된 업무 경력이 없습니다.</p>
+                  )}
+                </div>
+
+                {/* 자기소개/지원동기 섹션 */}
+                <div className="mt-6 border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-3">자기소개 및 지원동기</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-gray-500">자기소개</p>
+                      <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded mt-1 min-h-[60px]">
+                        {selectedUser.selfIntroduction || '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">지원 동기</p>
+                      <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded mt-1 min-h-[60px]">
+                        {selectedUser.jobMotivation || '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 피드백 섹션 */}
+                <div className="mt-6 border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-3">피드백</h3>
+                  <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded min-h-[80px]">
+                    {selectedUser.feedback || '-'}
+                  </p>
                 </div>
 
                 <div className="mt-6 flex justify-end">
