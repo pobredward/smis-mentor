@@ -20,6 +20,17 @@ type EditFormData = {
   addressDetail?: string;
   role?: User['role'];
   status?: User['status'];
+  university?: string;
+  grade?: number;
+  isOnLeave?: boolean;
+  major1?: string;
+  major2?: string;
+  feedback?: string;
+  selfIntroduction?: string;
+  jobMotivation?: string;
+  gender?: User['gender'];
+  rrnFront?: string;
+  rrnLast?: string;
 };
 
 export default function UserManage() {
@@ -143,14 +154,25 @@ export default function UserManage() {
       address: selectedUser.address,
       addressDetail: selectedUser.addressDetail,
       role: selectedUser.role,
-      status: selectedUser.status
+      status: selectedUser.status,
+      university: selectedUser.university || '',
+      grade: selectedUser.grade,
+      isOnLeave: selectedUser.isOnLeave || false,
+      major1: selectedUser.major1 || '',
+      major2: selectedUser.major2 || '',
+      feedback: selectedUser.feedback || '',
+      selfIntroduction: selectedUser.selfIntroduction || '',
+      jobMotivation: selectedUser.jobMotivation || '',
+      gender: selectedUser.gender || 'M',
+      rrnFront: selectedUser.rrnFront || '',
+      rrnLast: selectedUser.rrnLast || ''
     });
     
     setIsEditing(true);
   };
 
   // 수정 폼 데이터 변경 핸들러
-  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { target: { name: string; value: string } }) => {
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | { target: { name: string; value: string | boolean } }) => {
     const { name, value } = e.target;
     setEditFormData(prev => ({
       ...prev,
@@ -694,6 +716,150 @@ export default function UserManage() {
                             <option value="inactive">비활성</option>
                             <option value="temp">임시</option>
                           </select>
+                        </div>
+
+                        <div className="mb-4">
+                          <label className="block text-gray-700 text-sm font-medium mb-2">성별</label>
+                          <select
+                            name="gender"
+                            value={editFormData.gender || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">선택</option>
+                            <option value="M">남성</option>
+                            <option value="F">여성</option>
+                          </select>
+                        </div>
+
+                        <div className="mb-4">
+                          <label className="block text-gray-700 text-sm font-medium mb-2">주민등록번호 앞자리</label>
+                          <input
+                            type="text"
+                            name="rrnFront"
+                            value={editFormData.rrnFront || ''}
+                            onChange={handleEditFormChange}
+                            maxLength={6}
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div className="mb-4">
+                          <label className="block text-gray-700 text-sm font-medium mb-2">주민등록번호 뒷자리</label>
+                          <input
+                            type="text"
+                            name="rrnLast"
+                            value={editFormData.rrnLast || ''}
+                            onChange={handleEditFormChange}
+                            maxLength={7}
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 학교 정보 */}
+                      <div className="mt-6 border-t pt-4">
+                        <h3 className="text-lg font-semibold mb-3">학교 정보</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <FormInput
+                            label="학교"
+                            name="university"
+                            type="text"
+                            value={editFormData.university || ''}
+                            onChange={handleEditFormChange}
+                          />
+
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">학년</label>
+                            <select
+                              name="grade"
+                              value={editFormData.grade || ''}
+                              onChange={handleEditFormChange}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">선택</option>
+                              <option value="1">1학년</option>
+                              <option value="2">2학년</option>
+                              <option value="3">3학년</option>
+                              <option value="4">4학년</option>
+                            </select>
+                          </div>
+
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">휴학 상태</label>
+                            <select
+                              name="isOnLeave"
+                              value={editFormData.isOnLeave?.toString() || 'false'}
+                              onChange={(e) => handleEditFormChange({
+                                target: {
+                                  name: 'isOnLeave',
+                                  value: e.target.value === 'true'
+                                }
+                              })}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="false">재학 중</option>
+                              <option value="true">휴학 중</option>
+                            </select>
+                          </div>
+
+                          <FormInput
+                            label="전공 (1전공)"
+                            name="major1"
+                            type="text"
+                            value={editFormData.major1 || ''}
+                            onChange={handleEditFormChange}
+                          />
+
+                          <FormInput
+                            label="전공 (2전공/부전공)"
+                            name="major2"
+                            type="text"
+                            value={editFormData.major2 || ''}
+                            onChange={handleEditFormChange}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 자기소개 및 지원동기 */}
+                      <div className="mt-6 border-t pt-4">
+                        <h3 className="text-lg font-semibold mb-3">자기소개 및 지원동기</h3>
+                        <div className="space-y-4">
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">자기소개</label>
+                            <textarea
+                              name="selfIntroduction"
+                              value={editFormData.selfIntroduction || ''}
+                              onChange={handleEditFormChange}
+                              rows={4}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">지원 동기</label>
+                            <textarea
+                              name="jobMotivation"
+                              value={editFormData.jobMotivation || ''}
+                              onChange={handleEditFormChange}
+                              rows={4}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 피드백 */}
+                      <div className="mt-6 border-t pt-4">
+                        <h3 className="text-lg font-semibold mb-3">피드백</h3>
+                        <div className="mb-4">
+                          <textarea
+                            name="feedback"
+                            value={editFormData.feedback || ''}
+                            onChange={handleEditFormChange}
+                            rows={4}
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
                       </div>
                     </div>

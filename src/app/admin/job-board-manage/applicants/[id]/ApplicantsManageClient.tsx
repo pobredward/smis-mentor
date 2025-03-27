@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, updateDoc, getDoc, collection, query, where, getDocs, DocumentData } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, collection, query, where, getDocs, DocumentData, deleteField, FieldValue } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -151,7 +151,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     return format(dateObj, 'yyyy년 MM월 dd일 HH:mm', { locale: ko });
   };
 
-  const getStatusBadge = (status: string | undefined) => {
+  const getStatusBadge = (status: string | undefined, statusType: 'application' | 'interview' | 'final') => {
     if (!status) return null;
 
     const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
@@ -163,6 +163,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       finalAccepted: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: '최종합격' },
       finalRejected: { bg: 'bg-red-100', text: 'text-red-800', label: '최종불합격' },
     };
+
+    // 특별히 면접 상태가 'pending'인 경우 '면접 예정' 대신 '예정'으로 표시
+    if (status === 'pending' && statusType === 'interview') {
+      return (
+        <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+          예정
+        </span>
+      );
+    }
 
     const config = statusConfig[status];
     if (!config) return null;
@@ -181,7 +190,13 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       setIsLoading(true);
       const applicationRef = doc(db, 'applicationHistories', applicationId);
       
+      // 로컬 상태 업데이트용 데이터
       const updateData: Partial<ApplicationHistory> = {
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+
+      // Firestore 업데이트용 데이터 (FieldValue.delete()를 사용하기 위해 별도로 관리)
+      const firestoreUpdateData: Record<string, FieldValue | Timestamp | string | number | undefined> = {
         updatedAt: Timestamp.fromDate(new Date())
       };
 
@@ -189,25 +204,52 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       switch (statusType) {
         case 'application':
           updateData.applicationStatus = newStatus as 'pending' | 'accepted' | 'rejected';
+          firestoreUpdateData.applicationStatus = newStatus;
+          
           // 서류 불합격 시 면접과 최종 상태 초기화
           if (newStatus === 'rejected') {
+            // 로컬 상태 업데이트용
             updateData.interviewStatus = undefined;
             updateData.finalStatus = undefined;
+            updateData.interviewDate = undefined;
+            updateData.interviewDateTime = undefined;
+            updateData.interviewFeedback = undefined;
+            updateData.interviewBaseLink = undefined;
+            updateData.interviewBaseDuration = undefined;
+            updateData.interviewBaseNotes = undefined;
+            
+            // Firestore 업데이트용
+            firestoreUpdateData.interviewStatus = deleteField();
+            firestoreUpdateData.finalStatus = deleteField();
+            firestoreUpdateData.interviewDate = deleteField();
+            firestoreUpdateData.interviewDateTime = deleteField();
+            firestoreUpdateData.interviewFeedback = deleteField();
+            firestoreUpdateData.interviewBaseLink = deleteField();
+            firestoreUpdateData.interviewBaseDuration = deleteField();
+            firestoreUpdateData.interviewBaseNotes = deleteField();
           }
           break;
         case 'interview':
           updateData.interviewStatus = newStatus as 'pending' | 'passed' | 'failed';
+          firestoreUpdateData.interviewStatus = newStatus;
+          
           // 면접 불합격 시 최종 상태 초기화
           if (newStatus === 'failed') {
+            // 로컬 상태 업데이트용
             updateData.finalStatus = undefined;
+            
+            // Firestore 업데이트용
+            firestoreUpdateData.finalStatus = deleteField();
           }
           break;
         case 'final':
           updateData.finalStatus = newStatus as 'finalAccepted' | 'finalRejected';
+          firestoreUpdateData.finalStatus = newStatus;
           break;
       }
 
-      await updateDoc(applicationRef, updateData);
+      // Firestore 업데이트
+      await updateDoc(applicationRef, firestoreUpdateData);
 
       // 로컬 상태 업데이트
       const updatedApplication: ApplicationWithUser = {
@@ -466,18 +508,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         <div className="grid grid-cols-3 gap-1 text-xs">
                           <div>
                             <span className="text-gray-500 block mb-1">서류</span>
-                            {getStatusBadge(app.applicationStatus)}
+                            {getStatusBadge(app.applicationStatus, 'application')}
                           </div>
                           <div>
                             <span className="text-gray-500 block mb-1">면접</span>
                             {app.interviewStatus 
-                              ? getStatusBadge(app.interviewStatus)
+                              ? getStatusBadge(app.interviewStatus, 'interview')
                               : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
                           </div>
                           <div>
                             <span className="text-gray-500 block mb-1">최종</span>
                             {app.finalStatus 
-                              ? getStatusBadge(app.finalStatus)
+                              ? getStatusBadge(app.finalStatus, 'final')
                               : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
                           </div>
                         </div>
