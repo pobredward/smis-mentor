@@ -46,6 +46,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
   const [filteredJobCodes, setFilteredJobCodes] = useState<JobCodeWithId[]>([]);
   const [editedJobCodeId, setEditedJobCodeId] = useState('');
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
   const { userData } = useAuth();
   const router = useRouter();
@@ -287,20 +288,31 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       return;
     }
 
+    // 확인 모달 열기
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmApply = async () => {
+    if (!userData || !jobBoard || !selectedInterviewDate) return;
+
     try {
       setIsSubmitting(true);
 
       // 면접 일정 파싱
       const [startMillis] = selectedInterviewDate.split('-').map(Number);
       const interviewDate = new Timestamp(Math.floor(startMillis / 1000), 0);
+      const now = Timestamp.now();
 
       await createApplication({
         refJobBoardId: jobBoard.id,
         refUserId: userData.userId,
         applicationStatus: 'pending',
-        interviewDate
+        interviewDate,
+        createdAt: now,
+        updatedAt: now
       });
 
+      setIsConfirmModalOpen(false);
       toast.success('지원이 완료되었습니다.');
       router.push('/profile/job-apply');
     } catch (error) {
@@ -313,7 +325,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto px-0 sm:px-6 lg:px-8">
         {isLoading ? (
           <div className="flex justify-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
@@ -330,7 +342,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
             </Button>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+          <div className="bg-white overflow-hidden">
             <div className="p-4 sm:p-6">
               {isEditing ? (
                 <div className="space-y-6">
@@ -647,10 +659,46 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                   )}
 
                   {/* 지원하기 섹션 */}
+                  <div className="flex justify-center w-full mt-6">
+                    <Button
+                      variant="primary"
+                      onClick={handleApply}
+                      disabled={!selectedInterviewDate || isSubmitting}
+                      className="w-full py-3 bg-blue-300 hover:bg-blue-400"
+                    >
+                      {isSubmitting ? '지원 중...' : '지원하기'}
+                    </Button>
+                  </div>
+                  
+                  {/* 확인 모달 */}
+                  {isConfirmModalOpen && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+                        <h3 className="text-lg font-medium text-gray-900 mb-4">지원 확인</h3>
+                        <p className="text-gray-700 mb-6">정말 지원하시겠습니까? 한 번 지원하면 취소할 수 없습니다.</p>
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => setIsConfirmModalOpen(false)}
+                          >
+                            취소
+                          </Button>
+                          <Button
+                            variant="primary"
+                            onClick={confirmApply}
+                            isLoading={isSubmitting}
+                          >
+                            예
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   {userData && jobBoard.status === 'active' && (
-                    <div className="mt-8 pt-8 border-t border-gray-200">
+                    <div className="mt-4 pt-8">
                       <div className="mb-6">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-2">지원하기</h2>
+                        {/* <h2 className="text-lg font-semibold text-gray-900 mb-2">지원하기</h2> */}
                         <div className="bg-blue-50 p-4 rounded-lg mb-6">
                           <div className="flex items-start">
                             <div className="flex-shrink-0">
@@ -693,16 +741,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                                 {userData.jobMotivation}
                               </div>
                             </div>
-                            <div className="flex justify-end">
-                              <Button
-                                variant="primary"
-                                onClick={handleApply}
-                                disabled={!selectedInterviewDate || isSubmitting}
-                                className="w-full sm:w-auto"
-                              >
-                                {isSubmitting ? '지원 중...' : '지원하기'}
-                              </Button>
-                            </div>
+                        
                           </div>
                         )}
                       </div>
