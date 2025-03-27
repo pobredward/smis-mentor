@@ -87,7 +87,7 @@ export default function ProfilePage() {
 
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="border-b px-4 sm:px-6 py-3">
-            <h2 className="text-lg font-semibold">업무 경력</h2>
+            <h2 className="text-lg font-semibold">SMIS 캠프 참여이력</h2>
           </div>
           <div className="px-4 sm:px-6 py-4">
             {loading ? (
