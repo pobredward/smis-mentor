@@ -131,7 +131,7 @@ export default function SignUp() {
         
         <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
           <div className="mb-2 text-sm font-medium text-gray-700">
-            1/3 단계: 개인 정보
+            1/4 단계: 개인 정보
           </div>
           
           <FormInput

@@ -6,12 +6,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getUserJobCodesInfo } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
-import { JobCode } from '@/types';
+import { JobCodeWithId } from '@/types';
 
 export default function ProfilePage() {
   const { userData } = useAuth();
   const router = useRouter();
-  const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
+  const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function ProfilePage() {
             ) : (
               <div className="space-y-4">
                 {jobCodes.map((job) => (
-                  <div key={job.id} className="border rounded-md p-3">
+                  <div key={job.id as string} className="border rounded-md p-3">
                     <div className="flex flex-col sm:flex-row sm:justify-between mb-2">
                       <div className="flex items-center">
                         <h3 className="font-medium text-gray-900">{job.name}</h3>
@@ -178,6 +178,39 @@ export default function ProfilePage() {
                 <p className="p-3 bg-gray-50 rounded min-h-[100px]">
                   {userData.jobMotivation || '지원 동기가 없습니다.'}
                 </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 학교 정보 섹션 */}
+        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+          <div className="border-b px-4 sm:px-6 py-3">
+            <h2 className="text-lg font-semibold">학교 정보</h2>
+          </div>
+          <div className="px-6 py-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">학교</p>
+                  <p>{userData.university || '미입력'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">학년</p>
+                  <p>{userData.grade ? `${userData.grade}학년` : '미입력'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">휴학 상태</p>
+                  <p>{userData.isOnLeave ? '휴학 중' : '재학 중'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">전공 (1전공)</p>
+                  <p>{userData.major1 || '미입력'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">전공 (2전공/부전공)</p>
+                  <p>{userData.major2 || '없음'}</p>
+                </div>
               </div>
             </div>
           </div>

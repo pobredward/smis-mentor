@@ -25,6 +25,14 @@ const profileSchema = z.object({
   }),
   selfIntroduction: z.string().max(500, '자기소개는 500자 이내로 작성해주세요.').optional(),
   jobMotivation: z.string().max(500, '지원 동기는 500자 이내로 작성해주세요.').optional(),
+  university: z.string().min(1, '학교명을 입력해주세요.'),
+  grade: z.number({
+    required_error: '학년을 선택해주세요.',
+    invalid_type_error: '학년을 선택해주세요.',
+  }).min(1, '학년을 선택해주세요.').max(6, '유효한 학년을 선택해주세요.'),
+  isOnLeave: z.boolean(),
+  major1: z.string().min(1, '전공을 입력해주세요.'),
+  major2: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -59,6 +67,11 @@ export default function EditProfilePage() {
       gender: undefined,
       selfIntroduction: '',
       jobMotivation: '',
+      university: '',
+      grade: undefined,
+      isOnLeave: false,
+      major1: '',
+      major2: '',
     },
   });
 
@@ -80,6 +93,11 @@ export default function EditProfilePage() {
         gender: userData.gender as 'M' | 'F',
         selfIntroduction: userData.selfIntroduction,
         jobMotivation: userData.jobMotivation,
+        university: userData.university || '',
+        grade: userData.grade || undefined,
+        isOnLeave: userData.isOnLeave || false,
+        major1: userData.major1 || '',
+        major2: userData.major2 || '',
       });
       
       if (userData.profileImage) {
@@ -201,6 +219,11 @@ export default function EditProfilePage() {
         gender: data.gender,
         selfIntroduction: data.selfIntroduction || '',
         jobMotivation: data.jobMotivation || '',
+        university: data.university,
+        grade: data.grade,
+        isOnLeave: data.isOnLeave,
+        major1: data.major1,
+        major2: data.major2 || '',
       });
 
       // 사용자 데이터 갱신
@@ -420,6 +443,66 @@ export default function EditProfilePage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요.</p>
+              </div>
+
+              {/* 학교 정보 섹션 */}
+              <div className="border-t border-gray-200 pt-4 mt-6 mb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">학교 정보</h3>
+                
+                <FormInput
+                  label="학교"
+                  type="text"
+                  placeholder="학교명을 입력하세요"
+                  error={errors.university?.message}
+                  {...register('university')}
+                />
+                
+                <div className="w-full mb-4">
+                  <label className="block text-gray-700 text-sm font-medium mb-1">학년</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    {...register('grade', { valueAsNumber: true })}
+                  >
+                    <option value="">학년 선택</option>
+                    <option value="1">1학년</option>
+                    <option value="2">2학년</option>
+                    <option value="3">3학년</option>
+                    <option value="4">4학년</option>
+                    <option value="5">5학년</option>
+                    <option value="6">6학년</option>
+                  </select>
+                  {errors.grade && <p className="mt-1 text-sm text-red-600">{errors.grade.message}</p>}
+                </div>
+
+                <div className="w-full mb-4">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      id="isOnLeave"
+                      {...register('isOnLeave')}
+                    />
+                    <label htmlFor="isOnLeave" className="ml-2 block text-sm text-gray-700">
+                      현재 휴학 중
+                    </label>
+                  </div>
+                </div>
+
+                <FormInput
+                  label="전공 (1전공)"
+                  type="text"
+                  placeholder="1전공을 입력하세요"
+                  error={errors.major1?.message}
+                  {...register('major1')}
+                />
+
+                <FormInput
+                  label="전공 (2전공/부전공)"
+                  type="text"
+                  placeholder="2전공이 있는 경우 입력하세요 (선택사항)"
+                  error={errors.major2?.message}
+                  {...register('major2')}
+                />
               </div>
             </div>
 

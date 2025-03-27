@@ -40,6 +40,11 @@ export default function SignUpDetails() {
   const phoneNumber = searchParams.get('phone');
   const email = searchParams.get('email');
   const password = searchParams.get('password');
+  const university = searchParams.get('university');
+  const grade = searchParams.get('grade');
+  const isOnLeave = searchParams.get('isOnLeave');
+  const major1 = searchParams.get('major1');
+  const major2 = searchParams.get('major2');
 
   const {
     register,
@@ -74,7 +79,7 @@ export default function SignUpDetails() {
     setShowPostcode(false);
   };
 
-  if (!name || !phoneNumber || !email || !password) {
+  if (!name || !phoneNumber || !email || !password || !university || !grade || !major1) {
     return (
       <Layout>
         <div className="max-w-md mx-auto text-center">
@@ -108,6 +113,10 @@ export default function SignUpDetails() {
         
         const now = Timestamp.now();
         
+        // 교육 정보 추가
+        const gradeNum = parseInt(grade, 10);
+        const isOnLeaveVal = isOnLeave === 'true';
+
         // 기존 임시 사용자 문서 업데이트
         await updateUser(existingUser.userId, {
           email,
@@ -123,7 +132,12 @@ export default function SignUpDetails() {
           status: 'active',
           isEmailVerified: false,
           updatedAt: now,
-          lastLoginAt: now
+          lastLoginAt: now,
+          university,
+          grade: gradeNum,
+          isOnLeave: isOnLeaveVal,
+          major1,
+          major2: major2 || ''
         });
         
         toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
@@ -135,6 +149,10 @@ export default function SignUpDetails() {
         await sendVerificationEmail(userCredential.user);
 
         const now = Timestamp.now();
+
+        // 교육 정보 추가
+        const gradeNum = parseInt(grade, 10);
+        const isOnLeaveVal = isOnLeave === 'true';
 
         // Firestore에 사용자 정보 저장
         await createUser({
@@ -157,7 +175,12 @@ export default function SignUpDetails() {
           selfIntroduction: '',
           jobMotivation: '',
           feedback: '',
-          lastLoginAt: now
+          lastLoginAt: now,
+          university,
+          grade: gradeNum,
+          isOnLeave: isOnLeaveVal,
+          major1,
+          major2: major2 || ''
         });
 
         toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
@@ -179,7 +202,7 @@ export default function SignUpDetails() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
           <div className="mb-2 text-sm font-medium text-gray-700">
-            3/3 단계: 상세 정보
+            4/4 단계: 상세 정보
           </div>
 
           <div className="w-full mb-4">

@@ -32,6 +32,12 @@ export interface User {
   feedback: string;
   gender?: 'M' | 'F';
   rrnFront?: string;
+  rrnLast?: string;
+  university?: string;
+  grade?: number;
+  isOnLeave?: boolean;
+  major1?: string;
+  major2?: string;
 }
 
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common';

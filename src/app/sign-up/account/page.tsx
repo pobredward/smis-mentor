@@ -73,7 +73,7 @@ export default function SignUpAccount() {
       }
 
       // 다음 단계로 이동
-      router.push(`/sign-up/details?name=${name}&phone=${phoneNumber}&email=${data.email}&password=${encodeURIComponent(data.password)}`);
+      router.push(`/sign-up/education?name=${name}&phone=${phoneNumber}&email=${data.email}&password=${encodeURIComponent(data.password)}`);
     } catch (error) {
       console.error('계정 정보 확인 오류:', error);
       toast.error('계정 정보 확인 중 오류가 발생했습니다.');
@@ -107,7 +107,7 @@ export default function SignUpAccount() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
           <div className="mb-2 text-sm font-medium text-gray-700">
-            2/3 단계: 계정 정보
+            2/4 단계: 계정 정보
           </div>
 
           <FormInput
