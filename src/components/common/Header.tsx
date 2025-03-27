@@ -107,73 +107,77 @@ export default function Header() {
               )}
             </nav>
             
-            {/* 프로필 아이콘 (로그인 상태일 때) */}
-            {currentUser ?
-              <div className="relative ml-4" ref={dropdownRef}>
-                <button
-                  onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                  className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 focus:outline-none"
-                >
-                  {userData?.profileImage ? (
-                    <img 
-                      src={userData.profileImage} 
-                      alt="프로필" 
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  )}
-                </button>
-                
-                {/* 프로필 드롭다운 메뉴 */}
-                {isProfileDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
-                    <div className="px-4 py-2 border-b">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {userData?.name || '사용자'}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {userData?.email || ''}
-                      </p>
-                    </div>
-                    <Link 
-                      href="/profile" 
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsProfileDropdownOpen(false)}
-                    >
-                      내 정보
-                    </Link>
-                    
-                    <button
-                      onClick={() => {
-                        setIsProfileDropdownOpen(false);
-                        handleSignOut();
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      로그아웃
-                    </button>
-                  </div>
+            {/* 프로필 아이콘 */}
+            <div className="relative ml-4" ref={dropdownRef}>
+              <button
+                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 focus:outline-none"
+              >
+                {currentUser && userData?.profileImage ? (
+                  <img 
+                    src={userData.profileImage} 
+                    alt="프로필" 
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
                 )}
-              </div>
-            :
-              <div className="hidden md:flex space-x-4">
-                <Link
-                  href="/sign-in"
-                  className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
-                >
-                  로그인
-                </Link>
-                <Link
-                  href="/sign-up"
-                  className="px-3 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  회원가입
-                </Link>
-              </div>
-            }
+              </button>
+              
+              {/* 프로필 드롭다운 메뉴 */}
+              {isProfileDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                  {currentUser ? (
+                    <>
+                      <div className="px-4 py-2 border-b">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {userData?.name || '사용자'}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {userData?.email || ''}
+                        </p>
+                      </div>
+                      <Link 
+                        href="/profile" 
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setIsProfileDropdownOpen(false)}
+                      >
+                        내 정보
+                      </Link>
+                      
+                      <button
+                        onClick={() => {
+                          setIsProfileDropdownOpen(false);
+                          handleSignOut();
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        로그아웃
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link 
+                        href="/sign-in" 
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setIsProfileDropdownOpen(false)}
+                      >
+                        로그인
+                      </Link>
+                      <Link 
+                        href="/sign-up" 
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setIsProfileDropdownOpen(false)}
+                      >
+                        회원가입
+                      </Link>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -241,6 +245,28 @@ export default function Header() {
                 참여 후기
               </Link>
             </li>
+            {!currentUser && (
+              <>
+                <li className="border-t pt-2 mt-2">
+                  <Link
+                    href="/sign-in"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    로그인
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/sign-up"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    회원가입
+                  </Link>
+                </li>
+              </>
+            )}
           </ul>
         </nav>
       </div>
