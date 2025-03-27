@@ -51,6 +51,7 @@ export default function UserManage() {
   const [filteredJobCodes, setFilteredJobCodes] = useState<JobCodeWithId[]>([]);
   const [showUserList, setShowUserList] = useState(true);
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<string>('all');
 
   const jobGroups = [
     { value: 'junior', label: '주니어' },
@@ -64,14 +65,29 @@ export default function UserManage() {
     { value: 'manager', label: '매니저' },
   ];
 
+  const roleFilters = [
+    { value: 'all', label: '전체' },
+    { value: 'user', label: '사용자' },
+    { value: 'mentor', label: '멘토' },
+    { value: 'admin', label: '관리자' }
+  ];
+
   // 사용자 목록 불러오기
   useEffect(() => {
     const loadUsers = async () => {
       setIsLoading(true);
       try {
         const fetchedUsers = await getAllUsers();
-        setUsers(fetchedUsers);
-        setFilteredUsers(fetchedUsers);
+        
+        // 가입일시를 기준으로 오름차순 정렬 (가장 오래된 순)
+        const sortedUsers = [...fetchedUsers].sort((a, b) => {
+          const dateA = a.createdAt?.toDate?.() || new Date(0);
+          const dateB = b.createdAt?.toDate?.() || new Date(0);
+          return dateB.getTime() - dateA.getTime();
+        });
+        
+        setUsers(sortedUsers);
+        setFilteredUsers(sortedUsers);
       } catch (error) {
         console.error('사용자 목록 로딩 실패:', error);
         toast.error('사용자 정보를 불러오는 중 오류가 발생했습니다.');
@@ -82,21 +98,26 @@ export default function UserManage() {
     loadUsers();
   }, []);
 
-  // 검색어가 변경될 때 사용자 필터링
+  // 검색어 및 역할 필터링 적용
   useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredUsers(users);
-      return;
+    let filtered = [...users];
+    
+    // 역할 필터링
+    if (selectedRole !== 'all') {
+      filtered = filtered.filter(user => user.role === selectedRole);
     }
-
-    const filtered = users.filter(user => 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.phoneNumber.includes(searchTerm)
-    );
+    
+    // 검색어 필터링
+    if (searchTerm.trim()) {
+      filtered = filtered.filter(user => 
+        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.phoneNumber.includes(searchTerm)
+      );
+    }
     
     setFilteredUsers(filtered);
-  }, [searchTerm, users]);
+  }, [searchTerm, users, selectedRole]);
 
   // 화면 너비에 따라 사용자 목록 표시 여부 결정
   useEffect(() => {
@@ -510,6 +531,11 @@ export default function UserManage() {
     );
   };
 
+  // 역할 필터 변경 핸들러
+  const handleRoleFilterChange = (role: string) => {
+    setSelectedRole(role);
+  };
+
   return (
     <Layout requireAuth requireAdmin>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -528,7 +554,7 @@ export default function UserManage() {
         </div>
 
         <div className={`${showUserList ? 'block' : 'hidden md:block'} mb-6`}>
-          <div className="relative">
+          <div className="relative mb-4">
             <input
               type="text"
               placeholder="이름, 이메일 또는 전화번호로 검색"
@@ -545,6 +571,23 @@ export default function UserManage() {
                 />
               </svg>
             </div>
+          </div>
+          
+          {/* 역할 필터 토글 버튼 */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {roleFilters.map((filter) => (
+              <button
+                key={filter.value}
+                onClick={() => handleRoleFilterChange(filter.value)}
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  selectedRole === filter.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -564,7 +607,7 @@ export default function UserManage() {
                 
                 {filteredUsers.length === 0 ? (
                   <div className="p-6 text-center text-gray-500">
-                    {searchTerm ? '검색 결과가 없습니다.' : '사용자가 없습니다.'}
+                    {searchTerm || selectedRole !== 'all' ? '검색 결과가 없습니다.' : '사용자가 없습니다.'}
                   </div>
                 ) : (
                   <div className="divide-y overflow-y-auto max-h-[calc(100vh-250px)]">
