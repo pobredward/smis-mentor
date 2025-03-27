@@ -543,9 +543,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           </h2>
                           {selectedApplication.user && (
                             <div className="mt-2 space-y-1 text-sm text-gray-600">
-                              <p>
+                              {/* <p>
                                 <span className="font-medium">이메일:</span> {selectedApplication.user.email}
-                              </p>
+                              </p> */}
                               <p>
                                 <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber}
                               </p>
@@ -555,10 +555,16 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                               <p>
                                 <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
                               </p>
+                              <p>
+                                <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade}학년 {selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}
+                              </p>
+                              <p>
+                                <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
+                              </p>
                             </div>
                           )}
                         </div>
-                        <div className="flex space-x-2">
+                        {/* <div className="flex space-x-2">
                           <div className="text-right">
                             <p className="text-sm text-gray-500">
                               지원일: {formatDate(selectedApplication.applicationDate)}
@@ -567,34 +573,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                               면접예정일: {formatDate(selectedApplication.interviewDate)}
                             </p>
                           </div>
-                        </div>
+                        </div> */}
                       </div>
                     </div>
-                    
-                    {/* 자기소개 및 지원동기 */}
-                    {selectedApplication.user && (
-                      <div className="mb-6">
-                        <hr className="my-6" />
-                        <div className="mb-6 pb-6">
-                          <h3 className="text-lg font-semibold mb-4">자기소개 및 지원동기</h3>
-                          <div className="space-y-4">
-                            <div>
-                              <h4 className="font-medium mb-2">자기소개</h4>
-                              <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
-                                {selectedApplication.user?.selfIntroduction || '내용이 없습니다.'}
-                              </div>
-                            </div>
-                            <div>
-                              <h4 className="font-medium mb-2">지원동기</h4>
-                              <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
-                                {selectedApplication.user?.jobMotivation || '내용이 없습니다.'}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* 아르바이트 경력 */}
-                        <div className="mb-6 pb-6">
+
+                    {/* 아르바이트 경력 */}
+                    <div className="mb-6 pb-6">
                           <h3 className="text-lg font-semibold mb-4">아르바이트 경력</h3>
                           {!selectedApplication.user?.partTimeJobs || selectedApplication.user.partTimeJobs.length === 0 ? (
                             <p className="text-gray-500">등록된 아르바이트 경력이 없습니다.</p>
@@ -619,6 +603,30 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             </div>
                           )}
                         </div>
+                    
+                    {/* 자기소개 및 지원동기 */}
+                    {selectedApplication.user && (
+                      <div className="mb-6">
+                        <hr className="my-6" />
+                        <div className="mb-6 pb-6">
+                          <h3 className="text-lg font-semibold mb-4">자기소개 및 지원동기</h3>
+                          <div className="space-y-4">
+                            <div>
+                              <h4 className="font-medium mb-2">자기소개</h4>
+                              <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
+                                {selectedApplication.user?.selfIntroduction || '내용이 없습니다.'}
+                              </div>
+                            </div>
+                            <div>
+                              <h4 className="font-medium mb-2">지원동기</h4>
+                              <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
+                                {selectedApplication.user?.jobMotivation || '내용이 없습니다.'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        
                       </div>
                     )}
                     
