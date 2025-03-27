@@ -1,5 +1,12 @@
 import { Timestamp } from 'firebase/firestore';
 
+export interface PartTimeJob {
+  period: string;
+  companyName: string;
+  position: string;
+  description: string;
+}
+
 export interface User {
   id: string;
   userId: string;
@@ -12,6 +19,7 @@ export interface User {
   addressDetail: string;
   role: 'user' | 'mentor' | 'admin';
   jobExperiences?: Array<{id: string, group: JobGroup}>;
+  partTimeJobs?: PartTimeJob[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lastLoginAt?: Timestamp;

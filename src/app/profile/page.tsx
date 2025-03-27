@@ -185,6 +185,35 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* 아르바이트 경력 섹션 */}
+        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+          <div className="border-b px-4 sm:px-6 py-3">
+            <h2 className="text-lg font-semibold">아르바이트 경력</h2>
+          </div>
+          <div className="px-6 py-4">
+            {!userData.partTimeJobs || userData.partTimeJobs.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">등록된 아르바이트 경력이 없습니다.</p>
+            ) : (
+              <div className="space-y-4">
+                {userData.partTimeJobs.map((job, index) => (
+                  <div key={index} className="border rounded-md p-4">
+                    <div className="flex flex-col sm:flex-row sm:justify-between mb-2">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{job.companyName}</h3>
+                        <p className="text-sm text-gray-600">{job.position}</p>
+                      </div>
+                      <div className="text-sm text-gray-500 mt-1 sm:mt-0">{job.period}</div>
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-700">{job.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* 학교 정보 섹션 */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="border-b px-4 sm:px-6 py-3">

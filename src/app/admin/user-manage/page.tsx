@@ -9,7 +9,7 @@ import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
 import PhoneInput, { formatPhoneNumber } from '@/components/common/PhoneInput';
 import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode } from '@/lib/firebaseService';
-import { JobCodeWithId, JobCodeWithGroup, JobGroup, User } from '@/types';
+import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
 type EditFormData = {
@@ -31,6 +31,7 @@ type EditFormData = {
   gender?: User['gender'];
   rrnFront?: string;
   rrnLast?: string;
+  partTimeJobs?: PartTimeJob[];
 };
 
 export default function UserManage() {
@@ -166,7 +167,8 @@ export default function UserManage() {
       jobMotivation: selectedUser.jobMotivation || '',
       gender: selectedUser.gender || 'M',
       rrnFront: selectedUser.rrnFront || '',
-      rrnLast: selectedUser.rrnLast || ''
+      rrnLast: selectedUser.rrnLast || '',
+      partTimeJobs: selectedUser.partTimeJobs || []
     });
     
     setIsEditing(true);
@@ -825,45 +827,23 @@ export default function UserManage() {
                         </div>
                       </div>
 
-                      {/* 자기소개 및 지원동기 */}
+                      {/* 자기소개/지원동기 섹션 */}
                       <div className="mt-6 border-t pt-4">
                         <h3 className="text-lg font-semibold mb-3">자기소개 및 지원동기</h3>
                         <div className="space-y-4">
-                          <div className="mb-4">
-                            <label className="block text-gray-700 text-sm font-medium mb-2">자기소개</label>
-                            <textarea
-                              name="selfIntroduction"
-                              value={editFormData.selfIntroduction || ''}
-                              onChange={handleEditFormChange}
-                              rows={4}
-                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                          <div>
+                            <p className="text-sm text-gray-500">자기소개</p>
+                            <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded mt-1 min-h-[60px]">
+                              {editFormData.selfIntroduction || ''}
+                            </p>
                           </div>
 
-                          <div className="mb-4">
-                            <label className="block text-gray-700 text-sm font-medium mb-2">지원 동기</label>
-                            <textarea
-                              name="jobMotivation"
-                              value={editFormData.jobMotivation || ''}
-                              onChange={handleEditFormChange}
-                              rows={4}
-                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                          <div>
+                            <p className="text-sm text-gray-500">지원 동기</p>
+                            <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded mt-1 min-h-[60px]">
+                              {editFormData.jobMotivation || ''}
+                            </p>
                           </div>
-                        </div>
-                      </div>
-
-                      {/* 피드백 */}
-                      <div className="mt-6 border-t pt-4">
-                        <h3 className="text-lg font-semibold mb-3">피드백</h3>
-                        <div className="mb-4">
-                          <textarea
-                            name="feedback"
-                            value={editFormData.feedback || ''}
-                            onChange={handleEditFormChange}
-                            rows={4}
-                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
                         </div>
                       </div>
                     </div>
@@ -1024,6 +1004,33 @@ export default function UserManage() {
                         </div>
                       </div>
 
+                      {/* 아르바이트 경력 섹션 */}
+                      <div className="mt-6 border-t pt-4">
+                        <h3 className="text-lg font-semibold mb-3">아르바이트 경력</h3>
+                        {!selectedUser.partTimeJobs || selectedUser.partTimeJobs.length === 0 ? (
+                          <p className="text-gray-500">등록된 아르바이트 경력이 없습니다.</p>
+                        ) : (
+                          <div className="space-y-4">
+                            {selectedUser.partTimeJobs.map((job, index) => (
+                              <div key={index} className="bg-gray-50 p-4 rounded-md border border-gray-200">
+                                <div className="flex justify-between mb-2">
+                                  <span className="font-medium">{job.companyName}</span>
+                                  <span className="text-sm text-gray-500">{job.period}</span>
+                                </div>
+                                <div className="mb-2">
+                                  <span className="text-sm text-gray-500 mr-2">담당:</span>
+                                  <span>{job.position}</span>
+                                </div>
+                                <div>
+                                  <span className="text-sm text-gray-500 mr-2">업무 내용:</span>
+                                  <span className="text-gray-700">{job.description}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       {/* 피드백 섹션 */}
                       <div className="mt-6 border-t pt-4">
                         <h3 className="text-lg font-semibold mb-3">피드백</h3>
@@ -1031,8 +1038,6 @@ export default function UserManage() {
                           {selectedUser.feedback || '-'}
                         </p>
                       </div>
-
-                      
                     </div>
                   )}
                 </div>

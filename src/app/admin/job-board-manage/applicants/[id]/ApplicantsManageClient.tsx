@@ -574,18 +574,50 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     {/* 자기소개 및 지원동기 */}
                     {selectedApplication.user && (
                       <div className="mb-6">
-                        <div className="mb-4">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-2">자기소개</h3>
-                          <div className="text-gray-700 bg-gray-50 p-4 rounded-lg whitespace-pre-line">
-                            {selectedApplication.user.selfIntroduction || '(자기소개 없음)'}
+                        <hr className="my-6" />
+                        <div className="mb-6 pb-6">
+                          <h3 className="text-lg font-semibold mb-4">자기소개 및 지원동기</h3>
+                          <div className="space-y-4">
+                            <div>
+                              <h4 className="font-medium mb-2">자기소개</h4>
+                              <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
+                                {selectedApplication.user?.selfIntroduction || '내용이 없습니다.'}
+                              </div>
+                            </div>
+                            <div>
+                              <h4 className="font-medium mb-2">지원동기</h4>
+                              <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
+                                {selectedApplication.user?.jobMotivation || '내용이 없습니다.'}
+                              </div>
+                            </div>
                           </div>
                         </div>
                         
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-2">지원동기</h3>
-                          <div className="text-gray-700 bg-gray-50 p-4 rounded-lg whitespace-pre-line">
-                            {selectedApplication.user.jobMotivation || '(지원동기 없음)'}
-                          </div>
+                        {/* 아르바이트 경력 */}
+                        <div className="mb-6 pb-6">
+                          <h3 className="text-lg font-semibold mb-4">아르바이트 경력</h3>
+                          {!selectedApplication.user?.partTimeJobs || selectedApplication.user.partTimeJobs.length === 0 ? (
+                            <p className="text-gray-500">등록된 아르바이트 경력이 없습니다.</p>
+                          ) : (
+                            <div className="space-y-4">
+                              {selectedApplication.user.partTimeJobs.map((job, index) => (
+                                <div key={index} className="bg-gray-50 p-4 rounded-md border border-gray-200">
+                                  <div className="flex justify-between mb-2">
+                                    <span className="font-medium">{job.companyName}</span>
+                                    <span className="text-sm text-gray-500">{job.period}</span>
+                                  </div>
+                                  <div className="mb-2">
+                                    <span className="text-sm text-gray-500 mr-2">담당:</span>
+                                    <span>{job.position}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-sm text-gray-500 mr-2">업무 내용:</span>
+                                    <span className="text-gray-700">{job.description}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

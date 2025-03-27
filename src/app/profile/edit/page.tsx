@@ -13,6 +13,14 @@ import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import ImageCropper from '@/components/common/ImageCropper';
 import toast from 'react-hot-toast';
+import { PartTimeJob } from '@/types';
+
+const partTimeJobSchema = z.object({
+  period: z.string().min(1, '기간을 입력해주세요.'),
+  companyName: z.string().min(1, '회사명을 입력해주세요.'),
+  position: z.string().min(1, '담당을 입력해주세요.'),
+  description: z.string().min(1, '업무 내용을 입력해주세요.'),
+});
 
 const profileSchema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
@@ -33,6 +41,7 @@ const profileSchema = z.object({
   isOnLeave: z.boolean(),
   major1: z.string().min(1, '전공을 입력해주세요.'),
   major2: z.string().optional(),
+  partTimeJobs: z.array(partTimeJobSchema).optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -48,6 +57,7 @@ export default function EditProfilePage() {
   const [showCropper, setShowCropper] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
+  const [partTimeJobs, setPartTimeJobs] = useState<PartTimeJob[]>([]);
 
   const {
     register,
@@ -72,6 +82,7 @@ export default function EditProfilePage() {
       isOnLeave: false,
       major1: '',
       major2: '',
+      partTimeJobs: [],
     },
   });
 
@@ -80,6 +91,31 @@ export default function EditProfilePage() {
   const currentPhone = watch('phoneNumber');
   const currentSelfIntro = watch('selfIntroduction') || '';
   const currentJobMotivation = watch('jobMotivation') || '';
+
+  // 아르바이트 경력 추가
+  const addPartTimeJob = () => {
+    const newJob: PartTimeJob = {
+      period: '',
+      companyName: '',
+      position: '',
+      description: '',
+    };
+    setPartTimeJobs([...partTimeJobs, newJob]);
+  };
+
+  // 아르바이트 경력 삭제
+  const removePartTimeJob = (index: number) => {
+    const updatedJobs = [...partTimeJobs];
+    updatedJobs.splice(index, 1);
+    setPartTimeJobs(updatedJobs);
+  };
+
+  // 아르바이트 경력 업데이트
+  const updatePartTimeJob = (index: number, field: keyof PartTimeJob, value: string) => {
+    const updatedJobs = [...partTimeJobs];
+    updatedJobs[index] = { ...updatedJobs[index], [field]: value };
+    setPartTimeJobs(updatedJobs);
+  };
 
   // 사용자 데이터로 폼 초기화
   useEffect(() => {
@@ -98,11 +134,15 @@ export default function EditProfilePage() {
         isOnLeave: userData.isOnLeave || false,
         major1: userData.major1 || '',
         major2: userData.major2 || '',
+        partTimeJobs: userData.partTimeJobs || [],
       });
       
       if (userData.profileImage) {
         setProfileImageUrl(userData.profileImage);
       }
+      
+      // 아르바이트 경력 설정
+      setPartTimeJobs(userData.partTimeJobs || []);
     }
   }, [userData, reset]);
 
@@ -224,6 +264,7 @@ export default function EditProfilePage() {
         isOnLeave: data.isOnLeave,
         major1: data.major1,
         major2: data.major2 || '',
+        partTimeJobs: partTimeJobs,
       });
 
       // 사용자 데이터 갱신
@@ -503,6 +544,99 @@ export default function EditProfilePage() {
                   error={errors.major2?.message}
                   {...register('major2')}
                 />
+              </div>
+
+              {/* 아르바이트 경력 */}
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    아르바이트 경력
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addPartTimeJob}
+                    className="flex items-center text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                    경력 추가
+                  </button>
+                </div>
+                
+                {partTimeJobs.length === 0 ? (
+                  <div className="py-4 px-3 border border-dashed border-gray-300 rounded-md text-center text-gray-500">
+                    아르바이트 경력을 추가해보세요.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {partTimeJobs.map((job, index) => (
+                      <div key={index} className="border border-gray-200 rounded-md p-4 bg-gray-50 relative">
+                        <button
+                          type="button"
+                          onClick={() => removePartTimeJob(index)}
+                          className="absolute top-2 right-2 text-gray-400 hover:text-red-500"
+                          aria-label="삭제"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              기간
+                            </label>
+                            <input
+                              type="text"
+                              value={job.period}
+                              onChange={(e) => updatePartTimeJob(index, 'period', e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="2022.03 - 2022.09"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              회사명
+                            </label>
+                            <input
+                              type="text"
+                              value={job.companyName}
+                              onChange={(e) => updatePartTimeJob(index, 'companyName', e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="회사명"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              담당
+                            </label>
+                            <input
+                              type="text"
+                              value={job.position}
+                              onChange={(e) => updatePartTimeJob(index, 'position', e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="직무/담당"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              업무 내용
+                            </label>
+                            <input
+                              type="text"
+                              value={job.description}
+                              onChange={(e) => updatePartTimeJob(index, 'description', e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="간략한 업무 내용"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
