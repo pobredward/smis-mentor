@@ -388,7 +388,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           {jobBoard && (
             <div className="flex flex-col">
               <div className="text-lg font-semibold text-gray-900">{jobBoard.title}</div>
-              <div className="text-sm text-gray-500">{jobBoard.generation}기 {jobBoard.jobCode}</div>
+              <div className="text-sm text-gray-500">{jobBoard.generation} {jobBoard.jobCode}</div>
             </div>
           )}
         </div>
