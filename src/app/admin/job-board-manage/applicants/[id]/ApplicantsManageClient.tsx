@@ -385,19 +385,19 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             </div>
             <p className="mt-1 text-sm text-gray-600">지원자 정보와 지원 현황을 관리할 수 있습니다.</p>
           </div>
-          {jobBoard && (
+          {/* {jobBoard && (
             <div className="flex flex-col">
               <div className="text-lg font-semibold text-gray-900">{jobBoard.title}</div>
-              <div className="text-sm text-gray-500">{jobBoard.generation} {jobBoard.jobCode}</div>
+              <div className="text-sm text-gray-500">{jobBoard.generation}</div>
             </div>
-          )}
+          )} */}
         </div>
         
         {/* 필터 및 검색 */}
         <div className="mb-6 bg-white rounded-lg shadow p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">상태 필터</label>
+              {/* <label className="block text-sm font-medium text-gray-700 mb-2">상태 필터</label> */}
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setFilterStatus('all')}
@@ -442,7 +442,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">검색</label>
+              {/* <label className="block text-sm font-medium text-gray-700 mb-2">검색</label> */}
               <input
                 type="text"
                 value={searchQuery}
@@ -499,9 +499,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           <p className="text-sm text-gray-500">
                             지원일: {formatDate(app.applicationDate)}
                           </p>
-                          <p className="text-sm text-gray-500">
+                          {/* <p className="text-sm text-gray-500">
                             면접예정일: {formatDate(app.interviewDate)}
-                          </p>
+                          </p> */}
                         </div>
                         
                         {/* 지원 상태 표시 */}
