@@ -2,7 +2,7 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
   
   return (
-    <footer className="bg-gray-50 border-t border-gray-200">
+    <footer className="mt-30 bg-gray-50 border-t border-gray-200">
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* 회사 정보 */}
