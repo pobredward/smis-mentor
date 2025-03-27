@@ -328,19 +328,14 @@ export default function Home() {
                         {app.jobBoard?.title || '삭제된 공고'}
                       </h3>
                       <p className="text-sm text-gray-500">
-                        {app.jobBoard?.generation}기 ({app.jobBoard?.jobCode})
+                        {app.jobBoard?.generation} ({app.jobBoard?.jobCode})
                       </p>
                     </div>
                     
                     {/* 날짜 정보 */}
-                    <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="gap-4 mb-4">
                       <div>
-                        <p className="text-xs text-gray-500 font-medium">지원일</p>
-                        <p className="text-sm text-gray-700">{formatDateTime(app.applicationDate)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-medium">면접 일정</p>
-                        <p className="text-sm text-gray-700">{app.interviewDate ? formatDateTime(app.interviewDate) : '미정'}</p>
+                        <p className="text-sm text-gray-500 font-medium">지원일: {formatDateTime(app.applicationDate)}</p>
                       </div>
                     </div>
                     
@@ -358,13 +353,23 @@ export default function Home() {
                             </p>
                           </div>
                         )}
+
+                                                {/* 면접 시간 */}
+                                                {app.jobBoard.interviewBaseDuration && (
+                          <div className="mb-2">
+                            <p className="text-sm text-blue-800">
+                              <span className="font-medium">예상 소요 시간:</span>{' '}
+                              {app.jobBoard.interviewBaseDuration}분
+                            </p>
+                          </div>
+                        )}
                         
                         {/* 면접 링크 */}
                         {app.jobBoard.interviewBaseLink && (
                           <div className="mb-2">
-                            <p className="text-sm text-blue-800 mb-1">
+                            {/* <p className="text-sm text-blue-800 mb-1">
                               <span className="font-medium">면접 링크:</span>
-                            </p>
+                            </p> */}
                             <a
                               href={app.jobBoard.interviewBaseLink}
                               target="_blank"
@@ -378,21 +383,12 @@ export default function Home() {
                             </a>
                           </div>
                         )}
-                        
-                        {/* 면접 시간 */}
-                        {app.jobBoard.interviewBaseDuration && (
-                          <div className="mb-2">
-                            <p className="text-sm text-blue-800">
-                              <span className="font-medium">예상 소요 시간:</span>{' '}
-                              {app.jobBoard.interviewBaseDuration}분
-                            </p>
-                          </div>
-                        )}
+
                         
                         {/* 면접 참고사항 */}
                         {app.jobBoard.interviewBaseNotes && (
                           <div className="mt-3">
-                            <p className="text-sm font-medium text-blue-800 mb-1">참고사항:</p>
+                            {/* <p className="text-sm font-medium text-blue-800 mb-1">참고사항:</p> */}
                             <div className="text-sm text-blue-700 bg-blue-100 p-3 rounded-md whitespace-pre-line">
                               {app.jobBoard.interviewBaseNotes}
                             </div>

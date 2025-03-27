@@ -126,7 +126,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ userId: 
                           jobCode.group === 'autumn' ? 'bg-orange-100 text-orange-800' :
                           jobCode.group === 'winter' ? 'bg-pink-100 text-pink-800' :
                           jobCode.group === 'common' ? 'bg-gray-100 text-gray-800' :
-                          'bg-gray-100 text-gray-800'
+                          jobCode.group === 'manager' ? 'bg-gray-100 text-black-800' :
+                          'bg-black-100 text-black-800'
                         }`}>
                           {jobCode.group === 'junior' ? '주니어' :
                            jobCode.group === 'middle' ? '미들' :
@@ -135,7 +136,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ userId: 
                            jobCode.group === 'summer' ? '서머' :
                            jobCode.group === 'autumn' ? '어텀' :
                            jobCode.group === 'winter' ? '윈터' :
-                           '공통'}
+                           jobCode.group === 'common' ? '공통' :
+                           '매니저'}
                         </span>
                       )}
                     </div>

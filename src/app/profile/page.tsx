@@ -113,7 +113,8 @@ export default function ProfilePage() {
                             job.group === 'autumn' ? 'bg-orange-100 text-orange-800' :
                             job.group === 'winter' ? 'bg-pink-100 text-pink-800' :
                             job.group === 'common' ? 'bg-gray-100 text-gray-800' :
-                            'bg-gray-100 text-gray-800'
+                            job.group === 'manager' ? 'bg-gray-100 text-black-800' :
+                            'bg-gray-100 text-black-800'
                           }`}>
                             {job.group === 'junior' ? '주니어' :
                              job.group === 'middle' ? '미들' : 
@@ -122,7 +123,8 @@ export default function ProfilePage() {
                              job.group === 'summer' ? '서머' :
                              job.group === 'autumn' ? '어텀' :
                              job.group === 'winter' ? '윈터' :
-                             '공통'}
+                             job.group === 'common' ? '공통' :
+                             '매니저'}
                           </span>
                         )}
                       </div>

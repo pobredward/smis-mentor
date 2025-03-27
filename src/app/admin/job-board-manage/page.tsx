@@ -625,7 +625,7 @@ export default function JobBoardManage() {
                       <td className="px-4 sm:px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-medium text-gray-900">{board.title}</span>
-                          <span className="text-sm text-gray-500">{board.generation}기 ({board.jobCode})</span>
+                          <span className="text-sm text-gray-500">{board.generation} ({board.jobCode})</span>
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">

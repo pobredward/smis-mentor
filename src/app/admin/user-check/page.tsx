@@ -23,7 +23,7 @@ export default function UserCheck() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   
   // 그룹 순서 정의
-  const groupOrder = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
+  const groupOrder = ['manager', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
   
   // 그룹 이름 매핑
   const groupLabels: Record<string, string> = {
@@ -34,6 +34,8 @@ export default function UserCheck() {
     'summer': '서머',
     'autumn': '어텀',
     'winter': '윈터',
+    'common': '공통',
+    'manager': '매니저'
   };
   
   // 그룹 색상 매핑
@@ -44,7 +46,9 @@ export default function UserCheck() {
     'spring': { bg: 'bg-blue-100', text: 'text-blue-800' },
     'summer': { bg: 'bg-purple-100', text: 'text-purple-800' },
     'autumn': { bg: 'bg-orange-100', text: 'text-orange-800' },
-    'winter': { bg: 'bg-pink-100', text: 'text-pink-800' }
+    'winter': { bg: 'bg-pink-100', text: 'text-pink-800' },
+    'common': { bg: 'bg-pink-100', text: 'text-gray-800' },
+    'manager': { bg: 'bg-pink-100', text: 'text-black-800' },
   };
   
   // 모든 JobCode 및 Generation 로드
@@ -495,7 +499,8 @@ export default function UserCheck() {
                               exp.group === 'summer' ? '서머' :
                               exp.group === 'autumn' ? '어텀' :
                               exp.group === 'winter' ? '윈터' :
-                              '공통'
+                              exp.group === 'common' ? '공통' :
+                              '매니저'
                             }] ` : ''}
                             {jobCode ? `${jobCode.generation} ${jobCode.name}` : exp.id}
                             </span>

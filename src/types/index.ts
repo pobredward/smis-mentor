@@ -40,7 +40,7 @@ export interface User {
   major2?: string;
 }
 
-export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common';
+export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager';
 
 export interface JobCode {
   name: string;

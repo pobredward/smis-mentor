@@ -43,7 +43,8 @@ export default function UserGenerate() {
     { value: 'summer', label: '서머' },
     { value: 'autumn', label: '어텀' },
     { value: 'winter', label: '윈터' },
-    { value: 'common', label: '공통' }
+    { value: 'common', label: '공통' },
+    { value: 'manager', label: '매니저' },
   ];
 
   const {

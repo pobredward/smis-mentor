@@ -59,7 +59,8 @@ export default function UserManage() {
     { value: 'summer', label: '서머' },
     { value: 'autumn', label: '어텀' },
     { value: 'winter', label: '윈터' },
-    { value: 'common', label: '공통' }
+    { value: 'common', label: '공통' },
+    { value: 'manager', label: '매니저' },
   ];
 
   // 사용자 목록 불러오기
@@ -386,7 +387,8 @@ export default function UserManage() {
                       jobCode.group === 'autumn' ? 'bg-orange-100 text-red-800' :
                       jobCode.group === 'winter' ? 'bg-pink-100 text-purple-800' :
                       jobCode.group === 'common' ? 'bg-gray-100 text-gray-800' :
-                      'bg-gray-100 text-gray-800'
+                      jobCode.group === 'manager' ? 'bg-black-100 text-black-800' :
+                      'bg-black-100 text-black-800'
                     }`}>
                       {jobCode.group === 'junior' ? '주니어' :
                        jobCode.group === 'middle' ? '미들' :
@@ -395,7 +397,8 @@ export default function UserManage() {
                        jobCode.group === 'summer' ? '서머' :
                        jobCode.group === 'autumn' ? '어텀' :
                        jobCode.group === 'winter' ? '윈터' :
-                       '공통'}
+                       jobCode.group === 'common' ? '공통' :
+                       '매니저'}
                     </span>
                   )}
                 </div>
@@ -420,7 +423,8 @@ export default function UserManage() {
                        jobCode.group === 'summer' ? '서머' :
                        jobCode.group === 'autumn' ? '어텀' :
                        jobCode.group === 'winter' ? '윈터' :
-                       '공통'})
+                       jobCode.group === 'common' ? '공통' :
+                       '매니저'})
                     </span>
                   )}
                 </div>
