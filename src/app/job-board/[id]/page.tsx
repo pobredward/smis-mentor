@@ -114,9 +114,24 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                   date.end.toDate() : 
                   new Date(date.end);
 
+                // 날짜 및 시간을 로컬 시간대 기준으로 포맷팅 (YYYY-MM-DDTHH:MM 형식)
+                const padZero = (num: number) => String(num).padStart(2, '0');
+                
+                const startYear = startDate.getFullYear();
+                const startMonth = padZero(startDate.getMonth() + 1);
+                const startDay = padZero(startDate.getDate());
+                const startHours = padZero(startDate.getHours());
+                const startMinutes = padZero(startDate.getMinutes());
+                
+                const endYear = endDate.getFullYear();
+                const endMonth = padZero(endDate.getMonth() + 1);
+                const endDay = padZero(endDate.getDate());
+                const endHours = padZero(endDate.getHours());
+                const endMinutes = padZero(endDate.getMinutes());
+
                 return {
-                  start: startDate.toISOString().slice(0, 16),
-                  end: endDate.toISOString().slice(0, 16)
+                  start: `${startYear}-${startMonth}-${startDay}T${startHours}:${startMinutes}`,
+                  end: `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`
                 };
               } catch (error) {
                 console.error('날짜 변환 오류:', error);
@@ -251,9 +266,24 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                 date.end.toDate() : 
                 new Date(date.end);
 
+              // 날짜 및 시간을 로컬 시간대 기준으로 포맷팅 (YYYY-MM-DDTHH:MM 형식)
+              const padZero = (num: number) => String(num).padStart(2, '0');
+              
+              const startYear = startDate.getFullYear();
+              const startMonth = padZero(startDate.getMonth() + 1);
+              const startDay = padZero(startDate.getDate());
+              const startHours = padZero(startDate.getHours());
+              const startMinutes = padZero(startDate.getMinutes());
+              
+              const endYear = endDate.getFullYear();
+              const endMonth = padZero(endDate.getMonth() + 1);
+              const endDay = padZero(endDate.getDate());
+              const endHours = padZero(endDate.getHours());
+              const endMinutes = padZero(endDate.getMinutes());
+
               return {
-                start: startDate.toISOString().slice(0, 16),
-                end: endDate.toISOString().slice(0, 16)
+                start: `${startYear}-${startMonth}-${startDay}T${startHours}:${startMinutes}`,
+                end: `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`
               };
             } catch (error) {
               console.error('날짜 변환 오류:', error);
