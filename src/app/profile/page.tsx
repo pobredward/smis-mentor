@@ -185,14 +185,14 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* 아르바이트 경력 섹션 */}
+        {/* 알바 & 멘토링 경력 섹션 */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="border-b px-4 sm:px-6 py-3">
-            <h2 className="text-lg font-semibold">아르바이트 경력</h2>
+            <h2 className="text-lg font-semibold">알바 & 멘토링 경력</h2>
           </div>
           <div className="px-6 py-4">
             {!userData.partTimeJobs || userData.partTimeJobs.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">등록된 아르바이트 경력이 없습니다.</p>
+              <p className="text-gray-500 text-center py-4">등록된 경력이 없습니다.</p>
             ) : (
               <div className="space-y-4">
                 {userData.partTimeJobs.map((job, index) => (

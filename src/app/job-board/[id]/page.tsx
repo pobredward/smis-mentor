@@ -709,7 +709,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                             <div className="ml-3">
                               <h3 className="text-sm font-medium text-blue-800">지원 전 확인사항</h3>
                               <div className="mt-2 text-sm text-blue-700">
-                                <p className="mb-1">• <button onClick={() => router.push('/profile')} className="text-green-600 hover:text-green-800 font-medium">내 정보</button>에서 프로필 이미지 업로드 및 아르바이트 경력 & 자기소개서 & 지원동기를 작성해주세요.</p>
+                                <p className="mb-1">• <button onClick={() => router.push('/profile')} className="text-green-600 hover:text-green-800 font-medium">내 정보</button>에서 프로필 이미지 업로드, 멘토링 경력 & 자기소개서 & 지원동기를 작성해주세요.</p>
                                 <p className="mb-1">• 면접 일정을 반드시 선택해주세요.</p>
                                 <p>• 지원 후에는 <button onClick={() => router.push('/profile/job-apply')} className="text-green-600 hover:text-green-800 font-medium">지원 현황</button>에서 진행 상태를 확인할 수 있습니다.</p>
                               </div>

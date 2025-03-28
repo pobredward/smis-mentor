@@ -27,6 +27,9 @@ export const getGenderFromRRN = (rrnFront: string, rrnLast: string): 'M' | 'F' |
  * 3, 4: 2000년대
  * 5, 6: 1900년대 외국인
  * 7, 8: 2000년대 외국인
+ * 
+ * 출생 연도만 기준으로 나이 계산 (생일이 지났는지 여부는 무시)
+ * 예: 98년생은 28살, 99년생은 27살, 00년생은 26살, 01년생은 25살 등
  */
 export const getAgeFromRRN = (rrnFront: string, rrnLast: string): number => {
   if (!rrnFront || !rrnLast || rrnFront.length !== 6 || rrnLast.length !== 7) {
@@ -34,8 +37,6 @@ export const getAgeFromRRN = (rrnFront: string, rrnLast: string): number => {
   }
 
   const birthYear = rrnFront.substring(0, 2);
-  const birthMonth = rrnFront.substring(2, 4);
-  const birthDay = rrnFront.substring(4, 6);
   const firstDigitOfRrnLast = parseInt(rrnLast.charAt(0), 10);
 
   // 출생 연도의 세기 결정
@@ -50,7 +51,7 @@ export const getAgeFromRRN = (rrnFront: string, rrnLast: string): number => {
     return 0;
   }
 
-  // 현실적인 나이 검증 (124세와 같은 비현실적인 나이 방지)
+  // 현실적인 나이 검증
   const today = new Date();
   const currentYear = today.getFullYear();
   
@@ -62,21 +63,12 @@ export const getAgeFromRRN = (rrnFront: string, rrnLast: string): number => {
     }
   }
   
-  const currentMonth = today.getMonth() + 1; // 월은 0부터 시작하므로 +1
-  const currentDay = today.getDate();
-
-  // 기본 나이 계산 (현재 연도 - 출생 연도)
-  let age = currentYear - fullBirthYear;
-
-  // 생일이 아직 지나지 않았으면 나이에서 1을 뺌
-  if (
-    currentMonth < parseInt(birthMonth, 10) ||
-    (currentMonth === parseInt(birthMonth, 10) && currentDay < parseInt(birthDay, 10))
-  ) {
-    age--;
-  }
-
-  return age;
+  // 예: 현재 2024년 기준
+  // 98년생 -> 2024-1998 = 26
+  // 2023년 기준 25살 +2 = 27살 -> 1살 추가 = 28살
+  // 단순히 (현재 연도 - 출생 연도)로 만 나이를 계산하고 +2를 더함 (현재 기준 보정)
+  // 2024년 기준 보정 : +2
+  return currentYear - fullBirthYear + 2;
 };
 
 /**

@@ -32,6 +32,7 @@ type EditFormData = {
   rrnFront?: string;
   rrnLast?: string;
   partTimeJobs?: PartTimeJob[];
+  age?: number;
 };
 
 export default function UserManage() {
@@ -189,14 +190,15 @@ export default function UserManage() {
       gender: selectedUser.gender || 'M',
       rrnFront: selectedUser.rrnFront || '',
       rrnLast: selectedUser.rrnLast || '',
-      partTimeJobs: selectedUser.partTimeJobs || []
+      partTimeJobs: selectedUser.partTimeJobs || [],
+      age: selectedUser.age
     });
     
     setIsEditing(true);
   };
 
   // 수정 폼 데이터 변경 핸들러
-  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | { target: { name: string; value: string | boolean } }) => {
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | { target: { name: string; value: string | boolean | number } }) => {
     const { name, value } = e.target;
     setEditFormData(prev => ({
       ...prev,
@@ -722,6 +724,21 @@ export default function UserManage() {
                           value={editFormData.phoneNumber || ''}
                           onChange={(value) => handleEditFormChange({ target: { name: 'phoneNumber', value } })}
                         />
+                        <div className="mb-4">
+                          <label className="block text-gray-700 text-sm font-medium mb-2">나이</label>
+                          <input
+                            type="number"
+                            name="age"
+                            value={editFormData.age || ''}
+                            onChange={(e) => {
+                              const value = e.target.value ? parseInt(e.target.value, 10) : '';
+                              handleEditFormChange({ target: { name: 'age', value } });
+                            }}
+                            min="0"
+                            max="120"
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
                         <div className="md:col-span-2">
                           <FormInput
                             label="주소"
@@ -1047,11 +1064,11 @@ export default function UserManage() {
                         </div>
                       </div>
 
-                      {/* 아르바이트 경력 섹션 */}
+                      {/* 알바 & 멘토링 경력 섹션 */}
                       <div className="mt-6 border-t pt-4">
-                        <h3 className="text-lg font-semibold mb-3">아르바이트 경력</h3>
+                        <h3 className="text-lg font-semibold mb-3">알바 & 멘토링 경력</h3>
                         {!selectedUser.partTimeJobs || selectedUser.partTimeJobs.length === 0 ? (
-                          <p className="text-gray-500">등록된 아르바이트 경력이 없습니다.</p>
+                          <p className="text-gray-500">등록된 알바 & 멘토링 경력이 없습니다.</p>
                         ) : (
                           <div className="space-y-4">
                             {selectedUser.partTimeJobs.map((job, index) => (

@@ -92,7 +92,7 @@ export default function EditProfilePage() {
   const currentSelfIntro = watch('selfIntroduction') || '';
   const currentJobMotivation = watch('jobMotivation') || '';
 
-  // 아르바이트 경력 추가
+  // 알바 & 멘토링 경력 추가
   const addPartTimeJob = () => {
     const newJob: PartTimeJob = {
       period: '',
@@ -103,14 +103,14 @@ export default function EditProfilePage() {
     setPartTimeJobs([...partTimeJobs, newJob]);
   };
 
-  // 아르바이트 경력 삭제
+  // 알바 & 멘토링 경력 삭제
   const removePartTimeJob = (index: number) => {
     const updatedJobs = [...partTimeJobs];
     updatedJobs.splice(index, 1);
     setPartTimeJobs(updatedJobs);
   };
 
-  // 아르바이트 경력 업데이트
+  // 알바 & 멘토링 경력 업데이트
   const updatePartTimeJob = (index: number, field: keyof PartTimeJob, value: string) => {
     const updatedJobs = [...partTimeJobs];
     updatedJobs[index] = { ...updatedJobs[index], [field]: value };
@@ -141,7 +141,7 @@ export default function EditProfilePage() {
         setProfileImageUrl(userData.profileImage);
       }
       
-      // 아르바이트 경력 설정
+      // 알바 & 멘토링 경력 설정
       setPartTimeJobs(userData.partTimeJobs || []);
     }
   }, [userData, reset]);
@@ -546,11 +546,11 @@ export default function EditProfilePage() {
                 />
               </div>
 
-              {/* 아르바이트 경력 */}
+              {/* 알바 & 멘토링 경력 */}
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    아르바이트 경력
+                    알바 & 멘토링 경력
                   </label>
                   <button
                     type="button"
@@ -566,7 +566,7 @@ export default function EditProfilePage() {
                 
                 {partTimeJobs.length === 0 ? (
                   <div className="py-4 px-3 border border-dashed border-gray-300 rounded-md text-center text-gray-500">
-                    아르바이트 경력을 추가해보세요.
+                    알바 & 멘토링 경력을 추가해보세요.
                   </div>
                 ) : (
                   <div className="space-y-4">
