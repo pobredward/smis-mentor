@@ -10,7 +10,7 @@ import { ko } from 'date-fns/locale';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getJobBoardById, deleteJobBoard, getJobCodeById, getAllJobCodes, createApplication } from '@/lib/firebaseService';
-import { JobBoardWithId, JobCodeWithId } from '@/types';
+import { JobBoardWithId, JobCodeWithId, ApplicationHistory } from '@/types';
 import RichTextEditor from '@/components/common/RichTextEditor';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -47,6 +47,8 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   const [filteredJobCodes, setFilteredJobCodes] = useState<JobCodeWithId[]>([]);
   const [editedJobCodeId, setEditedJobCodeId] = useState('');
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isProfileErrorModalOpen, setIsProfileErrorModalOpen] = useState(false);
+  const [profileErrorType, setProfileErrorType] = useState<'image' | 'selfIntro' | 'jobMotivation' | null>(null);
 
   const { userData } = useAuth();
   const router = useRouter();
@@ -307,14 +309,24 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       return;
     }
 
-    if (!userData.selfIntroduction || !userData.jobMotivation) {
-      toast.error('자기소개서와 지원동기를 먼저 작성해주세요.');
-      router.push('/profile');
+    // 프로필 이미지 확인
+    if (!userData.profileImage) {
+      setProfileErrorType('image');
+      setIsProfileErrorModalOpen(true);
       return;
     }
 
-    if (!selectedInterviewDate) {
-      toast.error('면접 일정을 선택해주세요.');
+    // 자기소개서 확인
+    if (!userData.selfIntroduction) {
+      setProfileErrorType('selfIntro');
+      setIsProfileErrorModalOpen(true);
+      return;
+    }
+
+    // 지원동기 확인
+    if (!userData.jobMotivation) {
+      setProfileErrorType('jobMotivation');
+      setIsProfileErrorModalOpen(true);
       return;
     }
 
@@ -323,24 +335,29 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   };
 
   const confirmApply = async () => {
-    if (!userData || !jobBoard || !selectedInterviewDate) return;
+    if (!userData || !jobBoard) return;
 
     try {
       setIsSubmitting(true);
 
-      // 면접 일정 파싱
-      const [startMillis] = selectedInterviewDate.split('-').map(Number);
-      const interviewDate = new Timestamp(Math.floor(startMillis / 1000), 0);
       const now = Timestamp.now();
-
-      await createApplication({
+      
+      // applicationData 기본 데이터 설정
+      const applicationData: Partial<Omit<ApplicationHistory, 'applicationHistoryId' | 'applicationDate'>> = {
         refJobBoardId: jobBoard.id,
         refUserId: userData.userId,
         applicationStatus: 'pending',
-        interviewDate,
         createdAt: now,
         updatedAt: now
-      });
+      };
+
+      // 면접 일정이 선택된 경우에만 interviewDate 필드 추가
+      if (selectedInterviewDate) {
+        const [startMillis] = selectedInterviewDate.split('-').map(Number);
+        applicationData.interviewDate = new Timestamp(Math.floor(startMillis / 1000), 0);
+      }
+      
+      await createApplication(applicationData as Omit<ApplicationHistory, 'applicationHistoryId' | 'applicationDate'>);
 
       setIsConfirmModalOpen(false);
       toast.success('지원이 완료되었습니다.');
@@ -685,6 +702,23 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                           })
                           .filter(Boolean)}
                       </div>
+                      
+                      {/* 모든 일정 참석 불가능한 지원자를 위한 안내 */}
+                      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="flex items-start">
+                          <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="ml-3">
+                            <h3 className="text-sm font-medium text-yellow-800">모든 면접 일정에 참석할 수 없을 시</h3>
+                            <div className="mt-2 text-sm text-yellow-700">
+                              <p>지원하기 버튼 클릭 후 상기 지원 문의 번호로 카카오톡&문자 전송 후 별도로 면접 일정 조율</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -693,7 +727,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                     <Button
                       variant="primary"
                       onClick={handleApply}
-                      disabled={!selectedInterviewDate || isSubmitting}
+                      disabled={isSubmitting}
                       className="w-full py-3 bg-blue-300 hover:bg-blue-400"
                     >
                       {isSubmitting ? '지원 중...' : '지원하기'}
@@ -705,7 +739,12 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                       <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
                         <h3 className="text-lg font-medium text-gray-900 mb-4">지원 확인</h3>
-                        <p className="text-gray-700 mb-6">정말 지원하시겠습니까? 한 번 지원하면 취소할 수 없습니다.</p>
+                        {!selectedInterviewDate ? (
+                          <p className="text-gray-700 mb-4">면접 일정을 선택하지 않았습니다. 담당자에게 별도로 연락하여 면접 일정을 조율해 주세요</p>
+                        ) : (
+                          <p className="text-gray-700 mb-4"></p>
+                        )}
+                        <p className="text-gray-700 mb-6">정말 지원하시겠습니까? 서류전형 합/불 여부가 결정되면 지원을 취소할 수 없습니다</p>
                         <div className="flex justify-end gap-3">
                           <Button
                             variant="outline"
@@ -719,6 +758,42 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                             isLoading={isSubmitting}
                           >
                             예
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 프로필 정보 오류 모달 */}
+                  {isProfileErrorModalOpen && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+                        <h3 className="text-lg font-medium text-gray-900 mb-4">
+                          {profileErrorType === 'image' 
+                            ? '프로필 이미지가 필요합니다' 
+                            : profileErrorType === 'selfIntro' 
+                              ? '자기소개서가 필요합니다' 
+                              : '지원 동기가 필요합니다'}
+                        </h3>
+                        <p className="text-gray-700 mb-6">
+                          {profileErrorType === 'image' 
+                            ? '지원하기 전에 프로필 이미지를 업로드해주세요.' 
+                            : profileErrorType === 'selfIntro' 
+                              ? '지원하기 전에 자기소개서를 작성해주세요.' 
+                              : '지원하기 전에 지원 동기를 작성해주세요.'}
+                        </p>
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => setIsProfileErrorModalOpen(false)}
+                          >
+                            닫기
+                          </Button>
+                          <Button
+                            variant="primary"
+                            onClick={() => router.push('/profile/edit')}
+                          >
+                            내 정보 수정하기
                           </Button>
                         </div>
                       </div>

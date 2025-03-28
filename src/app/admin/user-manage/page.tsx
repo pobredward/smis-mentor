@@ -889,10 +889,10 @@ export default function UserManage() {
 
                       {/* 자기소개/지원동기 섹션 */}
                       <div className="mt-6 border-t pt-4">
-                        <h3 className="text-lg font-semibold mb-3">자기소개 및 지원동기</h3>
+                        <h3 className="text-lg font-semibold mb-3">자기소개서 및 지원동기</h3>
                         <div className="space-y-4">
                           <div>
-                            <p className="text-sm text-gray-500">자기소개</p>
+                            <p className="text-sm text-gray-500">자기소개서</p>
                             <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded mt-1 min-h-[60px]">
                               {editFormData.selfIntroduction || ''}
                             </p>

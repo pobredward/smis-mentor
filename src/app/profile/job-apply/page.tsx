@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
-import { getApplicationsByUserId, getJobBoardById } from '@/lib/firebaseService';
+import { getApplicationsByUserId, getJobBoardById, cancelApplication } from '@/lib/firebaseService';
 import { ApplicationHistory, JobBoard } from '@/types';
 
 type ApplicationWithJobDetails = ApplicationHistory & {
@@ -19,6 +19,9 @@ type ApplicationWithJobDetails = ApplicationHistory & {
 export default function JobApplyStatus() {
   const [applications, setApplications] = useState<ApplicationWithJobDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const { userData } = useAuth();
   const router = useRouter();
 
@@ -148,6 +151,39 @@ export default function JobApplyStatus() {
     );
   };
   
+  const handleCancelClick = (applicationId: string) => {
+    setSelectedApplicationId(applicationId);
+    setCancelModalOpen(true);
+  };
+
+  const handleCancelConfirm = async () => {
+    if (!selectedApplicationId) return;
+    
+    try {
+      setIsCancelling(true);
+      await cancelApplication(selectedApplicationId);
+      
+      // 성공적으로 취소된 지원을 목록에서 제거
+      setApplications(prevApplications => 
+        prevApplications.filter(app => app.applicationHistoryId !== selectedApplicationId)
+      );
+      
+      toast.success('지원이 취소되었습니다.');
+      setCancelModalOpen(false);
+    } catch (error) {
+      console.error('지원 취소 오류:', error);
+      let errorMessage = '지원 취소 중 오류가 발생했습니다.';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   return (
     <Layout requireAuth>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -274,12 +310,53 @@ export default function JobApplyStatus() {
                       </div>
                     </div>
                   </div>
+                  
+                  {/* 취소 버튼 (검토중 상태일 때만 표시) */}
+                  {app.applicationStatus === 'pending' && (
+                    <div className="mt-4 flex justify-end">
+                      <Button
+                        variant="danger"
+                        onClick={() => handleCancelClick(app.applicationHistoryId)}
+                        className="text-sm"
+                      >
+                        지원 취소
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+      
+      {/* 취소 확인 모달 */}
+      {cancelModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">지원 취소 확인</h3>
+            <p className="text-gray-700 mb-6">
+              정말로 이 지원을 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setCancelModalOpen(false)}
+                disabled={isCancelling}
+              >
+                아니오
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleCancelConfirm}
+                isLoading={isCancelling}
+              >
+                예, 취소합니다
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 } 

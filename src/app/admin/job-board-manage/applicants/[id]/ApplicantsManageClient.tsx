@@ -581,7 +581,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     <div className="mb-6 pb-6">
                           <h3 className="text-lg font-semibold mb-4">알바 & 멘토링 경력</h3>
                           {!selectedApplication.user?.partTimeJobs || selectedApplication.user.partTimeJobs.length === 0 ? (
-                            <p className="text-gray-500">등록된 경력이 없습니다.</p>
+                            <p className="text-gray-500">경력을 추가해주세요</p>
                           ) : (
                             <div className="space-y-4">
                               {selectedApplication.user.partTimeJobs.map((job, index) => (
@@ -604,15 +604,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           )}
                         </div>
                     
-                    {/* 자기소개 및 지원동기 */}
+                    {/* 자기소개서 및 지원동기 */}
                     {selectedApplication.user && (
                       <div className="mb-6">
                         <hr className="my-6" />
                         <div className="mb-6 pb-6">
-                          <h3 className="text-lg font-semibold mb-4">자기소개 및 지원동기</h3>
+                          <h3 className="text-lg font-semibold mb-4">자기소개서 및 지원동기</h3>
                           <div className="space-y-4">
                             <div>
-                              <h4 className="font-medium mb-2">자기소개</h4>
+                              <h4 className="font-medium mb-2">자기소개서</h4>
                               <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
                                 {selectedApplication.user?.selfIntroduction || '내용이 없습니다.'}
                               </div>

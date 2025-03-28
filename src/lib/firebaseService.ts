@@ -358,6 +358,31 @@ export const updateApplication = async (applicationId: string, applicationData: 
   return await updateDoc(doc(db, 'applicationHistories', applicationId), applicationData);
 };
 
+// 지원 취소 함수
+export const cancelApplication = async (applicationId: string) => {
+  try {
+    const applicationRef = doc(db, 'applicationHistories', applicationId);
+    
+    // 지원서 상태 확인 (취소 가능한지 검증)
+    const applicationSnap = await getDoc(applicationRef);
+    if (!applicationSnap.exists()) {
+      throw new Error('존재하지 않는 지원입니다.');
+    }
+    
+    const applicationData = applicationSnap.data() as ApplicationHistory;
+    if (applicationData.applicationStatus !== 'pending') {
+      throw new Error('검토중 상태의 지원만 취소할 수 있습니다.');
+    }
+    
+    // 지원서 삭제
+    await deleteDoc(applicationRef);
+    return true;
+  } catch (error) {
+    console.error('지원 취소 실패:', error);
+    throw error;
+  }
+};
+
 // Auth 관련 함수
 export const signIn = async (email: string, password: string) => {
   try {

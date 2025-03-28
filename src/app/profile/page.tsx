@@ -172,13 +172,13 @@ export default function ProfilePage() {
               <div>
                 <p className="text-sm text-gray-500 mb-1">자기소개</p>
                 <p className="p-3 bg-gray-50 rounded min-h-[100px]">
-                  {userData.selfIntroduction || '자기소개가 없습니다.'}
+                  {userData.selfIntroduction || '자기소개서를 작성해주세요'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">지원 동기</p>
                 <p className="p-3 bg-gray-50 rounded min-h-[100px]">
-                  {userData.jobMotivation || '지원 동기가 없습니다.'}
+                  {userData.jobMotivation || '지원 동기를 작성해주세요'}
                 </p>
               </div>
             </div>
@@ -192,7 +192,7 @@ export default function ProfilePage() {
           </div>
           <div className="px-6 py-4">
             {!userData.partTimeJobs || userData.partTimeJobs.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">등록된 경력이 없습니다.</p>
+              <p className="text-gray-500 text-center py-4">경력을 추가해주세요</p>
             ) : (
               <div className="space-y-4">
                 {userData.partTimeJobs.map((job, index) => (
