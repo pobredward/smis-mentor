@@ -14,7 +14,7 @@ export default function AdminDashboard() {
       icon: <FaUserPlus />,
     },
     {
-      title: '업무 생성',
+      title: '업무 생성 & 관리',
       description: '새로운 업무를 생성하고 관리합니다.',
       href: '/admin/job-generate',
       iconClass: 'text-blue-600',
@@ -69,7 +69,7 @@ export default function AdminDashboard() {
   return (
     <Layout requireAuth requireAdmin>
       <div>
-        <div className="mb-8">
+        <div className="mb-8 lg:px-4 px-0">
           <h1 className="text-2xl font-bold text-gray-900">관리자 대시보드</h1>
           <p className="mt-1 text-sm text-gray-600">업무 및 멘토 관리를 위한 관리자 기능</p>
         </div>

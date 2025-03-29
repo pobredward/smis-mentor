@@ -177,7 +177,7 @@ export default function UserGenerate() {
 
   return (
     <Layout requireAuth requireAdmin>
-      <div className="max-w-xl mx-auto px-4 sm:px-6">
+      <div className="max-w-xl mx-auto lg:px-4 px-0">
         <div className="mb-8">
           <div className="flex items-center">
             <button

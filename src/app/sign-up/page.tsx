@@ -129,7 +129,7 @@ export default function SignUp() {
         <h1 className="text-2xl font-bold text-center mb-2">회원가입</h1>
         <p className="text-gray-600 text-center mb-6">개인 정보를 입력해주세요</p>
         
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded lg:px-8 px-4 pt-6 pb-8 mb-4">
           <div className="mb-2 text-sm font-medium text-gray-700">
             1/4 단계: 개인 정보
           </div>

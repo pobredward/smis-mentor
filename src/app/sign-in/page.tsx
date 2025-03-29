@@ -58,7 +58,7 @@ export default function SignIn() {
       <div className="max-w-md mx-auto">
         <h1 className="text-2xl font-bold text-center mb-6">로그인</h1>
         
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded lg:px-8 px-4 pt-6 pb-8 mb-4">
           <FormInput
             label="이메일"
             type="email"
