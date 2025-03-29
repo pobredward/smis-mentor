@@ -501,7 +501,7 @@ export default function Home() {
                   <p className="text-sm text-gray-600 mb-4 line-clamp-3 flex-grow">
                     {review.content?.replace(/<[^>]*>?/gm, '') || '내용 없음'}
                   </p>
-                  <p className="text-sm text-gray-500">{formatDate(review.createdAt)}</p>
+                  {/* <p className="text-sm text-gray-500">{formatDate(review.createdAt)}</p> */}
                 </Link>
               ))}
             </div>
