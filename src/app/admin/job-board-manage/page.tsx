@@ -606,69 +606,124 @@ export default function JobBoardManage() {
             <p className="text-gray-500">등록된 공고가 없습니다.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">공고</th>
-                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">기간</th>
-                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
-                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지역</th>
-                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지원자</th>
-                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {jobBoards.map((board) => (
-                    <tr key={board.id} className="hover:bg-gray-50">
-                      <td className="px-4 sm:px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-gray-900">{board.title}</span>
-                          <span className="text-sm text-gray-500">{board.generation} ({board.jobCode})</span>
-                        </div>
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                        {formatDate(board.createdAt)}
-                      </td>
-                      <td className="px-4 sm:px-6 py-4">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          board.status === 'active' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {board.status === 'active' ? '모집중' : '마감'}
-                        </span>
-                      </td>
-                      <td className="px-4 sm:px-6 py-4">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          board.korea
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {board.korea ? '국내' : '해외'}
-                        </span>
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 text-sm text-gray-500">
-                        {board.applicationsCount}명
-                      </td>
-                      <td className="px-4 sm:px-6 py-4 text-sm font-medium">
-                        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => viewApplicants(board.id)}
-                          >
-                            지원자
-                          </Button>
-                        </div>
-                      </td>
+          // 데스크탑에서는 테이블, 모바일에서는 카드 형태로 표시
+
+      
+          <>
+            {/* 데스크탑 뷰 */}
+            <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">공고</th>
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">기간</th>
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지역</th>
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지원자</th>
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {jobBoards.map((board) => (
+                      <tr key={board.id} className="hover:bg-gray-50">
+                        <td className="px-4 sm:px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-gray-900">{board.title}</span>
+                            <span className="text-sm text-gray-500">{board.generation} ({board.jobCode})</span>
+                          </div>
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-sm text-gray-500">
+                          {formatDate(board.createdAt)}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            board.status === 'active' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {board.status === 'active' ? '모집중' : '마감'}
+                          </span>
+                        </td>
+                        <td className="px-4 sm:px-6 py-4">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            board.korea
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {board.korea ? '국내' : '해외'}
+                          </span>
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-sm text-gray-500">
+                          {board.applicationsCount}명
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-sm font-medium">
+                          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => viewApplicants(board.id)}
+                            >
+                              지원자
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+            {/* 모바일 뷰 - 카드 형태 */}
+            <div className="md:hidden space-y-4">
+              {jobBoards.map((board) => (
+                <div key={board.id} className="bg-white rounded-lg shadow p-4">
+                  <div className="mb-3">
+                    <h3 className="font-medium text-gray-900">{board.title}</h3>
+                    <p className="text-sm text-gray-500">{board.generation} ({board.jobCode})</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                    <div>
+                      <span className="text-gray-500">작성일:</span> 
+                      <span className="ml-1">{formatDate(board.createdAt)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">지원자:</span>
+                      <span className="ml-1 font-medium">{board.applicationsCount}명</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      board.status === 'active' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {board.status === 'active' ? '모집중' : '마감'}
+                    </span>
+                    
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      board.korea
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-purple-100 text-purple-800'
+                    }`}>
+                      {board.korea ? '국내' : '해외'}
+                    </span>
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    fullWidth
+                    onClick={() => viewApplicants(board.id)}
+                  >
+                    지원자 보기
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </Layout>

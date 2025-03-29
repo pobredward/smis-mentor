@@ -19,7 +19,7 @@ type ApplicationWithUser = ApplicationHistory & {
   user?: User;
 };
 
-type FilterStatus = 'all' | 'accepted' | 'interview' | 'final';
+type FilterStatus = 'all' | 'pending' | 'accepted' | 'interview' | 'passed' | 'final';
 
 type Props = {
   jobBoardId: string;
@@ -40,6 +40,25 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [interviewDate, setInterviewDate] = useState('');
   const [interviewTime, setInterviewTime] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // 모바일 상태 감지
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    
+    // 초기 로드 시 체크
+    checkIsMobile();
+    
+    // 리사이즈 이벤트 리스너 등록
+    window.addEventListener('resize', checkIsMobile);
+    
+    // 컴포넌트 언마운트 시 리스너 제거
+    return () => {
+      window.removeEventListener('resize', checkIsMobile);
+    };
+  }, []);
   
   const loadData = async () => {
     try {
@@ -81,6 +100,13 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         })
       );
       
+      // 지원일 기준 내림차순 정렬 (최신순)
+      applicationsData.sort((a, b) => {
+        const dateA = a.applicationDate.toDate().getTime();
+        const dateB = b.applicationDate.toDate().getTime();
+        return dateB - dateA;
+      });
+      
       setApplications(applicationsData);
       setFilteredApplications(applicationsData);
     } catch (error) {
@@ -102,10 +128,14 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     if (filterStatus !== 'all') {
       filtered = filtered.filter(app => {
         switch (filterStatus) {
+          case 'pending':
+            return app.applicationStatus === 'pending';
           case 'accepted':
             return app.applicationStatus === 'accepted';
           case 'interview':
             return app.interviewStatus === 'pending';
+          case 'passed':
+            return app.interviewStatus === 'passed';
           case 'final':
             return app.finalStatus === 'finalAccepted';
           default:
@@ -128,6 +158,13 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         );
       });
     }
+
+    // 지원일 기준 내림차순 정렬 (최신순)
+    filtered.sort((a, b) => {
+      const dateA = a.applicationDate.toDate().getTime();
+      const dateB = b.applicationDate.toDate().getTime();
+      return dateB - dateA; // 내림차순 정렬
+    });
 
     setFilteredApplications(filtered);
   }, [applications, filterStatus, searchQuery]);
@@ -370,79 +407,84 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   return (
     <Layout requireAuth requireAdmin>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center">
-          <div className="mb-4 sm:mb-0">
-            <div className="flex items-center">
-              <button
-                onClick={() => router.push('/admin/job-board-manage')}
-                className="mr-3 text-blue-600 hover:text-blue-800 focus:outline-none flex items-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">지원 유저 관리</h1>
-            </div>
-            <p className="mt-1 text-sm text-gray-600">지원자 정보와 지원 현황을 관리할 수 있습니다.</p>
+        <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">지원자 관리</h1>
+            {jobBoard && (
+              <p className="text-gray-500 text-sm mt-1">
+                {jobBoard.title} ({jobBoard.generation} {jobBoard.jobCode})
+              </p>
+            )}
           </div>
-          {/* {jobBoard && (
-            <div className="flex flex-col">
-              <div className="text-lg font-semibold text-gray-900">{jobBoard.title}</div>
-              <div className="text-sm text-gray-500">{jobBoard.generation}</div>
-            </div>
-          )} */}
         </div>
         
-        {/* 필터 및 검색 */}
-        <div className="mb-6 bg-white rounded-lg shadow p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              {/* <label className="block text-sm font-medium text-gray-700 mb-2">상태 필터</label> */}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setFilterStatus('all')}
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    filterStatus === 'all'
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  전체
-                </button>
-                <button
-                  onClick={() => setFilterStatus('accepted')}
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    filterStatus === 'accepted'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  서류 합격
-                </button>
-                <button
-                  onClick={() => setFilterStatus('interview')}
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    filterStatus === 'interview'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  면접 예정
-                </button>
-                <button
-                  onClick={() => setFilterStatus('final')}
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    filterStatus === 'final'
-                      ? 'bg-indigo-100 text-indigo-800'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  최종 합격
-                </button>
-              </div>
+        <div className="mb-4">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setFilterStatus('all')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  filterStatus === 'all'
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                전체
+              </button>
+              <button
+                onClick={() => setFilterStatus('pending')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  filterStatus === 'pending'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                검토중
+              </button>
+              <button
+                onClick={() => setFilterStatus('accepted')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  filterStatus === 'accepted'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                서류 합격
+              </button>
             </div>
-            <div>
-              {/* <label className="block text-sm font-medium text-gray-700 mb-2">검색</label> */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setFilterStatus('interview')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  filterStatus === 'interview'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                면접 예정
+              </button>
+              <button
+                onClick={() => setFilterStatus('passed')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  filterStatus === 'passed'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                면접 합격
+              </button>
+              <button
+                onClick={() => setFilterStatus('final')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  filterStatus === 'final'
+                    ? 'bg-indigo-100 text-indigo-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                최종 합격
+              </button>
+            </div>
+            <div className="w-full mt-2">
               <input
                 type="text"
                 value={searchQuery}
@@ -470,16 +512,32 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* 지원자 목록 */}
-            <div className="md:col-span-1">
+          // 모바일 최적화 레이아웃
+          <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
+            {/* 모바일 뷰에서는 상세 정보가 선택된 경우에만 지원자 목록을 숨깁니다 */}
+            {(!selectedApplication || !isMobile) && (
+            <div className={`${selectedApplication && isMobile ? 'hidden' : 'block'} lg:col-span-1`}>
+              {/* 지원자 목록 */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="p-4 border-b">
-                  <h2 className="font-medium text-gray-900">지원자 목록</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    총 {filteredApplications.length}명
-                    {filterStatus !== 'all' && ` (전체 ${applications.length}명 중)`}
-                  </p>
+                <div className="p-4 border-b flex justify-between items-center">
+                  <div>
+                    <h2 className="font-medium text-gray-900">지원자 목록</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      총 {filteredApplications.length}명
+                      {filterStatus !== 'all' && ` (전체 ${applications.length}명 중)`}
+                    </p>
+                  </div>
+                  
+                  {/* 모바일 뷰에서 상세보기에서 목록으로 돌아가는 버튼 */}
+                  {selectedApplication && isMobile && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedApplication(null)}
+                    >
+                      목록으로
+                    </Button>
+                  )}
                 </div>
                 <div className="divide-y overflow-y-auto max-h-[600px]">
                   {filteredApplications.map((app) => (
@@ -499,9 +557,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           <p className="text-sm text-gray-500">
                             지원일: {formatDate(app.applicationDate)}
                           </p>
-                          {/* <p className="text-sm text-gray-500">
-                            면접예정일: {formatDate(app.interviewDate)}
-                          </p> */}
                         </div>
                         
                         {/* 지원 상태 표시 */}
@@ -529,12 +584,25 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                 </div>
               </div>
             </div>
+            )}
             
-            {/* 선택된 지원자 상세 */}
-            <div className="md:col-span-2">
-              {selectedApplication ? (
+            {/* 선택된 지원자 상세 - 모바일에서는 전체 너비 사용 */}
+            {selectedApplication && (
+              <div className="lg:col-span-2">
                 <div className="bg-white rounded-lg shadow">
-                  <div className="p-6">
+                  {/* 모바일 뷰에서만 보이는 뒤로가기 버튼 */}
+                  <div className="lg:hidden p-4 border-b flex justify-between items-center">
+                    <h2 className="font-medium">지원자 상세</h2>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedApplication(null)}
+                    >
+                      목록으로
+                    </Button>
+                  </div>
+                  
+                  <div className="p-4 lg:p-6">
                     <div className="mb-6 pb-6 border-b border-gray-200">
                       <div className="flex justify-between items-start">
                         <div>
@@ -543,9 +611,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           </h2>
                           {selectedApplication.user && (
                             <div className="mt-2 space-y-1 text-sm text-gray-600">
-                              {/* <p>
-                                <span className="font-medium">이메일:</span> {selectedApplication.user.email}
-                              </p> */}
                               <p>
                                 <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber}
                               </p>
@@ -564,16 +629,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             </div>
                           )}
                         </div>
-                        {/* <div className="flex space-x-2">
-                          <div className="text-right">
-                            <p className="text-sm text-gray-500">
-                              지원일: {formatDate(selectedApplication.applicationDate)}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              면접예정일: {formatDate(selectedApplication.interviewDate)}
-                            </p>
-                          </div>
-                        </div> */}
                       </div>
                     </div>
 
@@ -625,13 +680,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             </div>
                           </div>
                         </div>
-                        
-                        
                       </div>
                     )}
                     
                     {/* 상태 변경 및 피드백 */}
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           서류 상태
@@ -684,7 +737,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     
                     {/* 면접 정보 입력 폼 */}
                     {selectedApplication.interviewStatus === 'pending' && (
-                      <div className="col-span-3 mt-4 p-4 bg-blue-50 rounded-lg">
+                      <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                         <h3 className="text-md font-medium text-blue-800 mb-3">면접 정보</h3>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -793,12 +846,16 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     </div>
                   </div>
                 </div>
-              ) : (
+              </div>
+            )}
+            
+            {!selectedApplication && (
+              <div className="hidden lg:block lg:col-span-2">
                 <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
                   지원자를 선택하세요
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
