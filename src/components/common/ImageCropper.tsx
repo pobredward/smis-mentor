@@ -112,8 +112,25 @@ async function getCroppedImg(
   
   // 캔버스 생성 및 설정
   const canvas = document.createElement('canvas');
-  canvas.width = pixelCrop.width;
-  canvas.height = pixelCrop.height;
+  
+  // 최대 크기 제한 (800x800)
+  const MAX_SIZE = 800;
+  let finalWidth = pixelCrop.width;
+  let finalHeight = pixelCrop.height;
+  
+  // 크기가 MAX_SIZE를 초과하는 경우 비율을 유지하며 크기 조정
+  if (finalWidth > MAX_SIZE || finalHeight > MAX_SIZE) {
+    if (finalWidth > finalHeight) {
+      finalHeight = (finalHeight / finalWidth) * MAX_SIZE;
+      finalWidth = MAX_SIZE;
+    } else {
+      finalWidth = (finalWidth / finalHeight) * MAX_SIZE;
+      finalHeight = MAX_SIZE;
+    }
+  }
+  
+  canvas.width = finalWidth;
+  canvas.height = finalHeight;
   
   const ctx = canvas.getContext('2d');
   if (!ctx) {
@@ -129,8 +146,8 @@ async function getCroppedImg(
     pixelCrop.height,
     0,
     0,
-    pixelCrop.width,
-    pixelCrop.height
+    finalWidth,
+    finalHeight
   );
   
   // 디버그 정보 출력
@@ -156,7 +173,7 @@ async function getCroppedImg(
         resolve(file);
       },
       'image/jpeg',
-      1.0 // 최대 품질
+      0.5 // 품질을 70%로 줄여 용량 감소 및 업로드 속도 향상
     );
   });
 }
