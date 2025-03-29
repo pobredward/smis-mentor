@@ -359,6 +359,7 @@ export default function EditProfilePage() {
                     이미지 변경
                   </label>
                 </div>
+                <p className="text-xs text-gray-500 mt-2">현재 프로필 이미지 업로드가 불가능하므로 나중에 시도해주세요</p>
               </div>
 
               <FormInput
