@@ -23,6 +23,8 @@ const detailsSchema = z.object({
   gender: z.enum(['M', 'F'], {
     errorMap: () => ({ message: '성별을 선택해주세요.' }),
   }),
+  referralPath: z.string().min(1, '가입 경로를 선택해주세요.'),
+  referrerName: z.string().optional(),
   agreedPersonal: z.boolean().refine(val => val === true, {
     message: '개인정보 수집 및 이용에 동의해주세요.',
   }),
@@ -56,6 +58,8 @@ export default function SignUpDetails() {
     resolver: zodResolver(detailsSchema),
     defaultValues: {
       gender: undefined,
+      referralPath: undefined,
+      referrerName: '',
       agreedPersonal: false,
     },
   });
@@ -127,6 +131,8 @@ export default function SignUpDetails() {
           gender: data.gender,
           age,
           agreedPersonal: data.agreedPersonal,
+          referralPath: data.referralPath,
+          referrerName: data.referrerName,
           selfIntroduction: '',
           jobMotivation: '',
           status: 'active',
@@ -167,6 +173,8 @@ export default function SignUpDetails() {
           gender: data.gender,
           age,
           agreedPersonal: data.agreedPersonal,
+          referralPath: data.referralPath,
+          referrerName: data.referrerName,
           profileImage: '',
           role: 'mentor',
           status: 'active',
@@ -180,7 +188,16 @@ export default function SignUpDetails() {
           grade: gradeNum,
           isOnLeave: isOnLeaveVal,
           major1,
-          major2: major2 || ''
+          major2: major2 || '',
+          agreedTerms: true,
+          isPhoneVerified: true,
+          isProfileCompleted: false,
+          isTermsAgreed: true,
+          isPersonalAgreed: true,
+          isAddressVerified: true,
+          isProfileImageUploaded: false,
+          createdAt: now,
+          updatedAt: now
         });
 
         toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
@@ -296,6 +313,51 @@ export default function SignUpDetails() {
               주민번호 입력 시 자동으로 선택되지만, 필요한 경우 수정할 수 있습니다.
             </p>
           </div>
+
+          <div className="w-full mb-4">
+            <label className="block text-gray-700 text-sm font-medium mb-1">가입 경로</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              {...register('referralPath')}
+            >
+              <option value="">선택해주세요</option>
+              <option value="에브리타임">에브리타임</option>
+              <option value="학교 커뮤니티">학교 커뮤니티</option>
+              <option value="링커리어">링커리어</option>
+              <option value="캠퍼스픽">캠퍼스픽</option>
+              <option value="인스타그램">인스타그램</option>
+              <option value="페이스북">페이스북</option>
+              <option value="구글/네이버 등 검색">구글/네이버 등 검색</option>
+              <option value="지인 소개">지인 소개</option>
+              <option value="기타">기타</option>
+            </select>
+            {errors.referralPath && <p className="mt-1 text-sm text-red-600">{errors.referralPath.message}</p>}
+          </div>
+
+          {watch('referralPath') === '지인 소개' && (
+            <div className="w-full mb-4">
+              <FormInput
+                label="소개해 주신 분의 이름"
+                type="text"
+                placeholder="지인의 이름을 입력해주세요"
+                error={errors.referrerName?.message}
+                {...register('referrerName')}
+              />
+            </div>
+          )}
+          
+          {watch('referralPath') === '기타' && (
+            <div className="w-full mb-4">
+              <FormInput
+                label="기타 경로"
+                type="text"
+                placeholder="경로를 입력해주세요"
+                error={errors.referrerName?.message}
+                {...register('referrerName')}
+              />
+            </div>
+
+          )}
 
           <div className="w-full mb-6">
             <div className="flex items-center">

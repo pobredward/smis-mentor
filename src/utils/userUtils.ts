@@ -68,7 +68,7 @@ export const getAgeFromRRN = (rrnFront: string, rrnLast: string): number => {
   // 2023년 기준 25살 +2 = 27살 -> 1살 추가 = 28살
   // 단순히 (현재 연도 - 출생 연도)로 만 나이를 계산하고 +2를 더함 (현재 기준 보정)
   // 2024년 기준 보정 : +2
-  return currentYear - fullBirthYear + 2;
+  return currentYear - fullBirthYear + 1;
 };
 
 /**

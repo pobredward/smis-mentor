@@ -46,6 +46,8 @@ export interface User {
   isOnLeave?: boolean;
   major1?: string;
   major2?: string;
+  referralPath?: string;
+  referrerName?: string;
 }
 
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager';
