@@ -406,18 +406,12 @@ export default function UserCheck() {
                     <p className="text-sm text-gray-500">이메일</p>
                     <p className="text-gray-900 break-words">{selectedUser.email || '-'}</p>
                   </div>
-                  <div>
+                  {/* <div>
                     <p className="text-sm text-gray-500">전화번호</p>
                     <p className="text-gray-900">
                       {selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}
                     </p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-500">주소</p>
-                    <p className="text-gray-900 break-words">
-                      {selectedUser.address ? `${selectedUser.address} ${selectedUser.addressDetail || ''}` : '-'}
-                    </p>
-                  </div>
+                  </div> */}
                   <div>
                     <p className="text-sm text-gray-500">성별</p>
                     <p className="text-gray-900">
@@ -437,19 +431,11 @@ export default function UserCheck() {
                         `${selectedUser.rrnFront}-${selectedUser.rrnLast}` : '-'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">이메일 인증</p>
-                    <p className="text-gray-900">
-                      {selectedUser.isEmailVerified ? '인증됨' : '미인증'}
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-500">주소</p>
+                    <p className="text-gray-900 break-words">
+                      {selectedUser.address ? `${selectedUser.address} ${selectedUser.addressDetail || ''}` : '-'}
                     </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">가입일</p>
-                    <p className="text-gray-900">{formatDate(selectedUser.createdAt)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">정보 업데이트</p>
-                    <p className="text-gray-900">{formatDate(selectedUser.updatedAt)}</p>
                   </div>
                 </div>
 
@@ -532,9 +518,9 @@ export default function UserCheck() {
                   </div>
                 </div>
 
-                {/* 피드백 섹션 */}
+                {/* 관리자 피드백 섹션 */}
                 <div className="mt-6 border-t pt-4">
-                  <h3 className="text-lg font-semibold mb-3">피드백</h3>
+                  <h3 className="text-lg font-semibold mb-3">관리자 피드백</h3>
                   <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded min-h-[80px]">
                     {selectedUser.feedback || '-'}
                   </p>

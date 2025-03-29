@@ -120,7 +120,7 @@ export default function ProfilePage() {
 
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="border-b px-4 sm:px-6 py-3">
-            <h2 className="text-lg font-semibold">SMIS 캠프 참여이력</h2>
+            <h2 className="text-lg font-semibold">SMIS 캠프 참여 이력</h2>
           </div>
           <div className="px-4 sm:px-6 py-4">
             {loading ? (
@@ -128,15 +128,17 @@ export default function ProfilePage() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
               </div>
             ) : jobCodes.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">등록된 업무 경력이 없습니다.</p>
+              <p className="text-gray-500 text-center py-4">등록된 참여 이력이 없습니다.</p>
             ) : (
               <div className="space-y-4">
                 {jobCodes.map((job) => (
-                  <div key={job.id as string} className="border rounded-md p-3">
-                    <div className="flex flex-col sm:flex-row sm:justify-between mb-2">
-                      <div className="flex items-center">
-                        <h3 className="font-medium text-gray-900">{job.name}</h3>
-                        {job.group && (
+                  <div key={job.id as string} className="">
+                    <div className="flex flex-col flex-row justify-between mb-2">
+                      <div className="flex text-sm items-center">
+                        <h3 className="text-gray-900">{job.name}</h3>
+                        
+                      </div>
+                      {job.group && (
                           <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
                             job.group === 'junior' ? 'bg-green-100 text-green-800' :
                             job.group === 'middle' ? 'bg-yellow-100 text-yellow-800' :
@@ -160,10 +162,9 @@ export default function ProfilePage() {
                              '매니저'}
                           </span>
                         )}
-                      </div>
-                      <span className="text-sm text-gray-500">{job.code}</span>
+                      {/* <span className="text-sm text-gray-500">{job.code}</span> */}
                     </div>
-                    <p className="text-sm text-gray-600">{job.generation}</p>
+                    {/* <p className="text-sm text-gray-600">{job.generation}</p> */}
                   </div>
                 ))}
               </div>
