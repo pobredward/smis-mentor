@@ -677,6 +677,171 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       </div>
                     </div>
 
+                    {/* 상태 변경 및 피드백 */}
+                    <div className="mb-6 pb-6 border-b border-gray-200">
+                      {/* 상태 변경 - 모든 화면에서 가로 배치 */}
+                      <div className="grid grid-cols-3 gap-2 md:gap-4 mt-4">
+                        <div>
+                          <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                            서류 상태
+                          </label>
+                          <select
+                            value={selectedApplication.applicationStatus}
+                            onChange={(e) => handleStatusChange(selectedApplication.id, e.target.value, 'application')}
+                            className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                            disabled={isLoading}
+                          >
+                            <option value="pending">검토중</option>
+                            <option value="accepted">서류합격</option>
+                            <option value="rejected">서류불합격</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                            면접 상태
+                          </label>
+                          <select
+                            value={selectedApplication.interviewStatus || ''}
+                            onChange={(e) => handleInterviewStatusChange(selectedApplication.id, e.target.value)}
+                            className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                            disabled={isLoading || selectedApplication.applicationStatus !== 'accepted'}
+                          >
+                            <option value="">선택</option>
+                            <option value="pending">면접예정</option>
+                            <option value="passed">면접합격</option>
+                            <option value="failed">면접불합격</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                            최종 상태
+                          </label>
+                          <select
+                            value={selectedApplication.finalStatus || ''}
+                            onChange={(e) => handleFinalStatusChange(selectedApplication.id, e.target.value)}
+                            className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                            disabled={isLoading || selectedApplication.interviewStatus !== 'passed'}
+                          >
+                            <option value="">선택</option>
+                            <option value="finalAccepted">최종합격</option>
+                            <option value="finalRejected">최종불합격</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      {/* 면접 정보 입력 폼 */}
+                      {selectedApplication.interviewStatus === 'pending' && (
+                        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                          <h3 className="text-md font-medium text-blue-800 mb-3">면접 정보</h3>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                면접 날짜
+                              </label>
+                              <input
+                                type="date"
+                                value={interviewDate}
+                                onChange={(e) => setInterviewDate(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md"
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                면접 시간
+                              </label>
+                              <input
+                                type="time"
+                                value={interviewTime}
+                                onChange={(e) => setInterviewTime(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                면접 링크
+                              </label>
+                              <input
+                                type="text"
+                                value={interviewBaseLink}
+                                onChange={(e) => setInterviewBaseLink(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md"
+                                placeholder="https://zoom.us/j/..."
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                면접 시간 (분)
+                              </label>
+                              <input
+                                type="number"
+                                value={interviewBaseDuration}
+                                onChange={(e) => setInterviewBaseDuration(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md"
+                                placeholder="30"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              면접 참고사항
+                            </label>
+                            <textarea
+                              value={interviewBaseNotes}
+                              onChange={(e) => setInterviewBaseNotes(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded-md"
+                              rows={3}
+                              placeholder="면접 참고사항을 입력하세요..."
+                            />
+                          </div>
+                          
+                          <div className="flex justify-end">
+                            <Button
+                              variant="primary"
+                              onClick={handleSaveInterviewInfo}
+                              isLoading={isLoading}
+                              disabled={isLoading || !interviewDate || !interviewTime}
+                            >
+                              면접 정보 저장
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 면접 피드백 */}
+                      <div className="mt-6">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          면접 피드백
+                        </label>
+                        <textarea
+                          value={feedbackText}
+                          onChange={(e) => setFeedbackText(e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 max-h-[100px] overflow-auto"
+                          placeholder="면접 피드백을 입력하세요..."
+                          disabled={isLoading}
+                          style={{ height: '100px', resize: 'none' }}
+                        ></textarea>
+                        <div className="mt-2 flex justify-end">
+                          <Button
+                            variant="primary"
+                            onClick={handleSaveFeedback}
+                            isLoading={isLoading}
+                            disabled={isLoading || !feedbackText.trim()}
+                          >
+                            피드백 저장
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* 알바 & 멘토링 경력 */}
                     <div className="mb-6 pb-6">
                           <h3 className="text-lg font-semibold mb-4">알바 & 멘토링 경력</h3>
@@ -727,168 +892,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         </div>
                       </div>
                     )}
-                    
-                    {/* 상태 변경 및 피드백 */}
-                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          서류 상태
-                        </label>
-                        <select
-                          value={selectedApplication.applicationStatus}
-                          onChange={(e) => handleStatusChange(selectedApplication.id, e.target.value, 'application')}
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                          disabled={isLoading}
-                        >
-                          <option value="pending">검토중</option>
-                          <option value="accepted">서류합격</option>
-                          <option value="rejected">서류불합격</option>
-                        </select>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          면접 상태
-                        </label>
-                        <select
-                          value={selectedApplication.interviewStatus || ''}
-                          onChange={(e) => handleInterviewStatusChange(selectedApplication.id, e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                          disabled={isLoading || selectedApplication.applicationStatus !== 'accepted'}
-                        >
-                          <option value="">선택</option>
-                          <option value="pending">면접예정</option>
-                          <option value="passed">면접합격</option>
-                          <option value="failed">면접불합격</option>
-                        </select>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          최종 상태
-                        </label>
-                        <select
-                          value={selectedApplication.finalStatus || ''}
-                          onChange={(e) => handleFinalStatusChange(selectedApplication.id, e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                          disabled={isLoading || selectedApplication.interviewStatus !== 'passed'}
-                        >
-                          <option value="">선택</option>
-                          <option value="finalAccepted">최종합격</option>
-                          <option value="finalRejected">최종불합격</option>
-                        </select>
-                      </div>
-                    </div>
-                    
-                    {/* 면접 정보 입력 폼 */}
-                    {selectedApplication.interviewStatus === 'pending' && (
-                      <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                        <h3 className="text-md font-medium text-blue-800 mb-3">면접 정보</h3>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              면접 날짜
-                            </label>
-                            <input
-                              type="date"
-                              value={interviewDate}
-                              onChange={(e) => setInterviewDate(e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md"
-                            />
-                          </div>
-                          
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              면접 시간
-                            </label>
-                            <input
-                              type="time"
-                              value={interviewTime}
-                              onChange={(e) => setInterviewTime(e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              면접 링크
-                            </label>
-                            <input
-                              type="text"
-                              value={interviewBaseLink}
-                              onChange={(e) => setInterviewBaseLink(e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md"
-                              placeholder="https://zoom.us/j/..."
-                            />
-                          </div>
-                          
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              면접 시간 (분)
-                            </label>
-                            <input
-                              type="number"
-                              value={interviewBaseDuration}
-                              onChange={(e) => setInterviewBaseDuration(e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md"
-                              placeholder="30"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            면접 참고사항
-                          </label>
-                          <textarea
-                            value={interviewBaseNotes}
-                            onChange={(e) => setInterviewBaseNotes(e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-md"
-                            rows={3}
-                            placeholder="면접 참고사항을 입력하세요..."
-                          />
-                        </div>
-                        
-                        <div className="flex justify-end">
-                          <Button
-                            variant="primary"
-                            onClick={handleSaveInterviewInfo}
-                            isLoading={isLoading}
-                            disabled={isLoading || !interviewDate || !interviewTime}
-                          >
-                            면접 정보 저장
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* 면접 피드백 */}
-                    <div className="mt-6">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        면접 피드백
-                      </label>
-                      <textarea
-                        value={feedbackText}
-                        onChange={(e) => setFeedbackText(e.target.value)}
-                        rows={5}
-                        className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="면접 피드백을 입력하세요..."
-                        disabled={isLoading}
-                      ></textarea>
-                      <div className="mt-2 flex justify-end">
-                        <Button
-                          variant="primary"
-                          onClick={handleSaveFeedback}
-                          isLoading={isLoading}
-                          disabled={isLoading || !feedbackText.trim()}
-                        >
-                          피드백 저장
-                        </Button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
