@@ -154,8 +154,8 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
   try {
     if (!jobExperiences || jobExperiences.length === 0) return [];
     
-    console.log('=== getUserJobCodesInfo 호출 ===');
-    console.log('검색할 jobExperiences:', jobExperiences);
+    // console.log('=== getUserJobCodesInfo 호출 ===');
+    // console.log('검색할 jobExperiences:', jobExperiences);
     
     // 배열 형식 확인 및 ID 추출
     const jobIds = jobExperiences.map(exp => {
@@ -179,7 +179,7 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
         const jobCodeDoc = await getDoc(doc(db, 'jobCodes', idOrCode));
         
         if (jobCodeDoc.exists()) {
-          console.log(`'${idOrCode}'는 jobCodes 컬렉션의 문서 ID입니다.`);
+          // console.log(`'${idOrCode}'는 jobCodes 컬렉션의 문서 ID입니다.`);
           
           // 그룹 정보와 함께 반환
           return {
@@ -194,7 +194,7 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
         const jobExperienceDoc = await getDoc(doc(db, 'jobExperiences', idOrCode));
         
         if (jobExperienceDoc.exists()) {
-          console.log(`'${idOrCode}'는 jobExperiences 컬렉션의 문서 ID입니다.`);
+          // console.log(`'${idOrCode}'는 jobExperiences 컬렉션의 문서 ID입니다.`);
           // jobExperiences 컬렉션에 문서가 존재하는 경우 (기존 로직)
           const jobExperience = { 
             jobExperienceId: idOrCode,
