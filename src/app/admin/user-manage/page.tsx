@@ -8,7 +8,7 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
 import PhoneInput, { formatPhoneNumber } from '@/components/common/PhoneInput';
-import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode } from '@/lib/firebaseService';
+import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser } from '@/lib/firebaseService';
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
@@ -538,6 +538,47 @@ export default function UserManage() {
     setSelectedRole(role);
   };
 
+  // 계정 복구 핸들러 추가
+  const handleReactivateUser = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      await reactivateUser(selectedUser.userId);
+      toast.success('사용자 계정이 복구되었습니다.');
+      
+      // 사용자 목록과 선택된 사용자 정보 새로고침
+      const updatedUsers = await getAllUsers();
+      
+      // 가입일시를 기준으로 오름차순 정렬 (가장 오래된 순)
+      const sortedUsers = [...updatedUsers].sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      setUsers(sortedUsers);
+      
+      // 선택된 사용자 정보 업데이트
+      const updatedUser = sortedUsers.find(user => user.userId === selectedUser.userId);
+      if (updatedUser) {
+        setSelectedUser(updatedUser);
+      }
+      
+      // 검색어 필터링 다시 적용
+      setFilteredUsers(sortedUsers.filter(user => 
+        selectedRole === 'all' || user.role === selectedRole
+      ).filter(user => 
+        !searchTerm.trim() || 
+        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.phoneNumber.includes(searchTerm)
+      ));
+    } catch (error) {
+      console.error('사용자 계정 복구 실패:', error);
+      toast.error('사용자 계정 복구에 실패했습니다.');
+    }
+  };
+
   return (
     <Layout requireAuth requireAdmin>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -667,17 +708,36 @@ export default function UserManage() {
             <div className={`md:col-span-2 ${showUserList ? 'hidden md:block' : 'block'}`}>
               {selectedUser ? (
                 <div className="bg-white rounded-lg shadow">
-                  {/* 모바일에서만 보이는 뒤로가기 버튼 */}
-                  <div className="md:hidden p-4 border-b">
-                    <button
-                      className="flex items-center text-blue-600"
-                      onClick={handleBackToList}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-                      </svg>
-                      사용자 목록으로
-                    </button>
+                  <div className="p-4 border-b sm:px-6 sm:py-5 flex items-center justify-between">
+                    <h3 className="text-lg font-medium">사용자 정보</h3>
+                    <div className="flex space-x-2">
+                      {selectedUser.status === 'inactive' && (
+                        <Button
+                          variant="success"
+                          size="sm"
+                          onClick={handleReactivateUser}
+                          className="text-xs px-2 py-1"
+                        >
+                          계정 복구
+                        </Button>
+                      )}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleStartEdit}
+                        className="text-xs px-2 py-1"
+                      >
+                        수정
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleBackToList}
+                        className="text-xs px-2 py-1 md:hidden"
+                      >
+                        목록
+                      </Button>
+                    </div>
                   </div>
                   
                   {isEditing ? (

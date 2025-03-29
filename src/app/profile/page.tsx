@@ -3,16 +3,21 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getUserJobCodesInfo } from '@/lib/firebaseService';
+import { getUserJobCodesInfo, deactivateUser } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { JobCodeWithId } from '@/types';
+import toast from 'react-hot-toast';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 export default function ProfilePage() {
   const { userData } = useAuth();
   const router = useRouter();
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
 
   useEffect(() => {
     const fetchJobCodes = async () => {
@@ -29,6 +34,34 @@ export default function ProfilePage() {
 
     fetchJobCodes();
   }, [userData]);
+
+  const handleDeactivateAccount = async () => {
+    if (!userData) return;
+    
+    try {
+      setDeactivating(true);
+      await deactivateUser(userData.userId);
+      toast.success('회원 탈퇴가 완료되었습니다.');
+      
+      // 로그아웃 처리
+      await signOut(auth);
+      
+      // 로그인 페이지로 이동
+      router.push('/sign-in');
+    } catch (error) {
+      console.error('회원 탈퇴 오류:', error);
+      let errorMessage = '회원 탈퇴 중 오류가 발생했습니다.';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
+    } finally {
+      setDeactivating(false);
+      setShowDeactivateModal(false);
+    }
+  };
 
   if (!userData) {
     return (
@@ -246,7 +279,45 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+        
+        {/* 회원 탈퇴 섹션 */}
+        <div className="mt-8 mb-12 text-center">
+          <button
+            onClick={() => setShowDeactivateModal(true)}
+            className="text-red-500 text-sm underline hover:text-red-700"
+          >
+            회원 탈퇴
+          </button>
+        </div>
       </div>
+      
+      {/* 회원 탈퇴 확인 모달 */}
+      {showDeactivateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">회원 탈퇴 확인</h3>
+            <p className="text-gray-700 mb-6">
+              정말로 회원 탈퇴를 진행하시겠습니까? 탈퇴 후에도 가입 정보는 관리자가 확인할 수 있으며, 원하시면 추후 계정 복구가 가능합니다.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeactivateModal(false)}
+                disabled={deactivating}
+              >
+                취소
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleDeactivateAccount}
+                isLoading={deactivating}
+              >
+                탈퇴하기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 } 

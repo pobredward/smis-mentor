@@ -89,6 +89,57 @@ export const updateUser = async (userId: string, updates: Partial<User>) => {
   });
 };
 
+export const deactivateUser = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('사용자를 찾을 수 없습니다.');
+    }
+    
+    const userData = userDoc.data() as User;
+    const now = Timestamp.now();
+    
+    await updateDoc(userRef, {
+      status: 'inactive',
+      name: `(탈퇴)${userData.name}`,
+      updatedAt: now
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('사용자 비활성화 실패:', error);
+    throw error;
+  }
+};
+
+export const reactivateUser = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('사용자를 찾을 수 없습니다.');
+    }
+    
+    const userData = userDoc.data() as User;
+    const now = Timestamp.now();
+    const originalName = userData.name.replace(/^\(탈퇴\)/, '');
+    
+    await updateDoc(userRef, {
+      status: 'active',
+      name: originalName,
+      updatedAt: now
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('사용자 재활성화 실패:', error);
+    throw error;
+  }
+};
+
 export const deleteUser = async (userId: string) => {
   try {
     await deleteDoc(doc(db, 'users', userId));
