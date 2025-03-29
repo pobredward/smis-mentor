@@ -57,6 +57,7 @@ export default function EditProfilePage() {
   const [showCropper, setShowCropper] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [partTimeJobs, setPartTimeJobs] = useState<PartTimeJob[]>([]);
 
   const {
@@ -167,23 +168,100 @@ export default function EditProfilePage() {
   const handleCropComplete = async (croppedFile: File) => {
     setShowCropper(false);
     setIsUploading(true);
+    setUploadProgress(0);
     
     try {
       if (!userData) return;
       
-      const downloadURL = await uploadProfileImage(userData.userId, croppedFile);
+      // 파일 크기 확인 및 압축 처리
+      let fileToUpload = croppedFile;
+      const fileSizeMB = croppedFile.size / (1024 * 1024);
+      
+      if (fileSizeMB > 1) {
+        // 압축 비율 계산 (2의 배수로)
+        let compressionRatio = 1;
+        while (fileSizeMB / compressionRatio > 1) {
+          compressionRatio *= 2;
+        }
+        
+        // 이미지 압축 처리
+        const compressedFile = await compressImage(croppedFile, 1 / compressionRatio);
+        fileToUpload = compressedFile;
+      }
+      
+      const downloadURL = await uploadProfileImage(
+        userData.userId, 
+        fileToUpload, 
+        (progress) => {
+          setUploadProgress(progress);
+        }
+      );
+      
       setProfileImageUrl(downloadURL);
       
       // 사용자 데이터 갱신
       await refreshUserData();
       
       toast.success('프로필 이미지가 업로드되었습니다.');
-    } catch (error) {
-      console.error('이미지 업로드 오류:', error);
+    } catch {
       toast.error('이미지 업로드 중 오류가 발생했습니다.');
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
+  };
+  
+  // 이미지 압축 함수
+  const compressImage = (file: File, quality: number): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas 컨텍스트를 가져올 수 없습니다.'));
+            return;
+          }
+          
+          // 원본 크기 유지
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          // 이미지 그리기
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          
+          // 압축된 이미지 가져오기
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error('이미지 압축에 실패했습니다.'));
+              return;
+            }
+            
+            // 새 파일 생성
+            const compressedFile = new File(
+              [blob], 
+              file.name, 
+              { type: file.type, lastModified: Date.now() }
+            );
+            
+            resolve(compressedFile);
+          }, file.type, quality);
+        };
+        
+        img.onerror = () => {
+          reject(new Error('이미지 로드에 실패했습니다.'));
+        };
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('파일 읽기에 실패했습니다.'));
+      };
+    });
   };
   
   // 이미지 크롭 취소
@@ -198,8 +276,8 @@ export default function EditProfilePage() {
       try {
         const existingUser = await getUserByEmail(currentEmail);
         setEmailExists(!!existingUser);
-      } catch (error) {
-        console.error('이메일 중복 확인 오류:', error);
+      } catch {
+        // 오류 발생 시 조용히 처리
       }
     } else {
       setEmailExists(false);
@@ -212,8 +290,8 @@ export default function EditProfilePage() {
       try {
         const existingUser = await getUserByPhone(currentPhone);
         setPhoneExists(!!existingUser);
-      } catch (error) {
-        console.error('전화번호 중복 확인 오류:', error);
+      } catch {
+        // 오류 발생 시 조용히 처리
       }
     } else {
       setPhoneExists(false);
@@ -272,8 +350,7 @@ export default function EditProfilePage() {
 
       toast.success('프로필이 성공적으로 업데이트되었습니다.');
       router.push('/profile');
-    } catch (error) {
-      console.error('프로필 업데이트 오류:', error);
+    } catch {
       toast.error('프로필 업데이트 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -338,8 +415,15 @@ export default function EditProfilePage() {
                   )}
                   
                   {isUploading && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white"></div>
+                    <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex flex-col items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white mb-2"></div>
+                      <span className="text-white text-sm font-medium">{uploadProgress.toFixed(0)}%</span>
+                      <div className="w-4/5 h-2 bg-gray-200 rounded-full mt-2">
+                        <div 
+                          className="h-full bg-blue-500 rounded-full" 
+                          style={{ width: `${uploadProgress}%` }}
+                        ></div>
+                      </div>
                     </div>
                   )}
                 </div>

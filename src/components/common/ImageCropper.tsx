@@ -133,17 +133,6 @@ async function getCroppedImg(
     pixelCrop.height
   );
   
-  // 디버그 정보 출력
-  console.log('Original image:', {
-    naturalWidth: image.naturalWidth,
-    naturalHeight: image.naturalHeight,
-    displayWidth: image.width,
-    displayHeight: image.height
-  });
-  console.log('Scale factors:', { scaleX, scaleY });
-  console.log('Display crop:', crop);
-  console.log('Pixel crop:', pixelCrop);
-  
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -206,8 +195,8 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
           previewCanvasRef.current,
           completedCrop
         );
-      } catch (error) {
-        console.error('미리보기 업데이트 오류:', error);
+      } catch {
+        // 미리보기 업데이트 오류 발생 시 조용히 처리
       }
     }
   }, [completedCrop]);
@@ -215,9 +204,6 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   // 이미지 로드 시 초기 크롭 영역 설정
   function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const { width, height } = e.currentTarget;
-    
-    // 이미지 정보 출력
-    console.log('Image loaded:', { width, height });
     
     // aspectRatio 프로퍼티 사용
     const newCrop = centerAspectCrop(width, height, aspectRatio);
@@ -238,9 +224,6 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
         throw new Error('Image or crop not ready');
       }
       
-      // 최종 크롭 확인 로깅
-      console.log('Final crop being applied:', completedCrop);
-      
       const croppedFile = await getCroppedImg(
         imgRef.current,
         completedCrop,
@@ -248,8 +231,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
       );
       
       onCropComplete(croppedFile);
-    } catch (error) {
-      console.error('이미지 크롭 오류:', error);
+    } catch {
       alert('이미지 크롭 중 오류가 발생했습니다. 다시 시도해 주세요.');
     }
   };

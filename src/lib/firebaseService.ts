@@ -503,7 +503,11 @@ export const signOut = async () => {
 };
 
 // 파일 업로드 관련 함수
-export const uploadProfileImage = async (userId: string, file: File): Promise<string> => {
+export const uploadProfileImage = async (
+  userId: string, 
+  file: File, 
+  onProgress?: (progress: number) => void
+): Promise<string> => {
   try {
     // 파일 경로 생성
     const filePath = `profileImages/${userId}/${Date.now()}-${file.name}`;
@@ -524,6 +528,10 @@ export const uploadProfileImage = async (userId: string, file: File): Promise<st
           // 업로드 진행 상태 (필요시 사용)
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           console.log(`업로드 진행률: ${progress}%`);
+          // 진행률 콜백 호출
+          if (onProgress) {
+            onProgress(progress);
+          }
         },
         (error) => {
           // 업로드 실패
