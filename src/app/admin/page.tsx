@@ -20,17 +20,17 @@ export default function AdminDashboard() {
       iconClass: 'text-blue-600',
       icon: <FaCalendarPlus />,
     },
-    {
-      title: '공고 생성 & 수정',
-      description: '업무 공고를 생성하고 수정합니다.',
-      href: '/admin/job-board-write',
-      iconClass: 'text-indigo-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-    },
+    // {
+    //   title: '공고 생성 & 수정',
+    //   description: '업무 공고를 생성하고 수정합니다.',
+    //   href: '/admin/job-board-write',
+    //   iconClass: 'text-indigo-600',
+    //   icon: (
+    //     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+    //       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    //     </svg>
+    //   ),
+    // },
     {
       title: '지원 유저 관리',
       description: '지원자 정보와 지원 현황을 관리합니다.',
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
     },
     {
       title: '사용자 조회',
-      description: '업무 코드의 generation과 code에 따라 유저(멘토)를 카드 형식으로 조회합니다.',
+      description: '캠프에 참여했던 유저를 기수별로 조회합니다.',
       href: '/admin/user-check',
       iconClass: 'text-red-600',
       icon: (

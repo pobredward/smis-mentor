@@ -182,10 +182,25 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     }
   };
 
-  const formatDate = (date: Date | Timestamp | null | undefined) => {
-    if (!date) return '미정';
-    const dateObj = date instanceof Timestamp ? date.toDate() : date;
-    return format(dateObj, 'yyyy년 MM월 dd일 HH:mm', { locale: ko });
+  // const formatDate = (date: Date | Timestamp | null | undefined) => {
+  //   if (!date) return '미정';
+  //   const dateObj = date instanceof Timestamp ? date.toDate() : date;
+  //   return format(dateObj, 'yyyy년 MM월 dd일 HH:mm', { locale: ko });
+  // };
+
+  // 전화번호에 하이픈 추가 함수
+  const formatPhoneNumber = (phoneNumber: string) => {
+    if (!phoneNumber) return '';
+    
+    // 전화번호가 10자리인 경우와 11자리인 경우를 구분
+    if (phoneNumber.length === 10) {
+      return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6)}`;
+    } else if (phoneNumber.length === 11) {
+      return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 7)}-${phoneNumber.slice(7)}`;
+    }
+    
+    // 그 외 경우는 원래 형식 반환
+    return phoneNumber;
   };
 
   const getStatusBadge = (status: string | undefined, statusType: 'application' | 'interview' | 'final') => {
@@ -406,7 +421,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   
   return (
     <Layout requireAuth requireAdmin>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-0 lg:px-4">
         <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
           <div>
             <h1 className="text-2xl font-bold">지원자 관리</h1>
@@ -519,63 +534,93 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             <div className={`${selectedApplication && isMobile ? 'hidden' : 'block'} lg:col-span-1`}>
               {/* 지원자 목록 */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="p-4 border-b flex justify-between items-center">
+                <div className="p-2 lg:p-4 border-b flex justify-between items-center">
                   <div>
                     <h2 className="font-medium text-gray-900">지원자 목록</h2>
-                    <p className="text-sm text-gray-500 mt-1">
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <p className="text-sm text-gray-500">
                       총 {filteredApplications.length}명
                       {filterStatus !== 'all' && ` (전체 ${applications.length}명 중)`}
                     </p>
+                    
+                    {/* 모바일 뷰에서 상세보기에서 목록으로 돌아가는 버튼 */}
+                    {selectedApplication && isMobile && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setSelectedApplication(null)}
+                        className="ml-2"
+                      >
+                        목록으로
+                      </Button>
+                    )}
                   </div>
-                  
-                  {/* 모바일 뷰에서 상세보기에서 목록으로 돌아가는 버튼 */}
-                  {selectedApplication && isMobile && (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setSelectedApplication(null)}
-                    >
-                      목록으로
-                    </Button>
-                  )}
                 </div>
+                
                 <div className="divide-y overflow-y-auto max-h-[600px]">
                   {filteredApplications.map((app) => (
                     <div 
                       key={app.id}
-                      className={`p-4 cursor-pointer hover:bg-gray-50 ${
+                      className={`p-2 lg:p-4 cursor-pointer hover:bg-gray-50 ${
                         selectedApplication?.id === app.id ? 'bg-blue-50' : ''
                       }`}
                       onClick={() => handleSelectApplication(app)}
                     >
-                      <div className="flex flex-col space-y-3">
-                        {/* 지원자 기본 정보 */}
-                        <div>
-                          <h3 className="font-medium text-gray-900">
-                            {app.user?.name || app.refUserId}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            지원일: {formatDate(app.applicationDate)}
-                          </p>
+                      <div className="flex items-center">
+                        {/* 프로필 이미지 */}
+                        <div className="flex-shrink-0 mr-3">
+                          {app.user?.profileImage ? (
+                            <img 
+                              src={app.user.profileImage} 
+                              alt={app.user?.name || '프로필'} 
+                              className="w-15 h-15 rounded object-cover border border-gray-100"
+                              style={{ aspectRatio: '1 / 1' }}
+                            />
+                          ) : (
+                            <div className="w-15 h-15 rounded bg-gray-200 flex items-center justify-center text-gray-500" style={{ aspectRatio: '1 / 1' }}>
+                              {app.user?.name ? app.user.name.charAt(0) : '?'}
+                            </div>
+                          )}
                         </div>
-                        
-                        {/* 지원 상태 표시 */}
-                        <div className="grid grid-cols-3 gap-1 text-xs">
-                          <div>
-                            <span className="text-gray-500 block mb-1">서류</span>
-                            {getStatusBadge(app.applicationStatus, 'application')}
+
+                        {/* 지원자 정보와 상태 배지 */}
+                        <div className="flex flex-1 justify-between items-center">
+                          {/* 왼쪽: 지원자 기본 정보 */}
+                          <div className="flex flex-col">
+                            <h3 className="font-medium text-gray-900">
+                            {app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}
+                            </h3>
+                            <p className="text-sm text-gray-500">
+                              {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {app.user?.university ? `${app.user.university} ${app.user.grade}학년 ${app.user.isOnLeave ? '휴학생' : '재학생'}` : ''}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
+                            </p>
                           </div>
-                          <div>
-                            <span className="text-gray-500 block mb-1">면접</span>
-                            {app.interviewStatus 
-                              ? getStatusBadge(app.interviewStatus, 'interview')
-                              : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
-                          </div>
-                          <div>
-                            <span className="text-gray-500 block mb-1">최종</span>
-                            {app.finalStatus 
-                              ? getStatusBadge(app.finalStatus, 'final')
-                              : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
+                          
+                          {/* 오른쪽: 상태 배지 */}
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-500">서류:</span>
+                              {getStatusBadge(app.applicationStatus, 'application')}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-500">면접:</span>
+                              {app.interviewStatus 
+                                ? getStatusBadge(app.interviewStatus, 'interview')
+                                : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-500">최종:</span>
+                              {app.finalStatus 
+                                ? getStatusBadge(app.finalStatus, 'final')
+                                : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -612,7 +657,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           {selectedApplication.user && (
                             <div className="mt-2 space-y-1 text-sm text-gray-600">
                               <p>
-                                <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber}
+                                <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
                               </p>
                               <p>
                                 <span className="font-medium">나이:</span> {selectedApplication.user.age}세
