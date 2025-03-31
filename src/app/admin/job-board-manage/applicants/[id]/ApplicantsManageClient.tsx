@@ -528,9 +528,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           </div>
         ) : (
           // 모바일 최적화 레이아웃
-          <div className="flex flex-col gap-6">
-            {/* 지원자 목록 */}
-            <div className="lg:col-span-1">
+          <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
+            {/* 모바일 뷰에서는 상세 정보가 선택된 경우에만 지원자 목록을 숨깁니다 */}
+            {(!selectedApplication || !isMobile) && (
+            <div className={`${selectedApplication && isMobile ? 'hidden' : 'block'} lg:col-span-1`}>
+              {/* 지원자 목록 */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <div className="p-2 lg:p-4 border-b flex justify-between items-center">
                   <div>
@@ -542,10 +544,22 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       총 {filteredApplications.length}명
                       {filterStatus !== 'all' && ` (전체 ${applications.length}명 중)`}
                     </p>
+                    
+                    {/* 모바일 뷰에서 상세보기에서 목록으로 돌아가는 버튼 */}
+                    {selectedApplication && isMobile && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setSelectedApplication(null)}
+                        className="ml-2"
+                      >
+                        목록으로
+                      </Button>
+                    )}
                   </div>
                 </div>
                 
-                <div className="divide-y overflow-y-auto max-h-[calc(100vh-400px)] lg:max-h-[600px]">
+                <div className="divide-y overflow-y-auto max-h-[600px]">
                   {filteredApplications.map((app) => (
                     <div 
                       key={app.id}
@@ -615,11 +629,24 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                 </div>
               </div>
             </div>
+            )}
             
-            {/* 선택된 지원자 상세 */}
+            {/* 선택된 지원자 상세 - 모바일에서는 전체 너비 사용 */}
             {selectedApplication && (
-              <div>
+              <div className="lg:col-span-2">
                 <div className="bg-white rounded-lg shadow">
+                  {/* 모바일 뷰에서만 보이는 뒤로가기 버튼 */}
+                  <div className="lg:hidden p-4 border-b flex justify-between items-center">
+                    <h2 className="font-medium">지원자 상세</h2>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedApplication(null)}
+                    >
+                      목록으로
+                    </Button>
+                  </div>
+                  
                   <div className="p-4 lg:p-6">
                     <div className="mb-6 pb-6 border-b border-gray-200">
                       <div className="flex justify-between items-start">
@@ -868,6 +895,14 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+            )}
+            
+            {!selectedApplication && (
+              <div className="hidden lg:block lg:col-span-2">
+                <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
+                  지원자를 선택하세요
                 </div>
               </div>
             )}
