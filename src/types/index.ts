@@ -102,8 +102,8 @@ export interface ApplicationHistory {
   applicationHistoryId: string;
   applicationDate: Timestamp;
   applicationStatus: 'pending' | 'accepted' | 'rejected';
-  interviewStatus?: 'pending' | 'passed' | 'failed';
-  finalStatus?: 'finalAccepted' | 'finalRejected';
+  interviewStatus?: 'pending' | 'passed' | 'failed' | '불참';
+  finalStatus?: 'finalAccepted' | 'finalRejected' | '불참';
   refJobBoardId: string;
   refUserId: string;
   interviewDate?: Timestamp;

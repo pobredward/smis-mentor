@@ -214,6 +214,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       failed: { bg: 'bg-red-100', text: 'text-red-800', label: '불합격' },
       finalAccepted: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: '최종합격' },
       finalRejected: { bg: 'bg-red-100', text: 'text-red-800', label: '최종불합격' },
+      불참: { bg: 'bg-red-100', text: 'text-red-800', label: '불참' },
     };
 
     // 특별히 면접 상태가 'pending'인 경우 '면접 예정' 대신 '예정'으로 표시
@@ -282,7 +283,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           }
           break;
         case 'interview':
-          updateData.interviewStatus = newStatus as 'pending' | 'passed' | 'failed';
+          updateData.interviewStatus = newStatus as 'pending' | 'passed' | 'failed' | '불참';
           firestoreUpdateData.interviewStatus = newStatus;
           
           // 면접 불합격 시 최종 상태 초기화
@@ -295,7 +296,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           }
           break;
         case 'final':
-          updateData.finalStatus = newStatus as 'finalAccepted' | 'finalRejected';
+          updateData.finalStatus = newStatus as 'finalAccepted' | 'finalRejected' | '불참';
           firestoreUpdateData.finalStatus = newStatus;
           break;
       }
@@ -711,6 +712,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <option value="pending">면접예정</option>
                             <option value="passed">면접합격</option>
                             <option value="failed">면접불합격</option>
+                            <option value="불참">불참</option>
                           </select>
                         </div>
                         
@@ -727,6 +729,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <option value="">선택</option>
                             <option value="finalAccepted">최종합격</option>
                             <option value="finalRejected">최종불합격</option>
+                            <option value="불참">불참</option>
                           </select>
                         </div>
                       </div>

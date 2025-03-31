@@ -153,6 +153,10 @@ export default function Home() {
           color = 'bg-red-100 text-red-800';
           label = '면접불합격';
           break;
+        case '불참':
+          color = 'bg-gray-100 text-gray-800';
+          label = '불참';
+          break;
         default:
           color = 'bg-gray-100 text-gray-800';
           label = '미정';
@@ -166,6 +170,10 @@ export default function Home() {
         case 'finalRejected':
           color = 'bg-red-100 text-red-800';
           label = '최종불합격';
+          break;
+        case '불참':
+          color = 'bg-red-100 text-red-800';
+          label = '불참';
           break;
         default:
           color = 'bg-gray-100 text-gray-800';
