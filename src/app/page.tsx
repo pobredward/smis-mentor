@@ -154,7 +154,7 @@ export default function Home() {
           label = '면접불합격';
           break;
         case '불참':
-          color = 'bg-gray-100 text-gray-800';
+          color = 'bg-red-100 text-red-800';
           label = '불참';
           break;
         default:
