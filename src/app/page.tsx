@@ -353,17 +353,17 @@ export default function Home() {
                         <h4 className="text-sm font-medium text-blue-900 mb-3">면접 정보</h4>
                         
                         {/* 면접 일시 */}
-                        {(app.interviewDate || app.interviewDateTime) && (
+                        {(app.interviewDate) && (
                           <div className="mb-2">
                             <p className="text-sm text-blue-800">
                               <span className="font-medium">면접 일시:</span>{' '}
-                              {formatDateTime(app.interviewDate || app.interviewDateTime)}
+                              {formatDateTime(app.interviewDate)}
                             </p>
                           </div>
                         )}
 
-                                                {/* 면접 시간 */}
-                                                {app.jobBoard.interviewBaseDuration && (
+                        {/* 면접 시간 */}
+                        {app.jobBoard.interviewBaseDuration && (
                           <div className="mb-2">
                             <p className="text-sm text-blue-800">
                               <span className="font-medium">예상 소요 시간:</span>{' '}

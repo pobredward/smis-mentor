@@ -48,6 +48,13 @@ export interface User {
   major2?: string;
   referralPath?: string;
   referrerName?: string;
+  school?: string;
+  major?: string;
+  schoolActivities?: {
+    name: string;
+    period: string;
+    description: string;
+  }[];
 }
 
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager';
@@ -107,11 +114,11 @@ export interface ApplicationHistory {
   refJobBoardId: string;
   refUserId: string;
   interviewDate?: Timestamp;
-  interviewDateTime?: Timestamp;
   interviewFeedback?: string;
   interviewBaseLink?: string;
   interviewBaseDuration?: number;
   interviewBaseNotes?: string;
+  applicationPath?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

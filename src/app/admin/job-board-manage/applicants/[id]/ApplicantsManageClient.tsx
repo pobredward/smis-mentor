@@ -6,7 +6,6 @@ import { doc, updateDoc, getDoc, collection, query, where, getDocs, DocumentData
 import { db } from '@/lib/firebase';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
 import { ApplicationHistory, JobBoard, User } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
