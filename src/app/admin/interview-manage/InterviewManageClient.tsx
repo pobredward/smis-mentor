@@ -27,7 +27,6 @@ type ApplicationWithUser = ApplicationHistory & {
 };
 
 export function InterviewManageClient() {
-  const [jobBoards, setJobBoards] = useState<JobBoardWithId[]>([]);
   const [interviewDates, setInterviewDates] = useState<InterviewDateInfo[]>([]);
   const [selectedDate, setSelectedDate] = useState<InterviewDateInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,8 +52,6 @@ export function InterviewManageClient() {
         ...doc.data() as JobBoard,
         id: doc.id
       }));
-
-      setJobBoards(jobBoardsData);
       
       // 면접 일정 정보 로드
       await loadInterviewDates(jobBoardsData);
@@ -178,7 +175,7 @@ export function InterviewManageClient() {
   };
 
   // 지원자 선택
-  const handleSelectApplication = (app: ApplicationWithUser) => {
+  const handleSelectApplication = async (app: ApplicationWithUser) => {
     setSelectedApplication(app);
     setFeedbackText(app.interviewFeedback || '');
     
@@ -189,6 +186,31 @@ export function InterviewManageClient() {
     } else {
       setInterviewTime('');
       setNewSelectedDate('');
+    }
+
+    // 채용 공고의 base 정보 가져오기
+    try {
+      const jobBoardRef = doc(db, 'jobBoards', app.refJobBoardId);
+      const jobBoardDoc = await getDoc(jobBoardRef);
+      
+      if (jobBoardDoc.exists()) {
+        const jobBoardData = jobBoardDoc.data() as JobBoard;
+        
+        // 선택된 지원자 정보 업데이트
+        setSelectedApplication(prev => {
+          if (!prev) return prev;
+          
+          return {
+            ...prev,
+            interviewBaseLink: jobBoardData.interviewBaseLink || '',
+            interviewBaseDuration: jobBoardData.interviewBaseDuration || 30,
+            interviewBaseNotes: jobBoardData.interviewBaseNotes || ''
+          };
+        });
+      }
+    } catch (error) {
+      console.error('채용 공고 정보 로드 오류:', error);
+      toast.error('채용 공고 정보를 불러오는 중 오류가 발생했습니다.');
     }
   };
 
@@ -260,6 +282,208 @@ export function InterviewManageClient() {
     }
   };
 
+  // 서류 상태 변경
+  const handleStatusChange = async (applicationId: string, newStatus: string, statusType: 'application' | 'interview' | 'final') => {
+    if (!selectedApplication) return;
+
+    try {
+      setLoading(true);
+      const applicationRef = doc(db, 'applicationHistories', applicationId);
+      
+      const updateData: Partial<ApplicationHistory> = {
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+      
+      switch (statusType) {
+        case 'application':
+          updateData.applicationStatus = newStatus as ApplicationHistory['applicationStatus'];
+          break;
+        case 'interview':
+          updateData.interviewStatus = newStatus as ApplicationHistory['interviewStatus'];
+          break;
+        case 'final':
+          updateData.finalStatus = newStatus as ApplicationHistory['finalStatus'];
+          break;
+      }
+      
+      await updateDoc(applicationRef, updateData);
+
+      toast.success('상태가 변경되었습니다.');
+      
+      // UI 업데이트
+      if (selectedDate) {
+        const updatedInterviews = selectedDate.interviews.map(interview => {
+          if (interview.id === selectedApplication.id) {
+            return { 
+              ...interview, 
+              ...updateData
+            };
+          }
+          return interview;
+        });
+        
+        setSelectedDate({
+          ...selectedDate,
+          interviews: updatedInterviews
+        });
+        
+        // 선택된 지원자 정보도 업데이트
+        setSelectedApplication({
+          ...selectedApplication,
+          ...updateData
+        });
+      }
+      
+    } catch (error) {
+      console.error('상태 변경 오류:', error);
+      toast.error('상태를 변경하는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 최종 상태 변경
+  const handleFinalStatusChange = async (applicationId: string, newStatus: string) => {
+    await handleStatusChange(applicationId, newStatus, 'final');
+  };
+
+  // 면접 정보 저장
+  const handleSaveInterviewInfo = async () => {
+    if (!selectedApplication || !newSelectedDate || !interviewTime) return;
+
+    try {
+      setLoading(true);
+      
+      // 새 날짜 + 시간 결합
+      const timeValue = interviewTime;
+      const dateTimeStr = `${newSelectedDate}T${timeValue}:00`;
+      const dateTimeObj = new Date(dateTimeStr);
+      
+      const applicationRef = doc(db, 'applicationHistories', selectedApplication.id);
+      
+      // 면접 날짜/시간만 업데이트
+      await updateDoc(applicationRef, {
+        interviewDate: Timestamp.fromDate(dateTimeObj),
+        updatedAt: Timestamp.fromDate(new Date())
+      });
+
+      toast.success('면접 날짜/시간이 저장되었습니다.');
+      
+      // 기존 날짜가 있었는지 확인
+      const hadPreviousDate = selectedApplication.interviewDate !== undefined;
+      const previousDateObj = hadPreviousDate ? selectedApplication.interviewDate!.toDate() : null;
+      const previousDateKey = previousDateObj ? format(previousDateObj, 'yyyy-MM-dd') : null;
+      
+      // 새로운 날짜 정보 생성
+      const newDateKey = format(dateTimeObj, 'yyyy-MM-dd');
+      const formattedNewDate = format(dateTimeObj, 'yyyy년 MM월 dd일 (eee)', { locale: ko });
+      
+      // UI 상태 업데이트 로직
+      if (selectedDate) {
+        // 현재 선택된 날짜가 이전 날짜와 같은 경우 - 단순 시간 변경
+        if (hadPreviousDate && format(selectedDate.date, 'yyyy-MM-dd') === previousDateKey && previousDateKey === newDateKey) {
+          // 시간만 변경된 경우 현재 목록 업데이트
+          const updatedInterviews = selectedDate.interviews.map(interview => {
+            if (interview.id === selectedApplication.id) {
+              return { 
+                ...interview, 
+                interviewDate: Timestamp.fromDate(dateTimeObj)
+              };
+            }
+            return interview;
+          });
+          
+          setSelectedDate({
+            ...selectedDate,
+            interviews: updatedInterviews
+          });
+        } else {
+          // 날짜 자체가 변경된 경우 - 현재 목록에서 제거
+          const updatedInterviews = selectedDate.interviews.filter(
+            interview => interview.id !== selectedApplication.id
+          );
+          
+          // 현재 날짜 목록 업데이트
+          setSelectedDate({
+            ...selectedDate,
+            interviews: updatedInterviews
+          });
+          
+          // 전체 날짜 목록 상태 업데이트
+          // 1. 기존 날짜들과 동일한 날짜가 있는지 확인
+          const existingDate = interviewDates.find(
+            dateInfo => format(dateInfo.date, 'yyyy-MM-dd') === newDateKey
+          );
+          
+          if (existingDate) {
+            // 이미 존재하는 날짜에 추가
+            const updatedDates = interviewDates.map(dateInfo => {
+              if (format(dateInfo.date, 'yyyy-MM-dd') === newDateKey) {
+                const updatedInterviews = [...dateInfo.interviews, {
+                  ...selectedApplication,
+                  interviewDate: Timestamp.fromDate(dateTimeObj)
+                }];
+                
+                // 면접 시간순으로 정렬
+                updatedInterviews.sort((a, b) => {
+                  const timeA = a.interviewDate!.toDate().getTime();
+                  const timeB = b.interviewDate!.toDate().getTime();
+                  return timeA - timeB;
+                });
+                
+                return {
+                  ...dateInfo,
+                  interviews: updatedInterviews
+                };
+              }
+              return dateInfo;
+            });
+            
+            setInterviewDates(updatedDates);
+          } else {
+            // 새로운 날짜 추가
+            const newDateInfo: InterviewDateInfo = {
+              jobBoardId: selectedApplication.refJobBoardId,
+              jobBoardTitle: selectedApplication.jobBoardTitle || '',
+              date: dateTimeObj,
+              formattedDate: formattedNewDate,
+              interviews: [{
+                ...selectedApplication,
+                interviewDate: Timestamp.fromDate(dateTimeObj)
+              }]
+            };
+            
+            // 새로운 날짜 추가하고 날짜순으로 정렬
+            setInterviewDates(prev => {
+              const newDates = [...prev, newDateInfo];
+              newDates.sort((a, b) => {
+                if (a.formattedDate === '날짜 미정') return 1;
+                if (b.formattedDate === '날짜 미정') return -1;
+                return a.date.getTime() - b.date.getTime();
+              });
+              return newDates;
+            });
+          }
+        }
+      }
+      
+      // 선택된 지원자 정보 업데이트
+      setSelectedApplication({
+        ...selectedApplication,
+        interviewDate: Timestamp.fromDate(dateTimeObj)
+      });
+      
+      // 전체 데이터 새로고침
+      await loadJobBoards();
+      
+    } catch (error) {
+      console.error('면접 날짜/시간 저장 오류:', error);
+      toast.error('면접 날짜/시간을 저장하는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 피드백 저장
   const handleSaveFeedback = async () => {
     if (!selectedApplication) return;
@@ -304,199 +528,6 @@ export function InterviewManageClient() {
     }
   };
 
-  // 면접 시간 변경
-  const handleChangeInterviewTime = async () => {
-    if (!selectedApplication || !selectedDate) return;
-    
-    // 날짜와 시간 모두 필요
-    if (!newSelectedDate) {
-      toast.error('날짜를 입력해주세요.');
-      return;
-    }
-    if (!interviewTime) {
-      toast.error('시간을 입력해주세요.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      
-      // 새 날짜 + 시간 결합
-      const timeValue = interviewTime;
-      const dateTimeStr = `${newSelectedDate}T${timeValue}:00`;
-      const dateTimeObj = new Date(dateTimeStr);
-      
-      const applicationRef = doc(db, 'applicationHistories', selectedApplication.id);
-      
-      await updateDoc(applicationRef, {
-        interviewDate: Timestamp.fromDate(dateTimeObj),
-        updatedAt: Timestamp.fromDate(new Date())
-      });
-
-      toast.success('면접 시간이 변경되었습니다.');
-      
-      // 새로운 날짜 정보 생성
-      const newDateKey = format(dateTimeObj, 'yyyy-MM-dd');
-      const formattedNewDate = format(dateTimeObj, 'yyyy년 MM월 dd일 (eee)', { locale: ko });
-      
-      // 현재 날짜의 interviews 배열에서 해당 지원자 제거
-      const currentDateInterviews = selectedDate.interviews.filter(
-        interview => interview.id !== selectedApplication.id
-      );
-
-      // 같은 날짜인지 확인
-      const isSameDate = format(selectedDate.date, 'yyyy-MM-dd') === newDateKey;
-      
-      if (isSameDate) {
-        // 같은 날짜인 경우, 현재 날짜의 interviews 배열에 업데이트된 지원자 정보 추가
-        const updatedApplication = {
-          ...selectedApplication,
-          interviewDate: Timestamp.fromDate(dateTimeObj)
-        };
-        
-        const updatedInterviews = [...currentDateInterviews, updatedApplication];
-        updatedInterviews.sort((a, b) => {
-          const timeA = a.interviewDate!.toDate().getTime();
-          const timeB = b.interviewDate!.toDate().getTime();
-          return timeA - timeB;
-        });
-        
-        const updatedDateInfo = {
-          ...selectedDate,
-          interviews: updatedInterviews
-        };
-        
-        // interviewDates 상태 업데이트
-        const updatedInterviewDates = interviewDates.map(dateInfo => 
-          format(dateInfo.date, 'yyyy-MM-dd') === newDateKey ? updatedDateInfo : dateInfo
-        );
-        
-        setInterviewDates(updatedInterviewDates);
-        setSelectedDate(updatedDateInfo);
-        setSelectedApplication(updatedApplication);
-      } else {
-        // 다른 날짜로 변경하는 경우, 기존 로직 사용
-        // 새 날짜의 interviews 배열 찾기 또는 생성
-        let newDateInfo = interviewDates.find(
-          date => format(date.date, 'yyyy-MM-dd') === newDateKey
-        );
-        
-        if (!newDateInfo) {
-          // 새 날짜 정보 생성
-          newDateInfo = {
-            jobBoardId: selectedApplication.refJobBoardId,
-            jobBoardTitle: selectedApplication.jobBoardTitle || '',
-            date: dateTimeObj,
-            formattedDate: formattedNewDate,
-            interviews: []
-          };
-        }
-        
-        // 업데이트된 지원자 정보
-        const updatedApplication = {
-          ...selectedApplication,
-          interviewDate: Timestamp.fromDate(dateTimeObj)
-        };
-        
-        // 새 날짜의 interviews 배열에 지원자 추가
-        const newDateInterviews = [...(newDateInfo.interviews || []), updatedApplication];
-        newDateInterviews.sort((a, b) => {
-          const timeA = a.interviewDate!.toDate().getTime();
-          const timeB = b.interviewDate!.toDate().getTime();
-          return timeA - timeB;
-        });
-        
-        // interviewDates 상태 업데이트
-        let updatedInterviewDates = interviewDates
-          .filter(dateInfo => {
-            // 현재 날짜에서 지원자 제거 후 인터뷰가 없으면 해당 날짜 제거
-            if (format(dateInfo.date, 'yyyy-MM-dd') === format(selectedDate.date, 'yyyy-MM-dd')) {
-              return currentDateInterviews.length > 0;
-            }
-            // 새 날짜가 아닌 다른 날짜들은 유지
-            return format(dateInfo.date, 'yyyy-MM-dd') !== newDateKey;
-          })
-          .map(dateInfo => {
-            // 현재 날짜의 interviews 업데이트
-            if (format(dateInfo.date, 'yyyy-MM-dd') === format(selectedDate.date, 'yyyy-MM-dd')) {
-              return { ...dateInfo, interviews: currentDateInterviews };
-            }
-            return dateInfo;
-          });
-
-        // 새 날짜 정보 추가
-        updatedInterviewDates = [
-          ...updatedInterviewDates,
-          {
-            ...newDateInfo,
-            interviews: newDateInterviews
-          }
-        ];
-        
-        // 날짜순 정렬
-        updatedInterviewDates.sort((a, b) => {
-          if (a.formattedDate === '날짜 미정') return 1;
-          if (b.formattedDate === '날짜 미정') return -1;
-          return a.date.getTime() - b.date.getTime();
-        });
-        
-        // 상태 업데이트
-        setInterviewDates(updatedInterviewDates);
-        
-        // 새 날짜 정보로 선택 상태 업데이트
-        const newDateInfoFinal = {
-          jobBoardId: selectedApplication.refJobBoardId,
-          jobBoardTitle: selectedApplication.jobBoardTitle || '',
-          date: dateTimeObj,
-          formattedDate: formattedNewDate,
-          interviews: newDateInterviews
-        };
-        
-        setSelectedDate(newDateInfoFinal);
-        setSelectedApplication(updatedApplication);
-      }
-      
-    } catch (error) {
-      console.error('면접 시간 변경 오류:', error);
-      toast.error('면접 시간을 변경하는 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 면접 시간을 미정으로 변경
-  const handleSetUndefinedTime = async () => {
-    if (!selectedApplication) return;
-
-    try {
-      setLoading(true);
-      
-      const applicationRef = doc(db, 'applicationHistories', selectedApplication.id);
-      
-      await updateDoc(applicationRef, {
-        interviewDate: null,
-        updatedAt: Timestamp.fromDate(new Date())
-      });
-
-      toast.success('면접 시간이 미정으로 변경되었습니다.');
-      
-      // 페이지 새로고침
-      await loadJobBoards();
-      
-      // 선택 초기화
-      setSelectedApplication(null);
-      setSelectedDate(null);
-      setNewSelectedDate('');
-      setInterviewTime('');
-      
-    } catch (error) {
-      console.error('면접 시간 변경 오류:', error);
-      toast.error('면접 시간을 변경하는 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 전화번호에 하이픈 추가 함수
   const formatPhoneNumber = (phoneNumber: string) => {
     if (!phoneNumber) return '';
@@ -510,6 +541,98 @@ export function InterviewManageClient() {
     
     // 그 외 경우는 원래 형식 반환
     return phoneNumber;
+  };
+
+  // 면접 날짜 미정으로 설정
+  const handleSetUndefinedDate = async () => {
+    if (!selectedApplication) return;
+
+    try {
+      setLoading(true);
+      const applicationRef = doc(db, 'applicationHistories', selectedApplication.id);
+      
+      await updateDoc(applicationRef, {
+        interviewDate: null,
+        updatedAt: Timestamp.fromDate(new Date())
+      });
+
+      toast.success('면접 날짜가 미정으로 변경되었습니다.');
+      
+      // 기존 날짜에서 지원자 제거
+      if (selectedDate && selectedApplication.interviewDate) {
+        const updatedInterviews = selectedDate.interviews.filter(
+          interview => interview.id !== selectedApplication.id
+        );
+        
+        setSelectedDate({
+          ...selectedDate,
+          interviews: updatedInterviews
+        });
+      }
+      
+      // 미정 날짜 정보 확인
+      const undefinedDateInfo = interviewDates.find(date => date.formattedDate === '날짜 미정');
+      
+      if (undefinedDateInfo) {
+        // 미정 날짜 정보가 이미 있는 경우 업데이트
+        const updatedDates = interviewDates.map(dateInfo => {
+          if (dateInfo.formattedDate === '날짜 미정') {
+            return {
+              ...dateInfo,
+              interviews: [...dateInfo.interviews, {
+                ...selectedApplication,
+                interviewDate: undefined
+              }]
+            };
+          }
+          return dateInfo;
+        });
+        
+        setInterviewDates(updatedDates);
+      } else {
+        // 미정 날짜 정보가 없는 경우 새로 생성
+        const newUndefinedDateInfo: InterviewDateInfo = {
+          jobBoardId: 'undefined',
+          jobBoardTitle: '날짜 미정',
+          date: new Date(),
+          formattedDate: '날짜 미정',
+          interviews: [{
+            ...selectedApplication,
+            interviewDate: undefined
+          }]
+        };
+        
+        // 미정 날짜는 항상 마지막에 위치하도록 정렬
+        setInterviewDates(prev => {
+          const newDates = [...prev, newUndefinedDateInfo];
+          newDates.sort((a, b) => {
+            if (a.formattedDate === '날짜 미정') return 1;
+            if (b.formattedDate === '날짜 미정') return -1;
+            return a.date.getTime() - b.date.getTime();
+          });
+          return newDates;
+        });
+      }
+      
+      // 선택된 지원자 정보 업데이트
+      setSelectedApplication({
+        ...selectedApplication,
+        interviewDate: undefined
+      });
+      
+      // 입력 필드 초기화
+      setNewSelectedDate('');
+      setInterviewTime('');
+      
+      // 전체 데이터 새로고침
+      await loadJobBoards();
+      
+    } catch (error) {
+      console.error('면접 날짜 변경 오류:', error);
+      toast.error('면접 날짜를 변경하는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -622,201 +745,212 @@ export function InterviewManageClient() {
           {/* 오른쪽: 선택된 지원자 상세 정보 */}
           <div className="lg:w-2/3">
             {selectedApplication && selectedDate ? (
-              <div className="space-y-6">
-                {/* 기본 정보 */}
-                <div className="bg-white rounded-lg shadow">
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-6">
+              <div className="bg-white rounded-lg shadow">
+                <div className="p-4 lg:p-6">
+                  <div className="mb-6 pb-6 border-b border-gray-200">
+                    <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="text-2xl font-bold">{selectedApplication.user?.name}</h3>                      </div>
-                      <div className="text-right">
-                        <p className="text-gray-600">{formatPhoneNumber(selectedApplication.user?.phoneNumber || '')}</p>
-                        <p className="text-gray-600 mt-1">
-                          {selectedApplication.user?.age}세 · {selectedApplication.user?.gender === 'M' ? '남성' : '여성'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-gray-600">학교</p>
-                        <p className="font-medium">{selectedApplication.user?.university || selectedApplication.user?.school || '정보 없음'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">전공</p>
-                        <p className="font-medium">
-                          {selectedApplication.user?.major1 || selectedApplication.user?.major || '정보 없음'}
-                          {selectedApplication.user?.major2 && ` / ${selectedApplication.user.major2}`}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">학년</p>
-                        <p className="font-medium">{selectedApplication.user?.grade ? `${selectedApplication.user.grade}학년` : '정보 없음'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">주소</p>
-                        <p className="font-medium">
-                          {selectedApplication.user?.address
-                            ? `${selectedApplication.user.address} ${selectedApplication.user.addressDetail || ''}`
-                            : '정보 없음'}
-                        </p>
+                        <h2 className="text-xl font-bold text-gray-900">
+                          {selectedApplication.user?.name || selectedApplication.refUserId}
+                        </h2>
+                        {selectedApplication.user && (
+                          <div className="mt-2 space-y-1 text-sm text-gray-600">
+                            <p>
+                              <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
+                            </p>
+                            <p>
+                              <span className="font-medium">나이:</span> {selectedApplication.user.age}세
+                            </p>
+                            <p>
+                              <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
+                            </p>
+                            <p>
+                              <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade}학년 {selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}
+                            </p>
+                            <p>
+                              <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
+                            </p>
+                            <p>
+                              <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
+                              {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
+                                ` (추천인: ${selectedApplication.user.referrerName})`}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* 면접 시간 및 상태 */}
-                <div className="bg-white rounded-lg shadow p-6">
-                  <h4 className="text-lg font-semibold mb-4">면접 시간 및 상태</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-gray-600 mb-2">면접 시간</p>
-                      <div className="flex flex-col gap-2">
+                  {/* 상태 변경 및 피드백 */}
+                  <div className="mb-6 pb-6 border-b border-gray-200">
+                    {/* 상태 변경 - 모든 화면에서 가로 배치 */}
+                    <div className="grid grid-cols-3 gap-2 md:gap-4 mt-4">
+                      <div>
+                        <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                          서류 상태
+                        </label>
+                        <select
+                          value={selectedApplication.applicationStatus}
+                          onChange={(e) => handleStatusChange(selectedApplication.id, e.target.value, 'application')}
+                          className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                          disabled={loading}
+                        >
+                          <option value="pending">검토중</option>
+                          <option value="accepted">서류합격</option>
+                          <option value="rejected">서류불합격</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                          면접 상태
+                        </label>
+                        <select
+                          value={selectedApplication.interviewStatus || ''}
+                          onChange={(e) => handleInterviewStatusChange(selectedApplication.id, e.target.value)}
+                          className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                          disabled={loading || selectedApplication.applicationStatus !== 'accepted'}
+                        >
+                          <option value="">선택</option>
+                          <option value="pending">면접예정</option>
+                          <option value="passed">면접합격</option>
+                          <option value="failed">면접불합격</option>
+                          <option value="불참">불참</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                          최종 상태
+                        </label>
+                        <select
+                          value={selectedApplication.finalStatus || ''}
+                          onChange={(e) => handleFinalStatusChange(selectedApplication.id, e.target.value)}
+                          className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                          disabled={loading || selectedApplication.interviewStatus !== 'passed'}
+                        >
+                          <option value="">선택</option>
+                          <option value="finalAccepted">최종합격</option>
+                          <option value="finalRejected">최종불합격</option>
+                          <option value="불참">불참</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    {/* 면접 정보 입력 폼 */}
+                    {selectedApplication?.interviewStatus === 'pending' && (
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
                         <input
                           type="date"
-                          className="p-2 border border-gray-300 rounded"
-                          value={newSelectedDate || (selectedDate?.formattedDate !== '날짜 미정' ? format(selectedDate?.date || new Date(), 'yyyy-MM-dd') : '')}
+                          value={newSelectedDate}
                           onChange={(e) => setNewSelectedDate(e.target.value)}
+                          className="flex-1 p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md min-w-[100px]"
                         />
                         <input
                           type="time"
-                          className="p-2 border border-gray-300 rounded"
                           value={interviewTime}
                           onChange={(e) => setInterviewTime(e.target.value)}
+                          className="flex-1 p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md min-w-[100px]"
                         />
-                        <div className="flex gap-2">
+                        <div className="flex gap-1">
                           <Button
-                            onClick={() => {
-                              if (!newSelectedDate && !selectedDate) {
-                                toast.error('날짜를 입력해주세요.');
-                                return;
-                              }
-                              handleChangeInterviewTime();
-                            }}
-                            className="flex-1"
-                            disabled={loading}
+                            variant="primary"
+                            onClick={handleSaveInterviewInfo}
+                            isLoading={loading}
+                            disabled={loading || !newSelectedDate || !interviewTime}
+                            className="whitespace-nowrap text-xs md:text-sm p-1 md:p-2"
                           >
                             저장
                           </Button>
                           <Button
-                            onClick={handleSetUndefinedTime}
-                            className="flex-1 bg-gray-500 hover:bg-gray-600"
+                            variant="secondary"
+                            onClick={handleSetUndefinedDate}
+                            isLoading={loading}
                             disabled={loading}
+                            className="whitespace-nowrap text-xs md:text-sm p-1 md:p-2"
                           >
                             미정
                           </Button>
                         </div>
                       </div>
-                    </div>
-                    <div>
-                      <p className="text-gray-600 mb-2">면접 상태</p>
-                      <div className="grid grid-cols-2 gap-2">
+                    )}
+                    
+                    {/* 면접 피드백 */}
+                    <div className="mt-6">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        면접 피드백
+                      </label>
+                      <textarea
+                        value={feedbackText}
+                        onChange={(e) => setFeedbackText(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 max-h-[100px] overflow-auto"
+                        placeholder="면접 피드백을 입력하세요..."
+                        disabled={loading}
+                        style={{ height: '100px', resize: 'none' }}
+                      ></textarea>
+                      <div className="mt-2 flex justify-end">
                         <Button
-                          onClick={() => handleInterviewStatusChange(selectedApplication.id, 'passed')}
-                          className="bg-green-600 hover:bg-green-700"
-                          disabled={loading || selectedApplication.interviewStatus === 'passed'}
+                          variant="primary"
+                          onClick={handleSaveFeedback}
+                          isLoading={loading}
+                          disabled={loading || !feedbackText.trim()}
                         >
-                          합격
-                        </Button>
-                        <Button
-                          onClick={() => handleInterviewStatusChange(selectedApplication.id, 'failed')}
-                          className="bg-red-600 hover:bg-red-700"
-                          disabled={loading || selectedApplication.interviewStatus === 'failed'}
-                        >
-                          불합격
-                        </Button>
-                        <Button
-                          onClick={() => handleInterviewStatusChange(selectedApplication.id, '불참')}
-                          className="bg-gray-600 hover:bg-gray-700"
-                          disabled={loading || selectedApplication.interviewStatus === '불참'}
-                        >
-                          불참
-                        </Button>
-                        <Button
-                          onClick={() => handleInterviewStatusChange(selectedApplication.id, 'pending')}
-                          className="bg-yellow-600 hover:bg-yellow-700"
-                          disabled={loading || selectedApplication.interviewStatus === 'pending'}
-                        >
-                          예정
+                          피드백 저장
                         </Button>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* 면접 피드백 */}
-                <div className="bg-white rounded-lg shadow p-6">
-                  <h4 className="text-lg font-semibold mb-4">면접 피드백</h4>
-                  <textarea
-                    className="w-full p-4 border border-gray-300 rounded-lg min-h-32 resize-none"
-                    value={feedbackText}
-                    onChange={(e) => setFeedbackText(e.target.value)}
-                    placeholder="면접 피드백을 입력하세요..."
-                  />
-                  <div className="flex justify-end mt-2">
-                    <Button
-                      onClick={handleSaveFeedback}
-                      disabled={loading}
-                    >
-                      피드백 저장
-                    </Button>
-                  </div>
-                </div>
-
-                {/* 알바 & 멘토링 경력 */}
-                {(selectedApplication.user?.partTimeJobs?.length || selectedApplication.user?.schoolActivities?.length) ? (
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <h4 className="text-lg font-semibold mb-4">알바 & 멘토링 경력</h4>
-                    <div className="space-y-4">
-                      {selectedApplication.user?.partTimeJobs?.map((job, index) => (
-                        <div key={index} className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <h5 className="font-medium">{job.companyName}</h5>
-                              <p className="text-sm text-gray-600">{job.position}</p>
+                  {/* 알바 & 멘토링 경력 */}
+                  <div className="mb-6 pb-6">
+                    <h3 className="text-lg font-semibold mb-4">알바 & 멘토링 경력</h3>
+                    {!selectedApplication.user?.partTimeJobs || selectedApplication.user.partTimeJobs.length === 0 ? (
+                      <p className="text-gray-500">경력을 추가해주세요</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {selectedApplication.user.partTimeJobs.map((job, index) => (
+                          <div key={index} className="bg-gray-50 p-4 rounded-md border border-gray-200">
+                            <div className="flex justify-between mb-2">
+                              <span className="font-medium">{job.companyName}</span>
+                              <span className="text-sm text-gray-500">{job.period}</span>
                             </div>
-                            <p className="text-sm text-gray-600">{job.period}</p>
+                            <div className="mb-2">
+                              <span className="text-sm text-gray-500 mr-2">담당:</span>
+                              <span>{job.position}</span>
+                            </div>
+                            <div>
+                              <span className="text-sm text-gray-500 mr-2">업무 내용:</span>
+                              <span className="text-gray-700">{job.description}</span>
+                            </div>
                           </div>
-                          <p className="text-sm text-gray-600 whitespace-pre-line">{job.description}</p>
-                        </div>
-                      ))}
-                      {selectedApplication.user?.schoolActivities?.map((activity, index) => (
-                        <div key={index} className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex justify-between items-start mb-2">
-                            <h5 className="font-medium">{activity.name}</h5>
-                            <p className="text-sm text-gray-600">{activity.period}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* 자기소개서 및 지원동기 */}
+                  {selectedApplication.user && (
+                    <div className="mb-6">
+                      <hr className="my-6" />
+                      <div className="mb-6 pb-6">
+                        <h3 className="text-lg font-semibold mb-4">자기소개서 및 지원동기</h3>
+                        <div className="space-y-4">
+                          <div>
+                            <h4 className="font-medium mb-2">자기소개서</h4>
+                            <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
+                              {selectedApplication.user?.selfIntroduction || '내용이 없습니다.'}
+                            </div>
                           </div>
-                          <p className="text-sm text-gray-600 whitespace-pre-line">{activity.description}</p>
+                          <div>
+                            <h4 className="font-medium mb-2">지원동기</h4>
+                            <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
+                              {selectedApplication.user?.jobMotivation || '내용이 없습니다.'}
+                            </div>
+                          </div>
                         </div>
-                      ))}
+                      </div>
                     </div>
-                  </div>
-                ) : null}
-
-                {/* 자기소개서 및 지원동기 */}
-                <div className="bg-white rounded-lg shadow p-6">
-                  <h4 className="text-lg font-semibold mb-4">자기소개서 및 지원동기</h4>
-                  <div className="space-y-6">
-                    {selectedApplication.user?.selfIntroduction && (
-                      <div>
-                        <h5 className="font-medium mb-2">자기소개서</h5>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <p className="text-sm text-gray-600 whitespace-pre-line">
-                            {selectedApplication.user.selfIntroduction}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    {selectedApplication.user?.jobMotivation && (
-                      <div>
-                        <h5 className="font-medium mb-2">지원동기</h5>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <p className="text-sm text-gray-600 whitespace-pre-line">
-                            {selectedApplication.user.jobMotivation}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             ) : (

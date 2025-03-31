@@ -171,21 +171,22 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const handleSelectApplication = (app: ApplicationWithUser) => {
     setSelectedApplication(app);
     setFeedbackText(app.interviewFeedback || '');
-    if (app.interviewDateTime) {
-      const date = app.interviewDateTime.toDate();
+    if (app.interviewDate) {
+      const date = app.interviewDate.toDate();
       setInterviewDate(format(date, 'yyyy-MM-dd'));
       setInterviewTime(format(date, 'HH:mm'));
     } else {
       setInterviewDate('');
       setInterviewTime('');
     }
-  };
 
-  // const formatDate = (date: Date | Timestamp | null | undefined) => {
-  //   if (!date) return '미정';
-  //   const dateObj = date instanceof Timestamp ? date.toDate() : date;
-  //   return format(dateObj, 'yyyy년 MM월 dd일 HH:mm', { locale: ko });
-  // };
+    // 채용 공고의 base 정보 가져오기
+    if (jobBoard) {
+      setInterviewBaseLink(jobBoard.interviewBaseLink || '');
+      setInterviewBaseDuration(jobBoard.interviewBaseDuration?.toString() || '30');
+      setInterviewBaseNotes(jobBoard.interviewBaseNotes || '');
+    }
+  };
 
   // 전화번호에 하이픈 추가 함수
   const formatPhoneNumber = (phoneNumber: string) => {
@@ -264,7 +265,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             updateData.interviewStatus = undefined;
             updateData.finalStatus = undefined;
             updateData.interviewDate = undefined;
-            updateData.interviewDateTime = undefined;
             updateData.interviewFeedback = undefined;
             updateData.interviewBaseLink = undefined;
             updateData.interviewBaseDuration = undefined;
@@ -274,7 +274,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             firestoreUpdateData.interviewStatus = deleteField();
             firestoreUpdateData.finalStatus = deleteField();
             firestoreUpdateData.interviewDate = deleteField();
-            firestoreUpdateData.interviewDateTime = deleteField();
             firestoreUpdateData.interviewFeedback = deleteField();
             firestoreUpdateData.interviewBaseLink = deleteField();
             firestoreUpdateData.interviewBaseDuration = deleteField();
@@ -345,13 +344,22 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       
       const interviewDateTime = new Date(`${interviewDate}T${interviewTime}`);
       
+      // 날짜/시간만 업데이트
       const updateData: Partial<ApplicationHistory> = {
-        interviewDateTime: Timestamp.fromDate(interviewDateTime),
-        interviewBaseLink,
-        interviewBaseDuration: interviewBaseDuration ? parseInt(interviewBaseDuration) : 30,
-        interviewBaseNotes,
+        interviewDate: Timestamp.fromDate(interviewDateTime),
         updatedAt: Timestamp.fromDate(new Date())
       };
+
+      // base 정보도 함께 저장 (이미 채용 공고에서 가져온 값)
+      if (interviewBaseLink) {
+        updateData.interviewBaseLink = interviewBaseLink;
+      }
+      if (interviewBaseDuration) {
+        updateData.interviewBaseDuration = parseInt(interviewBaseDuration);
+      }
+      if (interviewBaseNotes) {
+        updateData.interviewBaseNotes = interviewBaseNotes;
+      }
 
       await updateDoc(applicationRef, updateData);
 
@@ -371,10 +379,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // 선택된 지원자 상태 업데이트
       setSelectedApplication(updatedApplication);
 
-      toast.success('면접 정보가 저장되었습니다.');
+      toast.success('면접 날짜/시간이 저장되었습니다.');
     } catch (error) {
-      console.error('면접 정보 저장 오류:', error);
-      toast.error('면접 정보 저장 중 오류가 발생했습니다.');
+      console.error('면접 날짜/시간 저장 오류:', error);
+      toast.error('면접 날짜/시간 저장 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -414,6 +422,49 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     } catch (error) {
       console.error('면접 피드백 저장 오류:', error);
       toast.error('면접 피드백 저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 면접 날짜 미정으로 설정
+  const handleSetUndefinedDate = async () => {
+    if (!selectedApplication) return;
+
+    try {
+      setIsLoading(true);
+      const applicationRef = doc(db, 'applicationHistories', selectedApplication.id);
+      
+      // 날짜 정보 삭제
+      await updateDoc(applicationRef, {
+        interviewDate: null,
+        updatedAt: Timestamp.fromDate(new Date())
+      });
+
+      // 로컬 상태 업데이트
+      const updatedApplication: ApplicationWithUser = {
+        ...selectedApplication,
+        interviewDate: undefined
+      };
+
+      // applications 배열 업데이트
+      setApplications(prevApplications => 
+        prevApplications.map(app => 
+          app.id === selectedApplication.id ? updatedApplication : app
+        )
+      );
+
+      // 선택된 지원자 상태 업데이트
+      setSelectedApplication(updatedApplication);
+      
+      // 입력 필드 초기화
+      setInterviewDate('');
+      setInterviewTime('');
+
+      toast.success('면접 날짜가 미정으로 변경되었습니다.');
+    } catch (error) {
+      console.error('면접 날짜 변경 오류:', error);
+      toast.error('면접 날짜 변경 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -601,6 +652,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <p className="text-xs text-gray-400 mt-1">
                               {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
                             </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {app.user?.referralPath}
+                            </p>
                           </div>
                           
                           {/* 오른쪽: 상태 배지 */}
@@ -670,6 +724,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                               </p>
                               <p>
                                 <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
+                              </p>
+                              <p>
+                                <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
+                                {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
+                                  ` (추천인: ${selectedApplication.user.referrerName})`}
                               </p>
                             </div>
                           )}
@@ -741,25 +800,25 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 날짜
+                                면접 날짜 (수정 가능)
                               </label>
                               <input
                                 type="date"
                                 value={interviewDate}
                                 onChange={(e) => setInterviewDate(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md"
+                                className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md"
                               />
                             </div>
                             
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 시간
+                                면접 시간 (수정 가능)
                               </label>
                               <input
                                 type="time"
                                 value={interviewTime}
                                 onChange={(e) => setInterviewTime(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md"
+                                className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md"
                               />
                             </div>
                           </div>
@@ -767,26 +826,26 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 링크
+                                면접 링크 (수정 불가)
                               </label>
                               <input
                                 type="text"
                                 value={interviewBaseLink}
-                                onChange={(e) => setInterviewBaseLink(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md"
+                                readOnly
+                                className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md bg-gray-50"
                                 placeholder="https://zoom.us/j/..."
                               />
                             </div>
                             
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 시간 (분)
+                                면접 시간 (분) (수정 불가)
                               </label>
                               <input
                                 type="number"
                                 value={interviewBaseDuration}
-                                onChange={(e) => setInterviewBaseDuration(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md"
+                                readOnly
+                                className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md bg-gray-50"
                                 placeholder="30"
                               />
                             </div>
@@ -794,25 +853,35 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           
                           <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              면접 참고사항
+                              면접 참고사항 (수정 불가)
                             </label>
                             <textarea
                               value={interviewBaseNotes}
-                              onChange={(e) => setInterviewBaseNotes(e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md"
+                              readOnly
+                              className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md bg-gray-50"
                               rows={3}
                               placeholder="면접 참고사항을 입력하세요..."
                             />
                           </div>
                           
-                          <div className="flex justify-end">
+                          <div className="flex gap-2 justify-end">
                             <Button
                               variant="primary"
                               onClick={handleSaveInterviewInfo}
                               isLoading={isLoading}
                               disabled={isLoading || !interviewDate || !interviewTime}
+                              className="text-xs md:text-sm"
                             >
-                              면접 정보 저장
+                              면접 날짜/시간 저장
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={handleSetUndefinedDate}
+                              isLoading={isLoading}
+                              disabled={isLoading}
+                              className="text-xs md:text-sm"
+                            >
+                              미정으로 설정
                             </Button>
                           </div>
                         </div>
