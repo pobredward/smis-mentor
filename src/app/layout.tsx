@@ -76,6 +76,7 @@ export default function RootLayout({
   return (
     <html lang="ko" data-theme="light" className="light">
       <head>
+      <meta name="naver-site-verification" content="3f732ac5d0f0d5ccd49580ade7c5b037189b6e86" />
         <script dangerouslySetInnerHTML={{
           __html: `
             // 사용자의 테마 설정을 무시하고 항상 라이트 테마 적용
