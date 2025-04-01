@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     siteName: 'SMIS 채용 플랫폼',
     images: [
       {
-        url: '/og-image.jpg',
+        url: '/logo-wide.jpg',
         width: 1200,
         height: 630,
         alt: 'SMIS 채용 플랫폼',
