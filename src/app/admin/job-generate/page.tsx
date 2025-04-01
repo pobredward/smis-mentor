@@ -211,9 +211,35 @@ export default function JobGenerate() {
   };
 
   // 날짜 포맷팅 함수
-  const formatDate = (timestamp: Timestamp) => {
-    const date = timestamp.toDate();
-    return date.toISOString().split('T')[0];
+  const formatDate = (timestamp: Timestamp | any) => {
+    try {
+      // Firebase Timestamp 객체인 경우
+      if (timestamp && typeof timestamp.toDate === 'function') {
+        const date = timestamp.toDate();
+        return date.toISOString().split('T')[0];
+      } 
+      // Date 객체인 경우
+      else if (timestamp instanceof Date) {
+        return timestamp.toISOString().split('T')[0];
+      }
+      // 문자열인 경우 (이미 ISO 형식일 수 있음)
+      else if (typeof timestamp === 'string') {
+        if (timestamp.includes('T')) {
+          return timestamp.split('T')[0];
+        }
+        return timestamp;
+      }
+      // seconds와 nanoseconds가 있는 객체인 경우 (Firestore에서 가져온 객체가 변환되지 않은 경우)
+      else if (timestamp && 'seconds' in timestamp && 'nanoseconds' in timestamp) {
+        const date = new Date(timestamp.seconds * 1000);
+        return date.toISOString().split('T')[0];
+      }
+      // 기타 경우
+      return '날짜 없음';
+    } catch (error) {
+      console.error('날짜 변환 오류:', error, timestamp);
+      return '날짜 변환 오류';
+    }
   };
 
   // 기수로 필터링된 업무 목록
