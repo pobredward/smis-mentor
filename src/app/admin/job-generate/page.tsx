@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
-import { createJobCode, getAllJobCodes, deleteJobCode, updateJobCode } from '@/lib/firebaseService';
+import { createJobCode, getAllJobCodes, deleteJobCode, updateJobCode, clearJobCodesCache } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -168,11 +168,15 @@ export default function JobGenerate() {
         endDate,
         location: data.location,
         korea: data.korea === 'true',
+        updatedAt: Timestamp.now()
       };
 
       if (isEditing && editingJobCode) {
         // 업무 코드 수정
         await updateJobCode(editingJobCode.id, formData);
+        
+        // 캐시 초기화 추가
+        await clearJobCodesCache();
         
         toast.success('업무가 성공적으로 수정되었습니다.');
         setIsEditing(false);
@@ -184,6 +188,9 @@ export default function JobGenerate() {
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         });
+
+        // 캐시 초기화 추가
+        await clearJobCodesCache();
 
         toast.success('업무가 성공적으로 생성되었습니다.');
       }

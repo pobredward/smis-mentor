@@ -350,7 +350,13 @@ export default function EditProfilePage() {
       // 섹션에 따라 업데이트할 데이터 선택
       if (section === 'all' || section === 'personal') {
         updateData.name = data.name;
-        updateData.age = data.age;
+        
+        // 정확한 나이 값 설정
+        if (data.age !== undefined) {
+          // 나이 값이 변경된 경우에만 설정하고, 변환 과정 확인
+          updateData.age = parseInt(String(data.age), 10);
+        }
+        
         updateData.phoneNumber = data.phoneNumber;
         updateData.email = data.email;
         updateData.address = data.address;
