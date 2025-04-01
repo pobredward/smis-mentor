@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   authors: [{ name: '에스엠아이에스' }],
   publisher: '에스엠아이에스',
   creator: '에스엠아이에스',
-  metadataBase: new URL('https://www.smisedu.com'),
+  metadataBase: new URL('https://www.smis-mentor.com'),
   verification: {
     // 구글 서치 콘솔에서 발급받은 인증 코드로 교체하세요
     google: "구글_사이트_인증코드",

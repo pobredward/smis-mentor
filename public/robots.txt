@@ -3,4 +3,4 @@ User-agent: *
 Allow: /
 
 # Sitemap locations
-Sitemap: https://www.smisedu.com/sitemap.xml 
+Sitemap: https://www.smis-mentor.com/sitemap.xml 

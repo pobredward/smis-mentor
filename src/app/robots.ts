@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/admin/', '/api/'],
     },
-    sitemap: 'https://www.smisedu.com/sitemap.xml',
+    sitemap: 'https://www.smis-mentor.com/sitemap.xml',
   };
 } 

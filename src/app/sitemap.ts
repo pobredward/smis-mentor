@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://www.smisedu.com';
+  const baseUrl = 'https://www.smis-mentor.com';
   const currentDate = new Date().toISOString();
 
   // 정적 페이지 URL 목록
