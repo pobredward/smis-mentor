@@ -768,7 +768,7 @@ export function InterviewManageClient() {
                             <div>
                               <div className="font-medium">{app.user?.name || '이름 없음'}</div>
                               <div className="text-sm text-gray-600 mt-1">
-                                {app.user?.university || app.user?.school || '학교 정보 없음'}
+                                {formatPhoneNumber(app.user?.phoneNumber || '')}
                               </div>
                               <div className="text-sm text-gray-500 mt-1">
                                 {app.interviewDate 
