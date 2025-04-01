@@ -717,7 +717,7 @@ export default function UserManage() {
                           )}
                           <div className="flex-grow min-w-0">
                             <h3 className="font-medium text-gray-900 truncate">{user.name}</h3>
-                            <p className="text-sm text-gray-500 truncate">{user.email || user.phoneNumber}</p>
+                            <p className="text-sm text-gray-500 truncate">{formatPhoneNumber(user.phoneNumber)}</p>
                             <div className="flex flex-wrap gap-1 mt-1">
                               <span key={`role-${user.userId || index}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
