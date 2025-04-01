@@ -85,14 +85,9 @@ export default function ProfilePage() {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl sm:text-2xl font-bold">내 프로필</h1>
-          <Button
-            variant="outline"
-            onClick={() => router.push('/profile/edit')}
-            className="text-sm px-3 py-1.5"
-          >
-            프로필 수정
-          </Button>
         </div>
+
+        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
 
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4">
@@ -117,6 +112,72 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+
+          <div className="px-6 py-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">상세 정보</h3>
+              <Button
+                variant="outline"
+                onClick={() => router.push('/profile/edit?section=personal')}
+                className="text-sm px-3 py-1.5"
+              >
+                수정
+              </Button>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">이름</p>
+                  <p>{userData.name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">나이</p>
+                  <p>{userData.age}세</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">이메일</p>
+                  <p>{userData.email}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">성별</p>
+                  <p>{userData.gender === 'M' ? '남성' : userData.gender === 'F' ? '여성' : '미지정'}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-sm text-gray-500">주소</p>
+                  <p>{userData.address} {userData.addressDetail}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-sm text-gray-500">주민등록번호</p>
+                  <p>{userData.rrnFront}-*******</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-sm text-gray-500">지원 경로</p>
+                  <p>{userData.referralPath || '정보 없음'}</p>
+                </div>
+                {userData.referrerName && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-500">추천인</p>
+                    <p>{userData.referrerName}</p>
+                  </div>
+                )}
+              </div>
+              
+              <div>
+                <p className="text-sm text-gray-500 mb-1">자기소개</p>
+                <p className="p-3 bg-gray-50 rounded min-h-[100px]">
+                  {userData.selfIntroduction || '자기소개서를 작성해주세요'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 mb-1">지원 동기</p>
+                <p className="p-3 bg-gray-50 rounded min-h-[100px]">
+                  {userData.jobMotivation || '지원 동기를 작성해주세요'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
 
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="border-b px-4 sm:px-6 py-3">
@@ -172,57 +233,58 @@ export default function ProfilePage() {
           </div>
         </div>
 
+
+        {/* 학교 정보 섹션 */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+          <div className="border-b px-4 sm:px-6 py-3 flex justify-between items-center">
+            <h2 className="text-lg font-semibold">학교 정보</h2>
+            <Button
+              variant="outline"
+              onClick={() => router.push('/profile/edit?section=education')}
+              className="text-sm px-3 py-1.5"
+            >
+              수정
+            </Button>
+          </div>
           <div className="px-6 py-4">
-            <h3 className="text-lg font-bold mb-4">상세 정보</h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">이름</p>
-                  <p>{userData.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">나이</p>
-                  <p>{userData.age}세</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">이메일</p>
-                  <p>{userData.email}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">성별</p>
-                  <p>{userData.gender === 'M' ? '남성' : userData.gender === 'F' ? '여성' : '미지정'}</p>
-                </div>
-                <div className="md:col-span-2">
-                  <p className="text-sm text-gray-500">주소</p>
-                  <p>{userData.address} {userData.addressDetail}</p>
-                </div>
-                <div className="md:col-span-2">
-                  <p className="text-sm text-gray-500">주민등록번호</p>
-                  <p>{userData.rrnFront}-*******</p>
+            {!userData.university ? (
+              <p className="text-gray-500 text-center py-4">학교 정보를 추가해주세요</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">학교</p>
+                    <p>{userData.university}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">학년</p>
+                    <p>{userData.grade}학년 {userData.isOnLeave ? '(휴학중)' : ''}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">전공 (1전공)</p>
+                    <p>{userData.major1 || '정보 없음'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">전공 (2전공/부전공)</p>
+                    <p>{userData.major2 || '없음'}</p>
+                  </div>
                 </div>
               </div>
-              
-              <div>
-                <p className="text-sm text-gray-500 mb-1">자기소개</p>
-                <p className="p-3 bg-gray-50 rounded min-h-[100px]">
-                  {userData.selfIntroduction || '자기소개서를 작성해주세요'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">지원 동기</p>
-                <p className="p-3 bg-gray-50 rounded min-h-[100px]">
-                  {userData.jobMotivation || '지원 동기를 작성해주세요'}
-                </p>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
         {/* 알바 & 멘토링 경력 섹션 */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-          <div className="border-b px-4 sm:px-6 py-3">
+          <div className="border-b px-4 sm:px-6 py-3 flex justify-between items-center">
             <h2 className="text-lg font-semibold">알바 & 멘토링 경력</h2>
+            <Button
+              variant="outline"
+              onClick={() => router.push('/profile/edit?section=experience')}
+              className="text-sm px-3 py-1.5"
+            >
+              수정
+            </Button>
           </div>
           <div className="px-6 py-4">
             {!userData.partTimeJobs || userData.partTimeJobs.length === 0 ? (
@@ -248,38 +310,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* 학교 정보 섹션 */}
-        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-          <div className="border-b px-4 sm:px-6 py-3">
-            <h2 className="text-lg font-semibold">학교 정보</h2>
-          </div>
-          <div className="px-6 py-4">
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">학교</p>
-                  <p>{userData.university || '미입력'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">학년</p>
-                  <p>{userData.grade ? `${userData.grade}학년` : '미입력'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">휴학 상태</p>
-                  <p>{userData.isOnLeave ? '휴학 중' : '재학 중'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">전공 (1전공)</p>
-                  <p>{userData.major1 || '미입력'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">전공 (2전공/부전공)</p>
-                  <p>{userData.major2 || '없음'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        
         
         {/* 회원 탈퇴 섹션 */}
         <div className="mt-8 mb-12 text-center">

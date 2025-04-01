@@ -28,6 +28,7 @@ const detailsSchema = z.object({
   agreedPersonal: z.boolean().refine(val => val === true, {
     message: '개인정보 수집 및 이용에 동의해주세요.',
   }),
+  otherReferralDetail: z.string().optional(),
 });
 
 type DetailsFormValues = z.infer<typeof detailsSchema>;
@@ -109,6 +110,12 @@ export default function SignUpDetails() {
       // 전화번호로 기존 임시 사용자 조회
       const existingUser = await getUserByPhone(phoneNumber);
       
+      // 기타 경로 상세 정보 처리
+      let referralPathValue = data.referralPath;
+      if (data.referralPath === '기타' && data.otherReferralDetail) {
+        referralPathValue = `기타: ${data.otherReferralDetail}`;
+      }
+      
       if (existingUser && existingUser.status === 'temp') {
         // Firebase Auth에 사용자 등록
         const userCredential = await signUp(email, decodeURIComponent(password));
@@ -131,7 +138,7 @@ export default function SignUpDetails() {
           gender: data.gender,
           age,
           agreedPersonal: data.agreedPersonal,
-          referralPath: data.referralPath,
+          referralPath: referralPathValue,
           referrerName: data.referrerName,
           selfIntroduction: '',
           jobMotivation: '',
@@ -173,7 +180,7 @@ export default function SignUpDetails() {
           gender: data.gender,
           age,
           agreedPersonal: data.agreedPersonal,
-          referralPath: data.referralPath,
+          referralPath: referralPathValue,
           referrerName: data.referrerName,
           profileImage: '',
           role: 'mentor',
@@ -345,18 +352,16 @@ export default function SignUpDetails() {
               />
             </div>
           )}
-          
+
           {watch('referralPath') === '기타' && (
             <div className="w-full mb-4">
               <FormInput
-                label="기타 경로"
+                label="기타 경로 상세"
                 type="text"
-                placeholder="경로를 입력해주세요"
-                error={errors.referrerName?.message}
-                {...register('referrerName')}
+                placeholder="어떤 경로로 알게 되셨는지 입력해주세요"
+                {...register('otherReferralDetail')}
               />
             </div>
-
           )}
 
           <div className="w-full mb-6">

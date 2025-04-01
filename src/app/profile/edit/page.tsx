@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,7 +13,7 @@ import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import ImageCropper from '@/components/common/ImageCropper';
 import toast from 'react-hot-toast';
-import { PartTimeJob } from '@/types';
+import { PartTimeJob, User } from '@/types';
 
 const partTimeJobSchema = z.object({
   period: z.string().min(1, '기간을 입력해주세요.'),
@@ -24,6 +24,10 @@ const partTimeJobSchema = z.object({
 
 const profileSchema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
+  age: z.number({
+    required_error: '나이를 입력해주세요.',
+    invalid_type_error: '유효한 숫자를 입력해주세요.',
+  }).min(15, '최소 15세 이상이어야 합니다.').max(100, '유효한 나이를 입력해주세요.'),
   phoneNumber: z.string().min(10, '유효한 휴대폰 번호를 입력해주세요.').max(11, '유효한 휴대폰 번호를 입력해주세요.'),
   email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
   address: z.string().min(1, '주소를 입력해주세요.'),
@@ -42,6 +46,9 @@ const profileSchema = z.object({
   major1: z.string().min(1, '전공을 입력해주세요.'),
   major2: z.string().optional(),
   partTimeJobs: z.array(partTimeJobSchema).optional(),
+  referralPath: z.string().optional(),
+  referrerName: z.string().optional(),
+  otherReferralDetail: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -49,6 +56,8 @@ type ProfileFormValues = z.infer<typeof profileSchema>;
 export default function EditProfilePage() {
   const { userData, refreshUserData } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const section = searchParams.get('section') || 'all';
   const [isLoading, setIsLoading] = useState(false);
   const [showPostcode, setShowPostcode] = useState(false);
   const [emailExists, setEmailExists] = useState(false);
@@ -71,6 +80,7 @@ export default function EditProfilePage() {
     resolver: zodResolver(profileSchema),
     defaultValues: {
       name: '',
+      age: undefined,
       phoneNumber: '',
       email: '',
       address: '',
@@ -84,6 +94,9 @@ export default function EditProfilePage() {
       major1: '',
       major2: '',
       partTimeJobs: [],
+      referralPath: '',
+      referrerName: '',
+      otherReferralDetail: '',
     },
   });
 
@@ -123,6 +136,7 @@ export default function EditProfilePage() {
     if (userData) {
       reset({
         name: userData.name,
+        age: userData.age || undefined,
         phoneNumber: userData.phoneNumber,
         email: userData.email,
         address: userData.address,
@@ -136,6 +150,9 @@ export default function EditProfilePage() {
         major1: userData.major1 || '',
         major2: userData.major2 || '',
         partTimeJobs: userData.partTimeJobs || [],
+        referralPath: userData.referralPath || '',
+        referrerName: userData.referrerName || '',
+        otherReferralDetail: '',
       });
       
       if (userData.profileImage) {
@@ -327,23 +344,43 @@ export default function EditProfilePage() {
         }
       }
 
+      // 업데이트할 데이터 준비
+      const updateData: Partial<User> = {};
+      
+      // 섹션에 따라 업데이트할 데이터 선택
+      if (section === 'all' || section === 'personal') {
+        updateData.name = data.name;
+        updateData.age = data.age;
+        updateData.phoneNumber = data.phoneNumber;
+        updateData.email = data.email;
+        updateData.address = data.address;
+        updateData.addressDetail = data.addressDetail;
+        updateData.gender = data.gender;
+        updateData.selfIntroduction = data.selfIntroduction || '';
+        updateData.jobMotivation = data.jobMotivation || '';
+        updateData.referralPath = data.referralPath || '';
+        updateData.referrerName = data.referrerName || '';
+        
+        // 기타 경로 상세 정보 처리
+        if (data.referralPath === '기타' && data.otherReferralDetail) {
+          updateData.referralPath = `기타: ${data.otherReferralDetail}`;
+        }
+      }
+      
+      if (section === 'all' || section === 'experience') {
+        updateData.partTimeJobs = partTimeJobs;
+      }
+      
+      if (section === 'all' || section === 'education') {
+        updateData.university = data.university;
+        updateData.grade = data.grade;
+        updateData.isOnLeave = data.isOnLeave;
+        updateData.major1 = data.major1;
+        updateData.major2 = data.major2 || '';
+      }
+
       // 사용자 정보 업데이트
-      await updateUser(userData.userId, {
-        name: data.name,
-        phoneNumber: data.phoneNumber,
-        email: data.email,
-        address: data.address,
-        addressDetail: data.addressDetail,
-        gender: data.gender,
-        selfIntroduction: data.selfIntroduction || '',
-        jobMotivation: data.jobMotivation || '',
-        university: data.university,
-        grade: data.grade,
-        isOnLeave: data.isOnLeave,
-        major1: data.major1,
-        major2: data.major2 || '',
-        partTimeJobs: partTimeJobs,
-      });
+      await updateUser(userData.userId, updateData);
 
       // 사용자 데이터 갱신
       await refreshUserData();
@@ -378,7 +415,12 @@ export default function EditProfilePage() {
     <Layout requireAuth>
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">프로필 수정</h1>
+          <h1 className="text-2xl font-bold">
+            {section === 'personal' ? '상세 정보 수정' : 
+             section === 'experience' ? '알바 & 멘토링 경력 수정' : 
+             section === 'education' ? '학교 정보 수정' : 
+             '프로필 수정'}
+          </h1>
           <Button
             variant="outline"
             onClick={() => router.push('/profile')}
@@ -398,333 +440,392 @@ export default function EditProfilePage() {
           <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded-lg p-6">
             <div className="mb-6">
               {/* 프로필 이미지 업로드 섹션 */}
-              <div className="w-full mb-6 flex flex-col items-center">
-                <label className="block text-gray-700 text-sm font-medium mb-3">프로필 이미지</label>
-                <div className="mb-3 relative">
-                  {profileImageUrl ? (
-                    <img 
-                      src={profileImageUrl} 
-                      alt="프로필" 
-                      className="w-32 h-32 object-cover object-center rounded-md border border-gray-300"
-                      style={{ aspectRatio: '1 / 1' }}
-                    />
-                  ) : (
-                    <div className="w-32 h-32 bg-gray-200 rounded-md flex items-center justify-center">
-                      <span className="text-gray-500 text-5xl">{userData.name.charAt(0)}</span>
-                    </div>
-                  )}
-                  
-                  {isUploading && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex flex-col items-center justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white mb-2"></div>
-                      <span className="text-white text-sm font-medium">{uploadProgress.toFixed(0)}%</span>
-                      <div className="w-4/5 h-2 bg-gray-200 rounded-full mt-2">
-                        <div 
-                          className="h-full bg-blue-500 rounded-full" 
-                          style={{ width: `${uploadProgress}%` }}
-                        ></div>
+              {(section === 'all' || section === 'personal') && (
+                <div className="w-full mb-6 flex flex-col items-center">
+                  <label className="block text-gray-700 text-sm font-medium mb-3">프로필 이미지</label>
+                  <div className="mb-3 relative">
+                    {profileImageUrl ? (
+                      <img 
+                        src={profileImageUrl} 
+                        alt="프로필" 
+                        className="w-32 h-32 object-cover object-center rounded-md border border-gray-300"
+                        style={{ aspectRatio: '1 / 1' }}
+                      />
+                    ) : (
+                      <div className="w-32 h-32 bg-gray-200 rounded-md flex items-center justify-center">
+                        <span className="text-gray-500 text-5xl">{userData.name.charAt(0)}</span>
                       </div>
-                    </div>
-                  )}
-                </div>
-                
-                <div>
-                  <input
-                    type="file"
-                    id="profile-image"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-                  <label
-                    htmlFor="profile-image"
-                    className="cursor-pointer px-4 py-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 transition"
-                  >
-                    이미지 변경
-                  </label>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">현재 프로필 이미지 업로드가 불가능하므로 나중에 시도해주세요</p>
-              </div>
-
-              <FormInput
-                label="이름"
-                type="text"
-                placeholder="이름을 입력하세요"
-                error={errors.name?.message}
-                {...register('name')}
-              />
-
-              <FormInput
-                label="이메일"
-                type="email"
-                placeholder="이메일 주소를 입력하세요"
-                error={emailExists ? '이미 사용 중인 이메일입니다.' : errors.email?.message}
-                {...register('email', {
-                  onBlur: handleEmailBlur
-                })}
-              />
-
-              <FormInput
-                label="휴대폰 번호"
-                type="tel"
-                placeholder="'-' 없이 입력하세요"
-                error={phoneExists ? '이미 사용 중인 휴대폰 번호입니다.' : errors.phoneNumber?.message}
-                {...register('phoneNumber', {
-                  onBlur: handlePhoneBlur
-                })}
-              />
-
-              <div className="w-full mb-4">
-                <label className="block text-gray-700 text-sm font-medium mb-1">주소</label>
-                <div className="flex mb-2">
-                  <input
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="주소 검색을 클릭하세요"
-                    {...register('address')}
-                  />
-                  <Button
-                    type="button"
-                    className="ml-2"
-                    variant="secondary"
-                    onClick={() => setShowPostcode(!showPostcode)}
-                  >
-                    주소 검색
-                  </Button>
-                </div>
-                {showPostcode && (
-                  <div className="mb-2 border border-gray-300 rounded-md">
-                    <DaumPostcode onComplete={handleComplete} />
-                  </div>
-                )}
-                {errors.address && <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>}
-              </div>
-
-              <FormInput
-                label="상세 주소"
-                type="text"
-                placeholder="상세 주소를 입력하세요"
-                error={errors.addressDetail?.message}
-                {...register('addressDetail')}
-              />
-
-              <div className="w-full mb-4">
-                <label className="block text-gray-700 text-sm font-medium mb-1">성별</label>
-                <div className="flex space-x-4">
-                  <div className="flex items-center">
-                    <input
-                      type="radio"
-                      id="gender-male"
-                      value="M"
-                      className="h-4 w-4 text-blue-600 border-gray-300"
-                      {...register('gender')}
-                    />
-                    <label htmlFor="gender-male" className="ml-2 block text-sm text-gray-700">
-                      남성
-                    </label>
-                  </div>
-                  <div className="flex items-center">
-                    <input
-                      type="radio"
-                      id="gender-female"
-                      value="F"
-                      className="h-4 w-4 text-blue-600 border-gray-300"
-                      {...register('gender')}
-                    />
-                    <label htmlFor="gender-female" className="ml-2 block text-sm text-gray-700">
-                      여성
-                    </label>
-                  </div>
-                </div>
-                {errors.gender && <p className="mt-1 text-sm text-red-600">{errors.gender.message}</p>}
-              </div>
-
-              <div className="w-full mb-4">
-                <label className="block text-gray-700 text-sm font-medium mb-1">자기소개</label>
-                <div className="relative">
-                  <textarea
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
-                    placeholder="간단한 자기소개를 입력하세요"
-                    maxLength={500}
-                    {...register('selfIntroduction')}
-                  />
-                  <div className="absolute bottom-2 right-2 text-xs text-gray-500">
-                    {currentSelfIntro.length}/500자
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">자기소개는 500자 이내로 작성해주세요.</p>
-              </div>
-
-              <div className="w-full mb-4">
-                <label className="block text-gray-700 text-sm font-medium mb-1">지원 동기</label>
-                <div className="relative">
-                  <textarea
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
-                    placeholder="업무 지원 동기를 입력하세요"
-                    maxLength={500}
-                    {...register('jobMotivation')}
-                  />
-                  <div className="absolute bottom-2 right-2 text-xs text-gray-500">
-                    {currentJobMotivation.length}/500자
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요.</p>
-              </div>
-
-              {/* 알바 & 멘토링 경력 */}
-              <div className="mb-6">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    알바 & 멘토링 경력
-                  </label>
-                  <button
-                    type="button"
-                    onClick={addPartTimeJob}
-                    className="flex items-center text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                    </svg>
-                    경력 추가
-                  </button>
-                </div>
-                
-                {partTimeJobs.length === 0 ? (
-                  <div className="py-4 px-3 border border-dashed border-gray-300 rounded-md text-center text-gray-500">
-                    알바 & 멘토링 경력을 추가해보세요.
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {partTimeJobs.map((job, index) => (
-                      <div key={index} className="border border-gray-200 rounded-md p-4 bg-gray-50 relative">
-                        <button
-                          type="button"
-                          onClick={() => removePartTimeJob(index)}
-                          className="absolute top-2 right-2 text-gray-400 hover:text-red-500"
-                          aria-label="삭제"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              기간
-                            </label>
-                            <input
-                              type="text"
-                              value={job.period}
-                              onChange={(e) => updatePartTimeJob(index, 'period', e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              placeholder="2022.03 - 2022.09"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              회사명
-                            </label>
-                            <input
-                              type="text"
-                              value={job.companyName}
-                              onChange={(e) => updatePartTimeJob(index, 'companyName', e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              placeholder="회사명"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              담당
-                            </label>
-                            <input
-                              type="text"
-                              value={job.position}
-                              onChange={(e) => updatePartTimeJob(index, 'position', e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              placeholder="직무/담당"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              업무 내용
-                            </label>
-                            <input
-                              type="text"
-                              value={job.description}
-                              onChange={(e) => updatePartTimeJob(index, 'description', e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              placeholder="간략한 업무 내용"
-                            />
-                          </div>
+                    )}
+                    
+                    {isUploading && (
+                      <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex flex-col items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white mb-2"></div>
+                        <span className="text-white text-sm font-medium">{uploadProgress.toFixed(0)}%</span>
+                        <div className="w-4/5 h-2 bg-gray-200 rounded-full mt-2">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full" 
+                            style={{ width: `${uploadProgress}%` }}
+                          ></div>
                         </div>
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-
-              {/* 학교 정보 섹션 */}
-              <div className="border-t border-gray-200 pt-4 mt-6 mb-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">학교 정보</h3>
-                
-                <FormInput
-                  label="학교"
-                  type="text"
-                  placeholder="학교명을 입력하세요"
-                  error={errors.university?.message}
-                  {...register('university')}
-                />
-                
-                <div className="w-full mb-4">
-                  <label className="block text-gray-700 text-sm font-medium mb-1">학년</label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    {...register('grade', { valueAsNumber: true })}
-                  >
-                    <option value="">학년 선택</option>
-                    <option value="1">1학년</option>
-                    <option value="2">2학년</option>
-                    <option value="3">3학년</option>
-                    <option value="4">4학년</option>
-                    <option value="5">5학년</option>
-                    <option value="6">6학년</option>
-                  </select>
-                  {errors.grade && <p className="mt-1 text-sm text-red-600">{errors.grade.message}</p>}
-                </div>
-
-                <div className="w-full mb-4">
-                  <div className="flex items-center">
+                  
+                  <div>
                     <input
-                      type="checkbox"
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                      id="isOnLeave"
-                      {...register('isOnLeave')}
+                      type="file"
+                      id="profile-image"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileChange}
                     />
-                    <label htmlFor="isOnLeave" className="ml-2 block text-sm text-gray-700">
-                      현재 휴학 중
+                    <label
+                      htmlFor="profile-image"
+                      className="cursor-pointer px-4 py-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 transition"
+                    >
+                      이미지 변경
                     </label>
                   </div>
+                  <p className="text-xs text-gray-500 mt-2">현재 프로필 이미지 업로드가 불가능하므로 나중에 시도해주세요</p>
                 </div>
+              )}
 
-                <FormInput
-                  label="전공 (1전공)"
-                  type="text"
-                  placeholder="1전공을 입력하세요"
-                  error={errors.major1?.message}
-                  {...register('major1')}
-                />
+              {/* 개인 정보 섹션 */}
+              {(section === 'all' || section === 'personal') && (
+                <>
+                  <FormInput
+                    label="이름"
+                    type="text"
+                    placeholder="이름을 입력하세요"
+                    error={errors.name?.message}
+                    {...register('name')}
+                  />
 
-                <FormInput
-                  label="전공 (2전공/부전공)"
-                  type="text"
-                  placeholder="2전공이 있는 경우 입력하세요 (선택사항)"
-                  error={errors.major2?.message}
-                  {...register('major2')}
-                />
-              </div>
+                  <FormInput
+                    label="나이"
+                    type="number"
+                    placeholder="나이를 입력하세요"
+                    error={errors.age?.message}
+                    {...register('age', { valueAsNumber: true })}
+                  />
 
-              
+                  <FormInput
+                    label="이메일"
+                    type="email"
+                    placeholder="이메일 주소를 입력하세요"
+                    error={emailExists ? '이미 사용 중인 이메일입니다.' : errors.email?.message}
+                    {...register('email', {
+                      onBlur: handleEmailBlur
+                    })}
+                  />
+
+                  <FormInput
+                    label="휴대폰 번호"
+                    type="tel"
+                    placeholder="'-' 없이 입력하세요"
+                    error={phoneExists ? '이미 사용 중인 휴대폰 번호입니다.' : errors.phoneNumber?.message}
+                    {...register('phoneNumber', {
+                      onBlur: handlePhoneBlur
+                    })}
+                  />
+
+                  <div className="w-full mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-1">주소</label>
+                    <div className="flex mb-2">
+                      <input
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="주소 검색을 클릭하세요"
+                        {...register('address')}
+                      />
+                      <Button
+                        type="button"
+                        className="ml-2"
+                        variant="secondary"
+                        onClick={() => setShowPostcode(!showPostcode)}
+                      >
+                        주소 검색
+                      </Button>
+                    </div>
+                    {showPostcode && (
+                      <div className="mb-2 border border-gray-300 rounded-md">
+                        <DaumPostcode onComplete={handleComplete} />
+                      </div>
+                    )}
+                    {errors.address && <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>}
+                  </div>
+
+                  <FormInput
+                    label="상세 주소"
+                    type="text"
+                    placeholder="상세 주소를 입력하세요"
+                    error={errors.addressDetail?.message}
+                    {...register('addressDetail')}
+                  />
+
+                  <div className="w-full mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-1">가입 경로</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      {...register('referralPath')}
+                    >
+                      <option value="">선택해주세요</option>
+                      <option value="에브리타임">에브리타임</option>
+                      <option value="학교 커뮤니티">학교 커뮤니티</option>
+                      <option value="링커리어">링커리어</option>
+                      <option value="캠퍼스픽">캠퍼스픽</option>
+                      <option value="인스타그램">인스타그램</option>
+                      <option value="페이스북">페이스북</option>
+                      <option value="구글/네이버 등 검색">구글/네이버 등 검색</option>
+                      <option value="지인 소개">지인 소개</option>
+                      <option value="기타">기타</option>
+                    </select>
+                  </div>
+
+                  {watch('referralPath') === '지인 소개' && (
+                    <div className="w-full mb-4">
+                      <FormInput
+                        label="소개해 주신 분의 이름"
+                        type="text"
+                        placeholder="지인의 이름을 입력해주세요"
+                        error={errors.referrerName?.message}
+                        {...register('referrerName')}
+                      />
+                    </div>
+                  )}
+
+                  {watch('referralPath') === '기타' && (
+                    <div className="w-full mb-4">
+                      <FormInput
+                        label="기타 경로 상세"
+                        type="text"
+                        placeholder="어떤 경로로 알게 되셨는지 입력해주세요"
+                        {...register('otherReferralDetail')}
+                      />
+                    </div>
+                  )}
+
+                  <div className="w-full mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-1">성별</label>
+                    <div className="flex space-x-4">
+                      <div className="flex items-center">
+                        <input
+                          type="radio"
+                          id="gender-male"
+                          value="M"
+                          className="h-4 w-4 text-blue-600 border-gray-300"
+                          {...register('gender')}
+                        />
+                        <label htmlFor="gender-male" className="ml-2 block text-sm text-gray-700">
+                          남성
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="radio"
+                          id="gender-female"
+                          value="F"
+                          className="h-4 w-4 text-blue-600 border-gray-300"
+                          {...register('gender')}
+                        />
+                        <label htmlFor="gender-female" className="ml-2 block text-sm text-gray-700">
+                          여성
+                        </label>
+                      </div>
+                    </div>
+                    {errors.gender && <p className="mt-1 text-sm text-red-600">{errors.gender.message}</p>}
+                  </div>
+
+                  <div className="w-full mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-1">자기소개</label>
+                    <div className="relative">
+                      <textarea
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
+                        placeholder="간단한 자기소개를 입력하세요"
+                        maxLength={500}
+                        {...register('selfIntroduction')}
+                      />
+                      <div className="absolute bottom-2 right-2 text-xs text-gray-500">
+                        {currentSelfIntro.length}/500자
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">자기소개는 500자 이내로 작성해주세요.</p>
+                  </div>
+
+                  <div className="w-full mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-1">지원 동기</label>
+                    <div className="relative">
+                      <textarea
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
+                        placeholder="업무 지원 동기를 입력하세요"
+                        maxLength={500}
+                        {...register('jobMotivation')}
+                      />
+                      <div className="absolute bottom-2 right-2 text-xs text-gray-500">
+                        {currentJobMotivation.length}/500자
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요.</p>
+                  </div>
+                </>
+              )}
+
+              {/* 알바 & 멘토링 경력 */}
+              {(section === 'all' || section === 'experience') && (
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      알바 & 멘토링 경력
+                    </label>
+                    <button
+                      type="button"
+                      onClick={addPartTimeJob}
+                      className="flex items-center text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                      </svg>
+                      경력 추가
+                    </button>
+                  </div>
+                  
+                  {partTimeJobs.length === 0 ? (
+                    <div className="py-4 px-3 border border-dashed border-gray-300 rounded-md text-center text-gray-500">
+                      알바 & 멘토링 경력을 추가해보세요.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {partTimeJobs.map((job, index) => (
+                        <div key={index} className="border border-gray-200 rounded-md p-4 bg-gray-50 relative">
+                          <button
+                            type="button"
+                            onClick={() => removePartTimeJob(index)}
+                            className="absolute top-2 right-2 text-gray-400 hover:text-red-500"
+                            aria-label="삭제"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                기간
+                              </label>
+                              <input
+                                type="text"
+                                value={job.period}
+                                onChange={(e) => updatePartTimeJob(index, 'period', e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="2022.03 - 2022.09"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                회사명
+                              </label>
+                              <input
+                                type="text"
+                                value={job.companyName}
+                                onChange={(e) => updatePartTimeJob(index, 'companyName', e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="회사명"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                담당
+                              </label>
+                              <input
+                                type="text"
+                                value={job.position}
+                                onChange={(e) => updatePartTimeJob(index, 'position', e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="직무/담당"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                업무 내용
+                              </label>
+                              <input
+                                type="text"
+                                value={job.description}
+                                onChange={(e) => updatePartTimeJob(index, 'description', e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="간략한 업무 내용"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 학교 정보 섹션 */}
+              {(section === 'all' || section === 'education') && (
+                <div className={`${section !== 'education' ? 'border-t border-gray-200 pt-4 mt-6' : ''} mb-4`}>
+                  {section !== 'education' && <h3 className="text-lg font-medium text-gray-900 mb-4">학교 정보</h3>}
+                  
+                  <FormInput
+                    label="학교"
+                    type="text"
+                    placeholder="학교명을 입력하세요"
+                    error={errors.university?.message}
+                    {...register('university')}
+                  />
+                  
+                  <div className="w-full mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-1">학년</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      {...register('grade', { valueAsNumber: true })}
+                    >
+                      <option value="">학년 선택</option>
+                      <option value="1">1학년</option>
+                      <option value="2">2학년</option>
+                      <option value="3">3학년</option>
+                      <option value="4">4학년</option>
+                      <option value="5">5학년</option>
+                      <option value="6">6학년</option>
+                    </select>
+                    {errors.grade && <p className="mt-1 text-sm text-red-600">{errors.grade.message}</p>}
+                  </div>
+
+                  <div className="w-full mb-4">
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        id="isOnLeave"
+                        {...register('isOnLeave')}
+                      />
+                      <label htmlFor="isOnLeave" className="ml-2 block text-sm text-gray-700">
+                        현재 휴학 중
+                      </label>
+                    </div>
+                  </div>
+
+                  <FormInput
+                    label="전공 (1전공)"
+                    type="text"
+                    placeholder="1전공을 입력하세요"
+                    error={errors.major1?.message}
+                    {...register('major1')}
+                  />
+
+                  <FormInput
+                    label="전공 (2전공/부전공)"
+                    type="text"
+                    placeholder="2전공이 있는 경우 입력하세요 (선택사항)"
+                    error={errors.major2?.message}
+                    {...register('major2')}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end">
