@@ -85,6 +85,7 @@ export const getCache = async <T>(storeName: string, key: string): Promise<T | n
     }
     
     // _cacheExpiry 속성 제거 후 반환
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _cacheExpiry, ...cacheData } = data;
     return cacheData as T;
   } catch (error) {
@@ -141,6 +142,7 @@ export const getCacheCollection = async <T>(storeName: string): Promise<T[] | nu
     const validData = allData
       .filter(item => !item._cacheExpiry || item._cacheExpiry >= Date.now())
       .map(item => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { _cacheExpiry, ...rest } = item;
         return rest;
       });
