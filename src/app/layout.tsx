@@ -3,11 +3,12 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { Toaster } from "react-hot-toast";
+import { QueryProvider } from "@/lib/queryClient";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SMIS - 에스엠아이에스 공식 채용 플랫폼",
+  title: "SMIS 멘토 채용 플랫폼",
   description: "에스엠아이에스(SMIS) 공식 채용 플랫폼입니다. 멘토 채용 및 교육 정보를 제공합니다.",
   keywords: "SMIS, 에스엠아이에스, 멘토, 채용, 교육, 플랫폼, 임대환, 성남시, 분당구",
   authors: [{ name: '에스엠아이에스' }],
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "SMIS - 에스엠아이에스 공식 채용 플랫폼",
     description: "에스엠아이에스(SMIS) 공식 채용 플랫폼입니다. 멘토 채용 및 교육 정보를 제공합니다.",
-    url: 'https://www.smisedu.com',
+    url: 'https://www.smis-mentor.com',
     siteName: 'SMIS 채용 플랫폼',
     images: [
       {
@@ -87,10 +88,12 @@ export default function RootLayout({
         <meta name="msapplication-TileImage" content="/ms-icon-144x144.png" />
       </head>
       <body className={inter.className}>
-        <AuthProvider>
-          <Toaster position="top-center" reverseOrder={false} />
-          {children}
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <Toaster position="top-center" reverseOrder={false} />
+            {children}
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

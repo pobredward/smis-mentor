@@ -1,10 +1,10 @@
 'use client';
 
+import React, { ReactNode, useState } from 'react';
 import { 
   QueryClient, 
   QueryClientProvider 
 } from '@tanstack/react-query';
-import { ReactNode, useState } from 'react';
 
 // React Query 기본 설정
 const defaultOptions = {
