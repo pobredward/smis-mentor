@@ -32,6 +32,7 @@ import {
 } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
 import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup, Review } from '@/types';
+import { getCache, setCache, CACHE_STORE, CACHE_TTL, getCacheCollection, setCacheCollection, removeCache, clearCacheCollection } from './cacheUtils';
 
 // User 관련 함수
 export const createUser = async (userData: Omit<User, 'userId' | 'id'>) => {
@@ -46,9 +47,23 @@ export const createUser = async (userData: Omit<User, 'userId' | 'id'>) => {
 
 export const getUserById = async (userId: string) => {
   try {
+    // 캐시에서 데이터 확인
+    const cachedUser = await getCache<User>(CACHE_STORE.USERS, userId);
+    if (cachedUser) {
+      console.log('캐시에서 사용자 정보 로드:', userId);
+      return cachedUser;
+    }
+
+    // 캐시에 없는 경우 Firestore에서 조회
     const userDoc = await getDoc(doc(db, 'users', userId));
     if (!userDoc.exists()) return null;
-    return userDoc.data() as User;
+    
+    const userData = userDoc.data() as User;
+    
+    // 캐시에 저장 (1시간 유효)
+    await setCache(CACHE_STORE.USERS, userData, CACHE_TTL.MEDIUM);
+    
+    return userData;
   } catch (error) {
     console.error('사용자 정보 가져오기 실패:', error);
     throw error;
@@ -87,6 +102,9 @@ export const updateUser = async (userId: string, updates: Partial<User>) => {
     ...updates,
     updatedAt: now
   });
+  
+  // 해당 사용자 캐시 삭제 (다음 조회 시 새로 불러오도록)
+  await clearUserCache(userId);
 };
 
 export const deactivateUser = async (userId: string) => {
@@ -284,6 +302,14 @@ export const getJobBoardById = async (jobBoardId: string) => {
 
 export const getAllJobBoards = async () => {
   try {
+    // 캐시에서 데이터 확인
+    const cachedJobBoards = await getCacheCollection<JobBoardWithId>(CACHE_STORE.JOB_BOARDS);
+    if (cachedJobBoards) {
+      console.log('캐시에서 공고 목록 로드, 총', cachedJobBoards.length, '개');
+      return cachedJobBoards;
+    }
+
+    // 캐시에 없는 경우 Firestore에서 조회
     const querySnapshot = await getDocs(collection(db, 'jobBoards'));
     
     // JobBoard 데이터와 함께 JobCode의 korea 값을 가져오기
@@ -299,6 +325,9 @@ export const getAllJobBoards = async () => {
       } as JobBoardWithId;
     }));
     
+    // 캐시에 저장 (30분 유효)
+    await setCacheCollection(CACHE_STORE.JOB_BOARDS, jobBoards, CACHE_TTL.MEDIUM);
+    
     return jobBoards;
   } catch (error) {
     console.error('모든 공고 조회 실패:', error);
@@ -308,6 +337,25 @@ export const getAllJobBoards = async () => {
 
 export const getActiveJobBoards = async () => {
   try {
+    // 캐시 키 생성 ('active_job_boards')
+    const cacheKey = 'active_job_boards';
+    
+    // 캐시에서 데이터 확인 (localStorage 사용)
+    const cachedData = localStorage.getItem(cacheKey);
+    if (cachedData) {
+      const { data, expiry } = JSON.parse(cachedData);
+      
+      // 캐시가 유효한 경우
+      if (expiry > Date.now()) {
+        console.log('캐시에서 활성화 공고 목록 로드, 총', data.length, '개');
+        return data as JobBoardWithId[];
+      }
+      
+      // 만료된 캐시 삭제
+      localStorage.removeItem(cacheKey);
+    }
+    
+    // Firestore에서 조회
     const jobBoardsRef = collection(db, 'jobBoards');
     const q = query(jobBoardsRef, where('status', '==', 'active'));
     const querySnapshot = await getDocs(q);
@@ -325,6 +373,13 @@ export const getActiveJobBoards = async () => {
       } as JobBoardWithId;
     }));
     
+    // 캐시에 저장 (30분 유효)
+    const expiry = Date.now() + CACHE_TTL.MEDIUM;
+    localStorage.setItem(cacheKey, JSON.stringify({
+      data: jobBoards,
+      expiry
+    }));
+    
     return jobBoards;
   } catch (error) {
     console.error('활성화된 공고 조회 실패:', error);
@@ -333,7 +388,12 @@ export const getActiveJobBoards = async () => {
 };
 
 export const updateJobBoard = async (jobBoardId: string, jobBoardData: Partial<JobBoard>) => {
-  return await updateDoc(doc(db, 'jobBoards', jobBoardId), jobBoardData);
+  await updateDoc(doc(db, 'jobBoards', jobBoardId), jobBoardData);
+  
+  // 해당 공고 캐시 삭제 및 관련 캐시 초기화
+  await clearJobBoardCache(jobBoardId);
+  
+  return jobBoardId;
 };
 
 export const deleteJobBoard = async (jobBoardId: string) => {
@@ -730,8 +790,29 @@ export const getJobCodeById = async (jobCodeId: string) => {
 };
 
 export const getAllJobCodes = async () => {
-  const querySnapshot = await getDocs(collection(db, 'jobCodes'));
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as JobCode } as JobCodeWithId));
+  try {
+    // 캐시에서 데이터 확인
+    const cachedJobCodes = await getCacheCollection<JobCodeWithId>(CACHE_STORE.JOB_CODES);
+    if (cachedJobCodes) {
+      console.log('캐시에서 직무 코드 목록 로드, 총', cachedJobCodes.length, '개');
+      return cachedJobCodes;
+    }
+    
+    // Firestore에서 조회
+    const querySnapshot = await getDocs(collection(db, 'jobCodes'));
+    const jobCodes = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as JobCodeWithId[];
+    
+    // 캐시에 저장 (1시간 유효)
+    await setCacheCollection(CACHE_STORE.JOB_CODES, jobCodes, CACHE_TTL.MEDIUM);
+    
+    return jobCodes;
+  } catch (error) {
+    console.error('직무 코드 조회 실패:', error);
+    throw error;
+  }
 };
 
 export const createJobCode = async (jobCodeData: Omit<JobCode, 'id'>) => {
@@ -939,5 +1020,71 @@ export const getBestReviews = async (limit: number = 3): Promise<Review[]> => {
   } catch (error) {
     console.error('Best 후기를 가져오는 중 오류가 발생했습니다:', error);
     return [];
+  }
+};
+
+// 캐시 관리 유틸리티 함수
+export const clearUserCache = async (userId: string) => {
+  return await removeCache(CACHE_STORE.USERS, userId);
+};
+
+export const clearJobBoardCache = async (jobBoardId: string) => {
+  // 특정 JobBoard 캐시 삭제
+  const result = await removeCache(CACHE_STORE.JOB_BOARDS, jobBoardId);
+  
+  // 활성화된 공고 목록 캐시도 함께 삭제
+  localStorage.removeItem('active_job_boards');
+  
+  return result;
+};
+
+export const clearJobBoardsCache = async () => {
+  // 모든 JobBoard 캐시 삭제
+  const result = await clearCacheCollection(CACHE_STORE.JOB_BOARDS);
+  
+  // 활성화된 공고 목록 캐시도 함께 삭제
+  localStorage.removeItem('active_job_boards');
+  
+  return result;
+};
+
+export const clearJobCodesCache = async () => {
+  return await clearCacheCollection(CACHE_STORE.JOB_CODES);
+};
+
+export const clearAllCaches = async () => {
+  try {
+    await Promise.all([
+      clearCacheCollection(CACHE_STORE.USERS),
+      clearCacheCollection(CACHE_STORE.JOB_BOARDS),
+      clearCacheCollection(CACHE_STORE.JOB_CODES),
+      clearCacheCollection(CACHE_STORE.APPLICATIONS),
+      clearCacheCollection(CACHE_STORE.REVIEWS)
+    ]);
+    
+    // localStorage 캐시도 함께 삭제
+    localStorage.removeItem('active_job_boards');
+    
+    return true;
+  } catch (error) {
+    console.error('캐시 전체 삭제 실패:', error);
+    return false;
+  }
+};
+
+// 데이터 변경 시 관련 캐시를 초기화하는 유틸리티
+export const refreshCacheAfterUpdate = async (collection: string, id: string) => {
+  switch (collection) {
+    case 'users':
+      await clearUserCache(id);
+      break;
+    case 'jobBoards':
+      await clearJobBoardCache(id);
+      break;
+    case 'jobCodes':
+      await clearJobCodesCache();
+      break;
+    default:
+      break;
   }
 }; 
