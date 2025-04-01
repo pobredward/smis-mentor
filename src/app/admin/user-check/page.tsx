@@ -23,7 +23,7 @@ export default function UserCheck() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   
   // 그룹 순서 정의
-  const groupOrder = ['manager', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
+  const groupOrder = ['manager', 'common', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
   
   // 그룹 이름 매핑
   const groupLabels: Record<string, string> = {
