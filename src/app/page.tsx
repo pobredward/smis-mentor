@@ -190,7 +190,19 @@ export default function Home() {
 
   return (
     <Layout>
-      
+      {/* 관리자 대시보드 바로가기 */}
+      {userData?.role === 'admin' && (
+        <div className="bg-blue-50 py-2 mb-4 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto">
+            <Link
+              href="/admin"
+              className="flex justify-center items-center w-full px-4 py-2 bg-blue-400 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            >
+              관리자 대시보드 바로가기
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* 공고 목록 섹션 */}
       <div className="bg-gray-50 py-4 md:py-8 mb-6 px-4 sm:px-6 lg:px-8">
@@ -279,8 +291,6 @@ export default function Home() {
           )}
         </div>
       </div>
-
-
 
       {/* 지원 현황 섹션 */}
       <div className="bg-gray-50 py-12 md:py-8 px-4 sm:px-6 lg:px-8">
