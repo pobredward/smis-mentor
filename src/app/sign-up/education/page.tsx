@@ -15,7 +15,7 @@ const educationSchema = z.object({
   grade: z.number({
     required_error: '학년을 선택해주세요.',
     invalid_type_error: '학년을 선택해주세요.',
-  }).min(1, '학년을 선택해주세요.').max(6, '유효한 학년을 선택해주세요.'),
+  }).min(1, '학년을 선택해주세요.').max(7, '유효한 학년을 선택해주세요.'),
   isOnLeave: z.boolean(),
   major1: z.string().min(1, '전공을 입력해주세요.'),
   major2: z.string().optional(),
@@ -109,7 +109,7 @@ export default function SignUpEducation() {
               <option value="3">3학년</option>
               <option value="4">4학년</option>
               <option value="5">5학년</option>
-              <option value="6">6학년</option>
+              <option value="6">졸업생</option>
             </select>
             {errors.grade && <p className="mt-1 text-sm text-red-600">{errors.grade.message}</p>}
           </div>
