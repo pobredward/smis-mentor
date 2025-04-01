@@ -33,6 +33,9 @@ type EditFormData = {
   rrnLast?: string;
   partTimeJobs?: PartTimeJob[];
   age?: number;
+  referralPath?: string;
+  referrerName?: string;
+  otherReferralDetail?: string;
 };
 
 export default function UserManage() {
@@ -171,30 +174,40 @@ export default function UserManage() {
   const handleStartEdit = () => {
     if (!selectedUser) return;
     
-    setEditFormData({
-      name: selectedUser.name,
-      email: selectedUser.email,
-      phoneNumber: selectedUser.phoneNumber,
-      address: selectedUser.address,
-      addressDetail: selectedUser.addressDetail,
-      role: selectedUser.role,
-      status: selectedUser.status,
-      university: selectedUser.university || '',
-      grade: selectedUser.grade,
-      isOnLeave: selectedUser.isOnLeave || false,
-      major1: selectedUser.major1 || '',
-      major2: selectedUser.major2 || '',
-      feedback: selectedUser.feedback || '',
-      selfIntroduction: selectedUser.selfIntroduction || '',
-      jobMotivation: selectedUser.jobMotivation || '',
-      gender: selectedUser.gender || 'M',
-      rrnFront: selectedUser.rrnFront || '',
-      rrnLast: selectedUser.rrnLast || '',
-      partTimeJobs: selectedUser.partTimeJobs || [],
-      age: selectedUser.age
-    });
+    initEditForm(selectedUser);
     
     setIsEditing(true);
+  };
+
+  // 편집 폼 초기화
+  const initEditForm = (user: User) => {
+    setEditFormData({
+      name: user.name,
+      email: user.email || '',
+      phoneNumber: user.phoneNumber,
+      address: user.address || '',
+      addressDetail: user.addressDetail || '',
+      role: user.role,
+      status: user.status,
+      gender: user.gender as 'M' | 'F' | undefined,
+      rrnFront: user.rrnFront || '',
+      rrnLast: user.rrnLast || '',
+      university: user.university || '',
+      grade: user.grade,
+      isOnLeave: user.isOnLeave || false,
+      major1: user.major1 || '',
+      major2: user.major2 || '',
+      selfIntroduction: user.selfIntroduction || '',
+      jobMotivation: user.jobMotivation || '',
+      partTimeJobs: user.partTimeJobs || [],
+      age: user.age,
+      referralPath: user.referralPath ? (
+        user.referralPath.startsWith('기타: ') ? '기타' : user.referralPath
+      ) : '',
+      referrerName: user.referrerName || '',
+      otherReferralDetail: user.referralPath?.startsWith('기타: ') ? 
+        user.referralPath.substring(4).trim() : '',
+    });
   };
 
   // 수정 폼 데이터 변경 핸들러
@@ -211,17 +224,45 @@ export default function UserManage() {
     if (!selectedUser) return;
     
     try {
-      await updateUser(selectedUser.userId, editFormData);
+      // editFormData에서 undefined 값 제거
+      const cleanedData: Record<string, unknown> = {};
+      
+      // 기존 editFormData에서 undefined가 아닌 값만 복사
+      Object.entries(editFormData).forEach(([key, value]) => {
+        if (value !== undefined && key !== 'otherReferralDetail') {
+          cleanedData[key] = value;
+        }
+      });
+      
+      // 지원 경로 처리
+      if (editFormData.referralPath === '기타' && editFormData.otherReferralDetail) {
+        cleanedData.referralPath = `기타: ${editFormData.otherReferralDetail}`;
+      }
+      
+      // role이 'admin'으로 변경되는 경우 필수 필드 설정
+      if (editFormData.role === 'admin' && selectedUser.role !== 'admin') {
+        // 필수 필드 기본값 제공
+        if (selectedUser.grade === undefined) cleanedData.grade = 1;
+        if (selectedUser.isOnLeave === undefined) cleanedData.isOnLeave = false;
+        if (selectedUser.major1 === undefined) cleanedData.major1 = '';
+        if (selectedUser.major2 === undefined) cleanedData.major2 = '';
+        if (selectedUser.university === undefined) cleanedData.university = '';
+        if (selectedUser.gender === undefined) cleanedData.gender = 'M';
+        if (selectedUser.selfIntroduction === undefined) cleanedData.selfIntroduction = '';
+        if (selectedUser.jobMotivation === undefined) cleanedData.jobMotivation = '';
+      }
+      
+      await updateUser(selectedUser.userId, cleanedData);
       
       // 상태 업데이트
       const updatedUsers = users.map(user => 
         user.userId === selectedUser.userId 
-          ? { ...user, ...editFormData } 
+          ? { ...user, ...cleanedData } 
           : user
       );
       
       setUsers(updatedUsers);
-      setSelectedUser(prev => prev ? { ...prev, ...editFormData } : null);
+      setSelectedUser(prev => prev ? { ...prev, ...cleanedData } : null);
       setIsEditing(false);
       
       toast.success('사용자 정보가 업데이트되었습니다.');
@@ -722,14 +763,6 @@ export default function UserManage() {
                         </Button>
                       )}
                       <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={handleStartEdit}
-                        className="text-xs px-2 py-1"
-                      >
-                        수정
-                      </Button>
-                      <Button
                         variant="outline"
                         size="sm"
                         onClick={handleBackToList}
@@ -799,6 +832,53 @@ export default function UserManage() {
                             className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
+                        <div className="mb-4">
+                          <label className="block text-gray-700 text-sm font-medium mb-2">지원 경로</label>
+                          <select
+                            name="referralPath"
+                            value={editFormData.referralPath || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">선택해주세요</option>
+                            <option value="에브리타임">에브리타임</option>
+                            <option value="학교 커뮤니티">학교 커뮤니티</option>
+                            <option value="링커리어">링커리어</option>
+                            <option value="캠퍼스픽">캠퍼스픽</option>
+                            <option value="인스타그램">인스타그램</option>
+                            <option value="페이스북">페이스북</option>
+                            <option value="구글/네이버 등 검색">구글/네이버 등 검색</option>
+                            <option value="지인 소개">지인 소개</option>
+                            <option value="기타">기타</option>
+                          </select>
+                        </div>
+                        
+                        {editFormData.referralPath === '지인 소개' && (
+                          <div className="mb-4">
+                            <FormInput
+                              label="소개해 주신 분의 이름"
+                              name="referrerName"
+                              type="text"
+                              placeholder="지인의 이름을 입력해주세요"
+                              value={editFormData.referrerName || ''}
+                              onChange={handleEditFormChange}
+                            />
+                          </div>
+                        )}
+                        
+                        {editFormData.referralPath === '기타' && (
+                          <div className="mb-4">
+                            <FormInput
+                              label="기타 경로 상세"
+                              name="otherReferralDetail"
+                              type="text"
+                              placeholder="어떤 경로로 알게 되셨는지 입력해주세요"
+                              value={editFormData.otherReferralDetail || ''}
+                              onChange={handleEditFormChange}
+                            />
+                          </div>
+                        )}
+                        
                         <div className="md:col-span-2">
                           <FormInput
                             label="주소"
@@ -808,6 +888,7 @@ export default function UserManage() {
                             onChange={handleEditFormChange}
                           />
                         </div>
+                        
                         <FormInput
                           label="상세 주소"
                           name="addressDetail"
@@ -1053,6 +1134,20 @@ export default function UserManage() {
                           <p className="text-sm text-gray-500">나이</p>
                           <p className="text-gray-900">
                             {selectedUser.age ? `${selectedUser.age}세` : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">지원 경로</p>
+                          <p className="text-gray-900">
+                            {selectedUser.referralPath ? (
+                              selectedUser.referralPath.startsWith('기타: ') ? (
+                                selectedUser.referralPath
+                              ) : selectedUser.referralPath === '지인 소개' && selectedUser.referrerName ? (
+                                `${selectedUser.referralPath} (${selectedUser.referrerName})`
+                              ) : (
+                                selectedUser.referralPath
+                              )
+                            ) : '-'}
                           </p>
                         </div>
                         <div>
