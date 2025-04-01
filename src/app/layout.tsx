@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "SMIS 멘토 채용 플랫폼",
   description: "SMIS 멘토 채용 플랫폼입니다.",
-  keywords: "SMIS, 영어캠프, 해외캠프, 국내캠프, 멘토, 채용, 교육",
+  keywords: "SMIS, 멘토, 영어캠프, 해외캠프, 국내캠프, 채용, 교육",
   authors: [{ name: '에스엠아이에스' }],
   publisher: '에스엠아이에스',
   creator: '에스엠아이에스',
