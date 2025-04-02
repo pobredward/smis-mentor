@@ -10,14 +10,18 @@ type AuthContextType = {
   currentUser: FirebaseUser | null;
   userData: User | null;
   loading: boolean;
+  authReady: boolean;
   refreshUserData: () => Promise<void>;
+  waitForAuthReady: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   userData: null,
   loading: true,
+  authReady: false,
   refreshUserData: async () => {},
+  waitForAuthReady: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -30,6 +34,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+
+  // 인증 준비 상태를 기다리는 함수
+  const waitForAuthReady = async (): Promise<void> => {
+    if (authReady) return Promise.resolve();
+    return new Promise((resolve) => {
+      const checkReady = () => {
+        if (authReady) {
+          resolve();
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+      checkReady();
+    });
+  };
 
   const refreshUserData = async () => {
     if (currentUser?.email) {
@@ -62,6 +82,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
       
       setLoading(false);
+      setAuthReady(true);
     });
 
     return unsubscribe;
@@ -71,7 +92,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     currentUser,
     userData,
     loading,
+    authReady,
     refreshUserData,
+    waitForAuthReady,
   };
 
   return (

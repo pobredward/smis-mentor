@@ -38,10 +38,15 @@ export default function SignIn() {
       await signIn(data.email, data.password);
       toast.success('로그인에 성공했습니다.');
       
-      // 로그인 상태 반영을 위한 짧은 지연 후 리디렉션
+      // URL에서 redirect 매개변수 확인
+      const params = new URLSearchParams(window.location.search);
+      const redirectTo = params.get('redirect');
+      
+      // 지연 후 리디렉션
       setTimeout(() => {
-        router.push('/');
-      }, 500);
+        // redirectTo가 있으면 해당 경로로, 없으면 메인 페이지로 이동
+        router.push(redirectTo || '/');
+      }, 1000);
     } catch (error) {
       console.error('로그인 오류:', error);
       const firebaseError = error as FirebaseError;

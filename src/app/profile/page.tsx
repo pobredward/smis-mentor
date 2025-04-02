@@ -12,12 +12,36 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 export default function ProfilePage() {
-  const { userData } = useAuth();
+  const { userData, currentUser, waitForAuthReady, refreshUserData } = useAuth();
   const router = useRouter();
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
+
+  // 인증 상태 확인 및 데이터 로드
+  useEffect(() => {
+    const checkAuthAndLoadData = async () => {
+      try {
+        setAuthChecking(true);
+        // 인증 상태가 준비될 때까지 대기
+        await waitForAuthReady();
+        
+        // 인증 상태가 준비되었지만 로그인이 안된 경우 리프레시 시도
+        if (currentUser && !userData) {
+          await refreshUserData();
+        }
+
+        setAuthChecking(false);
+      } catch (error) {
+        console.error('인증 상태 확인 오류:', error);
+        setAuthChecking(false);
+      }
+    };
+
+    checkAuthAndLoadData();
+  }, [waitForAuthReady, currentUser, userData, refreshUserData]);
 
   useEffect(() => {
     const fetchJobCodes = async () => {
@@ -32,8 +56,10 @@ export default function ProfilePage() {
       setLoading(false);
     };
 
-    fetchJobCodes();
-  }, [userData]);
+    if (!authChecking && userData) {
+      fetchJobCodes();
+    }
+  }, [userData, authChecking]);
 
   const handleDeactivateAccount = async () => {
     if (!userData) return;
@@ -63,18 +89,12 @@ export default function ProfilePage() {
     }
   };
 
-  if (!userData) {
+  // 인증 상태 확인 중이면 로딩 표시
+  if (authChecking || !userData) {
     return (
       <Layout requireAuth>
-        <div className="max-w-2xl mx-auto text-center py-8">
-          <h1 className="text-2xl font-bold mb-4">로그인이 필요합니다</h1>
-          <p className="text-gray-600 mb-6">프로필 정보를 보려면 로그인해 주세요.</p>
-          <Button
-            variant="primary"
-            onClick={() => router.push('/sign-in')}
-          >
-            로그인
-          </Button>
+        <div className="flex justify-center items-center min-h-[60vh]">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
         </div>
       </Layout>
     );

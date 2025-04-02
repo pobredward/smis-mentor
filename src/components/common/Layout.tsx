@@ -2,6 +2,8 @@ import React, { ReactNode } from 'react';
 import Header from './Header';
 import Footer from './Footer';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRouter, usePathname } from 'next/navigation';
+import Button from './Button';
 
 type LayoutProps = {
   children: ReactNode;
@@ -11,6 +13,13 @@ type LayoutProps = {
 
 export default function Layout({ children, requireAuth, requireAdmin }: LayoutProps) {
   const { currentUser, userData, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // 로그인이 필요한 페이지로 리디렉션
+  const redirectToLogin = () => {
+    router.push(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
+  };
 
   // 로딩 중 표시
   if (loading) {
@@ -30,8 +39,17 @@ export default function Layout({ children, requireAuth, requireAdmin }: LayoutPr
           <div className="text-center">
             <h1 className="text-2xl font-semibold text-gray-900">접근 권한이 없습니다</h1>
             <p className="mt-2 text-sm text-gray-500">로그인 후 이용해 주세요.</p>
+            <div className="mt-6">
+              <Button
+                variant="primary"
+                onClick={redirectToLogin}
+              >
+                로그인하기
+              </Button>
+            </div>
           </div>
         </div>
+        <Footer />
       </div>
     );
   }
@@ -47,6 +65,7 @@ export default function Layout({ children, requireAuth, requireAdmin }: LayoutPr
             <p className="mt-2 text-sm text-gray-500">이 페이지는 관리자만 접근할 수 있습니다.</p>
           </div>
         </div>
+        <Footer />
       </div>
     );
   }

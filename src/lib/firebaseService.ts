@@ -497,10 +497,14 @@ export const cancelApplication = async (applicationId: string) => {
 // Auth 관련 함수
 export const signIn = async (email: string, password: string) => {
   try {
-    // 회원가입 직후 로그인 문제 해결을 위해 작은 지연 추가
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // 회원가입 직후 로그인 문제 해결을 위해 지연 시간 증가
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    
+    // Firebase 인증 상태가 반영될 시간을 확보
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
     // 로그인 성공 시 마지막 로그인 시간 업데이트
     const userRecord = await getUserByEmail(email);
     if (userRecord) {
@@ -509,7 +513,7 @@ export const signIn = async (email: string, password: string) => {
       });
       
       // 사용자 정보 업데이트 후 상태 반영을 위한 짧은 지연
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
     return userCredential.user;
   } catch (error) {
