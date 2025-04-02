@@ -154,7 +154,12 @@ export default function SignUpDetails() {
         });
         
         toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
-        router.push('/');
+        
+        // 잠시 후 로그인 페이지로 이동
+        setTimeout(() => {
+          toast.success('이제 로그인해 주세요', { duration: 3000 });
+          router.push('/sign-in');
+        }, 1000);
       } else {
         // Firebase Auth에 사용자 등록
         const userCredential = await signUp(email, decodeURIComponent(password));
@@ -208,7 +213,12 @@ export default function SignUpDetails() {
         });
 
         toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
-        router.push('/');
+        
+        // 잠시 후 로그인 페이지로 이동
+        setTimeout(() => {
+          toast.success('이제 로그인해 주세요', { duration: 3000 });
+          router.push('/sign-in');
+        }, 1000);
       }
     } catch (error) {
       console.error('회원가입 오류:', error);

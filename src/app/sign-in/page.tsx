@@ -37,7 +37,11 @@ export default function SignIn() {
     try {
       await signIn(data.email, data.password);
       toast.success('로그인에 성공했습니다.');
-      router.push('/');
+      
+      // 로그인 상태 반영을 위한 짧은 지연 후 리디렉션
+      setTimeout(() => {
+        router.push('/');
+      }, 500);
     } catch (error) {
       console.error('로그인 오류:', error);
       const firebaseError = error as FirebaseError;
