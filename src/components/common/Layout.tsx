@@ -4,6 +4,7 @@ import Footer from './Footer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import Button from './Button';
+import Loading from './Loading';
 
 type LayoutProps = {
   children: ReactNode;
@@ -12,22 +13,28 @@ type LayoutProps = {
 };
 
 export default function Layout({ children, requireAuth, requireAdmin }: LayoutProps) {
-  const { currentUser, userData, loading } = useAuth();
+  const { currentUser, userData, loading, authReady } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  // 디버깅 로그
+  console.log('Layout 렌더링:', {
+    pathname,
+    loading,
+    authReady,
+    hasCurrentUser: !!currentUser,
+    hasUserData: !!userData,
+    userRole: userData?.role || 'no role'
+  });
 
   // 로그인이 필요한 페이지로 리디렉션
   const redirectToLogin = () => {
     router.push(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
   };
 
-  // 로딩 중 표시
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-      </div>
-    );
+  // 인증 초기화가 완전히 완료되지 않은 경우 로딩 표시
+  if (loading || !authReady) {
+    return <Loading fullScreen message="인증 정보를 확인하는 중입니다..." />;
   }
 
   // 인증이 필요한 페이지에서 인증 되지 않았을 때

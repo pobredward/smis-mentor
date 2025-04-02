@@ -1,10 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import Layout from '@/components/common/Layout';
 import { FaUserPlus, FaCalendarPlus, FaUserClock } from 'react-icons/fa';
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import Loading from '@/components/common/Loading';
 
 export default function AdminDashboard() {
+  const { userData, loading } = useAuth();
+  const [isPageLoaded, setIsPageLoaded] = useState(false);
+
+  useEffect(() => {
+    console.log('관리자 대시보드 마운트됨:', { userData, loading });
+    setIsPageLoaded(true);
+  }, [userData, loading]);
+
   const adminMenus = [
     {
       title: '임시 사용자 생성',
@@ -62,32 +72,36 @@ export default function AdminDashboard() {
     }
   ];
 
-  return (
-    <Layout requireAuth requireAdmin>
-      <div>
-        <div className="mb-8 lg:px-4 px-0">
-          <h1 className="text-2xl font-bold text-gray-900">관리자 대시보드</h1>
-          <p className="mt-1 text-sm text-gray-600">업무 및 멘토 관리를 위한 관리자 기능</p>
-        </div>
+  if (!isPageLoaded) {
+    return <Loading message="대시보드 로딩 중..." />;
+  }
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {adminMenus.map((menu, index) => (
-            <Link
-              key={index}
-              href={menu.href}
-              className="block p-6 bg-white shadow-md rounded-lg hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-center mb-4">
-                <div className={`rounded-full p-2 ${menu.iconClass} bg-gray-100`}>
-                  {menu.icon}
-                </div>
-                <h2 className="ml-3 text-lg font-semibold text-gray-900">{menu.title}</h2>
-              </div>
-              <p className="text-gray-600">{menu.description}</p>
-            </Link>
-          ))}
-        </div>
+  console.log('관리자 대시보드 렌더링 완료');
+
+  return (
+    <div>
+      <div className="mb-8 lg:px-4 px-0">
+        <h1 className="text-2xl font-bold text-gray-900">관리자 대시보드</h1>
+        <p className="mt-1 text-sm text-gray-600">업무 및 멘토 관리를 위한 관리자 기능</p>
       </div>
-    </Layout>
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {adminMenus.map((menu, index) => (
+          <Link
+            key={index}
+            href={menu.href}
+            className="block p-6 bg-white shadow-md rounded-lg hover:shadow-lg transition-shadow"
+          >
+            <div className="flex items-center mb-4">
+              <div className={`rounded-full p-2 ${menu.iconClass} bg-gray-100`}>
+                {menu.icon}
+              </div>
+              <h2 className="ml-3 text-lg font-semibold text-gray-900">{menu.title}</h2>
+            </div>
+            <p className="text-gray-600">{menu.description}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 } 

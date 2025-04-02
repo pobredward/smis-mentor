@@ -65,13 +65,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   useEffect(() => {
+    console.log('AuthProvider 초기화 시작');
+    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log('Firebase 인증 상태 변경:', user?.email || '로그아웃 상태');
       setCurrentUser(user);
       
       if (user) {
         try {
-          console.log('사용자 인증 성공:', user.email);
+          console.log('사용자 인증 성공, Firestore 데이터 로드 시작:', user.email);
           const userRecord = await getUserByEmail(user.email || '');
+          
           if (userRecord) {
             console.log('Firestore 사용자 데이터 로드 성공:', userRecord.role);
             setUserData(userRecord as unknown as User);
@@ -84,14 +88,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setUserData(null);
         }
       } else {
+        console.log('로그아웃 상태 - userData 초기화');
         setUserData(null);
       }
       
       setLoading(false);
       setAuthReady(true);
+      console.log('인증 초기화 완료');
     });
 
-    return unsubscribe;
+    return () => {
+      console.log('AuthProvider 언마운트 - 구독 해제');
+      unsubscribe();
+    }
   }, []);
 
   const value = {
