@@ -20,7 +20,8 @@ import {
   sendEmailVerification, 
   sendPasswordResetEmail,
   updateProfile,
-  User as FirebaseUser
+  User as FirebaseUser,
+  deleteUser as deleteAuthUser
 } from 'firebase/auth';
 import { 
   ref, 
@@ -119,11 +120,24 @@ export const deactivateUser = async (userId: string) => {
     const userData = userDoc.data() as User;
     const now = Timestamp.now();
     
+    // 이메일 주소 백업을 위해 originalEmail 필드 추가
     await updateDoc(userRef, {
       status: 'inactive',
       name: `(탈퇴)${userData.name}`,
+      originalEmail: userData.email, // 원본 이메일 저장
       updatedAt: now
     });
+    
+    // 현재 로그인된 사용자가 탈퇴하려는 사용자인 경우 Authentication 계정 삭제
+    if (auth.currentUser && auth.currentUser.email === userData.email) {
+      try {
+        await deleteAuthUser(auth.currentUser);
+        console.log('Firebase Authentication 계정이 삭제되었습니다.');
+      } catch (authError) {
+        console.error('Firebase Authentication 계정 삭제 실패:', authError);
+        // Authentication 오류는 무시하고 Firestore 업데이트는 진행
+      }
+    }
     
     return true;
   } catch (error) {
@@ -145,11 +159,20 @@ export const reactivateUser = async (userId: string) => {
     const now = Timestamp.now();
     const originalName = userData.name.replace(/^\(탈퇴\)/, '');
     
+    // 저장된 원본 이메일이 있는지 확인
+    const email = userData.originalEmail || userData.email;
+    
+    // Firestore 사용자 문서 업데이트
     await updateDoc(userRef, {
       status: 'active',
       name: originalName,
+      email: email, // 원본 이메일 복원
       updatedAt: now
     });
+    
+    // 사용자에게 새 비밀번호 생성 이메일 전송
+    // (이 부분은 관리자가 API를 통해 수행하도록 해야 함)
+    await sendPasswordResetEmail(auth, email);
     
     return true;
   } catch (error) {
@@ -160,7 +183,35 @@ export const reactivateUser = async (userId: string) => {
 
 export const deleteUser = async (userId: string) => {
   try {
-    await deleteDoc(doc(db, 'users', userId));
+    // 사용자 정보 가져오기
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('사용자를 찾을 수 없습니다.');
+    }
+    
+    const userData = userDoc.data() as User;
+    
+    // 현재 인증된 사용자와 삭제하려는 사용자가 같은 경우
+    // (사용자 자신이 탈퇴하는 경우)
+    if (auth.currentUser && auth.currentUser.email === userData.email) {
+      try {
+        await deleteAuthUser(auth.currentUser);
+        console.log('Firebase Authentication 계정이 삭제되었습니다.');
+      } catch (authError) {
+        console.error('Firebase Authentication 계정 삭제 실패:', authError);
+        // Authentication 오류는 무시하고 Firestore 삭제는 진행
+      }
+    } else {
+      // 관리자가 다른 사용자를 삭제하는 경우
+      // 여기서는 관리자 권한으로 해당 사용자의 Authentication 계정을 직접 삭제할 수 없음
+      // Firebase Admin SDK가 필요한 부분이므로 별도의 백엔드 API 구현이 필요
+      console.log('관리자가 사용자를 삭제하는 경우, Authentication 계정은 삭제할 수 없습니다.');
+    }
+    
+    // Firestore에서 사용자 문서 삭제
+    await deleteDoc(userRef);
     return true;
   } catch (error) {
     console.error('사용자 삭제 실패:', error);

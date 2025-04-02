@@ -276,7 +276,7 @@ export default function UserManage() {
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
     
-    if (!window.confirm(`정말로 ${selectedUser.name} 사용자를 삭제하시겠습니까?`)) {
+    if (!window.confirm(`정말로 ${selectedUser.name} 사용자를 삭제하시겠습니까?\n\n※ 사용자의 Firebase Authentication 계정 정보도 함께 삭제될 수 있으며, 이 경우 동일한 이메일로 재가입이 가능해집니다.`)) {
       return;
     }
     
@@ -583,9 +583,13 @@ export default function UserManage() {
   const handleReactivateUser = async () => {
     if (!selectedUser) return;
     
+    if (!window.confirm(`${selectedUser.name} 사용자의 계정을 복구하시겠습니까?\n\n복구 후 사용자에게 비밀번호 재설정 이메일이 발송됩니다.`)) {
+      return;
+    }
+    
     try {
       await reactivateUser(selectedUser.userId);
-      toast.success('사용자 계정이 복구되었습니다.');
+      toast.success('사용자 계정이 복구되었습니다. 비밀번호 재설정 이메일이 발송되었습니다.');
       
       // 사용자 목록과 선택된 사용자 정보 새로고침
       const updatedUsers = await getAllUsers();

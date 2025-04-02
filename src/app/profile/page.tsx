@@ -348,8 +348,11 @@ export default function ProfilePage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">회원 탈퇴 확인</h3>
-            <p className="text-gray-700 mb-6">
-              정말로 회원 탈퇴를 진행하시겠습니까? 탈퇴 후에도 가입 정보는 관리자가 확인할 수 있으며, 원하시면 추후 계정 복구가 가능합니다.
+            <p className="text-gray-700 mb-4">
+              정말로 회원 탈퇴를 진행하시겠습니까? 탈퇴 후에는 동일한 이메일로 다시 로그인할 수 없으며, 모든 계정 정보가 비활성화됩니다.
+            </p>
+            <p className="text-gray-700 mb-6 text-sm">
+              ※ 탈퇴 시 계정 정보는 관리자가 확인할 수 있으며, 필요한 경우 관리자를 통해 계정을 복구할 수 있습니다.
             </p>
             <div className="flex justify-end gap-3">
               <Button
