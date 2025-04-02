@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { signIn } from '@/lib/firebaseService';
+import { signIn, resetPassword } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -23,11 +23,14 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function SignIn() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [showResetForm, setShowResetForm] = useState(false);
   
   const {
     register,
     handleSubmit,
     formState: { errors },
+    getValues,
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
   });
@@ -56,6 +59,30 @@ export default function SignIn() {
         toast.error('너무 많은 로그인 시도가 있었습니다. 나중에 다시 시도해주세요.');
       } else {
         toast.error('로그인 중 오류가 발생했습니다.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleForgotPassword = async () => {
+    try {
+      const email = resetEmail || getValues('email');
+      if (!email) {
+        toast.error('이메일 주소를 입력해주세요.');
+        return;
+      }
+      setIsLoading(true);
+      await resetPassword(email);
+      toast.success('비밀번호 재설정 이메일이 발송되었습니다.');
+      setShowResetForm(false);
+    } catch (error) {
+      console.error('비밀번호 재설정 오류:', error);
+      const firebaseError = error as FirebaseError;
+      if (firebaseError.code === 'auth/user-not-found') {
+        toast.error('해당 이메일로 등록된 계정이 없습니다.');
+      } else {
+        toast.error('비밀번호 재설정 이메일 발송 중 오류가 발생했습니다.');
       }
     } finally {
       setIsLoading(false);
@@ -94,6 +121,39 @@ export default function SignIn() {
               로그인
             </Button>
           </div>
+          
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              className="text-sm text-blue-600 hover:text-blue-800"
+              onClick={() => setShowResetForm(!showResetForm)}
+            >
+              비밀번호를 잊었습니까?
+            </button>
+          </div>
+          
+          {showResetForm && (
+            <div className="mt-4 p-3 border border-gray-200 rounded bg-gray-50">
+              <p className="text-sm text-gray-700 mb-2">비밀번호 재설정 이메일을 받을 주소를 입력하세요:</p>
+              <div className="flex space-x-2">
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  placeholder="이메일 주소"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  isLoading={isLoading}
+                  onClick={handleForgotPassword}
+                >
+                  전송
+                </Button>
+              </div>
+            </div>
+          )}
           
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
