@@ -583,7 +583,7 @@ export default function UserManage() {
   const handleReactivateUser = async () => {
     if (!selectedUser) return;
     
-    if (!window.confirm(`${selectedUser.name} 사용자의 계정을 복구하시겠습니까?\n\n복구 후 사용자에게 비밀번호 재설정 이메일이 발송됩니다.`)) {
+    if (!window.confirm(`${selectedUser.name} 사용자의 계정을 복구하시겠습니까?\n\n복구 시 다음 작업이 진행됩니다:\n1. Firebase Authentication에 새 계정이 생성됩니다.\n2. 사용자에게 비밀번호 재설정 이메일이 전송됩니다.\n3. Firestore의 계정 상태가 '활성'으로 변경됩니다.`)) {
       return;
     }
     

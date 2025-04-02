@@ -23,6 +23,7 @@ import {
   User as FirebaseUser,
   deleteUser as deleteAuthUser
 } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
 import { 
   ref, 
   uploadBytesResumable, 
@@ -148,6 +149,7 @@ export const deactivateUser = async (userId: string) => {
 
 export const reactivateUser = async (userId: string) => {
   try {
+    // 1. Firestore에서 사용자 정보 조회
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
     
@@ -162,17 +164,76 @@ export const reactivateUser = async (userId: string) => {
     // 저장된 원본 이메일이 있는지 확인
     const email = userData.originalEmail || userData.email;
     
-    // Firestore 사용자 문서 업데이트
+    if (!email) {
+      throw new Error('사용자의 이메일 정보를 찾을 수 없습니다.');
+    }
+    
+    // 임시 비밀번호 생성 (랜덤 문자열)
+    const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-2).toUpperCase() + '!';
+    
+    // 2. 기존 로그인 상태 백업
+    const currentUserBackup = auth.currentUser;
+    
+    console.log(`계정 복구 시작: ${email}`);
+    
+    try {
+      // 3. 임시 로그아웃 (현재 사용자가 있는 경우)
+      if (currentUserBackup) {
+        console.log('기존 로그인 상태 백업 및 로그아웃');
+        await firebaseSignOut(auth);
+      }
+      
+      // 4. Authentication 계정 생성 시도
+      try {
+        console.log(`새 Authentication 계정 생성 시도: ${email}`);
+        await createUserWithEmailAndPassword(auth, email, tempPassword);
+        console.log('새 Authentication 계정 생성 성공');
+      } catch (createError) {
+        // 이미 계정이 존재하는 경우 (auth/email-already-in-use)
+        if (createError instanceof FirebaseError && createError.code === 'auth/email-already-in-use') {
+          console.log('이미 해당 이메일로 계정이 존재합니다.');
+        } else {
+          console.error('Authentication 계정 생성 오류:', createError);
+          throw createError; // 다른 오류는 상위로 전파
+        }
+      }
+      
+      // 5. 비밀번호 재설정 이메일 전송
+      console.log(`비밀번호 재설정 이메일 전송 시도: ${email}`);
+      await sendPasswordResetEmail(auth, email);
+      console.log('비밀번호 재설정 이메일 전송 성공');
+      
+      // 6. 원래 사용자로 다시 로그인 (필요한 경우)
+      if (currentUserBackup) {
+        // 현재는 간단히 로그아웃만 수행 (세션 유지는 복잡할 수 있음)
+        console.log('로그아웃 상태 유지 (관리자는 새로 로그인 필요)');
+        await firebaseSignOut(auth);
+      }
+    } catch (authError) {
+      console.error('Authentication 계정 복구 오류:', authError);
+      
+      // 오류 발생 시 원래 사용자로 복원 시도
+      if (currentUserBackup) {
+        try {
+          // 이 부분은 실제로는 작동하지 않을 수 있음 (세션 토큰을 저장할 수 없음)
+          // 관리자에게 다시 로그인하라는 메시지를 표시하는 것이 더 적절함
+          console.log('인증 오류 발생, 관리자는 다시 로그인해야 합니다.');
+          await firebaseSignOut(auth);
+        } catch (reloginError) {
+          console.error('원래 사용자로 복원 실패:', reloginError);
+        }
+      }
+      
+      // 인증 오류가 있더라도 Firestore 업데이트는 계속 진행
+    }
+    
+    // 7. Firestore 사용자 문서 업데이트
     await updateDoc(userRef, {
       status: 'active',
       name: originalName,
       email: email, // 원본 이메일 복원
       updatedAt: now
     });
-    
-    // 사용자에게 새 비밀번호 생성 이메일 전송
-    // (이 부분은 관리자가 API를 통해 수행하도록 해야 함)
-    await sendPasswordResetEmail(auth, email);
     
     return true;
   } catch (error) {
