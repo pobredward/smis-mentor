@@ -110,6 +110,7 @@ export default function SignUpAccount() {
             2/4 단계: 계정 정보
           </div>
 
+          
           <FormInput
             label="이메일"
             type="email"
@@ -119,6 +120,7 @@ export default function SignUpAccount() {
               onBlur: handleEmailBlur
             })}
           />
+          <p className="text-xs text-red-500 mt-0 mb-3">이메일에 오타가 없는지 다시 한 번 확인해주세요</p>
 
           <div className="mb-2">
             <FormInput
@@ -129,8 +131,8 @@ export default function SignUpAccount() {
               showPasswordToggle={true}
               {...register('password')}
             />
-            <p className="text-xs text-gray-500 mt-1">
-              비밀번호는 8자 이상, 문자, 숫자, 특수문자를 포함해야 합니다.
+            <p className="text-xs text-red-500 mt-1">
+              비밀번호는 8자 이상, 문자, 숫자, 특수문자를 포함해야 합니다
             </p>
           </div>
 
