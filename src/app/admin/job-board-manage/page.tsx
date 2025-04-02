@@ -120,6 +120,9 @@ export default function JobBoardManage() {
   
   // 날짜 포맷팅 함수
   const formatDate = (timestamp: Timestamp) => {
+    if (!timestamp || typeof timestamp.toDate !== 'function') {
+      return '날짜 없음';
+    }
     const date = timestamp.toDate();
     // 로컬 시간대로 변환
     const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));

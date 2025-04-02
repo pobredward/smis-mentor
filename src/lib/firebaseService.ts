@@ -74,18 +74,10 @@ export const getUserById = async (userId: string) => {
 
 export const getUserByEmail = async (email: string) => {
   try {
-    console.log('이메일로 사용자 조회 시작:', email);
     const q = query(collection(db, 'users'), where('email', '==', email));
     const querySnapshot = await getDocs(q);
-    
-    if (querySnapshot.empty) {
-      console.log('이메일에 해당하는 사용자가 없음:', email);
-      return null;
-    }
-    
-    const userData = querySnapshot.docs[0].data() as User;
-    console.log('이메일로 사용자 조회 성공:', email, '역할:', userData.role);
-    return userData;
+    if (querySnapshot.empty) return null;
+    return querySnapshot.docs[0].data() as User;
   } catch (error) {
     console.error('이메일로 사용자 조회 실패:', error);
     throw error;
