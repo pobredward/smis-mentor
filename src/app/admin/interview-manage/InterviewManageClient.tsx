@@ -114,17 +114,18 @@ export function InterviewManageClient() {
       const validApplications = applications
         .filter(app => app !== null) as (ApplicationWithUser & { jobBoardTitle: string })[];
       
-      // 각 지원자의 면접일을 기준으로 그룹화
+      // 각 지원자의 면접일을 기준으로 그룹화 (날짜+시간)
       for (const app of validApplications) {
         if (app.interviewDate) {
           // 면접일이 있는 경우
           const date = app.interviewDate.toDate();
-          const dateKey = format(date, 'yyyy-MM-dd');
-          const formattedDate = format(date, 'yyyy년 MM월 dd일 (eee)', { locale: ko });
+          // 날짜+시간으로 키 생성
+          const dateTimeKey = format(date, 'yyyy-MM-dd-HH:mm');
+          const formattedDate = format(date, 'yyyy년 MM월 dd일 (eee) HH:mm', { locale: ko });
           
-          // 해당 날짜에 대한 면접 일정 정보가 없으면 새로 생성
-          if (!interviewDateMap.has(dateKey)) {
-            interviewDateMap.set(dateKey, {
+          // 해당 날짜+시간에 대한 면접 일정 정보가 없으면 새로 생성
+          if (!interviewDateMap.has(dateTimeKey)) {
+            interviewDateMap.set(dateTimeKey, {
               jobBoardId: app.refJobBoardId,
               jobBoardTitle: app.jobBoardTitle || '',
               date,
@@ -134,23 +135,12 @@ export function InterviewManageClient() {
           }
           
           // 지원자 추가
-          const dateInfo = interviewDateMap.get(dateKey)!;
+          const dateInfo = interviewDateMap.get(dateTimeKey)!;
           dateInfo.interviews.push(app);
         } else {
           // 면접일이 없는 경우 '미정' 그룹에 추가
           const undefinedDateInfo = interviewDateMap.get(undefinedDateKey)!;
           undefinedDateInfo.interviews.push(app);
-        }
-      }
-      
-      // 각 그룹 내에서 면접 시간순으로 정렬
-      for (const [key, dateInfo] of interviewDateMap.entries()) {
-        if (key !== undefinedDateKey) {
-          dateInfo.interviews.sort((a, b) => {
-            const timeA = a.interviewDate!.toDate().getTime();
-            const timeB = b.interviewDate!.toDate().getTime();
-            return timeA - timeB;
-          });
         }
       }
       
@@ -699,13 +689,13 @@ export function InterviewManageClient() {
               interviewDates.map((dateInfo, index) => {
                 const shortDate = dateInfo.formattedDate === '날짜 미정' 
                   ? '미정' 
-                  : format(dateInfo.date, 'M/d');
+                  : `${format(dateInfo.date, 'M/d(eee)', { locale: ko })} ${format(dateInfo.date, 'HH:mm')}`;
                 
                 return (
                   <button
                     key={index}
-                    className={`px-4 py-2 rounded-full transition-colors ${
-                      selectedDate && format(selectedDate.date, 'yyyy-MM-dd') === format(dateInfo.date, 'yyyy-MM-dd')
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      selectedDate && format(selectedDate.date, 'yyyy-MM-dd-HH:mm') === format(dateInfo.date, 'yyyy-MM-dd-HH:mm')
                         ? 'bg-blue-500 text-white'
                         : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
                     }`}
