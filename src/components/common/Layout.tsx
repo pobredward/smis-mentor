@@ -55,7 +55,7 @@ export default function Layout({ children, requireAuth, requireAdmin }: LayoutPr
   }
 
   // 관리자 권한이 필요한 페이지에서 관리자가 아닐 때
-  if (requireAdmin && userData?.role !== 'admin') {
+  if (requireAdmin && (!userData || userData?.role !== 'admin')) {
     return (
       <div className="min-h-screen">
         <Header />

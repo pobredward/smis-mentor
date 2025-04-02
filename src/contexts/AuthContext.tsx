@@ -70,12 +70,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       if (user) {
         try {
+          console.log('사용자 인증 성공:', user.email);
           const userRecord = await getUserByEmail(user.email || '');
           if (userRecord) {
+            console.log('Firestore 사용자 데이터 로드 성공:', userRecord.role);
             setUserData(userRecord as unknown as User);
+          } else {
+            console.error('Firestore에 사용자 데이터가 없음:', user.email);
+            setUserData(null);
           }
         } catch (error) {
-          console.error('Failed to fetch user data:', error);
+          console.error('Firestore 사용자 데이터 로드 실패:', error);
+          setUserData(null);
         }
       } else {
         setUserData(null);
