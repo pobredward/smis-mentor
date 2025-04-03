@@ -798,6 +798,9 @@ export function InterviewManageClient() {
                               <div className="text-sm text-gray-600 mt-1">
                                 {formatPhoneNumber(app.user?.phoneNumber || '')}
                               </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {app.jobBoardTitle || '캠프 정보 없음'}
+                              </div>
                               {/* <div className="text-sm text-gray-500 mt-1">
                                 {app.interviewDate 
                                   ? format(app.interviewDate.toDate(), 'HH:mm', { locale: ko }) 
