@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getUserByEmail } from '@/lib/firebaseService';
@@ -36,8 +36,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
 
-  // 인증 준비 상태를 기다리는 함수
-  const waitForAuthReady = async (): Promise<void> => {
+  // 인증 준비 상태를 기다리는 함수 - useCallback으로 최적화
+  const waitForAuthReady = useCallback(async (): Promise<void> => {
     if (authReady) return Promise.resolve();
     return new Promise((resolve) => {
       const checkReady = () => {
@@ -49,9 +49,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       };
       checkReady();
     });
-  };
+  }, [authReady]);
 
-  const refreshUserData = async () => {
+  // 사용자 데이터 새로고침 함수 - useCallback으로 최적화
+  const refreshUserData = useCallback(async () => {
     if (currentUser?.email) {
       try {
         const userRecord = await getUserByEmail(currentUser.email);
@@ -62,9 +63,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         console.error('Failed to refresh user data:', error);
       }
     }
-  };
+  }, [currentUser?.email]);
 
   useEffect(() => {
+    // Firebase 인증 상태 변경 감지
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       
@@ -88,14 +90,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return unsubscribe;
   }, []);
 
-  const value = {
+  // Context 값을 useMemo로 메모이제이션
+  const value = useMemo(() => ({
     currentUser,
     userData,
     loading,
     authReady,
     refreshUserData,
     waitForAuthReady,
-  };
+  }), [currentUser, userData, loading, authReady, refreshUserData, waitForAuthReady]);
 
   return (
     <AuthContext.Provider value={value}>

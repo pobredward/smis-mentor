@@ -139,4 +139,7 @@ export interface Review {
   jobCode: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  rating?: number;
+  writer?: string;
+  reviewId?: string;
 } 

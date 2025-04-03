@@ -449,48 +449,69 @@ export const getAllJobBoards = async () => {
 
 export const getActiveJobBoards = async () => {
   try {
-    // 캐시 키 생성 ('active_job_boards')
-    const cacheKey = 'active_job_boards';
+    // 브라우저 환경인지 확인
+    const isBrowser = typeof window !== 'undefined';
     
-    // 캐시에서 데이터 확인 (localStorage 사용)
-    const cachedData = localStorage.getItem(cacheKey);
-    if (cachedData) {
-      const { data, expiry } = JSON.parse(cachedData);
+    // 브라우저 환경에서만 캐시 사용
+    if (isBrowser) {
+      const cachedData = await getCacheCollection<JobBoardWithId>(CACHE_STORE.JOB_BOARDS);
       
-      // 캐시가 유효한 경우
-      if (expiry > Date.now()) {
-        console.log('캐시에서 활성화 공고 목록 로드, 총', data.length, '개');
-        return data as JobBoardWithId[];
+      if (cachedData && cachedData.length > 0) {
+        // 캐시에서 status가 active인 데이터만 필터링
+        const activeBoards = cachedData.filter(board => board.status === 'active');
+        if (activeBoards.length > 0) {
+          console.log('캐시에서 활성화 공고 목록 로드, 총', activeBoards.length, '개');
+          return activeBoards;
+        }
       }
-      
-      // 만료된 캐시 삭제
-      localStorage.removeItem(cacheKey);
     }
     
-    // Firestore에서 조회
+    // Firestore에서 한 번에 필요한 데이터를 모두 가져오기
     const jobBoardsRef = collection(db, 'jobBoards');
     const q = query(jobBoardsRef, where('status', '==', 'active'));
     const querySnapshot = await getDocs(q);
     
-    // JobBoard 데이터와 함께 JobCode의 korea 값을 가져오기
-    const jobBoards = await Promise.all(querySnapshot.docs.map(async (docSnapshot) => {
+    // 필요한 JobCode ID 수집
+    const jobCodeIds = new Set<string>();
+    querySnapshot.docs.forEach(doc => {
+      const data = doc.data() as JobBoard;
+      jobCodeIds.add(data.refJobCodeId);
+    });
+    
+    // 필요한 모든 JobCode를 한 번에 가져오기
+    const jobCodePromises = Array.from(jobCodeIds).map(async id => {
+      const jobCodeDoc = await getDoc(doc(db, 'jobCodes', id));
+      return { 
+        id, 
+        data: jobCodeDoc.data() as JobCode 
+      };
+    });
+    
+    const jobCodes = await Promise.all(jobCodePromises);
+    
+    // JobCode 맵 생성
+    const jobCodeMap = new Map<string, JobCode>();
+    jobCodes.forEach(({ id, data }) => {
+      jobCodeMap.set(id, data);
+    });
+    
+    // JobBoard 데이터 생성
+    const jobBoards = querySnapshot.docs.map(docSnapshot => {
       const jobBoardData = docSnapshot.data() as JobBoard;
-      const jobCodeDoc = await getDoc(doc(db, 'jobCodes', jobBoardData.refJobCodeId));
-      const jobCodeData = jobCodeDoc.data() as JobCode;
+      const jobCodeData = jobCodeMap.get(jobBoardData.refJobCodeId);
       
       return { 
         id: docSnapshot.id, 
         ...jobBoardData,
-        korea: jobCodeData.korea  // JobCode의 korea 값을 사용
+        korea: jobCodeData?.korea ?? true  // JobCode의 korea 값을 사용하되, 없으면 기본값
       } as JobBoardWithId;
-    }));
+    });
     
-    // 캐시에 저장 (30분 유효)
-    const expiry = Date.now() + CACHE_TTL.MEDIUM;
-    localStorage.setItem(cacheKey, JSON.stringify({
-      data: jobBoards,
-      expiry
-    }));
+    // 브라우저 환경에서만 캐시에 저장
+    if (isBrowser) {
+      // IndexedDB 캐시에 저장 (30분 유효)
+      await setCacheCollection(CACHE_STORE.JOB_BOARDS, jobBoards, CACHE_TTL.MEDIUM);
+    }
     
     return jobBoards;
   } catch (error) {
@@ -1131,7 +1152,13 @@ export const getBestReviews = async (limit: number = 3): Promise<Review[]> => {
       return {
         ...data,
         id: doc.id,
-      } as Review;
+        // 기본 rating 값 추가 (실제 데이터에 없는 경우 대비)
+        rating: data.rating || 5,
+        // 리뷰 ID도 확장 (page.tsx의 ExtendedReview 타입과 호환되도록)
+        reviewId: doc.id,
+        // 작성자 기본값 설정
+        writer: data.author?.name || '익명'
+      } as Review & { rating: number, reviewId: string, writer: string };
     });
     
     // 클라이언트에서 "Best 후기" 필터링 수행

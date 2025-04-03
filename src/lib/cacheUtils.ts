@@ -1,5 +1,8 @@
 import { openDB } from 'idb';
 
+// 브라우저 환경인지 확인하는 유틸리티 함수
+const isBrowser = () => typeof window !== 'undefined';
+
 // IndexedDB 데이터베이스 이름과 버전
 const DB_NAME = 'smis-mentor-cache';
 const DB_VERSION = 1;
@@ -22,6 +25,10 @@ const CACHE_EXPIRY = {
 
 // IndexedDB 초기화
 const initDB = async () => {
+  if (!isBrowser()) {
+    return null; // 서버 환경에서는 null 반환
+  }
+  
   return openDB(DB_NAME, DB_VERSION, {
     upgrade(db) {
       // 각 저장소 생성
@@ -50,8 +57,14 @@ const initDB = async () => {
 
 // 데이터 저장 함수
 export const setCache = async <T>(storeName: string, data: T, expiryTime = CACHE_EXPIRY.MEDIUM) => {
+  if (!isBrowser()) {
+    return false; // 서버 환경에서는 작업 생략
+  }
+  
   try {
     const db = await initDB();
+    if (!db) return false;
+    
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
     
@@ -72,8 +85,14 @@ export const setCache = async <T>(storeName: string, data: T, expiryTime = CACHE
 
 // 데이터 가져오기 함수
 export const getCache = async <T>(storeName: string, key: string): Promise<T | null> => {
+  if (!isBrowser()) {
+    return null; // 서버 환경에서는 null 반환
+  }
+  
   try {
     const db = await initDB();
+    if (!db) return null;
+    
     const tx = db.transaction(storeName, 'readonly');
     const store = tx.objectStore(storeName);
     
@@ -94,10 +113,51 @@ export const getCache = async <T>(storeName: string, key: string): Promise<T | n
   }
 };
 
+// localStorage에서 항목 가져오기 (안전하게)
+const safeGetItem = (key: string): string | null => {
+  if (!isBrowser()) return null;
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.error(`localStorage 접근 오류 (${key}):`, error);
+    return null;
+  }
+};
+
+// localStorage에 항목 저장 (안전하게)
+const safeSetItem = (key: string, value: string): boolean => {
+  if (!isBrowser()) return false;
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    console.error(`localStorage 저장 오류 (${key}):`, error);
+    return false;
+  }
+};
+
+// localStorage에서 항목 삭제 (안전하게)
+const safeRemoveItem = (key: string): boolean => {
+  if (!isBrowser()) return false;
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch (error) {
+    console.error(`localStorage 삭제 오류 (${key}):`, error);
+    return false;
+  }
+};
+
 // 컬렉션 데이터 저장
 export const setCacheCollection = async <T>(storeName: string, data: T[], expiryTime = CACHE_EXPIRY.MEDIUM) => {
+  if (!isBrowser()) {
+    return false; // 서버 환경에서는 작업 생략
+  }
+  
   try {
     const db = await initDB();
+    if (!db) return false;
+    
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
     
@@ -113,8 +173,8 @@ export const setCacheCollection = async <T>(storeName: string, data: T[], expiry
     await tx.done;
     
     // 컬렉션 메타데이터 저장 (마지막 갱신 시간)
-    localStorage.setItem(`${storeName}_lastUpdated`, Date.now().toString());
-    localStorage.setItem(`${storeName}_expiry`, (Date.now() + expiryTime).toString());
+    safeSetItem(`${storeName}_lastUpdated`, Date.now().toString());
+    safeSetItem(`${storeName}_expiry`, (Date.now() + expiryTime).toString());
     
     return true;
   } catch (error) {
@@ -125,14 +185,20 @@ export const setCacheCollection = async <T>(storeName: string, data: T[], expiry
 
 // 컬렉션 데이터 가져오기
 export const getCacheCollection = async <T>(storeName: string): Promise<T[] | null> => {
+  if (!isBrowser()) {
+    return null; // 서버 환경에서는 null 반환
+  }
+  
   try {
     // 만료 여부 확인
-    const expiry = localStorage.getItem(`${storeName}_expiry`);
+    const expiry = safeGetItem(`${storeName}_expiry`);
     if (!expiry || parseInt(expiry) < Date.now()) {
       return null;
     }
     
     const db = await initDB();
+    if (!db) return null;
+    
     const tx = db.transaction(storeName, 'readonly');
     const store = tx.objectStore(storeName);
     
@@ -156,8 +222,14 @@ export const getCacheCollection = async <T>(storeName: string): Promise<T[] | nu
 
 // 캐시 항목 삭제
 export const removeCache = async (storeName: string, key: string) => {
+  if (!isBrowser()) {
+    return false; // 서버 환경에서는 작업 생략
+  }
+  
   try {
     const db = await initDB();
+    if (!db) return false;
+    
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
     
@@ -172,8 +244,14 @@ export const removeCache = async (storeName: string, key: string) => {
 
 // 캐시 컬렉션 비우기
 export const clearCacheCollection = async (storeName: string) => {
+  if (!isBrowser()) {
+    return false; // 서버 환경에서는 작업 생략
+  }
+  
   try {
     const db = await initDB();
+    if (!db) return false;
+    
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
     
@@ -181,8 +259,8 @@ export const clearCacheCollection = async (storeName: string) => {
     await tx.done;
     
     // 메타데이터 삭제
-    localStorage.removeItem(`${storeName}_lastUpdated`);
-    localStorage.removeItem(`${storeName}_expiry`);
+    safeRemoveItem(`${storeName}_lastUpdated`);
+    safeRemoveItem(`${storeName}_expiry`);
     
     return true;
   } catch (error) {
