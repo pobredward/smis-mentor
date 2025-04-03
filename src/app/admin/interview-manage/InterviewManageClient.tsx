@@ -778,16 +778,32 @@ export function InterviewManageClient() {
                         onClick={() => handleSelectApplication(app)}
                       >
                         <div className="flex justify-between items-start">
-                          <div>
-                            <div className="font-medium">{app.user?.name || '이름 없음'}</div>
-                            <div className="text-sm text-gray-600 mt-1">
-                              {formatPhoneNumber(app.user?.phoneNumber || '')}
+                          <div className="flex items-center">
+                            {/* 프로필 이미지 */}
+                            <div className="flex-shrink-0 mr-3">
+                              {app.user?.profileImage ? (
+                                <img 
+                                  src={app.user.profileImage} 
+                                  alt={app.user?.name || '프로필'} 
+                                  className="w-15 h-15 rounded object-cover border border-gray-100"
+                                />
+                              ) : (
+                                <div className="w-15 h-15 rounded bg-gray-200 flex items-center justify-center text-gray-500">
+                                  {app.user?.name ? app.user.name.charAt(0) : '?'}
+                                </div>
+                              )}
                             </div>
-                            {/* <div className="text-sm text-gray-500 mt-1">
-                              {app.interviewDate 
-                                ? format(app.interviewDate.toDate(), 'HH:mm', { locale: ko }) 
-                                : '시간 미정'}
-                            </div> */}
+                            <div>
+                              <div className="font-medium">{app.user?.name || '이름 없음'}</div>
+                              <div className="text-sm text-gray-600 mt-1">
+                                {formatPhoneNumber(app.user?.phoneNumber || '')}
+                              </div>
+                              {/* <div className="text-sm text-gray-500 mt-1">
+                                {app.interviewDate 
+                                  ? format(app.interviewDate.toDate(), 'HH:mm', { locale: ko }) 
+                                  : '시간 미정'}
+                              </div> */}
+                            </div>
                           </div>
                           <div>
                             {app.interviewStatus === 'pending' && (
@@ -832,34 +848,50 @@ export function InterviewManageClient() {
                   <div className="p-4 lg:p-6">
                     <div className="mb-6 pb-6 border-b border-gray-200">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <h2 className="text-xl font-bold text-gray-900">
-                            {selectedApplication.user?.name || selectedApplication.refUserId}
-                          </h2>
-                          {selectedApplication.user && (
-                            <div className="mt-2 space-y-1 text-sm text-gray-600">
-                              <p>
-                                <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
-                              </p>
-                              <p>
-                                <span className="font-medium">나이:</span> {selectedApplication.user.age}세
-                              </p>
-                              <p>
-                                <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
-                              </p>
-                              <p>
-                                <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade}학년 {selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}
-                              </p>
-                              <p>
-                                <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
-                              </p>
-                              <p>
-                                <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
-                                {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
-                                  ` (추천인: ${selectedApplication.user.referrerName})`}
-                              </p>
-                            </div>
-                          )}
+                        <div className="flex items-start">
+                          {/* 프로필 이미지 */}
+                          <div className="flex-shrink-0 mr-4">
+                            {selectedApplication.user?.profileImage ? (
+                              <img 
+                                src={selectedApplication.user.profileImage} 
+                                alt={selectedApplication.user?.name || '프로필'} 
+                                className="w-16 h-16 rounded-full object-cover border border-gray-100"
+                              />
+                            ) : (
+                              <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xl">
+                                {selectedApplication.user?.name ? selectedApplication.user.name.charAt(0) : '?'}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <h2 className="text-xl font-bold text-gray-900">
+                              {selectedApplication.user?.name || selectedApplication.refUserId}
+                            </h2>
+                            {selectedApplication.user && (
+                              <div className="mt-2 space-y-1 text-sm text-gray-600">
+                                <p>
+                                  <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
+                                </p>
+                                <p>
+                                  <span className="font-medium">나이:</span> {selectedApplication.user.age}세
+                                </p>
+                                <p>
+                                  <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
+                                </p>
+                                <p>
+                                  <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade}학년 {selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}
+                                </p>
+                                <p>
+                                  <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
+                                </p>
+                                <p>
+                                  <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
+                                  {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
+                                    ` (추천인: ${selectedApplication.user.referrerName})`}
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
