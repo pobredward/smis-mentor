@@ -36,12 +36,12 @@ export function InterviewManageClient() {
   const [feedbackText, setFeedbackText] = useState('');
   const [interviewTime, setInterviewTime] = useState('');
   const [newSelectedDate, setNewSelectedDate] = useState('');
-  const [activeTab, setActiveTab] = useState<'applicants' | 'script'>('applicants');
   const [scriptText, setScriptText] = useState('');
   
   // 데이터 로드
   useEffect(() => {
     loadJobBoards();
+    loadScript();
   }, []);
 
   // 채용 공고 목록 로드
@@ -172,7 +172,6 @@ export function InterviewManageClient() {
   const handleSelectApplication = async (app: ApplicationWithUser) => {
     setSelectedApplication(app);
     setFeedbackText(app.interviewFeedback || '');
-    setActiveTab('applicants');
     
     if (app.interviewDate) {
       const time = format(app.interviewDate.toDate(), 'HH:mm');
@@ -214,24 +213,23 @@ export function InterviewManageClient() {
     setSelectedDate(dateInfo);
     setSelectedApplication(null);
     setFeedbackText('');
-    loadScript(dateInfo);
   };
 
   // 진행자 스크립트 로드
-  const loadScript = async (dateInfo: InterviewDateInfo) => {
+  const loadScript = async () => {
     try {
-      // 해당 날짜의 스크립트 문서를 Firestore에서 불러오기
-      const scriptRef = doc(db, 'interviewScripts', dateInfo.formattedDate);
+      // 진행자 스크립트 문서를 Firestore에서 불러오기
+      const scriptRef = doc(db, 'interviewScripts', 'common');
       const scriptDoc = await getDoc(scriptRef);
       
       if (scriptDoc.exists()) {
         setScriptText(scriptDoc.data().content || '');
       } else {
         // 기본 스크립트 템플릿 설정
-        setScriptText(`${dateInfo.formattedDate} 면접 진행 스크립트\n\n1. 면접 시작 인사\n2. 지원자 소개\n3. 질문 리스트\n4. 마무리 인사`);
+        setScriptText('# 진행자 스크립트\n\n## 면접 시작 인사\n안녕하세요, SMIS 면접에 참여해 주셔서 감사합니다.\n\n## 지원자 소개\n간단한 자기소개를 부탁드립니다.\n\n## 주요 질문 리스트\n1. 지원 동기가 무엇인가요?\n2. 팀 프로젝트 경험이 있다면 말씀해주세요.\n3. 어려운 상황을 극복한 경험이 있나요?\n\n## 마무리 인사\n면접에 참여해 주셔서 감사합니다. 결과는 추후 안내해 드리겠습니다.');
       }
     } catch (error) {
-      console.error('스크립트 로드 오류:', error);
+      console.error('진행자 스크립트 로드 오류:', error);
       toast.error('진행자 스크립트를 불러오는 중 오류가 발생했습니다.');
       setScriptText('');
     }
@@ -239,22 +237,19 @@ export function InterviewManageClient() {
 
   // 진행자 스크립트 저장
   const handleSaveScript = async () => {
-    if (!selectedDate) return;
-
     try {
       setLoading(true);
       
-      // Firestore에 스크립트 저장
-      const scriptRef = doc(db, 'interviewScripts', selectedDate.formattedDate);
+      // Firestore에 진행자 스크립트 저장
+      const scriptRef = doc(db, 'interviewScripts', 'common');
       await setDoc(scriptRef, {
         content: scriptText,
-        jobBoardId: selectedDate.jobBoardId,
         updatedAt: Timestamp.fromDate(new Date())
       }, { merge: true });
 
       toast.success('진행자 스크립트가 저장되었습니다.');
     } catch (error) {
-      console.error('스크립트 저장 오류:', error);
+      console.error('진행자 스크립트 저장 오류:', error);
       toast.error('진행자 스크립트를 저장하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -733,112 +728,64 @@ export function InterviewManageClient() {
           <div className="lg:w-1/3">
             {selectedDate ? (
               <div className="bg-white rounded-lg shadow">
-                <div className="p-4 border-b">
+                <div className="p-4 border-b bg-gray-50">
                   <h2 className="text-lg font-semibold">
-                    {selectedDate.formattedDate} 면접 대상자
+                    면접 대상자
                   </h2>
                   <p className="text-sm text-gray-600">총 {selectedDate.interviews.length}명</p>
                 </div>
 
-                {/* 진행자 스크립트 탭 추가 */}
-                <div className="flex border-b">
-                  <button
-                    className={`flex-1 py-2 text-center text-sm ${
-                      activeTab === 'applicants' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-500 hover:bg-gray-50'
-                    }`}
-                    onClick={() => setActiveTab('applicants')}
-                  >
-                    면접 대상자 목록
-                  </button>
-                  <button
-                    className={`flex-1 py-2 text-center text-sm ${
-                      activeTab === 'script' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-500 hover:bg-gray-50'
-                    }`}
-                    onClick={() => setActiveTab('script')}
-                  >
-                    진행자 스크립트
-                  </button>
-                </div>
-
-                {activeTab === 'applicants' ? (
-                  <div className="divide-y">
-                    {selectedDate.interviews.length === 0 ? (
-                      <p className="p-4 text-center text-gray-500">면접 대상자가 없습니다.</p>
-                    ) : (
-                      selectedDate.interviews.map((app) => (
-                        <div
-                          key={app.id}
-                          className={`p-4 cursor-pointer transition-colors ${
-                            selectedApplication?.id === app.id ? 'bg-blue-50' : 'hover:bg-gray-50'
-                          }`}
-                          onClick={() => handleSelectApplication(app)}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="font-medium">{app.user?.name || '이름 없음'}</div>
-                              <div className="text-sm text-gray-600 mt-1">
-                                {formatPhoneNumber(app.user?.phoneNumber || '')}
-                              </div>
-                              <div className="text-sm text-gray-500 mt-1">
-                                {app.interviewDate 
-                                  ? format(app.interviewDate.toDate(), 'HH:mm', { locale: ko }) 
-                                  : '시간 미정'}
-                              </div>
+                <div className="divide-y">
+                  {selectedDate.interviews.length === 0 ? (
+                    <p className="p-4 text-center text-gray-500">면접 대상자가 없습니다.</p>
+                  ) : (
+                    selectedDate.interviews.map((app) => (
+                      <div
+                        key={app.id}
+                        className={`p-3 cursor-pointer transition-colors ${
+                          selectedApplication?.id === app.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        }`}
+                        onClick={() => handleSelectApplication(app)}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-medium">{app.user?.name || '이름 없음'}</div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              {formatPhoneNumber(app.user?.phoneNumber || '')}
                             </div>
-                            <div>
-                              {app.interviewStatus === 'pending' && (
-                                <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                                  예정
-                                </span>
-                              )}
-                              {app.interviewStatus === 'passed' && (
-                                <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                  합격
-                                </span>
-                              )}
-                              {app.interviewStatus === 'failed' && (
-                                <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
-                                  불합격
-                                </span>
-                              )}
-                              {app.interviewStatus === '불참' && (
-                                <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
-                                  불참
-                                </span>
-                              )}
-                            </div>
+                            {/* <div className="text-sm text-gray-500 mt-1">
+                              {app.interviewDate 
+                                ? format(app.interviewDate.toDate(), 'HH:mm', { locale: ko }) 
+                                : '시간 미정'}
+                            </div> */}
+                          </div>
+                          <div>
+                            {app.interviewStatus === 'pending' && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                                예정
+                              </span>
+                            )}
+                            {app.interviewStatus === 'passed' && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                                합격
+                              </span>
+                            )}
+                            {app.interviewStatus === 'failed' && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                                불합격
+                              </span>
+                            )}
+                            {app.interviewStatus === '불참' && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                                불참
+                              </span>
+                            )}
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-4">
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        스크립트를 수정하고 저장을 눌러주세요
-                      </label>
-                      <textarea
-                        value={scriptText}
-                        onChange={(e) => setScriptText(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="면접 진행 스크립트를 입력하세요..."
-                        disabled={loading}
-                        style={{ height: '400px', resize: 'vertical' }}
-                      ></textarea>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        variant="primary"
-                        onClick={handleSaveScript}
-                        isLoading={loading}
-                        disabled={loading}
-                      >
-                        스크립트 저장
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             ) : (
               <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
@@ -847,227 +794,247 @@ export function InterviewManageClient() {
             )}
           </div>
 
-          {/* 오른쪽: 선택된 지원자 상세 정보 */}
+          {/* 오른쪽: 선택된 지원자 상세 정보 또는 스크립트 */}
           <div className="lg:w-2/3">
             {selectedDate ? (
               <div className="bg-white rounded-lg shadow">
-                {activeTab === 'applicants' ? (
-                  selectedApplication ? (
-                    <div className="p-4 lg:p-6">
-                      <div className="mb-6 pb-6 border-b border-gray-200">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h2 className="text-xl font-bold text-gray-900">
-                              {selectedApplication.user?.name || selectedApplication.refUserId}
-                            </h2>
-                            {selectedApplication.user && (
-                              <div className="mt-2 space-y-1 text-sm text-gray-600">
-                                <p>
-                                  <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
-                                </p>
-                                <p>
-                                  <span className="font-medium">나이:</span> {selectedApplication.user.age}세
-                                </p>
-                                <p>
-                                  <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
-                                </p>
-                                <p>
-                                  <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade}학년 {selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}
-                                </p>
-                                <p>
-                                  <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
-                                </p>
-                                <p>
-                                  <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
-                                  {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
-                                    ` (추천인: ${selectedApplication.user.referrerName})`}
-                                </p>
-                              </div>
-                            )}
-                          </div>
+                {selectedApplication ? (
+                  <div className="p-4 lg:p-6">
+                    <div className="mb-6 pb-6 border-b border-gray-200">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h2 className="text-xl font-bold text-gray-900">
+                            {selectedApplication.user?.name || selectedApplication.refUserId}
+                          </h2>
+                          {selectedApplication.user && (
+                            <div className="mt-2 space-y-1 text-sm text-gray-600">
+                              <p>
+                                <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
+                              </p>
+                              <p>
+                                <span className="font-medium">나이:</span> {selectedApplication.user.age}세
+                              </p>
+                              <p>
+                                <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
+                              </p>
+                              <p>
+                                <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade}학년 {selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}
+                              </p>
+                              <p>
+                                <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
+                              </p>
+                              <p>
+                                <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
+                                {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
+                                  ` (추천인: ${selectedApplication.user.referrerName})`}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
+                    </div>
 
-                      {/* 상태 변경 및 피드백 */}
-                      <div className="mb-6 pb-6 border-b border-gray-200">
-                        {/* 상태 변경 - 모든 화면에서 가로 배치 */}
-                        <div className="grid grid-cols-3 gap-2 md:gap-4 mt-4">
-                          <div>
-                            <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
-                              서류 상태
-                            </label>
-                            <select
-                              value={selectedApplication.applicationStatus}
-                              onChange={(e) => handleStatusChange(selectedApplication.id, e.target.value, 'application')}
-                              className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
-                              disabled={loading}
-                            >
-                              <option value="pending">검토중</option>
-                              <option value="accepted">서류합격</option>
-                              <option value="rejected">서류불합격</option>
-                            </select>
-                          </div>
-                          
-                          <div>
-                            <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
-                              면접 상태
-                            </label>
-                            <select
-                              value={selectedApplication.interviewStatus || ''}
-                              onChange={(e) => handleInterviewStatusChange(selectedApplication.id, e.target.value)}
-                              className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
-                              disabled={loading || selectedApplication.applicationStatus !== 'accepted'}
-                            >
-                              <option value="">선택</option>
-                              <option value="pending">면접예정</option>
-                              <option value="passed">면접합격</option>
-                              <option value="failed">면접불합격</option>
-                              <option value="불참">불참</option>
-                            </select>
-                          </div>
-                          
-                          <div>
-                            <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
-                              최종 상태
-                            </label>
-                            <select
-                              value={selectedApplication.finalStatus || ''}
-                              onChange={(e) => handleFinalStatusChange(selectedApplication.id, e.target.value)}
-                              className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
-                              disabled={loading || selectedApplication.interviewStatus !== 'passed'}
-                            >
-                              <option value="">선택</option>
-                              <option value="finalAccepted">최종합격</option>
-                              <option value="finalRejected">최종불합격</option>
-                              <option value="불참">불참</option>
-                            </select>
-                          </div>
+                    {/* 상태 변경 및 피드백 */}
+                    <div className="mb-6 pb-6 border-b border-gray-200">
+                      {/* 상태 변경 - 모든 화면에서 가로 배치 */}
+                      <div className="grid grid-cols-3 gap-2 md:gap-4 mt-4">
+                        <div>
+                          <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                            서류 상태
+                          </label>
+                          <select
+                            value={selectedApplication.applicationStatus}
+                            onChange={(e) => handleStatusChange(selectedApplication.id, e.target.value, 'application')}
+                            className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                            disabled={loading}
+                          >
+                            <option value="pending">검토중</option>
+                            <option value="accepted">서류합격</option>
+                            <option value="rejected">서류불합격</option>
+                          </select>
                         </div>
                         
-                        {/* 면접 정보 입력 폼 */}
-                        {selectedApplication?.interviewStatus === 'pending' && (
-                          <div className="mt-4 flex flex-wrap items-center gap-2">
-                            <input
-                              type="date"
-                              value={newSelectedDate}
-                              onChange={(e) => setNewSelectedDate(e.target.value)}
-                              className="flex-1 p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md min-w-[100px]"
-                            />
-                            <input
-                              type="time"
-                              value={interviewTime}
-                              onChange={(e) => setInterviewTime(e.target.value)}
-                              className="flex-1 p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md min-w-[100px]"
-                            />
-                            <div className="flex gap-1">
-                              <Button
-                                variant="primary"
-                                onClick={handleSaveInterviewInfo}
-                                isLoading={loading}
-                                disabled={loading || !newSelectedDate || !interviewTime}
-                                className="whitespace-nowrap text-xs md:text-sm p-1 md:p-2"
-                              >
-                                저장
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                onClick={handleSetUndefinedDate}
-                                isLoading={loading}
-                                disabled={loading}
-                                className="whitespace-nowrap text-xs md:text-sm p-1 md:p-2"
-                              >
-                                미정
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* 면접 피드백 */}
-                        <div className="mt-6">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            면접 피드백
+                        <div>
+                          <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                            면접 상태
                           </label>
-                          <textarea
-                            value={feedbackText}
-                            onChange={(e) => setFeedbackText(e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px] min-h-[250px] overflow-auto"
-                            placeholder="면접 피드백을 입력하세요..."
-                            disabled={loading}
-                            style={{ height: '100px', resize: 'none' }}
-                          ></textarea>
-                          <div className="mt-2 flex justify-end">
+                          <select
+                            value={selectedApplication.interviewStatus || ''}
+                            onChange={(e) => handleInterviewStatusChange(selectedApplication.id, e.target.value)}
+                            className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                            disabled={loading || selectedApplication.applicationStatus !== 'accepted'}
+                          >
+                            <option value="">선택</option>
+                            <option value="pending">면접예정</option>
+                            <option value="passed">면접합격</option>
+                            <option value="failed">면접불합격</option>
+                            <option value="불참">불참</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">
+                            최종 상태
+                          </label>
+                          <select
+                            value={selectedApplication.finalStatus || ''}
+                            onChange={(e) => handleFinalStatusChange(selectedApplication.id, e.target.value)}
+                            className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md"
+                            disabled={loading || selectedApplication.interviewStatus !== 'passed'}
+                          >
+                            <option value="">선택</option>
+                            <option value="finalAccepted">최종합격</option>
+                            <option value="finalRejected">최종불합격</option>
+                            <option value="불참">불참</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      {/* 면접 정보 입력 폼 */}
+                      {selectedApplication?.interviewStatus === 'pending' && (
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <input
+                            type="date"
+                            value={newSelectedDate}
+                            onChange={(e) => setNewSelectedDate(e.target.value)}
+                            className="flex-1 p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md min-w-[100px]"
+                          />
+                          <input
+                            type="time"
+                            value={interviewTime}
+                            onChange={(e) => setInterviewTime(e.target.value)}
+                            className="flex-1 p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md min-w-[100px]"
+                          />
+                          <div className="flex gap-1">
                             <Button
                               variant="primary"
-                              onClick={handleSaveFeedback}
+                              onClick={handleSaveInterviewInfo}
                               isLoading={loading}
-                              disabled={loading || !feedbackText.trim()}
+                              disabled={loading || !newSelectedDate || !interviewTime}
+                              className="whitespace-nowrap text-xs md:text-sm p-1 md:p-2"
                             >
-                              피드백 저장
+                              저장
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={handleSetUndefinedDate}
+                              isLoading={loading}
+                              disabled={loading}
+                              className="whitespace-nowrap text-xs md:text-sm p-1 md:p-2"
+                            >
+                              미정
                             </Button>
                           </div>
                         </div>
-                      </div>
-
-                      {/* 알바 & 멘토링 경력 */}
-                      <div className="mb-6 pb-6">
-                        <h3 className="text-lg font-semibold mb-4">알바 & 멘토링 경력</h3>
-                        {!selectedApplication.user?.partTimeJobs || selectedApplication.user.partTimeJobs.length === 0 ? (
-                          <p className="text-gray-500">경력을 추가해주세요</p>
-                        ) : (
-                          <div className="space-y-4">
-                            {selectedApplication.user.partTimeJobs.map((job, index) => (
-                              <div key={index} className="bg-gray-50 p-4 rounded-md border border-gray-200">
-                                <div className="flex justify-between mb-2">
-                                  <span className="font-medium">{job.companyName}</span>
-                                  <span className="text-sm text-gray-500">{job.period}</span>
-                                </div>
-                                <div className="mb-2">
-                                  <span className="text-sm text-gray-500 mr-2">담당:</span>
-                                  <span>{job.position}</span>
-                                </div>
-                                <div>
-                                  <span className="text-sm text-gray-500 mr-2">업무 내용:</span>
-                                  <span className="text-gray-700">{job.description}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      )}
                       
-                      {/* 자기소개서 및 지원동기 */}
-                      {selectedApplication.user && (
-                        <div className="mb-6">
-                          <hr className="my-6" />
-                          <div className="mb-6 pb-6">
-                            <h3 className="text-lg font-semibold mb-4">자기소개서 및 지원동기</h3>
-                            <div className="space-y-4">
-                              <div>
-                                <h4 className="font-medium mb-2">자기소개서</h4>
-                                <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
-                                  {selectedApplication.user?.selfIntroduction || '내용이 없습니다.'}
-                                </div>
+                      {/* 면접 피드백 */}
+                      <div className="mt-6">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          면접 피드백
+                        </label>
+                        <textarea
+                          value={feedbackText}
+                          onChange={(e) => setFeedbackText(e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px] min-h-[250px] overflow-auto"
+                          placeholder="면접 피드백을 입력하세요..."
+                          disabled={loading}
+                          style={{ height: '100px', resize: 'none' }}
+                        ></textarea>
+                        <div className="mt-2 flex justify-end">
+                          <Button
+                            variant="primary"
+                            onClick={handleSaveFeedback}
+                            isLoading={loading}
+                            disabled={loading || !feedbackText.trim()}
+                          >
+                            피드백 저장
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 알바 & 멘토링 경력 */}
+                    <div className="mb-6 pb-6">
+                      <h3 className="text-lg font-semibold mb-4">알바 & 멘토링 경력</h3>
+                      {!selectedApplication.user?.partTimeJobs || selectedApplication.user.partTimeJobs.length === 0 ? (
+                        <p className="text-gray-500">경력을 추가해주세요</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {selectedApplication.user.partTimeJobs.map((job, index) => (
+                            <div key={index} className="bg-gray-50 p-4 rounded-md border border-gray-200">
+                              <div className="flex justify-between mb-2">
+                                <span className="font-medium">{job.companyName}</span>
+                                <span className="text-sm text-gray-500">{job.period}</span>
+                              </div>
+                              <div className="mb-2">
+                                <span className="text-sm text-gray-500 mr-2">담당:</span>
+                                <span>{job.position}</span>
                               </div>
                               <div>
-                                <h4 className="font-medium mb-2">지원동기</h4>
-                                <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
-                                  {selectedApplication.user?.jobMotivation || '내용이 없습니다.'}
-                                </div>
+                                <span className="text-sm text-gray-500 mr-2">업무 내용:</span>
+                                <span className="text-gray-700">{job.description}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* 자기소개서 및 지원동기 */}
+                    {selectedApplication.user && (
+                      <div className="mb-6">
+                        <hr className="my-6" />
+                        <div className="mb-6 pb-6">
+                          <h3 className="text-lg font-semibold mb-4">자기소개서 및 지원동기</h3>
+                          <div className="space-y-4">
+                            <div>
+                              <h4 className="font-medium mb-2">자기소개서</h4>
+                              <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
+                                {selectedApplication.user?.selfIntroduction || '내용이 없습니다.'}
+                              </div>
+                            </div>
+                            <div>
+                              <h4 className="font-medium mb-2">지원동기</h4>
+                              <div className="p-4 bg-gray-50 rounded-md whitespace-pre-line">
+                                {selectedApplication.user?.jobMotivation || '내용이 없습니다.'}
                               </div>
                             </div>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-6 text-center text-gray-500">
-                      면접 대상자를 선택하여 상세 정보를 확인하세요.
-                    </div>
-                  )
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <div className="p-4 lg:p-6 whitespace-pre-wrap">
+                  <div className="p-4 lg:p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="text-xl font-bold">진행자 스크립트</h2>
+                    </div>
                     
+                    <div className="mb-4">
+                      <textarea
+                        value={scriptText}
+                        onChange={(e) => setScriptText(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="진행자 스크립트를 입력하세요..."
+                        disabled={loading}
+                        style={{ height: '250px', resize: 'vertical' }}
+                      ></textarea>
+                      <div className="flex justify-end mt-2">
+                        <Button
+                          variant="primary"
+                          onClick={handleSaveScript}
+                          isLoading={loading}
+                          disabled={loading}
+                        >
+                          스크립트 저장
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="whitespace-pre-wrap bg-gray-50 p-4 rounded-md border border-gray-200">
                       {scriptText || '스크립트가 작성되지 않았습니다.'}
+                    </div>
                   </div>
                 )}
               </div>

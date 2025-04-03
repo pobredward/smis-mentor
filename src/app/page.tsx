@@ -17,33 +17,33 @@ interface ExtendedReview extends Review {
 async function ReviewsSection() {
   // 서버 컴포넌트에서 데이터 가져오기
   const reviews = await getBestReviews(3) as ExtendedReview[];
-  
+
   return (
     <div className="bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+          <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">
+            <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">
             멘토링 참여 후기
-          </h2>
-          <Link
+            </h2>
+            <Link
             href="/reviews"
-            className="inline-flex items-center text-blue-600 hover:text-blue-700"
-          >
+              className="inline-flex items-center text-blue-600 hover:text-blue-700"
+            >
             더 보기
-            <svg className="ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
-        </div>
-        
-        {reviews.length === 0 ? (
-          <div className="text-center py-10 bg-white rounded-lg shadow">
-            <p className="text-gray-500">아직 등록된 후기가 없습니다.</p>
+              <svg className="ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
           </div>
-        ) : (
+          
+        {reviews.length === 0 ? (
+            <div className="text-center py-10 bg-white rounded-lg shadow">
+            <p className="text-gray-500">아직 등록된 후기가 없습니다.</p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {reviews.map((review) => (
-              <Link
+                <Link
                 href={`/reviews/${review.reviewId}`}
                 key={review.reviewId}
                 className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200"
@@ -54,14 +54,14 @@ async function ReviewsSection() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
                     </svg>
                   </div>
-                  <div>
+                      <div>
                     <h3 className="font-bold text-lg text-gray-900 mb-1 line-clamp-2">{review.title}</h3>
                     <div className="text-sm text-gray-500">
                       {review.createdAt && formatDate(review.createdAt)}
                     </div>
-                  </div>
-                </div>
-                
+        </div>
+      </div>
+
                 <p className="text-gray-700 mb-4 line-clamp-3">{review.content.replace(/<[^>]*>/g, '')}</p>
                 
                 <div className="flex items-center text-sm text-gray-500">
@@ -72,12 +72,12 @@ async function ReviewsSection() {
                   <span>|</span>
                   <span className="ml-2">{review.writer}</span>
                 </div>
-              </Link>
-            ))}
-          </div>
-        )}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
   );
 }
 
