@@ -8,10 +8,12 @@ import Button from '@/components/common/Button';
 import { getAllJobCodes, getUsersByJobCode } from '@/lib/firebaseService';
 import { JobCodeWithId, User } from '@/types';
 import { formatPhoneNumber } from '@/components/common/PhoneInput';
+import { useRouter } from 'next/navigation';
 
 type UserWithGroupInfo = User & { groupName?: string };
 
 export default function UserCheck() {
+  const router = useRouter();
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [generations, setGenerations] = useState<string[]>([]);
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
@@ -243,19 +245,26 @@ export default function UserCheck() {
     </div>
   );
 
+  // 뒤로가기 (관리자 페이지로)
+  const handleGoBack = () => {
+    router.back();
+  };
+
   return (
     <Layout requireAuth requireAdmin>
       <div className="max-w-7xl mx-auto px-0 sm:px-0 lg:px-0">
         <div className="mb-6">
           <div className="flex items-center">
-            <button
-              onClick={() => window.location.href = '/admin'}
-              className="mr-3 text-blue-600 hover:text-blue-800 focus:outline-none flex items-center"
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+              onClick={handleGoBack}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
               </svg>
-            </button>
+            </Button>
             <h1 className="text-2xl font-bold">사용자 조회</h1>
           </div>
           <p className="text-gray-500 mt-1">업무 코드별로 사용자를 조회합니다.</p>
@@ -291,12 +300,12 @@ export default function UserCheck() {
                     key={code.id}
                     className={`px-3 py-1.5 text-sm rounded-full border ${
                       selectedCode === code.code
-                        ? 'bg-blue-100 border-blue-300 text-blue-800'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        ? 'bg-blue-100 border-blue-300 text-blue-800 text-xs'
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 text-xs'
                     }`}
                     onClick={() => setSelectedCode(code.code)}
                   >
-                    {code.code} - {code.name}
+                    {code.code} {code.name}
                   </button>
                 ))}
               </div>

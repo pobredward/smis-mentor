@@ -470,19 +470,34 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     }
   };
   
+  // 뒤로가기 처리
+  const handleGoBack = () => {
+    router.back();
+  };
+  
   return (
     <Layout requireAuth requireAdmin>
-      <div className="max-w-7xl mx-auto px-0 lg:px-4">
-        <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">지원자 관리</h1>
-            {jobBoard && (
-              <p className="text-gray-500 text-sm mt-1">
-                {jobBoard.title} ({jobBoard.generation} {jobBoard.jobCode})
-              </p>
-            )}
+      <div className="container mx-auto lg:px-4 px-0">
+        {jobBoard && (
+          <div className="mb-6">
+            <div className="flex items-center">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+                onClick={handleGoBack}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                </svg>
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold">캠프별 지원자 관리</h1>
+                <p className="text-sm text-gray-600">{jobBoard.title}</p>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
         
         <div className="mb-4">
           <div className="flex flex-col gap-2">

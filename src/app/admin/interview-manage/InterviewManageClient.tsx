@@ -9,6 +9,7 @@ import { db } from '@/lib/firebase';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { JobBoard, ApplicationHistory, User } from '@/types';
+import { useRouter } from 'next/navigation';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -27,6 +28,7 @@ type ApplicationWithUser = ApplicationHistory & {
 };
 
 export function InterviewManageClient() {
+  const router = useRouter();
   const [interviewDates, setInterviewDates] = useState<InterviewDateInfo[]>([]);
   const [selectedDate, setSelectedDate] = useState<InterviewDateInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -673,10 +675,27 @@ export function InterviewManageClient() {
     }
   };
 
+  // 관리자 페이지로 돌아가기
+  const handleGoBack = () => {
+    router.back();
+  };
+
   return (
     <Layout requireAuth requireAdmin>
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">면접 관리</h1>
+      <div className="container mx-auto lg:px-4 px-0">
+        <div className="flex items-center mb-6">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+            onClick={handleGoBack}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+          </Button>
+          <h1 className="text-2xl font-bold">면접 관리</h1>
+        </div>
 
         {/* 면접일 토글 목록 */}
         <div className="mb-6">
@@ -971,7 +990,7 @@ export function InterviewManageClient() {
                           <textarea
                             value={feedbackText}
                             onChange={(e) => setFeedbackText(e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 max-h-[100px] overflow-auto"
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px] min-h-[250px] overflow-auto"
                             placeholder="면접 피드백을 입력하세요..."
                             disabled={loading}
                             style={{ height: '100px', resize: 'none' }}

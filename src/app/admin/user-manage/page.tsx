@@ -11,6 +11,7 @@ import PhoneInput, { formatPhoneNumber } from '@/components/common/PhoneInput';
 import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser } from '@/lib/firebaseService';
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { Timestamp } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
 
 type EditFormData = {
   name?: string;
@@ -56,6 +57,7 @@ export default function UserManage() {
   const [showUserList, setShowUserList] = useState(true);
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('all');
+  const router = useRouter();
 
   const jobGroups = [
     { value: 'junior', label: '주니어' },
@@ -410,9 +412,9 @@ export default function UserManage() {
     }
   };
 
-  // 뒤로 가기 핸들러
-  const handleBackToList = () => {
-    setShowUserList(true);
+  // 뒤로가기 (관리자 페이지로)
+  const handleGoBack = () => {
+    router.back();
   };
 
   // 날짜 포맷팅 함수
@@ -629,14 +631,16 @@ export default function UserManage() {
       <div className="max-w-7xl mx-auto lg:px-4 px-0">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
-            <button
-              onClick={() => window.location.href = '/admin'}
-              className="mr-3 text-blue-600 hover:text-blue-800 focus:outline-none flex items-center"
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+              onClick={handleGoBack}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
               </svg>
-            </button>
+            </Button>
             <h1 className="text-xl md:text-2xl font-bold">사용자 관리</h1>
           </div>
         </div>
@@ -769,7 +773,7 @@ export default function UserManage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleBackToList}
+                        onClick={() => setShowUserList(true)}
                         className="text-xs px-2 py-1 md:hidden"
                       >
                         목록
