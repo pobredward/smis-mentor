@@ -534,7 +534,7 @@ export function InterviewManageClient() {
 
       toast.success('면접 피드백이 저장되었습니다.');
       
-      // UI 업데이트
+      // UI 업데이트 - 선택된 날짜의 인터뷰 목록 업데이트
       if (selectedDate) {
         const updatedInterviews = selectedDate.interviews.map(interview => {
           if (interview.id === selectedApplication.id) {
@@ -547,6 +547,36 @@ export function InterviewManageClient() {
           ...selectedDate,
           interviews: updatedInterviews
         });
+        
+        // 전체 면접 날짜 목록의 데이터도 업데이트
+        const updatedDates = interviewDates.map(dateInfo => {
+          if (dateInfo.formattedDate === selectedDate.formattedDate) {
+            return {
+              ...dateInfo,
+              interviews: updatedInterviews
+            };
+          } else {
+            // 다른 날짜에도 동일한 지원자가 있는지 확인하고 업데이트
+            const dateHasApplication = dateInfo.interviews.some(
+              interview => interview.id === selectedApplication.id
+            );
+            
+            if (dateHasApplication) {
+              return {
+                ...dateInfo,
+                interviews: dateInfo.interviews.map(interview => {
+                  if (interview.id === selectedApplication.id) {
+                    return { ...interview, interviewFeedback: feedbackText };
+                  }
+                  return interview;
+                })
+              };
+            }
+          }
+          return dateInfo;
+        });
+        
+        setInterviewDates(updatedDates);
         
         // 선택된 지원자 정보도 업데이트
         setSelectedApplication({
