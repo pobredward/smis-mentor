@@ -31,6 +31,10 @@ export default function StatusBadge({ status, type }: StatusBadgeProps) {
         color = 'bg-yellow-100 text-yellow-800';
         label = '면접예정';
         break;
+      case 'complete':
+        color = 'bg-purple-100 text-purple-800';
+        label = '면접완료';
+        break;
       case 'passed':
         color = 'bg-green-100 text-green-800';
         label = '면접합격';
@@ -39,9 +43,9 @@ export default function StatusBadge({ status, type }: StatusBadgeProps) {
         color = 'bg-red-100 text-red-800';
         label = '면접불합격';
         break;
-      case '불참':
+      case 'absent':
         color = 'bg-red-100 text-red-800';
-        label = '불참';
+        label = '면접불참';
         break;
       default:
         color = 'bg-gray-100 text-gray-800';
@@ -57,7 +61,7 @@ export default function StatusBadge({ status, type }: StatusBadgeProps) {
         color = 'bg-red-100 text-red-800';
         label = '최종불합격';
         break;
-      case '불참':
+      case 'finalAbsent':
         color = 'bg-red-100 text-red-800';
         label = '불참';
         break;

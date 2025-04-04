@@ -814,6 +814,11 @@ export function InterviewManageClient() {
                                 예정
                               </span>
                             )}
+                            {app.interviewStatus === 'complete' && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+                                완료
+                              </span>
+                            )}
                             {app.interviewStatus === 'passed' && (
                               <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
                                 합격
@@ -824,7 +829,7 @@ export function InterviewManageClient() {
                                 불합격
                               </span>
                             )}
-                            {app.interviewStatus === '불참' && (
+                            {app.interviewStatus === 'absent' && (
                               <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
                                 불참
                               </span>
@@ -931,9 +936,10 @@ export function InterviewManageClient() {
                           >
                             <option value="">선택</option>
                             <option value="pending">면접예정</option>
+                            <option value="complete">면접완료</option>
                             <option value="passed">면접합격</option>
                             <option value="failed">면접불합격</option>
-                            <option value="불참">불참</option>
+                            <option value="absent">면접불참</option>
                           </select>
                         </div>
                         
@@ -950,7 +956,7 @@ export function InterviewManageClient() {
                             <option value="">선택</option>
                             <option value="finalAccepted">최종합격</option>
                             <option value="finalRejected">최종불합격</option>
-                            <option value="불참">불참</option>
+                            <option value="absent">불참</option>
                           </select>
                         </div>
                       </div>

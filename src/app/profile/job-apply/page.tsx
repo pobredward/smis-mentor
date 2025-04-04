@@ -60,7 +60,6 @@ export default function JobApplyStatus() {
             console.log('면접 정보:', {
               applicationId: app.applicationHistoryId,
               interviewDate: app.interviewDate,
-              interviewDateTime: app.interviewDateTime,
               interviewBaseLink: app.interviewBaseLink,
               interviewBaseDuration: app.interviewBaseDuration,
               interviewBaseNotes: app.interviewBaseNotes
@@ -116,6 +115,10 @@ export default function JobApplyStatus() {
           color = 'bg-yellow-100 text-yellow-800';
           label = '면접예정';
           break;
+        case 'complete':
+          color = 'bg-purple-100 text-purple-800';
+          label = '면접완료';
+          break;
         case 'passed':
           color = 'bg-green-100 text-green-800';
           label = '면접합격';
@@ -124,7 +127,7 @@ export default function JobApplyStatus() {
           color = 'bg-red-100 text-red-800';
           label = '면접불합격';
           break;
-        case '불참':
+        case 'absent':
           color = 'bg-red-100 text-red-800';
           label = '불참';
           break;
@@ -142,7 +145,7 @@ export default function JobApplyStatus() {
           color = 'bg-red-100 text-red-800';
           label = '최종불합격';
           break;
-        case '불참':
+        case 'absent':
           color = 'bg-gray-100 text-gray-800';
           label = '불참';
           break;
@@ -243,11 +246,11 @@ export default function JobApplyStatus() {
                       <h4 className="text-sm font-medium text-blue-900 mb-3">면접 정보</h4>
                       
                       {/* 면접 일시 */}
-                      {(app.interviewDate || app.interviewDateTime) && (
+                      {(app.interviewDate) && (
                         <div className="mb-2">
                           <p className="text-sm text-blue-800">
                             <span className="font-medium">면접 일시:</span>{' '}
-                            {formatDate(app.interviewDate || app.interviewDateTime)}
+                            {formatDate(app.interviewDate)}
                           </p>
                         </div>
                       )}

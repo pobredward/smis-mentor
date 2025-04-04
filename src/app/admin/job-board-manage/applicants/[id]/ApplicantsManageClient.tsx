@@ -18,7 +18,7 @@ type ApplicationWithUser = ApplicationHistory & {
   user?: User;
 };
 
-type FilterStatus = 'all' | 'pending' | 'accepted' | 'interview' | 'passed' | 'final';
+type FilterStatus = 'all' | 'pending' | 'complete' | 'accepted' | 'interview' | 'passed' | 'final';
 
 type Props = {
   jobBoardId: string;
@@ -135,6 +135,8 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             return app.interviewStatus === 'pending';
           case 'passed':
             return app.interviewStatus === 'passed';
+          case 'complete':
+            return app.interviewStatus === 'complete';
           case 'final':
             return app.finalStatus === 'finalAccepted';
           default:
@@ -211,10 +213,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       accepted: { bg: 'bg-green-100', text: 'text-green-800', label: '합격' },
       rejected: { bg: 'bg-red-100', text: 'text-red-800', label: '불합격' },
       passed: { bg: 'bg-green-100', text: 'text-green-800', label: '합격' },
+      complete: { bg: 'bg-purple-100', text: 'text-purple-800', label: '완료' },
       failed: { bg: 'bg-red-100', text: 'text-red-800', label: '불합격' },
       finalAccepted: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: '최종합격' },
       finalRejected: { bg: 'bg-red-100', text: 'text-red-800', label: '최종불합격' },
-      불참: { bg: 'bg-red-100', text: 'text-red-800', label: '불참' },
+      absent: { bg: 'bg-red-100', text: 'text-red-800', label: '불참' },
     };
 
     // 특별히 면접 상태가 'pending'인 경우 '면접 예정' 대신 '예정'으로 표시
@@ -281,7 +284,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           }
           break;
         case 'interview':
-          updateData.interviewStatus = newStatus as 'pending' | 'passed' | 'failed' | '불참';
+          updateData.interviewStatus = newStatus as 'pending' | 'passed' | 'failed' | 'absent';
           firestoreUpdateData.interviewStatus = newStatus;
           
           // 면접 불합격 시 최종 상태 초기화
@@ -294,7 +297,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           }
           break;
         case 'final':
-          updateData.finalStatus = newStatus as 'finalAccepted' | 'finalRejected' | '불참';
+          updateData.finalStatus = newStatus as 'finalAccepted' | 'finalRejected' | 'finalAbsent';
           firestoreUpdateData.finalStatus = newStatus;
           break;
       }
@@ -545,6 +548,16 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                 면접 예정
               </button>
               <button
+                onClick={() => setFilterStatus('complete')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  filterStatus === 'complete'
+                    ? 'bg-purple-100 text-purple-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                면접 완료
+              </button>
+              <button
                 onClick={() => setFilterStatus('passed')}
                 className={`px-3 py-1 rounded-full text-sm font-medium ${
                   filterStatus === 'passed'
@@ -783,9 +796,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           >
                             <option value="">선택</option>
                             <option value="pending">면접예정</option>
+                            <option value="complete">면접완료</option>
                             <option value="passed">면접합격</option>
                             <option value="failed">면접불합격</option>
-                            <option value="불참">불참</option>
+                            <option value="absent">면접불참</option>
                           </select>
                         </div>
                         
@@ -802,7 +816,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <option value="">선택</option>
                             <option value="finalAccepted">최종합격</option>
                             <option value="finalRejected">최종불합격</option>
-                            <option value="불참">불참</option>
+                            <option value="finalAbsent">불참</option>
                           </select>
                         </div>
                       </div>
