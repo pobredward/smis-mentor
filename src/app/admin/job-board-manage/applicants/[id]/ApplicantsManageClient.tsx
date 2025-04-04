@@ -681,7 +681,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                               {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
                             </p>
                             <p className="text-xs text-gray-400 mt-1">
-                              {app.user?.referralPath}
+                              {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
                             </p>
                           </div>
                           
