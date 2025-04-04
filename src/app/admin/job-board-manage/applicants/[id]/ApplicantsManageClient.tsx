@@ -671,9 +671,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <h3 className="font-medium text-gray-900">
                             {app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}
                             </h3>
-                            <p className="text-sm text-gray-500">
+                            {/* <p className="text-sm text-gray-500">
                               {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
-                            </p>
+                            </p> */}
                             <p className="text-xs text-gray-400 mt-1">
                               {app.user?.university ? `${app.user.university} ${app.user.grade}학년 ${app.user.isOnLeave ? '휴학생' : '재학생'}` : ''}
                             </p>
@@ -681,7 +681,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                               {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
                             </p>
                             <p className="text-xs text-gray-400 mt-1">
-                              {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
+                              지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
                             </p>
                           </div>
                           

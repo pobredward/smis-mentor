@@ -58,6 +58,7 @@ async function ReviewsSection() {
                   <div>
                     <h3 className="font-bold text-lg text-gray-900 mb-1 line-clamp-2">{review.title}</h3>
                   </div>
+                  
                 </div>
 
                 <p className="text-gray-700 mb-4 line-clamp-3">{review.content.replace(/<[^>]*>/g, '')}</p>

@@ -794,13 +794,22 @@ export function InterviewManageClient() {
                               )}
                             </div>
                             <div>
-                              <div className="font-medium">{app.user?.name || '이름 없음'}</div>
-                              <div className="text-sm text-gray-600 mt-1">
+                              <div className="font-medium">{app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}</div>
+                              {/* <div className="text-sm text-gray-600 mt-1">
                                 {formatPhoneNumber(app.user?.phoneNumber || '')}
-                              </div>
+                              </div> */}
                               <div className="text-xs text-gray-500 mt-1">
                                 {app.jobBoardTitle || '캠프 정보 없음'}
                               </div>
+                              <p className="text-xs text-gray-400 mt-1">
+                              {app.user?.university ? `${app.user.university} ${app.user.grade}학년 ${app.user.isOnLeave ? '휴학생' : '재학생'}` : ''}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
+                            </p>
                               {/* <div className="text-sm text-gray-500 mt-1">
                                 {app.interviewDate 
                                   ? format(app.interviewDate.toDate(), 'HH:mm', { locale: ko }) 
