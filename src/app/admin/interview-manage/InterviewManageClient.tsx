@@ -894,7 +894,7 @@ export function InterviewManageClient() {
                               <img 
                                 src={selectedApplication.user.profileImage} 
                                 alt={selectedApplication.user?.name || '프로필'} 
-                                className="w-16 h-16 rounded-full object-cover border border-gray-100"
+                                className="w-20 h-20 rounded object-cover border border-gray-100"
                               />
                             ) : (
                               <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xl">
@@ -903,17 +903,17 @@ export function InterviewManageClient() {
                             )}
                           </div>
                           <div>
-                            <h2 className="text-xl font-bold text-gray-900">
-                              {selectedApplication.user?.name || selectedApplication.refUserId}
+                            <h2 className="font-bold text-gray-900">
+                            {selectedApplication.user?.name ? `${selectedApplication.user.name} (${selectedApplication.user.age})` : selectedApplication.refUserId}
                             </h2>
                             {selectedApplication.user && (
-                              <div className="mt-2 space-y-1 text-sm text-gray-600">
+                              <div className="mt-1 space-y-1 text-sm text-gray-600">
                                 <p>
                                   <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
                                 </p>
-                                <p>
+                                {/* <p>
                                   <span className="font-medium">나이:</span> {selectedApplication.user.age}세
-                                </p>
+                                </p> */}
                                 <p>
                                   <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
                                 </p>
@@ -923,11 +923,11 @@ export function InterviewManageClient() {
                                 <p>
                                   <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
                                 </p>
-                                <p>
+                                {/* <p>
                                   <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
                                   {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
                                     ` (추천인: ${selectedApplication.user.referrerName})`}
-                                </p>
+                                </p> */}
                               </div>
                             )}
                           </div>
