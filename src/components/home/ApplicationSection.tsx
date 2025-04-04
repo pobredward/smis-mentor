@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApplicationsByUserId, getJobBoardById } from '@/lib/firebaseService';
-import { formatDateTime } from '@/utils/dateUtils';
-import StatusBadge from './StatusBadge';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
+import { Timestamp } from 'firebase/firestore';
 import { ApplicationHistory, JobBoard } from '@/types';
 
 type ApplicationWithJobDetails = ApplicationHistory & {
@@ -19,13 +20,12 @@ export default function ApplicationSection() {
 
   useEffect(() => {
     const loadApplications = async () => {
-      if (!userData) {
-        setIsLoading(false);
-        return;
-      }
-      
       try {
         setIsLoading(true);
+        
+        if (!userData) {
+          return;
+        }
         
         // 사용자의 지원 내역 가져오기
         const userApplications = await getApplicationsByUserId(userData.userId);
@@ -56,6 +56,89 @@ export default function ApplicationSection() {
     
     loadApplications();
   }, [userData]);
+
+  // 날짜 포맷팅 함수
+  const formatDate = (timestamp: Timestamp | undefined) => {
+    if (!timestamp) return '-';
+    const date = timestamp.toDate();
+    return format(date, 'yyyy년 MM월 dd일 (EEE) HH:mm', { locale: ko });
+  };
+  
+  // 지원 상태 뱃지 함수
+  const getStatusBadge = (status: string | undefined, type: 'application' | 'interview' | 'final') => {
+    let color = '';
+    let label = '';
+    
+    if (type === 'application') {
+      switch (status) {
+        case 'pending':
+          color = 'bg-yellow-100 text-yellow-800';
+          label = '검토중';
+          break;
+        case 'accepted':
+          color = 'bg-green-100 text-green-800';
+          label = '서류합격';
+          break;
+        case 'rejected':
+          color = 'bg-red-100 text-red-800';
+          label = '서류불합격';
+          break;
+        default:
+          color = 'bg-gray-100 text-gray-800';
+          label = '미정';
+      }
+    } else if (type === 'interview') {
+      switch (status) {
+        case 'pending':
+          color = 'bg-yellow-100 text-yellow-800';
+          label = '면접예정';
+          break;
+        case 'complete':
+          color = 'bg-purple-100 text-purple-800';
+          label = '면접완료';
+          break;
+        case 'passed':
+          color = 'bg-green-100 text-green-800';
+          label = '면접합격';
+          break;
+        case 'failed':
+          color = 'bg-red-100 text-red-800';
+          label = '면접불합격';
+          break;
+        case 'absent':
+          color = 'bg-red-100 text-red-800';
+          label = '불참';
+          break;
+        default:
+          color = 'bg-gray-100 text-gray-800';
+          label = '미정';
+      }
+    } else if (type === 'final') {
+      switch (status) {
+        case 'finalAccepted':
+          color = 'bg-green-100 text-green-800';
+          label = '최종합격';
+          break;
+        case 'finalRejected':
+          color = 'bg-red-100 text-red-800';
+          label = '최종불합격';
+          break;
+        case 'absent':
+          color = 'bg-gray-100 text-gray-800';
+          label = '불참';
+          break;
+        default:
+          color = 'bg-gray-100 text-gray-800';
+          label = '미정';
+      }
+    }
+    
+    return (
+      <span className={`px-2 py-1 text-xs rounded-full ${color}`}>
+        {label}
+      </span>
+    );
+  };
 
   return (
     <div className="bg-gray-50 py-12 md:py-8 px-4 sm:px-6 lg:px-8">
@@ -106,34 +189,23 @@ export default function ApplicationSection() {
               <div key={app.applicationHistoryId} className="bg-white rounded-lg shadow overflow-hidden">
                 <div className="px-4 py-5 sm:p-6">
                   {/* 공고 제목 및 정보 */}
-                  <div className="mb-4">
+                  <div className="mb-2">
                     <h3 className="text-lg font-semibold text-gray-900 truncate">
                       {app.jobBoard?.title || '삭제된 공고'}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {app.jobBoard?.generation} ({app.jobBoard?.jobCode})
+                      {app.jobBoard?.generation}
                     </p>
                   </div>
                   
                   {/* 날짜 정보 */}
-                  <div className="gap-4 mb-4">
+                  {/* <div className="mb-2">
                     <div>
-                      <p className="text-sm text-gray-500 font-medium">지원일: {formatDateTime(app.applicationDate)}</p>
+                      <p className="text-sm text-gray-500 font-medium">지원일: {formatDate(app.applicationDate)}</p>
                     </div>
-                  </div>
+                  </div> */}
                   
-                  {/* 현재 상태 정보 */}
-                  <div className="flex space-x-2 mb-3">
-                    <StatusBadge status={app.applicationStatus} type="application" />
-                    {app.interviewStatus && (
-                      <StatusBadge status={app.interviewStatus} type="interview" />
-                    )}
-                    {app.finalStatus && (
-                      <StatusBadge status={app.finalStatus} type="final" />
-                    )}
-                  </div>
-                  
-                  {/* 면접 링크 버튼 (서류 합격이고 interviewStatus가 pending일 때만 표시) */}
+                  {/* 면접 링크 버튼 (서류 합격이고 interviewBaseLink가 있을 때만 표시) */}
                   {app.applicationStatus === 'accepted' && app.interviewStatus === 'pending' && app.jobBoard && (
                     <div className="mb-4 p-4 bg-blue-50 rounded-lg">
                       <h4 className="text-sm font-medium text-blue-900 mb-3">면접 정보</h4>
@@ -143,7 +215,7 @@ export default function ApplicationSection() {
                         <div className="mb-2">
                           <p className="text-sm text-blue-800">
                             <span className="font-medium">면접 일시:</span>{' '}
-                            {formatDateTime(app.interviewDate)}
+                            {formatDate(app.interviewDate)}
                           </p>
                         </div>
                       )}
@@ -174,13 +246,45 @@ export default function ApplicationSection() {
                           </a>
                         </div>
                       )}
+                      
+                      {/* 면접 참고사항 */}
+                      {app.jobBoard.interviewBaseNotes && (
+                        <div className="mt-3">
+                          <div className="text-sm text-blue-700 bg-blue-100 p-3 rounded-md whitespace-pre-line">
+                            {app.jobBoard.interviewBaseNotes}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
+                  
+                  {/* 상태 표시 */}
+                  <div className="border-t border-gray-200 pt-4">
+                    {/* <p className="text-xs text-gray-500 font-medium mb-2">진행 상태</p> */}
+                    <div className="grid grid-cols-3 gap-1 text-xs">
+                      <div>
+                        <span className="text-gray-500 block mb-1">서류</span>
+                        {getStatusBadge(app.applicationStatus, 'application')}
+                      </div>
+                      <div>
+                        <span className="text-gray-500 block mb-1">면접</span>
+                        {app.interviewStatus 
+                          ? getStatusBadge(app.interviewStatus, 'interview')
+                          : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
+                      </div>
+                      <div>
+                        <span className="text-gray-500 block mb-1">최종</span>
+                        {app.finalStatus 
+                          ? getStatusBadge(app.finalStatus, 'final')
+                          : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
+                      </div>
+                    </div>
+                  </div>
                   
                   {/* 상세 보기 링크 (프로필 페이지로 이동) */}
                   <Link 
                     href="/profile/job-apply" 
-                    className="text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                    className="text-blue-600 hover:text-blue-800 text-sm flex items-center mt-4"
                   >
                     상세보기
                     <svg className="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -234,11 +234,11 @@ export default function JobApplyStatus() {
                   </div>
                   
                   {/* 날짜 정보 */}
-                  <div className="mb-2">
+                  {/* <div className="mb-2">
                     <div>
                       <p className="text-sm text-gray-500 font-medium">지원일: {formatDate(app.applicationDate)}</p>
                     </div>
-                  </div>
+                  </div> */}
                   
                   {/* 면접 링크 버튼 (서류 합격이고 interviewBaseLink가 있을 때만 표시) */}
                   {app.applicationStatus === 'accepted' && app.interviewStatus === 'pending' && app.jobBoard && (
@@ -300,8 +300,8 @@ export default function JobApplyStatus() {
                   )}
                   
                   {/* 상태 표시 */}
-                  <div className="border-t pt-4">
-                    <p className="text-xs text-gray-500 font-medium mb-2">진행 상태</p>
+                  <div className="border-t border-gray-200 pt-4">
+                    {/* <p className="text-xs text-gray-500 font-medium mb-2">진행 상태</p> */}
                     <div className="grid grid-cols-3 gap-1 text-xs">
                       <div>
                         <span className="text-gray-500 block mb-1">서류</span>
