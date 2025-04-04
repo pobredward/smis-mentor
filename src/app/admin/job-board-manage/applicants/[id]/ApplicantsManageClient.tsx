@@ -173,6 +173,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const handleSelectApplication = (app: ApplicationWithUser) => {
     setSelectedApplication(app);
     setFeedbackText(app.interviewFeedback || '');
+    
+    // 화면 최상단으로 스크롤
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
     if (app.interviewDate) {
       const date = app.interviewDate.toDate();
       setInterviewDate(format(date, 'yyyy-MM-dd'));

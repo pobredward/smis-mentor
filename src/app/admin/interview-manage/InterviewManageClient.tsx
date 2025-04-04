@@ -37,6 +37,7 @@ export function InterviewManageClient() {
   const [interviewTime, setInterviewTime] = useState('');
   const [newSelectedDate, setNewSelectedDate] = useState('');
   const [scriptText, setScriptText] = useState('');
+  const [showDetail, setShowDetail] = useState(false);
   
   // 데이터 로드
   useEffect(() => {
@@ -172,6 +173,10 @@ export function InterviewManageClient() {
   const handleSelectApplication = async (app: ApplicationWithUser) => {
     setSelectedApplication(app);
     setFeedbackText(app.interviewFeedback || '');
+    setShowDetail(true);
+    
+    // 화면 최상단으로 스크롤
+    window.scrollTo({ top: 0 });
     
     if (app.interviewDate) {
       const time = format(app.interviewDate.toDate(), 'HH:mm');
@@ -705,6 +710,11 @@ export function InterviewManageClient() {
     router.back();
   };
 
+  // 목록으로 돌아가는 함수 추가
+  const handleBackToList = () => {
+    setShowDetail(false);
+  };
+
   return (
     <Layout requireAuth requireAdmin>
       <div className="container mx-auto lg:px-4 px-0">
@@ -738,7 +748,7 @@ export function InterviewManageClient() {
                 return (
                   <button
                     key={index}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                    className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
                       selectedDate && format(selectedDate.date, 'yyyy-MM-dd-HH:mm') === format(dateInfo.date, 'yyyy-MM-dd-HH:mm')
                         ? 'bg-blue-500 text-white'
                         : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
@@ -755,7 +765,7 @@ export function InterviewManageClient() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* 왼쪽: 면접 대상자 목록 */}
-          <div className="lg:w-1/3">
+          <div className={`lg:w-1/3 ${showDetail ? 'hidden lg:block' : 'block'}`}>
             {selectedDate ? (
               <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b bg-gray-50">
@@ -858,11 +868,23 @@ export function InterviewManageClient() {
           </div>
 
           {/* 오른쪽: 선택된 지원자 상세 정보 또는 스크립트 */}
-          <div className="lg:w-2/3">
+          <div className={`lg:w-2/3 ${showDetail ? 'block' : 'hidden lg:block'}`}>
             {selectedDate ? (
               <div className="bg-white rounded-lg shadow">
                 {selectedApplication ? (
                   <div className="p-4 lg:p-6">
+                    {/* 모바일 화면에서만 보이는 뒤로가기 버튼 */}
+                    <div className="lg:hidden mb-4">
+                      <button
+                        onClick={handleBackToList}
+                        className="flex items-center text-blue-600 hover:text-blue-800"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                        </svg>
+                        목록으로
+                      </button>
+                    </div>
                     <div className="mb-6 pb-6 border-b border-gray-200">
                       <div className="flex justify-between items-start">
                         <div className="flex items-start">
