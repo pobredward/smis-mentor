@@ -218,6 +218,7 @@ export function InterviewManageClient() {
     setSelectedDate(dateInfo);
     setSelectedApplication(null);
     setFeedbackText('');
+    setShowDetail(false); // 상세 보기 모드 해제
   };
 
   // 진행자 스크립트 로드
@@ -1108,7 +1109,7 @@ export function InterviewManageClient() {
                     )}
                   </div>
                 ) : (
-                  <div className="p-4 lg:p-6">
+                  <div className="p-4 lg:p-6 hidden lg:block">
                     <div className="flex justify-between items-center mb-4">
                       <h2 className="text-xl font-bold">진행자 스크립트</h2>
                     </div>
