@@ -6,11 +6,10 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { Timestamp, onSnapshot, collection, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
 // import Button from '@/components/common/Button';
-import { getJobCodeById } from '@/lib/firebaseService';
+import { getActiveJobBoards, getJobCodeById } from '@/lib/firebaseService';
 import { JobBoard, JobCodeWithId } from '@/types';
 
 type JobBoardWithId = JobBoard & { id: string };
@@ -23,28 +22,18 @@ export default function JobBoardList() {
   // const { userData } = useAuth();
   const router = useRouter();
 
-  // 공고 목록 실시간 업데이트
+  // 공고 목록 불러오기
   useEffect(() => {
-    setIsLoading(true);
-    
-    // 활성화된 공고만 필터링
-    const q = query(
-      collection(db, 'jobBoards'),
-      where('status', '==', 'active')
-    );
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
+    const loadJobBoards = async () => {
       try {
-        const boards = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as JobBoardWithId[];
+        setIsLoading(true);
+        const boards = await getActiveJobBoards();
         
-        // 클라이언트 측에서 정렬 수행
+        // 최신순 정렬
         const sortedBoards = boards.sort((a, b) => 
           b.createdAt.seconds - a.createdAt.seconds
         );
-
+        
         // JobCode 정보도 함께 가져오기
         const jobCodeIds = sortedBoards.map(board => board.refJobCodeId);
         const uniqueJobCodeIds = [...new Set(jobCodeIds)];
@@ -57,27 +46,17 @@ export default function JobBoardList() {
           }
         }
         
-        // JobCode의 korea 속성을 JobBoard에 적용
-        const boardsWithKorea = sortedBoards.map(board => {
-          const jobCode = jobCodesData[board.refJobCodeId];
-          return {
-            ...board,
-            korea: jobCode ? jobCode.korea : board.korea
-          };
-        });
-        
         setJobCodesMap(jobCodesData);
-        setJobBoards(boardsWithKorea);
+        setJobBoards(sortedBoards);
       } catch (error) {
         console.error('공고 정보 로드 오류:', error);
         toast.error('공고 정보를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
       }
-    });
+    };
 
-    // 컴포넌트 언마운트 시 리스너 정리
-    return () => unsubscribe();
+    loadJobBoards();
   }, []);
 
   // 공고 선택 핸들러
