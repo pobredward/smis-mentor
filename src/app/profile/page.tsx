@@ -278,7 +278,7 @@ export default function ProfilePage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">학년</p>
-                    <p>{userData.grade}학년 {userData.isOnLeave ? '(휴학중)' : ''}</p>
+                    <p>{userData.grade === 6 ? '졸업생' : `${userData.grade}학년`} {userData.isOnLeave ? '(휴학중)' : ''}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">전공 (1전공)</p>

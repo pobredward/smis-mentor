@@ -997,6 +997,8 @@ export default function UserManage() {
                               <option value="2">2학년</option>
                               <option value="3">3학년</option>
                               <option value="4">4학년</option>
+                              <option value="5">5학년</option>
+                              <option value="6">졸업생</option>
                             </select>
                           </div>
 
@@ -1191,7 +1193,7 @@ export default function UserManage() {
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">학년</p>
-                            <p className="text-gray-900">{selectedUser.grade ? `${selectedUser.grade}학년` : '-'}</p>
+                            <p className="text-gray-900">{selectedUser.grade ? (selectedUser.grade === 6 ? '졸업생' : `${selectedUser.grade}학년`) : '-'}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">휴학 상태</p>
