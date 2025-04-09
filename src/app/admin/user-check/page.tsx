@@ -458,7 +458,7 @@ export default function UserCheck() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">학년</p>
-                      <p className="text-gray-900">{selectedUser.grade ? `${selectedUser.grade}학년` : '-'}</p>
+                      <p className="text-gray-900">{selectedUser.grade ? (selectedUser.grade === 6 ? '졸업생' : `${selectedUser.grade}학년`) : '-'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">휴학 상태</p>
