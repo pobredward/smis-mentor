@@ -627,24 +627,30 @@ export default function JobBoardManage() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">공고</th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">기간</th>
                       <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
                       <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지역</th>
                       <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지원자</th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {jobBoards.map((board) => (
-                      <tr key={board.id} className="hover:bg-gray-50">
+                    {jobBoards.map((board) => {
+                      // 상태별 지원자 수 계산
+                      const pendingCount = board.applications.filter(app => app.applicationStatus === 'pending').length;
+                      const interviewCount = board.applications.filter(app => app.interviewStatus === 'pending').length;
+                      const passedCount = board.applications.filter(app => app.interviewStatus === 'passed').length;
+                      const finalAcceptedCount = board.applications.filter(app => app.finalStatus === 'finalAccepted').length;
+                      
+                      return (
+                      <tr 
+                        key={board.id} 
+                        className="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
+                        onClick={() => viewApplicants(board.id)}
+                      >
                         <td className="px-4 sm:px-6 py-4">
                           <div className="flex flex-col">
                             <span className="font-medium text-gray-900">{board.title}</span>
                             <span className="text-sm text-gray-500">{board.generation} ({board.jobCode})</span>
                           </div>
-                        </td>
-                        <td className="px-4 sm:px-6 py-4 text-sm text-gray-500">
-                          {formatDate(board.createdAt)}
                         </td>
                         <td className="px-4 sm:px-6 py-4">
                           <span className={`px-2 py-1 text-xs rounded-full ${
@@ -664,22 +670,31 @@ export default function JobBoardManage() {
                             {board.korea ? '국내' : '해외'}
                           </span>
                         </td>
-                        <td className="px-4 sm:px-6 py-4 text-sm text-gray-500">
-                          {board.applicationsCount}명
-                        </td>
-                        <td className="px-4 sm:px-6 py-4 text-sm font-medium">
-                          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => viewApplicants(board.id)}
-                            >
-                              지원자
-                            </Button>
+                        <td className="px-4 sm:px-6 py-4 text-sm">
+                          <div className="flex flex-col gap-1">
+                            <div className="text-gray-700 font-medium">총 {board.applicationsCount}명</div>
+                            <div className="flex flex-col sm:flex-row gap-2 text-xs">
+                              <span className="inline-flex items-center">
+                                <span className="h-2 w-2 rounded-full bg-red-500 mr-1"></span>
+                                <span>서류 검토중: {pendingCount}명</span>
+                              </span>
+                              <span className="inline-flex items-center">
+                                <span className="h-2 w-2 rounded-full bg-yellow-500 mr-1"></span>
+                                <span>면접 예정자: {interviewCount}명</span>
+                              </span>
+                              <span className="inline-flex items-center">
+                                <span className="h-2 w-2 rounded-full bg-green-500 mr-1"></span>
+                                <span>면접 합격자: {passedCount}명</span>
+                              </span>
+                              <span className="inline-flex items-center">
+                                <span className="h-2 w-2 rounded-full bg-indigo-500 mr-1"></span>
+                                <span>최종 합격자: {finalAcceptedCount}명</span>
+                              </span>
+                            </div>
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
@@ -687,25 +702,25 @@ export default function JobBoardManage() {
 
             {/* 모바일 뷰 - 카드 형태 */}
             <div className="md:hidden space-y-4">
-              {jobBoards.map((board) => (
-                <div key={board.id} className="bg-white rounded-lg shadow p-4">
+              {jobBoards.map((board) => {
+                // 상태별 지원자 수 계산
+                const pendingCount = board.applications.filter(app => app.applicationStatus === 'pending').length;
+                const interviewCount = board.applications.filter(app => app.interviewStatus === 'pending').length;
+                const passedCount = board.applications.filter(app => app.interviewStatus === 'passed').length;
+                const finalAcceptedCount = board.applications.filter(app => app.finalStatus === 'finalAccepted').length;
+                
+                return (
+                <div 
+                  key={board.id} 
+                  className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow duration-200" 
+                  onClick={() => viewApplicants(board.id)}
+                >
                   <div className="mb-3">
                     <h3 className="font-medium text-gray-900">{board.title}</h3>
                     <p className="text-sm text-gray-500">{board.generation} ({board.jobCode})</p>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-                    <div>
-                      <span className="text-gray-500">작성일:</span> 
-                      <span className="ml-1">{formatDate(board.createdAt)}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">지원자:</span>
-                      <span className="ml-1 font-medium">{board.applicationsCount}명</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2 mb-4">
+                  <div className="flex flex-wrap gap-2 mb-3">
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       board.status === 'active' 
                         ? 'bg-green-100 text-green-800' 
@@ -723,15 +738,33 @@ export default function JobBoardManage() {
                     </span>
                   </div>
                   
-                  <Button
-                    variant="outline"
-                    fullWidth
-                    onClick={() => viewApplicants(board.id)}
-                  >
-                    지원자 보기
-                  </Button>
+                  <div className="border-t pt-3 mt-2">
+                    <div className="flex items-center gap-1 mb-2">
+                      <span className="font-medium text-gray-700">총 지원자:</span>
+                      <span className="bg-gray-100 px-2 py-0.5 rounded-full text-sm">{board.applicationsCount}명</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
+                      <div className="flex gap-2 items-center">
+                        <span className="h-2 w-2 rounded-full bg-red-500"></span>
+                        <span>서류 검토중: {pendingCount}명</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <span className="h-2 w-2 rounded-full bg-yellow-500"></span>
+                        <span>면접 예정자: {interviewCount}명</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                        <span>면접 합격자: {passedCount}명</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <span className="h-2 w-2 rounded-full bg-indigo-500"></span>
+                        <span>최종 합격자: {finalAcceptedCount}명</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              )})}
             </div>
           </>
         )}
