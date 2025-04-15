@@ -611,10 +611,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           </div>
         ) : (
           // 모바일 최적화 레이아웃
-          <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
+          <div className="flex flex-col lg:grid lg:grid-cols-5 gap-6">
             {/* 모바일 뷰에서는 상세 정보가 선택된 경우에만 지원자 목록을 숨깁니다 */}
             {(!selectedApplication || !isMobile) && (
-            <div className={`${selectedApplication && isMobile ? 'hidden' : 'block'} lg:col-span-1`}>
+            <div className={`${selectedApplication && isMobile ? 'hidden' : 'block'} lg:col-span-2`}>
               {/* 지원자 목록 */}
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <div className="p-2 lg:p-4 border-b flex justify-between items-center">
@@ -671,26 +671,26 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         {/* 지원자 정보와 상태 배지 */}
                         <div className="flex flex-1 justify-between items-center">
                           {/* 왼쪽: 지원자 기본 정보 */}
-                          <div className="flex flex-col">
-                            <h3 className="font-medium text-gray-900">
+                          <div className="flex flex-col mr-2 flex-grow-0 max-w-[70%]">
+                            <h3 className="font-medium text-gray-900 truncate">
                             {app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}
                             </h3>
                             {/* <p className="text-sm text-gray-500">
                               {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
                             </p> */}
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-gray-400 mt-1 truncate">
                               {app.user?.university ? `${app.user.university} ${app.user.grade}학년 ${app.user.isOnLeave ? '휴학생' : '재학생'}` : ''}
                             </p>
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-gray-400 mt-1 truncate">
                               {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
                             </p>
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-gray-400 mt-1 truncate">
                               지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
                             </p>
                           </div>
                           
                           {/* 오른쪽: 상태 배지 */}
-                          <div className="flex flex-col items-end gap-1">
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
                             <div className="flex items-center gap-1">
                               <span className="text-xs text-gray-500">서류:</span>
                               {getStatusBadge(app.applicationStatus, 'application')}
@@ -719,7 +719,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             
             {/* 선택된 지원자 상세 - 모바일에서는 전체 너비 사용 */}
             {selectedApplication && (
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-3">
                 <div className="bg-white rounded-lg shadow">
                   {/* 모바일 뷰에서만 보이는 뒤로가기 버튼 */}
                   <div className="lg:hidden p-4 border-b flex justify-between items-center">
