@@ -11,9 +11,9 @@ export default function Footer() {
             <ul className="space-y-2">
               <li className="text-sm text-gray-500">회사명: (주)에스엠아이에스</li>
               <li className="text-sm text-gray-500">대표: 임대환</li>
-              <li className="text-sm text-gray-500">개인정보 보호 책임자: 김소희</li>
               <li className="text-sm text-gray-500">법인사업자 등록번호: 427-88-03423</li>
               <li className="text-sm text-gray-500">주소: 경기 성남시 분당구 장미로 78 SMIS 라운지&교육센터 3층</li>
+              <li className="text-sm text-gray-500">채용 문의: 신선웅 (010-7656-7933)</li>
             </ul>
           </div>
           
