@@ -129,14 +129,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         switch (filterStatus) {
           case 'pending':
             return app.applicationStatus === 'pending';
-          case 'accepted':
-            return app.applicationStatus === 'accepted';
           case 'interview':
             return app.interviewStatus === 'pending';
           case 'passed':
             return app.interviewStatus === 'passed';
-          case 'complete':
-            return app.interviewStatus === 'complete';
           case 'final':
             return app.finalStatus === 'finalAccepted';
           default:
@@ -213,7 +209,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     if (!status) return null;
 
     const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
-      pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '검토중' },
+      pending: { bg: 'bg-red-100', text: 'text-red-800', label: '검토중' },
       accepted: { bg: 'bg-green-100', text: 'text-green-800', label: '합격' },
       rejected: { bg: 'bg-red-100', text: 'text-red-800', label: '불합격' },
       passed: { bg: 'bg-green-100', text: 'text-green-800', label: '합격' },
@@ -523,24 +519,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                 onClick={() => setFilterStatus('pending')}
                 className={`px-3 py-1 rounded-full text-sm font-medium ${
                   filterStatus === 'pending'
-                    ? 'bg-yellow-100 text-yellow-800'
+                    ? 'bg-red-100 text-red-800'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                검토중
+                <span className="inline-flex items-center">
+                  <span className="h-2 w-2 rounded-full bg-red-500 mr-1"></span>
+                  <span>서류 검토중</span>
+                </span>
               </button>
-              <button
-                onClick={() => setFilterStatus('accepted')}
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  filterStatus === 'accepted'
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                서류 합격
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setFilterStatus('interview')}
                 className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -549,17 +536,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                면접 예정
-              </button>
-              <button
-                onClick={() => setFilterStatus('complete')}
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  filterStatus === 'complete'
-                    ? 'bg-purple-100 text-purple-800'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                면접 완료
+                <span className="inline-flex items-center">
+                  <span className="h-2 w-2 rounded-full bg-yellow-500 mr-1"></span>
+                  <span>면접 예정자</span>
+                </span>
               </button>
               <button
                 onClick={() => setFilterStatus('passed')}
@@ -569,7 +549,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                면접 합격
+                <span className="inline-flex items-center">
+                  <span className="h-2 w-2 rounded-full bg-green-500 mr-1"></span>
+                  <span>면접 합격자</span>
+                </span>
               </button>
               <button
                 onClick={() => setFilterStatus('final')}
@@ -579,7 +562,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                최종 합격
+                <span className="inline-flex items-center">
+                  <span className="h-2 w-2 rounded-full bg-indigo-500 mr-1"></span>
+                  <span>최종 합격자</span>
+                </span>
               </button>
             </div>
             <div className="w-full mt-2">
