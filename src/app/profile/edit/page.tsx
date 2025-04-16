@@ -863,7 +863,7 @@ export default function EditProfilePage() {
                 type="submit"
                 variant="primary"
                 isLoading={isLoading}
-                disabled={(section !== 'experience' && !isDirty && !profileImageUrl) || emailExists || phoneExists}
+                disabled={((section !== 'experience' && section !== 'personal') && !isDirty && !profileImageUrl) || emailExists || phoneExists}
               >
                 저장하기
               </Button>
