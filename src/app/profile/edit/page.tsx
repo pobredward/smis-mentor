@@ -115,6 +115,9 @@ export default function EditProfilePage() {
       description: '',
     };
     setPartTimeJobs([...partTimeJobs, newJob]);
+    if (section === 'experience') {
+      setValue('partTimeJobs', [...partTimeJobs, newJob], { shouldDirty: true });
+    }
   };
 
   // 알바 & 멘토링 경력 삭제
@@ -122,6 +125,9 @@ export default function EditProfilePage() {
     const updatedJobs = [...partTimeJobs];
     updatedJobs.splice(index, 1);
     setPartTimeJobs(updatedJobs);
+    if (section === 'experience') {
+      setValue('partTimeJobs', updatedJobs, { shouldDirty: true });
+    }
   };
 
   // 알바 & 멘토링 경력 업데이트
@@ -129,6 +135,9 @@ export default function EditProfilePage() {
     const updatedJobs = [...partTimeJobs];
     updatedJobs[index] = { ...updatedJobs[index], [field]: value };
     setPartTimeJobs(updatedJobs);
+    if (section === 'experience') {
+      setValue('partTimeJobs', updatedJobs, { shouldDirty: true });
+    }
   };
 
   // 사용자 데이터로 폼 초기화
@@ -854,7 +863,7 @@ export default function EditProfilePage() {
                 type="submit"
                 variant="primary"
                 isLoading={isLoading}
-                disabled={!isDirty && !profileImageUrl || emailExists || phoneExists}
+                disabled={(section !== 'experience' && !isDirty && !profileImageUrl) || emailExists || phoneExists}
               >
                 저장하기
               </Button>
