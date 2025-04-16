@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/common/Header';
 import { deleteReview } from '@/lib/firebaseService';
 import { useRouter } from 'next/navigation';
-
+import Button from '@/components/common/Button';
 interface ReviewWithId extends Review {
   isOpen?: boolean;
 }
@@ -133,13 +133,29 @@ export default function ReviewsPage() {
     return a.localeCompare(b);
   });
 
+  const handleGoBack = () => {
+    router.back();
+  };
+
   return (
     <>
       <Header />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">멘토 참여 후기</h1>
-          {currentUser && userData?.role === 'admin' && (
+        <div className="flex items-center">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+                        onClick={handleGoBack}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                        </svg>
+                      </Button>
+                      <h1 className="text-xl font-semibold text-gray-900">멘토 참여 후기</h1>
+                    </div>
+                    {currentUser && userData?.role === 'admin' && (
             <Link
               href="/reviews/add"
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
@@ -156,7 +172,7 @@ export default function ReviewsPage() {
         ) : (
           sortedGenerations.map((generation) => (
             <div key={generation} className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4">{generation}</h2>
+              <h2 className="text-xl font-semibold mb-4">{generation}</h2>
               <div className="space-y-4">
                 {reviewsByGeneration[generation].map((review) => (
                   <div key={review.id} className="border border-gray-200 rounded-lg overflow-hidden">
@@ -167,7 +183,7 @@ export default function ReviewsPage() {
                         className="flex-1"
                         onClick={() => toggleReview(review.id)}
                       >
-                        <h3 className="text-lg font-medium text-gray-900">
+                        <h3 className="text-base font-medium text-gray-900">
                           {review.title}
                         </h3>
                       </div>
