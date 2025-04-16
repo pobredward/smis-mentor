@@ -48,7 +48,14 @@ export default function ProfilePage() {
       if (userData?.jobExperiences && userData.jobExperiences.length > 0) {
         try {
           const jobCodesInfo = await getUserJobCodesInfo(userData.jobExperiences);
-          setJobCodes(jobCodesInfo);
+          // generation 기준으로 정렬 (generation은 문자열이므로 숫자로 변환하여 정렬)
+          const sortedJobCodes = [...jobCodesInfo].sort((a, b) => {
+            // generation에서 숫자만 추출 (예: "1기" -> 1, "10기" -> 10)
+            const genA = parseInt(a.generation.replace(/[^0-9]/g, ''));
+            const genB = parseInt(b.generation.replace(/[^0-9]/g, ''));
+            return genB - genA; // 내림차순 정렬 (최신 기수가 위로)
+          });
+          setJobCodes(sortedJobCodes);
         } catch (error) {
           console.error('업무 정보 불러오기 오류:', error);
         }
