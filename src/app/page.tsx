@@ -6,7 +6,6 @@ import ApplicationSection from '@/components/home/ApplicationSection';
 import AdminDashboardButton from '@/components/home/AdminDashboardButton';
 import { getBestReviews } from '@/lib/firebaseService';
 import { Review } from '@/types';
-import { formatDate } from '@/utils/dateUtils';
 
 // getBestReviews API 호출로 반환되는 확장된 Review 타입
 interface ExtendedReview extends Review {
@@ -20,7 +19,7 @@ async function ReviewsSection() {
   const reviews = await getBestReviews(3) as ExtendedReview[];
 
   return (
-    <div className="bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 mt-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">
