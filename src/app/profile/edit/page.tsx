@@ -392,7 +392,6 @@ export default function EditProfilePage() {
       await refreshUserData();
 
       toast.success('프로필이 성공적으로 업데이트되었습니다.');
-      router.push('/profile');
     } catch {
       toast.error('프로필 업데이트 중 오류가 발생했습니다.');
     } finally {
@@ -421,18 +420,24 @@ export default function EditProfilePage() {
     <Layout requireAuth>
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">
-            {section === 'personal' ? '상세 정보 수정' : 
-             section === 'experience' ? '알바 & 멘토링 경력 수정' : 
-             section === 'education' ? '학교 정보 수정' : 
-             '프로필 수정'}
-          </h1>
-          <Button
-            variant="outline"
-            onClick={() => router.push('/profile')}
-          >
-            취소
-          </Button>
+          <div className="flex items-center">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+              onClick={() => router.back()}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            </Button>
+            <h1 className="text-2xl font-bold">
+              {section === 'personal' ? '상세 정보 수정' : 
+               section === 'experience' ? '알바 & 멘토링 경력 수정' : 
+               section === 'education' ? '학교 정보 수정' : 
+               '프로필 수정'}
+            </h1>
+          </div>
         </div>
 
         {showCropper && selectedFile ? (
