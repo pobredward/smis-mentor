@@ -102,7 +102,7 @@ export default function ProfilePage() {
 
   return (
     <Layout requireAuth>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl mx-auto lg:px-4 px-0">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl sm:text-2xl font-bold">내 프로필</h1>
         </div>
@@ -216,7 +216,7 @@ export default function ProfilePage() {
                   <div key={job.id as string} className="">
                     <div className="flex flex-col flex-row justify-between mb-2">
                       <div className="flex text-sm items-center">
-                        <h3 className="text-gray-900">{job.name}</h3>
+                        <h3 className="text-gray-900">{job.generation} {job.name}</h3>
                         
                       </div>
                       {job.group && (
