@@ -142,6 +142,7 @@ export default function SignUpDetails() {
           selfIntroduction: '',
           jobMotivation: '',
           status: 'active',
+          role: 'mentor',
           isEmailVerified: false,
           updatedAt: now,
           lastLoginAt: now,
