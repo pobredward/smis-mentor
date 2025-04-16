@@ -134,6 +134,16 @@ export default function EditProfilePage() {
   // 사용자 데이터로 폼 초기화
   useEffect(() => {
     if (userData) {
+      // referralPath 값 처리
+      let referralPathValue = userData.referralPath || '';
+      let otherReferralDetail = '';
+      
+      // 기타 경로인 경우 분리
+      if (referralPathValue && referralPathValue.startsWith('기타: ')) {
+        otherReferralDetail = referralPathValue.substring(4).trim();
+        referralPathValue = '기타';
+      }
+      
       reset({
         name: userData.name,
         age: userData.age || undefined,
@@ -150,9 +160,9 @@ export default function EditProfilePage() {
         major1: userData.major1 || '',
         major2: userData.major2 || '',
         partTimeJobs: userData.partTimeJobs || [],
-        referralPath: userData.referralPath || '',
+        referralPath: referralPathValue,
         referrerName: userData.referrerName || '',
-        otherReferralDetail: '',
+        otherReferralDetail: otherReferralDetail,
       });
       
       if (userData.profileImage) {
