@@ -370,6 +370,10 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
     }
   };
 
+  const handleGoBack = () => {
+    router.back();
+  };
+
   return (
     <Layout>
       <div className="container mx-auto px-0 sm:px-6 lg:px-8">
@@ -601,9 +605,20 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
               ) : (
                 <>
                   {/* 공고 헤더 */}
-                  <div className="mb-6 pb-6 border-b border-gray-200">
-                    <div className="text-lg font-semibold text-gray-900">{jobBoard.title}</div>
-                    <div className="text-sm text-gray-500">{jobBoard.generation}</div>
+                  <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-200">
+                    <div className="flex items-center">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+                        onClick={handleGoBack}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                        </svg>
+                      </Button>
+                      <h1 className="text-lg font-semibold text-gray-900">{jobBoard.generation} {jobBoard.title}</h1>
+                    </div>
                   </div>
 
                   {/* 캠프 정보 */}
