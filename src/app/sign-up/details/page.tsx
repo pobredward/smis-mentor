@@ -38,15 +38,16 @@ export default function SignUpDetails() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPostcode, setShowPostcode] = useState(false);
 
-  const name = searchParams.get('name');
-  const phoneNumber = searchParams.get('phone');
-  const email = searchParams.get('email');
+  // URL 파라미터 디코딩
+  const name = searchParams.get('name') ? decodeURIComponent(searchParams.get('name') as string) : null;
+  const phoneNumber = searchParams.get('phone') ? decodeURIComponent(searchParams.get('phone') as string) : null;
+  const email = searchParams.get('email') ? decodeURIComponent(searchParams.get('email') as string) : null;
   const password = searchParams.get('password');
-  const university = searchParams.get('university');
+  const university = searchParams.get('university') ? decodeURIComponent(searchParams.get('university') as string) : null;
   const grade = searchParams.get('grade');
   const isOnLeave = searchParams.get('isOnLeave');
-  const major1 = searchParams.get('major1');
-  const major2 = searchParams.get('major2');
+  const major1 = searchParams.get('major1') ? decodeURIComponent(searchParams.get('major1') as string) : null;
+  const major2 = searchParams.get('major2') ? decodeURIComponent(searchParams.get('major2') as string) : null;
 
   const {
     register,

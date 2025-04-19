@@ -28,9 +28,10 @@ export default function SignUpEducation() {
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
 
-  const name = searchParams.get('name');
-  const phoneNumber = searchParams.get('phone');
-  const email = searchParams.get('email');
+  // URL 파라미터 디코딩
+  const name = searchParams.get('name') ? decodeURIComponent(searchParams.get('name') as string) : null;
+  const phoneNumber = searchParams.get('phone') ? decodeURIComponent(searchParams.get('phone') as string) : null;
+  const email = searchParams.get('email') ? decodeURIComponent(searchParams.get('email') as string) : null;
   const password = searchParams.get('password');
 
   const {
@@ -92,7 +93,7 @@ export default function SignUpEducation() {
       }
       
       // 다음 단계로 이동
-      router.push(`/sign-up/details?name=${name}&phone=${phoneNumber}&email=${email}&password=${password}&university=${encodeURIComponent(data.university)}&grade=${data.grade}&isOnLeave=${data.isOnLeave}&major1=${encodeURIComponent(data.major1)}&major2=${encodeURIComponent(data.major2 || '')}`);
+      router.push(`/sign-up/details?name=${encodeURIComponent(name || '')}&phone=${encodeURIComponent(phoneNumber || '')}&email=${encodeURIComponent(email || '')}&password=${encodeURIComponent(password || '')}&university=${encodeURIComponent(data.university)}&grade=${data.grade}&isOnLeave=${data.isOnLeave}&major1=${encodeURIComponent(data.major1)}&major2=${encodeURIComponent(data.major2 || '')}`);
     } catch (error) {
       console.error('교육 정보 확인 오류:', error);
       toast.error('교육 정보 확인 중 오류가 발생했습니다.');

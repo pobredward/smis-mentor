@@ -73,7 +73,7 @@ export default function SignUpAccount() {
       }
 
       // 다음 단계로 이동
-      router.push(`/sign-up/education?name=${name}&phone=${phoneNumber}&email=${data.email}&password=${encodeURIComponent(data.password)}`);
+      router.push(`/sign-up/education?name=${encodeURIComponent(name || '')}&phone=${encodeURIComponent(phoneNumber || '')}&email=${encodeURIComponent(data.email)}&password=${encodeURIComponent(data.password)}`);
     } catch (error) {
       console.error('계정 정보 확인 오류:', error);
       toast.error('계정 정보 확인 중 오류가 발생했습니다.');
