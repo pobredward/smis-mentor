@@ -5,11 +5,12 @@ import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, s
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { JobBoard, ApplicationHistory, User } from '@/types';
 import { useRouter } from 'next/navigation';
+import { getSMSTemplateByTypeAndJobBoard, saveSMSTemplate, updateSMSTemplate, getAllSMSTemplates, SMSTemplate, TemplateType } from '@/lib/smsTemplateService';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -42,10 +43,28 @@ export function InterviewManageClient() {
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState('');
   
+  // SMS 관련 상태 추가
+  const [showDocumentPassMessage, setShowDocumentPassMessage] = useState(false);
+  const [showDocumentFailMessage, setShowDocumentFailMessage] = useState(false);
+  const [showInterviewPassMessage, setShowInterviewPassMessage] = useState(false);
+  const [showInterviewFailMessage, setShowInterviewFailMessage] = useState(false);
+  const [showFinalPassMessage, setShowFinalPassMessage] = useState(false);
+  const [showFinalFailMessage, setShowFinalFailMessage] = useState(false);
+  const [documentPassMessage, setDocumentPassMessage] = useState('');
+  const [documentFailMessage, setDocumentFailMessage] = useState('');
+  const [interviewPassMessage, setInterviewPassMessage] = useState('');
+  const [interviewFailMessage, setInterviewFailMessage] = useState('');
+  const [finalPassMessage, setFinalPassMessage] = useState('');
+  const [finalFailMessage, setFinalFailMessage] = useState('');
+  const [isLoadingMessage, setIsLoadingMessage] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [smsTemplates, setSmsTemplates] = useState<SMSTemplate[]>([]);
+  
   // 데이터 로드
   useEffect(() => {
     loadJobBoards();
     loadScript();
+    loadSmsTemplates();
   }, []);
 
   // 채용 공고 목록 로드
@@ -973,6 +992,288 @@ export function InterviewManageClient() {
     }
   };
 
+  // 모든 메시지 박스 닫기
+  const closeAllMessageBoxes = () => {
+    setShowDocumentPassMessage(false);
+    setShowDocumentFailMessage(false);
+    setShowInterviewPassMessage(false);
+    setShowInterviewFailMessage(false);
+    setShowFinalPassMessage(false);
+    setShowFinalFailMessage(false);
+  };
+
+  // SMS 템플릿 로드
+  const loadSmsTemplates = async () => {
+    try {
+      const templates = await getAllSMSTemplates();
+      setSmsTemplates(templates);
+    } catch (error) {
+      console.error('SMS 템플릿 로드 오류:', error);
+    }
+  };
+  
+  // 상태별 템플릿 로드 함수
+  const loadTemplates = async () => {
+    if (!selectedApplication) return;
+    
+    try {
+      setLoading(true);
+      
+      // 해당 지원자의 공고 ID 가져오기
+      const jobBoardId = selectedApplication.refJobBoardId;
+      
+      // document_pass 템플릿 로드
+      const documentPassTemplate = await getSMSTemplateByTypeAndJobBoard('document_pass', jobBoardId);
+      if (documentPassTemplate) {
+        setDocumentPassMessage(documentPassTemplate.content);
+      } else {
+        // 기본 서류 합격 메시지 설정
+        setDocumentPassMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n서류 전형 합격을 축하드립니다. 다음 면접 일정을 안내드리겠습니다.`);
+      }
+      
+      // document_fail 템플릿 로드
+      const documentFailTemplate = await getSMSTemplateByTypeAndJobBoard('document_fail', jobBoardId);
+      if (documentFailTemplate) {
+        setDocumentFailMessage(documentFailTemplate.content);
+      } else {
+        // 기본 서류 불합격 메시지 설정
+        setDocumentFailMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+      }
+      
+      // interview_pass 템플릿 로드
+      const interviewPassTemplate = await getSMSTemplateByTypeAndJobBoard('interview_pass', jobBoardId);
+      if (interviewPassTemplate) {
+        setInterviewPassMessage(interviewPassTemplate.content);
+      } else {
+        // 기본 면접 합격 메시지 설정
+        setInterviewPassMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 면접에 참여해주셔서 감사합니다.\n면접 전형 합격을 축하드립니다. 후속 단계에 대해 안내드리겠습니다.`);
+      }
+      
+      // interview_fail 템플릿 로드
+      const interviewFailTemplate = await getSMSTemplateByTypeAndJobBoard('interview_fail', jobBoardId);
+      if (interviewFailTemplate) {
+        setInterviewFailMessage(interviewFailTemplate.content);
+      } else {
+        // 기본 면접 불합격 메시지 설정
+        setInterviewFailMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 면접에 참여해주셔서 감사합니다.\n아쉽게도 이번 면접 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+      }
+      
+      // final_pass 템플릿 로드
+      const finalPassTemplate = await getSMSTemplateByTypeAndJobBoard('final_pass', jobBoardId);
+      if (finalPassTemplate) {
+        setFinalPassMessage(finalPassTemplate.content);
+      } else {
+        // 기본 최종 합격 메시지 설정
+        setFinalPassMessage(`축하합니다, ${selectedApplication.user?.name || ''}님!\n${selectedApplication.jobBoardTitle || ''}에 최종 합격하셨습니다. 입사 관련 안내사항은 추후 이메일로 전달드릴 예정입니다.`);
+      }
+      
+      // final_fail 템플릿 로드
+      const finalFailTemplate = await getSMSTemplateByTypeAndJobBoard('final_fail', jobBoardId);
+      if (finalFailTemplate) {
+        setFinalFailMessage(finalFailTemplate.content);
+      } else {
+        // 기본 최종 불합격 메시지 설정
+        setFinalFailMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+      }
+    } catch (error) {
+      console.error('템플릿 로드 실패:', error);
+      toast.error('템플릿을 불러오는 데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 선택된 지원자가 변경될 때 모든 템플릿 로드
+  useEffect(() => {
+    if (selectedApplication?.user) {
+      loadTemplates();
+    }
+  }, [selectedApplication]);
+
+  // 메시지 전송 함수
+  const sendMessage = async (message: string) => {
+    if (!selectedApplication?.user?.phoneNumber || !message) {
+      toast.error('전화번호 또는 내용이 없습니다.');
+      return;
+    }
+    
+    try {
+      setIsLoadingMessage(true);
+      
+      // 메시지 전송 요청을 백그라운드로 처리
+      const response = await fetch('/api/send-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber: selectedApplication.user.phoneNumber,
+          content: message
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success('메시지가 성공적으로 전송되었습니다.');
+        // 모든 메시지 창 닫기
+        closeAllMessageBoxes();
+      } else {
+        toast.error(`메시지 전송 실패: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('메시지 전송 오류:', error);
+      toast.error('메시지 전송 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoadingMessage(false);
+    }
+  };
+
+  // 템플릿 저장 함수
+  const saveTemplate = async (type: TemplateType, content: string) => {
+    if (!selectedApplication) return;
+    
+    try {
+      setIsSavingTemplate(true);
+      
+      // 현재 로그인된 사용자의 uid 가져오기
+      const currentUser = auth.currentUser;
+      const createdBy = currentUser?.uid || 'system';
+      
+      // 기존 템플릿 확인
+      const existingTemplate = await getSMSTemplateByTypeAndJobBoard(type, selectedApplication.refJobBoardId);
+      
+      if (existingTemplate && existingTemplate.id) {
+        // 기존 템플릿 업데이트 - 비동기 작업을 백그라운드로 수행
+        updateSMSTemplate(existingTemplate.id, {
+          content,
+          type,
+          refJobBoardId: selectedApplication.refJobBoardId,
+          title: `${type} 템플릿`,
+          createdBy
+        }).catch(error => {
+          console.error('템플릿 업데이트 실패:', error);
+          toast.error('템플릿 업데이트에 실패했습니다. 다시 시도해주세요.');
+        });
+      } else {
+        // 새 템플릿 생성 - 비동기 작업을 백그라운드로 수행
+        saveSMSTemplate({
+          content,
+          type,
+          refJobBoardId: selectedApplication.refJobBoardId,
+          title: `${type} 템플릿`,
+          createdBy
+        }).catch(error => {
+          console.error('템플릿 생성 실패:', error);
+          toast.error('템플릿 생성에 실패했습니다. 다시 시도해주세요.');
+        });
+      }
+      
+      toast.success('템플릿이 저장되었습니다.');
+      
+      // 템플릿 저장 후 즉시 로컬 상태 업데이트
+      switch (type) {
+        case 'document_pass':
+          setDocumentPassMessage(content);
+          break;
+        case 'document_fail':
+          setDocumentFailMessage(content);
+          break;
+        case 'interview_pass':
+          setInterviewPassMessage(content);
+          break;
+        case 'interview_fail':
+          setInterviewFailMessage(content);
+          break;
+        case 'final_pass':
+          setFinalPassMessage(content);
+          break;
+        case 'final_fail':
+          setFinalFailMessage(content);
+          break;
+      }
+      
+      // 백그라운드에서 최신 템플릿 데이터 로드
+      loadSmsTemplates().catch(error => {
+        console.error('템플릿 로드 실패:', error);
+      });
+      
+    } catch (error) {
+      console.error('템플릿 저장 실패:', error);
+      toast.error('템플릿 저장에 실패했습니다.');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  // 메시지 박스 표시 함수
+  const showMessageBox = (type: TemplateType) => {
+    // 이미 열려있는 메시지 박스인 경우 닫기 처리
+    switch(type) {
+      case 'document_pass':
+        if(showDocumentPassMessage) {
+          setShowDocumentPassMessage(false);
+          return;
+        }
+        break;
+      case 'document_fail':
+        if(showDocumentFailMessage) {
+          setShowDocumentFailMessage(false);
+          return;
+        }
+        break;
+      case 'interview_pass':
+        if(showInterviewPassMessage) {
+          setShowInterviewPassMessage(false);
+          return;
+        }
+        break;
+      case 'interview_fail':
+        if(showInterviewFailMessage) {
+          setShowInterviewFailMessage(false);
+          return;
+        }
+        break;
+      case 'final_pass':
+        if(showFinalPassMessage) {
+          setShowFinalPassMessage(false);
+          return;
+        }
+        break;
+      case 'final_fail':
+        if(showFinalFailMessage) {
+          setShowFinalFailMessage(false);
+          return;
+        }
+        break;
+    }
+
+    // 모든 메시지 박스 숨기기
+    closeAllMessageBoxes();
+    
+    // 선택된 타입의 메시지 박스만 표시
+    switch (type) {
+      case 'document_pass':
+        setShowDocumentPassMessage(true);
+        break;
+      case 'document_fail':
+        setShowDocumentFailMessage(true);
+        break;
+      case 'interview_pass':
+        setShowInterviewPassMessage(true);
+        break;
+      case 'interview_fail':
+        setShowInterviewFailMessage(true);
+        break;
+      case 'final_pass':
+        setShowFinalPassMessage(true);
+        break;
+      case 'final_fail':
+        setShowFinalFailMessage(true);
+        break;
+    }
+  };
+
   return (
     <Layout requireAuth requireAdmin>
       <div className="container mx-auto lg:px-4 px-0">
@@ -1237,6 +1538,31 @@ export function InterviewManageClient() {
                             <option value="accepted">서류합격</option>
                             <option value="rejected">서류불합격</option>
                           </select>
+                          
+                          {/* 상태에 따라 적절한 버튼 표시 */}
+                          <div className="mt-2">
+                            {selectedApplication.applicationStatus === 'accepted' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('document_pass')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showDocumentPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                              </Button>
+                            )}
+                            
+                            {selectedApplication.applicationStatus === 'rejected' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('document_fail')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showDocumentFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         
                         <div>
@@ -1256,6 +1582,31 @@ export function InterviewManageClient() {
                             <option value="failed">면접불합격</option>
                             <option value="absent">면접불참</option>
                           </select>
+                          
+                          {/* 상태에 따라 적절한 버튼 표시 */}
+                          <div className="mt-2">
+                            {selectedApplication.interviewStatus === 'passed' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('interview_pass')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showInterviewPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                              </Button>
+                            )}
+                            
+                            {selectedApplication.interviewStatus === 'failed' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('interview_fail')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showInterviewFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         
                         <div>
@@ -1273,10 +1624,276 @@ export function InterviewManageClient() {
                             <option value="finalRejected">최종불합격</option>
                             <option value="absent">불참</option>
                           </select>
+                          
+                          {/* 상태에 따라 적절한 버튼 표시 */}
+                          <div className="mt-2">
+                            {selectedApplication.finalStatus === 'finalAccepted' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('final_pass')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showFinalPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                              </Button>
+                            )}
+                            
+                            {selectedApplication.finalStatus === 'finalRejected' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('final_fail')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showFinalFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                       
-                      {/* 면접 정보 입력 폼 */}
+                      {/* 메시지 박스 영역 - 그리드 밖으로 이동 */}
+                      {/* 합격 메시지 박스 */}
+                      {showDocumentPassMessage && (
+                        <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
+                          <label className="block text-sm font-medium text-green-700 mb-2">
+                            서류 합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
+                            rows={5}
+                            value={documentPassMessage}
+                            onChange={(e) => setDocumentPassMessage(e.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowDocumentPassMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('document_pass', documentPassMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="success"
+                              size="sm"
+                              onClick={() => sendMessage(documentPassMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 불합격 메시지 박스 */}
+                      {showDocumentFailMessage && (
+                        <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
+                          <label className="block text-sm font-medium text-red-700 mb-2">
+                            서류 불합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={documentFailMessage}
+                            onChange={(e) => setDocumentFailMessage(e.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowDocumentFailMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('document_fail', documentFailMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => sendMessage(documentFailMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 면접 합격 메시지 박스 */}
+                      {showInterviewPassMessage && (
+                        <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
+                          <label className="block text-sm font-medium text-green-700 mb-2">
+                            면접 합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
+                            rows={5}
+                            value={interviewPassMessage}
+                            onChange={(e) => setInterviewPassMessage(e.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowInterviewPassMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('interview_pass', interviewPassMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="success"
+                              size="sm"
+                              onClick={() => sendMessage(interviewPassMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 면접 불합격 메시지 박스 */}
+                      {showInterviewFailMessage && (
+                        <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
+                          <label className="block text-sm font-medium text-red-700 mb-2">
+                            면접 불합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={interviewFailMessage}
+                            onChange={(e) => setInterviewFailMessage(e.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowInterviewFailMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('interview_fail', interviewFailMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => sendMessage(interviewFailMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 최종 합격 메시지 박스 */}
+                      {showFinalPassMessage && (
+                        <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
+                          <label className="block text-sm font-medium text-green-700 mb-2">
+                            최종 합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
+                            rows={5}
+                            value={finalPassMessage}
+                            onChange={(e) => setFinalPassMessage(e.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowFinalPassMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('final_pass', finalPassMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="success"
+                              size="sm"
+                              onClick={() => sendMessage(finalPassMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 최종 불합격 메시지 박스 */}
+                      {showFinalFailMessage && (
+                        <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
+                          <label className="block text-sm font-medium text-red-700 mb-2">
+                            최종 불합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={finalFailMessage}
+                            onChange={(e) => setFinalFailMessage(e.target.value)}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowFinalFailMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('final_fail', finalFailMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => sendMessage(finalFailMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 면접 정보 입력 폼 - 기존 코드 유지 */}
                       {selectedApplication?.interviewStatus === 'pending' && (
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                           <input
