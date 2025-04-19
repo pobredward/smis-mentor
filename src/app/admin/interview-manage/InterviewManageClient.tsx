@@ -19,6 +19,7 @@ type InterviewDateInfo = {
   date: Date;
   formattedDate: string;
   interviews: ApplicationWithUser[];
+  recordingUrl?: string;
 };
 
 type ApplicationWithUser = ApplicationHistory & { 
@@ -38,6 +39,8 @@ export function InterviewManageClient() {
   const [newSelectedDate, setNewSelectedDate] = useState('');
   const [scriptText, setScriptText] = useState('');
   const [showDetail, setShowDetail] = useState(false);
+  const [showRecordingModal, setShowRecordingModal] = useState(false);
+  const [recordingUrl, setRecordingUrl] = useState('');
   
   // 데이터 로드
   useEffect(() => {
@@ -150,6 +153,24 @@ export function InterviewManageClient() {
       // 미정 그룹에 지원자가 없는 경우 제거
       if (interviewDateMap.get(undefinedDateKey)!.interviews.length === 0) {
         interviewDateMap.delete(undefinedDateKey);
+      }
+      
+      // 녹화 영상 URL 정보 가져오기
+      for (const [key, dateInfo] of interviewDateMap.entries()) {
+        if (key !== undefinedDateKey) {
+          try {
+            const dateTimeKey = format(dateInfo.date, 'yyyy-MM-dd-HH:mm');
+            const interviewDateRef = doc(db, 'interviewDates', dateTimeKey);
+            const interviewDateDoc = await getDoc(interviewDateRef);
+            
+            if (interviewDateDoc.exists()) {
+              const data = interviewDateDoc.data();
+              dateInfo.recordingUrl = data.recordingUrl;
+            }
+          } catch (error) {
+            console.error('녹화 영상 URL 로드 오류:', error);
+          }
+        }
       }
       
       // Map을 배열로 변환
@@ -887,21 +908,96 @@ export function InterviewManageClient() {
     setShowDetail(false);
   };
 
+  // 녹화 영상 URL 변경 함수
+  const handleRecordingUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRecordingUrl(e.target.value);
+  };
+
+  // 녹화 영상 모달 열기
+  const handleOpenRecordingModal = () => {
+    setRecordingUrl(selectedDate?.recordingUrl || '');
+    setShowRecordingModal(true);
+  };
+
+  // 녹화 영상 모달 닫기
+  const handleCloseRecordingModal = () => {
+    setShowRecordingModal(false);
+  };
+
+  // 녹화 영상 URL 저장
+  const handleSaveRecordingUrl = async () => {
+    if (!selectedDate) return;
+
+    try {
+      setLoading(true);
+      
+      // 해당 면접 일정의 문서 ID 생성 (날짜+시간 기반)
+      const dateTimeKey = format(selectedDate.date, 'yyyy-MM-dd-HH:mm');
+      const interviewDateRef = doc(db, 'interviewDates', dateTimeKey);
+
+      // Firestore에 녹화 URL 저장
+      await setDoc(
+        interviewDateRef, 
+        { 
+          recordingUrl,
+          jobBoardId: selectedDate.jobBoardId,
+          jobBoardTitle: selectedDate.jobBoardTitle,
+          date: Timestamp.fromDate(selectedDate.date),
+          updatedAt: Timestamp.fromDate(new Date())
+        }, 
+        { merge: true }
+      );
+
+      // 상태 업데이트
+      setSelectedDate({
+        ...selectedDate,
+        recordingUrl
+      });
+
+      // 전체 면접 일정 목록도 업데이트
+      setInterviewDates(prevDates => 
+        prevDates.map(dateInfo => 
+          format(dateInfo.date, 'yyyy-MM-dd-HH:mm') === dateTimeKey
+            ? { ...dateInfo, recordingUrl }
+            : dateInfo
+        )
+      );
+
+      toast.success('녹화 영상 URL이 저장되었습니다.');
+      handleCloseRecordingModal();
+    } catch (error) {
+      console.error('녹화 영상 URL 저장 오류:', error);
+      toast.error('녹화 영상 URL을 저장하는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Layout requireAuth requireAdmin>
       <div className="container mx-auto lg:px-4 px-0">
-        <div className="flex items-center mb-6">
-          <Button
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+              onClick={handleGoBack}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            </Button>
+            <h1 className="text-2xl font-bold">면접 관리</h1>
+          </div>
+          <Button 
             variant="secondary"
             size="sm"
-            className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
-            onClick={handleGoBack}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={() => window.open("https://us06web.zoom.us/j/85134823001?pwd=dUP232JtaSI6UrGIGxlf99urSQpgKq.1", "_blank")}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-            </svg>
+            Zoom 접속
           </Button>
-          <h1 className="text-2xl font-bold">면접 관리</h1>
         </div>
 
         {/* 면접일 토글 목록 */}
@@ -941,10 +1037,22 @@ export function InterviewManageClient() {
             {selectedDate ? (
               <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b bg-gray-50">
-                  <h2 className="text-lg font-semibold">
-                    면접 대상자
-                  </h2>
-                  <p className="text-sm text-gray-600">총 {selectedDate.interviews.length}명</p>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-semibold">
+                        면접 대상자
+                      </h2>
+                      <p className="text-sm text-gray-600">총 {selectedDate.interviews.length}명</p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      onClick={handleOpenRecordingModal}
+                    >
+                      녹화 영상
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="divide-y">
@@ -1319,6 +1427,59 @@ export function InterviewManageClient() {
             )}
           </div>
         </div>
+
+        {/* 녹화 영상 URL 모달 */}
+        {showRecordingModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-md">
+              <div className="p-4 border-b">
+                <h3 className="text-lg font-semibold">녹화 영상 URL 관리</h3>
+                <p className="text-sm text-gray-600">{selectedDate?.formattedDate}</p>
+              </div>
+              <div className="p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  녹화 영상 URL
+                </label>
+                <input
+                  type="text"
+                  value={recordingUrl}
+                  onChange={handleRecordingUrlChange}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="녹화 영상 URL을 입력하세요"
+                />
+                {recordingUrl && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">프리뷰:</p>
+                    <a 
+                      href={recordingUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 break-all"
+                    >
+                      {recordingUrl}
+                    </a>
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t flex justify-end space-x-2">
+                <Button
+                  variant="secondary"
+                  onClick={handleCloseRecordingModal}
+                >
+                  취소
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSaveRecordingUrl}
+                  isLoading={loading}
+                  disabled={loading}
+                >
+                  저장
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
