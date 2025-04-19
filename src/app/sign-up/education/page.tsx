@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
@@ -16,7 +16,7 @@ const educationSchema = z.object({
     required_error: '학년을 선택해주세요.',
     invalid_type_error: '학년을 선택해주세요.',
   }).min(1, '학년을 선택해주세요.').max(7, '유효한 학년을 선택해주세요.'),
-  isOnLeave: z.boolean(),
+  isOnLeave: z.boolean().nullable(),
   major1: z.string().min(1, '전공을 입력해주세요.'),
   major2: z.string().optional(),
 });
@@ -37,6 +37,8 @@ export default function SignUpEducation() {
     register,
     handleSubmit,
     formState: { errors },
+    control,
+    setValue,
   } = useForm<EducationFormValues>({
     resolver: zodResolver(educationSchema),
     defaultValues: {
@@ -47,6 +49,22 @@ export default function SignUpEducation() {
       major2: '',
     },
   });
+
+  // 학년 값을 감시
+  const grade = useWatch({
+    control,
+    name: 'grade',
+  });
+
+  // 졸업생일 경우 isOnLeave 값을 null로 설정
+  useEffect(() => {
+    if (grade === 6) {
+      setValue('isOnLeave', null);
+    } else if (grade && grade !== 6) {
+      // 다른 학년으로 변경되었다면 기본값으로 복원
+      setValue('isOnLeave', false);
+    }
+  }, [grade, setValue]);
 
   if (!name || !phoneNumber || !email || !password) {
     return (
@@ -68,6 +86,11 @@ export default function SignUpEducation() {
   const onSubmit = async (data: EducationFormValues) => {
     setIsLoading(true);
     try {
+      // 졸업생인 경우 isOnLeave를 null로 설정
+      if (data.grade === 6) {
+        data.isOnLeave = null;
+      }
+      
       // 다음 단계로 이동
       router.push(`/sign-up/details?name=${name}&phone=${phoneNumber}&email=${email}&password=${password}&university=${encodeURIComponent(data.university)}&grade=${data.grade}&isOnLeave=${data.isOnLeave}&major1=${encodeURIComponent(data.major1)}&major2=${encodeURIComponent(data.major2 || '')}`);
     } catch (error) {
@@ -114,19 +137,22 @@ export default function SignUpEducation() {
             {errors.grade && <p className="mt-1 text-sm text-red-600">{errors.grade.message}</p>}
           </div>
 
-          <div className="w-full mb-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                id="isOnLeave"
-                {...register('isOnLeave')}
-              />
-              <label htmlFor="isOnLeave" className="ml-2 block text-sm text-gray-700">
-                현재 휴학 중
-              </label>
+          {/* 학년이 졸업생(6)이 아닐 때만 휴학 중 토글 표시 */}
+          {grade !== 6 && (
+            <div className="w-full mb-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                  id="isOnLeave"
+                  {...register('isOnLeave')}
+                />
+                <label htmlFor="isOnLeave" className="ml-2 block text-sm text-gray-700">
+                  현재 휴학 중
+                </label>
+              </div>
             </div>
-          </div>
+          )}
 
           <FormInput
             label="전공 (1전공)"

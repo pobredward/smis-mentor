@@ -23,7 +23,7 @@ type EditFormData = {
   status?: User['status'];
   university?: string;
   grade?: number;
-  isOnLeave?: boolean;
+  isOnLeave?: boolean | null;
   major1?: string;
   major2?: string;
   feedback?: string;
@@ -196,7 +196,7 @@ export default function UserManage() {
       rrnLast: user.rrnLast || '',
       university: user.university || '',
       grade: user.grade,
-      isOnLeave: user.isOnLeave || false,
+      isOnLeave: user.isOnLeave,
       major1: user.major1 || '',
       major2: user.major2 || '',
       selfIntroduction: user.selfIntroduction || '',
@@ -213,7 +213,7 @@ export default function UserManage() {
   };
 
   // 수정 폼 데이터 변경 핸들러
-  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | { target: { name: string; value: string | boolean | number } }) => {
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> | { target: { name: string; value: string | boolean | number | null } }) => {
     const { name, value } = e.target;
     setEditFormData(prev => ({
       ...prev,
@@ -1006,17 +1006,21 @@ export default function UserManage() {
                             <label className="block text-gray-700 text-sm font-medium mb-2">휴학 상태</label>
                             <select
                               name="isOnLeave"
-                              value={editFormData.isOnLeave?.toString() || 'false'}
-                              onChange={(e) => handleEditFormChange({
-                                target: {
-                                  name: 'isOnLeave',
-                                  value: e.target.value === 'true'
-                                }
-                              })}
+                              value={editFormData.isOnLeave === null ? 'null' : editFormData.isOnLeave?.toString() || 'false'}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                handleEditFormChange({
+                                  target: {
+                                    name: 'isOnLeave',
+                                    value: value === 'null' ? null : value === 'true'
+                                  }
+                                });
+                              }}
                               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                               <option value="false">재학 중</option>
                               <option value="true">휴학 중</option>
+                              <option value="null">졸업생</option>
                             </select>
                           </div>
 
@@ -1197,7 +1201,7 @@ export default function UserManage() {
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">휴학 상태</p>
-                            <p className="text-gray-900">{selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
+                            <p className="text-gray-900">{selectedUser.isOnLeave === null ? '졸업생' : selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">전공 (1전공)</p>

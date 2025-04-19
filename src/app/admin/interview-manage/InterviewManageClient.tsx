@@ -984,8 +984,8 @@ export function InterviewManageClient() {
                                 {app.jobBoardTitle || '캠프 정보 없음'}
                               </div>
                               <p className="text-xs text-gray-400 mt-1">
-                              {app.user?.university ? `${app.user.university} ${app.user.grade}학년 ${app.user.isOnLeave ? '휴학생' : '재학생'}` : ''}
-                            </p>
+                              {app.user?.university ? `${app.user.university} ${app.user.grade === 6 ? '졸업생' : `${app.user.grade}학년 ${app.user.isOnLeave === null ? '졸업생' : app.user.isOnLeave ? '휴학생' : '재학생'}`}` : ''}
+                              </p>
                             <p className="text-xs text-gray-400 mt-1">
                               {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
                             </p>
@@ -1090,7 +1090,7 @@ export function InterviewManageClient() {
                                   <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
                                 </p>
                                 <p>
-                                  <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade}학년 {selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}
+                                  <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade === 6 ? '졸업생' : `${selectedApplication.user.grade}학년 ${selectedApplication.user.isOnLeave === null ? '졸업생' : selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}`}
                                 </p>
                                 <p>
                                   <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}

@@ -462,7 +462,7 @@ export default function UserCheck() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">휴학 상태</p>
-                      <p className="text-gray-900">{selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
+                      <p className="text-gray-900">{selectedUser.grade === 6 || selectedUser.isOnLeave === null ? '졸업생' : selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">전공 (1전공)</p>
