@@ -1433,12 +1433,12 @@ export function InterviewManageClient() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg w-full max-w-md">
               <div className="p-4 border-b">
-                <h3 className="text-lg font-semibold">녹화 영상 URL 관리</h3>
+                <h3 className="text-lg font-semibold">면접 녹화영상</h3>
                 <p className="text-sm text-gray-600">{selectedDate?.formattedDate}</p>
               </div>
               <div className="p-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  녹화 영상 URL
+                  URL 수정
                 </label>
                 <input
                   type="text"
@@ -1449,7 +1449,7 @@ export function InterviewManageClient() {
                 />
                 {recordingUrl && (
                   <div className="mt-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">프리뷰:</p>
+                    <p className="text-sm font-medium text-gray-700 mb-2">바로가기</p>
                     <a 
                       href={recordingUrl} 
                       target="_blank" 
