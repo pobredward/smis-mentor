@@ -1047,7 +1047,11 @@ export function InterviewManageClient() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      className={`${
+                        selectedDate.recordingUrl 
+                          ? "bg-purple-600 hover:bg-purple-700 text-white" 
+                          : "bg-gray-400 hover:bg-gray-500 text-white"
+                      }`}
                       onClick={handleOpenRecordingModal}
                     >
                       녹화 영상
