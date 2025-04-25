@@ -180,8 +180,27 @@ export default function EditProfilePage() {
       
       // 알바 & 멘토링 경력 설정
       setPartTimeJobs(userData.partTimeJobs || []);
+      
+      // 중복 상태 초기화
+      setEmailExists(false);
+      setPhoneExists(false);
     }
   }, [userData, reset]);
+
+  // 폼 제출 실패 시 중복 상태 초기화
+  useEffect(() => {
+    const subscription = watch((_, { name }) => {
+      // 이메일이나 전화번호 필드가 변경되면 중복 상태 초기화
+      if (name === 'email') {
+        setEmailExists(false);
+      }
+      if (name === 'phoneNumber') {
+        setPhoneExists(false);
+      }
+    });
+    
+    return () => subscription.unsubscribe();
+  }, [watch]);
 
   // 이미지 업로드 핸들러
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -311,9 +330,14 @@ export default function EditProfilePage() {
     if (currentEmail && currentEmail !== userData?.email && !errors.email) {
       try {
         const existingUser = await getUserByEmail(currentEmail);
-        setEmailExists(!!existingUser);
-      } catch {
-        // 오류 발생 시 조용히 처리
+        if (existingUser && existingUser.userId !== userData?.userId) {
+          setEmailExists(true);
+        } else {
+          setEmailExists(false);
+        }
+      } catch (error) {
+        console.error("이메일 검증 중 오류 발생:", error);
+        setEmailExists(false); // 오류 발생 시 저장 버튼이 비활성화되지 않도록 함
       }
     } else {
       setEmailExists(false);
@@ -325,9 +349,14 @@ export default function EditProfilePage() {
     if (currentPhone && currentPhone !== userData?.phoneNumber && !errors.phoneNumber) {
       try {
         const existingUser = await getUserByPhone(currentPhone);
-        setPhoneExists(!!existingUser);
-      } catch {
-        // 오류 발생 시 조용히 처리
+        if (existingUser && existingUser.userId !== userData?.userId) {
+          setPhoneExists(true);
+        } else {
+          setPhoneExists(false);
+        }
+      } catch (error) {
+        console.error("전화번호 검증 중 오류 발생:", error);
+        setPhoneExists(false); // 오류 발생 시 저장 버튼이 비활성화되지 않도록 함
       }
     } else {
       setPhoneExists(false);
@@ -347,7 +376,7 @@ export default function EditProfilePage() {
       // 이메일 또는 전화번호 중복 마지막 확인
       if (data.email !== userData.email) {
         const existingEmail = await getUserByEmail(data.email);
-        if (existingEmail) {
+        if (existingEmail && existingEmail.userId !== userData.userId) {
           setEmailExists(true);
           setIsLoading(false);
           return;
@@ -356,7 +385,7 @@ export default function EditProfilePage() {
 
       if (data.phoneNumber !== userData.phoneNumber) {
         const existingPhone = await getUserByPhone(data.phoneNumber);
-        if (existingPhone) {
+        if (existingPhone && existingPhone.userId !== userData.userId) {
           setPhoneExists(true);
           setIsLoading(false);
           return;
@@ -858,11 +887,29 @@ export default function EditProfilePage() {
             </div>
 
             <div className="flex justify-end">
+              {/* 디버깅용 정보 - emailExists, phoneExists 상태 확인 */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mr-4 text-xs text-gray-500">
+                  <div>Email exists: {emailExists ? 'true' : 'false'}</div>
+                  <div>Phone exists: {phoneExists ? 'true' : 'false'}</div>
+                </div>
+              )}
               <Button
                 type="submit"
                 variant="primary"
                 isLoading={isLoading}
                 disabled={emailExists || phoneExists}
+                onClick={() => {
+                  if (emailExists || phoneExists) {
+                    console.log('저장 버튼 비활성화 상태:', { emailExists, phoneExists });
+                    if (emailExists) {
+                      toast.error('이미 사용 중인 이메일입니다. 다른 이메일을 입력해주세요.');
+                    }
+                    if (phoneExists) {
+                      toast.error('이미 사용 중인 전화번호입니다. 다른 전화번호를 입력해주세요.');
+                    }
+                  }
+                }}
               >
                 저장하기
               </Button>
