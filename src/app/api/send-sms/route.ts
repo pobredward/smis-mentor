@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-// 주석 처리된 코드에서 사용되는 import는 제거합니다
-// import { sendSMS } from '@/lib/naverCloudSMS';
-// import { getSMSTemplate, replaceTemplateVariables } from '@/lib/smsTemplateService';
+import { sendSMS, PhoneNumber } from '@/lib/naverCloudSMS';
+import { getSMSTemplate, replaceTemplateVariables } from '@/lib/smsTemplateService';
 
 export async function POST(request: NextRequest) {
   try {
-    // 필요한 변수만 구조 분해합니다
-    const { phoneNumber } = await request.json();
+    const { phoneNumber, templateId, variables, content, userName, fromNumber } = await request.json();
     
     if (!phoneNumber) {
       return NextResponse.json(
@@ -15,18 +13,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 발신자 인증이 완료되지 않았으므로 항상 오류 메시지 반환
-    return NextResponse.json(
-      { success: false, message: '아직 발신자 인증이 되지 않았습니다.' },
-      { status: 403 }
-    );
-
-    // 아래 코드는 발신자 인증 후 활성화할 예정입니다
-    /*
-    import { sendSMS } from '@/lib/naverCloudSMS';
-    import { getSMSTemplate, replaceTemplateVariables } from '@/lib/smsTemplateService';
-    
-    const { templateId, variables, content } = await request.json();
+    // 사용자 변수 준비
+    const allVariables = {
+      ...variables || {},
+      이름: userName || variables?.이름 || '{이름}'
+    };
     
     // 템플릿 ID가 제공된 경우 템플릿 내용을 가져옴
     let messageContent = content;
@@ -41,18 +32,22 @@ export async function POST(request: NextRequest) {
       }
       
       // 템플릿의 변수 치환
-      messageContent = replaceTemplateVariables(template.content, variables || {});
+      messageContent = replaceTemplateVariables(template.content, allVariables);
     } else if (!content) {
       return NextResponse.json(
         { success: false, message: '템플릿 ID 또는 직접 내용이 필요합니다.' },
         { status: 400 }
       );
+    } else {
+      // 직접 입력한 내용에서도 변수 치환 수행
+      messageContent = replaceTemplateVariables(content, allVariables);
     }
     
     // SMS 전송
     const result = await sendSMS({ 
       to: phoneNumber, 
-      content: messageContent 
+      content: messageContent,
+      from: fromNumber as PhoneNumber
     });
     
     if (result) {
@@ -63,7 +58,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    */
   } catch (error) {
     console.error('SMS 전송 API 오류:', error);
     return NextResponse.json(

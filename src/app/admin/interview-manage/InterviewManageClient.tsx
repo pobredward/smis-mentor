@@ -11,6 +11,7 @@ import Button from '@/components/common/Button';
 import { JobBoard, ApplicationHistory, User } from '@/types';
 import { useRouter } from 'next/navigation';
 import { getSMSTemplateByTypeAndJobBoard, saveSMSTemplate, updateSMSTemplate, getAllSMSTemplates, SMSTemplate, TemplateType } from '@/lib/smsTemplateService';
+import { PhoneNumber } from '@/lib/naverCloudSMS';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -59,6 +60,7 @@ export function InterviewManageClient() {
   const [isLoadingMessage, setIsLoadingMessage] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [smsTemplates, setSmsTemplates] = useState<SMSTemplate[]>([]);
+  const [fromNumber, setFromNumber] = useState<PhoneNumber>('01067117933');
   
   // 데이터 로드
   useEffect(() => {
@@ -1108,7 +1110,8 @@ export function InterviewManageClient() {
         },
         body: JSON.stringify({
           phoneNumber: selectedApplication.user.phoneNumber,
-          content: message
+          content: message,
+          fromNumber
         }),
       });
       
@@ -1745,6 +1748,35 @@ export function InterviewManageClient() {
                             value={interviewPassMessage}
                             onChange={(e) => setInterviewPassMessage(e.target.value)}
                           />
+                          
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-green-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberPass"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberPass"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
+                          
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"

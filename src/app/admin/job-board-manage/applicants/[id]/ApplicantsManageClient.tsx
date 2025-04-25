@@ -19,6 +19,7 @@ import {
   TemplateType, 
 } from '@/lib/smsTemplateService';
 import { auth } from '@/lib/firebase';
+import { PhoneNumber } from '@/lib/naverCloudSMS';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -74,6 +75,8 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
 
   const [isLoadingMessage, setIsLoadingMessage] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  
+  const [fromNumber, setFromNumber] = useState<PhoneNumber>('01067117933');
   
   // 모바일 상태 감지
   useEffect(() => {
@@ -557,17 +560,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     const template = smsTemplates.find(t => t.id === selectedTemplateId);
     if (!template) return;
     
-    // 변수 대체
+    // 변수 치환하지 않고 템플릿 내용 그대로 표시
     let content = template.content;
     
-    // 사용자 정보 변수 대체
-    const user = selectedApplication.user;
-    content = content
-      .replace(/{이름}/g, user.name || '')
-      .replace(/{휴대폰번호}/g, user.phoneNumber || '')
-      .replace(/{이메일}/g, user.email || '');
-    
-    // 면접 정보 변수 대체
+    // 면접 정보 변수 대체 (이 변수들은 화면에 표시될 때만 필요하므로 치환)
     if (selectedApplication.interviewDate) {
       const interviewDate = selectedApplication.interviewDate.toDate();
       content = content
@@ -575,10 +571,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         .replace(/{면접시간}/g, format(interviewDate, 'HH:mm'));
     }
     
-    // 채용 공고 정보 변수 대체
+    // 채용 공고 정보 변수 대체 (이 변수들은 화면에 표시될 때만 필요하므로 치환)
     if (jobBoard) {
       content = content.replace(/{채용공고명}/g, jobBoard.title || '');
     }
+    
+    // 이름 변수는 치환하지 않음 - API에서 처리됨
     
     setSmsContent(content);
   }, [selectedTemplateId, selectedApplication, smsTemplates, jobBoard]);
@@ -600,7 +598,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         },
         body: JSON.stringify({
           phoneNumber: selectedApplication.user.phoneNumber,
-          content: smsContent
+          content: smsContent,
+          userName: selectedApplication.user.name, // 사용자 이름 추가
+          fromNumber // 발신번호 추가
         }),
       });
       
@@ -744,7 +744,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         },
         body: JSON.stringify({
           phoneNumber: selectedApplication.user.phoneNumber,
-          content: message
+          content: message,
+          userName: selectedApplication.user.name, // 사용자 이름 추가
+          fromNumber // 발신번호 추가
         }),
       })
       .then(response => response.json())
@@ -1348,9 +1350,33 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 합격 메시지 박스 */}
                       {showDocumentPassMessage && (
                         <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
-                          <label className="block text-sm font-medium text-green-700 mb-2">
-                            서류 합격 메시지 내용
-                          </label>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-sm font-medium text-green-700">
+                              서류 합격 메시지 내용
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberPass"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-1 text-xs text-green-700">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberPass"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-1 text-xs text-green-700">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <textarea
                             className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
                             rows={5}
@@ -1388,9 +1414,33 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 불합격 메시지 박스 */}
                       {showDocumentFailMessage && (
                         <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
-                          <label className="block text-sm font-medium text-red-700 mb-2">
-                            서류 불합격 메시지 내용
-                          </label>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-sm font-medium text-red-700">
+                              서류 불합격 메시지 내용
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberFail"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-1 text-xs text-red-700">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberFail"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-1 text-xs text-red-700">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <textarea
                             className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
                             rows={5}
@@ -1428,9 +1478,33 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 면접 합격 메시지 박스 */}
                       {showInterviewPassMessage && (
                         <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
-                          <label className="block text-sm font-medium text-green-700 mb-2">
-                            면접 합격 메시지 내용
-                          </label>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-sm font-medium text-green-700">
+                              면접 합격 메시지 내용
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberInterviewPass"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-1 text-xs text-green-700">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberInterviewPass"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-1 text-xs text-green-700">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <textarea
                             className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
                             rows={5}
@@ -1468,9 +1542,33 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 면접 불합격 메시지 박스 */}
                       {showInterviewFailMessage && (
                         <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
-                          <label className="block text-sm font-medium text-red-700 mb-2">
-                            면접 불합격 메시지 내용
-                          </label>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-sm font-medium text-red-700">
+                              면접 불합격 메시지 내용
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberInterviewFail"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-1 text-xs text-red-700">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberInterviewFail"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-1 text-xs text-red-700">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <textarea
                             className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
                             rows={5}
@@ -1508,9 +1606,33 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 최종 합격 메시지 박스 */}
                       {showFinalPassMessage && (
                         <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
-                          <label className="block text-sm font-medium text-green-700 mb-2">
-                            최종 합격 메시지 내용
-                          </label>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-sm font-medium text-green-700">
+                              최종 합격 메시지 내용
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberFinalPass"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-1 text-xs text-green-700">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberFinalPass"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-1 text-xs text-green-700">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <textarea
                             className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
                             rows={5}
@@ -1548,9 +1670,33 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 최종 불합격 메시지 박스 */}
                       {showFinalFailMessage && (
                         <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
-                          <label className="block text-sm font-medium text-red-700 mb-2">
-                            최종 불합격 메시지 내용
-                          </label>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-sm font-medium text-red-700">
+                              최종 불합격 메시지 내용
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberFinalFail"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-1 text-xs text-red-700">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberFinalFail"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-1 text-xs text-red-700">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <textarea
                             className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
                             rows={5}
@@ -1799,6 +1945,34 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     </option>
                   ))}
                 </select>
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  발신번호 선택
+                </label>
+                <div className="flex items-center space-x-4 mt-1 mb-3">
+                  <label className="inline-flex items-center">
+                    <input
+                      type="radio"
+                      className="form-radio text-blue-600"
+                      name="fromNumber"
+                      checked={fromNumber === '01067117933'}
+                      onChange={() => setFromNumber('01067117933')}
+                    />
+                    <span className="ml-2">010-6711-7933</span>
+                  </label>
+                  <label className="inline-flex items-center">
+                    <input
+                      type="radio"
+                      className="form-radio text-blue-600"
+                      name="fromNumber"
+                      checked={fromNumber === '01076567933'}
+                      onChange={() => setFromNumber('01076567933')}
+                    />
+                    <span className="ml-2">010-7656-7933</span>
+                  </label>
+                </div>
               </div>
               
               <div className="mb-4">

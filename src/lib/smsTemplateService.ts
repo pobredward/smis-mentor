@@ -203,7 +203,9 @@ export function replaceTemplateVariables(template: string, variables: Record<str
   let result = template;
   
   for (const [key, value] of Object.entries(variables)) {
-    result = result.replace(new RegExp(`{${key}}`, 'g'), value || '');
+    // 값이 undefined나 빈 문자열이면 패턴을 유지
+    const replacement = value ? value : `{${key}}`;
+    result = result.replace(new RegExp(`{${key}}`, 'g'), replacement);
   }
   
   return result;

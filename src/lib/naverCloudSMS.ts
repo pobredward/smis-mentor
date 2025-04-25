@@ -1,13 +1,15 @@
 import crypto from 'crypto';
 
+export type PhoneNumber = '01076567933' | '01067117933';
+
 interface SendSMSParams {
   to: string;
   content: string;
-  from?: string;
+  from?: PhoneNumber;
 }
 
 // 네이버 클라우드 플랫폼 SMS API 호출 함수
-export async function sendSMS({ to, content, from = '01076567933' }: SendSMSParams): Promise<boolean> {
+export async function sendSMS({ to, content, from = '01067117933' }: SendSMSParams): Promise<boolean> {
   try {
     const timestamp = Date.now().toString();
     const serviceId = process.env.NAVER_CLOUD_SMS_SERVICE_ID;
@@ -34,12 +36,15 @@ export async function sendSMS({ to, content, from = '01076567933' }: SendSMSPara
     
     // 요청 본문 생성
     const body = {
-      type: 'SMS',
+      type: 'LMS',
       contentType: 'COMM',
       countryCode: '82',
       from: from.replace(/-/g, ''),
       content,
-      messages: [{ to: to.replace(/-/g, '') }]
+      messages: [{ 
+        to: to.replace(/-/g, ''),
+        subject: 'SMIS 알림'
+      }]
     };
     
     // API 요청
