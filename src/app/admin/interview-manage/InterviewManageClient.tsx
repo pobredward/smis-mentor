@@ -61,6 +61,10 @@ export function InterviewManageClient() {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [smsTemplates, setSmsTemplates] = useState<SMSTemplate[]>([]);
   const [fromNumber, setFromNumber] = useState<PhoneNumber>('01067117933');
+  const [filteredApplications, setFilteredApplications] = useState<ApplicationWithUser[]>([]);
+  const [showJobBoardInfo, setShowJobBoardInfo] = useState<boolean>(false);
+  // 새로 추가: 사용자가 지원한 모든 캠프 제목 저장
+  const [userAppliedCamps, setUserAppliedCamps] = useState<string[]>([]);
   
   // 데이터 로드
   useEffect(() => {
@@ -252,6 +256,44 @@ export function InterviewManageClient() {
     } catch (error) {
       console.error('채용 공고 정보 로드 오류:', error);
       toast.error('채용 공고 정보를 불러오는 중 오류가 발생했습니다.');
+    }
+    
+    // 사용자가 지원한 모든 캠프 불러오기
+    loadUserAppliedCamps(app.refUserId);
+  };
+  
+  // 사용자가 지원한 모든 캠프 제목 불러오기
+  const loadUserAppliedCamps = async (userId: string) => {
+    try {
+      // 사용자의 모든 지원 이력 조회
+      const applicationsRef = collection(db, 'applicationHistories');
+      const q = query(applicationsRef, where('refUserId', '==', userId));
+      const applicationsSnapshot = await getDocs(q);
+      
+      // 지원한 모든 jobBoard ID 수집
+      const jobBoardIds = applicationsSnapshot.docs.map(doc => doc.data().refJobBoardId);
+      
+      // 중복 제거
+      const uniqueJobBoardIds = [...new Set(jobBoardIds)];
+      
+      // 각 jobBoard의 제목 가져오기
+      const jobBoardTitles = await Promise.all(
+        uniqueJobBoardIds.map(async (id) => {
+          const jobBoardRef = doc(db, 'jobBoards', id);
+          const jobBoardDoc = await getDoc(jobBoardRef);
+          
+          if (jobBoardDoc.exists()) {
+            return jobBoardDoc.data().title;
+          }
+          return null;
+        })
+      );
+      
+      // null 값 제거하고 설정
+      setUserAppliedCamps(jobBoardTitles.filter(title => title !== null) as string[]);
+    } catch (error) {
+      console.error('지원 캠프 로드 오류:', error);
+      setUserAppliedCamps([]);
     }
   };
 
@@ -1499,9 +1541,6 @@ export function InterviewManageClient() {
                                 <p>
                                   <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
                                 </p>
-                                {/* <p>
-                                  <span className="font-medium">나이:</span> {selectedApplication.user.age}세
-                                </p> */}
                                 <p>
                                   <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
                                 </p>
@@ -1516,6 +1555,11 @@ export function InterviewManageClient() {
                                   {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
                                     ` (추천인: ${selectedApplication.user.referrerName})`}
                                 </p> */}
+                                <p>
+                                  <span className="font-medium">지원 장소:</span> {userAppliedCamps.length > 0 
+                                    ? userAppliedCamps.join(' / ') 
+                                    : '정보 없음'}
+                                </p>
                               </div>
                             )}
                           </div>
