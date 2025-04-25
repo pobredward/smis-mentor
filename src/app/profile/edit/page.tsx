@@ -75,7 +75,7 @@ export default function EditProfilePage() {
     setValue,
     watch,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors },
   } = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
@@ -116,7 +116,7 @@ export default function EditProfilePage() {
     };
     setPartTimeJobs([...partTimeJobs, newJob]);
     if (section === 'experience') {
-      setValue('partTimeJobs', [...partTimeJobs, newJob], { shouldDirty: true });
+      setValue('partTimeJobs', [...partTimeJobs, newJob]);
     }
   };
 
@@ -126,7 +126,7 @@ export default function EditProfilePage() {
     updatedJobs.splice(index, 1);
     setPartTimeJobs(updatedJobs);
     if (section === 'experience') {
-      setValue('partTimeJobs', updatedJobs, { shouldDirty: true });
+      setValue('partTimeJobs', updatedJobs);
     }
   };
 
@@ -136,7 +136,7 @@ export default function EditProfilePage() {
     updatedJobs[index] = { ...updatedJobs[index], [field]: value };
     setPartTimeJobs(updatedJobs);
     if (section === 'experience') {
-      setValue('partTimeJobs', updatedJobs, { shouldDirty: true });
+      setValue('partTimeJobs', updatedJobs);
     }
   };
 
@@ -516,7 +516,6 @@ export default function EditProfilePage() {
                       이미지 변경
                     </label>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">현재 프로필 이미지 업로드가 불가능하므로 나중에 시도해주세요</p>
                 </div>
               )}
 
@@ -863,7 +862,7 @@ export default function EditProfilePage() {
                 type="submit"
                 variant="primary"
                 isLoading={isLoading}
-                disabled={((section !== 'experience' && section !== 'personal') && !isDirty && !profileImageUrl) || emailExists || phoneExists}
+                disabled={emailExists || phoneExists}
               >
                 저장하기
               </Button>
