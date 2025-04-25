@@ -201,6 +201,7 @@ export default function UserManage() {
       major2: user.major2 || '',
       selfIntroduction: user.selfIntroduction || '',
       jobMotivation: user.jobMotivation || '',
+      feedback: user.feedback || '',
       partTimeJobs: user.partTimeJobs || [],
       age: user.age,
       referralPath: user.referralPath ? (
@@ -1046,19 +1047,47 @@ export default function UserManage() {
                       <div className="mt-6 border-t pt-4">
                         <h3 className="text-lg font-semibold mb-3">자기소개서 및 지원동기</h3>
                         <div className="space-y-4">
-                          <div>
-                            <p className="text-sm text-gray-500">자기소개서</p>
-                            <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded mt-1 min-h-[60px]">
-                              {editFormData.selfIntroduction || ''}
-                            </p>
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">자기소개</label>
+                            <textarea
+                              name="selfIntroduction"
+                              value={editFormData.selfIntroduction || ''}
+                              onChange={handleEditFormChange}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
+                              placeholder="자기소개를 입력하세요"
+                              maxLength={500}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">자기소개는 500자 이내로 작성해주세요. ({(editFormData.selfIntroduction || '').length}/500자)</p>
                           </div>
 
-                          <div>
-                            <p className="text-sm text-gray-500">지원 동기</p>
-                            <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded mt-1 min-h-[60px]">
-                              {editFormData.jobMotivation || ''}
-                            </p>
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">지원 동기</label>
+                            <textarea
+                              name="jobMotivation"
+                              value={editFormData.jobMotivation || ''}
+                              onChange={handleEditFormChange}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
+                              placeholder="지원 동기를 입력하세요"
+                              maxLength={500}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요. ({(editFormData.jobMotivation || '').length}/500자)</p>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* 피드백 섹션 */}
+                      <div className="mt-6 border-t pt-4">
+                        <h3 className="text-lg font-semibold mb-3">피드백</h3>
+                        <div className="mb-4">
+                          <label className="block text-gray-700 text-sm font-medium mb-2">관리자 피드백</label>
+                          <textarea
+                            name="feedback"
+                            value={editFormData.feedback || ''}
+                            onChange={handleEditFormChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
+                            placeholder="사용자에 대한 피드백을 입력하세요"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">면접, 과제 등에 대한 피드백이나 중요 메모를 입력해주세요.</p>
                         </div>
                       </div>
                     </div>
