@@ -56,6 +56,8 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [isSendingSMS, setIsSendingSMS] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [smsContent, setSmsContent] = useState('');
+  // 새로 추가: 사용자가 지원한 모든 캠프 제목 저장
+  const [userAppliedCamps, setUserAppliedCamps] = useState<string[]>([]);
   
   // 서류 합격/불합격 메시지 관련 상태
   const [documentPassMessage, setDocumentPassMessage] = useState('');
@@ -225,8 +227,46 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       setInterviewBaseDuration(jobBoard.interviewBaseDuration?.toString() || '30');
       setInterviewBaseNotes(jobBoard.interviewBaseNotes || '');
     }
+    
+    // 사용자가 지원한 모든 캠프 불러오기
+    loadUserAppliedCamps(app.refUserId);
   };
-
+  
+  // 사용자가 지원한 모든 캠프 제목 불러오기
+  const loadUserAppliedCamps = async (userId: string) => {
+    try {
+      // 사용자의 모든 지원 이력 조회
+      const applicationsRef = collection(db, 'applicationHistories');
+      const q = query(applicationsRef, where('refUserId', '==', userId));
+      const applicationsSnapshot = await getDocs(q);
+      
+      // 지원한 모든 jobBoard ID 수집
+      const jobBoardIds = applicationsSnapshot.docs.map(doc => doc.data().refJobBoardId);
+      
+      // 중복 제거
+      const uniqueJobBoardIds = [...new Set(jobBoardIds)];
+      
+      // 각 jobBoard의 제목 가져오기
+      const jobBoardTitles = await Promise.all(
+        uniqueJobBoardIds.map(async (id) => {
+          const jobBoardRef = doc(db, 'jobBoards', id);
+          const jobBoardDoc = await getDoc(jobBoardRef);
+          
+          if (jobBoardDoc.exists()) {
+            return jobBoardDoc.data().title;
+          }
+          return null;
+        })
+      );
+      
+      // null 값 제거하고 설정
+      setUserAppliedCamps(jobBoardTitles.filter(title => title !== null) as string[]);
+    } catch (error) {
+      console.error('지원 캠프 로드 오류:', error);
+      setUserAppliedCamps([]);
+    }
+  };
+  
   // 전화번호에 하이픈 추가 함수
   const formatPhoneNumber = (phoneNumber: string) => {
     if (!phoneNumber) return '';
@@ -1129,6 +1169,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <p className="text-xs text-gray-400 mt-1 truncate">
                               지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
                             </p>
+                            <p className="text-xs text-gray-400 mt-1 truncate">
+                              <span className="font-medium">지원 장소:</span> {userAppliedCamps.length > 0 
+                                ? userAppliedCamps.join(' / ') 
+                                : '정보 없음'}
+                            </p>
                           </div>
                           
                           {/* 오른쪽: 상태 배지 */}
@@ -1203,6 +1248,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
                                 {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
                                   ` (추천인: ${selectedApplication.user.referrerName})`}
+                              </p>
+                              <p>
+                                <span className="font-medium">지원 장소:</span> {userAppliedCamps.length > 0 
+                                  ? userAppliedCamps.join(' / ') 
+                                  : '정보 없음'}
                               </p>
                             </div>
                           )}
