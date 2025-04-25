@@ -246,7 +246,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     if (!status) return null;
 
     const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
-      pending: { bg: 'bg-red-100', text: 'text-red-800', label: '검토중' },
+      pending: { bg: 'bg-cyan-100', text: 'text-cyan-800', label: '검토중' },
       accepted: { bg: 'bg-green-100', text: 'text-green-800', label: '합격' },
       rejected: { bg: 'bg-red-100', text: 'text-red-800', label: '불합격' },
       passed: { bg: 'bg-green-100', text: 'text-green-800', label: '합격' },
@@ -980,7 +980,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                 }`}
               >
                 <span className="inline-flex items-center">
-                  <span className="h-2 w-2 rounded-full bg-red-500 mr-1"></span>
+                  <span className="h-2 w-2 rounded-full bg-cyan-500 mr-1"></span>
                   <span>서류 검토중</span>
                 </span>
               </button>

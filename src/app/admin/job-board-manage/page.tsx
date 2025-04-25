@@ -675,7 +675,7 @@ export default function JobBoardManage() {
                             <div className="text-gray-700 font-medium">총 {board.applicationsCount}명</div>
                             <div className="flex flex-col sm:flex-row gap-2 text-xs">
                               <span className="inline-flex items-center">
-                                <span className="h-2 w-2 rounded-full bg-red-500 mr-1"></span>
+                                <span className="h-2 w-2 rounded-full bg-cyan-500 mr-1"></span>
                                 <span>서류 검토중: {pendingCount}명</span>
                               </span>
                               <span className="inline-flex items-center">
@@ -746,7 +746,7 @@ export default function JobBoardManage() {
                     
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
                       <div className="flex gap-2 items-center">
-                        <span className="h-2 w-2 rounded-full bg-red-500"></span>
+                        <span className="h-2 w-2 rounded-full bg-cyan-500"></span>
                         <span>서류 검토중: {pendingCount}명</span>
                       </div>
                       <div className="flex gap-2 items-center">
