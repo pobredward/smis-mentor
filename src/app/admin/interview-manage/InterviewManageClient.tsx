@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, setDoc } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -28,6 +28,7 @@ type ApplicationWithUser = ApplicationHistory & {
   id: string;
   user?: User;
   jobBoardTitle?: string;
+  jobCode?: string; // JobBoard의 code를 저장하기 위한 필드 추가
 };
 
 export function InterviewManageClient() {
@@ -35,6 +36,7 @@ export function InterviewManageClient() {
   const [interviewDates, setInterviewDates] = useState<InterviewDateInfo[]>([]);
   const [selectedDate, setSelectedDate] = useState<InterviewDateInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingDates, setLoadingDates] = useState(true); // 면접일 토글 로딩 상태 추가
   const [selectedApplication, setSelectedApplication] = useState<ApplicationWithUser | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [interviewTime, setInterviewTime] = useState('');
@@ -43,6 +45,9 @@ export function InterviewManageClient() {
   const [showDetail, setShowDetail] = useState(false);
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState('');
+  const [showScriptModal, setShowScriptModal] = useState(false); // 스크립트 모달 상태 추가
+  const [isEditingScript, setIsEditingScript] = useState(false); // 스크립트 수정 모드 상태 추가
+  const [showPastDates, setShowPastDates] = useState(false); // 과거 면접일 표시 여부
   
   // SMS 관련 상태 추가
   const [showDocumentPassMessage, setShowDocumentPassMessage] = useState(false);
@@ -67,14 +72,45 @@ export function InterviewManageClient() {
   const [userAppliedCamps, setUserAppliedCamps] = useState<string[]>([]);
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
   
+  // 채용 공고 필터링을 위한 상태 추가
+  const [jobCodes, setJobCodes] = useState<{ code: string, count: number }[]>([]); // 모든 채용 공고 코드와 지원자 수 목록
+  const [selectedJobBoard, setSelectedJobBoard] = useState<string>('전체'); // 선택된 채용 공고
+  
   // 데이터 로드
   useEffect(() => {
-    loadJobBoards();
+    // 첫 로딩 시 빠르게 면접일 데이터만 먼저 가져옴
+    loadInitialData();
     loadScript();
     loadSmsTemplates();
   }, []);
 
-  // 채용 공고 목록 로드
+  // 초기 데이터 로드 (더 빠르게 면접일 데이터만 먼저 가져옴)
+  const loadInitialData = async () => {
+    try {
+      setLoadingDates(true);
+      const jobBoardsRef = collection(db, 'jobBoards');
+      const jobBoardsQuery = query(jobBoardsRef, where('status', '==', 'active'));
+      const jobBoardsSnapshot = await getDocs(jobBoardsQuery);
+      
+      const jobBoardsData = jobBoardsSnapshot.docs.map(doc => ({
+        ...doc.data() as JobBoard,
+        id: doc.id
+      }));
+      
+      // 면접 일정 정보 로드
+      await loadInterviewDates(jobBoardsData);
+    } catch (error) {
+      console.error('채용 공고 로드 오류:', error);
+      toast.error('채용 공고를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoadingDates(false);
+      setLoading(false);
+    }
+  };
+
+  // 필요시 전체 데이터 새로고침을 위해 유지하는 함수 (ESLint에서 사용되지 않는다고 경고하지만 유지)
+  // 이 함수는 현재는 사용되지 않지만 필요할 때 호출할 수 있습니다
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const loadJobBoards = async () => {
     try {
       setLoading(true);
@@ -87,7 +123,7 @@ export function InterviewManageClient() {
         id: doc.id
       }));
       
-      // 면접 일정 정보 로드
+      // 면접 일정 정보 로드 
       await loadInterviewDates(jobBoardsData);
     } catch (error) {
       console.error('채용 공고 로드 오류:', error);
@@ -137,14 +173,15 @@ export function InterviewManageClient() {
             ...data,
             id: docSnapshot.id,
             user: userData ? { ...userData, id: userDoc.id } : undefined,
-            jobBoardTitle: jobBoard.title
-          } as ApplicationWithUser & { jobBoardTitle: string };
+            jobBoardTitle: jobBoard.title,
+            jobCode: jobBoard.jobCode // jobCode 추가
+          } as ApplicationWithUser & { jobBoardTitle: string; jobCode: string };
         })
       );
       
       // null 값 제거
       const validApplications = applications
-        .filter(app => app !== null) as (ApplicationWithUser & { jobBoardTitle: string })[];
+        .filter(app => app !== null) as (ApplicationWithUser & { jobBoardTitle: string; jobCode: string })[];
       
       // 각 지원자의 면접일을 기준으로 그룹화 (날짜+시간)
       for (const app of validApplications) {
@@ -304,6 +341,31 @@ export function InterviewManageClient() {
     setSelectedApplication(null);
     setFeedbackText('');
     setShowDetail(false); // 상세 보기 모드 해제
+    
+    // 선택된 면접일의 jobCode별 지원자 수 계산
+    if (dateInfo.interviews.length > 0) {
+      const jobCodeCountMap = new Map<string, number>();
+      
+      // 먼저 '전체' 카테고리 카운트 설정
+      jobCodeCountMap.set('전체', dateInfo.interviews.length);
+      
+      // 각 jobCode 별 지원자 수 계산
+      dateInfo.interviews.forEach(app => {
+        // 각 지원자의 jobCode 사용 (없으면 jobBoardTitle에서 추출)
+        const jobCode = app.jobCode || (app.jobBoardTitle ? app.jobBoardTitle.split(' ')[0] : '미정');
+        const count = jobCodeCountMap.get(jobCode) || 0;
+        jobCodeCountMap.set(jobCode, count + 1);
+      });
+      
+      // 지원자가 있는 jobCode만 필터링하여 정렬된 배열로 변환
+      const jobCodesList = Array.from(jobCodeCountMap.entries())
+        .map(([code, count]) => ({ code, count }));
+      
+      setJobCodes(jobCodesList);
+      setSelectedJobBoard('전체'); // 면접일 변경 시 필터 초기화
+    } else {
+      setJobCodes([{ code: '전체', count: 0 }]);
+    }
   };
 
   // 진행자 스크립트 로드
@@ -770,9 +832,6 @@ export function InterviewManageClient() {
         interviewDate: Timestamp.fromDate(dateTimeObj)
       });
       
-      // 전체 데이터 새로고침
-      await loadJobBoards();
-      
     } catch (error) {
       console.error('면접 날짜/시간 저장 오류:', error);
       toast.error('면접 날짜/시간을 저장하는 중 오류가 발생했습니다.');
@@ -950,9 +1009,6 @@ export function InterviewManageClient() {
       // 입력 필드 초기화
       setNewSelectedDate('');
       setInterviewTime('');
-      
-      // 전체 데이터 새로고침
-      await loadJobBoards();
       
     } catch (error) {
       console.error('면접 날짜 변경 오류:', error);
@@ -1152,7 +1208,7 @@ export function InterviewManageClient() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          phoneNumber: selectedApplication.user.phoneNumber,
+          phoneNumber: selectedApplication.user?.phoneNumber,
           content: message,
           fromNumber
         }),
@@ -1320,6 +1376,62 @@ export function InterviewManageClient() {
     }
   };
 
+  // 스크립트 모달 닫기 함수 추가
+  const handleCloseScriptModal = () => {
+    setShowScriptModal(false);
+    setIsEditingScript(false); // 모달 닫을 때 수정 모드도 초기화
+  };
+
+  // 채용 공고 선택 처리 함수
+  const handleSelectJobBoard = (code: string) => {
+    setSelectedJobBoard(code);
+    // 선택 시 상세 정보 초기화
+    setSelectedApplication(null);
+    setShowDetail(false);
+  };
+  
+  // 현재 선택된 채용 공고에 따라 면접 대상자 필터링
+  const getFilteredInterviews = useMemo(() => {
+    if (!selectedDate) return [];
+    
+    if (selectedJobBoard === '전체') {
+      return selectedDate.interviews;
+    } else {
+      return selectedDate.interviews.filter(app => {
+        // jobCode 직접 사용, 없으면 기본값으로 '미정' 사용
+        const jobCode = app.jobCode || '미정';
+        return jobCode === selectedJobBoard;
+      });
+    }
+  }, [selectedDate, selectedJobBoard]);
+
+  // 현재 날짜 기준으로 과거/미래 면접일 필터링
+  const filterInterviewDates = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    const futureDates = interviewDates.filter(dateInfo => {
+      // '날짜 미정'은 항상 표시
+      if (dateInfo.formattedDate === '날짜 미정') return true;
+      // 오늘 이후 날짜만 필터링
+      return dateInfo.date.getTime() >= today.getTime();
+    });
+    
+    const pastDates = interviewDates.filter(dateInfo => {
+      // '날짜 미정'은 제외
+      if (dateInfo.formattedDate === '날짜 미정') return false;
+      // 오늘 이전 날짜만 필터링
+      return dateInfo.date.getTime() < today.getTime();
+    });
+    
+    return { futureDates, pastDates };
+  }, [interviewDates]);
+
+  // 과거 면접일 토글 처리
+  const togglePastDates = () => {
+    setShowPastDates(prev => !prev);
+  };
+
   return (
     <Layout requireAuth requireAdmin>
       <div className="container mx-auto lg:px-4 px-0">
@@ -1337,43 +1449,97 @@ export function InterviewManageClient() {
             </Button>
             <h1 className="text-2xl font-bold">면접 관리</h1>
           </div>
+          <div className="flex items-center">
+          <Button 
+            variant="secondary"
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white mr-1"
+            onClick={() => window.open("https://us06web.zoom.us/j/85134823001?pwd=dUP232JtaSI6UrGIGxlf99urSQpgKq.1", "_blank")}
+          >
+            Zoom
+          </Button>
+                    <Button 
+            variant="secondary"
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white mr-1"
+            onClick={() => window.open("https://www.canva.com/design/DAFvhaPK91Q/VhiME0MRIe-gqhlQlWyb9A/view?utm_content=DAFvhaPK91Q&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=haf1323a182", "_blank")}
+          >
+            캔바
+          </Button>
           <Button 
             variant="secondary"
             size="sm"
             className="bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={() => window.open("https://us06web.zoom.us/j/85134823001?pwd=dUP232JtaSI6UrGIGxlf99urSQpgKq.1", "_blank")}
+            onClick={() => setShowScriptModal(true)}
           >
-            Zoom 접속
+            스크립트
           </Button>
+          </div>
         </div>
 
         {/* 면접일 토글 목록 */}
         <div className="mb-6">
           <div className="flex flex-wrap gap-2">
-            {loading ? (
+            {loadingDates ? (
               <p className="text-center py-4">로딩 중...</p>
             ) : interviewDates.length === 0 ? (
               <p className="text-center py-4 text-gray-500">등록된 면접일이 없습니다.</p>
             ) : (
-              interviewDates.map((dateInfo, index) => {
-                const shortDate = dateInfo.formattedDate === '날짜 미정' 
-                  ? '미정' 
-                  : `${format(dateInfo.date, 'M/d(eee)', { locale: ko })} ${format(dateInfo.date, 'HH:mm')}`;
+              <>
+                {/* 현재 및 미래 면접일 표시 */}
+                {filterInterviewDates.futureDates.map((dateInfo, index) => {
+                  const shortDate = dateInfo.formattedDate === '날짜 미정' 
+                    ? '미정' 
+                    : `${format(dateInfo.date, 'M/d(eee)', { locale: ko })} ${format(dateInfo.date, 'HH:mm')}`;
+                  
+                  return (
+                    <button
+                      key={`future-${index}`}
+                      className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
+                        selectedDate && format(selectedDate.date, 'yyyy-MM-dd-HH:mm') === format(dateInfo.date, 'yyyy-MM-dd-HH:mm')
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                      }`}
+                      onClick={() => handleSelectDate(dateInfo)}
+                    >
+                      {shortDate} ({dateInfo.interviews.length})
+                    </button>
+                  );
+                })}
                 
-                return (
+                {/* 과거 면접일 토글 버튼 - 과거 날짜가 있을 때만 표시 */}
+                {filterInterviewDates.pastDates.length > 0 && (
                   <button
-                    key={index}
                     className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
-                      selectedDate && format(selectedDate.date, 'yyyy-MM-dd-HH:mm') === format(dateInfo.date, 'yyyy-MM-dd-HH:mm')
-                        ? 'bg-blue-500 text-white'
+                      showPastDates 
+                        ? 'bg-gray-400 text-white' 
                         : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
                     }`}
-                    onClick={() => handleSelectDate(dateInfo)}
+                    onClick={togglePastDates}
                   >
-                    {shortDate} ({dateInfo.interviews.length})
+                    {showPastDates ? '숨기기' : `과거 면접일 (${filterInterviewDates.pastDates.length})`}
                   </button>
-                );
-              })
+                )}
+                
+                {/* 과거 면접일 표시 - 토글 시에만 표시 */}
+                {showPastDates && filterInterviewDates.pastDates.map((dateInfo, index) => {
+                  const shortDate = `${format(dateInfo.date, 'M/d(eee)', { locale: ko })} ${format(dateInfo.date, 'HH:mm')}`;
+                  
+                  return (
+                    <button
+                      key={`past-${index}`}
+                      className={`px-3 py-1.5 rounded-full text-xs transition-colors border border-dashed ${
+                        selectedDate && format(selectedDate.date, 'yyyy-MM-dd-HH:mm') === format(dateInfo.date, 'yyyy-MM-dd-HH:mm')
+                          ? 'bg-gray-500 text-white border-gray-500'
+                          : 'bg-gray-50 hover:bg-gray-100 text-gray-500 border-gray-300'
+                      }`}
+                      onClick={() => handleSelectDate(dateInfo)}
+                    >
+                      {shortDate} ({dateInfo.interviews.length})
+                    </button>
+                  );
+                })}
+              </>
             )}
           </div>
         </div>
@@ -1389,7 +1555,10 @@ export function InterviewManageClient() {
                       <h2 className="text-lg font-semibold">
                         면접 대상자
                       </h2>
-                      <p className="text-sm text-gray-600">총 {selectedDate.interviews.length}명</p>
+                      <p className="text-sm text-gray-600">
+                        총 {getFilteredInterviews.length}명
+                        {selectedJobBoard !== '전체' && ` (${selectedJobBoard})`}
+                      </p>
                     </div>
                     <Button
                       variant="secondary"
@@ -1406,11 +1575,32 @@ export function InterviewManageClient() {
                   </div>
                 </div>
 
+                {/* 채용 공고별 필터링 토글 추가 */}
+                <div className="p-3 border-b">
+                  <div className="flex flex-wrap gap-1">
+                    {jobCodes.map((item, index) => (
+                      <button
+                        key={index}
+                        className={`px-2 py-1 rounded-md text-xs transition-colors ${
+                          selectedJobBoard === item.code
+                            ? 'bg-yellow-400 text-yellow-900'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                        }`}
+                        onClick={() => handleSelectJobBoard(item.code)}
+                      >
+                        {item.code === '전체' ? '전체' : `${item.code} (${item.count}명)`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="divide-y">
                   {selectedDate.interviews.length === 0 ? (
                     <p className="p-4 text-center text-gray-500">면접 대상자가 없습니다.</p>
+                  ) : getFilteredInterviews.length === 0 ? (
+                    <p className="p-4 text-center text-gray-500">해당 채용 공고의 면접 대상자가 없습니다.</p>
                   ) : (
-                    selectedDate.interviews.map((app) => (
+                    getFilteredInterviews.map((app) => (
                       <div
                         key={app.id}
                         className={`p-3 cursor-pointer transition-colors ${
@@ -1439,15 +1629,14 @@ export function InterviewManageClient() {
                               {/* <div className="text-sm text-gray-600 mt-1">
                                 {formatPhoneNumber(app.user?.phoneNumber || '')}
                               </div> */}
-                              <div className="text-xs text-gray-500 mt-1">
-                                {app.jobBoardTitle || '캠프 정보 없음'}
-                              </div>
+                                                          <p className="text-xs text-gray-500 mt-1">
+                              연락처: {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
+                            </p>
+                              
                               <p className="text-xs text-gray-400 mt-1">
                               {app.user?.university ? `${app.user.university} ${app.user.grade === 6 ? '졸업생' : `${app.user.grade}학년 ${app.user.isOnLeave === null ? '졸업생' : app.user.isOnLeave ? '휴학생' : '재학생'}`}` : ''}
                               </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
-                            </p>
+
                             <p className="text-xs text-gray-400 mt-1">
                               지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
                             </p>
@@ -1523,20 +1712,20 @@ export function InterviewManageClient() {
                           <div className="flex-shrink-0 mr-4">
                             {selectedApplication.user?.profileImage ? (
                               <img 
-                                src={selectedApplication.user.profileImage} 
+                                src={selectedApplication.user?.profileImage} 
                                 alt={selectedApplication.user?.name || '프로필'} 
                                 className="w-20 h-20 rounded object-cover border border-gray-100"
                               />
                             ) : (
                               <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xl">
-                                {selectedApplication.user?.name ? selectedApplication.user.name.charAt(0) : '?'}
+                                {selectedApplication.user?.name ? selectedApplication.user?.name.charAt(0) : '?'}
                               </div>
                             )}
                           </div>
                           <div>
                             <div className="flex items-center">
                               <h2 className="font-bold text-gray-900">
-                              {selectedApplication.user?.name ? `${selectedApplication.user.name} (${selectedApplication.user.age})` : selectedApplication.refUserId}
+                              {selectedApplication.user?.name ? `${selectedApplication.user?.name} (${selectedApplication.user?.age})` : selectedApplication.refUserId}
                               </h2>
                               {selectedApplication.user?.profileImage && (
                                 <button
@@ -1554,16 +1743,16 @@ export function InterviewManageClient() {
                             {selectedApplication.user && (
                               <div className="mt-1 space-y-1 text-sm text-gray-600">
                                 <p>
-                                  <span className="font-medium">전화번호:</span> {selectedApplication.user.phoneNumber ? formatPhoneNumber(selectedApplication.user.phoneNumber) : ''}
+                                  <span className="font-medium">전화번호:</span> {selectedApplication.user?.phoneNumber ? formatPhoneNumber(selectedApplication.user?.phoneNumber) : ''}
                                 </p>
                                 <p>
-                                  <span className="font-medium">주소:</span> {selectedApplication.user.address} {selectedApplication.user.addressDetail}
+                                  <span className="font-medium">주소:</span> {selectedApplication.user?.address} {selectedApplication.user?.addressDetail}
                                 </p>
                                 <p>
-                                  <span className="font-medium">학교:</span> {selectedApplication.user.university} {selectedApplication.user.grade === 6 ? '졸업생' : `${selectedApplication.user.grade}학년 ${selectedApplication.user.isOnLeave === null ? '졸업생' : selectedApplication.user.isOnLeave ? '휴학생' : '재학생'}`}
+                                  <span className="font-medium">학교:</span> {selectedApplication.user?.university} {selectedApplication.user?.grade === 6 ? '졸업생' : `${selectedApplication.user?.grade}학년 ${selectedApplication.user?.isOnLeave === null ? '졸업생' : selectedApplication.user?.isOnLeave ? '휴학생' : '재학생'}`}
                                 </p>
                                 <p>
-                                  <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
+                                  <span className="font-medium">전공1:</span> {selectedApplication.user?.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user?.major2}
                                 </p>
                                 {/* <p>
                                   <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
@@ -1727,6 +1916,33 @@ export function InterviewManageClient() {
                             value={documentPassMessage}
                             onChange={(e) => setDocumentPassMessage(e.target.value)}
                           />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-green-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberDocPass"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberDocPass"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1767,6 +1983,33 @@ export function InterviewManageClient() {
                             value={documentFailMessage}
                             onChange={(e) => setDocumentFailMessage(e.target.value)}
                           />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-red-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberDocFail"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberDocFail"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1876,6 +2119,33 @@ export function InterviewManageClient() {
                             value={interviewFailMessage}
                             onChange={(e) => setInterviewFailMessage(e.target.value)}
                           />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-red-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberInterviewFail"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberInterviewFail"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1916,6 +2186,33 @@ export function InterviewManageClient() {
                             value={finalPassMessage}
                             onChange={(e) => setFinalPassMessage(e.target.value)}
                           />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-green-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberFinalPass"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-green-600"
+                                  name="fromNumberFinalPass"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1956,6 +2253,33 @@ export function InterviewManageClient() {
                             value={finalFailMessage}
                             onChange={(e) => setFinalFailMessage(e.target.value)}
                           />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-red-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberFinalFail"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-red-600"
+                                  name="fromNumberFinalFail"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -2051,11 +2375,11 @@ export function InterviewManageClient() {
                     {/* 알바 & 멘토링 경력 */}
                     <div className="mb-6 pb-6">
                       <h3 className="text-lg font-semibold mb-4">알바 & 멘토링 경력</h3>
-                      {!selectedApplication.user?.partTimeJobs || selectedApplication.user.partTimeJobs.length === 0 ? (
+                      {!selectedApplication.user?.partTimeJobs || selectedApplication.user?.partTimeJobs.length === 0 ? (
                         <p className="text-gray-500">경력을 추가해주세요</p>
                       ) : (
                         <div className="space-y-4">
-                          {selectedApplication.user.partTimeJobs.map((job, index) => (
+                          {selectedApplication.user?.partTimeJobs.map((job, index) => (
                             <div key={index} className="bg-gray-50 p-4 rounded-md border border-gray-200">
                               <div className="flex justify-between mb-2">
                                 <span className="font-medium">{job.companyName}</span>
@@ -2100,34 +2424,9 @@ export function InterviewManageClient() {
                     )}
                   </div>
                 ) : (
-                  <div className="p-4 lg:p-6 hidden lg:block">
-                    <div className="flex justify-between items-center mb-4">
-                      <h2 className="text-xl font-bold">진행자 스크립트</h2>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <textarea
-                        value={scriptText}
-                        onChange={(e) => setScriptText(e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="진행자 스크립트를 입력하세요..."
-                        disabled={loading}
-                        style={{ height: '250px', resize: 'vertical' }}
-                      ></textarea>
-                      <div className="flex justify-end mt-2">
-                        <Button
-                          variant="primary"
-                          onClick={handleSaveScript}
-                          isLoading={loading}
-                          disabled={loading}
-                        >
-                          스크립트 저장
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    <div className="whitespace-pre-wrap bg-gray-50 p-4 rounded-md border border-gray-200">
-                      {scriptText || '스크립트가 작성되지 않았습니다.'}
+                  <div className="p-4 lg:p-6">
+                    <div className="text-center text-gray-500">
+                      면접 대상자를 선택하세요.
                     </div>
                   </div>
                 )}
@@ -2193,6 +2492,73 @@ export function InterviewManageClient() {
           </div>
         )}
         
+        {/* 스크립트 모달 */}
+        {showScriptModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-4 border-b flex justify-between items-center">
+                <h3 className="text-lg font-semibold">진행자 스크립트</h3>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={isEditingScript ? "primary" : "secondary"}
+                    size="sm"
+                    onClick={() => setIsEditingScript(!isEditingScript)}
+                  >
+                    {isEditingScript ? "보기 모드" : "수정 모드"}
+                  </Button>
+                  <button 
+                    onClick={handleCloseScriptModal}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="p-4 flex-1 overflow-auto">
+                {isEditingScript ? (
+                  <div className="mb-4">
+                    <textarea
+                      value={scriptText}
+                      onChange={(e) => setScriptText(e.target.value)}
+                      className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="진행자 스크립트를 입력하세요..."
+                      disabled={loading}
+                      style={{ height: '350px', resize: 'vertical' }}
+                    ></textarea>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap bg-gray-50 p-4 rounded-md border border-gray-200 max-h-[500px] overflow-y-auto">
+                    {scriptText || '스크립트가 작성되지 않았습니다.'}
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t flex justify-end space-x-2">
+                <Button
+                  variant="secondary"
+                  onClick={handleCloseScriptModal}
+                >
+                  닫기
+                </Button>
+                {isEditingScript && (
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      handleSaveScript();
+                      setIsEditingScript(false); // 저장 후 보기 모드로 전환
+                    }}
+                    isLoading={loading}
+                    disabled={loading}
+                  >
+                    저장
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* 프로필 이미지 모달 */}
         {showProfileImageModal && selectedApplication?.user?.profileImage && (
           <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -2208,8 +2574,8 @@ export function InterviewManageClient() {
               </button>
               <div className="w-full h-full max-h-[calc(90vh-2rem)] overflow-hidden">
                 <img
-                  src={selectedApplication.user.profileImage}
-                  alt={selectedApplication.user.name || '프로필 이미지'}
+                  src={selectedApplication.user?.profileImage}
+                  alt={selectedApplication.user?.name || '프로필 이미지'}
                   className="w-full h-auto object-contain"
                 />
               </div>

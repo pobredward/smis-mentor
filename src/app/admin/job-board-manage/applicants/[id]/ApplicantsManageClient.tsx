@@ -1416,9 +1416,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 합격 메시지 박스 */}
                       {showDocumentPassMessage && (
                         <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-green-700">
-                              서류 합격 메시지 내용
+                          <label className="block text-sm font-medium text-green-700 mb-2">
+                            서류 합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
+                            rows={5}
+                            value={documentPassMessage}
+                            onChange={(e) => setDocumentPassMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-green-700 mb-2">
+                              발신번호 선택
                             </label>
                             <div className="flex items-center space-x-4">
                               <label className="inline-flex items-center">
@@ -1429,7 +1438,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01067117933'}
                                   onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-1 text-xs text-green-700">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
@@ -1439,16 +1448,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01076567933'}
                                   onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-1 text-xs text-green-700">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                             </div>
                           </div>
-                          <textarea
-                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
-                            rows={5}
-                            value={documentPassMessage}
-                            onChange={(e) => setDocumentPassMessage(e.target.value)}
-                          />
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1480,9 +1483,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 불합격 메시지 박스 */}
                       {showDocumentFailMessage && (
                         <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-red-700">
-                              서류 불합격 메시지 내용
+                          <label className="block text-sm font-medium text-red-700 mb-2">
+                            서류 불합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={documentFailMessage}
+                            onChange={(e) => setDocumentFailMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-red-700 mb-2">
+                              발신번호 선택
                             </label>
                             <div className="flex items-center space-x-4">
                               <label className="inline-flex items-center">
@@ -1493,7 +1505,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01067117933'}
                                   onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-1 text-xs text-red-700">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
@@ -1503,16 +1515,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01076567933'}
                                   onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-1 text-xs text-red-700">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                             </div>
                           </div>
-                          <textarea
-                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
-                            rows={5}
-                            value={documentFailMessage}
-                            onChange={(e) => setDocumentFailMessage(e.target.value)}
-                          />
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1544,9 +1550,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 면접 합격 메시지 박스 */}
                       {showInterviewPassMessage && (
                         <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-green-700">
-                              면접 합격 메시지 내용
+                          <label className="block text-sm font-medium text-green-700 mb-2">
+                            면접 합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
+                            rows={5}
+                            value={interviewPassMessage}
+                            onChange={(e) => setInterviewPassMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-green-700 mb-2">
+                              발신번호 선택
                             </label>
                             <div className="flex items-center space-x-4">
                               <label className="inline-flex items-center">
@@ -1557,7 +1572,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01067117933'}
                                   onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-1 text-xs text-green-700">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
@@ -1567,16 +1582,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01076567933'}
                                   onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-1 text-xs text-green-700">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                             </div>
                           </div>
-                          <textarea
-                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
-                            rows={5}
-                            value={interviewPassMessage}
-                            onChange={(e) => setInterviewPassMessage(e.target.value)}
-                          />
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1608,9 +1617,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 면접 불합격 메시지 박스 */}
                       {showInterviewFailMessage && (
                         <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-red-700">
-                              면접 불합격 메시지 내용
+                          <label className="block text-sm font-medium text-red-700 mb-2">
+                            면접 불합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={interviewFailMessage}
+                            onChange={(e) => setInterviewFailMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-red-700 mb-2">
+                              발신번호 선택
                             </label>
                             <div className="flex items-center space-x-4">
                               <label className="inline-flex items-center">
@@ -1621,7 +1639,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01067117933'}
                                   onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-1 text-xs text-red-700">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
@@ -1631,16 +1649,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01076567933'}
                                   onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-1 text-xs text-red-700">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                             </div>
                           </div>
-                          <textarea
-                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
-                            rows={5}
-                            value={interviewFailMessage}
-                            onChange={(e) => setInterviewFailMessage(e.target.value)}
-                          />
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1672,9 +1684,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 최종 합격 메시지 박스 */}
                       {showFinalPassMessage && (
                         <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-green-700">
-                              최종 합격 메시지 내용
+                          <label className="block text-sm font-medium text-green-700 mb-2">
+                            최종 합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
+                            rows={5}
+                            value={finalPassMessage}
+                            onChange={(e) => setFinalPassMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-green-700 mb-2">
+                              발신번호 선택
                             </label>
                             <div className="flex items-center space-x-4">
                               <label className="inline-flex items-center">
@@ -1685,7 +1706,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01067117933'}
                                   onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-1 text-xs text-green-700">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
@@ -1695,16 +1716,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01076567933'}
                                   onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-1 text-xs text-green-700">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                             </div>
                           </div>
-                          <textarea
-                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
-                            rows={5}
-                            value={finalPassMessage}
-                            onChange={(e) => setFinalPassMessage(e.target.value)}
-                          />
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
@@ -1736,9 +1751,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       {/* 최종 불합격 메시지 박스 */}
                       {showFinalFailMessage && (
                         <div className="mt-4 border border-red-200 rounded-md p-4 bg-red-50">
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-red-700">
-                              최종 불합격 메시지 내용
+                          <label className="block text-sm font-medium text-red-700 mb-2">
+                            최종 불합격 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={finalFailMessage}
+                            onChange={(e) => setFinalFailMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-red-700 mb-2">
+                              발신번호 선택
                             </label>
                             <div className="flex items-center space-x-4">
                               <label className="inline-flex items-center">
@@ -1749,7 +1773,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01067117933'}
                                   onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-1 text-xs text-red-700">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
@@ -1759,16 +1783,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   checked={fromNumber === '01076567933'}
                                   onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-1 text-xs text-red-700">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                             </div>
                           </div>
-                          <textarea
-                            className="w-full p-2 border border-red-300 rounded-md text-sm mb-3" 
-                            rows={5}
-                            value={finalFailMessage}
-                            onChange={(e) => setFinalFailMessage(e.target.value)}
-                          />
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="secondary"
