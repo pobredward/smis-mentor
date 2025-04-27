@@ -409,100 +409,6 @@ export function InterviewManageClient() {
     }
   };
 
-  // 면접 상태 변경
-  const handleInterviewStatusChange = async (applicationId: string, newStatus: string) => {
-    if (!selectedApplication) return;
-
-    try {
-      setLoading(true);
-      
-      // UI 먼저 업데이트 (낙관적 업데이트)
-      if (selectedDate) {
-        const updatedInterviews = selectedDate.interviews.map(interview => {
-          if (interview.id === selectedApplication.id) {
-            return { 
-              ...interview, 
-              interviewStatus: newStatus as ApplicationHistory['interviewStatus']
-            };
-          }
-          return interview;
-        });
-        
-        setSelectedDate({
-          ...selectedDate,
-          interviews: updatedInterviews
-        });
-        
-        // 선택된 지원자 정보도 업데이트
-        setSelectedApplication({
-          ...selectedApplication,
-          interviewStatus: newStatus as ApplicationHistory['interviewStatus']
-        });
-      }
-      
-      // Firestore 업데이트는 백그라운드에서 처리
-      const applicationRef = doc(db, 'applicationHistories', applicationId);
-      
-      // 현재 상태 확인
-      const applicationDoc = await getDoc(applicationRef);
-      const currentData = applicationDoc.data();
-      
-      // 상태 업데이트
-      const updateData: Partial<ApplicationHistory> = {
-        interviewStatus: newStatus as ApplicationHistory['interviewStatus'],
-        updatedAt: Timestamp.fromDate(new Date())
-      };
-      
-      // 처음 상태를 설정하는 경우 기본값도 함께 설정
-      if (!currentData?.interviewStatus) {
-        updateData.interviewBaseLink = '';
-        updateData.interviewBaseDuration = 30;
-        updateData.interviewBaseNotes = '';
-      }
-      
-      // 비동기로 업데이트 실행
-      updateDoc(applicationRef, updateData)
-        .then(() => {
-          toast.success('면접 상태가 변경되었습니다.');
-        })
-        .catch((error) => {
-          console.error('면접 상태 변경 오류:', error);
-          toast.error('면접 상태를 변경하는 중 오류가 발생했습니다.');
-          
-          // 오류 발생 시 UI 롤백
-          if (selectedDate) {
-            const rollbackInterviews = selectedDate.interviews.map(interview => {
-              if (interview.id === selectedApplication.id) {
-                return { 
-                  ...interview, 
-                  interviewStatus: selectedApplication.interviewStatus
-                };
-              }
-              return interview;
-            });
-            
-            setSelectedDate({
-              ...selectedDate,
-              interviews: rollbackInterviews
-            });
-            
-            setSelectedApplication({
-              ...selectedApplication,
-              interviewStatus: selectedApplication.interviewStatus
-            });
-          }
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-      
-    } catch (error) {
-      console.error('면접 상태 변경 오류:', error);
-      toast.error('면접 상태를 변경하는 중 오류가 발생했습니다.');
-      setLoading(false);
-    }
-  };
-
   // 서류 상태 변경
   const handleStatusChange = async (applicationId: string, newStatus: string, statusType: 'application' | 'interview' | 'final') => {
     if (!selectedApplication) return;
@@ -571,6 +477,26 @@ export function InterviewManageClient() {
       updateDoc(applicationRef, updateData)
         .then(() => {
           toast.success('상태가 변경되었습니다.');
+          
+          // 모든 날짜 그룹에서 해당 지원자 상태를 업데이트
+          const updatedDates = interviewDates.map(dateInfo => {
+            const updatedInterviews = dateInfo.interviews.map(interview => {
+              if (interview.id === applicationId) {
+                return {
+                  ...interview,
+                  ...updateData
+                };
+              }
+              return interview;
+            });
+            
+            return {
+              ...dateInfo,
+              interviews: updatedInterviews
+            };
+          });
+          
+          setInterviewDates(updatedDates);
         })
         .catch((error) => {
           console.error('상태 변경 오류:', error);
@@ -624,6 +550,120 @@ export function InterviewManageClient() {
     }
   };
 
+  // 면접 상태 변경
+  const handleInterviewStatusChange = async (applicationId: string, newStatus: string) => {
+    if (!selectedApplication) return;
+
+    try {
+      setLoading(true);
+      
+      // UI 먼저 업데이트 (낙관적 업데이트)
+      if (selectedDate) {
+        const updatedInterviews = selectedDate.interviews.map(interview => {
+          if (interview.id === selectedApplication.id) {
+            return { 
+              ...interview, 
+              interviewStatus: newStatus as ApplicationHistory['interviewStatus']
+            };
+          }
+          return interview;
+        });
+        
+        setSelectedDate({
+          ...selectedDate,
+          interviews: updatedInterviews
+        });
+        
+        // 선택된 지원자 정보도 업데이트
+        setSelectedApplication({
+          ...selectedApplication,
+          interviewStatus: newStatus as ApplicationHistory['interviewStatus']
+        });
+      }
+      
+      // Firestore 업데이트는 백그라운드에서 처리
+      const applicationRef = doc(db, 'applicationHistories', applicationId);
+      
+      // 현재 상태 확인
+      const applicationDoc = await getDoc(applicationRef);
+      const currentData = applicationDoc.data();
+      
+      // 상태 업데이트
+      const updateData: Partial<ApplicationHistory> = {
+        interviewStatus: newStatus as ApplicationHistory['interviewStatus'],
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+      
+      // 처음 상태를 설정하는 경우 기본값도 함께 설정
+      if (!currentData?.interviewStatus) {
+        updateData.interviewBaseLink = '';
+        updateData.interviewBaseDuration = 30;
+        updateData.interviewBaseNotes = '';
+      }
+      
+      // 비동기로 업데이트 실행
+      updateDoc(applicationRef, updateData)
+        .then(() => {
+          toast.success('면접 상태가 변경되었습니다.');
+          
+          // 모든 날짜 그룹에서 해당 지원자 상태를 업데이트
+          const updatedDates = interviewDates.map(dateInfo => {
+            const updatedInterviews = dateInfo.interviews.map(interview => {
+              if (interview.id === applicationId) {
+                return {
+                  ...interview,
+                  interviewStatus: newStatus as ApplicationHistory['interviewStatus']
+                };
+              }
+              return interview;
+            });
+            
+            return {
+              ...dateInfo,
+              interviews: updatedInterviews
+            };
+          });
+          
+          setInterviewDates(updatedDates);
+        })
+        .catch((error) => {
+          console.error('면접 상태 변경 오류:', error);
+          toast.error('면접 상태를 변경하는 중 오류가 발생했습니다.');
+          
+          // 오류 발생 시 UI 롤백
+          if (selectedDate) {
+            const rollbackInterviews = selectedDate.interviews.map(interview => {
+              if (interview.id === selectedApplication.id) {
+                return { 
+                  ...interview, 
+                  interviewStatus: selectedApplication.interviewStatus
+                };
+              }
+              return interview;
+            });
+            
+            setSelectedDate({
+              ...selectedDate,
+              interviews: rollbackInterviews
+            });
+            
+            setSelectedApplication({
+              ...selectedApplication,
+              interviewStatus: selectedApplication.interviewStatus
+            });
+          }
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+      
+    } catch (error) {
+      console.error('면접 상태 변경 오류:', error);
+      toast.error('면접 상태를 변경하는 중 오류가 발생했습니다.');
+      setLoading(false);
+    }
+  };
+
   // 최종 상태 변경
   const handleFinalStatusChange = async (applicationId: string, newStatus: string) => {
     if (!selectedApplication) return;
@@ -667,6 +707,26 @@ export function InterviewManageClient() {
       updateDoc(applicationRef, updateData)
         .then(() => {
           toast.success('최종 상태가 변경되었습니다.');
+          
+          // 모든 날짜 그룹에서 해당 지원자 상태를 업데이트
+          const updatedDates = interviewDates.map(dateInfo => {
+            const updatedInterviews = dateInfo.interviews.map(interview => {
+              if (interview.id === applicationId) {
+                return {
+                  ...interview,
+                  finalStatus: newStatus as ApplicationHistory['finalStatus']
+                };
+              }
+              return interview;
+            });
+            
+            return {
+              ...dateInfo,
+              interviews: updatedInterviews
+            };
+          });
+          
+          setInterviewDates(updatedDates);
         })
         .catch((error) => {
           console.error('최종 상태 변경 오류:', error);

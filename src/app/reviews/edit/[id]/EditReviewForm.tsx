@@ -50,7 +50,12 @@ export default function EditReviewForm({ reviewId }: EditReviewFormProps) {
       }
       
       setTitle(reviewData.title || '');
-      setContent(reviewData.content || '');
+      
+      // 수정 모드에서도 줄바꿈이 동일하게 보이도록 처리
+      const processedContent = (reviewData.content || '')
+        .replace(/<p><br><\/p>\s*<p><br><\/p>/g, '<p><br></p><p><br></p>');
+      setContent(processedContent);
+      
       setGeneration(reviewData.generation || '');
     } catch (err) {
       console.error('후기를 불러오는 중 오류가 발생했습니다:', err);
@@ -77,7 +82,10 @@ export default function EditReviewForm({ reviewId }: EditReviewFormProps) {
       setIsSubmitting(true);
       
       // content에서 줄바꿈이 유지되도록 처리
-      const processedContent = content.replace(/<p><\/p>/g, '<p><br></p>');
+      // 단일 빈 줄(<p></p>)은 <p><br></p>로 변환하되, 연속된 여러 개는 그대로 유지
+      const processedContent = content
+        .replace(/<p><\/p>/g, '<p><br></p>')
+        .replace(/<p><br><\/p>\s*<p><br><\/p>/g, '<p><br></p><p><br></p>');
       
       await updateReview(reviewId, {
         title,

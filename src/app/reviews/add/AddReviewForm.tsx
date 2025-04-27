@@ -48,7 +48,10 @@ export default function AddReviewForm() {
       setIsSubmitting(true);
       
       // content에서 줄바꿈이 유지되도록 처리
-      const processedContent = content.replace(/<p><\/p>/g, '<p><br></p>');
+      // 단일 빈 줄(<p></p>)은 <p><br></p>로 변환하되, 연속된 여러 개는 그대로 유지
+      const processedContent = content
+        .replace(/<p><\/p>/g, '<p><br></p>')
+        .replace(/<p><br><\/p>\s*<p><br><\/p>/g, '<p><br></p><p><br></p>');
       
       await addReview({
         title,

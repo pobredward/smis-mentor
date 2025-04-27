@@ -229,7 +229,7 @@ export default function ReviewsPage() {
                     
                     {review.isOpen && (
                       <div className="px-6 py-4 bg-white">
-                        <div className="prose max-w-none whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: review.content }} />
+                        <div className="prose max-w-none [&>p]:whitespace-pre-wrap [&>p]:break-words [&>p]:min-h-[1.5em] [&>p:empty]:h-[1em] [&>p:empty]:block" dangerouslySetInnerHTML={{ __html: review.content }} />
                       </div>
                     )}
                   </div>

@@ -46,7 +46,9 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
     ],
     content,
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
+      const html = editor.getHTML();
+      const processedHtml = html.replace(/<p><br><\/p>\s*<p><br><\/p>/g, '<p><br></p><p><br></p>');
+      onChange(processedHtml);
     },
     editorProps: {
       attributes: {
