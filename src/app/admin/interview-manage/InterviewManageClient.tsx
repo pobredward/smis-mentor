@@ -214,7 +214,7 @@ export function InterviewManageClient() {
             existingUserInterview.jobBoardTitle = `${existingUserInterview.jobBoardTitle} / ${app.jobBoardTitle}`;
           } else {
             // 새로운 유저의 면접인 경우 추가
-            dateInfo.interviews.push(app);
+          dateInfo.interviews.push(app);
           }
         } else {
           // 면접일이 없는 경우 '미정' 그룹에 추가
@@ -229,7 +229,7 @@ export function InterviewManageClient() {
             existingUserInterview.jobBoardTitle = `${existingUserInterview.jobBoardTitle} / ${app.jobBoardTitle}`;
           } else {
             // 새로운 유저의 면접인 경우 추가
-            undefinedDateInfo.interviews.push(app);
+          undefinedDateInfo.interviews.push(app);
           }
         }
       }
@@ -281,7 +281,7 @@ export function InterviewManageClient() {
     setShowDetail(true);
     
     // 화면 최상단으로 스크롤
-    window.scrollTo({ top: 0 });
+    // window.scrollTo({ top: 0 });
     
     if (app.interviewDate) {
       const time = format(app.interviewDate.toDate(), 'HH:mm');
