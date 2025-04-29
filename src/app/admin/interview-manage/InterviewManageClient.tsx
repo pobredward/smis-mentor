@@ -203,13 +203,34 @@ export function InterviewManageClient() {
             });
           }
           
-          // 지원자 추가
+          // 현재 면접 일정에서 동일한 유저가 있는지 확인
           const dateInfo = interviewDateMap.get(dateTimeKey)!;
-          dateInfo.interviews.push(app);
+          const existingUserInterview = dateInfo.interviews.find(
+            interview => interview.user?.id === app.user?.id
+          );
+
+          if (existingUserInterview) {
+            // 동일 유저의 기존 면접이 있는 경우, jobBoardTitle을 합침
+            existingUserInterview.jobBoardTitle = `${existingUserInterview.jobBoardTitle} / ${app.jobBoardTitle}`;
+          } else {
+            // 새로운 유저의 면접인 경우 추가
+            dateInfo.interviews.push(app);
+          }
         } else {
           // 면접일이 없는 경우 '미정' 그룹에 추가
           const undefinedDateInfo = interviewDateMap.get(undefinedDateKey)!;
-          undefinedDateInfo.interviews.push(app);
+          // 미정 그룹에서도 동일 유저 체크
+          const existingUserInterview = undefinedDateInfo.interviews.find(
+            interview => interview.user?.id === app.user?.id
+          );
+
+          if (existingUserInterview) {
+            // 동일 유저의 기존 면접이 있는 경우, jobBoardTitle을 합침
+            existingUserInterview.jobBoardTitle = `${existingUserInterview.jobBoardTitle} / ${app.jobBoardTitle}`;
+          } else {
+            // 새로운 유저의 면접인 경우 추가
+            undefinedDateInfo.interviews.push(app);
+          }
         }
       }
       
