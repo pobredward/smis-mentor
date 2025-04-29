@@ -211,8 +211,8 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     setSelectedApplication(app);
     setFeedbackText(app.interviewFeedback || '');
     
-    // 화면 최상단으로 스크롤
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // 화면 최상단으로 스크롤 - 이 부분 제거
+    // window.scrollTo({ top: 0, behavior: 'smooth' });
     
     if (app.interviewDate) {
       const date = app.interviewDate.toDate();
@@ -1078,7 +1078,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           </div>
         </div>
         
-        {isLoading ? (
+        {isLoading && !selectedApplication ? (
           <div className="flex justify-center py-10">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
           </div>
