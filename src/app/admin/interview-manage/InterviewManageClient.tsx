@@ -1675,7 +1675,7 @@ export function InterviewManageClient() {
                   </div>
                 </div>
 
-                <div className="divide-y">
+                <div className="divide-y overflow-y-auto max-h-[600px]">
                   {selectedDate.interviews.length === 0 ? (
                     <p className="p-4 text-center text-gray-500">면접 대상자가 없습니다.</p>
                   ) : getFilteredInterviews.length === 0 ? (
