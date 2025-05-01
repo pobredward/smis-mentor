@@ -637,6 +637,7 @@ export default function JobBoardManage() {
                       // 상태별 지원자 수 계산
                       const pendingCount = board.applications.filter(app => app.applicationStatus === 'pending').length;
                       const interviewCount = board.applications.filter(app => app.interviewStatus === 'pending').length;
+                      const completeCount = board.applications.filter(app => app.interviewStatus === 'complete').length;
                       const passedCount = board.applications.filter(app => app.interviewStatus === 'passed').length;
                       const finalAcceptedCount = board.applications.filter(app => app.finalStatus === 'finalAccepted').length;
                       
@@ -683,6 +684,10 @@ export default function JobBoardManage() {
                                 <span>면접 예정자: {interviewCount}명</span>
                               </span>
                               <span className="inline-flex items-center">
+                                <span className="h-2 w-2 rounded-full bg-purple-500 mr-1"></span>
+                                <span>면접 완료자: {completeCount}명</span>
+                              </span>
+                              <span className="inline-flex items-center">
                                 <span className="h-2 w-2 rounded-full bg-green-500 mr-1"></span>
                                 <span>면접 합격자: {passedCount}명</span>
                               </span>
@@ -706,6 +711,7 @@ export default function JobBoardManage() {
                 // 상태별 지원자 수 계산
                 const pendingCount = board.applications.filter(app => app.applicationStatus === 'pending').length;
                 const interviewCount = board.applications.filter(app => app.interviewStatus === 'pending').length;
+                const completeCount = board.applications.filter(app => app.interviewStatus === 'complete').length;
                 const passedCount = board.applications.filter(app => app.interviewStatus === 'passed').length;
                 const finalAcceptedCount = board.applications.filter(app => app.finalStatus === 'finalAccepted').length;
                 
@@ -752,6 +758,10 @@ export default function JobBoardManage() {
                       <div className="flex gap-2 items-center">
                         <span className="h-2 w-2 rounded-full bg-yellow-500"></span>
                         <span>면접 예정자: {interviewCount}명</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                        <span>면접 완료자: {completeCount}명</span>
                       </div>
                       <div className="flex gap-2 items-center">
                         <span className="h-2 w-2 rounded-full bg-green-500"></span>

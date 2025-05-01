@@ -170,6 +170,8 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         switch (filterStatus) {
           case 'pending':
             return app.applicationStatus === 'pending';
+          case 'complete':
+            return app.interviewStatus === 'complete';
           case 'interview':
             return app.interviewStatus === 'pending';
           case 'passed':
@@ -1037,6 +1039,19 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                 <span className="inline-flex items-center">
                   <span className="h-2 w-2 rounded-full bg-yellow-500 mr-1"></span>
                   <span>면접 예정자</span>
+                </span>
+              </button>
+              <button
+                onClick={() => setFilterStatus('complete')}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  filterStatus === 'complete'
+                    ? 'bg-purple-100 text-purple-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <span className="inline-flex items-center">
+                  <span className="h-2 w-2 rounded-full bg-purple-500 mr-1"></span>
+                  <span>면접 완료자</span>
                 </span>
               </button>
               <button
