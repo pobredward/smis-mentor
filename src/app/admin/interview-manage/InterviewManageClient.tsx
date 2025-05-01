@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, setDoc, DocumentData } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -71,6 +71,9 @@ export function InterviewManageClient() {
   // 새로 추가: 사용자가 지원한 모든 캠프 제목 저장
   const [userAppliedCamps, setUserAppliedCamps] = useState<string[]>([]);
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
+  
+  // 지원자별 지원 장소 정보를 저장하는 맵 추가
+  const [appliedCampsMap, setAppliedCampsMap] = useState<Record<string, string[]>>({});
   
   // 채용 공고 필터링을 위한 상태 추가
   const [jobCodes, setJobCodes] = useState<{ code: string, count: number }[]>([]); // 모든 채용 공고 코드와 지원자 수 목록
@@ -268,6 +271,22 @@ export function InterviewManageClient() {
       });
       
       setInterviewDates(interviewDatesInfo);
+      
+      // 모든 지원자의 지원 장소 정보를 로드
+      const allUserIds = new Set<string>();
+      interviewDatesInfo.forEach(dateInfo => {
+        dateInfo.interviews.forEach(app => {
+          if (app.refUserId) {
+            allUserIds.add(app.refUserId);
+          }
+        });
+      });
+      
+      // 각 사용자에 대해 지원 정보 로드
+      await Promise.all(
+        Array.from(allUserIds).map(userId => loadUserAppliedCampsForAll(userId))
+      );
+      
     } catch (error) {
       console.error('면접 일정 로드 오류:', error);
       toast.error('면접 일정을 불러오는 중 오류가 발생했습니다.');
@@ -324,6 +343,20 @@ export function InterviewManageClient() {
   // 사용자가 지원한 모든 캠프 제목 불러오기
   const loadUserAppliedCamps = async (userId: string) => {
     try {
+      // 이미 캐시된 데이터가 있으면 불러오지 않음
+      if (appliedCampsMap[userId]) return;
+      
+      await loadUserAppliedCampsForAll(userId);
+      
+    } catch (error) {
+      console.error('지원 캠프 로드 오류:', error);
+      setUserAppliedCamps([]);
+    }
+  };
+  
+  // 모든 사용자의 지원 정보를 로드
+  const loadUserAppliedCampsForAll = async (userId: string) => {
+    try {
       // 사용자의 모든 지원 이력 조회
       const applicationsRef = collection(db, 'applicationHistories');
       const q = query(applicationsRef, where('refUserId', '==', userId));
@@ -335,24 +368,41 @@ export function InterviewManageClient() {
       // 중복 제거
       const uniqueJobBoardIds = [...new Set(jobBoardIds)];
       
-      // 각 jobBoard의 제목 가져오기
-      const jobBoardTitles = await Promise.all(
+      // 각 jobBoard의 jobCode 가져오기
+      const jobCodes = await Promise.all(
         uniqueJobBoardIds.map(async (id) => {
           const jobBoardRef = doc(db, 'jobBoards', id);
           const jobBoardDoc = await getDoc(jobBoardRef);
           
           if (jobBoardDoc.exists()) {
-            return jobBoardDoc.data().title;
+            const data = jobBoardDoc.data();
+            return data.jobCode;
           }
           return null;
         })
       );
       
-      // null 값 제거하고 설정
-      setUserAppliedCamps(jobBoardTitles.filter(title => title !== null) as string[]);
+      // null 값 제거하고 중복 제거 후 설정
+      const filteredCodes = jobCodes.filter(code => code !== null) as string[];
+      const uniqueCodes = [...new Set(filteredCodes)];
+      
+      // 사용자별 지원 정보 맵 업데이트 
+      setAppliedCampsMap(prev => ({
+        ...prev,
+        [userId]: uniqueCodes
+      }));
+      
+      // 선택된 사용자인 경우 userAppliedCamps도 업데이트
+      if (selectedApplication && selectedApplication.refUserId === userId) {
+        setUserAppliedCamps(uniqueCodes);
+      }
+      
     } catch (error) {
       console.error('지원 캠프 로드 오류:', error);
-      setUserAppliedCamps([]);
+      setAppliedCampsMap(prev => ({
+        ...prev,
+        [userId]: []
+      }));
     }
   };
 
@@ -1710,22 +1760,22 @@ export function InterviewManageClient() {
                               {/* <div className="text-sm text-gray-600 mt-1">
                                 {formatPhoneNumber(app.user?.phoneNumber || '')}
                               </div> */}
-                                                          <p className="text-xs text-gray-500 mt-1">
-                              연락처: {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
-                            </p>
+                              <p className="text-xs text-gray-500">
+                                연락처: {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
+                              </p>
                               
-                              <p className="text-xs text-gray-400 mt-1">
+                              <p className="text-xs text-gray-400 truncate">
                               {app.user?.university ? `${app.user.university} ${app.user.grade === 6 ? '졸업생' : `${app.user.grade}학년 ${app.user.isOnLeave === null ? '졸업생' : app.user.isOnLeave ? '휴학생' : '재학생'}`}` : ''}
                               </p>
 
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-gray-400 truncate">
                               지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
                             </p>
-                              {/* <div className="text-sm text-gray-500 mt-1">
-                                {app.interviewDate 
-                                  ? format(app.interviewDate.toDate(), 'HH:mm', { locale: ko }) 
-                                  : '시간 미정'}
-                              </div> */}
+                            <p className="text-xs text-gray-400 truncate">
+                              <span className="font-medium">지원 장소:</span> {appliedCampsMap[app.refUserId]?.length > 0 
+                                ? appliedCampsMap[app.refUserId].join(' / ') 
+                                : '정보 없음'}
+                            </p>
                             </div>
                           </div>
                           <div>
@@ -1841,9 +1891,11 @@ export function InterviewManageClient() {
                                     ` (추천인: ${selectedApplication.user.referrerName})`}
                                 </p> */}
                                 <p>
-                                  <span className="font-medium">지원 장소:</span> {userAppliedCamps.length > 0 
-                                    ? userAppliedCamps.join(' / ') 
-                                    : '정보 없음'}
+                                  <span className="font-medium">지원 장소:</span> {appliedCampsMap[selectedApplication.refUserId]?.length > 0 
+                                    ? appliedCampsMap[selectedApplication.refUserId].join(' / ') 
+                                    : userAppliedCamps.length > 0 
+                                      ? userAppliedCamps.join(' / ') 
+                                      : '정보 없음'}
                                 </p>
                               </div>
                             )}

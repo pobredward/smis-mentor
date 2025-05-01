@@ -57,7 +57,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [smsContent, setSmsContent] = useState('');
   // 새로 추가: 사용자가 지원한 모든 캠프 제목 저장
-  const [userAppliedCamps, setUserAppliedCamps] = useState<string[]>([]);
+  // const [userAppliedCamps, setUserAppliedCamps] = useState<string[]>([]);
+  
+  // 지원자별 지원 장소 정보를 저장하는 맵 추가
+  const [appliedCampsMap, setAppliedCampsMap] = useState<Record<string, string[]>>({});
   
   // 서류 합격/불합격 메시지 관련 상태
   const [documentPassMessage, setDocumentPassMessage] = useState('');
@@ -149,6 +152,13 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       
       setApplications(applicationsData);
       setFilteredApplications(applicationsData);
+      
+      // 모든 지원자의 지원 장소 정보를 로드
+      await Promise.all(
+        applicationsData.map(async (app) => {
+          await loadUserAppliedCampsForList(app.refUserId);
+        })
+      );
     } catch (error) {
       console.error('데이터 로드 오류:', error);
       toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -213,9 +223,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     setSelectedApplication(app);
     setFeedbackText(app.interviewFeedback || '');
     
-    // 화면 최상단으로 스크롤 - 이 부분 제거
-    // window.scrollTo({ top: 0, behavior: 'smooth' });
-    
     if (app.interviewDate) {
       const date = app.interviewDate.toDate();
       setInterviewDate(format(date, 'yyyy-MM-dd'));
@@ -232,8 +239,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       setInterviewBaseNotes(jobBoard.interviewBaseNotes || '');
     }
     
-    // 사용자가 지원한 모든 캠프 불러오기
-    loadUserAppliedCamps(app.refUserId);
+    // 사용자 관련 데이터가 아직 로드되지 않았다면 로드
+    if (!appliedCampsMap[app.refUserId]) {
+      loadUserAppliedCamps(app.refUserId);
+    }
   };
   
   // 사용자가 지원한 모든 캠프 제목 불러오기
@@ -250,24 +259,77 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // 중복 제거
       const uniqueJobBoardIds = [...new Set(jobBoardIds)];
       
-      // 각 jobBoard의 제목 가져오기
-      const jobBoardTitles = await Promise.all(
+      // 각 jobBoard의 jobCode만 가져오기
+      const jobCodes = await Promise.all(
         uniqueJobBoardIds.map(async (id) => {
           const jobBoardRef = doc(db, 'jobBoards', id);
           const jobBoardDoc = await getDoc(jobBoardRef);
           
           if (jobBoardDoc.exists()) {
-            return jobBoardDoc.data().title;
+            const data = jobBoardDoc.data();
+            return data.jobCode;
           }
           return null;
         })
       );
       
-      // null 값 제거하고 설정
-      setUserAppliedCamps(jobBoardTitles.filter(title => title !== null) as string[]);
+      // null 값 제거하고 중복 제거 후 설정
+      const filteredCodes = jobCodes.filter(code => code !== null) as string[];
+      const uniqueCodes = [...new Set(filteredCodes)];
+      
+      // 사용자 ID와 지원 장소 매핑 정보 업데이트
+      setAppliedCampsMap(prev => ({
+        ...prev,
+        [userId]: uniqueCodes
+      }));
     } catch (error) {
       console.error('지원 캠프 로드 오류:', error);
-      setUserAppliedCamps([]);
+      setAppliedCampsMap(prev => ({
+        ...prev,
+        [userId]: []
+      }));
+    }
+  };
+  
+  // 사용자가 지원한 모든 캠프 제목 불러오기 (목록용)
+  const loadUserAppliedCampsForList = async (userId: string) => {
+    try {
+      // 사용자의 모든 지원 이력 조회
+      const applicationsRef = collection(db, 'applicationHistories');
+      const q = query(applicationsRef, where('refUserId', '==', userId));
+      const applicationsSnapshot = await getDocs(q);
+      
+      // 지원한 모든 jobBoard ID 수집
+      const jobBoardIds = applicationsSnapshot.docs.map(doc => doc.data().refJobBoardId);
+      
+      // 중복 제거
+      const uniqueJobBoardIds = [...new Set(jobBoardIds)];
+      
+      // 각 jobBoard의 jobCode만 가져오기
+      const jobCodes = await Promise.all(
+        uniqueJobBoardIds.map(async (id) => {
+          const jobBoardRef = doc(db, 'jobBoards', id);
+          const jobBoardDoc = await getDoc(jobBoardRef);
+          
+          if (jobBoardDoc.exists()) {
+            const data = jobBoardDoc.data();
+            return data.jobCode;
+          }
+          return null;
+        })
+      );
+      
+      // null 값 제거하고 중복 제거 후 설정
+      const filteredCodes = jobCodes.filter(code => code !== null) as string[];
+      const uniqueCodes = [...new Set(filteredCodes)];
+      
+      // 사용자 ID와 지원 장소 매핑 정보 업데이트
+      setAppliedCampsMap(prev => ({
+        ...prev,
+        [userId]: uniqueCodes
+      }));
+    } catch (error) {
+      console.error('지원 캠프 로드 오류:', error);
     }
   };
   
@@ -1174,21 +1236,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <h3 className="font-medium text-gray-900 truncate">
                             {app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}
                             </h3>
-                            {/* <p className="text-sm text-gray-500">
-                              {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
-                            </p> */}
-                            <p className="text-xs text-gray-400 mt-1 truncate">
+                            <p className="text-xs text-gray-500">
+                              연락처: {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
+                            </p>
+                            <p className="text-xs text-gray-400 truncate">
                               {app.user?.university ? `${app.user.university} ${app.user.grade === 6 ? '졸업생' : `${app.user.grade}학년 ${app.user.isOnLeave === null ? '졸업생' : app.user.isOnLeave ? '휴학생' : '재학생'}`}` : ''}
                             </p>
-                            <p className="text-xs text-gray-400 mt-1 truncate">
-                              {app.user?.major1 ? `전공: ${app.user.major1}` : ''}
+                            <p className="text-xs text-gray-400 truncate">
+                              경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
                             </p>
-                            <p className="text-xs text-gray-400 mt-1 truncate">
-                              지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1 truncate">
-                              <span className="font-medium">지원 장소:</span> {userAppliedCamps.length > 0 
-                                ? userAppliedCamps.join(' / ') 
+                            <p className="text-xs text-gray-400 truncate">
+                              <span className="font-medium">지원 장소:</span> {appliedCampsMap[app.refUserId]?.length > 0 
+                                ? appliedCampsMap[app.refUserId].join(' / ') 
                                 : '정보 없음'}
                             </p>
                           </div>
@@ -1281,8 +1340,8 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   ` (추천인: ${selectedApplication.user.referrerName})`}
                               </p>
                               <p>
-                                <span className="font-medium">지원 장소:</span> {userAppliedCamps.length > 0 
-                                  ? userAppliedCamps.join(' / ') 
+                                <span className="font-medium">지원 장소:</span> {appliedCampsMap[selectedApplication.refUserId]?.length > 0 
+                                  ? appliedCampsMap[selectedApplication.refUserId].join(' / ') 
                                   : '정보 없음'}
                               </p>
                             </div>
