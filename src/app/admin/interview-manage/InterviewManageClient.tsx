@@ -62,12 +62,13 @@ export function InterviewManageClient() {
   const [interviewFailMessage, setInterviewFailMessage] = useState('');
   const [finalPassMessage, setFinalPassMessage] = useState('');
   const [finalFailMessage, setFinalFailMessage] = useState('');
+  // const [isSendingSms, setIsSendingSms] = useState(false);
   const [isLoadingMessage, setIsLoadingMessage] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
-  const [smsTemplates, setSmsTemplates] = useState<SMSTemplate[]>([]);
+  // const [smsTemplates, setSmsTemplates] = useState<SMSTemplate[]>([]);
   const [fromNumber, setFromNumber] = useState<PhoneNumber>('01067117933');
-  const [filteredApplications, setFilteredApplications] = useState<ApplicationWithUser[]>([]);
-  const [showJobBoardInfo, setShowJobBoardInfo] = useState<boolean>(false);
+  // const [filteredApplications, setFilteredApplications] = useState<ApplicationWithUser[]>([]);
+  // const [showJobBoardInfo, setShowJobBoardInfo] = useState<boolean>(false);
   // 새로 추가: 사용자가 지원한 모든 캠프 제목 저장
   const [userAppliedCamps, setUserAppliedCamps] = useState<string[]>([]);
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
@@ -1237,8 +1238,9 @@ export function InterviewManageClient() {
   // SMS 템플릿 로드
   const loadSmsTemplates = async () => {
     try {
-      const templates = await getAllSMSTemplates();
-      setSmsTemplates(templates);
+      // 템플릿 로딩만 수행하고 상태 업데이트는 하지 않음
+      await getAllSMSTemplates();
+      // setSmsTemplates(templates);
     } catch (error) {
       console.error('SMS 템플릿 로드 오류:', error);
     }
@@ -1755,12 +1757,9 @@ export function InterviewManageClient() {
                                 </div>
                               )}
                             </div>
-                            <div>
-                              <div className="font-medium">{app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}</div>
-                              {/* <div className="text-sm text-gray-600 mt-1">
-                                {formatPhoneNumber(app.user?.phoneNumber || '')}
-                              </div> */}
-                              <p className="text-xs text-gray-500">
+                            <div className="flex-1 min-w-0 mr-3">
+                              <div className="font-medium truncate">{app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}</div>
+                              <p className="text-xs text-gray-500 truncate">
                                 연락처: {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
                               </p>
                               
@@ -1768,39 +1767,39 @@ export function InterviewManageClient() {
                               {app.user?.university ? `${app.user.university} ${app.user.grade === 6 ? '졸업생' : `${app.user.grade}학년 ${app.user.isOnLeave === null ? '졸업생' : app.user.isOnLeave ? '휴학생' : '재학생'}`}` : ''}
                               </p>
 
-                            <p className="text-xs text-gray-400 truncate">
-                              지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
-                            </p>
-                            <p className="text-xs text-gray-400 truncate">
-                              <span className="font-medium">지원 장소:</span> {appliedCampsMap[app.refUserId]?.length > 0 
-                                ? appliedCampsMap[app.refUserId].join(' / ') 
-                                : '정보 없음'}
-                            </p>
+                              <p className="text-xs text-gray-400 truncate">
+                                지원경로: {app.user?.referralPath} {app.user?.referrerName ? `(${app.user.referrerName})` : ''}
+                              </p>
+                              <p className="text-xs text-gray-400 truncate">
+                                <span className="font-medium">지원 장소:</span> {appliedCampsMap[app.refUserId]?.length > 0 
+                                  ? appliedCampsMap[app.refUserId].join(' / ') 
+                                  : '정보 없음'}
+                              </p>
                             </div>
                           </div>
-                          <div>
+                          <div className="flex-shrink-0 ml-2">
                             {app.interviewStatus === 'pending' && (
-                              <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                              <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 whitespace-nowrap">
                                 예정
                               </span>
                             )}
                             {app.interviewStatus === 'complete' && (
-                              <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+                              <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800 whitespace-nowrap">
                                 완료
                               </span>
                             )}
                             {app.interviewStatus === 'passed' && (
-                              <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                              <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 whitespace-nowrap">
                                 합격
                               </span>
                             )}
                             {app.interviewStatus === 'failed' && (
-                              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 whitespace-nowrap">
                                 불합격
                               </span>
                             )}
                             {app.interviewStatus === 'absent' && (
-                              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 whitespace-nowrap">
                                 불참
                               </span>
                             )}
