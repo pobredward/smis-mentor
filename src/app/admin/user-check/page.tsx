@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getAllJobCodes, getUsersByJobCode } from '@/lib/firebaseService';
 import { JobCodeWithId, User } from '@/types';
 import { formatPhoneNumber } from '@/components/common/PhoneInput';
 import { useRouter } from 'next/navigation';
+import { maskRRNLast } from '@/utils/userUtils';
 
 type UserWithGroupInfo = User & { groupName?: string };
 
@@ -200,12 +200,6 @@ export default function UserCheck() {
   // 모달 닫기 핸들러
   const handleCloseModal = () => {
     setSelectedUser(null);
-  };
-
-  // 날짜 포맷팅 함수
-  const formatDate = (timestamp: { seconds: number } | undefined) => {
-    if (!timestamp) return '-';
-    return format(new Date(timestamp.seconds * 1000), 'yyyy-MM-dd');
   };
 
   // 사용자 카드 렌더링 함수
@@ -436,8 +430,8 @@ export default function UserCheck() {
                   <div>
                     <p className="text-sm text-gray-500">주민등록번호</p>
                     <p className="text-gray-900">
-                      {selectedUser.rrnFront && selectedUser.rrnLast ? 
-                        `${selectedUser.rrnFront}-${selectedUser.rrnLast}` : '-'}
+                      {selectedUser.rrnFront && selectedUser.rrnLast ?
+                        `${selectedUser.rrnFront}-${maskRRNLast(selectedUser.rrnLast)}` : '-'}
                     </p>
                   </div>
                   <div className="md:col-span-2">
@@ -509,6 +503,7 @@ export default function UserCheck() {
                 </div>
 
                 {/* 자기소개/지원동기 섹션 */}
+                {/*
                 <div className="mt-6 border-t pt-4">
                   <h3 className="text-lg font-semibold mb-3">자기소개서 및 지원동기</h3>
                   <div className="space-y-4">
@@ -526,14 +521,17 @@ export default function UserCheck() {
                     </div>
                   </div>
                 </div>
+                */}
 
                 {/* 관리자 피드백 섹션 */}
+                {/*
                 <div className="mt-6 border-t pt-4">
                   <h3 className="text-lg font-semibold mb-3">관리자 피드백</h3>
                   <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded min-h-[80px]">
                     {selectedUser.feedback || '-'}
                   </p>
                 </div>
+                */}
 
                 <div className="mt-6 flex justify-end">
                   <Button

@@ -79,4 +79,13 @@ export const getUserInfoFromRRN = (rrnFront: string, rrnLast: string) => {
     gender: getGenderFromRRN(rrnFront, rrnLast),
     age: getAgeFromRRN(rrnFront, rrnLast)
   };
+};
+
+/**
+ * 주민등록번호 뒷자리를 앞 한 자리만 보이고 나머지는 *로 마스킹합니다.
+ * 예: '1234567' -> '1******'
+ */
+export const maskRRNLast = (rrnLast: string): string => {
+  if (!rrnLast || rrnLast.length !== 7) return '';
+  return rrnLast.charAt(0) + '******';
 }; 
