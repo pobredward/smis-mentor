@@ -1262,7 +1262,7 @@ export function InterviewManageClient() {
         setDocumentPassMessage(documentPassTemplate.content);
       } else {
         // 기본 서류 합격 메시지 설정
-        setDocumentPassMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n서류 전형 합격을 축하드립니다. 다음 면접 일정을 안내드리겠습니다.`);
+        setDocumentPassMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n서류 전형 합격을 축하드립니다. 다음 면접 일정을 안내드리겠습니다.`);
       }
       
       // document_fail 템플릿 로드
@@ -1271,7 +1271,7 @@ export function InterviewManageClient() {
         setDocumentFailMessage(documentFailTemplate.content);
       } else {
         // 기본 서류 불합격 메시지 설정
-        setDocumentFailMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+        setDocumentFailMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
       }
       
       // interview_pass 템플릿 로드
@@ -1280,7 +1280,7 @@ export function InterviewManageClient() {
         setInterviewPassMessage(interviewPassTemplate.content);
       } else {
         // 기본 면접 합격 메시지 설정
-        setInterviewPassMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 면접에 참여해주셔서 감사합니다.\n면접 전형 합격을 축하드립니다. 후속 단계에 대해 안내드리겠습니다.`);
+        setInterviewPassMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 면접에 참여해주셔서 감사합니다.\n면접 전형 합격을 축하드립니다. 후속 단계에 대해 안내드리겠습니다.`);
       }
       
       // interview_fail 템플릿 로드
@@ -1289,7 +1289,7 @@ export function InterviewManageClient() {
         setInterviewFailMessage(interviewFailTemplate.content);
       } else {
         // 기본 면접 불합격 메시지 설정
-        setInterviewFailMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 면접에 참여해주셔서 감사합니다.\n아쉽게도 이번 면접 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+        setInterviewFailMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 면접에 참여해주셔서 감사합니다.\n아쉽게도 이번 면접 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
       }
       
       // final_pass 템플릿 로드
@@ -1298,7 +1298,7 @@ export function InterviewManageClient() {
         setFinalPassMessage(finalPassTemplate.content);
       } else {
         // 기본 최종 합격 메시지 설정
-        setFinalPassMessage(`축하합니다, ${selectedApplication.user?.name || ''}님!\n${selectedApplication.jobBoardTitle || ''}에 최종 합격하셨습니다. 입사 관련 안내사항은 추후 이메일로 전달드릴 예정입니다.`);
+        setFinalPassMessage(`축하합니다, {이름}님!\n${selectedApplication.jobBoardTitle || ''}에 최종 합격하셨습니다. 입사 관련 안내사항은 추후 이메일로 전달드릴 예정입니다.`);
       }
       
       // final_fail 템플릿 로드
@@ -1307,7 +1307,7 @@ export function InterviewManageClient() {
         setFinalFailMessage(finalFailTemplate.content);
       } else {
         // 기본 최종 불합격 메시지 설정
-        setFinalFailMessage(`안녕하세요, ${selectedApplication.user?.name || ''}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+        setFinalFailMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
       }
     } catch (error) {
       console.error('템플릿 로드 실패:', error);
@@ -1334,6 +1334,9 @@ export function InterviewManageClient() {
     try {
       setIsLoadingMessage(true);
       
+      // {이름} 치환
+      const processedMessage = message.replace(/\{이름\}/g, selectedApplication.user?.name || '');
+      
       // 메시지 전송 요청을 백그라운드로 처리
       const response = await fetch('/api/send-sms', {
         method: 'POST',
@@ -1342,7 +1345,7 @@ export function InterviewManageClient() {
         },
         body: JSON.stringify({
           phoneNumber: selectedApplication.user?.phoneNumber,
-          content: message,
+          content: processedMessage,
           fromNumber
         }),
       });
