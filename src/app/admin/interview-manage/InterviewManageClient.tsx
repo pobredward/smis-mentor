@@ -2576,7 +2576,7 @@ export function InterviewManageClient() {
 
         {/* 녹화 영상 URL 모달 */}
         {showRecordingModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black bg-black/0 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg w-full max-w-md">
               <div className="p-4 border-b">
                 <h3 className="text-lg font-semibold">면접 녹화영상</h3>
@@ -2629,7 +2629,7 @@ export function InterviewManageClient() {
         
         {/* 스크립트 모달 */}
         {showScriptModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black bg-black/0 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
               <div className="p-4 border-b flex justify-between items-center">
                 <h3 className="text-lg font-semibold">진행자 스크립트</h3>
@@ -2696,7 +2696,7 @@ export function InterviewManageClient() {
         
         {/* 프로필 이미지 모달 */}
         {showProfileImageModal && selectedApplication?.user?.profileImage && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black bg-black/0 flex items-center justify-center z-50 p-4">
             <div className="relative bg-white rounded-lg p-1 max-w-2xl max-h-[90vh] overflow-hidden">
               <button
                 onClick={() => setShowProfileImageModal(false)}

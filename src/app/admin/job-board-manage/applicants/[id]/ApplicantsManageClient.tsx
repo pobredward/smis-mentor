@@ -2077,7 +2077,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         
         {/* SMS 템플릿 선택 모달 */}
         {isTemplateModalOpen && selectedApplication?.user && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black bg-black/0 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-lg">
               <h3 className="text-lg font-semibold mb-4">
                 문자 메시지 보내기
@@ -2171,7 +2171,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         
         {/* 프로필 이미지 모달 */}
         {showProfileImageModal && selectedApplication?.user?.profileImage && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black bg-black/0 flex items-center justify-center z-50 p-4">
             <div className="relative bg-white rounded-lg p-1 max-w-2xl max-h-[90vh] overflow-hidden">
               <button
                 onClick={() => setShowProfileImageModal(false)}

@@ -343,7 +343,7 @@ export default function JobApplyStatus() {
       
       {/* 취소 확인 모달 */}
       {cancelModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-black/0 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">지원 취소 확인</h3>
             <p className="text-gray-700 mb-6">

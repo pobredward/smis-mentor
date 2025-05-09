@@ -517,7 +517,7 @@ export default function EditProfilePage() {
                     )}
                     
                     {isUploading && (
-                      <div className="absolute inset-0 bg-black bg-opacity-50 rounded-md flex flex-col items-center justify-center">
+                      <div className="absolute inset-0 bg-black bg-black/0 rounded-md flex flex-col items-center justify-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white mb-2"></div>
                         <span className="text-white text-sm font-medium">{uploadProgress.toFixed(0)}%</span>
                         <div className="w-4/5 h-2 bg-gray-200 rounded-full mt-2">

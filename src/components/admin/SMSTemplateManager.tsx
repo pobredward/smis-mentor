@@ -208,7 +208,7 @@ export default function SMSTemplateManager({ adminId }: SMSTemplateManagerProps)
       
       {/* 템플릿 추가/수정 모달 */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-black/0 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">
               {selectedTemplate ? '템플릿 수정' : '새 템플릿 추가'}

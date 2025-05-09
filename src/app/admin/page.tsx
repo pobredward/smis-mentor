@@ -59,7 +59,14 @@ export default function AdminDashboard() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       ),
-    }
+    },
+    {
+      title: '수업자료 템플릿 관리',
+      description: '수업자료 대제목/소제목 템플릿을 생성/수정/삭제합니다.',
+      href: '/admin/upload',
+      iconClass: 'text-pink-600',
+      icon: <FaCalendarPlus />,
+    },
   ];
 
   return (

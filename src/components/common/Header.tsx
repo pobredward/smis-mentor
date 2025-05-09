@@ -141,6 +141,15 @@ const MobileMenu = memo(forwardRef<HTMLDivElement, {
           >
             참여 후기
           </Link>
+          {userData?.jobExperiences && userData.jobExperiences.length > 0 && (
+            <Link
+              href="/upload"
+              className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+              onClick={onClose}
+            >
+              수업 자료
+            </Link>
+          )}
           <Link
             href="/profile"
             className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
@@ -273,6 +282,11 @@ const Header = () => {
               <Link href="/reviews" className="text-sm font-medium text-gray-700 hover:text-gray-900">
                 참여 후기
               </Link>
+              {userData?.jobExperiences && userData.jobExperiences.length > 0 && (
+                <Link href="/upload" className="text-sm font-medium text-gray-700 hover:text-gray-900">
+                  수업 자료
+                </Link>
+              )}
             </nav>
           </div>
 
@@ -330,7 +344,7 @@ const Header = () => {
       {/* 배경 오버레이 (모바일 메뉴가 열려있을 때) */}
       {isMenuOpen && (
         <div
-          className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+          className="md:hidden fixed inset-0 bg-black bg-black/0 z-20"
           onClick={closeMobileMenu}
         ></div>
       )}
