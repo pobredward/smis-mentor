@@ -167,7 +167,6 @@ export default function UploadPage() {
   const [templates, setTemplates] = useState<LessonMaterialTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedMaterialGeneration, setSelectedMaterialGeneration] = useState<string>('전체');
-  const [selectedTemplateGeneration, setSelectedTemplateGeneration] = useState<string>('');
 
   // DnD sensors
   const sensors = useSensors(
@@ -244,17 +243,6 @@ export default function UploadPage() {
       setTemplatesLoading(false);
     });
     if (sortedMaterialGenerations.length > 0) setSelectedMaterialGeneration(sortedMaterialGenerations[0]);
-    if (templates.length > 0) {
-      const allGenerations = Array.from(new Set(templates.map(t => t.generation || '미지정')));
-      const sortedGenerations = allGenerations.sort((a, b) => {
-        if (a === '미지정') return 1;
-        if (b === '미지정') return -1;
-        const numA = parseInt(a.replace(/[^0-9]/g, ''));
-        const numB = parseInt(b.replace(/[^0-9]/g, ''));
-        return numB - numA;
-      });
-      setSelectedTemplateGeneration(sortedGenerations[0] || '');
-    }
     // eslint-disable-next-line
   }, [userData]);
 
@@ -352,7 +340,7 @@ export default function UploadPage() {
       <Header />
       <main className="max-w-2xl mx-auto px-4 py-8 w-full min-h-[70vh]">
         <h1 className="text-2xl font-bold mb-2">수업 자료</h1>
-        <p className="text-gray-600 mb-6 text-sm">본인이 만든 수업자료 링크를 업로드하고 관리할 수 있습니다</p>
+        <p className="text-gray-600 mb-6 text-sm">본인이 만든 수업자료 링크를 업로드하고 관리할 수 있습니다.<br />대제목(예: 드림멘토링, AI&amp;SW)과 소제목(예: 1주차 수업자료 등)을 자유롭게 추가/수정/순서변경할 수 있습니다.<br />각 소제목에는 &apos;보기&apos;, &apos;템플릿&apos;, &apos;원본&apos; 링크를 모두 입력해야 합니다.</p>
         {/* 기수별 토글 */}
         <div className="flex flex-wrap gap-2 mb-6">
           <button
@@ -423,17 +411,8 @@ export default function UploadPage() {
                                           />
                                         ) : (
                                           <>
-                                            {/* 소제목 제목 + 버튼들 한 줄에 우측 정렬 */}
-                                            <div className="flex items-center justify-between mb-1">
-                                              <div className="font-medium text-base">{s.title}</div>
-                                              <div className="flex gap-2 items-center ml-2">
-                                                <Button size="sm" color="secondary" onClick={() => setEditingSection({ materialId: m.id, section: s })}>수정</Button>
-                                                <Button size="sm" color="danger" onClick={() => handleDeleteSection(m.id, s.id)}>삭제</Button>
-                                                <span className="cursor-move text-gray-300 hover:text-blue-400 ml-2">
-                                                  <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/><circle cx="10" cy="7" r="1.5" fill="currentColor"/><circle cx="10" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/></svg>
-                                                </span>
-                                              </div>
-                                            </div>
+                                            {/* 소제목 제목 */}
+                                            <div className="font-medium text-base mb-1">{s.title}</div>
                                             {/* 링크 코드 버튼들 (아래 줄, 작게) */}
                                             {s.links && Array.isArray(s.links) && s.links.length > 0 && (
                                               <div className="flex gap-1 flex-wrap mb-2">
@@ -488,6 +467,13 @@ export default function UploadPage() {
                                                 원본
                                               </a>
                                             </div>
+                                            <div className="flex gap-2 items-center mt-2 md:mt-0">
+                                              <Button size="sm" color="secondary" onClick={() => setEditingSection({ materialId: m.id, section: s })}>수정</Button>
+                                              <Button size="sm" color="danger" onClick={() => handleDeleteSection(m.id, s.id)}>삭제</Button>
+                                              <span className="cursor-move text-gray-300 hover:text-blue-400 ml-2">
+                                                <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/><circle cx="10" cy="7" r="1.5" fill="currentColor"/><circle cx="10" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/></svg>
+                                              </span>
+                                            </div>
                                           </>
                                         )}
                                       </div>
@@ -520,87 +506,53 @@ export default function UploadPage() {
               <Button size="lg" className="px-8 py-3 text-base font-semibold rounded-xl shadow" onClick={() => setShowTemplateSelect(true)}>+ 대제목 추가</Button>
             </div>
             {showTemplateSelect && (
-              <TemplateSelectModal
-                templates={templates}
-                loading={templatesLoading}
-                selectedGeneration={selectedTemplateGeneration}
-                setSelectedGeneration={setSelectedTemplateGeneration}
-                onSelect={handleAddMaterialFromTemplate}
-                onClose={() => setShowTemplateSelect(false)}
-                materials={materials}
-              />
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
+                <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
+                  <h2 className="text-lg font-bold mb-4">템플릿 선택</h2>
+                  {/* Generation 필터 토글 */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {sortedMaterialGenerations.map((gen) => (
+                      <button
+                        key={gen}
+                        className={`px-3 py-1.5 text-sm rounded-full border ${selectedMaterialGeneration === gen ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                        onClick={() => setSelectedMaterialGeneration(gen)}
+                      >
+                        {gen}
+                      </button>
+                    ))}
+                  </div>
+                  {templatesLoading ? (
+                    <div className="text-center text-gray-400 py-8">로딩 중...</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {templates
+                        .filter(t => selectedMaterialGeneration === '전체' || (t.generation || '미지정') === selectedMaterialGeneration)
+                        .map((tpl) => {
+                          const alreadyAdded = materials.some(m => m.title === tpl.title);
+                          return (
+                            <li key={tpl.id}>
+                              <Button
+                                onClick={() => handleAddMaterialFromTemplate(tpl)}
+                                disabled={alreadyAdded}
+                                className={`w-full ${alreadyAdded ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              >
+                                {tpl.title} {alreadyAdded && '(이미 추가됨)'}
+                              </Button>
+                            </li>
+                          );
+                        })}
+                    </ul>
+                  )}
+                  <div className="flex justify-end mt-4">
+                    <Button color="secondary" onClick={() => setShowTemplateSelect(false)}>취소</Button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         )}
       </main>
       <Footer />
     </>
-  );
-}
-
-function TemplateSelectModal({
-  templates,
-  loading,
-  selectedGeneration,
-  setSelectedGeneration,
-  onSelect,
-  onClose,
-  materials,
-}: {
-  templates: LessonMaterialTemplate[];
-  loading: boolean;
-  selectedGeneration: string;
-  setSelectedGeneration: (gen: string) => void;
-  onSelect: (tpl: LessonMaterialTemplate) => void;
-  onClose: () => void;
-  materials: LessonMaterialData[];
-}) {
-  const allGenerations = Array.from(new Set(templates.map(t => t.generation || '미지정')));
-  const sortedGenerations = allGenerations.sort((a, b) => {
-    if (a === '미지정') return 1;
-    if (b === '미지정') return -1;
-    const numA = parseInt(a.replace(/[^0-9]/g, ''));
-    const numB = parseInt(b.replace(/[^0-9]/g, ''));
-    return numB - numA;
-  });
-  const filteredTemplates = templates.filter(t => (t.generation || '미지정') === selectedGeneration);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
-        <h2 className="text-lg font-bold mb-4">템플릿 선택</h2>
-        <div className="flex flex-wrap gap-2 mb-4">
-          {sortedGenerations.map(gen => (
-            <button
-              key={gen}
-              className={`px-3 py-1.5 text-sm rounded-full border ${selectedGeneration === gen ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-              onClick={() => setSelectedGeneration(gen)}
-            >{gen}</button>
-          ))}
-        </div>
-        {loading ? (
-          <div className="text-center text-gray-400 py-8">로딩 중...</div>
-        ) : (
-          <ul className="space-y-2">
-            {filteredTemplates.map(tpl => {
-              const alreadyAdded = materials.some(m => m.title === tpl.title);
-              return (
-                <li key={tpl.id}>
-                  <Button
-                    onClick={() => onSelect(tpl)}
-                    disabled={alreadyAdded}
-                    className={`w-full ${alreadyAdded ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    {tpl.title} {alreadyAdded && '(이미 추가됨)'}
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <div className="flex justify-end mt-4">
-          <Button color="secondary" onClick={onClose}>취소</Button>
-        </div>
-      </div>
-    </div>
   );
 } 

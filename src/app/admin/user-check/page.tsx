@@ -8,6 +8,7 @@ import { getAllJobCodes, getUsersByJobCode } from '@/lib/firebaseService';
 import { JobCodeWithId, User } from '@/types';
 import { formatPhoneNumber } from '@/components/common/PhoneInput';
 import { useRouter } from 'next/navigation';
+import { maskRRNLast } from '@/utils/userUtils';
 import { getLessonMaterials, getSections, LessonMaterialData, SectionData, getLessonMaterialTemplates, LessonMaterialTemplate } from '@/lib/lessonMaterialService';
 
 type UserWithGroupInfo = User & { groupName?: string };
@@ -501,52 +502,6 @@ export default function UserCheck() {
           <div className="fixed inset-0 bg-black/0 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6">
-                {/* 프로필 영역: 항상 표시 */}
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex items-center">
-                    {selectedUser.profileImage ? (
-                      <img 
-                        src={selectedUser.profileImage} 
-                        alt={selectedUser.name}
-                        className="h-16 w-16 rounded-full mr-4 object-cover"
-                      />
-                    ) : (
-                      <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center mr-4">
-                        <span className="text-gray-500 text-xl">{selectedUser.name.charAt(0)}</span>
-                      </div>
-                    )}
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-900">{selectedUser.name}</h2>
-                      <p className="text-gray-600 text-sm">{selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}</p>
-                      <div className="flex items-center mt-1">
-                        {/* 그룹 정보 표시 */}
-                        {selectedUser && 
-                          'groupName' in selectedUser && 
-                          typeof selectedUser.groupName === 'string' && 
-                          selectedUser.groupName && (
-                            <span className={`px-2 py-0.5 text-xs rounded-full ${
-                              groupColors[selectedUser.groupName as keyof typeof groupColors].bg} ${groupColors[selectedUser.groupName as keyof typeof groupColors].text
-                            }`}>
-                              {groupLabels[selectedUser.groupName as keyof typeof groupLabels]}
-                            </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    className="text-gray-400 hover:text-gray-600"
-                    onClick={handleCloseModal}
-                  >
-                    <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-                </div>
-                {/* mode 분기 */}
                 {mode === 'mode2' ? (
                   <>
                     <h3 className="text-lg font-semibold mb-3">수업 자료</h3>
@@ -554,7 +509,155 @@ export default function UserCheck() {
                   </>
                 ) : (
                   <>
-                    {/* 기존 상세정보 전체 블록을 여기에 그대로 둡니다 */}
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="flex items-center">
+                        {selectedUser.profileImage ? (
+                          <img 
+                            src={selectedUser.profileImage} 
+                            alt={selectedUser.name}
+                            className="h-16 w-16 rounded-full mr-4 object-cover"
+                          />
+                        ) : (
+                          <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center mr-4">
+                            <span className="text-gray-500 text-xl">{selectedUser.name.charAt(0)}</span>
+                          </div>
+                        )}
+                        <div>
+                          <h2 className="text-xl font-bold text-gray-900">{selectedUser.name}</h2>
+                          <p className="text-gray-600 text-sm">{selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}</p>
+                          <div className="flex items-center mt-1">
+                            {/* 그룹 정보 표시 */}
+                            {selectedUser && 
+                              'groupName' in selectedUser && 
+                              typeof selectedUser.groupName === 'string' && 
+                              selectedUser.groupName && (
+                                <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                  groupColors[selectedUser.groupName as keyof typeof groupColors].bg} ${groupColors[selectedUser.groupName as keyof typeof groupColors].text
+                                }`}>
+                                  {groupLabels[selectedUser.groupName as keyof typeof groupLabels]}
+                                </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        className="text-gray-400 hover:text-gray-600"
+                        onClick={handleCloseModal}
+                      >
+                        <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 border-t pt-4">
+                      <div>
+                        <p className="text-sm text-gray-500">이메일</p>
+                        <p className="text-gray-900 break-words">{selectedUser.email || '-'}</p>
+                      </div>
+                      {/* <div>
+                        <p className="text-sm text-gray-500">전화번호</p>
+                        <p className="text-gray-900">
+                          {selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}
+                        </p>
+                      </div> */}
+                      <div>
+                        <p className="text-sm text-gray-500">성별</p>
+                        <p className="text-gray-900">
+                          {selectedUser.gender === 'M' ? '남성' : selectedUser.gender === 'F' ? '여성' : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">나이</p>
+                        <p className="text-gray-900">
+                          {selectedUser.age ? `${selectedUser.age}세` : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">주민등록번호</p>
+                        <p className="text-gray-900">
+                          {selectedUser.rrnFront && selectedUser.rrnLast ?
+                            `${selectedUser.rrnFront}-${maskRRNLast(selectedUser.rrnLast)}` : '-'}
+                        </p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <p className="text-sm text-gray-500">주소</p>
+                        <p className="text-gray-900 break-words">
+                          {selectedUser.address ? `${selectedUser.address} ${selectedUser.addressDetail || ''}` : '-'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 학교 정보 섹션 */}
+                    <div className="mt-6 border-t pt-4">
+                      <h3 className="text-lg font-semibold mb-3">학교 정보</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4">
+                        <div>
+                          <p className="text-sm text-gray-500">학교</p>
+                          <p className="text-gray-900">{selectedUser.university || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">학년</p>
+                          <p className="text-gray-900">{selectedUser.grade ? (selectedUser.grade === 6 ? '졸업생' : `${selectedUser.grade}학년`) : '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">휴학 상태</p>
+                          <p className="text-gray-900">{selectedUser.grade === 6 || selectedUser.isOnLeave === null ? '졸업생' : selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">전공 (1전공)</p>
+                          <p className="text-gray-900">{selectedUser.major1 || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">전공 (2전공/부전공)</p>
+                          <p className="text-gray-900">{selectedUser.major2 || '없음'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 업무 경력 정보 */}
+                    <div className="mt-6 border-t pt-4">
+                      <h3 className="text-lg font-semibold mb-3">업무 경력</h3>
+                      {selectedUser.jobExperiences && selectedUser.jobExperiences.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedUser.jobExperiences
+                            .slice()
+                            .sort((a, b) => {
+                              const jobCodeA = jobCodes.find(code => code.id === a.id);
+                              const jobCodeB = jobCodes.find(code => code.id === b.id);
+                              const genA = jobCodeA ? parseInt(jobCodeA.generation.replace(/[^0-9]/g, '')) : -1;
+                              const genB = jobCodeB ? parseInt(jobCodeB.generation.replace(/[^0-9]/g, '')) : -1;
+                              return genB - genA;
+                            })
+                            .map((exp, idx) => {
+                              const jobCode = jobCodes.find(code => code.id === exp.id);
+                              return (
+                                <div key={idx} className="bg-blue-50 text-blue-800 px-3 py-2 rounded-lg">
+                                  <span>{exp.group ? `[${
+                                    exp.group === 'junior' ? '주니어' :
+                                    exp.group === 'middle' ? '미들' :
+                                    exp.group === 'senior' ? '시니어' :
+                                    exp.group === 'spring' ? '스프링' :
+                                    exp.group === 'summer' ? '서머' :
+                                    exp.group === 'autumn' ? '어텀' :
+                                    exp.group === 'winter' ? '윈터' :
+                                    exp.group === 'common' ? '공통' :
+                                    '매니저'
+                                  }] ` : ''}
+                                  {jobCode ? `${jobCode.generation} ${jobCode.name}` : exp.id}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500">등록된 업무 경력이 없습니다.</p>
+                      )}
+                    </div>
                   </>
                 )}
                 <div className="mt-6 flex justify-end">
