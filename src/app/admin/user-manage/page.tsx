@@ -1214,6 +1214,10 @@ export default function UserManage() {
                           <p className="text-sm text-gray-500">정보 업데이트</p>
                           <p className="text-gray-900">{formatDate(selectedUser.updatedAt)}</p>
                         </div>
+                        <div>
+                          <p className="text-sm text-gray-500">DB 아이디</p>
+                          <p className="text-gray-900">{selectedUser.id}</p>
+                        </div>
                       </div>
 
                       {/* 학교 정보 섹션 */}
