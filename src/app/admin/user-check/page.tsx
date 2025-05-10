@@ -504,6 +504,51 @@ export default function UserCheck() {
               <div className="p-6">
                 {mode === 'mode2' ? (
                   <>
+                    {/* 상단 요약(프로필, 이름, 연락처, 그룹 뱃지) */}
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="flex items-center">
+                        {selectedUser.profileImage ? (
+                          <img 
+                            src={selectedUser.profileImage} 
+                            alt={selectedUser.name}
+                            className="h-16 w-16 rounded-full mr-4 object-cover"
+                          />
+                        ) : (
+                          <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center mr-4">
+                            <span className="text-gray-500 text-xl">{selectedUser.name.charAt(0)}</span>
+                          </div>
+                        )}
+                        <div>
+                          <h2 className="text-xl font-bold text-gray-900">{selectedUser.name}</h2>
+                          <p className="text-gray-600 text-sm">{selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}</p>
+                          <div className="flex items-center mt-1">
+                            {selectedUser && 
+                              'groupName' in selectedUser && 
+                              typeof selectedUser.groupName === 'string' && 
+                              selectedUser.groupName && (
+                                <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                  groupColors[selectedUser.groupName as keyof typeof groupColors].bg} ${groupColors[selectedUser.groupName as keyof typeof groupColors].text
+                                }`}>
+                                  {groupLabels[selectedUser.groupName as keyof typeof groupLabels]}
+                                </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        className="text-gray-400 hover:text-gray-600"
+                        onClick={handleCloseModal}
+                      >
+                        <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    {/* 수업 자료만 */}
                     <h3 className="text-lg font-semibold mb-3">수업 자료</h3>
                     <UserLessonMaterials userId={selectedUser.userId} />
                   </>
