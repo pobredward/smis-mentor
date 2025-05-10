@@ -24,7 +24,7 @@ export default function UserCheck() {
   const [groupedUsers, setGroupedUsers] = useState<Record<string, UserWithGroupInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [mode, setMode] = useState<'mode1' | 'mode2'>('mode1');
+  const [mode, setMode] = useState<'mode1' | 'mode2'>('mode2');
   
   // 그룹 순서 정의
   const groupOrder = ['manager', 'common', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
