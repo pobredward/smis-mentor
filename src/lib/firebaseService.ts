@@ -613,12 +613,6 @@ export const cancelApplication = async (applicationId: string) => {
       throw new Error('존재하지 않는 지원입니다.');
     }
     
-    const applicationData = applicationSnap.data() as ApplicationHistory;
-    if (applicationData.applicationStatus !== 'pending') {
-      throw new Error('검토중 상태의 지원만 취소할 수 있습니다.');
-    }
-    
-    // 지원서 삭제
     await deleteDoc(applicationRef);
     return true;
   } catch (error) {

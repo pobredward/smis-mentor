@@ -20,6 +20,7 @@ import {
 } from '@/lib/smsTemplateService';
 import { auth } from '@/lib/firebase';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
+import { cancelApplication } from '@/lib/firebaseService';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -2056,6 +2057,30 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 {selectedApplication.user?.jobMotivation || '내용이 없습니다.'}
                               </div>
                             </div>
+                          </div>
+                          <div className="mt-6 flex justify-end">
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              isLoading={isLoading}
+                              onClick={async () => {
+                                if (!selectedApplication) return;
+                                if (!window.confirm('정말로 이 지원자를 지원 취소시키시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+                                setIsLoading(true);
+                                try {
+                                  await cancelApplication(selectedApplication.id);
+                                  setApplications(prev => prev.filter(app => app.id !== selectedApplication.id));
+                                  setSelectedApplication(null);
+                                  toast.success('지원이 성공적으로 취소되었습니다.');
+                                } catch {
+                                  toast.error('지원 취소에 실패했습니다.');
+                                } finally {
+                                  setIsLoading(false);
+                                }
+                              }}
+                            >
+                              지원 취소시키기
+                            </Button>
                           </div>
                         </div>
                       </div>
