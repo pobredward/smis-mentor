@@ -117,7 +117,7 @@ export default function ApplicationSection() {
       switch (status) {
         case 'finalAccepted':
           color = 'bg-green-100 text-green-800';
-          label = '최종합격';
+          label = '합격';
           break;
         case 'finalRejected':
           color = 'bg-red-100 text-red-800';

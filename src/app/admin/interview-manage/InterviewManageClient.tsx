@@ -2006,8 +2006,8 @@ export function InterviewManageClient() {
                             disabled={loading || selectedApplication.interviewStatus !== 'passed'}
                           >
                             <option value="">선택</option>
-                            <option value="finalAccepted">최종합격</option>
-                            <option value="finalRejected">최종불합격</option>
+                            <option value="finalAccepted">합격</option>
+                            <option value="finalRejected">불합격</option>
                             <option value="absent">불참</option>
                           </select>
                           

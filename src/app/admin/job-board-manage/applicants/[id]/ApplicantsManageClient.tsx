@@ -359,8 +359,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       passed: { bg: 'bg-green-100', text: 'text-green-800', label: '합격' },
       complete: { bg: 'bg-purple-100', text: 'text-purple-800', label: '완료' },
       failed: { bg: 'bg-red-100', text: 'text-red-800', label: '불합격' },
-      finalAccepted: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: '최종합격' },
-      finalRejected: { bg: 'bg-red-100', text: 'text-red-800', label: '최종불합격' },
+      finalAccepted: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: '합격' },
+      finalRejected: { bg: 'bg-red-100', text: 'text-red-800', label: '불합격' },
+      finalAbsent: { bg: 'bg-red-100', text: 'text-red-800', label: '불참' },
       absent: { bg: 'bg-red-100', text: 'text-red-800', label: '불참' },
     };
 
