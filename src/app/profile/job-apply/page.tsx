@@ -145,6 +145,10 @@ export default function JobApplyStatus() {
           color = 'bg-red-100 text-red-800';
           label = '최종불합격';
           break;
+        case 'finalAbsent':
+          color = 'bg-red-100 text-red-800';
+          label = '불참';
+          break;
         case 'absent':
           color = 'bg-gray-100 text-gray-800';
           label = '불참';
