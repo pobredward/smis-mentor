@@ -116,9 +116,9 @@ export default function UserManage() {
     // 검색어 필터링
     if (searchTerm.trim()) {
       filtered = filtered.filter(user => 
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.phoneNumber.includes(searchTerm)
+        (user.name?.toLowerCase?.() ?? '').includes(searchTerm.toLowerCase()) ||
+        (user.email?.toLowerCase?.() ?? '').includes(searchTerm.toLowerCase()) ||
+        (user.phoneNumber ?? '').includes(searchTerm)
       );
     }
     
@@ -617,9 +617,9 @@ export default function UserManage() {
         selectedRole === 'all' || user.role === selectedRole
       ).filter(user => 
         !searchTerm.trim() || 
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.phoneNumber.includes(searchTerm)
+        (user.name?.toLowerCase?.() ?? '').includes(searchTerm.toLowerCase()) ||
+        (user.email?.toLowerCase?.() ?? '').includes(searchTerm.toLowerCase()) ||
+        (user.phoneNumber ?? '').includes(searchTerm)
       ));
     } catch (error) {
       console.error('사용자 계정 복구 실패:', error);
