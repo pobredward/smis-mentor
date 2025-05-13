@@ -262,6 +262,7 @@ export default function AdminUploadTemplatePage() {
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [editingGeneration, setEditingGeneration] = useState('');
+  const [links, setLinks] = useState<{ label: string; url: string }[]>([]);
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -281,16 +282,16 @@ export default function AdminUploadTemplatePage() {
   const handleSave = async () => {
     if (!title.trim()) return;
     if (editing) {
-      await updateLessonMaterialTemplate(editing.id, { title, sections, generation });
+      await updateLessonMaterialTemplate(editing.id, { title, sections, generation, links });
     } else {
-      const newId = await addLessonMaterialTemplate(title, sections, generation);
-      // 새 템플릿을 맨 위에 추가
-      setTemplates(prev => [{ id: newId, title, sections, generation }, ...prev]);
+      const newId = await addLessonMaterialTemplate(title, sections, generation, links);
+      setTemplates(prev => [{ id: newId, title, sections, generation, links }, ...prev]);
     }
     setShowForm(false);
     setEditing(null);
     setTitle('');
     setSections([]);
+    setLinks([]);
     fetchTemplates();
   };
 
@@ -324,7 +325,7 @@ export default function AdminUploadTemplatePage() {
         ) : (
           <div className="space-y-6">
             <div className="flex justify-end">
-              <Button onClick={() => { setShowForm(true); setEditing(null); setTitle(''); setSections([]); }}>+ 템플릿 추가</Button>
+              <Button onClick={() => { setShowForm(true); setEditing(null); setTitle(''); setSections([]); setLinks([]); }}>+ 템플릿 추가</Button>
             </div>
             {/* Generation 필터 토글 */}
             <div className="flex flex-wrap gap-2 mb-6">
@@ -348,28 +349,70 @@ export default function AdminUploadTemplatePage() {
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         {editingTemplateId === tpl.id ? (
-                          <>
-                            <input
-                              className="font-bold text-lg border-b border-blue-400 focus:outline-none bg-transparent px-1 py-0.5"
-                              value={editingTitle}
-                              onChange={e => setEditingTitle(e.target.value)}
-                              aria-label="템플릿명"
-                              autoFocus
-                            />
-                            <input
-                              className="w-20 text-sm border-b border-blue-200 focus:outline-none bg-transparent px-1 py-0.5"
-                              value={editingGeneration}
-                              onChange={e => setEditingGeneration(e.target.value)}
-                              aria-label="기수"
-                              placeholder="기수 (예: 26기)"
-                            />
-                            <Button size="sm" color="primary" onClick={async () => {
-                              await updateLessonMaterialTemplate(tpl.id, { title: editingTitle, generation: editingGeneration });
-                              setEditingTemplateId(null);
-                              fetchTemplates();
-                            }}>완료</Button>
-                            <Button size="sm" color="secondary" onClick={() => setEditingTemplateId(null)}>취소</Button>
-                          </>
+                          <div className="flex flex-col gap-2 w-full">
+                            {/* 첫 번째 행: 템플릿명/기수/버튼 */}
+                            <div className="flex items-center gap-3 mb-2 flex-wrap">
+                              <input
+                                className="font-bold text-lg border-b border-blue-400 focus:outline-none bg-transparent px-1 py-0.5"
+                                value={editingTitle}
+                                onChange={e => setEditingTitle(e.target.value)}
+                                aria-label="템플릿명"
+                                autoFocus
+                              />
+                              <input
+                                className="w-20 text-sm border-b border-blue-200 focus:outline-none bg-transparent px-1 py-0.5"
+                                value={editingGeneration}
+                                onChange={e => setEditingGeneration(e.target.value)}
+                                aria-label="기수"
+                                placeholder="기수 (예: 26기)"
+                              />
+                              <div className="flex gap-2 ml-auto">
+                                <Button color="primary" onClick={async () => {
+                                  await updateLessonMaterialTemplate(tpl.id, { title: editingTitle, generation: editingGeneration, links });
+                                  setEditingTemplateId(null);
+                                  setLinks([]);
+                                  fetchTemplates();
+                                }}>완료</Button>
+                                <Button color="secondary" onClick={() => {
+                                  setEditingTemplateId(null);
+                                  setLinks([]);
+                                }}>취소</Button>
+                              </div>
+                            </div>
+                            {/* 두 번째 행: 대주제 링크 입력 UI */}
+                            <div className="bg-gray-50 border border-blue-100 rounded-lg p-4 mb-2 w-full max-w-md">
+                              <div className="font-semibold mb-2">대주제 링크들 <span className="text-xs text-gray-400">(선택)</span></div>
+                              {links.map((l, idx) => (
+                                <div key={idx} className="flex gap-2 items-center mb-2 flex-wrap">
+                                  <input
+                                    className="w-40 max-w-[160px] px-2 py-1 border rounded text-sm"
+                                    placeholder="링크 제목 (예: 운영방안)"
+                                    value={l.label}
+                                    onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
+                                    aria-label="링크 제목"
+                                  />
+                                  <input
+                                    className="flex-1 min-w-0 px-2 py-1 border rounded text-sm"
+                                    placeholder="URL (예: https://...)"
+                                    value={l.url}
+                                    onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
+                                    aria-label="링크 URL"
+                                  />
+                                  <Button size="sm" color="danger" type="button" onClick={() => setLinks(links.filter((_, i) => i !== idx))}>
+                                    삭제
+                                  </Button>
+                                </div>
+                              ))}
+                              <Button
+                                size="sm"
+                                type="button"
+                                className="mt-1"
+                                onClick={() => setLinks([...links, { label: '', url: '' }])}
+                              >
+                                + 링크 추가
+                              </Button>
+                            </div>
+                          </div>
                         ) : (
                           <>
                             <span className="font-bold text-lg mr-2">{tpl.title}</span>
@@ -378,17 +421,41 @@ export default function AdminUploadTemplatePage() {
                         )}
                       </div>
                       <div className="flex gap-2 items-center">
-                        <Button size="sm" color="secondary" onClick={() => {
-                          setEditingTemplateId(tpl.id);
-                          setEditingTitle(tpl.title);
-                          setEditingGeneration(tpl.generation || '');
-                        }}>수정</Button>
-                        <Button size="sm" color="danger" onClick={() => handleDelete(tpl.id)}>삭제</Button>
-                        <span className="cursor-move text-gray-300 hover:text-blue-400 ml-2">
-                          <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/><circle cx="10" cy="7" r="1.5" fill="currentColor"/><circle cx="10" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/></svg>
-                        </span>
+                        {editingTemplateId === tpl.id ? null : (
+                          <>
+                            <Button size="sm" color="secondary" onClick={() => {
+                              setEditingTemplateId(tpl.id);
+                              setEditingTitle(tpl.title);
+                              setEditingGeneration(tpl.generation || '');
+                              setLinks(tpl.links ?? []);
+                            }}>수정</Button>
+                            <Button size="sm" color="danger" onClick={() => handleDelete(tpl.id)}>삭제</Button>
+                            <span className="cursor-move text-gray-300 hover:text-blue-400 ml-2">
+                              <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/><circle cx="10" cy="7" r="1.5" fill="currentColor"/><circle cx="10" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/></svg>
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
+                    {/* 대주제 links 버튼 그룹: 제목 아래에 */}
+                    {editingTemplateId !== tpl.id && tpl.links && tpl.links.length > 0 && (
+                      <div className="flex gap-2 flex-wrap mt-2">
+                        {tpl.links.map((l, idx) => (
+                          l.label && l.url ? (
+                            <a
+                              key={idx}
+                              href={l.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm font-medium border border-blue-200 hover:bg-blue-200 transition"
+                              aria-label={l.label}
+                            >
+                              {l.label}
+                            </a>
+                          ) : null
+                        ))}
+                      </div>
+                    )}
                     {/* SectionEditor로 소제목(섹션) 리스트 및 인라인 편집 통합 */}
                     <SectionEditor
                       sections={tpl.sections}
@@ -400,34 +467,65 @@ export default function AdminUploadTemplatePage() {
             )}
             {/* 템플릿 추가/수정 폼 */}
             {showForm && (
-              <div className="border rounded-lg p-4 bg-blue-50 mt-4">
-                <div className="mb-2">
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 mb-8">
+                <div className="mb-4">
+                  <label className="block font-semibold mb-1">템플릿명</label>
                   <input
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-                    placeholder="대제목 (예: 드림멘토링)"
+                    className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-blue-400"
                     value={title}
                     onChange={e => setTitle(e.target.value)}
-                    aria-label="대제목"
+                    placeholder="예: 드림멘토링"
+                    aria-label="템플릿명"
                   />
                 </div>
-                <div className="mb-2">
+                <div className="mb-4">
+                  <label className="block font-semibold mb-1">기수</label>
                   <input
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-                    placeholder="기수 (예: 26기)"
+                    className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-blue-400"
                     value={generation}
                     onChange={e => setGeneration(e.target.value)}
+                    placeholder="예: 26기"
                     aria-label="기수"
                   />
                 </div>
-                <div className="mb-2">
-                  <SectionEditor
-                    sections={sections}
-                    onSectionsChange={setSections}
-                  />
+                {/* 대주제 링크 입력 UI */}
+                <div className="mb-4">
+                  <div className="font-semibold mb-1">대주제 링크들 (선택)</div>
+                  {links.length === 0 && (
+                    <Button size="sm" type="button" onClick={() => setLinks([{ label: '', url: '' }])}>
+                      + 링크 추가
+                    </Button>
+                  )}
+                  {links.map((l, idx) => (
+                    <div key={idx} className="flex gap-2 items-center mb-1">
+                      <input
+                        className="w-32 px-2 py-1 border rounded"
+                        placeholder="링크 제목"
+                        value={l.label}
+                        onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
+                      />
+                      <input
+                        className="flex-1 px-2 py-1 border rounded"
+                        placeholder="URL"
+                        value={l.url}
+                        onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
+                      />
+                      <Button size="sm" color="danger" type="button" onClick={() => setLinks(links.filter((_, i) => i !== idx))}>
+                        삭제
+                      </Button>
+                    </div>
+                  ))}
+                  {links.length > 0 && (
+                    <Button size="sm" type="button" onClick={() => setLinks([...links, { label: '', url: '' }])}>
+                      + 링크 추가
+                    </Button>
+                  )}
                 </div>
-                <div className="flex gap-2 justify-end mt-2">
-                  <Button type="button" color="secondary" onClick={() => { setShowForm(false); setEditing(null); setTitle(''); setSections([]); }}>취소</Button>
-                  <Button type="button" onClick={handleSave}>{editing ? '수정 완료' : '저장'}</Button>
+                {/* 소제목(섹션) 에디터 */}
+                <SectionEditor sections={sections} onSectionsChange={setSections} />
+                <div className="flex gap-2 mt-6 justify-end">
+                  <Button color="secondary" onClick={() => { setShowForm(false); setEditing(null); setTitle(''); setSections([]); setLinks([]); }}>취소</Button>
+                  <Button color="primary" onClick={handleSave}>저장</Button>
                 </div>
               </div>
             )}

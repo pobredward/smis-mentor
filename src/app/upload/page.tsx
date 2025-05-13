@@ -369,25 +369,42 @@ export default function UploadPage() {
                     {filteredMaterials.map((m) => (
                       <SortableItem key={m.id} id={m.id}>
                         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 relative group transition-all">
-                          <div className="flex items-center justify-between mb-4">
-                            {editingMaterial?.id === m.id ? (
-                              <LessonMaterialForm
-                                initial={editingMaterial.title}
-                                onSave={title => handleEditMaterial(editingMaterial.id, title)}
-                                onCancel={() => setEditingMaterial(null)}
-                              />
-                            ) : (
-                              <>
-                                <span className="text-xl font-bold">{m.title}</span>
-                                <div className="flex gap-2 items-center">
-                                  <Button size="sm" color="secondary" onClick={() => setEditingMaterial(m)}>수정</Button>
-                                  <Button size="sm" color="danger" onClick={() => handleDeleteMaterial(m.id)}>삭제</Button>
-                                  <span className="cursor-move text-gray-300 hover:text-blue-400 ml-2">
-                                    <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/><circle cx="10" cy="7" r="1.5" fill="currentColor"/><circle cx="10" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/></svg>
-                                  </span>
-                                </div>
-                              </>
-                            )}
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xl font-bold">{m.title}</span>
+                              <div className="flex gap-2 items-center">
+                                {/* <Button size="sm" color="secondary" onClick={() => setEditingMaterial(m)}>수정</Button> */}
+                                <Button size="sm" color="danger" onClick={() => handleDeleteMaterial(m.id)}>삭제</Button>
+                                <span className="cursor-move text-gray-300 hover:text-blue-400 ml-2">
+                                  <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/><circle cx="10" cy="7" r="1.5" fill="currentColor"/><circle cx="10" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/></svg>
+                                </span>
+                              </div>
+                            </div>
+                            {/* 대주제 links 버튼 그룹: 제목 아래에 */}
+                            {(() => {
+                              const tpl = m.templateId ? templates.find(t => t.id === m.templateId) : undefined;
+                              if (tpl && tpl.links && tpl.links.length > 0) {
+                                return (
+                                  <div className="flex gap-2 flex-wrap mt-2">
+                                    {tpl.links.map((l, idx) => (
+                                      l.label && l.url ? (
+                                        <a
+                                          key={idx}
+                                          href={l.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm font-medium border border-blue-200 hover:bg-blue-200 transition"
+                                          aria-label={l.label}
+                                        >
+                                          {l.label}
+                                        </a>
+                                      ) : null
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                           {/* 소제목 카드들 */}
                           <DndContext
