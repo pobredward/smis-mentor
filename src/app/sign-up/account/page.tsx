@@ -12,7 +12,7 @@ import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 
 // 비밀번호 검증 정규식
-const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/;
+const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
 const accountSchema = z.object({
   email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
@@ -131,9 +131,6 @@ export default function SignUpAccount() {
               showPasswordToggle={true}
               {...register('password')}
             />
-            <p className="text-xs text-red-500 mt-1">
-              비밀번호는 8자 이상, 문자, 숫자, 특수문자를 포함해야 합니다
-            </p>
           </div>
 
           <FormInput
