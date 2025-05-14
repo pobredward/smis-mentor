@@ -239,11 +239,11 @@ export default function ProfilePage() {
                             job.group === 'autumn' ? 'bg-orange-100 text-orange-800' :
                             job.group === 'winter' ? 'bg-pink-100 text-pink-800' :
                             job.group === 'common' ? 'bg-gray-100 text-gray-800' :
-                            job.group === 'manager' ? 'bg-gray-100 text-black-800' :
-                            'bg-gray-100 text-black-800'
+                            job.group === 'manager' ? 'bg-black-100 text-black-800' :
+                            'bg-black-100 text-black-800'
                           }`}>
                             {job.group === 'junior' ? '주니어' :
-                             job.group === 'middle' ? '미들' : 
+                             job.group === 'middle' ? '미들' :
                              job.group === 'senior' ? '시니어' :
                              job.group === 'spring' ? '스프링' :
                              job.group === 'summer' ? '서머' :
@@ -253,13 +253,11 @@ export default function ProfilePage() {
                              '매니저'}
                           </span>
                         )}
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 border border-gray-300 font-medium">
-                          {groupRole || '미지정'}
-                        </span>
+                        {groupRole && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 border border-gray-300">{groupRole}</span>
+                        )}
                         {classCode && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-medium">
-                            {classCode}
-                          </span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">{classCode}</span>
                         )}
                       </div>
                     </div>

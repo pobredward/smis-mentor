@@ -90,7 +90,7 @@ export type JobExperience = {
   refCode: string;
 };
 
-export type JobExperienceGroupRole = '담임' | '수업' | '서포트' | '리더';
+export type JobExperienceGroupRole = '담임' | '수업' | '서포트' | '리더' | '매니저' | '부매니저';
 
 export interface JobBoard {
   title: string;

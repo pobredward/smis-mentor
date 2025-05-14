@@ -86,6 +86,8 @@ export default function UserManage() {
     { value: '수업', label: '수업' },
     { value: '서포트', label: '서포트' },
     { value: '리더', label: '리더' },
+    { value: '매니저', label: '매니저' },
+    { value: '부매니저', label: '부매니저' },
   ];
 
   // 사용자 목록 불러오기

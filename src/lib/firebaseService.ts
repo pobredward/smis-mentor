@@ -1024,10 +1024,18 @@ export const addUserJobCode = async (
     if (exists) {
       throw new Error('이미 추가된 직무 코드입니다.');
     }
-    // 새 형식으로 추가
-    const newJobExperience = { id: jobCodeId, group, groupRole, classCode };
+    // 새 형식으로 추가 (classCode가 undefined/빈문자열이면 필드 자체를 넣지 않음)
+    const newJobExperience: {
+      id: string;
+      group: JobGroup;
+      groupRole: JobExperienceGroupRole;
+      classCode?: string;
+    } = { id: jobCodeId, group, groupRole };
+    if (classCode && classCode.trim() !== '') {
+      newJobExperience.classCode = classCode.trim();
+    }
     const updatedJobExperiences = [...jobExperiences, newJobExperience];
-    await updateUser(userId, { jobExperiences: updatedJobExperiences });
+    await updateDoc(userRef, { jobExperiences: updatedJobExperiences });
     return updatedJobExperiences;
   } catch (error) {
     console.error('직무 코드 추가 실패:', error);

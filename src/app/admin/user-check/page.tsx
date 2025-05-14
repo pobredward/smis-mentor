@@ -209,7 +209,7 @@ export default function UserCheck() {
     // 현재 선택된 jobCodeId 찾기
     const jobCode = jobCodes.find(code => code.generation === selectedGeneration && code.code === selectedCode);
     const exp = user.jobExperiences?.find(exp => exp.id === jobCode?.id);
-    const groupRole = exp?.groupRole || '미지정';
+    const groupRole = exp?.groupRole;
     const classCode = exp?.classCode;
     return (
       <div
@@ -229,9 +229,11 @@ export default function UserCheck() {
             </div>
           )}
           <div className="absolute top-1 right-1 flex gap-1">
-            <span className="text-[9px] sm:text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-full bg-gray-200 text-gray-700 border border-gray-300">
-              {groupRole}
-            </span>
+            {groupRole && (
+              <span className="text-[9px] sm:text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-full bg-gray-200 text-gray-700 border border-gray-300">
+                {groupRole}
+              </span>
+            )}
             {classCode && (
               <span className="text-[9px] sm:text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
                 {classCode}
@@ -704,6 +706,8 @@ export default function UserCheck() {
                             })
                             .map((exp, idx) => {
                               const jobCode = jobCodes.find(code => code.id === exp.id);
+                              const groupRole = exp.groupRole;
+                              const classCode = exp.classCode;
                               return (
                                 <div key={idx} className="bg-blue-50 text-blue-800 px-3 py-2 rounded-lg">
                                   <span>
@@ -716,12 +720,15 @@ export default function UserCheck() {
                                       exp.group === 'autumn' ? '어텀' :
                                       exp.group === 'winter' ? '윈터' :
                                       exp.group === 'common' ? '공통' :
-                                      '매니저'
-                                    }] ` : ''}
-                                    {exp.groupRole ? `[${exp.groupRole}] ` : '[미지정] '}
-                                    {exp.classCode ? `[${exp.classCode}] ` : ''}
+                                      '매니저'}] ` : ''}
                                     {jobCode ? `${jobCode.generation} ${jobCode.name}` : exp.id}
                                   </span>
+                                  {groupRole && (
+                                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 border border-gray-300">{groupRole}</span>
+                                  )}
+                                  {classCode && (
+                                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">{classCode}</span>
+                                  )}
                                 </div>
                               );
                             })}
