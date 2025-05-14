@@ -205,41 +205,47 @@ export default function UserCheck() {
   };
 
   // 사용자 카드 렌더링 함수
-  const renderUserCard = (user: UserWithGroupInfo) => (
-    <div
-      className="bg-white rounded-lg shadow overflow-hidden cursor-pointer transform transition hover:scale-105 flex flex-col"
-      onClick={() => handleSelectUser(user)}
-    >
-      <div className="aspect-square w-full bg-gray-200 relative">
-        {user.profileImage ? (
-          <img
-            src={user.profileImage}
-            alt={user.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-            <span className="text-4xl sm:text-5xl font-bold text-blue-300">{user.name.charAt(0)}</span>
+  const renderUserCard = (user: UserWithGroupInfo) => {
+    // 현재 선택된 jobCodeId 찾기
+    const jobCode = jobCodes.find(code => code.generation === selectedGeneration && code.code === selectedCode);
+    const exp = user.jobExperiences?.find(exp => exp.id === jobCode?.id);
+    const groupRole = exp?.groupRole || '미지정';
+    const classCode = exp?.classCode;
+    return (
+      <div
+        className="bg-white rounded-lg shadow overflow-hidden cursor-pointer transform transition hover:scale-105 flex flex-col"
+        onClick={() => handleSelectUser(user)}
+      >
+        <div className="aspect-square w-full bg-gray-200 relative">
+          {user.profileImage ? (
+            <img
+              src={user.profileImage}
+              alt={user.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+              <span className="text-4xl sm:text-5xl font-bold text-blue-300">{user.name.charAt(0)}</span>
+            </div>
+          )}
+          <div className="absolute top-1 right-1 flex gap-1">
+            <span className="text-[9px] sm:text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-full bg-gray-200 text-gray-700 border border-gray-300">
+              {groupRole}
+            </span>
+            {classCode && (
+              <span className="text-[9px] sm:text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                {classCode}
+              </span>
+            )}
           </div>
-        )}
-        <div className="absolute top-1 right-1">
-          <span className={`text-[9px] sm:text-xs px-1 sm:px-2 py-0.5 sm:py-1 rounded-full ${
-            user.groupName && groupColors[user.groupName] 
-              ? `${groupColors[user.groupName].bg} ${groupColors[user.groupName].text}`
-              : 'bg-gray-100 text-gray-800'
-          }`}>
-            {user.groupName && groupLabels[user.groupName] 
-              ? groupLabels[user.groupName] 
-              : '주니어'}
-          </span>
+        </div>
+        <div className="p-3 sm:p-4 flex-grow">
+          <h3 className="font-bold text-base sm:text-lg text-gray-900">{user.name}</h3>
+          <p className="text-xs sm:text-sm text-gray-500 truncate">{user.phoneNumber ? formatPhoneNumber(user.phoneNumber) : '-'}</p>
         </div>
       </div>
-      <div className="p-3 sm:p-4 flex-grow">
-        <h3 className="font-bold text-base sm:text-lg text-gray-900">{user.name}</h3>
-        <p className="text-xs sm:text-sm text-gray-500 truncate">{user.phoneNumber ? formatPhoneNumber(user.phoneNumber) : '-'}</p>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // 뒤로가기 (관리자 페이지로)
   const handleGoBack = () => {
@@ -464,7 +470,25 @@ export default function UserCheck() {
             ) : (
               <div className="space-y-8">
                 {groupOrder.map(group => {
-                  const usersInGroup = groupedUsers[group] || [];
+                  let usersInGroup = groupedUsers[group] || [];
+                  // 정렬: classCode 오름차순, 없으면 맨 뒤, 이름순 2차
+                  usersInGroup = [...usersInGroup].sort((a, b) => {
+                    const jobCode = jobCodes.find(code => code.generation === selectedGeneration && code.code === selectedCode);
+                    const expA = a.jobExperiences?.find(exp => exp.id === jobCode?.id);
+                    const expB = b.jobExperiences?.find(exp => exp.id === jobCode?.id);
+                    const classCodeA = expA?.classCode;
+                    const classCodeB = expB?.classCode;
+                    if (classCodeA && classCodeB) {
+                      if (classCodeA < classCodeB) return -1;
+                      if (classCodeA > classCodeB) return 1;
+                      // classCode 같으면 이름순
+                      return (a.name || '').localeCompare(b.name || '');
+                    }
+                    if (classCodeA && !classCodeB) return -1;
+                    if (!classCodeA && classCodeB) return 1;
+                    // 둘 다 없으면 이름순
+                    return (a.name || '').localeCompare(b.name || '');
+                  });
                   
                   if (usersInGroup.length === 0) {
                     return null;
@@ -682,18 +706,21 @@ export default function UserCheck() {
                               const jobCode = jobCodes.find(code => code.id === exp.id);
                               return (
                                 <div key={idx} className="bg-blue-50 text-blue-800 px-3 py-2 rounded-lg">
-                                  <span>{exp.group ? `[${
-                                    exp.group === 'junior' ? '주니어' :
-                                    exp.group === 'middle' ? '미들' :
-                                    exp.group === 'senior' ? '시니어' :
-                                    exp.group === 'spring' ? '스프링' :
-                                    exp.group === 'summer' ? '서머' :
-                                    exp.group === 'autumn' ? '어텀' :
-                                    exp.group === 'winter' ? '윈터' :
-                                    exp.group === 'common' ? '공통' :
-                                    '매니저'
-                                  }] ` : ''}
-                                  {jobCode ? `${jobCode.generation} ${jobCode.name}` : exp.id}
+                                  <span>
+                                    {exp.group ? `[${
+                                      exp.group === 'junior' ? '주니어' :
+                                      exp.group === 'middle' ? '미들' :
+                                      exp.group === 'senior' ? '시니어' :
+                                      exp.group === 'spring' ? '스프링' :
+                                      exp.group === 'summer' ? '서머' :
+                                      exp.group === 'autumn' ? '어텀' :
+                                      exp.group === 'winter' ? '윈터' :
+                                      exp.group === 'common' ? '공통' :
+                                      '매니저'
+                                    }] ` : ''}
+                                    {exp.groupRole ? `[${exp.groupRole}] ` : '[미지정] '}
+                                    {exp.classCode ? `[${exp.classCode}] ` : ''}
+                                    {jobCode ? `${jobCode.generation} ${jobCode.name}` : exp.id}
                                   </span>
                                 </div>
                               );

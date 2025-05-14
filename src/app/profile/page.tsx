@@ -219,15 +219,18 @@ export default function ProfilePage() {
               <p className="text-gray-500 text-center py-4">등록된 참여 이력이 없습니다.</p>
             ) : (
               <div className="space-y-4">
-                {jobCodes.map((job) => (
-                  <div key={job.id as string} className="">
-                    <div className="flex flex-col flex-row justify-between mb-2">
-                      <div className="flex text-sm items-center">
-                        <h3 className="text-gray-900">{job.generation} {job.name}</h3>
-                        
+                {jobCodes.map((job) => {
+                  const exp = userData?.jobExperiences?.find(exp => exp.id === job.id);
+                  const groupRole = exp?.groupRole;
+                  const classCode = exp?.classCode;
+                  return (
+                    <div key={job.id as string} className="flex justify-between items-center py-1">
+                      <div className="flex-shrink-0 min-w-0 text-gray-900">
+                        {job.generation} {job.name}
                       </div>
-                      {job.group && (
-                          <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
+                      <div className="flex gap-x-2 flex-shrink-0">
+                        {job.group && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                             job.group === 'junior' ? 'bg-green-100 text-green-800' :
                             job.group === 'middle' ? 'bg-yellow-100 text-yellow-800' :
                             job.group === 'senior' ? 'bg-red-100 text-red-800' :
@@ -250,11 +253,18 @@ export default function ProfilePage() {
                              '매니저'}
                           </span>
                         )}
-                      {/* <span className="text-sm text-gray-500">{job.code}</span> */}
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 border border-gray-300 font-medium">
+                          {groupRole || '미지정'}
+                        </span>
+                        {classCode && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-medium">
+                            {classCode}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {/* <p className="text-sm text-gray-600">{job.generation}</p> */}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

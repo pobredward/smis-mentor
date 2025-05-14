@@ -33,7 +33,7 @@ import {
   uploadBytes
 } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
-import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup, Review } from '@/types';
+import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup, Review, JobExperienceGroupRole } from '@/types';
 import { getCache, setCache, CACHE_STORE, CACHE_TTL, getCacheCollection, setCacheCollection, removeCache, clearCacheCollection } from './cacheUtils';
 
 // User 관련 함수
@@ -768,7 +768,9 @@ export const createTempUser = async (
   name: string,
   phoneNumber: string,
   jobExperienceIds: string[],
-  jobExperienceGroups: JobGroup[] = []
+  jobExperienceGroups: JobGroup[] = [],
+  jobExperienceGroupRoles: JobExperienceGroupRole[] = [],
+  jobExperienceClassCodes: (string | undefined)[] = []
 ) => {
   try {
     // 동일한 이름과 전화번호를 가진 사용자가 있는지 확인
@@ -788,7 +790,9 @@ export const createTempUser = async (
     // JobExperiences 객체 배열 생성
     const jobExperiences = jobExperienceIds.map((id, index) => ({
       id,
-      group: index < jobExperienceGroups.length ? jobExperienceGroups[index] : 'junior' as JobGroup
+      group: index < jobExperienceGroups.length ? jobExperienceGroups[index] : 'junior' as JobGroup,
+      groupRole: index < jobExperienceGroupRoles.length ? jobExperienceGroupRoles[index] : '담임',
+      classCode: index < jobExperienceClassCodes.length ? jobExperienceClassCodes[index] : undefined
     }));
     
     const now = Timestamp.now();
@@ -1000,29 +1004,29 @@ export const uploadImage = async (file: File): Promise<string> => {
   }
 };
 
-export const addUserJobCode = async (userId: string, jobCodeId: string, group: JobGroup): Promise<Array<{id: string, group: JobGroup}>> => {
+export const addUserJobCode = async (
+  userId: string,
+  jobCodeId: string,
+  group: JobGroup,
+  groupRole: JobExperienceGroupRole,
+  classCode?: string
+): Promise<Array<{id: string, group: JobGroup, groupRole: JobExperienceGroupRole, classCode?: string}>> => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-    
     if (!userDoc.exists()) {
       throw new Error('사용자를 찾을 수 없습니다.');
     }
-    
     const user = userDoc.data() as User;
     const jobExperiences = user.jobExperiences || [];
-    
     // 이미 존재하는지 확인
     const exists = jobExperiences.some(exp => exp.id === jobCodeId);
-    
     if (exists) {
       throw new Error('이미 추가된 직무 코드입니다.');
     }
-    
     // 새 형식으로 추가
-    const newJobExperience = { id: jobCodeId, group };
+    const newJobExperience = { id: jobCodeId, group, groupRole, classCode };
     const updatedJobExperiences = [...jobExperiences, newJobExperience];
-    
     await updateUser(userId, { jobExperiences: updatedJobExperiences });
     return updatedJobExperiences;
   } catch (error) {

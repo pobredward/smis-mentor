@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getUserById, getUserJobCodesInfo } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
-import { User, JobCode } from '@/types';
+import { User, JobCode, JobCodeWithId } from '@/types';
 
 export default function UserProfilePage({ params }: { params: Promise<{ userId: string }> }) {
   const router = useRouter();
@@ -112,42 +112,52 @@ export default function UserProfilePage({ params }: { params: Promise<{ userId: 
             <h3 className="text-lg font-bold mb-4">참여 업무 내역</h3>
             {jobCodes.length > 0 ? (
               <div className="space-y-2">
-                {jobCodes.map((jobCode) => (
-                  <div key={jobCode.id} className="p-3 border rounded-md">
-                    <div className="flex items-center mb-1">
-                      <p className="font-semibold">{jobCode.name}</p>
-                      {jobCode.group && (
-                        <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
-                          jobCode.group === 'junior' ? 'bg-green-100 text-green-800' :
-                          jobCode.group === 'middle' ? 'bg-yellow-100 text-yellow-800' :
-                          jobCode.group === 'senior' ? 'bg-red-100 text-red-800' :
-                          jobCode.group === 'spring' ? 'bg-blue-100 text-blue-800' :
-                          jobCode.group === 'summer' ? 'bg-purple-100 text-purple-800' :
-                          jobCode.group === 'autumn' ? 'bg-orange-100 text-orange-800' :
-                          jobCode.group === 'winter' ? 'bg-pink-100 text-pink-800' :
-                          jobCode.group === 'common' ? 'bg-gray-100 text-gray-800' :
-                          jobCode.group === 'manager' ? 'bg-gray-100 text-black-800' :
-                          'bg-black-100 text-black-800'
-                        }`}>
-                          {jobCode.group === 'junior' ? '주니어' :
-                           jobCode.group === 'middle' ? '미들' :
-                           jobCode.group === 'senior' ? '시니어' :
-                           jobCode.group === 'spring' ? '스프링' :
-                           jobCode.group === 'summer' ? '서머' :
-                           jobCode.group === 'autumn' ? '어텀' :
-                           jobCode.group === 'winter' ? '윈터' :
-                           jobCode.group === 'common' ? '공통' :
-                           '매니저'}
-                        </span>
-                      )}
+                {jobCodes.map((jobCode) => {
+                  const jobId = (jobCode as JobCodeWithId).id || jobCode.code;
+                  const exp = user?.jobExperiences?.find(exp => exp.id === jobId);
+                  const groupRole = exp?.groupRole;
+                  const classCode = exp?.classCode;
+                  return (
+                    <div key={jobId} className="p-3 border rounded-md">
+                      <div className="flex items-center mb-1">
+                        <p className="font-semibold">{jobCode.name}</p>
+                        {jobCode.group && (
+                          <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
+                            jobCode.group === 'junior' ? 'bg-green-100 text-green-800' :
+                            jobCode.group === 'middle' ? 'bg-yellow-100 text-yellow-800' :
+                            jobCode.group === 'senior' ? 'bg-red-100 text-red-800' :
+                            jobCode.group === 'spring' ? 'bg-blue-100 text-blue-800' :
+                            jobCode.group === 'summer' ? 'bg-purple-100 text-purple-800' :
+                            jobCode.group === 'autumn' ? 'bg-orange-100 text-orange-800' :
+                            jobCode.group === 'winter' ? 'bg-pink-100 text-pink-800' :
+                            jobCode.group === 'common' ? 'bg-gray-100 text-gray-800' :
+                            jobCode.group === 'manager' ? 'bg-gray-100 text-black-800' :
+                            'bg-black-100 text-black-800'
+                          }`}>
+                            {jobCode.group === 'junior' ? '주니어' :
+                             jobCode.group === 'middle' ? '미들' :
+                             jobCode.group === 'senior' ? '시니어' :
+                             jobCode.group === 'spring' ? '스프링' :
+                             jobCode.group === 'summer' ? '서머' :
+                             jobCode.group === 'autumn' ? '어텀' :
+                             jobCode.group === 'winter' ? '윈터' :
+                             jobCode.group === 'common' ? '공통' :
+                             '매니저'}
+                          </span>
+                        )}
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 border border-gray-300">{groupRole || '미지정'}</span>
+                        {classCode && (
+                          <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">{classCode}</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">{jobCode.generation}</p>
+                      <p className="text-sm text-gray-600">
+                        {new Date(jobCode.startDate.seconds * 1000).toLocaleDateString()} ~ 
+                        {new Date(jobCode.endDate.seconds * 1000).toLocaleDateString()}
+                      </p>
                     </div>
-                    <p className="text-sm text-gray-600">{jobCode.generation}</p>
-                    <p className="text-sm text-gray-600">
-                      {new Date(jobCode.startDate.seconds * 1000).toLocaleDateString()} ~ 
-                      {new Date(jobCode.endDate.seconds * 1000).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-gray-600">참여한 업무 내역이 없습니다.</p>

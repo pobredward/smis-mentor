@@ -13,13 +13,22 @@ import Button from '@/components/common/Button';
 import { JobCodeWithId, JobGroup } from '@/types';
 import { useRouter } from 'next/navigation';
 
+const groupRoleOptions = [
+  { value: '담임', label: '담임' },
+  { value: '수업', label: '수업' },
+  { value: '서포트', label: '서포트' },
+  { value: '리더', label: '리더' },
+];
+
 const tempUserSchema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
   phoneNumber: z.string().min(10, '유효한 휴대폰 번호를 입력해주세요.').max(11, '유효한 휴대폰 번호를 입력해주세요.'),
   jobExperiences: z.array(
     z.object({
       value: z.string().min(1, '참가 이력을 선택해주세요.'),
-      group: z.string().min(1, '그룹을 선택해주세요.')
+      group: z.string().min(1, '그룹을 선택해주세요.'),
+      groupRole: z.string().min(1, '역할을 선택해주세요.'),
+      classCode: z.string().optional()
     })
   ).min(1, '최소 하나 이상의 업무 참가 이력이 필요합니다.'),
 });
@@ -59,7 +68,7 @@ export default function UserGenerate() {
   } = useForm<TempUserFormValues>({
     resolver: zodResolver(tempUserSchema),
     defaultValues: {
-      jobExperiences: [{ value: '', group: 'junior' }],
+      jobExperiences: [{ value: '', group: 'junior', groupRole: '담임', classCode: '' }],
     },
   });
 
@@ -134,21 +143,17 @@ export default function UserGenerate() {
   const onSubmit = async (data: TempUserFormValues) => {
     setIsLoading(true);
     try {
-      // 업무 코드 배열과 그룹 배열로 변환
       const jobExperienceIds = data.jobExperiences.map(exp => exp.value);
-      const jobExperienceGroups = data.jobExperiences.map(exp => exp.group);
-      
-      // 임시 사용자 생성
-      await createTempUser(data.name, data.phoneNumber, jobExperienceIds, jobExperienceGroups as JobGroup[]);
-      
+      const jobExperienceGroups = data.jobExperiences.map(exp => exp.group as JobGroup);
+      const jobExperienceGroupRoles = data.jobExperiences.map(exp => exp.groupRole as '담임' | '수업' | '서포트' | '리더');
+      const jobExperienceClassCodes = data.jobExperiences.map(exp => exp.classCode);
+      await createTempUser(data.name, data.phoneNumber, jobExperienceIds, jobExperienceGroups, jobExperienceGroupRoles, jobExperienceClassCodes);
       toast.success('임시 사용자가 성공적으로 생성되었습니다.');
       setIsSuccess(true);
-      
-      // 폼 초기화
       reset({
         name: '',
         phoneNumber: '',
-        jobExperiences: [{ value: '', group: 'junior' }],
+        jobExperiences: [{ value: '', group: 'junior', groupRole: '담임', classCode: '' }],
       });
       setSelectedGenerations([]);
     } catch (error) {
@@ -166,7 +171,7 @@ export default function UserGenerate() {
   };
 
   const handleAddJobExperience = () => {
-    append({ value: '', group: 'junior' });
+    append({ value: '', group: 'junior', groupRole: '담임', classCode: '' });
     setSelectedGenerations([...selectedGenerations, '']);
   };
 
@@ -289,22 +294,28 @@ export default function UserGenerate() {
                       </div>
                       
                       {/* 그룹 선택 */}
-                      <div className="md:w-2/5">
+                      <div className="md:w-1/5">
                         <label className="block text-xs text-gray-500 mb-1">그룹 선택</label>
+                        <select
+                          className={`w-full px-3 py-2 border ${errors.jobExperiences?.[index]?.group ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                          {...register(`jobExperiences.${index}.group`)}
+                        >
+                          {jobGroups.map(group => (
+                            <option key={group.value} value={group.value}>{group.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:w-1/5">
+                        <label className="block text-xs text-gray-500 mb-1">역할 선택</label>
                         <div className="flex items-center gap-2">
                           <select
-                            className={`w-full px-3 py-2 border ${
-                              errors.jobExperiences?.[index]?.group ? 'border-red-500' : 'border-gray-300'
-                            } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-                            {...register(`jobExperiences.${index}.group`)}
+                            className={`w-full px-3 py-2 border ${errors.jobExperiences?.[index]?.groupRole ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                            {...register(`jobExperiences.${index}.groupRole`)}
                           >
-                            {jobGroups.map(group => (
-                              <option key={group.value} value={group.value}>
-                                {group.label}
-                              </option>
+                            {groupRoleOptions.map(role => (
+                              <option key={role.value} value={role.value}>{role.label}</option>
                             ))}
                           </select>
-                          
                           {index > 0 && (
                             <button
                               type="button"
@@ -318,6 +329,16 @@ export default function UserGenerate() {
                             </button>
                           )}
                         </div>
+                      </div>
+                      <div className="md:w-1/5">
+                        <label className="block text-xs text-gray-500 mb-1">반 코드</label>
+                        <input
+                          type="text"
+                          className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                          maxLength={32}
+                          placeholder="반 코드 입력"
+                          {...register(`jobExperiences.${index}.classCode`)}
+                        />
                       </div>
                     </div>
                     

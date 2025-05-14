@@ -19,7 +19,12 @@ export interface User {
   address: string;
   addressDetail: string;
   role: 'user' | 'mentor' | 'admin';
-  jobExperiences?: Array<{id: string, group: JobGroup}>;
+  jobExperiences?: Array<{
+    id: string,
+    group: JobGroup,
+    groupRole: JobExperienceGroupRole,
+    classCode?: string
+  }>;
   partTimeJobs?: PartTimeJob[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -84,6 +89,8 @@ export type JobExperience = {
   refGeneration: string;
   refCode: string;
 };
+
+export type JobExperienceGroupRole = '담임' | '수업' | '서포트' | '리더';
 
 export interface JobBoard {
   title: string;
