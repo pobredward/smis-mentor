@@ -7,8 +7,6 @@ import toast from 'react-hot-toast';
 import {
   getLessonMaterials,
   addLessonMaterial,
-  updateLessonMaterial,
-  deleteLessonMaterial,
   reorderLessonMaterials,
   getSections,
   addSection,
@@ -69,7 +67,6 @@ function SectionForm({
 }) {
   const [title, setTitle] = useState(initial?.title || '');
   const [viewUrl, setViewUrl] = useState(initial?.viewUrl || '');
-  const [templateUrl, setTemplateUrl] = useState(initial?.templateUrl || '');
   const [originalUrl, setOriginalUrl] = useState(initial?.originalUrl || '');
   return (
     <form
@@ -79,7 +76,6 @@ function SectionForm({
         onSave({
           title,
           viewUrl,
-          templateUrl,
           originalUrl,
           order: initial?.order ?? 0,
         });
@@ -95,17 +91,10 @@ function SectionForm({
       />
       <input
         className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-        placeholder="보기 링크"
+        placeholder="공개보기 링크"
         value={viewUrl}
         onChange={e => setViewUrl(e.target.value)}
-        aria-label="보기 링크"
-      />
-      <input
-        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-        placeholder="템플릿 링크"
-        value={templateUrl}
-        onChange={e => setTemplateUrl(e.target.value)}
-        aria-label="템플릿 링크"
+        aria-label="공개보기 링크"
       />
       <input
         className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
@@ -122,44 +111,11 @@ function SectionForm({
   );
 }
 
-function LessonMaterialForm({
-  onSave,
-  onCancel,
-  initial,
-}: {
-  onSave: (title: string) => void;
-  onCancel: () => void;
-  initial?: string;
-}) {
-  const [title, setTitle] = useState(initial || '');
-  return (
-    <form
-      className="flex gap-2 bg-gray-50 border border-blue-200 rounded-lg p-4"
-      onSubmit={event => {
-        event.preventDefault();
-        onSave(title);
-      }}
-    >
-      <input
-        className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-        placeholder="대제목 (예: 드림멘토링)"
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-        required
-        aria-label="대제목"
-      />
-      <Button type="button" onClick={onCancel} color="secondary">취소</Button>
-      <Button type="submit">저장</Button>
-    </form>
-  );
-}
-
 export default function UploadPage() {
   const { userData } = useAuth();
   const [materials, setMaterials] = useState<LessonMaterialData[]>([]);
   const [sections, setSections] = useState<Record<string, SectionDataWithLinks[]>>({});
   const [loading, setLoading] = useState(true);
-  const [editingMaterial, setEditingMaterial] = useState<LessonMaterialData | null>(null);
   const [addingSectionFor, setAddingSectionFor] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<{ materialId: string; section: SectionDataWithLinks } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -246,22 +202,6 @@ export default function UploadPage() {
     // eslint-disable-next-line
   }, [userData]);
 
-  // 대제목 수정
-  const handleEditMaterial = async (id: string, title: string) => {
-    await updateLessonMaterial(id, { title });
-    setEditingMaterial(null);
-    toast.success('대제목이 수정되었습니다.');
-    fetchAll();
-  };
-
-  // 대제목 삭제
-  const handleDeleteMaterial = async (id: string) => {
-    if (!confirm('정말 삭제하시겠습니까?')) return;
-    await deleteLessonMaterial(id);
-    toast.success('대제목이 삭제되었습니다.');
-    fetchAll();
-  };
-
   // 대제목 순서변경
   const handleMaterialDragEnd = async (event: import('@dnd-kit/core').DragEndEvent) => {
     const { active, over } = event;
@@ -320,7 +260,7 @@ export default function UploadPage() {
     const order = materials.length;
     const materialId = await addLessonMaterial(userData.userId, tpl.title, order, tpl.id);
     for (const section of tpl.sections.sort((a, b) => a.order - b.order)) {
-      await addSection(materialId, { ...section, viewUrl: '', templateUrl: '', originalUrl: '', order: section.order } as Omit<SectionData, 'id'>);
+      await addSection(materialId, { ...section, viewUrl: '', originalUrl: '', order: section.order } as Omit<SectionData, 'id'>);
     }
     setShowTemplateSelect(false);
     toast.success('템플릿이 추가되었습니다.');
@@ -373,8 +313,6 @@ export default function UploadPage() {
                             <div className="flex items-center justify-between">
                               <span className="text-xl font-bold">{m.title}</span>
                               <div className="flex gap-2 items-center">
-                                {/* <Button size="sm" color="secondary" onClick={() => setEditingMaterial(m)}>수정</Button> */}
-                                <Button size="sm" color="danger" onClick={() => handleDeleteMaterial(m.id)}>삭제</Button>
                                 <span className="cursor-move text-gray-300 hover:text-blue-400 ml-2">
                                   <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/><circle cx="10" cy="7" r="1.5" fill="currentColor"/><circle cx="10" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/></svg>
                                 </span>
@@ -457,19 +395,7 @@ export default function UploadPage() {
                                                     : 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-60 pointer-events-none'}
                                                 `}
                                               >
-                                                보기
-                                              </a>
-                                              <a
-                                                href={s.templateUrl || undefined}
-                                                target="_blank"
-                                                rel="noopener"
-                                                className={`inline-block px-3 py-1 rounded-full text-sm font-medium transition
-                                                  ${s.templateUrl
-                                                    ? 'bg-blue-500 text-white hover:bg-blue-600 focus:ring-2 focus:ring-blue-400'
-                                                    : 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-60 pointer-events-none'}
-                                                `}
-                                              >
-                                                템플릿
+                                                공개보기
                                               </a>
                                               <a
                                                 href={s.originalUrl || undefined}

@@ -20,7 +20,6 @@ export interface SectionData {
   title: string;
   order: number;
   viewUrl: string;
-  templateUrl: string;
   originalUrl: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
