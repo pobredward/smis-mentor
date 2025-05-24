@@ -70,18 +70,65 @@ async function ReviewsSection() {
 
 export default function Home() {
   return (
-    <Layout>
-      {/* 관리자 대시보드 바로가기 버튼 */}
-      <AdminDashboardButton />
-      
-      {/* JobBoard 섹션 */}
-      <JobBoardSection />
-      
-      {/* 지원 현황 섹션 */}
-      <ApplicationSection />
-      
-      {/* 후기 섹션 */}
-      <ReviewsSection />
-    </Layout>
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{
+        __html: JSON.stringify([
+          {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "홈", "item": "https://www.smis-mentor.com" }
+            ]
+          },
+          // 최신 공고 3개 JobPosting schema
+          {
+            "@context": "https://schema.org",
+            "@type": "JobPosting",
+            "title": "E.G.G 영어캠프",
+            "url": "https://www.smis-mentor.com/job-board/6XxTH28Nu6qi0hPoNaNV",
+            "hiringOrganization": {
+              "@type": "Organization",
+              "name": "SMIS 멘토 채용 플랫폼",
+              "sameAs": "https://www.smis-mentor.com"
+            }
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "JobPosting",
+            "title": "발상 영어캠프",
+            "url": "https://www.smis-mentor.com/job-board/NcwLxGHoLRX34uScQ9er",
+            "hiringOrganization": {
+              "@type": "Organization",
+              "name": "SMIS 멘토 채용 플랫폼",
+              "sameAs": "https://www.smis-mentor.com"
+            }
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "JobPosting",
+            "title": "싱가포르&말레이시아 영어캠프",
+            "url": "https://www.smis-mentor.com/job-board/7MQ6awgoebb5KQ4IpCgk",
+            "hiringOrganization": {
+              "@type": "Organization",
+              "name": "SMIS 멘토 채용 플랫폼",
+              "sameAs": "https://www.smis-mentor.com"
+            }
+          }
+        ])
+      }} />
+      <Layout>
+        {/* 관리자 대시보드 바로가기 버튼 */}
+        <AdminDashboardButton />
+        
+        {/* JobBoard 섹션 */}
+        <JobBoardSection />
+        
+        {/* 지원 현황 섹션 */}
+        <ApplicationSection />
+        
+        {/* 후기 섹션 */}
+        <ReviewsSection />
+      </Layout>
+    </>
   );
 }

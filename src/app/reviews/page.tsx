@@ -78,6 +78,57 @@ export default function ReviewsPage() {
   if (loading) {
     return (
       <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            {
+              "@context": "https://schema.org",
+              "@type": "BreadcrumbList",
+              "itemListElement": [
+                { "@type": "ListItem", "position": 1, "name": "홈", "item": "https://www.smis-mentor.com" },
+                { "@type": "ListItem", "position": 2, "name": "멘토 후기", "item": "https://www.smis-mentor.com/reviews" }
+              ]
+            },
+            // 후기 예시 2개 Review schema
+            {
+              "@context": "https://schema.org",
+              "@type": "Review",
+              "itemReviewed": {
+                "@type": "Organization",
+                "name": "SMIS 멘토 채용 플랫폼"
+              },
+              "author": {
+                "@type": "Person",
+                "name": "지준원"
+              },
+              "reviewBody": "Best 후기 ; 지준원 멘토 (건국대 항공우주모빌리티공학과)",
+              "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": "5",
+                "bestRating": "5"
+              },
+              "datePublished": "2024-06-01"
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "Review",
+              "itemReviewed": {
+                "@type": "Organization",
+                "name": "SMIS 멘토 채용 플랫폼"
+              },
+              "author": {
+                "@type": "Person",
+                "name": "김미솔"
+              },
+              "reviewBody": "Best 후기 ; 김미솔 멘토 (광주교대 체육교육과)",
+              "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": "5",
+                "bestRating": "5"
+              },
+              "datePublished": "2024-06-01"
+            }
+          ])
+        }} />
         <Header />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <h1 className="text-3xl font-bold mb-8">멘토 참여 후기</h1>
@@ -94,6 +145,57 @@ export default function ReviewsPage() {
   if (error) {
     return (
       <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            {
+              "@context": "https://schema.org",
+              "@type": "BreadcrumbList",
+              "itemListElement": [
+                { "@type": "ListItem", "position": 1, "name": "홈", "item": "https://www.smis-mentor.com" },
+                { "@type": "ListItem", "position": 2, "name": "멘토 후기", "item": "https://www.smis-mentor.com/reviews" }
+              ]
+            },
+            // 후기 예시 2개 Review schema
+            {
+              "@context": "https://schema.org",
+              "@type": "Review",
+              "itemReviewed": {
+                "@type": "Organization",
+                "name": "SMIS 멘토 채용 플랫폼"
+              },
+              "author": {
+                "@type": "Person",
+                "name": "지준원"
+              },
+              "reviewBody": "Best 후기 ; 지준원 멘토 (건국대 항공우주모빌리티공학과)",
+              "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": "5",
+                "bestRating": "5"
+              },
+              "datePublished": "2024-06-01"
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "Review",
+              "itemReviewed": {
+                "@type": "Organization",
+                "name": "SMIS 멘토 채용 플랫폼"
+              },
+              "author": {
+                "@type": "Person",
+                "name": "김미솔"
+              },
+              "reviewBody": "Best 후기 ; 김미솔 멘토 (광주교대 체육교육과)",
+              "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": "5",
+                "bestRating": "5"
+              },
+              "datePublished": "2024-06-01"
+            }
+          ])
+        }} />
         <Header />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <h1 className="text-3xl font-bold mb-8">멘토 참여 후기</h1>
@@ -139,6 +241,57 @@ export default function ReviewsPage() {
 
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{
+        __html: JSON.stringify([
+          {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "홈", "item": "https://www.smis-mentor.com" },
+              { "@type": "ListItem", "position": 2, "name": "멘토 후기", "item": "https://www.smis-mentor.com/reviews" }
+            ]
+          },
+          // 후기 예시 2개 Review schema
+          {
+            "@context": "https://schema.org",
+            "@type": "Review",
+            "itemReviewed": {
+              "@type": "Organization",
+              "name": "SMIS 멘토 채용 플랫폼"
+            },
+            "author": {
+              "@type": "Person",
+              "name": "지준원"
+            },
+            "reviewBody": "Best 후기 ; 지준원 멘토 (건국대 항공우주모빌리티공학과)",
+            "reviewRating": {
+              "@type": "Rating",
+              "ratingValue": "5",
+              "bestRating": "5"
+            },
+            "datePublished": "2024-06-01"
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "Review",
+            "itemReviewed": {
+              "@type": "Organization",
+              "name": "SMIS 멘토 채용 플랫폼"
+            },
+            "author": {
+              "@type": "Person",
+              "name": "김미솔"
+            },
+            "reviewBody": "Best 후기 ; 김미솔 멘토 (광주교대 체육교육과)",
+            "reviewRating": {
+              "@type": "Rating",
+              "ratingValue": "5",
+              "bestRating": "5"
+            },
+            "datePublished": "2024-06-01"
+          }
+        ])
+      }} />
       <Header />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-8">

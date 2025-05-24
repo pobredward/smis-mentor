@@ -87,6 +87,48 @@ export default function RootLayout({
         }} />
         <meta name="msapplication-TileColor" content="#ffffff" />
         <meta name="msapplication-TileImage" content="/ms-icon-144x144.png" />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            {
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              "name": "SMIS 멘토 채용 플랫폼",
+              "url": "https://www.smis-mentor.com",
+              "logo": "https://www.smis-mentor.com/logo-wide.png",
+              "contactPoint": [{
+                "@type": "ContactPoint",
+                "telephone": "+82-10-6711-7933",
+                "contactType": "customer service",
+                "areaServed": "KR",
+                "availableLanguage": ["Korean"]
+              }],
+              "address": {
+                "@type": "PostalAddress",
+                "streetAddress": "경기도 성남시 분당구 장미로 78, 8층 SMIS 라운지",
+                "addressLocality": "성남시",
+                "addressRegion": "경기도",
+                "postalCode": "13558",
+                "addressCountry": "KR"
+              },
+              "sameAs": [
+                "https://www.youtube.com/@smiscamp",
+                "http://pf.kakao.com/_Axafxcb/chat",
+                "https://www.smisedu.com"
+              ]
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              "name": "SMIS 멘토 채용 플랫폼",
+              "url": "https://www.smis-mentor.com",
+              "potentialAction": {
+                "@type": "SearchAction",
+                "target": "https://www.smis-mentor.com/search?q={search_term_string}",
+                "query-input": "required name=search_term_string"
+              }
+            }
+          ])
+        }} />
       </head>
       <body className={inter.className}>
         <QueryProvider>

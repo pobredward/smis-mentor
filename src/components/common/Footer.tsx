@@ -44,7 +44,7 @@ export default function Footer() {
               </li>
               <li>
                 <a 
-                  href="https://www.youtube.com/channel/UCDwzbcdYCz6AdPUHzCMQmaA/playlists" 
+                  href="https://www.youtube.com/@smiscamp" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center text-sm text-gray-500 hover:text-gray-700"
