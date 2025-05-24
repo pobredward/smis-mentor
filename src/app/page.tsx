@@ -85,33 +85,66 @@ export default function Home() {
             "@context": "https://schema.org",
             "@type": "JobPosting",
             "title": "E.G.G 영어캠프",
+            "description": "E.G.G 영어캠프 대학생 멘토 채용 공고",
+            "datePosted": "2025-03-27",
             "url": "https://www.smis-mentor.com/job-board/6XxTH28Nu6qi0hPoNaNV",
             "hiringOrganization": {
               "@type": "Organization",
               "name": "SMIS 멘토 채용 플랫폼",
               "sameAs": "https://www.smis-mentor.com"
+            },
+            "jobLocation": {
+              "@type": "Place",
+              "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "KR",
+                "addressLocality": "거창국제학교",
+                "addressRegion": "경상남도"
+              }
             }
           },
           {
             "@context": "https://schema.org",
             "@type": "JobPosting",
             "title": "발상 영어캠프",
+            "description": "발상 영어캠프 대학생 멘토 채용 공고",
+            "datePosted": "2025-03-27",
             "url": "https://www.smis-mentor.com/job-board/NcwLxGHoLRX34uScQ9er",
             "hiringOrganization": {
               "@type": "Organization",
               "name": "SMIS 멘토 채용 플랫폼",
               "sameAs": "https://www.smis-mentor.com"
+            },
+            "jobLocation": {
+              "@type": "Place",
+              "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "KR",
+                "addressLocality": "대경대학교",
+                "addressRegion": "경상북도"
+              }
             }
           },
           {
             "@context": "https://schema.org",
             "@type": "JobPosting",
             "title": "싱가포르&말레이시아 영어캠프",
+            "description": "싱&말 영어캠프 대학생 멘토 채용 공고",
+            "datePosted": "2025-03-27",
             "url": "https://www.smis-mentor.com/job-board/7MQ6awgoebb5KQ4IpCgk",
             "hiringOrganization": {
               "@type": "Organization",
               "name": "SMIS 멘토 채용 플랫폼",
               "sameAs": "https://www.smis-mentor.com"
+            },
+            "jobLocation": {
+              "@type": "Place",
+              "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "MY",
+                "addressLocality": "말레이시아",
+                "addressRegion": "조호바루"
+              }
             }
           }
         ])
