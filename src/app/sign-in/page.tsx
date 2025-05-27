@@ -170,4 +170,31 @@ export default function SignIn() {
       </div>
     </Layout>
   );
-} 
+}
+
+export const metadata = {
+  title: '로그인 | SMIS 멘토 채용 플랫폼',
+  description: 'SMIS 멘토 채용 플랫폼에 로그인하여 멘토 지원 및 후기, 채용공고 등 다양한 서비스를 이용하세요.',
+  openGraph: {
+    title: '로그인 | SMIS 멘토 채용 플랫폼',
+    description: 'SMIS 멘토 채용 플랫폼에 로그인하여 멘토 지원 및 후기, 채용공고 등 다양한 서비스를 이용하세요.',
+    url: 'https://www.smis-mentor.com/sign-in',
+    siteName: 'SMIS 멘토 채용 플랫폼',
+    images: [
+      {
+        url: '/logo-wide.png',
+        width: 1200,
+        height: 630,
+        alt: 'SMIS 멘토 채용 플랫폼',
+      },
+    ],
+    locale: 'ko_KR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: '로그인 | SMIS 멘토 채용 플랫폼',
+    description: 'SMIS 멘토 채용 플랫폼에 로그인하여 멘토 지원 및 후기, 채용공고 등 다양한 서비스를 이용하세요.',
+    images: ['/logo-wide.png'],
+  },
+}; 

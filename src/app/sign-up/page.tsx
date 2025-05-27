@@ -230,4 +230,31 @@ export default function SignUp() {
       </div>
     </Layout>
   );
-} 
+}
+
+export const metadata = {
+  title: '회원가입 | SMIS 멘토 채용 플랫폼',
+  description: 'SMIS 멘토 채용 플랫폼에 회원가입하고 멘토 지원, 후기 작성, 채용공고 확인 등 다양한 서비스를 이용하세요.',
+  openGraph: {
+    title: '회원가입 | SMIS 멘토 채용 플랫폼',
+    description: 'SMIS 멘토 채용 플랫폼에 회원가입하고 멘토 지원, 후기 작성, 채용공고 확인 등 다양한 서비스를 이용하세요.',
+    url: 'https://www.smis-mentor.com/sign-up',
+    siteName: 'SMIS 멘토 채용 플랫폼',
+    images: [
+      {
+        url: '/logo-wide.png',
+        width: 1200,
+        height: 630,
+        alt: 'SMIS 멘토 채용 플랫폼',
+      },
+    ],
+    locale: 'ko_KR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: '회원가입 | SMIS 멘토 채용 플랫폼',
+    description: 'SMIS 멘토 채용 플랫폼에 회원가입하고 멘토 지원, 후기 작성, 채용공고 확인 등 다양한 서비스를 이용하세요.',
+    images: ['/logo-wide.png'],
+  },
+}; 

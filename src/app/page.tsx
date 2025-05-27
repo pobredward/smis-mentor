@@ -165,3 +165,30 @@ export default function Home() {
     </>
   );
 }
+
+export const metadata = {
+  title: 'SMIS 멘토 채용 플랫폼',
+  description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다. 실제 멘토 후기와 다양한 채용공고를 확인하세요.',
+  openGraph: {
+    title: 'SMIS 멘토 채용 플랫폼',
+    description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다.',
+    url: 'https://www.smis-mentor.com',
+    siteName: 'SMIS 멘토 채용 플랫폼',
+    images: [
+      {
+        url: '/logo-wide.png',
+        width: 1200,
+        height: 630,
+        alt: 'SMIS 멘토 채용 플랫폼',
+      },
+    ],
+    locale: 'ko_KR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'SMIS 멘토 채용 플랫폼',
+    description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다.',
+    images: ['/logo-wide.png'],
+  },
+};

@@ -390,4 +390,31 @@ export default function ProfilePage() {
       )}
     </Layout>
   );
-} 
+}
+
+export const metadata = {
+  title: '내 프로필 | SMIS 멘토 채용 플랫폼',
+  description: '내 프로필을 확인하고 멘토 지원 현황, 후기, 채용공고 등 다양한 정보를 관리하세요.',
+  openGraph: {
+    title: '내 프로필 | SMIS 멘토 채용 플랫폼',
+    description: '내 프로필을 확인하고 멘토 지원 현황, 후기, 채용공고 등 다양한 정보를 관리하세요.',
+    url: 'https://www.smis-mentor.com/profile',
+    siteName: 'SMIS 멘토 채용 플랫폼',
+    images: [
+      {
+        url: '/logo-wide.png',
+        width: 1200,
+        height: 630,
+        alt: 'SMIS 멘토 채용 플랫폼',
+      },
+    ],
+    locale: 'ko_KR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: '내 프로필 | SMIS 멘토 채용 플랫폼',
+    description: '내 프로필을 확인하고 멘토 지원 현황, 후기, 채용공고 등 다양한 정보를 관리하세요.',
+    images: ['/logo-wide.png'],
+  },
+}; 

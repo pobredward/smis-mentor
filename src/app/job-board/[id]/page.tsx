@@ -942,4 +942,34 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       </div>
     </Layout>
   );
+}
+
+export async function generateMetadata({ params }: { params: { id: string } }) {
+  const job = await getJobBoardById(params.id);
+  return {
+    title: `${job?.title || '채용공고'} | SMIS 멘토 채용 플랫폼`,
+    description: job?.description?.slice(0, 100) || 'SMIS 멘토 채용 플랫폼 채용공고',
+    openGraph: {
+      title: `${job?.title || '채용공고'} | SMIS 멘토 채용 플랫폼`,
+      description: job?.description?.slice(0, 100) || 'SMIS 멘토 채용 플랫폼 채용공고',
+      url: `https://www.smis-mentor.com/job-board/${params.id}`,
+      siteName: 'SMIS 멘토 채용 플랫폼',
+      images: [
+        {
+          url: '/logo-wide.png',
+          width: 1200,
+          height: 630,
+          alt: job?.title || 'SMIS 멘토 채용 플랫폼',
+        },
+      ],
+      locale: 'ko_KR',
+      type: 'article',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${job?.title || '채용공고'} | SMIS 멘토 채용 플랫폼`,
+      description: job?.description?.slice(0, 100) || 'SMIS 멘토 채용 플랫폼 채용공고',
+      images: ['/logo-wide.png'],
+    },
+  };
 } 
