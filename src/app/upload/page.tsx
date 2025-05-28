@@ -473,9 +473,9 @@ export default function UploadPage() {
         {/* 헤더 섹션 */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">수업 자료 업로드</h1>
-          {/* <p className="text-gray-600 text-sm leading-relaxed">
-            수업자료 링크 업로드 및 관리
-          </p> */}
+          <p className="text-gray-600 text-sm leading-relaxed">
+            참여하는 캠프 코드의 자료만 확인 가능합니다
+          </p>
         </div>
 
         {/* 코드별 필터 탭 */}
