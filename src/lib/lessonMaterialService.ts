@@ -46,7 +46,7 @@ export interface LessonMaterialTemplate {
   id: string;
   title: string;
   sections: LessonMaterialTemplateSection[];
-  generation?: string;
+  code?: string;
   links?: { label: string; url: string }[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -153,11 +153,11 @@ export async function getLessonMaterialTemplates() {
   return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as LessonMaterialTemplate[];
 }
 
-export async function addLessonMaterialTemplate(title: string, sections: Omit<LessonMaterialTemplateSection, 'id'>[], generation?: string, links?: { label: string; url: string }[]) {
+export async function addLessonMaterialTemplate(title: string, sections: Omit<LessonMaterialTemplateSection, 'id'>[], code?: string, links?: { label: string; url: string }[]) {
   const docRef = await addDoc(collection(db, LESSON_MATERIAL_TEMPLATES), {
     title,
     sections: sections.map((s, idx) => ({ ...s, id: uuidv4(), order: idx, links: s.links || [] })),
-    generation: generation || '',
+    code: code || '',
     links: links || [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

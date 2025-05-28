@@ -287,26 +287,24 @@ export default function UserCheck() {
     }, [userId]);
 
     // 기수 매핑
-    const materialGenerationMap: Record<string, string> = {};
+    const materialCodeMap: Record<string, string> = {};
     materials.forEach(m => {
       if (m.templateId) {
         const tpl = templates.find(t => t.id === m.templateId);
-        materialGenerationMap[m.id] = tpl?.generation || '미지정';
+        materialCodeMap[m.id] = tpl?.code || '미지정';
       } else {
-        materialGenerationMap[m.id] = '미지정';
+        materialCodeMap[m.id] = '미지정';
       }
     });
-    const allGenerations = Array.from(new Set(Object.values(materialGenerationMap)));
-    const sortedGenerations = allGenerations.sort((a, b) => {
+    const allCodes = Array.from(new Set(Object.values(materialCodeMap)));
+    const sortedCodes = allCodes.sort((a, b) => {
       if (a === '미지정') return 1;
       if (b === '미지정') return -1;
-      const numA = parseInt(a.replace(/[^0-9]/g, ''));
-      const numB = parseInt(b.replace(/[^0-9]/g, ''));
-      return numB - numA;
+      return a.localeCompare(b);
     });
     const filteredMaterials = selectedGeneration === '전체'
       ? materials
-      : materials.filter(m => materialGenerationMap[m.id] === selectedGeneration);
+      : materials.filter(m => materialCodeMap[m.id] === selectedGeneration);
 
     if (isLoading) {
       return <div className="py-4 text-center text-gray-400">수업 자료 불러오는 중...</div>;
@@ -325,12 +323,12 @@ export default function UserCheck() {
             className={`px-3 py-1.5 text-sm rounded-full border ${selectedGeneration === '전체' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
             onClick={() => setSelectedGeneration('전체')}
           >전체</button>
-          {sortedGenerations.map(gen => (
+          {sortedCodes.map(code => (
             <button
-              key={gen}
-              className={`px-3 py-1.5 text-sm rounded-full border ${selectedGeneration === gen ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-              onClick={() => setSelectedGeneration(gen)}
-            >{gen}</button>
+              key={code}
+              className={`px-3 py-1.5 text-sm rounded-full border ${selectedGeneration === code ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+              onClick={() => setSelectedGeneration(code)}
+            >{code}</button>
           ))}
         </div>
         <div className="space-y-6">
@@ -350,17 +348,7 @@ export default function UserCheck() {
                         tabIndex={section.viewUrl ? 0 : -1}
                         aria-disabled={!section.viewUrl}
                       >
-                        보기
-                      </a>
-                      <a
-                        href={section.templateUrl || undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`px-3 py-1 rounded text-sm font-medium border transition-colors ${section.templateUrl ? 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}
-                        tabIndex={section.templateUrl ? 0 : -1}
-                        aria-disabled={!section.templateUrl}
-                      >
-                        템플릿
+                        공개보기
                       </a>
                       <a
                         href={section.originalUrl || undefined}

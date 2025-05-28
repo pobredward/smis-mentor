@@ -12,6 +12,8 @@ import {
   LessonMaterialTemplate,
   LessonMaterialTemplateSection,
 } from '@/lib/lessonMaterialService';
+import { getAllJobCodes } from '@/lib/firebaseService';
+import { JobCodeWithId } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -257,12 +259,14 @@ export default function AdminUploadTemplatePage() {
   const [editing, setEditing] = useState<LessonMaterialTemplate | null>(null);
   const [title, setTitle] = useState('');
   const [sections, setSections] = useState<LessonMaterialTemplateSection[]>([]);
-  const [generation, setGeneration] = useState('');
-  const [selectedGeneration, setSelectedGeneration] = useState('전체');
+  const [selectedCode, setSelectedCode] = useState('');
+  const [selectedCodeFilter, setSelectedCodeFilter] = useState('전체');
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
-  const [editingGeneration, setEditingGeneration] = useState('');
+  const [editingCode, setEditingCode] = useState('');
   const [links, setLinks] = useState<{ label: string; url: string }[]>([]);
+  const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
+  const [jobCodesLoading, setJobCodesLoading] = useState(false);
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -276,21 +280,37 @@ export default function AdminUploadTemplatePage() {
     }
   };
 
-  useEffect(() => { fetchTemplates(); }, []);
+  const fetchJobCodes = async () => {
+    setJobCodesLoading(true);
+    try {
+      const codes = await getAllJobCodes();
+      setJobCodes(codes);
+    } catch {
+      setError('직무 코드를 불러오지 못했습니다.');
+    } finally {
+      setJobCodesLoading(false);
+    }
+  };
+
+  useEffect(() => { 
+    fetchTemplates(); 
+    fetchJobCodes();
+  }, []);
 
   // 템플릿 추가/수정
   const handleSave = async () => {
     if (!title.trim()) return;
     if (editing) {
-      await updateLessonMaterialTemplate(editing.id, { title, sections, generation, links });
+      await updateLessonMaterialTemplate(editing.id, { title, sections, code: selectedCode, links });
     } else {
-      const newId = await addLessonMaterialTemplate(title, sections, generation, links);
-      setTemplates(prev => [{ id: newId, title, sections, generation, links }, ...prev]);
+      const newId = await addLessonMaterialTemplate(title, sections, selectedCode, links);
+      setTemplates(prev => [{ id: newId, title, sections, code: selectedCode, links }, ...prev]);
     }
     setShowForm(false);
     setEditing(null);
     setTitle('');
     setSections([]);
+    setSelectedCode('');
     setLinks([]);
     fetchTemplates();
   };
@@ -309,9 +329,12 @@ export default function AdminUploadTemplatePage() {
     fetchTemplates();
   };
 
-  const filteredTemplates = selectedGeneration === '전체'
+  // 사용 가능한 코드 목록 (중복 제거)
+  const availableCodes = Array.from(new Set(jobCodes.map(jc => jc.code))).sort();
+  
+  const filteredTemplates = selectedCodeFilter === '전체'
     ? templates
-    : templates.filter(t => (t.generation || '미지정') === selectedGeneration);
+    : templates.filter(t => (t.code || '미지정') === selectedCodeFilter);
 
   return (
     <>
@@ -325,23 +348,23 @@ export default function AdminUploadTemplatePage() {
         ) : (
           <div className="space-y-6">
             <div className="flex justify-end">
-              <Button onClick={() => { setShowForm(true); setEditing(null); setTitle(''); setSections([]); setLinks([]); }}>+ 템플릿 추가</Button>
+              <Button onClick={() => { setShowForm(true); setEditing(null); setTitle(''); setSections([]); setSelectedCode(''); setLinks([]); }}>+ 템플릿 추가</Button>
             </div>
-            {/* Generation 필터 토글 */}
+            {/* 코드별 필터 토글 */}
             <div className="flex flex-wrap gap-2 mb-6">
-              {['전체', ...Array.from(new Set(templates.map(t => t.generation || '미지정')))].map(gen => (
+              {['전체', ...Array.from(new Set(templates.map(t => t.code || '미지정')))].map(code => (
                 <button
-                  key={gen}
-                  className={`px-3 py-1.5 text-sm rounded-full border ${selectedGeneration === gen ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-                  onClick={() => setSelectedGeneration(gen)}
+                  key={code}
+                  className={`px-3 py-1.5 text-sm rounded-full border ${selectedCodeFilter === code ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                  onClick={() => setSelectedCodeFilter(code)}
                 >
-                  {gen}
+                  {code}
                 </button>
               ))}
             </div>
             {/* 템플릿 리스트 */}
             {filteredTemplates.length === 0 ? (
-              <div className="text-center text-gray-400 py-12 border rounded-lg">해당 기수에 등록된 템플릿이 없습니다.</div>
+              <div className="text-center text-gray-400 py-12 border rounded-lg">해당 코드에 등록된 템플릿이 없습니다.</div>
             ) : (
               <div className="space-y-8">
                 {filteredTemplates.map(tpl => (
@@ -350,7 +373,7 @@ export default function AdminUploadTemplatePage() {
                       <div className="flex items-center gap-3">
                         {editingTemplateId === tpl.id ? (
                           <div className="flex flex-col gap-2 w-full">
-                            {/* 첫 번째 행: 템플릿명/기수/버튼 */}
+                            {/* 첫 번째 행: 템플릿명/코드/버튼 */}
                             <div className="flex items-center gap-3 mb-2 flex-wrap">
                               <input
                                 className="font-bold text-lg border-b border-blue-400 focus:outline-none bg-transparent px-1 py-0.5"
@@ -359,16 +382,20 @@ export default function AdminUploadTemplatePage() {
                                 aria-label="템플릿명"
                                 autoFocus
                               />
-                              <input
-                                className="w-20 text-sm border-b border-blue-200 focus:outline-none bg-transparent px-1 py-0.5"
-                                value={editingGeneration}
-                                onChange={e => setEditingGeneration(e.target.value)}
-                                aria-label="기수"
-                                placeholder="기수 (예: 26기)"
-                              />
+                              <select
+                                className="text-sm border-b border-blue-200 focus:outline-none bg-transparent px-1 py-0.5"
+                                value={editingCode}
+                                onChange={e => setEditingCode(e.target.value)}
+                                aria-label="코드"
+                              >
+                                <option value="">코드 선택</option>
+                                {availableCodes.map(code => (
+                                  <option key={code} value={code}>{code}</option>
+                                ))}
+                              </select>
                               <div className="flex gap-2 ml-auto">
                                 <Button color="primary" onClick={async () => {
-                                  await updateLessonMaterialTemplate(tpl.id, { title: editingTitle, generation: editingGeneration, links });
+                                  await updateLessonMaterialTemplate(tpl.id, { title: editingTitle, code: editingCode, links });
                                   setEditingTemplateId(null);
                                   setLinks([]);
                                   fetchTemplates();
@@ -416,7 +443,7 @@ export default function AdminUploadTemplatePage() {
                         ) : (
                           <>
                             <span className="font-bold text-lg mr-2">{tpl.title}</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-semibold">{tpl.generation || '미지정'}</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-semibold">{tpl.code || '미지정'}</span>
                           </>
                         )}
                       </div>
@@ -426,7 +453,7 @@ export default function AdminUploadTemplatePage() {
                             <Button size="sm" color="secondary" onClick={() => {
                               setEditingTemplateId(tpl.id);
                               setEditingTitle(tpl.title);
-                              setEditingGeneration(tpl.generation || '');
+                              setEditingCode(tpl.code || '');
                               setLinks(tpl.links ?? []);
                             }}>수정</Button>
                             <Button size="sm" color="danger" onClick={() => handleDelete(tpl.id)}>삭제</Button>
@@ -479,14 +506,27 @@ export default function AdminUploadTemplatePage() {
                   />
                 </div>
                 <div className="mb-4">
-                  <label className="block font-semibold mb-1">기수</label>
-                  <input
-                    className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-blue-400"
-                    value={generation}
-                    onChange={e => setGeneration(e.target.value)}
-                    placeholder="예: 26기"
-                    aria-label="기수"
-                  />
+                  <label className="block font-semibold mb-1">코드</label>
+                  {jobCodesLoading ? (
+                    <div className="text-gray-400">코드 목록 로딩 중...</div>
+                  ) : (
+                    <select
+                      className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-blue-400"
+                      value={selectedCode}
+                      onChange={e => setSelectedCode(e.target.value)}
+                      aria-label="코드"
+                    >
+                      <option value="">코드 선택</option>
+                      {availableCodes.map(code => {
+                        const jobCode = jobCodes.find(jc => jc.code === code);
+                        return (
+                          <option key={code} value={code}>
+                            {code} - {jobCode?.name || ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
                 </div>
                 {/* 대주제 링크 입력 UI */}
                 <div className="mb-4">
@@ -524,7 +564,7 @@ export default function AdminUploadTemplatePage() {
                 {/* 소제목(섹션) 에디터 */}
                 <SectionEditor sections={sections} onSectionsChange={setSections} />
                 <div className="flex gap-2 mt-6 justify-end">
-                  <Button color="secondary" onClick={() => { setShowForm(false); setEditing(null); setTitle(''); setSections([]); setLinks([]); }}>취소</Button>
+                  <Button color="secondary" onClick={() => { setShowForm(false); setEditing(null); setTitle(''); setSections([]); setSelectedCode(''); setLinks([]); }}>취소</Button>
                   <Button color="primary" onClick={handleSave}>저장</Button>
                 </div>
               </div>

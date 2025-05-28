@@ -163,6 +163,25 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
     loadData();
   }, [id, router, searchParams, userData?.role]);
 
+  // 동적 메타데이터 설정을 위한 useEffect 추가
+  useEffect(() => {
+    if (jobBoard) {
+      document.title = `${jobBoard.title} | SMIS 멘토 채용 플랫폼`;
+      
+      // 기존 메타 태그 제거
+      const existingDescription = document.querySelector('meta[name="description"]');
+      if (existingDescription) {
+        existingDescription.remove();
+      }
+      
+      // 새로운 메타 태그 추가
+      const metaDescription = document.createElement('meta');
+      metaDescription.name = 'description';
+      metaDescription.content = jobBoard.description?.slice(0, 100) || 'SMIS 멘토 채용 플랫폼 채용공고';
+      document.head.appendChild(metaDescription);
+    }
+  }, [jobBoard]);
+
   // 기수 선택 핸들러
   const handleGenerationChange = (generation: string) => {
     setSelectedGeneration(generation);
@@ -942,34 +961,4 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       </div>
     </Layout>
   );
-}
-
-export async function generateMetadata({ params }: { params: { id: string } }) {
-  const job = await getJobBoardById(params.id);
-  return {
-    title: `${job?.title || '채용공고'} | SMIS 멘토 채용 플랫폼`,
-    description: job?.description?.slice(0, 100) || 'SMIS 멘토 채용 플랫폼 채용공고',
-    openGraph: {
-      title: `${job?.title || '채용공고'} | SMIS 멘토 채용 플랫폼`,
-      description: job?.description?.slice(0, 100) || 'SMIS 멘토 채용 플랫폼 채용공고',
-      url: `https://www.smis-mentor.com/job-board/${params.id}`,
-      siteName: 'SMIS 멘토 채용 플랫폼',
-      images: [
-        {
-          url: '/logo-wide.png',
-          width: 1200,
-          height: 630,
-          alt: job?.title || 'SMIS 멘토 채용 플랫폼',
-        },
-      ],
-      locale: 'ko_KR',
-      type: 'article',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: `${job?.title || '채용공고'} | SMIS 멘토 채용 플랫폼`,
-      description: job?.description?.slice(0, 100) || 'SMIS 멘토 채용 플랫폼 채용공고',
-      images: ['/logo-wide.png'],
-    },
-  };
 } 

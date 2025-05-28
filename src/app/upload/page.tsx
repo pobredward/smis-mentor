@@ -17,7 +17,11 @@ import {
   SectionData,
   getLessonMaterialTemplates,
   LessonMaterialTemplate,
+  deleteLessonMaterial,
+  updateLessonMaterial,
 } from '@/lib/lessonMaterialService';
+import { getUserJobCodesInfo } from '@/lib/firebaseService';
+import { JobCodeWithGroup } from '@/types';
 import {
   DndContext,
   closestCenter,
@@ -112,62 +116,204 @@ function SectionForm({
 }
 
 export default function UploadPage() {
-  const { userData } = useAuth();
+  const { userData, loading: authLoading } = useAuth();
   const [materials, setMaterials] = useState<LessonMaterialData[]>([]);
   const [sections, setSections] = useState<Record<string, SectionDataWithLinks[]>>({});
   const [loading, setLoading] = useState(true);
   const [addingSectionFor, setAddingSectionFor] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<{ materialId: string; section: SectionDataWithLinks } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showTemplateSelect, setShowTemplateSelect] = useState(false);
   const [templates, setTemplates] = useState<LessonMaterialTemplate[]>([]);
-  const [templatesLoading, setTemplatesLoading] = useState(false);
-  const [selectedMaterialGeneration, setSelectedMaterialGeneration] = useState<string>('전체');
+  const [selectedMaterialCode, setSelectedMaterialCode] = useState<string>('');
+  const [userJobCodes, setUserJobCodes] = useState<JobCodeWithGroup[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  // 클라이언트 사이드에서만 렌더링되도록 보장
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  // 대제목별 generation 매핑
-  const materialGenerationMap: Record<string, string> = {};
-  materials.forEach(m => {
-    if (m.templateId) {
-      const tpl = templates.find(t => t.id === m.templateId);
-      materialGenerationMap[m.id] = tpl?.generation || '미지정';
-    } else {
-      materialGenerationMap[m.id] = '미지정';
+  // 사용자 jobCodes 정보 가져오기
+  const fetchUserJobCodes = async () => {
+    if (!userData?.jobExperiences || userData.jobExperiences.length === 0) {
+      setUserJobCodes([]);
+      return [];
     }
-  });
-  const allMaterialGenerations = Array.from(new Set(Object.values(materialGenerationMap)));
-  const sortedMaterialGenerations = allMaterialGenerations.sort((a, b) => {
-    if (a === '미지정') return 1;
-    if (b === '미지정') return -1;
-    const numA = parseInt(a.replace(/[^0-9]/g, ''));
-    const numB = parseInt(b.replace(/[^0-9]/g, ''));
-    return numB - numA;
-  });
-  const filteredMaterials = selectedMaterialGeneration === '전체'
-    ? materials
-    : materials.filter(m => materialGenerationMap[m.id] === selectedMaterialGeneration);
+    try {
+      const jobCodesInfo = await getUserJobCodesInfo(userData.jobExperiences);
+      setUserJobCodes(jobCodesInfo);
+      return jobCodesInfo;
+    } catch (error) {
+      console.error('사용자 직무 코드 정보 가져오기 오류:', error);
+      return [];
+    }
+  };
 
-  // 대제목/소제목 fetch
+  // 사용자가 접근할 수 있는 템플릿 필터링
+  const getAccessibleTemplates = (allTemplates: LessonMaterialTemplate[], userCodes: JobCodeWithGroup[]) => {
+    if (!userCodes.length) return [];
+    
+    const codes = userCodes.map(jc => jc.code);
+    return allTemplates.filter(template => 
+      template.code && codes.includes(template.code)
+    );
+  };
+
+  // 대제목/소제목 fetch 및 자동 템플릿 추가
   const fetchAll = async () => {
     if (!userData) return;
     setLoading(true);
     try {
+      // 1. 먼저 사용자 직무 코드 정보 가져오기
+      const userCodes = await fetchUserJobCodes();
+      console.log('사용자 직무 코드:', userCodes.map(uc => uc.code));
+      
+      // 2. 모든 템플릿 가져오기
+      const allTemplates = await getLessonMaterialTemplates();
+      setTemplates(allTemplates);
+      console.log('모든 템플릿:', allTemplates.map(t => ({ title: t.title, code: t.code })));
+      
+      // 3. 사용자가 접근할 수 있는 템플릿 필터링
+      const accessibleTemplates = getAccessibleTemplates(allTemplates, userCodes);
+      console.log('접근 가능한 템플릿:', accessibleTemplates.map(t => ({ title: t.title, code: t.code })));
+      
+      // 4. 기존 수업 자료 가져오기
       const mats = await getLessonMaterials(userData.userId);
-      setMaterials(mats);
-      // 템플릿 미리 fetch (중복 방지)
-      const templateIds = Array.from(new Set(mats.map(m => m.templateId).filter(Boolean)));
+      console.log('기존 수업 자료:', mats.map(m => ({ title: m.title, templateId: m.templateId })));
+      
+      // 5. 기존 수업 자료 중복 제거 및 접근 권한 체크
+      const userCodesList = userCodes.map(uc => uc.code);
+      const seenTemplateIds = new Set<string>();
+      const materialsToKeep: string[] = [];
+      const materialsToRemove: string[] = [];
+      const materialsToUpdate: { id: string; newTitle: string }[] = [];
+      
+      for (const mat of mats) {
+        // 템플릿 ID가 없는 경우 제거
+        if (!mat.templateId) {
+          materialsToRemove.push(mat.id);
+          continue;
+        }
+        
+        // 템플릿 정보 확인
+        const template = allTemplates.find(t => t.id === mat.templateId);
+        if (!template || !template.code) {
+          materialsToRemove.push(mat.id);
+          continue;
+        }
+        
+        // 사용자 접근 권한 확인
+        if (!userCodesList.includes(template.code)) {
+          materialsToRemove.push(mat.id);
+          continue;
+        }
+        
+        // 중복 템플릿 체크 (같은 templateId를 가진 수업 자료가 이미 있는 경우)
+        if (seenTemplateIds.has(mat.templateId)) {
+          materialsToRemove.push(mat.id);
+          console.log(`중복 템플릿 제거: ${mat.title} (templateId: ${mat.templateId})`);
+          continue;
+        }
+        
+        // 제목이 템플릿과 다른 경우 업데이트 예약
+        if (mat.title !== template.title) {
+          materialsToUpdate.push({ id: mat.id, newTitle: template.title });
+          console.log(`제목 업데이트 예약: "${mat.title}" -> "${template.title}"`);
+        }
+        
+        // 유지할 수업 자료
+        seenTemplateIds.add(mat.templateId);
+        materialsToKeep.push(mat.id);
+      }
+      
+      console.log('유지할 수업 자료 ID:', materialsToKeep);
+      console.log('제거할 수업 자료 ID:', materialsToRemove);
+      console.log('업데이트할 수업 자료:', materialsToUpdate);
+      
+      // 접근할 수 없는 수업 자료들 삭제
+      for (const materialId of materialsToRemove) {
+        try {
+          await deleteLessonMaterial(materialId);
+          console.log(`수업 자료 삭제됨: ${materialId}`);
+        } catch (error) {
+          console.error(`수업 자료 삭제 실패: ${materialId}`, error);
+        }
+      }
+      
+      // 제목이 다른 수업 자료들 업데이트
+      for (const { id, newTitle } of materialsToUpdate) {
+        try {
+          await updateLessonMaterial(id, { title: newTitle });
+          console.log(`수업 자료 제목 업데이트됨: ${id} -> "${newTitle}"`);
+        } catch (error) {
+          console.error(`수업 자료 제목 업데이트 실패: ${id}`, error);
+        }
+      }
+      
+      // 6. 접근 가능한 기존 수업 자료만 필터링
+      const accessibleMaterials = mats.filter(mat => materialsToKeep.includes(mat.id));
+      
+      // 7. 아직 추가되지 않은 템플릿들을 자동으로 추가 (templateId 기반 체크)
+      const existingTemplateIds = new Set(accessibleMaterials.map(m => m.templateId).filter(Boolean));
+      const templatesToAdd = accessibleTemplates.filter(tpl => !existingTemplateIds.has(tpl.id));
+      console.log('추가할 템플릿:', templatesToAdd.map(t => ({ title: t.title, id: t.id })));
+      
+      for (const template of templatesToAdd) {
+        const order = accessibleMaterials.length + templatesToAdd.indexOf(template);
+        const materialId = await addLessonMaterial(userData.userId, template.title, order, template.id);
+        console.log(`새 수업 자료 추가됨: ${template.title} (${materialId})`);
+        
+        // 템플릿의 섹션들을 추가
+        for (const section of template.sections.sort((a, b) => a.order - b.order)) {
+          await addSection(materialId, { 
+            ...section, 
+            viewUrl: '', 
+            originalUrl: '', 
+            order: section.order 
+          } as Omit<SectionData, 'id'>);
+        }
+      }
+      
+      // 8. 최종 수업 자료 다시 가져오기 (접근 가능한 것만)
+      const finalMats = await getLessonMaterials(userData.userId);
+      
+      // 9. 최종 중복 제거 및 필터링
+      const finalSeenTemplateIds = new Set<string>();
+      const finalAccessibleMaterials = finalMats.filter(mat => {
+        if (!mat.templateId) return false;
+        
+        const template = allTemplates.find(t => t.id === mat.templateId);
+        if (!template || !template.code) return false;
+        
+        if (!userCodesList.includes(template.code)) return false;
+        
+        // 중복 제거
+        if (finalSeenTemplateIds.has(mat.templateId)) {
+          console.log(`최종 중복 제거: ${mat.title}`);
+          return false;
+        }
+        
+        finalSeenTemplateIds.add(mat.templateId);
+        return true;
+      });
+      
+      console.log('최종 표시될 수업 자료:', finalAccessibleMaterials.map(m => ({ title: m.title, templateId: m.templateId })));
+      setMaterials(finalAccessibleMaterials);
+      
+      // 10. 템플릿 미리 fetch (중복 방지)
+      const templateIds = Array.from(new Set(finalAccessibleMaterials.map(m => m.templateId).filter(Boolean)));
       let templateMap: Record<string, LessonMaterialTemplate> = {};
       if (templateIds.length > 0) {
-        // 이미 불러온 templates state 활용 (최신성 보장 위해 getLessonMaterialTemplates로 fetch한 후 filter)
-        const allTemplates = templates.length > 0 ? templates : await getLessonMaterialTemplates();
         templateMap = Object.fromEntries(allTemplates.filter(t => templateIds.includes(t.id)).map(t => [t.id, t]));
       }
+      
       const sectionMap: Record<string, SectionDataWithLinks[]> = {};
-      for (const m of mats) {
+      for (const m of finalAccessibleMaterials) {
         const userSections = await getSections(m.id);
         if (m.templateId && templateMap[m.templateId]) {
           const tplSections = templateMap[m.templateId].sections;
@@ -184,23 +330,45 @@ export default function UploadPage() {
         }
       }
       setSections(sectionMap);
-    } catch {
+    } catch (error) {
+      console.error('수업 자료 로드 오류:', error);
       setError('수업 자료를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
   };
 
+  // 대제목별 code 매핑 및 필터링
+  const materialCodeMap: Record<string, string> = {};
+  materials.forEach(m => {
+    if (m.templateId) {
+      const tpl = templates.find(t => t.id === m.templateId);
+      materialCodeMap[m.id] = tpl?.code || '미지정';
+    } else {
+      materialCodeMap[m.id] = '미지정';
+    }
+  });
+  
+  // 사용자가 접근할 수 있는 코드만 표시 (미지정 제외)
+  const userCodes = userJobCodes.map(jc => jc.code);
+  const allMaterialCodes = Array.from(new Set(Object.values(materialCodeMap)))
+    .filter(code => userCodes.includes(code)); // 미지정 제외
+  const sortedMaterialCodes = allMaterialCodes.sort((a, b) => a.localeCompare(b));
+  
+  const filteredMaterials = selectedMaterialCode
+    ? materials.filter(m => materialCodeMap[m.id] === selectedMaterialCode)
+    : materials;
+
   useEffect(() => {
     fetchAll();
-    setTemplatesLoading(true);
-    getLessonMaterialTemplates().then(tpls => {
-      setTemplates(tpls);
-      setTemplatesLoading(false);
-    });
-    if (sortedMaterialGenerations.length > 0) setSelectedMaterialGeneration(sortedMaterialGenerations[0]);
-    // eslint-disable-next-line
   }, [userData]);
+
+  // 코드 필터 초기화 (사용자가 접근할 수 있는 첫 번째 코드로)
+  useEffect(() => {
+    if (sortedMaterialCodes.length > 0 && !selectedMaterialCode) {
+      setSelectedMaterialCode(sortedMaterialCodes[0]);
+    }
+  }, [sortedMaterialCodes, selectedMaterialCode]);
 
   // 대제목 순서변경
   const handleMaterialDragEnd = async (event: import('@dnd-kit/core').DragEndEvent) => {
@@ -253,25 +421,56 @@ export default function UploadPage() {
     fetchAll();
   };
 
-  // 템플릿 기반 대제목 추가
-  const handleAddMaterialFromTemplate = async (tpl: LessonMaterialTemplate) => {
-    if (!userData) return;
-    if (materials.some(m => m.title === tpl.title)) return;
-    const order = materials.length;
-    const materialId = await addLessonMaterial(userData.userId, tpl.title, order, tpl.id);
-    for (const section of tpl.sections.sort((a, b) => a.order - b.order)) {
-      await addSection(materialId, { ...section, viewUrl: '', originalUrl: '', order: section.order } as Omit<SectionData, 'id'>);
-    }
-    setShowTemplateSelect(false);
-    toast.success('템플릿이 추가되었습니다.');
-    fetchAll();
-  };
+  // 클라이언트 사이드에서만 렌더링되도록 보장
+  if (!mounted) {
+    return null;
+  }
 
+  // 인증 로딩 중
+  if (authLoading) {
+    return (
+      <>
+        <Header />
+        <main className="max-w-2xl mx-auto px-4 py-8 w-full min-h-[70vh]">
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+            <p>로딩 중...</p>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
+  // 로그인하지 않은 경우
   if (!userData) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
-        로그인 후 이용 가능합니다.
-      </div>
+      <>
+        <Header />
+        <main className="max-w-2xl mx-auto px-4 py-8 w-full min-h-[70vh]">
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
+            <p className="text-center">로그인 후 이용 가능합니다.</p>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
+  // jobExperiences가 없는 경우
+  if (!userData.jobExperiences || userData.jobExperiences.length === 0) {
+    return (
+      <>
+        <Header />
+        <main className="max-w-2xl mx-auto px-4 py-8 w-full min-h-[70vh]">
+          <h1 className="text-2xl font-bold mb-2">수업 자료</h1>
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
+            <p className="text-center">수업 자료를 이용하려면 직무 경험이 등록되어야 합니다.</p>
+            <p className="text-center mt-2">관리자에게 문의해주세요.</p>
+          </div>
+        </main>
+        <Footer />
+      </>
     );
   }
 
@@ -280,21 +479,19 @@ export default function UploadPage() {
       <Header />
       <main className="max-w-2xl mx-auto px-4 py-8 w-full min-h-[70vh]">
         <h1 className="text-2xl font-bold mb-2">수업 자료</h1>
-        <p className="text-gray-600 mb-6 text-sm">본인이 만든 수업자료 링크를 업로드하고 관리할 수 있습니다.<br />대제목(예: 드림멘토링, AI&amp;SW)과 소제목(예: 1주차 수업자료 등)을 자유롭게 추가/수정/순서변경할 수 있습니다.<br />각 소제목에는 &apos;보기&apos;, &apos;템플릿&apos;, &apos;원본&apos; 링크를 모두 입력해야 합니다.</p>
-        {/* 기수별 토글 */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          <button
-            className={`px-3 py-1.5 text-sm rounded-full border ${selectedMaterialGeneration === '전체' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-            onClick={() => setSelectedMaterialGeneration('전체')}
-          >전체</button>
-          {sortedMaterialGenerations.map(gen => (
-            <button
-              key={gen}
-              className={`px-3 py-1.5 text-sm rounded-full border ${selectedMaterialGeneration === gen ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-              onClick={() => setSelectedMaterialGeneration(gen)}
-            >{gen}</button>
-          ))}
-        </div>
+        <p className="text-gray-600 mb-6 text-sm">본인이 참여한 캠프의 수업자료 링크를 업로드하고 관리할 수 있습니다.<br />각 소제목에는 &apos;공개보기&apos;와 &apos;원본&apos; 링크를 입력해주세요.</p>
+        {/* 코드별 토글 */}
+        {sortedMaterialCodes.length > 1 && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            {sortedMaterialCodes.map(code => (
+              <button
+                key={code}
+                className={`px-3 py-1.5 text-sm rounded-full border ${selectedMaterialCode === code ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                onClick={() => setSelectedMaterialCode(code)}
+              >{code}</button>
+            ))}
+          </div>
+        )}
         {error && <div className="text-red-500 mb-4">{error}</div>}
         {loading ? (
           <div className="text-center text-gray-400 py-12 border rounded-lg">로딩 중...</div>
@@ -303,7 +500,7 @@ export default function UploadPage() {
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleMaterialDragEnd}>
               <SortableContext items={filteredMaterials.map(m => m.id)} strategy={verticalListSortingStrategy}>
                 {filteredMaterials.length === 0 ? (
-                  <div className="text-center text-gray-400 py-12 border rounded-lg">해당 기수에 등록된 수업 자료가 없습니다.</div>
+                  <div className="text-center text-gray-400 py-12 border rounded-lg">해당 코드에 등록된 수업 자료가 없습니다.</div>
                 ) : (
                   <div className="space-y-6">
                     {filteredMaterials.map((m) => (
@@ -353,7 +550,7 @@ export default function UploadPage() {
                             <SortableContext items={sections[m.id]?.map(s => s.id) || []} strategy={verticalListSortingStrategy}>
                               <div className="space-y-3">
                                 {sections[m.id]?.length === 0 ? (
-                                  <div className="text-gray-400">소제목이 없습니다.</div>
+                                  <div className="text-gray-400">소제목이 없습니다</div>
                                 ) : (
                                   sections[m.id]?.map((s) => (
                                     <SortableItem key={s.id} id={s.id}>
@@ -444,54 +641,6 @@ export default function UploadPage() {
                 )}
               </SortableContext>
             </DndContext>
-            {/* 대제목 추가 버튼 및 템플릿 선택 모달 */}
-            <div className="flex justify-center mt-8">
-              <Button size="lg" className="px-8 py-3 text-base font-semibold rounded-xl shadow" onClick={() => setShowTemplateSelect(true)}>+ 대제목 추가</Button>
-            </div>
-            {showTemplateSelect && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-                <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
-                  <h2 className="text-lg font-bold mb-4">템플릿 선택</h2>
-                  {/* Generation 필터 토글 */}
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {sortedMaterialGenerations.map((gen) => (
-                      <button
-                        key={gen}
-                        className={`px-3 py-1.5 text-sm rounded-full border ${selectedMaterialGeneration === gen ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-                        onClick={() => setSelectedMaterialGeneration(gen)}
-                      >
-                        {gen}
-                      </button>
-                    ))}
-                  </div>
-                  {templatesLoading ? (
-                    <div className="text-center text-gray-400 py-8">로딩 중...</div>
-                  ) : (
-                    <ul className="space-y-2">
-                      {templates
-                        .filter(t => selectedMaterialGeneration === '전체' || (t.generation || '미지정') === selectedMaterialGeneration)
-                        .map((tpl) => {
-                          const alreadyAdded = materials.some(m => m.title === tpl.title);
-                          return (
-                            <li key={tpl.id}>
-                              <Button
-                                onClick={() => handleAddMaterialFromTemplate(tpl)}
-                                disabled={alreadyAdded}
-                                className={`w-full ${alreadyAdded ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              >
-                                {tpl.title} {alreadyAdded && '(이미 추가됨)'}
-                              </Button>
-                            </li>
-                          );
-                        })}
-                    </ul>
-                  )}
-                  <div className="flex justify-end mt-4">
-                    <Button color="secondary" onClick={() => setShowTemplateSelect(false)}>취소</Button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </main>
