@@ -498,31 +498,4 @@ export default function UploadPage() {
       <Footer />
     </>
   );
-}
-
-export const metadata = {
-  title: '파일 업로드 | SMIS 멘토 채용 플랫폼',
-  description: 'SMIS 멘토 채용 플랫폼에서 파일을 업로드하고 멘토 지원, 후기, 채용공고 등 다양한 서비스를 이용하세요.',
-  openGraph: {
-    title: '파일 업로드 | SMIS 멘토 채용 플랫폼',
-    description: 'SMIS 멘토 채용 플랫폼에서 파일을 업로드하고 멘토 지원, 후기, 채용공고 등 다양한 서비스를 이용하세요.',
-    url: 'https://www.smis-mentor.com/upload',
-    siteName: 'SMIS 멘토 채용 플랫폼',
-    images: [
-      {
-        url: '/logo-wide.png',
-        width: 1200,
-        height: 630,
-        alt: 'SMIS 멘토 채용 플랫폼',
-      },
-    ],
-    locale: 'ko_KR',
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: '파일 업로드 | SMIS 멘토 채용 플랫폼',
-    description: 'SMIS 멘토 채용 플랫폼에서 파일을 업로드하고 멘토 지원, 후기, 채용공고 등 다양한 서비스를 이용하세요.',
-    images: ['/logo-wide.png'],
-  },
-}; 
+} 
