@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from 'react';
 import Header from '@/components/common/Header';
 import Footer from '@/components/common/Footer';
-import Button from '@/components/common/Button';
 import {
   getLessonMaterialTemplates,
   addLessonMaterialTemplate,
@@ -15,7 +14,7 @@ import {
 import { getAllJobCodes } from '@/lib/firebaseService';
 import { JobCodeWithId } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -42,7 +41,8 @@ function SectionEditor({
   sections: LessonMaterialTemplateSection[];
   onSectionsChange: (sections: LessonMaterialTemplateSection[]) => void;
 }) {
-  const [sections, setSections] = useState<LessonMaterialTemplateSection[]>([...initialSections].sort((a, b) => a.order - b.order));
+  const safeSections = Array.isArray(initialSections) ? initialSections : [];
+  const [sections, setSections] = useState<LessonMaterialTemplateSection[]>([...safeSections].sort((a, b) => a.order - b.order));
   const [input, setInput] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -51,7 +51,8 @@ function SectionEditor({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setSections([...initialSections].sort((a, b) => a.order - b.order));
+    const safeSections = Array.isArray(initialSections) ? initialSections : [];
+    setSections([...safeSections].sort((a, b) => a.order - b.order));
   }, [initialSections]);
 
   // Firestore 반영
@@ -112,7 +113,10 @@ function SectionEditor({
   };
 
   // 드래그
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { distance: 5 } })
+  );
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -136,115 +140,226 @@ function SectionEditor({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
-          {sections.map(s => (
-            <SortableItem key={s.id} id={s.id}>
-              <div className="flex flex-col gap-1 mb-2 bg-white rounded px-2 py-2 border">
-                {editingId === s.id ? (
-                  <>
-                    <div className="flex gap-2 items-center">
-                      <input
-                        className="flex-1 px-2 py-1 border rounded focus:ring-2 focus:ring-blue-400"
-                        value={editingValue}
-                        onChange={e => setEditingValue(e.target.value)}
-                        placeholder="소제목명"
-                        aria-label="소제목명"
-                        autoFocus
-                      />
-                      <Button size="sm" color="primary" type="button" onClick={handleEditComplete}>완료</Button>
-                      <Button size="sm" color="secondary" type="button" onClick={handleEditCancel}>취소</Button>
-                    </div>
-                    {/* 링크들 인라인 수정 */}
-                    <div className="flex flex-col gap-2 mt-2">
-                      <div className="font-medium text-sm text-gray-700">링크들 (선택)</div>
-                      {editingLinks.map((l, idx) => (
-                        <div key={idx} className="flex gap-2 items-center">
+          {sections.length === 0 ? (
+            <div className="text-center py-6 text-gray-400">
+              <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-sm">소제목이 없습니다</p>
+              <p className="text-xs mt-1">아래에서 소제목을 추가해보세요</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {sections.map(s => (
+                <SortableItem key={s.id} id={s.id}>
+                  <div className="bg-white border border-emerald-100 rounded-lg p-3 hover:border-emerald-200 hover:shadow-sm transition-all group">
+                    {editingId === s.id ? (
+                      <div className="space-y-3">
+                        <div>
                           <input
-                            className="w-32 px-2 py-1 border rounded"
-                            placeholder="링크 제목"
-                            value={l.label}
-                            onChange={e => handleLinkChange(editingLinks, setEditingLinks, idx, 'label', e.target.value)}
+                            className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent transition-all bg-white"
+                            value={editingValue}
+                            onChange={e => setEditingValue(e.target.value)}
+                            placeholder="소제목명"
+                            aria-label="소제목명"
+                            autoFocus
                           />
-                          <input
-                            className="flex-1 px-2 py-1 border rounded"
-                            placeholder="URL"
-                            value={l.url}
-                            onChange={e => handleLinkChange(editingLinks, setEditingLinks, idx, 'url', e.target.value)}
-                          />
-                          <Button size="sm" color="danger" type="button" onClick={() => handleLinkRemove(editingLinks, setEditingLinks, idx)}>삭제</Button>
                         </div>
-                      ))}
-                      <Button size="sm" type="button" onClick={() => handleLinkAdd(editingLinks, setEditingLinks)}>+ 링크 추가</Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-base">{s.title}</span>
-                      <div className="flex gap-2">
-                        <Button size="sm" color="secondary" type="button" onClick={() => handleEdit(s.id, s.title, s.links)}>수정</Button>
-                        <Button size="sm" color="danger" type="button" onClick={() => handleDelete(s.id)}>삭제</Button>
-                      </div>
-                    </div>
-                    {s.links && s.links.length > 0 && (
-                      <div className="flex gap-1 flex-wrap mb-2">
-                        {s.links.map((l, idx) => (
-                          <a
-                            key={idx}
-                            href={l.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-200 transition"
+                        {/* 링크들 수정 */}
+                        <div>
+                          <label className="block text-sm font-medium text-emerald-800 mb-2">소제목 링크들 (선택)</label>
+                          <div className="space-y-2">
+                            {editingLinks.map((l, idx) => (
+                              <div key={idx} className="flex gap-2 items-center bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                                <input
+                                  className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                  placeholder="링크 제목"
+                                  value={l.label}
+                                  onChange={e => handleLinkChange(editingLinks, setEditingLinks, idx, 'label', e.target.value)}
+                                />
+                                <input
+                                  className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                  placeholder="URL"
+                                  value={l.url}
+                                  onChange={e => handleLinkChange(editingLinks, setEditingLinks, idx, 'url', e.target.value)}
+                                />
+                                <button
+                                  onClick={() => handleLinkRemove(editingLinks, setEditingLinks, idx)}
+                                  className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
+                                >
+                                  삭제
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => handleLinkAdd(editingLinks, setEditingLinks)}
+                              className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 transition-all"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                              링크 추가
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end pt-3 border-t border-emerald-200">
+                          <button
+                            onClick={handleEditCancel}
+                            className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
                           >
-                            {l.label}
-                          </a>
-                        ))}
+                            취소
+                          </button>
+                          <button
+                            onClick={handleEditComplete}
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 border border-transparent rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
+                          >
+                            완료
+                          </button>
+                        </div>
                       </div>
+                    ) : (
+                      <>
+                        {/* 소제목 헤더 */}
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 bg-emerald-100 rounded flex items-center justify-center">
+                              <span className="text-emerald-700 font-medium text-xs">
+                                {sections.findIndex(sec => sec.id === s.id) + 1}
+                              </span>
+                            </div>
+                            <h5 className="font-medium text-gray-900 text-sm">{s.title}</h5>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleEdit(s.id, s.title, s.links)}
+                              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-all"
+                              title="수정"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDelete(s.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                              title="삭제"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                            <div className="cursor-move text-gray-300 hover:text-emerald-500 p-1.5 rounded hover:bg-emerald-50 transition-all" style={{ touchAction: 'none' }}>
+                              <svg width="14" height="14" fill="none" viewBox="0 0 14 14">
+                                <circle cx="3.5" cy="5" r="0.5" fill="currentColor"/>
+                                <circle cx="3.5" cy="9" r="0.5" fill="currentColor"/>
+                                <circle cx="7" cy="5" r="0.5" fill="currentColor"/>
+                                <circle cx="7" cy="9" r="0.5" fill="currentColor"/>
+                                <circle cx="10.5" cy="5" r="0.5" fill="currentColor"/>
+                                <circle cx="10.5" cy="9" r="0.5" fill="currentColor"/>
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 소제목 링크들 */}
+                        {s.links && Array.isArray(s.links) && s.links.length > 0 && (
+                          <div className="flex gap-1.5 flex-wrap">
+                            {s.links.map((l, idx) => (
+                              <a
+                                key={idx}
+                                href={l.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all border border-emerald-200"
+                              >
+                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                {l.label}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </div>
-            </SortableItem>
-          ))}
+                  </div>
+                </SortableItem>
+              ))}
+            </div>
+          )}
         </SortableContext>
       </DndContext>
+      
       {/* 소제목 추가 폼 */}
-      <div className="flex flex-col gap-2 mt-2 p-3 bg-gray-50 rounded border">
-        <div className="flex gap-2 items-center">
-          <input
-            ref={inputRef}
-            className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-400"
-            placeholder="소제목 (예: 오리엔테이션)"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
-            aria-label="소제목 입력"
-          />
-          <Button type="button" onClick={handleAdd}>+ 추가</Button>
+      <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+            <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+          </div>
+          <h5 className="text-sm font-semibold text-emerald-800">새 소제목 추가</h5>
         </div>
-        {/* 링크들 추가 */}
-        <div className="flex flex-col gap-2 mt-2">
-          <div className="font-medium text-sm text-gray-700">링크들 (선택)</div>
-          {newLinks.map((l, idx) => (
-            <div key={idx} className="flex gap-2 items-center">
-              <input
-                className="w-32 px-2 py-1 border rounded"
-                placeholder="링크 제목"
-                value={l.label}
-                onChange={e => handleLinkChange(newLinks, setNewLinks, idx, 'label', e.target.value)}
-              />
-              <input
-                className="flex-1 px-2 py-1 border rounded"
-                placeholder="URL"
-                value={l.url}
-                onChange={e => handleLinkChange(newLinks, setNewLinks, idx, 'url', e.target.value)}
-              />
-              <Button size="sm" color="danger" type="button" onClick={() => handleLinkRemove(newLinks, setNewLinks, idx)}>삭제</Button>
+        <div className="space-y-3">
+          <div>
+            <input
+              ref={inputRef}
+              className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent transition-all bg-white"
+              placeholder="소제목 (예: 오리엔테이션)"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
+              aria-label="소제목 입력"
+            />
+          </div>
+          {/* 링크들 추가 */}
+          <div>
+            <label className="block text-sm font-medium text-emerald-800 mb-2">소제목 링크들 (선택)</label>
+            <div className="space-y-2">
+              {newLinks.map((l, idx) => (
+                <div key={idx} className="flex gap-2 items-center bg-white rounded-lg p-2 border border-emerald-100">
+                  <input
+                    className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    placeholder="링크 제목"
+                    value={l.label}
+                    onChange={e => handleLinkChange(newLinks, setNewLinks, idx, 'label', e.target.value)}
+                  />
+                  <input
+                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    placeholder="URL"
+                    value={l.url}
+                    onChange={e => handleLinkChange(newLinks, setNewLinks, idx, 'url', e.target.value)}
+                  />
+                  <button
+                    onClick={() => handleLinkRemove(newLinks, setNewLinks, idx)}
+                    className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
+                  >
+                    삭제
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2 justify-between items-center">
+                <button
+                  onClick={() => handleLinkAdd(newLinks, setNewLinks)}
+                  className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 transition-all"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  링크 추가
+                </button>
+                <button
+                  onClick={handleAdd}
+                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 border border-transparent rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
+                >
+                  소제목 추가
+                </button>
+              </div>
             </div>
-          ))}
-          <Button size="sm" type="button" onClick={() => handleLinkAdd(newLinks, setNewLinks)}>+ 링크 추가</Button>
+          </div>
         </div>
       </div>
     </div>
@@ -261,12 +376,10 @@ export default function AdminUploadTemplatePage() {
   const [sections, setSections] = useState<LessonMaterialTemplateSection[]>([]);
   const [selectedCode, setSelectedCode] = useState('');
   const [selectedCodeFilter, setSelectedCodeFilter] = useState('전체');
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState('');
-  const [editingCode, setEditingCode] = useState('');
   const [links, setLinks] = useState<{ label: string; url: string }[]>([]);
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [jobCodesLoading, setJobCodesLoading] = useState(false);
+  const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -302,12 +415,12 @@ export default function AdminUploadTemplatePage() {
     if (!title.trim()) return;
     if (editing) {
       await updateLessonMaterialTemplate(editing.id, { title, sections, code: selectedCode, links });
+      setEditing(null);
     } else {
       const newId = await addLessonMaterialTemplate(title, sections, selectedCode, links);
       setTemplates(prev => [{ id: newId, title, sections, code: selectedCode, links }, ...prev]);
+      setShowForm(false);
     }
-    setShowForm(false);
-    setEditing(null);
     setTitle('');
     setSections([]);
     setSelectedCode('');
@@ -322,250 +435,447 @@ export default function AdminUploadTemplatePage() {
     fetchTemplates();
   };
 
-  // 템플릿 소제목 변경 핸들러
-  const handleSectionsChange = async (templateId: string, newSections: LessonMaterialTemplateSection[]) => {
-    await updateLessonMaterialTemplate(templateId, { sections: newSections });
-    // Firestore 반영 후 템플릿 목록 갱신
-    fetchTemplates();
-  };
-
   // 사용 가능한 코드 목록 (중복 제거)
-  const availableCodes = Array.from(new Set(jobCodes.map(jc => jc.code))).sort();
+  const availableCodes = Array.from(new Set(jobCodes.map(jc => jc.code))).sort((a, b) => {
+    // 숫자 부분을 추출하여 비교 (예: "D26" -> 26, "F23_1" -> 23)
+    const getNumericPart = (code: string) => {
+      const match = code.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    
+    const numA = getNumericPart(a);
+    const numB = getNumericPart(b);
+    
+    // 숫자가 높은 것부터 (내림차순)
+    if (numA !== numB) {
+      return numB - numA;
+    }
+    
+    // 숫자가 같으면 문자열로 비교 (알파벳 순)
+    return a.localeCompare(b) as number;
+  });
   
   const filteredTemplates = selectedCodeFilter === '전체'
     ? templates
     : templates.filter(t => (t.code || '미지정') === selectedCodeFilter);
 
+  // 토글 함수 - 토글 시 바로 편집 모드로 진입
+  const toggleTemplate = (template: LessonMaterialTemplate) => {
+    setExpandedTemplates(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(template.id)) {
+        newSet.delete(template.id);
+        // 접을 때 편집 모드 해제
+        if (editing?.id === template.id) {
+          setEditing(null);
+          setTitle('');
+          setSections([]);
+          setSelectedCode('');
+          setLinks([]);
+        }
+      } else {
+        newSet.add(template.id);
+        // 펼칠 때 편집 모드로 진입
+        setEditing(template);
+        setTitle(template.title);
+        setSections(template.sections || []);
+        setSelectedCode(template.code || '');
+        setLinks(template.links || []);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <>
       <Header />
-      <main className="max-w-2xl mx-auto px-4 py-8 w-full min-h-[70vh]">
-        <h1 className="text-2xl font-bold mb-4">수업자료 템플릿 관리</h1>
-        <p className="text-gray-600 mb-6 text-sm">대제목(수업자료 템플릿)과 소제목(섹션) 구조를 미리 만들어두면, 유저가 업로드 시 선택해서 사용할 수 있습니다.</p>
-        {error && <div className="text-red-500 mb-4">{error}</div>}
+      <main className="max-w-4xl mx-auto px-4 py-6 w-full min-h-[70vh]">
+        {/* 헤더 섹션 */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">수업자료 템플릿 관리</h1>
+          <p className="text-gray-600 text-sm leading-relaxed">
+            캠프별 수업자료 업로드 템플릿 제작 페이지
+          </p>
+        </div>
+
+        {/* 에러 메시지 */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm">
+            <div className="flex items-center">
+              <svg className="w-4 h-4 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-red-700">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* 로딩 상태 */}
         {loading ? (
-          <div className="text-center text-gray-400 py-12 border rounded-lg">로딩 중...</div>
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mx-auto"></div>
+            <p className="mt-3 text-gray-500 text-sm">템플릿을 불러오는 중...</p>
+          </div>
         ) : (
-          <div className="space-y-6">
-            <div className="flex justify-end">
-              <Button onClick={() => { setShowForm(true); setEditing(null); setTitle(''); setSections([]); setSelectedCode(''); setLinks([]); }}>+ 템플릿 추가</Button>
+          <div className="space-y-3">
+            {/* 상단 액션 바 */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
+              {/* 코드별 필터 */}
+              <div className="flex flex-wrap gap-2">
+                {['전체', ...Array.from(new Set(templates.map(t => t.code || '미지정')))].map(code => (
+                  <button
+                    key={code}
+                    className={`px-3 py-1.5 text-sm font-medium rounded border transition-all ${
+                      selectedCodeFilter === code 
+                        ? 'bg-blue-500 border-blue-500 text-white' 
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setSelectedCodeFilter(code)}
+                  >
+                    {code}
+                  </button>
+                ))}
+              </div>
+              
+              {/* 템플릿 추가 버튼 */}
+              <button
+                onClick={() => { 
+                  setShowForm(true); 
+                  setEditing(null); 
+                  setTitle(''); 
+                  setSections([]); 
+                  setSelectedCode(''); 
+                  setLinks([]); 
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-all text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                템플릿 추가
+              </button>
             </div>
-            {/* 코드별 필터 토글 */}
-            <div className="flex flex-wrap gap-2 mb-6">
-              {['전체', ...Array.from(new Set(templates.map(t => t.code || '미지정')))].map(code => (
-                <button
-                  key={code}
-                  className={`px-3 py-1.5 text-sm rounded-full border ${selectedCodeFilter === code ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-                  onClick={() => setSelectedCodeFilter(code)}
-                >
-                  {code}
-                </button>
-              ))}
-            </div>
+
             {/* 템플릿 리스트 */}
             {filteredTemplates.length === 0 ? (
-              <div className="text-center text-gray-400 py-12 border rounded-lg">해당 코드에 등록된 템플릿이 없습니다.</div>
+              <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <p className="text-gray-500 font-medium">해당 코드에 등록된 템플릿이 없습니다</p>
+                <p className="text-gray-400 text-sm mt-1">새 템플릿을 추가해보세요</p>
+              </div>
             ) : (
-              <div className="space-y-8">
-                {filteredTemplates.map(tpl => (
-                  <div key={tpl.id} className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 relative group transition-all">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        {editingTemplateId === tpl.id ? (
-                          <div className="flex flex-col gap-2 w-full">
-                            {/* 첫 번째 행: 템플릿명/코드/버튼 */}
-                            <div className="flex items-center gap-3 mb-2 flex-wrap">
-                              <input
-                                className="font-bold text-lg border-b border-blue-400 focus:outline-none bg-transparent px-1 py-0.5"
-                                value={editingTitle}
-                                onChange={e => setEditingTitle(e.target.value)}
-                                aria-label="템플릿명"
-                                autoFocus
-                              />
-                              <select
-                                className="text-sm border-b border-blue-200 focus:outline-none bg-transparent px-1 py-0.5"
-                                value={editingCode}
-                                onChange={e => setEditingCode(e.target.value)}
-                                aria-label="코드"
-                              >
-                                <option value="">코드 선택</option>
-                                {availableCodes.map(code => (
-                                  <option key={code} value={code}>{code}</option>
-                                ))}
-                              </select>
-                              <div className="flex gap-2 ml-auto">
-                                <Button color="primary" onClick={async () => {
-                                  await updateLessonMaterialTemplate(tpl.id, { title: editingTitle, code: editingCode, links });
-                                  setEditingTemplateId(null);
-                                  setLinks([]);
-                                  fetchTemplates();
-                                }}>완료</Button>
-                                <Button color="secondary" onClick={() => {
-                                  setEditingTemplateId(null);
-                                  setLinks([]);
-                                }}>취소</Button>
+              <div className="space-y-3">
+                {filteredTemplates.map(tpl => {
+                  const isExpanded = expandedTemplates.has(tpl.id);
+                  const sectionCount = tpl.sections?.length || 0;
+                  
+                  return (
+                    <div key={tpl.id} className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all">
+                      {/* 카드 헤더 - 항상 표시 */}
+                      <div 
+                        className="p-4 cursor-pointer"
+                        onClick={() => toggleTemplate(tpl)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
+                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <h3 className="font-medium text-gray-900">{tpl.title}</h3>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                                  {tpl.code || '미지정'}
+                                </span>
+                                <span className="text-xs text-gray-500">{sectionCount}개 소제목</span>
                               </div>
                             </div>
-                            {/* 두 번째 행: 대주제 링크 입력 UI */}
-                            <div className="bg-gray-50 border border-blue-100 rounded-lg p-4 mb-2 w-full max-w-md">
-                              <div className="font-semibold mb-2">대주제 링크들 <span className="text-xs text-gray-400">(선택)</span></div>
-                              {links.map((l, idx) => (
-                                <div key={idx} className="flex gap-2 items-center mb-2 flex-wrap">
-                                  <input
-                                    className="w-40 max-w-[160px] px-2 py-1 border rounded text-sm"
-                                    placeholder="링크 제목 (예: 운영방안)"
-                                    value={l.label}
-                                    onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
-                                    aria-label="링크 제목"
-                                  />
-                                  <input
-                                    className="flex-1 min-w-0 px-2 py-1 border rounded text-sm"
-                                    placeholder="URL (예: https://...)"
-                                    value={l.url}
-                                    onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
-                                    aria-label="링크 URL"
-                                  />
-                                  <Button size="sm" color="danger" type="button" onClick={() => setLinks(links.filter((_, i) => i !== idx))}>
-                                    삭제
-                                  </Button>
-                                </div>
-                              ))}
-                              <Button
-                                size="sm"
-                                type="button"
-                                className="mt-1"
-                                onClick={() => setLinks([...links, { label: '', url: '' }])}
-                              >
-                                + 링크 추가
-                              </Button>
-                            </div>
                           </div>
-                        ) : (
-                          <>
-                            <span className="font-bold text-lg mr-2">{tpl.title}</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-semibold">{tpl.code || '미지정'}</span>
-                          </>
-                        )}
-                      </div>
-                      <div className="flex gap-2 items-center">
-                        {editingTemplateId === tpl.id ? null : (
-                          <>
-                            <Button size="sm" color="secondary" onClick={() => {
-                              setEditingTemplateId(tpl.id);
-                              setEditingTitle(tpl.title);
-                              setEditingCode(tpl.code || '');
-                              setLinks(tpl.links ?? []);
-                            }}>수정</Button>
-                            <Button size="sm" color="danger" onClick={() => handleDelete(tpl.id)}>삭제</Button>
-                            <span className="cursor-move text-gray-300 hover:text-blue-400 ml-2">
-                              <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="13" r="1.5" fill="currentColor"/><circle cx="10" cy="7" r="1.5" fill="currentColor"/><circle cx="10" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="7" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/></svg>
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {/* 대주제 links 버튼 그룹: 제목 아래에 */}
-                    {editingTemplateId !== tpl.id && tpl.links && tpl.links.length > 0 && (
-                      <div className="flex gap-2 flex-wrap mt-2">
-                        {tpl.links.map((l, idx) => (
-                          l.label && l.url ? (
-                            <a
-                              key={idx}
-                              href={l.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm font-medium border border-blue-200 hover:bg-blue-200 transition"
-                              aria-label={l.label}
+                          <div className="flex items-center gap-2">
+                            {/* 대주제 링크 버튼들 */}
+                            {tpl.links && tpl.links.length > 0 && (
+                              <div className="flex gap-1 mr-2">
+                                {tpl.links.slice(0, 2).map((l, idx) => (
+                                  l.label && l.url ? (
+                                    <a
+                                      key={idx}
+                                      href={l.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all"
+                                      onClick={(e) => e.stopPropagation()}
+                                      aria-label={l.label}
+                                    >
+                                      {l.label}
+                                    </a>
+                                  ) : null
+                                ))}
+                              </div>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(tpl.id);
+                              }}
+                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                              title="삭제"
                             >
-                              {l.label}
-                            </a>
-                          ) : null
-                        ))}
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                            <svg 
+                              className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    {/* SectionEditor로 소제목(섹션) 리스트 및 인라인 편집 통합 */}
-                    <SectionEditor
-                      sections={tpl.sections}
-                      onSectionsChange={newSections => handleSectionsChange(tpl.id, newSections)}
-                    />
-                  </div>
-                ))}
+
+                      {/* 카드 본문 - 토글로 표시/숨김 */}
+                      {isExpanded && (
+                        <div className="px-4 pb-4 border-t border-gray-100">
+                          {/* 템플릿 수정 폼 */}
+                          {editing === tpl && (
+                            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-4 mt-4 mb-6 shadow-sm">
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </div>
+                                <h4 className="text-base font-semibold text-indigo-900">대주제 관리</h4>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-sm font-medium text-indigo-800 mb-1">템플릿명</label>
+                                  <input
+                                    className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent transition-all bg-white"
+                                    value={title}
+                                    onChange={e => setTitle(e.target.value)}
+                                    aria-label="템플릿명"
+                                    autoFocus
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-indigo-800 mb-1">코드</label>
+                                  <select
+                                    className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent transition-all bg-white"
+                                    value={selectedCode}
+                                    onChange={e => setSelectedCode(e.target.value)}
+                                    aria-label="코드"
+                                  >
+                                    <option value="">코드 선택</option>
+                                    {availableCodes.map(code => (
+                                      <option key={code} value={code}>{code}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                              {/* 대주제 링크 수정 */}
+                              <div className="mt-3">
+                                <label className="block text-sm font-medium text-indigo-800 mb-2">대주제 링크들 (선택)</label>
+                                <div className="space-y-2">
+                                  {links.map((l, idx) => (
+                                    <div key={idx} className="flex gap-2 items-center bg-white rounded-lg p-2 border border-indigo-100">
+                                      <input
+                                        className="w-32 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        placeholder="링크 제목"
+                                        value={l.label}
+                                        onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
+                                      />
+                                      <input
+                                        className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        placeholder="URL"
+                                        value={l.url}
+                                        onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
+                                      />
+                                      <button
+                                        onClick={() => setLinks(links.filter((_, i) => i !== idx))}
+                                        className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
+                                      >
+                                        삭제
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <button
+                                    onClick={() => setLinks([...links, { label: '', url: '' }])}
+                                    className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 transition-all"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                    링크 추가
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 justify-end pt-4 border-t border-indigo-200 mt-4">
+                                <button
+                                  onClick={() => {
+                                    setEditing(null);
+                                    setLinks([]);
+                                  }}
+                                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
+                                >
+                                  취소
+                                </button>
+                                <button
+                                  onClick={handleSave}
+                                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                                >
+                                  수정 완료
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* SectionEditor로 소제목 관리 - 항상 표시 */}
+                          <div className="mt-6">
+                            <div className="flex items-center gap-2 mb-4">
+                              <div className="w-5 h-5 bg-emerald-500 rounded flex items-center justify-center">
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                              </div>
+                              <h4 className="text-base font-semibold text-emerald-800">소제목 관리</h4>
+                            </div>
+                            <SectionEditor
+                              sections={editing === tpl ? sections : (tpl.sections || [])}
+                              onSectionsChange={editing === tpl ? setSections : (newSections) => {
+                                // 편집 모드가 아닐 때는 바로 저장
+                                updateLessonMaterialTemplate(tpl.id, { sections: newSections });
+                                fetchTemplates();
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {/* 템플릿 추가/수정 폼 */}
             {showForm && (
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 mb-8">
+              <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
                 <div className="mb-4">
-                  <label className="block font-semibold mb-1">템플릿명</label>
-                  <input
-                    className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-blue-400"
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    placeholder="예: 드림멘토링"
-                    aria-label="템플릿명"
-                  />
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">새 템플릿 추가</h3>
                 </div>
-                <div className="mb-4">
-                  <label className="block font-semibold mb-1">코드</label>
-                  {jobCodesLoading ? (
-                    <div className="text-gray-400">코드 목록 로딩 중...</div>
-                  ) : (
-                    <select
-                      className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-blue-400"
-                      value={selectedCode}
-                      onChange={e => setSelectedCode(e.target.value)}
-                      aria-label="코드"
-                    >
-                      <option value="">코드 선택</option>
-                      {availableCodes.map(code => {
-                        const jobCode = jobCodes.find(jc => jc.code === code);
-                        return (
-                          <option key={code} value={code}>
-                            {code} - {jobCode?.name || ''}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  )}
-                </div>
-                {/* 대주제 링크 입력 UI */}
-                <div className="mb-4">
-                  <div className="font-semibold mb-1">대주제 링크들 (선택)</div>
-                  {links.length === 0 && (
-                    <Button size="sm" type="button" onClick={() => setLinks([{ label: '', url: '' }])}>
-                      + 링크 추가
-                    </Button>
-                  )}
-                  {links.map((l, idx) => (
-                    <div key={idx} className="flex gap-2 items-center mb-1">
-                      <input
-                        className="w-32 px-2 py-1 border rounded"
-                        placeholder="링크 제목"
-                        value={l.label}
-                        onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
-                      />
-                      <input
-                        className="flex-1 px-2 py-1 border rounded"
-                        placeholder="URL"
-                        value={l.url}
-                        onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
-                      />
-                      <Button size="sm" color="danger" type="button" onClick={() => setLinks(links.filter((_, i) => i !== idx))}>
-                        삭제
-                      </Button>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">템플릿명</label>
+                    <input
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      placeholder="예: 드림멘토링"
+                      aria-label="템플릿명"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">코드</label>
+                    {jobCodesLoading ? (
+                      <div className="text-gray-400 text-sm">코드 목록 로딩 중...</div>
+                    ) : (
+                      <select
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all"
+                        value={selectedCode}
+                        onChange={e => setSelectedCode(e.target.value)}
+                        aria-label="코드"
+                      >
+                        <option value="">코드 선택</option>
+                        {availableCodes.map(code => {
+                          const jobCode = jobCodes.find(jc => jc.code === code);
+                          return (
+                            <option key={code} value={code}>
+                              {code} - {jobCode?.name || ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+                  </div>
+                  {/* 대주제 링크 입력 UI */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">대주제 링크들 (선택)</label>
+                    <div className="space-y-2">
+                      {links.length === 0 ? (
+                        <button
+                          onClick={() => setLinks([{ label: '', url: '' }])}
+                          className="text-sm text-blue-600 hover:text-blue-700 transition-all"
+                        >
+                          + 링크 추가
+                        </button>
+                      ) : (
+                        <>
+                          {links.map((l, idx) => (
+                            <div key={idx} className="flex gap-2 items-center">
+                              <input
+                                className="w-32 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                placeholder="링크 제목"
+                                value={l.label}
+                                onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
+                              />
+                              <input
+                                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                placeholder="URL"
+                                value={l.url}
+                                onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
+                              />
+                              <button
+                                onClick={() => setLinks(links.filter((_, i) => i !== idx))}
+                                className="px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => setLinks([...links, { label: '', url: '' }])}
+                            className="text-sm text-blue-600 hover:text-blue-700 transition-all"
+                          >
+                            + 링크 추가
+                          </button>
+                        </>
+                      )}
                     </div>
-                  ))}
-                  {links.length > 0 && (
-                    <Button size="sm" type="button" onClick={() => setLinks([...links, { label: '', url: '' }])}>
-                      + 링크 추가
-                    </Button>
-                  )}
-                </div>
-                {/* 소제목(섹션) 에디터 */}
-                <SectionEditor sections={sections} onSectionsChange={setSections} />
-                <div className="flex gap-2 mt-6 justify-end">
-                  <Button color="secondary" onClick={() => { setShowForm(false); setEditing(null); setTitle(''); setSections([]); setSelectedCode(''); setLinks([]); }}>취소</Button>
-                  <Button color="primary" onClick={handleSave}>저장</Button>
+                  </div>
+                  {/* 소제목(섹션) 에디터 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">소제목 구성</label>
+                    <SectionEditor sections={sections} onSectionsChange={setSections} />
+                  </div>
+                  <div className="flex gap-2 justify-end pt-4 border-t border-gray-200">
+                    <button
+                      onClick={() => { 
+                        setShowForm(false); 
+                        setEditing(null); 
+                        setTitle(''); 
+                        setSections([]); 
+                        setSelectedCode(''); 
+                        setLinks([]); 
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                    >
+                      저장
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
