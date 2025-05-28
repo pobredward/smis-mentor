@@ -104,7 +104,7 @@ export default function RootLayout({
               }],
               "address": {
                 "@type": "PostalAddress",
-                "streetAddress": "경기도 성남시 분당구 장미로 78, 8층 SMIS 라운지",
+                "streetAddress": "경기도 성남시 분당구 장미로 78, 3층 SMIS 라운지",
                 "addressLocality": "성남시",
                 "addressRegion": "경기도",
                 "postalCode": "13558",
