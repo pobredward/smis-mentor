@@ -25,6 +25,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -168,7 +169,8 @@ export default function UploadPage() {
 
   // DnD sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { distance: 5 } })
   );
 
   // 사용자 jobCodes 정보 가져오기
@@ -583,7 +585,7 @@ export default function UploadPage() {
                                     }
                                     return null;
                                   })()}
-                                  <div className="cursor-move text-gray-300 hover:text-gray-500 p-1" onClick={(e) => e.stopPropagation()}>
+                                  <div className="cursor-move text-gray-300 hover:text-gray-500 p-1" style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
                                     <svg width="16" height="16" fill="none" viewBox="0 0 16 16">
                                       <circle cx="4" cy="6" r="1" fill="currentColor"/>
                                       <circle cx="4" cy="10" r="1" fill="currentColor"/>
@@ -658,7 +660,7 @@ export default function UploadPage() {
                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                         </svg>
                                                       </button>
-                                                      <div className="cursor-move text-gray-300 hover:text-gray-500 p-1">
+                                                      <div className="cursor-move text-gray-300 hover:text-gray-500 p-1" style={{ touchAction: 'none' }}>
                                                         <svg width="12" height="12" fill="none" viewBox="0 0 12 12">
                                                           <circle cx="3" cy="4" r="0.5" fill="currentColor"/>
                                                           <circle cx="3" cy="8" r="0.5" fill="currentColor"/>
