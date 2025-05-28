@@ -472,11 +472,10 @@ export default function UploadPage() {
       <main className="max-w-4xl mx-auto px-4 py-6 w-full min-h-[70vh]">
         {/* 헤더 섹션 */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">수업 자료</h1>
-          <p className="text-gray-600 text-sm leading-relaxed">
-            본인이 참여한 캠프의 수업자료 링크를 업로드하고 관리할 수 있습니다.<br />
-            각 소제목에는 &apos;공개보기&apos;와 &apos;원본&apos; 링크를 입력해주세요.
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">수업 자료 업로드</h1>
+          {/* <p className="text-gray-600 text-sm leading-relaxed">
+            수업자료 링크 업로드 및 관리
+          </p> */}
         </div>
 
         {/* 코드별 필터 탭 */}
