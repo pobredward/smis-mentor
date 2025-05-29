@@ -40,7 +40,11 @@ import Header from '@/components/common/Header';
 import Footer from '@/components/common/Footer';
 
 // SectionData 타입 확장 (관리자 links 지원)
-type SectionDataWithLinks = SectionData & { links?: { label: string; url: string }[] };
+type SectionDataWithLinks = SectionData & { 
+  links?: { label: string; url: string }[];
+  isFromTemplate?: boolean; // 템플릿에서 온 섹션인지 구분
+  templateSectionId?: string; // 템플릿 섹션 ID
+};
 
 function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
@@ -64,10 +68,12 @@ function SectionForm({
   onSave,
   onCancel,
   initial,
+  isFromTemplate = false,
 }: {
   onSave: (data: Omit<SectionData, 'id'>) => void;
   onCancel: () => void;
   initial?: Partial<SectionData>;
+  isFromTemplate?: boolean;
 }) {
   const [title, setTitle] = useState(initial?.title || '');
   const [viewUrl, setViewUrl] = useState(initial?.viewUrl || '');
@@ -93,13 +99,20 @@ function SectionForm({
             소제목 이름
           </label>
           <input
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+            className={`w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all ${
+              isFromTemplate ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+            }`}
             placeholder="예: 1차시 - React 기초"
             value={title}
             onChange={e => setTitle(e.target.value)}
             required
             aria-label="소제목"
+            disabled={isFromTemplate}
+            readOnly={isFromTemplate}
           />
+          {isFromTemplate && (
+            <p className="text-xs text-gray-500 mt-1">관리자가 설정한 제목은 수정할 수 없습니다.</p>
+          )}
         </div>
         
         <div>
@@ -291,7 +304,58 @@ export default function UploadPage() {
       const allSections: Record<string, SectionDataWithLinks[]> = {};
       for (const mat of finalMats) {
         const matSections = await getSections(mat.id);
-        allSections[mat.id] = matSections;
+        
+        // 템플릿 sections 가져오기
+        const template = mat.templateId ? allTemplates.find(t => t.id === mat.templateId) : null;
+        console.log('Material:', mat.title, 'Template:', template?.title, 'Template sections:', template?.sections);
+        
+        // 유저 sections에 템플릿 정보 병합
+        const mergedSections: SectionDataWithLinks[] = [];
+        
+        // 먼저 템플릿 sections를 기반으로 유저 sections와 매칭
+        if (template?.sections) {
+          for (let i = 0; i < template.sections.length; i++) {
+            const templateSection = template.sections[i];
+            // 해당 순서의 유저 section이 있는지 확인
+            const userSection = matSections.find(s => s.order === i);
+            
+            if (userSection) {
+              // 유저 section이 있으면 템플릿 정보와 병합
+              mergedSections.push({
+                ...userSection,
+                isFromTemplate: true,
+                templateSectionId: templateSection.id,
+                // 템플릿의 제목과 링크는 유지하되, 유저가 추가한 URL은 보존
+                title: templateSection.title, // 템플릿 제목 강제 적용
+                links: templateSection.links || [], // 템플릿 링크 유지
+              });
+            } else {
+              // 유저 section이 없으면 템플릿 section만 표시 (편집 가능)
+              mergedSections.push({
+                id: `template-${templateSection.id}`,
+                title: templateSection.title,
+                order: i,
+                viewUrl: '',
+                originalUrl: '',
+                links: templateSection.links || [],
+                isFromTemplate: true,
+                templateSectionId: templateSection.id,
+              });
+            }
+          }
+        }
+        
+        // 템플릿 sections 개수를 넘어서는 유저 sections만 추가 (템플릿과 겹치지 않는 것들)
+        const templateSectionCount = template?.sections?.length || 0;
+        const additionalUserSections = matSections
+          .filter(s => s.order >= templateSectionCount)
+          .map(section => ({
+            ...section,
+            isFromTemplate: false,
+          }));
+        
+        allSections[mat.id] = [...mergedSections, ...additionalUserSections];
+        console.log('Final sections for', mat.title, ':', allSections[mat.id]);
       }
       setSections(allSections);
       
@@ -350,7 +414,9 @@ export default function UploadPage() {
 
   // 소제목 추가
   const handleAddSection = async (materialId: string, data: Omit<SectionData, 'id'> & { links?: { label: string; url: string }[] }) => {
-    const order = sections[materialId]?.length || 0;
+    // 유저 sections만 카운트하여 order 계산
+    const userSections = sections[materialId]?.filter(s => !s.isFromTemplate) || [];
+    const order = userSections.length;
     await addSection(materialId, { ...data, order } as Omit<SectionData, 'id'>);
     setAddingSectionFor(null);
     toast.success('소제목이 추가되었습니다.');
@@ -367,6 +433,13 @@ export default function UploadPage() {
 
   // 소제목 삭제
   const handleDeleteSection = async (materialId: string, sectionId: string) => {
+    // 템플릿에서 온 섹션은 삭제할 수 없음
+    const section = sections[materialId]?.find(s => s.id === sectionId);
+    if (section?.isFromTemplate) {
+      toast.error('관리자가 설정한 소제목은 삭제할 수 없습니다.');
+      return;
+    }
+    
     if (!confirm('정말 삭제하시겠습니까?')) return;
     await deleteSection(materialId, sectionId);
     toast.success('소제목이 삭제되었습니다.');
@@ -377,11 +450,24 @@ export default function UploadPage() {
   const handleSectionDragEnd = async (materialId: string, event: import('@dnd-kit/core').DragEndEvent) => {
     const { active, over } = event;
     if (!over || String(active.id) === String(over.id)) return;
+    
+    // 템플릿 섹션은 이동할 수 없음
+    const activeSection = sections[materialId].find(s => s.id === String(active.id));
+    const overSection = sections[materialId].find(s => s.id === String(over.id));
+    
+    if (activeSection?.isFromTemplate || overSection?.isFromTemplate) {
+      toast.error('관리자가 설정한 소제목은 이동할 수 없습니다.');
+      return;
+    }
+    
     const oldIndex = sections[materialId].findIndex((s: SectionDataWithLinks) => s.id === String(active.id));
     const newIndex = sections[materialId].findIndex((s: SectionDataWithLinks) => s.id === String(over.id));
     const newSections = arrayMove(sections[materialId], oldIndex, newIndex);
     setSections(prev => ({ ...prev, [materialId]: newSections }));
-    await reorderSections(materialId, newSections.map(s => s.id));
+    
+    // 실제 DB에서는 유저 섹션만 순서 변경
+    const userSections = newSections.filter(s => !s.isFromTemplate);
+    await reorderSections(materialId, userSections.map(s => s.id));
     toast.success('소제목 순서가 변경되었습니다.');
     fetchAll();
   };
@@ -615,7 +701,7 @@ export default function UploadPage() {
                                   collisionDetection={closestCenter}
                                   onDragEnd={event => handleSectionDragEnd(m.id, event)}
                                 >
-                                  <SortableContext items={sections[m.id]?.map(s => s.id) || []} strategy={verticalListSortingStrategy}>
+                                  <SortableContext items={sections[m.id]?.filter(s => !s.isFromTemplate).map(s => s.id) || []} strategy={verticalListSortingStrategy}>
                                     <div className="space-y-2 mt-3">
                                       {sections[m.id]?.length === 0 ? (
                                         <div className="text-center py-6 text-gray-400">
@@ -627,19 +713,25 @@ export default function UploadPage() {
                                         </div>
                                       ) : (
                                         sections[m.id]?.map((s) => (
-                                          <SortableItem key={s.id} id={s.id}>
-                                            <div className="bg-gray-50 rounded border p-3 hover:bg-gray-100 transition-all group">
+                                          s.isFromTemplate ? (
+                                            <div key={s.id} className={`rounded border p-3 transition-all group bg-emerald-50 border-emerald-200 hover:bg-emerald-100`}>
                                               {editingSection?.materialId === m.id && editingSection?.section.id === s.id ? (
                                                 <SectionForm
                                                   initial={editingSection.section}
                                                   onSave={data => handleEditSection(m.id, s.id, data)}
                                                   onCancel={() => setEditingSection(null)}
+                                                  isFromTemplate={s.isFromTemplate}
                                                 />
                                               ) : (
                                                 <>
                                                   {/* 소제목 헤더 */}
                                                   <div className="flex items-start justify-between mb-2">
-                                                    <h4 className="font-medium text-sm text-gray-800">{s.title}</h4>
+                                                    <div className="flex items-center gap-2">
+                                                      <h4 className="font-medium text-sm text-gray-800">{s.title}</h4>
+                                                      <span className="px-2 py-0.5 text-xs bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200">
+                                                        관리자 설정
+                                                      </span>
+                                                    </div>
                                                     <div className="flex items-center gap-1 transition-opacity">
                                                       <button
                                                         onClick={() => setEditingSection({ materialId: m.id, section: s })}
@@ -650,23 +742,9 @@ export default function UploadPage() {
                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                         </svg>
                                                       </button>
-                                                      <button
-                                                        onClick={() => handleDeleteSection(m.id, s.id)}
-                                                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
-                                                        title="삭제"
-                                                      >
+                                                      <div className="p-1 text-gray-300" title="관리자가 설정한 소제목입니다">
                                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                        </svg>
-                                                      </button>
-                                                      <div className="cursor-move text-gray-300 hover:text-gray-500 p-1" style={{ touchAction: 'none' }}>
-                                                        <svg width="12" height="12" fill="none" viewBox="0 0 12 12">
-                                                          <circle cx="3" cy="4" r="0.5" fill="currentColor"/>
-                                                          <circle cx="3" cy="8" r="0.5" fill="currentColor"/>
-                                                          <circle cx="6" cy="4" r="0.5" fill="currentColor"/>
-                                                          <circle cx="6" cy="8" r="0.5" fill="currentColor"/>
-                                                          <circle cx="9" cy="4" r="0.5" fill="currentColor"/>
-                                                          <circle cx="9" cy="8" r="0.5" fill="currentColor"/>
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                         </svg>
                                                       </div>
                                                     </div>
@@ -681,7 +759,7 @@ export default function UploadPage() {
                                                           href={l.url}
                                                           target="_blank"
                                                           rel="noopener noreferrer"
-                                                          className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all"
+                                                          className="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all"
                                                         >
                                                           {l.label}
                                                         </a>
@@ -726,7 +804,111 @@ export default function UploadPage() {
                                                 </>
                                               )}
                                             </div>
-                                          </SortableItem>
+                                          ) : (
+                                            <SortableItem key={s.id} id={s.id}>
+                                              <div className={`rounded border p-3 transition-all group bg-gray-50 hover:bg-gray-100`}>
+                                                {editingSection?.materialId === m.id && editingSection?.section.id === s.id ? (
+                                                  <SectionForm
+                                                    initial={editingSection.section}
+                                                    onSave={data => handleEditSection(m.id, s.id, data)}
+                                                    onCancel={() => setEditingSection(null)}
+                                                    isFromTemplate={s.isFromTemplate}
+                                                  />
+                                                ) : (
+                                                  <>
+                                                    {/* 소제목 헤더 */}
+                                                    <div className="flex items-start justify-between mb-2">
+                                                      <div className="flex items-center gap-2">
+                                                        <h4 className="font-medium text-sm text-gray-800">{s.title}</h4>
+                                                      </div>
+                                                      <div className="flex items-center gap-1 transition-opacity">
+                                                        <button
+                                                          onClick={() => setEditingSection({ materialId: m.id, section: s })}
+                                                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
+                                                          title="수정"
+                                                        >
+                                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                          </svg>
+                                                        </button>
+                                                        <button
+                                                          onClick={() => handleDeleteSection(m.id, s.id)}
+                                                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                                                          title="삭제"
+                                                        >
+                                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                          </svg>
+                                                        </button>
+                                                        <div className="cursor-move text-gray-300 hover:text-gray-500 p-1" style={{ touchAction: 'none' }}>
+                                                          <svg width="12" height="12" fill="none" viewBox="0 0 12 12">
+                                                            <circle cx="3" cy="4" r="0.5" fill="currentColor"/>
+                                                            <circle cx="3" cy="8" r="0.5" fill="currentColor"/>
+                                                            <circle cx="6" cy="4" r="0.5" fill="currentColor"/>
+                                                            <circle cx="6" cy="8" r="0.5" fill="currentColor"/>
+                                                            <circle cx="9" cy="4" r="0.5" fill="currentColor"/>
+                                                            <circle cx="9" cy="8" r="0.5" fill="currentColor"/>
+                                                          </svg>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+
+                                                    {/* 소제목 링크들 */}
+                                                    {s.links && Array.isArray(s.links) && s.links.length > 0 && (
+                                                      <div className="flex gap-1 flex-wrap mb-2">
+                                                        {s.links.map((l, idx) => (
+                                                          <a
+                                                            key={idx}
+                                                            href={l.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all"
+                                                          >
+                                                            {l.label}
+                                                          </a>
+                                                        ))}
+                                                      </div>
+                                                    )}
+
+                                                    {/* 액션 버튼들 */}
+                                                    <div className="flex gap-2">
+                                                      <a
+                                                        href={s.viewUrl || undefined}
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                                          s.viewUrl
+                                                            ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                                            : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
+                                                        }`}
+                                                      >
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                        </svg>
+                                                        공개보기
+                                                      </a>
+                                                      <a
+                                                        href={s.originalUrl || undefined}
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                                          s.originalUrl
+                                                            ? 'bg-green-500 text-white hover:bg-green-600'
+                                                            : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
+                                                        }`}
+                                                      >
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                        </svg>
+                                                        원본
+                                                      </a>
+                                                    </div>
+                                                  </>
+                                                )}
+                                              </div>
+                                            </SortableItem>
+                                          )
                                         ))
                                       )}
                                     </div>
