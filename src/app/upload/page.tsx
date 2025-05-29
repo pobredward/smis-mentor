@@ -174,6 +174,8 @@ export default function UploadPage() {
   const [userJobCodes, setUserJobCodes] = useState<JobCodeWithGroup[]>([]);
   const [mounted, setMounted] = useState(false);
   const [expandedMaterials, setExpandedMaterials] = useState<Set<string>>(new Set());
+  const [showAddMaterialForm, setShowAddMaterialForm] = useState(false);
+  const [newMaterialTitle, setNewMaterialTitle] = useState('');
 
   // 클라이언트 사이드에서만 렌더링되도록 보장
   useEffect(() => {
@@ -423,12 +425,76 @@ export default function UploadPage() {
     fetchAll();
   };
 
+  // 유저 대주제 추가
+  const handleAddUserMaterial = async () => {
+    if (!newMaterialTitle.trim()) {
+      toast.error('대주제 이름을 입력해주세요.');
+      return;
+    }
+    
+    try {
+      const order = materials.length;
+      await addLessonMaterial(userData!.userId, newMaterialTitle.trim(), order);
+      setNewMaterialTitle('');
+      setShowAddMaterialForm(false);
+      toast.success('대주제가 추가되었습니다.');
+      fetchAll();
+    } catch (error) {
+      console.error('대주제 추가 오류:', error);
+      toast.error('대주제 추가 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 유저 대주제 삭제 (템플릿 기반이 아닌 것만)
+  const handleDeleteUserMaterial = async (materialId: string) => {
+    const material = materials.find(m => m.id === materialId);
+    if (!material) return;
+    
+    // 템플릿 기반 대주제는 삭제할 수 없음
+    if (material.templateId) {
+      toast.error('템플릿 기반 대주제는 삭제할 수 없습니다.');
+      return;
+    }
+    
+    if (!confirm('정말 삭제하시겠습니까? 모든 소제목도 함께 삭제됩니다.')) return;
+    
+    try {
+      await deleteLessonMaterial(materialId);
+      toast.success('대주제가 삭제되었습니다.');
+      fetchAll();
+    } catch (error) {
+      console.error('대주제 삭제 오류:', error);
+      toast.error('대주제 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   // 소제목 수정
   const handleEditSection = async (materialId: string, sectionId: string, data: Omit<SectionData, 'id'> & { links?: { label: string; url: string }[] }) => {
-    await updateSection(materialId, sectionId, data as Omit<SectionData, 'id'>);
-    setEditingSection(null);
-    toast.success('소제목이 수정되었습니다.');
-    fetchAll();
+    try {
+      const section = sections[materialId]?.find(s => s.id === sectionId);
+      
+      if (section?.isFromTemplate) {
+        // 템플릿 섹션의 경우
+        if (sectionId.startsWith('template-')) {
+          // 가상 ID인 경우 새로운 유저 섹션 생성
+          const order = section.order;
+          await addSection(materialId, { ...data, order } as Omit<SectionData, 'id'>);
+        } else {
+          // 실제 유저 섹션이 있는 경우 업데이트
+          await updateSection(materialId, sectionId, data as Omit<SectionData, 'id'>);
+        }
+      } else {
+        // 일반 유저 섹션 업데이트
+        await updateSection(materialId, sectionId, data as Omit<SectionData, 'id'>);
+      }
+      
+      setEditingSection(null);
+      toast.success('소제목이 수정되었습니다.');
+      fetchAll();
+    } catch (error) {
+      console.error('소제목 수정 오류:', error);
+      toast.error('소제목 수정 중 오류가 발생했습니다.');
+    }
   };
 
   // 소제목 삭제
@@ -670,6 +736,21 @@ export default function UploadPage() {
                                     }
                                     return null;
                                   })()}
+                                  {/* 유저가 추가한 대주제 삭제 버튼 */}
+                                  {!m.templateId && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteUserMaterial(m.id);
+                                      }}
+                                      className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                                      title="대주제 삭제"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  )}
                                   <div className="cursor-move text-gray-300 hover:text-gray-500 p-1" style={{ touchAction: 'none' }} onClick={(e) => e.stopPropagation()}>
                                     <svg width="16" height="16" fill="none" viewBox="0 0 16 16">
                                       <circle cx="4" cy="6" r="1" fill="currentColor"/>
@@ -942,6 +1023,56 @@ export default function UploadPage() {
                 )}
               </SortableContext>
             </DndContext>
+
+            {/* 유저 대주제 추가 섹션 */}
+            {showAddMaterialForm ? (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                <h3 className="text-sm font-semibold text-blue-800 mb-3">새 대주제 추가</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      대주제 이름
+                    </label>
+                    <input
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                      placeholder="예: 개인 프로젝트"
+                      value={newMaterialTitle}
+                      onChange={e => setNewMaterialTitle(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddUserMaterial(); }}
+                      aria-label="대주제 이름"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => {
+                        setShowAddMaterialForm(false);
+                        setNewMaterialTitle('');
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={handleAddUserMaterial}
+                      className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                    >
+                      추가하기
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowAddMaterialForm(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-4 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                새 대주제 추가하기
+              </button>
+            )}
           </div>
         )}
       </main>
