@@ -102,7 +102,7 @@ function SectionForm({
             className={`w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all ${
               isFromTemplate ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
             }`}
-            placeholder="예: 1차시 - React 기초"
+            placeholder="예: 1차시 수업자료"
             value={title}
             onChange={e => setTitle(e.target.value)}
             required
@@ -405,24 +405,58 @@ export default function UploadPage() {
   const handleMaterialDragEnd = async (event: import('@dnd-kit/core').DragEndEvent) => {
     const { active, over } = event;
     if (!over || String(active.id) === String(over.id)) return;
+    
     const oldIndex = materials.findIndex((m: LessonMaterialData) => m.id === String(active.id));
     const newIndex = materials.findIndex((m: LessonMaterialData) => m.id === String(over.id));
     const newMaterials = arrayMove(materials, oldIndex, newIndex);
+    
+    // 로컬 상태 즉시 업데이트
     setMaterials(newMaterials);
-    await reorderLessonMaterials(userData!.userId, newMaterials.map(m => m.id));
-    toast.success('대제목 순서가 변경되었습니다.');
-    fetchAll();
+    
+    try {
+      await reorderLessonMaterials(userData!.userId, newMaterials.map(m => m.id));
+      toast.success('대제목 순서가 변경되었습니다.');
+    } catch (error) {
+      console.error('대제목 순서 변경 오류:', error);
+      toast.error('대제목 순서 변경 중 오류가 발생했습니다.');
+      // 오류 발생 시 원래 상태로 복원
+      setMaterials(materials);
+    }
   };
 
   // 소제목 추가
   const handleAddSection = async (materialId: string, data: Omit<SectionData, 'id'> & { links?: { label: string; url: string }[] }) => {
-    // 유저 sections만 카운트하여 order 계산
-    const userSections = sections[materialId]?.filter(s => !s.isFromTemplate) || [];
-    const order = userSections.length;
-    await addSection(materialId, { ...data, order } as Omit<SectionData, 'id'>);
-    setAddingSectionFor(null);
-    toast.success('소제목이 추가되었습니다.');
-    fetchAll();
+    try {
+      // 템플릿 섹션 개수 + 유저 섹션 개수로 order 계산
+      const currentSections = sections[materialId] || [];
+      const templateSections = currentSections.filter(s => s.isFromTemplate);
+      const userSections = currentSections.filter(s => !s.isFromTemplate);
+      const order = templateSections.length + userSections.length;
+      
+      const sectionId = await addSection(materialId, { ...data, order } as Omit<SectionData, 'id'>);
+      
+      // 로컬 상태 즉시 업데이트
+      const newSection: SectionDataWithLinks = {
+        id: sectionId,
+        title: data.title,
+        order,
+        viewUrl: data.viewUrl,
+        originalUrl: data.originalUrl,
+        links: data.links || [],
+        isFromTemplate: false,
+      };
+      
+      setSections(prev => ({
+        ...prev,
+        [materialId]: [...(prev[materialId] || []), newSection]
+      }));
+      
+      setAddingSectionFor(null);
+      toast.success('소제목이 추가되었습니다.');
+    } catch (error) {
+      console.error('소제목 추가 오류:', error);
+      toast.error('소제목 추가 중 오류가 발생했습니다.');
+    }
   };
 
   // 유저 대주제 추가
@@ -434,14 +468,119 @@ export default function UploadPage() {
     
     try {
       const order = materials.length;
-      await addLessonMaterial(userData!.userId, newMaterialTitle.trim(), order);
+      const materialId = await addLessonMaterial(userData!.userId, newMaterialTitle.trim(), order);
+      
+      // 로컬 상태 즉시 업데이트
+      const newMaterial: LessonMaterialData = {
+        id: materialId,
+        userId: userData!.userId,
+        title: newMaterialTitle.trim(),
+        order,
+        templateId: undefined,
+      };
+      
+      setMaterials(prev => [...prev, newMaterial]);
+      setSections(prev => ({
+        ...prev,
+        [materialId]: []
+      }));
+      
       setNewMaterialTitle('');
       setShowAddMaterialForm(false);
       toast.success('대주제가 추가되었습니다.');
-      fetchAll();
     } catch (error) {
       console.error('대주제 추가 오류:', error);
       toast.error('대주제 추가 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 소제목 수정
+  const handleEditSection = async (materialId: string, sectionId: string, data: Omit<SectionData, 'id'> & { links?: { label: string; url: string }[] }) => {
+    try {
+      const section = sections[materialId]?.find(s => s.id === sectionId);
+      
+      if (section?.isFromTemplate) {
+        // 템플릿 섹션의 경우
+        if (sectionId.startsWith('template-')) {
+          // 가상 ID인 경우 새로운 유저 섹션 생성
+          const order = section.order;
+          const newSectionId = await addSection(materialId, { ...data, order } as Omit<SectionData, 'id'>);
+          
+          // 로컬 상태에서 템플릿 섹션을 실제 유저 섹션으로 교체
+          const newSection: SectionDataWithLinks = {
+            id: newSectionId,
+            title: data.title,
+            order,
+            viewUrl: data.viewUrl,
+            originalUrl: data.originalUrl,
+            links: data.links || [],
+            isFromTemplate: true,
+            templateSectionId: section.templateSectionId,
+          };
+          
+          setSections(prev => ({
+            ...prev,
+            [materialId]: prev[materialId]?.map(s => 
+              s.id === sectionId ? newSection : s
+            ) || []
+          }));
+        } else {
+          // 실제 유저 섹션이 있는 경우 업데이트
+          await updateSection(materialId, sectionId, data as Omit<SectionData, 'id'>);
+          
+          // 로컬 상태 업데이트
+          setSections(prev => ({
+            ...prev,
+            [materialId]: prev[materialId]?.map(s => 
+              s.id === sectionId ? { ...s, ...data } : s
+            ) || []
+          }));
+        }
+      } else {
+        // 일반 유저 섹션 업데이트
+        await updateSection(materialId, sectionId, data as Omit<SectionData, 'id'>);
+        
+        // 로컬 상태 업데이트
+        setSections(prev => ({
+          ...prev,
+          [materialId]: prev[materialId]?.map(s => 
+            s.id === sectionId ? { ...s, ...data } : s
+          ) || []
+        }));
+      }
+      
+      setEditingSection(null);
+      toast.success('소제목이 수정되었습니다.');
+    } catch (error) {
+      console.error('소제목 수정 오류:', error);
+      toast.error('소제목 수정 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 소제목 삭제
+  const handleDeleteSection = async (materialId: string, sectionId: string) => {
+    // 템플릿에서 온 섹션은 삭제할 수 없음
+    const section = sections[materialId]?.find(s => s.id === sectionId);
+    if (section?.isFromTemplate) {
+      toast.error('관리자가 설정한 소제목은 삭제할 수 없습니다.');
+      return;
+    }
+    
+    if (!confirm('정말 삭제하시겠습니까?')) return;
+    
+    try {
+      await deleteSection(materialId, sectionId);
+      
+      // 로컬 상태에서 섹션 제거
+      setSections(prev => ({
+        ...prev,
+        [materialId]: prev[materialId]?.filter(s => s.id !== sectionId) || []
+      }));
+      
+      toast.success('소제목이 삭제되었습니다.');
+    } catch (error) {
+      console.error('소제목 삭제 오류:', error);
+      toast.error('소제목 삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -460,56 +599,20 @@ export default function UploadPage() {
     
     try {
       await deleteLessonMaterial(materialId);
+      
+      // 로컬 상태에서 대주제와 관련 섹션들 제거
+      setMaterials(prev => prev.filter(m => m.id !== materialId));
+      setSections(prev => {
+        const newSections = { ...prev };
+        delete newSections[materialId];
+        return newSections;
+      });
+      
       toast.success('대주제가 삭제되었습니다.');
-      fetchAll();
     } catch (error) {
       console.error('대주제 삭제 오류:', error);
       toast.error('대주제 삭제 중 오류가 발생했습니다.');
     }
-  };
-
-  // 소제목 수정
-  const handleEditSection = async (materialId: string, sectionId: string, data: Omit<SectionData, 'id'> & { links?: { label: string; url: string }[] }) => {
-    try {
-      const section = sections[materialId]?.find(s => s.id === sectionId);
-      
-      if (section?.isFromTemplate) {
-        // 템플릿 섹션의 경우
-        if (sectionId.startsWith('template-')) {
-          // 가상 ID인 경우 새로운 유저 섹션 생성
-          const order = section.order;
-          await addSection(materialId, { ...data, order } as Omit<SectionData, 'id'>);
-        } else {
-          // 실제 유저 섹션이 있는 경우 업데이트
-          await updateSection(materialId, sectionId, data as Omit<SectionData, 'id'>);
-        }
-      } else {
-        // 일반 유저 섹션 업데이트
-        await updateSection(materialId, sectionId, data as Omit<SectionData, 'id'>);
-      }
-      
-      setEditingSection(null);
-      toast.success('소제목이 수정되었습니다.');
-      fetchAll();
-    } catch (error) {
-      console.error('소제목 수정 오류:', error);
-      toast.error('소제목 수정 중 오류가 발생했습니다.');
-    }
-  };
-
-  // 소제목 삭제
-  const handleDeleteSection = async (materialId: string, sectionId: string) => {
-    // 템플릿에서 온 섹션은 삭제할 수 없음
-    const section = sections[materialId]?.find(s => s.id === sectionId);
-    if (section?.isFromTemplate) {
-      toast.error('관리자가 설정한 소제목은 삭제할 수 없습니다.');
-      return;
-    }
-    
-    if (!confirm('정말 삭제하시겠습니까?')) return;
-    await deleteSection(materialId, sectionId);
-    toast.success('소제목이 삭제되었습니다.');
-    fetchAll();
   };
 
   // 소제목 순서변경
@@ -517,25 +620,38 @@ export default function UploadPage() {
     const { active, over } = event;
     if (!over || String(active.id) === String(over.id)) return;
     
-    // 템플릿 섹션은 이동할 수 없음
-    const activeSection = sections[materialId].find(s => s.id === String(active.id));
-    const overSection = sections[materialId].find(s => s.id === String(over.id));
+    const currentSections = sections[materialId] || [];
+    const userSections = currentSections.filter(s => !s.isFromTemplate);
     
-    if (activeSection?.isFromTemplate || overSection?.isFromTemplate) {
-      toast.error('관리자가 설정한 소제목은 이동할 수 없습니다.');
-      return;
+    const oldIndex = userSections.findIndex(s => s.id === String(active.id));
+    const newIndex = userSections.findIndex(s => s.id === String(over.id));
+    
+    if (oldIndex === -1 || newIndex === -1) return;
+    
+    const newUserSections = arrayMove(userSections, oldIndex, newIndex);
+    
+    // 템플릿 섹션과 유저 섹션을 다시 합치기
+    const templateSections = currentSections.filter(s => s.isFromTemplate);
+    const mergedSections = [...templateSections, ...newUserSections];
+    
+    // 로컬 상태 즉시 업데이트
+    setSections(prev => ({
+      ...prev,
+      [materialId]: mergedSections
+    }));
+    
+    try {
+      await reorderSections(materialId, newUserSections.map(s => s.id));
+      toast.success('소제목 순서가 변경되었습니다.');
+    } catch (error) {
+      console.error('소제목 순서 변경 오류:', error);
+      toast.error('소제목 순서 변경 중 오류가 발생했습니다.');
+      // 오류 발생 시 원래 상태로 복원
+      setSections(prev => ({
+        ...prev,
+        [materialId]: currentSections
+      }));
     }
-    
-    const oldIndex = sections[materialId].findIndex((s: SectionDataWithLinks) => s.id === String(active.id));
-    const newIndex = sections[materialId].findIndex((s: SectionDataWithLinks) => s.id === String(over.id));
-    const newSections = arrayMove(sections[materialId], oldIndex, newIndex);
-    setSections(prev => ({ ...prev, [materialId]: newSections }));
-    
-    // 실제 DB에서는 유저 섹션만 순서 변경
-    const userSections = newSections.filter(s => !s.isFromTemplate);
-    await reorderSections(materialId, userSections.map(s => s.id));
-    toast.success('소제목 순서가 변경되었습니다.');
-    fetchAll();
   };
 
   // 토글 함수
