@@ -108,6 +108,7 @@ export function SignInClient() {
             type="password"
             placeholder="비밀번호를 입력하세요"
             error={errors.password?.message}
+            showPasswordToggle={true}
             {...register('password')}
           />
           
