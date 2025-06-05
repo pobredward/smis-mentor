@@ -68,6 +68,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     // Firebase 인증 상태 변경 감지
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log('Auth state changed:', user ? `로그인됨 (${user.email})` : '로그아웃됨');
       setCurrentUser(user);
       
       if (user) {
@@ -75,9 +76,36 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           const userRecord = await getUserByEmail(user.email || '');
           if (userRecord) {
             setUserData(userRecord as unknown as User);
+            console.log('사용자 데이터 로드 성공:', userRecord.name);
+          } else {
+            console.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
+            // 3초 후 한 번 더 시도
+            setTimeout(async () => {
+              try {
+                const retryUserRecord = await getUserByEmail(user.email || '');
+                if (retryUserRecord) {
+                  setUserData(retryUserRecord as unknown as User);
+                  console.log('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
+                }
+              } catch (retryError) {
+                console.error('사용자 데이터 재시도 실패:', retryError);
+              }
+            }, 3000);
           }
         } catch (error) {
-          console.error('Failed to fetch user data:', error);
+          console.error('사용자 데이터 가져오기 실패:', error);
+          // 네트워크 오류 등의 경우 재시도
+          setTimeout(async () => {
+            try {
+              const retryUserRecord = await getUserByEmail(user.email || '');
+              if (retryUserRecord) {
+                setUserData(retryUserRecord as unknown as User);
+                console.log('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
+              }
+            } catch (retryError) {
+              console.error('사용자 데이터 재시도 실패:', retryError);
+            }
+          }, 3000);
         }
       } else {
         setUserData(null);

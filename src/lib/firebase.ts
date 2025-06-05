@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
@@ -17,6 +17,14 @@ const firebaseConfig = {
 // Firebase 앱 초기화 (서버 사이드에서도 사용 가능하도록)
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
+
+// 브라우저 환경에서만 persistence 설정
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.error('Firebase Auth persistence 설정 실패:', error);
+  });
+}
+
 const db = getFirestore(app);
 const storage = getStorage(app, 'gs://smis-mentor.firebasestorage.app');
 

@@ -39,7 +39,9 @@ export function SignInClient() {
     setIsLoading(true);
     try {
       await signIn(data.email, data.password);
-      toast.success('로그인에 성공했습니다.');
+      toast.success('로그인에 성공했습니다. 로그인 정보가 브라우저에 안전하게 저장되어 다음에도 자동으로 로그인됩니다.', { 
+        duration: 4000 
+      });
       
       // URL에서 redirect 매개변수 확인
       const params = new URLSearchParams(window.location.search);
