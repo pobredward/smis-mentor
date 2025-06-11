@@ -46,18 +46,22 @@ type SectionDataWithLinks = SectionData & {
   templateSectionId?: string; // 템플릿 섹션 ID
 };
 
-function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+function SortableItem({ id, children, disabled = false }: { id: string; children: React.ReactNode; disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ 
+    id,
+    disabled 
+  });
+  
   return (
     <div
       ref={setNodeRef}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
+        opacity: isDragging ? 0.5 : 1,
       }}
-      {...attributes}
-      {...listeners}
-      className="cursor-move"
+      {...(disabled ? {} : { ...attributes, ...listeners })}
+      className={disabled ? "cursor-default" : "cursor-move"}
     >
       {children}
     </div>
@@ -313,6 +317,7 @@ export default function UploadPage() {
         
         // 유저 sections에 템플릿 정보 병합
         const mergedSections: SectionDataWithLinks[] = [];
+        const processedUserSectionIds = new Set<string>();
         
         // 먼저 템플릿 sections를 기반으로 유저 sections와 매칭
         if (template?.sections) {
@@ -331,6 +336,7 @@ export default function UploadPage() {
                 title: templateSection.title, // 템플릿 제목 강제 적용
                 links: templateSection.links || [], // 템플릿 링크 유지
               });
+              processedUserSectionIds.add(userSection.id);
             } else {
               // 유저 section이 없으면 템플릿 section만 표시 (편집 가능)
               mergedSections.push({
@@ -347,10 +353,9 @@ export default function UploadPage() {
           }
         }
         
-        // 템플릿 sections 개수를 넘어서는 유저 sections만 추가 (템플릿과 겹치지 않는 것들)
-        const templateSectionCount = template?.sections?.length || 0;
+        // 템플릿과 매칭되지 않은 모든 유저 sections 추가 (순서에 관계없이)
         const additionalUserSections = matSections
-          .filter(s => s.order >= templateSectionCount)
+          .filter(s => !processedUserSectionIds.has(s.id))
           .map(section => ({
             ...section,
             isFromTemplate: false,
@@ -621,6 +626,7 @@ export default function UploadPage() {
     if (!over || String(active.id) === String(over.id)) return;
     
     const currentSections = sections[materialId] || [];
+    const templateSections = currentSections.filter(s => s.isFromTemplate);
     const userSections = currentSections.filter(s => !s.isFromTemplate);
     
     const oldIndex = userSections.findIndex(s => s.id === String(active.id));
@@ -628,19 +634,20 @@ export default function UploadPage() {
     
     if (oldIndex === -1 || newIndex === -1) return;
     
+    // 사용자 소제목 배열에서만 순서 변경
     const newUserSections = arrayMove(userSections, oldIndex, newIndex);
     
-    // 템플릿 섹션과 유저 섹션을 다시 합치기
-    const templateSections = currentSections.filter(s => s.isFromTemplate);
-    const mergedSections = [...templateSections, ...newUserSections];
+    // 템플릿 소제목과 재결합
+    const newSections = [...templateSections, ...newUserSections];
     
     // 로컬 상태 즉시 업데이트
     setSections(prev => ({
       ...prev,
-      [materialId]: mergedSections
+      [materialId]: newSections
     }));
     
     try {
+      // 사용자 소제목만 서버에 순서 업데이트
       await reorderSections(materialId, newUserSections.map(s => s.id));
       toast.success('소제목 순서가 변경되었습니다.');
     } catch (error) {
@@ -939,7 +946,7 @@ export default function UploadPage() {
                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                         </svg>
                                                       </button>
-                                                      <div className="p-1 text-gray-300" title="관리자가 설정한 소제목입니다">
+                                                      <div className="p-1 text-gray-300" title="관리자가 설정한 소제목입니다 (순서 변경 불가)">
                                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                         </svg>
