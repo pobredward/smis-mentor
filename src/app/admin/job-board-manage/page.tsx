@@ -53,7 +53,21 @@ export default function JobBoardManage() {
         
         // 업무 코드 로드
         const jobCodeData = await getAllJobCodes();
-        setJobCodes(jobCodeData);
+        
+        // 기수별 내림차순 정렬
+        const sortedJobCodes = jobCodeData.sort((a, b) => {
+          // generation이 문자열인 경우 숫자로 변환하여 비교
+          const generationA = typeof a.generation === 'string' 
+            ? parseInt(a.generation.replace(/[^0-9]/g, '')) || 0
+            : Number(a.generation) || 0;
+          const generationB = typeof b.generation === 'string' 
+            ? parseInt(b.generation.replace(/[^0-9]/g, '')) || 0
+            : Number(b.generation) || 0;
+          
+          return generationB - generationA; // 내림차순 (높은 기수부터)
+        });
+        
+        setJobCodes(sortedJobCodes);
         
         // 모든 공고 로드
         const boards = await getAllJobBoards();
@@ -460,6 +474,7 @@ export default function JobBoardManage() {
                   공고 상태
                 </label>
                 <select
+                  name="status"
                   value={formData.status}
                   onChange={(e) => handleChange(e)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -477,6 +492,7 @@ export default function JobBoardManage() {
                 </label>
                 <input
                   type="text"
+                  name="title"
                   value={formData.title}
                   onChange={(e) => handleChange(e)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -491,6 +507,7 @@ export default function JobBoardManage() {
                   공고 내용
                 </label>
                 <textarea
+                  name="description"
                   value={formData.description}
                   onChange={(e) => handleChange(e)}
                   rows={6}
