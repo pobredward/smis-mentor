@@ -26,6 +26,7 @@ export default function JobBoardManage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   
   // 공고 생성/수정 폼 상태
   const [selectedJobBoard, setSelectedJobBoard] = useState<JobBoardWithApplications | null>(null);
@@ -46,90 +47,135 @@ export default function JobBoardManage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
+  // 마운트 상태 관리
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
+    setIsMounted(true);
+    return () => {
+      setIsMounted(false);
+      // 상태 초기화
+      setJobBoards([]);
+      setJobCodes([]);
+      setSelectedJobBoard(null);
+      setIsCreating(false);
+      setIsSubmitting(false);
+    };
+  }, []);
+
+  // 안전한 상태 업데이트 함수
+  const safeSetJobBoards = (value: JobBoardWithApplications[]) => {
+    if (isMounted) setJobBoards(value);
+  };
+  const safeSetJobCodes = (value: JobCodeWithId[]) => {
+    if (isMounted) setJobCodes(value);
+  };
+  const safeSetIsLoading = (value: boolean) => {
+    if (isMounted) setIsLoading(value);
+  };
+  const safeSetIsSubmitting = (value: boolean) => {
+    if (isMounted) setIsSubmitting(value);
+  };
+  const safeSetSelectedJobBoard = (value: JobBoardWithApplications | null) => {
+    if (isMounted) setSelectedJobBoard(value);
+  };
+  const safeSetIsCreating = (value: boolean) => {
+    if (isMounted) setIsCreating(value);
+  };
+  const safeSetFormData = (value: typeof formData) => {
+    if (isMounted) setFormData(value);
+  };
+  
+  // 데이터 로드 함수
+  const loadData = async () => {
+    try {
+      safeSetIsLoading(true);
+      
+      // 업무 코드 로드
+      const jobCodeData = await getAllJobCodes();
+      
+      // 기수별 내림차순 정렬
+      const sortedJobCodes = jobCodeData.sort((a, b) => {
+        // generation이 문자열인 경우 숫자로 변환하여 비교
+        const generationA = typeof a.generation === 'string' 
+          ? parseInt(a.generation.replace(/[^0-9]/g, '')) || 0
+          : Number(a.generation) || 0;
+        const generationB = typeof b.generation === 'string' 
+          ? parseInt(b.generation.replace(/[^0-9]/g, '')) || 0
+          : Number(b.generation) || 0;
         
-        // 업무 코드 로드
-        const jobCodeData = await getAllJobCodes();
-        
-        // 기수별 내림차순 정렬
-        const sortedJobCodes = jobCodeData.sort((a, b) => {
-          // generation이 문자열인 경우 숫자로 변환하여 비교
-          const generationA = typeof a.generation === 'string' 
-            ? parseInt(a.generation.replace(/[^0-9]/g, '')) || 0
-            : Number(a.generation) || 0;
-          const generationB = typeof b.generation === 'string' 
-            ? parseInt(b.generation.replace(/[^0-9]/g, '')) || 0
-            : Number(b.generation) || 0;
-          
-          return generationB - generationA; // 내림차순 (높은 기수부터)
-        });
-        
-        setJobCodes(sortedJobCodes);
-        
-        // 모든 공고 로드
-        const boards = await getAllJobBoards();
-        
-        // 각 공고의 지원 수 가져오기
-        const jobBoardsWithApplications = await Promise.all(
-          boards.map(async (board) => {
-            try {
-              const applications = await getApplicationsByJobBoardId(board.id);
-              return {
-                ...board,
-                applications,
-                applicationsCount: applications.length
-              };
-            } catch (error) {
-              console.error(`지원 정보 로드 오류 (${board.id}):`, error);
-              return {
-                ...board,
-                applications: [],
-                applicationsCount: 0
-              };
-            }
-          })
-        );
-        
-        // 최신순 정렬
-        const sortedBoards = jobBoardsWithApplications.sort((a, b) => 
-          b.createdAt.seconds - a.createdAt.seconds
-        );
-        
-        setJobBoards(sortedBoards);
-        
-        // URL 파라미터 처리
-        const editId = searchParams.get('edit');
-        const closeId = searchParams.get('close');
-        const activateId = searchParams.get('activate');
-        
-        if (editId) {
-          const boardToEdit = sortedBoards.find(board => board.id === editId);
-          if (boardToEdit) {
-            handleEditJobBoard(boardToEdit);
+        return generationB - generationA; // 내림차순 (높은 기수부터)
+      });
+      
+      safeSetJobCodes(sortedJobCodes);
+      
+      // 모든 공고 로드
+      const boards = await getAllJobBoards();
+      
+      // 각 공고의 지원 수 가져오기
+      const jobBoardsWithApplications = await Promise.all(
+        boards.map(async (board) => {
+          try {
+            const applications = await getApplicationsByJobBoardId(board.id);
+            return {
+              ...board,
+              applications,
+              applicationsCount: applications.length
+            };
+          } catch (error) {
+            console.error(`지원 정보 로드 오류 (${board.id}):`, error);
+            return {
+              ...board,
+              applications: [],
+              applicationsCount: 0
+            };
           }
-        } else if (closeId) {
-          const boardToClose = sortedBoards.find(board => board.id === closeId);
-          if (boardToClose && boardToClose.status === 'active') {
-            handleCloseJobBoard(boardToClose);
-          }
-        } else if (activateId) {
-          const boardToActivate = sortedBoards.find(board => board.id === activateId);
-          if (boardToActivate && boardToActivate.status === 'closed') {
-            handleActivateJobBoard(boardToActivate);
-          }
+        })
+      );
+      
+      // 최신순 정렬
+      const sortedBoards = jobBoardsWithApplications.sort((a, b) => 
+        b.createdAt.seconds - a.createdAt.seconds
+      );
+      
+      safeSetJobBoards(sortedBoards);
+      
+      return sortedBoards;
+    } catch (error) {
+      console.error('데이터 로드 오류:', error);
+      toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
+      return [];
+    } finally {
+      safeSetIsLoading(false);
+    }
+  };
+  
+  useEffect(() => {
+    const handleUrlParams = async () => {
+      const sortedBoards = await loadData();
+      
+      // URL 파라미터 처리
+      const editId = searchParams.get('edit');
+      const closeId = searchParams.get('close');
+      const activateId = searchParams.get('activate');
+      
+      if (editId) {
+        const boardToEdit = sortedBoards.find(board => board.id === editId);
+        if (boardToEdit) {
+          handleEditJobBoard(boardToEdit);
         }
-      } catch (error) {
-        console.error('데이터 로드 오류:', error);
-        toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
-      } finally {
-        setIsLoading(false);
+      } else if (closeId) {
+        const boardToClose = sortedBoards.find(board => board.id === closeId);
+        if (boardToClose && boardToClose.status === 'active') {
+          handleCloseJobBoard(boardToClose);
+        }
+      } else if (activateId) {
+        const boardToActivate = sortedBoards.find(board => board.id === activateId);
+        if (boardToActivate && boardToActivate.status === 'closed') {
+          handleActivateJobBoard(boardToActivate);
+        }
       }
     };
     
-    loadData();
+    handleUrlParams();
   }, [searchParams]);
   
   // 날짜 포맷팅 함수
@@ -146,8 +192,8 @@ export default function JobBoardManage() {
   // 공고 수정 핸들러
   const handleEditJobBoard = (jobBoard: JobBoardWithApplications) => {
     console.log('Editing job board:', jobBoard);
-    setSelectedJobBoard(jobBoard);
-    setIsCreating(false);
+    safeSetSelectedJobBoard(jobBoard);
+    safeSetIsCreating(false);
     
     // interviewDates 안전하게 처리
     const safeInterviewDates = Array.isArray(jobBoard.interviewDates) && jobBoard.interviewDates.length > 0
@@ -161,7 +207,7 @@ export default function JobBoardManage() {
         })
       : [''];
     
-    setFormData({
+    safeSetFormData({
       title: jobBoard.title || '',
       description: jobBoard.description || '',
       refJobCodeId: jobBoard.refJobCodeId || '',
@@ -180,17 +226,19 @@ export default function JobBoardManage() {
   const handleCloseJobBoard = async (jobBoard: JobBoardWithApplications) => {
     if (window.confirm('이 공고를 마감하시겠습니까?')) {
       try {
-        setIsSubmitting(true);
+        safeSetIsSubmitting(true);
         await updateJobBoard(jobBoard.id, { status: 'closed' });
         
         // 상태 업데이트
-        setJobBoards(prevBoards => 
-          prevBoards.map(board => 
-            board.id === jobBoard.id 
-              ? { ...board, status: 'closed' } 
-              : board
-          )
-        );
+        if (isMounted) {
+          setJobBoards(prevBoards => 
+            prevBoards.map(board => 
+              board.id === jobBoard.id 
+                ? { ...board, status: 'closed' } 
+                : board
+            )
+          );
+        }
         
         toast.success('공고가 마감되었습니다.');
         
@@ -200,7 +248,7 @@ export default function JobBoardManage() {
         console.error('공고 마감 오류:', error);
         toast.error('공고 마감 중 오류가 발생했습니다.');
       } finally {
-        setIsSubmitting(false);
+        safeSetIsSubmitting(false);
       }
     }
   };
@@ -209,17 +257,19 @@ export default function JobBoardManage() {
   const handleActivateJobBoard = async (jobBoard: JobBoardWithApplications) => {
     if (window.confirm('이 공고를 다시 활성화하시겠습니까?')) {
       try {
-        setIsSubmitting(true);
+        safeSetIsSubmitting(true);
         await updateJobBoard(jobBoard.id, { status: 'active' });
         
         // 상태 업데이트
-        setJobBoards(prevBoards => 
-          prevBoards.map(board => 
-            board.id === jobBoard.id 
-              ? { ...board, status: 'active' } 
-              : board
-          )
-        );
+        if (isMounted) {
+          setJobBoards(prevBoards => 
+            prevBoards.map(board => 
+              board.id === jobBoard.id 
+                ? { ...board, status: 'active' } 
+                : board
+            )
+          );
+        }
         
         toast.success('공고가 활성화되었습니다.');
         
@@ -229,22 +279,24 @@ export default function JobBoardManage() {
         console.error('공고 활성화 오류:', error);
         toast.error('공고 활성화 중 오류가 발생했습니다.');
       } finally {
-        setIsSubmitting(false);
+        safeSetIsSubmitting(false);
       }
     }
   };
   
   // 면접 날짜 추가
   const addInterviewDate = () => {
-    setFormData(prev => ({
-      ...prev,
-      interviewDates: [...prev.interviewDates, '']
-    }));
+    if (isMounted) {
+      setFormData(prev => ({
+        ...prev,
+        interviewDates: [...prev.interviewDates, '']
+      }));
+    }
   };
   
   // 면접 날짜 제거
   const removeInterviewDate = (index: number) => {
-    if (formData.interviewDates.length > 1) {
+    if (formData.interviewDates.length > 1 && isMounted) {
       setFormData(prev => ({
         ...prev,
         interviewDates: prev.interviewDates.filter((_, i) => i !== index)
@@ -255,19 +307,25 @@ export default function JobBoardManage() {
   // 폼 필드 업데이트
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (isMounted) {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   // korea 필드 업데이트
   const handleKoreaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFormData(prev => ({ ...prev, korea: e.target.value === 'true' }));
+    if (isMounted) {
+      setFormData(prev => ({ ...prev, korea: e.target.value === 'true' }));
+    }
   };
   
-  // 면접 날짜 업데이트
+  // 면접 날짜 변경
   const handleInterviewDateChange = (index: number, value: string) => {
-    const newDates = [...formData.interviewDates];
-    newDates[index] = value;
-    setFormData(prev => ({ ...prev, interviewDates: newDates }));
+    if (isMounted) {
+      const newDates = [...formData.interviewDates];
+      newDates[index] = value;
+      setFormData(prev => ({ ...prev, interviewDates: newDates }));
+    }
   };
   
   // 폼 제출 핸들러
@@ -320,7 +378,7 @@ export default function JobBoardManage() {
     }
     
     try {
-      setIsSubmitting(true);
+      safeSetIsSubmitting(true);
       
       if (isCreating) {
         // 새 공고 생성
@@ -362,9 +420,10 @@ export default function JobBoardManage() {
         toast.success('공고가 성공적으로 수정되었습니다.');
       }
       
-      // 폼 리셋 및 페이지 새로고침
-      setSelectedJobBoard(null);
-      setFormData({
+      // 폼 리셋 및 데이터 새로고침
+      safeSetSelectedJobBoard(null);
+      safeSetIsCreating(false);
+      safeSetFormData({
         title: '',
         description: '',
         refJobCodeId: '',
@@ -378,24 +437,26 @@ export default function JobBoardManage() {
         status: 'active'
       });
       
-      // URL 파라미터 제거하고 페이지 새로고침
+      // URL 파라미터 제거
       router.replace('/admin/job-board-manage');
       
-      // 페이지 데이터 새로고침
-      window.location.reload();
+      // 데이터 안전하게 다시 로드
+      setTimeout(() => {
+        loadData();
+      }, 100);
     } catch (error) {
       console.error('공고 저장 오류:', error);
       toast.error('공고 저장 중 오류가 발생했습니다.');
     } finally {
-      setIsSubmitting(false);
+      safeSetIsSubmitting(false);
     }
   };
   
   // 취소 핸들러
   const handleCancel = () => {
-    setSelectedJobBoard(null);
-    setIsCreating(false);
-    setFormData({
+    safeSetSelectedJobBoard(null);
+    safeSetIsCreating(false);
+    safeSetFormData({
       title: '',
       description: '',
       refJobCodeId: '',
@@ -444,9 +505,9 @@ export default function JobBoardManage() {
           <Button 
             variant="primary" 
             onClick={() => {
-              setIsCreating(true);
-              setSelectedJobBoard(null);
-              setFormData({
+              safeSetIsCreating(true);
+              safeSetSelectedJobBoard(null);
+              safeSetFormData({
                 title: '',
                 description: '',
                 refJobCodeId: '',

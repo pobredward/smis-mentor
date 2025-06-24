@@ -49,119 +49,148 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isProfileErrorModalOpen, setIsProfileErrorModalOpen] = useState(false);
   const [profileErrorType, setProfileErrorType] = useState<'image' | 'selfIntro' | 'jobMotivation' | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   const { userData } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // 마운트 상태 관리
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-        const board = await getJobBoardById(id);
-        
-        if (!board) {
-          toast.error('존재하지 않는 공고입니다.');
-          router.push('/job-board');
-          return;
-        }
-        
-        if (board.status !== 'active' && userData?.role !== 'admin') {
-          toast.error('마감된 공고입니다.');
-          router.push('/job-board');
-          return;
-        }
-        
-        setJobBoard(board);
-        setEditedTitle(board.title);
-        setEditedStatus(board.status);
-        setEditedDescription(board.description);
-        setEditedJobCodeId(board.refJobCodeId);
-        
-        // 면접 기본정보 초기화
-        setEditedInterviewBaseLink(board.interviewBaseLink || '');
-        setEditedInterviewBaseDuration(board.interviewBaseDuration || 30);
-        setEditedInterviewBaseNotes(board.interviewBaseNotes || '');
-
-        // jobCode 정보 로드
-        if (board.refJobCodeId) {
-          const jobCodeData = await getJobCodeById(board.refJobCodeId);
-          setJobCode(jobCodeData);
-          if (jobCodeData) {
-            setSelectedGeneration(jobCodeData.generation);
-          }
-        }
-
-        // 모든 업무 코드 로드
-        const codes = await getAllJobCodes();
-        setJobCodes(codes);
-        
-        // 현재 기수의 업무 코드 필터링
-        if (jobCode) {
-          const filtered = codes.filter(code => code.generation === jobCode.generation);
-          setFilteredJobCodes(filtered);
-        }
-
-        // interviewDates 설정
-        if (board.interviewDates && Array.isArray(board.interviewDates)) {
-          const formattedDates = board.interviewDates
-            .filter(date => date && date.start && date.end)
-            .map(date => {
-              try {
-                const startDate = date.start instanceof Timestamp ? 
-                  date.start.toDate() : 
-                  new Date(date.start);
-                
-                const endDate = date.end instanceof Timestamp ? 
-                  date.end.toDate() : 
-                  new Date(date.end);
-
-                // 날짜 및 시간을 로컬 시간대 기준으로 포맷팅 (YYYY-MM-DDTHH:MM 형식)
-                const padZero = (num: number) => String(num).padStart(2, '0');
-                
-                const startYear = startDate.getFullYear();
-                const startMonth = padZero(startDate.getMonth() + 1);
-                const startDay = padZero(startDate.getDate());
-                const startHours = padZero(startDate.getHours());
-                const startMinutes = padZero(startDate.getMinutes());
-                
-                const endYear = endDate.getFullYear();
-                const endMonth = padZero(endDate.getMonth() + 1);
-                const endDay = padZero(endDate.getDate());
-                const endHours = padZero(endDate.getHours());
-                const endMinutes = padZero(endDate.getMinutes());
-
-                return {
-                  start: `${startYear}-${startMonth}-${startDay}T${startHours}:${startMinutes}`,
-                  end: `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`
-                };
-              } catch (error) {
-                console.error('날짜 변환 오류:', error);
-                return null;
-              }
-            })
-            .filter(date => date !== null);
-
-          setEditedInterviewDates(formattedDates);
-        } else {
-          setEditedInterviewDates([]);
-        }
-
-        // URL에 edit=true가 있으면 수정 모드로 전환
-        if (searchParams.get('edit') === 'true' && userData?.role === 'admin') {
-          setIsEditing(true);
-        }
-      } catch (error) {
-        console.error('공고 정보 로드 오류:', error);
-        toast.error('공고 정보를 불러오는 중 오류가 발생했습니다.');
-        router.push('/job-board');
-      } finally {
-        setIsLoading(false);
-      }
+    setIsMounted(true);
+    return () => {
+      setIsMounted(false);
+      // 상태 초기화
+      setJobBoard(null);
+      setJobCode(null);
+      setIsEditing(false);
+      setIsSubmitting(false);
     };
+  }, []);
 
-    loadData();
-  }, [id, router, searchParams, userData?.role]);
+  // 안전한 상태 업데이트 함수들
+  const safeSetJobBoard = (value: JobBoardWithId | null) => {
+    if (isMounted) setJobBoard(value);
+  };
+  const safeSetJobCode = (value: JobCodeWithId | null) => {
+    if (isMounted) setJobCode(value);
+  };
+  const safeSetIsLoading = (value: boolean) => {
+    if (isMounted) setIsLoading(value);
+  };
+  const safeSetIsEditing = (value: boolean) => {
+    if (isMounted) setIsEditing(value);
+  };
+  const safeSetJobCodes = (value: JobCodeWithId[]) => {
+    if (isMounted) setJobCodes(value);
+  };
+  const safeSetSelectedGeneration = (value: string) => {
+    if (isMounted) setSelectedGeneration(value);
+  };
+  const safeSetFilteredJobCodes = (value: JobCodeWithId[]) => {
+    if (isMounted) setFilteredJobCodes(value);
+  };
+  const safeSetEditedTitle = (value: string) => {
+    if (isMounted) setEditedTitle(value);
+  };
+  const safeSetEditedDescription = (value: string) => {
+    if (isMounted) setEditedDescription(value);
+  };
+  const safeSetEditedStatus = (value: 'active' | 'closed') => {
+    if (isMounted) setEditedStatus(value);
+  };
+  const safeSetEditedInterviewDates = (value: { start: string; end: string }[]) => {
+    if (isMounted) setEditedInterviewDates(value);
+  };
+  const safeSetEditedInterviewBaseDuration = (value: number) => {
+    if (isMounted) setEditedInterviewBaseDuration(value);
+  };
+  const safeSetEditedInterviewBaseLink = (value: string) => {
+    if (isMounted) setEditedInterviewBaseLink(value);
+  };
+  const safeSetEditedInterviewBaseNotes = (value: string) => {
+    if (isMounted) setEditedInterviewBaseNotes(value);
+  };
+  const safeSetEditedJobCodeId = (value: string) => {
+    if (isMounted) setEditedJobCodeId(value);
+  };
+
+  // 데이터 로드 함수
+  const loadJobBoardData = async () => {
+    if (!isMounted) return;
+    
+    try {
+      safeSetIsLoading(true);
+      const jobBoardData = await getJobBoardById(id);
+      
+      if (!jobBoardData) {
+        router.push('/job-board');
+        return;
+      }
+
+      safeSetJobBoard(jobBoardData);
+
+      // 업무 코드 정보 조회
+      if (jobBoardData.refJobCodeId) {
+        const jobCodeData = await getJobCodeById(jobBoardData.refJobCodeId);
+        safeSetJobCode(jobCodeData);
+      }
+
+      // 모든 업무 코드 조회 (수정 모드용)
+      const allJobCodes = await getAllJobCodes();
+      safeSetJobCodes(allJobCodes);
+
+      // 기수별로 그룹화
+      const generations = [...new Set(allJobCodes.map(code => code.generation))];
+      if (generations.length > 0) {
+        safeSetSelectedGeneration(generations[0]);
+        safeSetFilteredJobCodes(allJobCodes.filter(code => code.generation === generations[0]));
+      }
+
+      // 수정 폼 초기값 설정
+      safeSetEditedTitle(jobBoardData.title);
+      safeSetEditedDescription(jobBoardData.description);
+      safeSetEditedStatus(jobBoardData.status);
+      safeSetEditedInterviewDates( 
+        jobBoardData.interviewDates.map(date => ({
+          start: format(date.start.toDate(), 'yyyy-MM-ddTHH:mm'),
+          end: format(date.end.toDate(), 'yyyy-MM-ddTHH:mm')
+        }))
+      );
+      safeSetEditedInterviewBaseDuration(jobBoardData.interviewBaseDuration || 30);
+      safeSetEditedInterviewBaseLink(jobBoardData.interviewBaseLink || '');
+      safeSetEditedInterviewBaseNotes(jobBoardData.interviewBaseNotes || '');
+      safeSetEditedJobCodeId(jobBoardData.refJobCodeId || '');
+
+      // URL에 edit=true가 있으면 수정 모드로 전환
+      if (searchParams.get('edit') === 'true' && userData?.role === 'admin') {
+        safeSetIsEditing(true);
+      }
+    } catch (error) {
+      console.error('공고 정보 로드 오류:', error);
+      toast.error('공고 정보를 불러오는 중 오류가 발생했습니다.');
+      router.push('/job-board');
+    } finally {
+      safeSetIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id && isMounted) {
+      loadJobBoardData();
+    }
+  }, [id, isMounted]); // isMounted 의존성 추가
+
+  // URL 파라미터 변경 감지용 별도 useEffect
+  useEffect(() => {
+    if (!isMounted) return;
+    
+    if (searchParams.get('edit') === 'true' && userData?.role === 'admin') {
+      safeSetIsEditing(true);
+    } else if (searchParams.get('edit') === null) {
+      safeSetIsEditing(false);
+    }
+  }, [searchParams, userData?.role, isMounted]);
 
   // 동적 메타데이터 설정을 위한 useEffect 추가
   useEffect(() => {

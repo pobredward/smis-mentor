@@ -1,6 +1,7 @@
 'use client';
 
 import { useEditor, EditorContent } from '@tiptap/react';
+import { useEffect, useState } from 'react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
@@ -10,6 +11,7 @@ import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import { uploadImage } from '@/lib/firebaseService';
 import toast from 'react-hot-toast';
+import dynamic from 'next/dynamic';
 
 interface RichTextEditorProps {
   content: string;
@@ -18,6 +20,8 @@ interface RichTextEditorProps {
 }
 
 const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps) => {
+  const [isMounted, setIsMounted] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -45,10 +49,13 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
       }),
     ],
     content,
+    immediatelyRender: false,
     onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
-      const processedHtml = html.replace(/<p><br><\/p>\s*<p><br><\/p>/g, '<p><br></p><p><br></p>');
-      onChange(processedHtml);
+      if (isMounted) {
+        const html = editor.getHTML();
+        const processedHtml = html.replace(/<p><br><\/p>\s*<p><br><\/p>/g, '<p><br></p><p><br></p>');
+        onChange(processedHtml);
+      }
     },
     editorProps: {
       attributes: {
@@ -57,8 +64,44 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
     },
   });
 
-  if (!editor) {
-    return null;
+  useEffect(() => {
+    setIsMounted(true);
+    return () => {
+      setIsMounted(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (editor && isMounted && content !== editor.getHTML()) {
+      editor.commands.setContent(content, false);
+    }
+  }, [content, editor, isMounted]);
+
+  useEffect(() => {
+    return () => {
+      if (editor && !editor.isDestroyed) {
+        try {
+          editor.destroy();
+        } catch (error) {
+          console.warn('Editor destruction error:', error);
+        }
+      }
+    };
+  }, [editor]);
+
+  if (!isMounted || !editor) {
+    return (
+      <div className="border rounded-lg overflow-hidden">
+        <div className="border-b bg-gray-50 p-2 h-12 animate-pulse">
+          <div className="h-8 bg-gray-200 rounded"></div>
+        </div>
+        <div className="p-4 animate-pulse">
+          <div className="h-4 bg-gray-200 rounded mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,11 +115,23 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
 
     try {
       const imageUrl = await uploadImage(file);
-      editor.chain().focus().setImage({ src: imageUrl }).run();
-      toast.success('이미지가 업로드되었습니다.');
+      if (editor && !editor.isDestroyed && isMounted) {
+        editor.chain().focus().setImage({ src: imageUrl }).run();
+        toast.success('이미지가 업로드되었습니다.');
+      }
     } catch (err) {
       console.error('이미지 업로드 오류:', err);
       toast.error('이미지 업로드에 실패했습니다.');
+    }
+  };
+
+  const handleButtonClick = (callback: () => void) => {
+    if (editor && !editor.isDestroyed && isMounted) {
+      try {
+        callback();
+      } catch (error) {
+        console.warn('Editor command error:', error);
+      }
     }
   };
 
@@ -84,66 +139,74 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
     <div className="border rounded-lg overflow-hidden">
       <div className="border-b bg-gray-50 p-2 flex flex-wrap gap-1">
         <button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          onClick={() => handleButtonClick(() => editor.chain().focus().toggleHeading({ level: 1 }).run())}
           className={`p-2 rounded ${editor.isActive('heading', { level: 1 }) ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="제목 1"
+          type="button"
         >
           <span className="font-bold">H1</span>
         </button>
         <button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          onClick={() => handleButtonClick(() => editor.chain().focus().toggleHeading({ level: 2 }).run())}
           className={`p-2 rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="제목 2"
+          type="button"
         >
           <span className="font-bold">H2</span>
         </button>
         <button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          onClick={() => handleButtonClick(() => editor.chain().focus().toggleHeading({ level: 3 }).run())}
           className={`p-2 rounded ${editor.isActive('heading', { level: 3 }) ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="제목 3"
+          type="button"
         >
           <span className="font-bold">H3</span>
         </button>
 
         <button
-          onClick={() => editor.chain().focus().toggleBold().run()}
+          onClick={() => handleButtonClick(() => editor.chain().focus().toggleBold().run())}
           className={`p-2 rounded ${editor.isActive('bold') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="굵게"
+          type="button"
         >
           <span className="font-bold">B</span>
         </button>
         <button
-          onClick={() => editor.chain().focus().toggleItalic().run()}
+          onClick={() => handleButtonClick(() => editor.chain().focus().toggleItalic().run())}
           className={`p-2 rounded ${editor.isActive('italic') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="기울임"
+          type="button"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path d="M10 4.5l1.5-.5-3 12-1.5.5 3-12z" />
           </svg>
         </button>
         <button
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          onClick={() => handleButtonClick(() => editor.chain().focus().toggleUnderline().run())}
           className={`p-2 rounded ${editor.isActive('underline') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="밑줄"
+          type="button"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M7 3a1 1 0 011 1v8a3 3 0 006 0V4a1 1 0 112 0v8a5 5 0 01-10 0V4a1 1 0 011-1z" />
+            <path fillRule="evenodd" d="M7 3a1 1 0 011 1v8a3 3 0 006 0V4a1 1 0 112 0v8a5 5 0 01-10 0V4a1 1 0 011-1z" />
             <path fillRule="evenodd" d="M3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
           </svg>
         </button>
         <button
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          onClick={() => handleButtonClick(() => editor.chain().focus().toggleBulletList().run())}
           className={`p-2 rounded ${editor.isActive('bulletList') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="글머리 기호"
+          type="button"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
             <path d="M8 4h13v2H8V4zM4.5 6.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm0 7a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm0 6.9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 11h13v2H8v-2zm0 7h13v2H8v-2z"/>
           </svg>
         </button>
         <button
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          onClick={() => handleButtonClick(() => editor.chain().focus().toggleOrderedList().run())}
           className={`p-2 rounded ${editor.isActive('orderedList') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="번호 매기기"
+          type="button"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
             <path d="M3 4h2v2H3V4zm0 7h2v2H3v-2zm0 7h2v2H3v-2zm4-14h14v2H7V4zm0 7h14v2H7v-2zm0 7h14v2H7v-2z"/>
@@ -152,12 +215,13 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
         <button
           onClick={() => {
             const url = window.prompt('링크를 입력하세요:');
-            if (url) {
+            if (url && editor && !editor.isDestroyed) {
               editor.chain().focus().setLink({ href: url }).run();
             }
           }}
           className={`p-2 rounded ${editor.isActive('link') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
           title="링크"
+          type="button"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
@@ -177,7 +241,9 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
         <input
           type="color"
           onInput={(event) => {
-            editor.chain().focus().setColor((event.target as HTMLInputElement).value).run();
+            if (editor && !editor.isDestroyed && isMounted) {
+              editor.chain().focus().setColor((event.target as HTMLInputElement).value).run();
+            }
           }}
           className="w-8 h-8 p-0 rounded cursor-pointer"
           title="텍스트 색상"
@@ -195,4 +261,27 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
   );
 };
 
-export default RichTextEditor; 
+// 내부 에디터 컴포넌트
+const InternalRichTextEditor = RichTextEditor;
+
+// 동적 import를 위한 래퍼 컴포넌트
+const DynamicRichTextEditor = dynamic(
+  () => Promise.resolve(InternalRichTextEditor),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="border rounded-lg overflow-hidden">
+        <div className="border-b bg-gray-50 p-2 h-12 animate-pulse">
+          <div className="h-8 bg-gray-200 rounded"></div>
+        </div>
+        <div className="p-4 animate-pulse">
+          <div className="h-4 bg-gray-200 rounded mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    )
+  }
+);
+
+export default DynamicRichTextEditor; 
