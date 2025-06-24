@@ -13,7 +13,7 @@ export default function Footer() {
               <li className="text-sm text-gray-500">대표: 임대환</li>
               <li className="text-sm text-gray-500">법인사업자 등록번호: 427-88-03423</li>
               <li className="text-sm text-gray-500">주소: 경기 성남시 분당구 장미로 78 SMIS 라운지&교육센터 3층</li>
-              <li className="text-sm text-gray-500">채용 문의: 신선웅 (010-6711-7933)</li>
+              <li className="text-sm text-gray-500">채용 문의: 신선웅 (010-7656-7933)</li>
             </ul>
           </div>
           
