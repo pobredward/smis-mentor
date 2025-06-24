@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -62,14 +62,11 @@ export const metadata: Metadata = {
       { rel: 'manifest', url: '/manifest.json' },
     ]
   },
+  themeColor: '#ffffff',
   appleWebApp: {
     title: 'SMIS 멘토 채용 플랫폼',
     statusBarStyle: 'default',
   },
-};
-
-export const viewport: Viewport = {
-  themeColor: '#ffffff',
 };
 
 export default function RootLayout({
