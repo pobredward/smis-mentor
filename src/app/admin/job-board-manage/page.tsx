@@ -149,18 +149,30 @@ export default function JobBoardManage() {
     setSelectedJobBoard(jobBoard);
     setIsCreating(false);
     
+    // interviewDates 안전하게 처리
+    const safeInterviewDates = Array.isArray(jobBoard.interviewDates) && jobBoard.interviewDates.length > 0
+      ? jobBoard.interviewDates.map(date => {
+          try {
+            return formatDate(date.start);
+          } catch (error) {
+            console.error('Interview date formatting error:', error);
+            return '';
+          }
+        })
+      : [''];
+    
     setFormData({
-      title: jobBoard.title,
-      description: jobBoard.description,
-      refJobCodeId: jobBoard.refJobCodeId,
-      generation: jobBoard.generation,
-      jobCode: jobBoard.jobCode,
-      korea: jobBoard.korea,
-      interviewDates: jobBoard.interviewDates.map(date => formatDate(date.start)),
+      title: jobBoard.title || '',
+      description: jobBoard.description || '',
+      refJobCodeId: jobBoard.refJobCodeId || '',
+      generation: jobBoard.generation || '',
+      jobCode: jobBoard.jobCode || '',
+      korea: Boolean(jobBoard.korea),
+      interviewDates: safeInterviewDates,
       interviewBaseLink: jobBoard.interviewBaseLink || '',
       interviewBaseDuration: jobBoard.interviewBaseDuration ? String(jobBoard.interviewBaseDuration) : '',
       interviewBaseNotes: jobBoard.interviewBaseNotes || '',
-      status: jobBoard.status
+      status: jobBoard.status || 'active'
     });
   };
   
@@ -261,66 +273,89 @@ export default function JobBoardManage() {
   // 폼 제출 핸들러
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.description || !formData.refJobCodeId) {
-      toast.error('필수 항목을 모두 입력해주세요.');
+    
+    if (isSubmitting) return;
+    
+    // 입력값 검증
+    if (!formData.title.trim()) {
+      toast.error('제목을 입력해주세요.');
       return;
     }
-
+    
+    if (!formData.description.trim()) {
+      toast.error('설명을 입력해주세요.');
+      return;
+    }
+    
+    if (!formData.refJobCodeId) {
+      toast.error('업무 구분을 선택해주세요.');
+      return;
+    }
+    
+    // 유효한 면접 날짜만 필터링
+    const validInterviewDates = formData.interviewDates
+      .filter(date => date && date.trim() !== '')
+      .map(date => {
+        try {
+          const localDate = new Date(date);
+          if (isNaN(localDate.getTime())) {
+            throw new Error('Invalid date');
+          }
+          // UTC 시간으로 변환
+          const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+          return {
+            start: Timestamp.fromDate(utcDate),
+            end: Timestamp.fromDate(utcDate)
+          };
+        } catch (error) {
+          console.error('Date conversion error:', error, 'for date:', date);
+          return null;
+        }
+      })
+      .filter(date => date !== null);
+    
+    if (validInterviewDates.length === 0) {
+      toast.error('최소 하나 이상의 유효한 면접 날짜를 입력해주세요.');
+      return;
+    }
+    
     try {
       setIsSubmitting(true);
-
+      
       if (isCreating) {
         // 새 공고 생성
-        const newJobBoardData = {
-          title: formData.title,
-          description: formData.description,
+        await createJobBoard({
+          title: formData.title.trim(),
+          description: formData.description.trim(),
           refJobCodeId: formData.refJobCodeId,
           generation: formData.generation,
           jobCode: formData.jobCode,
           korea: formData.korea,
-          status: 'active' as const,
-          interviewDates: formData.interviewDates.map(date => {
-            const localDate = new Date(date);
-            // UTC 시간으로 변환
-            const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
-            return {
-              start: Timestamp.fromDate(utcDate),
-              end: Timestamp.fromDate(utcDate)
-            };
-          }),
-          interviewBaseLink: formData.interviewBaseLink || '',
+          interviewDates: validInterviewDates,
+          interviewBaseLink: formData.interviewBaseLink?.trim() || '',
           interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
-          interviewBaseNotes: formData.interviewBaseNotes || '',
+          interviewBaseNotes: formData.interviewBaseNotes?.trim() || '',
           interviewPassword: '',
           educationStartDate: Timestamp.now(),
           educationEndDate: Timestamp.now(),
+          status: formData.status as 'active' | 'closed',
           updatedAt: Timestamp.now()
-        };
-
-        await createJobBoard(newJobBoardData);
+        });
         
         toast.success('공고가 성공적으로 생성되었습니다.');
       } else if (selectedJobBoard) {
         // 기존 공고 수정
         await updateJobBoard(selectedJobBoard.id, {
-          title: formData.title,
-          description: formData.description,
+          title: formData.title.trim(),
+          description: formData.description.trim(),
           refJobCodeId: formData.refJobCodeId,
           generation: formData.generation,
           jobCode: formData.jobCode,
           korea: formData.korea,
-          interviewDates: formData.interviewDates.map(date => {
-            const localDate = new Date(date);
-            // UTC 시간으로 변환
-            const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
-            return {
-              start: Timestamp.fromDate(utcDate),
-              end: Timestamp.fromDate(utcDate)
-            };
-          }),
-          interviewBaseLink: formData.interviewBaseLink || '',
+          interviewDates: validInterviewDates,
+          interviewBaseLink: formData.interviewBaseLink?.trim() || '',
           interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
-          interviewBaseNotes: formData.interviewBaseNotes || '',
+          interviewBaseNotes: formData.interviewBaseNotes?.trim() || '',
           updatedAt: Timestamp.now()
         });
         
@@ -360,6 +395,21 @@ export default function JobBoardManage() {
   const handleCancel = () => {
     setSelectedJobBoard(null);
     setIsCreating(false);
+    setFormData({
+      title: '',
+      description: '',
+      refJobCodeId: '',
+      generation: '',
+      jobCode: '',
+      korea: true,
+      interviewDates: [''],
+      interviewBaseLink: '',
+      interviewBaseDuration: '',
+      interviewBaseNotes: '',
+      status: 'active'
+    });
+    
+    // URL 파라미터 제거
     router.replace('/admin/job-board-manage');
   };
   

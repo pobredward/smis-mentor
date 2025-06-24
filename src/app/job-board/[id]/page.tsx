@@ -10,7 +10,7 @@ import { ko } from 'date-fns/locale';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getJobBoardById, deleteJobBoard, getJobCodeById, getAllJobCodes, createApplication } from '@/lib/firebaseService';
-import { JobBoardWithId, JobCodeWithId, ApplicationHistory } from '@/types';
+import { JobBoardWithId, JobCodeWithId, ApplicationHistory, JobBoard } from '@/types';
 import RichTextEditor from '@/components/common/RichTextEditor';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -203,31 +203,53 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   };
 
   const handleSave = async () => {
-    if (!jobBoard || !jobCode) return;
+    if (!jobBoard) {
+      toast.error('공고 정보를 찾을 수 없습니다.');
+      return;
+    }
 
     try {
-      const docRef = doc(db, 'jobBoards', id);
-      await updateDoc(docRef, {
-        title: editedTitle,
-        description: editedDescription,
+      setIsSubmitting(true);
+
+      // 유효한 면접 날짜만 필터링
+      const validInterviewDates = editedInterviewDates
+        .filter(date => date.start && date.end)
+        .map(date => {
+          try {
+            return {
+              start: Timestamp.fromDate(new Date(date.start)),
+              end: Timestamp.fromDate(new Date(date.end))
+            };
+          } catch (error) {
+            console.error('Date conversion error:', error);
+            return null;
+          }
+        })
+        .filter(date => date !== null);
+
+      // 기본값 설정
+      const updateData: Partial<JobBoard> = {
+        title: editedTitle || jobBoard.title,
+        description: editedDescription || jobBoard.description,
         status: editedStatus,
-        refJobCodeId: editedJobCodeId,
-        generation: jobCode.generation,
-        jobCode: jobCode.code,
-        interviewDates: editedInterviewDates
-          .filter(date => date.start && date.end)
-          .map(date => ({
-            start: Timestamp.fromDate(new Date(date.start)),
-            end: Timestamp.fromDate(new Date(date.end))
-          })),
+        interviewDates: validInterviewDates,
         interviewBaseDuration: Number(editedInterviewBaseDuration) || 30,
-        interviewBaseLink: editedInterviewBaseLink || '',
-        interviewBaseNotes: editedInterviewBaseNotes || '',
-        interviewPassword: jobBoard.interviewPassword || '',
-        educationStartDate: jobCode.startDate,
-        educationEndDate: jobCode.endDate,
+        interviewBaseLink: editedInterviewBaseLink?.trim() || '',
+        interviewBaseNotes: editedInterviewBaseNotes?.trim() || '',
         updatedAt: Timestamp.now()
-      });
+      };
+
+      // JobCode가 변경된 경우에만 관련 필드 업데이트
+      if (editedJobCodeId && jobCode) {
+        updateData.refJobCodeId = editedJobCodeId;
+        updateData.generation = jobCode.generation;
+        updateData.jobCode = jobCode.code;
+        updateData.educationStartDate = jobCode.startDate;
+        updateData.educationEndDate = jobCode.endDate;
+      }
+
+      const docRef = doc(db, 'jobBoards', id);
+      await updateDoc(docRef, updateData);
 
       const updatedDocSnap = await getDoc(docRef);
       if (updatedDocSnap.exists()) {
@@ -243,6 +265,8 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
     } catch (error) {
       console.error('공고 수정 오류:', error);
       toast.error('공고 수정 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

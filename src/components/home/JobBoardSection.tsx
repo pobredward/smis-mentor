@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { JobBoard, JobCodeWithId } from '@/types';
+import { JobCodeWithId } from '@/types';
 import { getActiveJobBoards, getJobCodeById } from '@/lib/firebaseService';
 import { formatDate } from '@/utils/dateUtils';
 
@@ -8,7 +8,7 @@ export default async function JobBoardSection() {
   const boards = await getActiveJobBoards();
   const sortedBoards = boards
     .sort((a, b) => b.createdAt.seconds - a.createdAt.seconds)
-    .slice(0, 3); // 최신 3개만 표시
+    .slice(0, 4); // 최신 4개만 표시
     
   // JobCode 정보도 한 번에 가져오기
   const jobCodeIds = sortedBoards.map(board => board.refJobCodeId);
@@ -53,7 +53,7 @@ export default async function JobBoardSection() {
             <p className="text-gray-500">현재 모집 중인 공고가 없습니다.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {sortedBoards.map((board) => (
               <Link
                 key={board.id}
