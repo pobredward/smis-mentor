@@ -1,34 +1,61 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { JobCodeWithId } from '@/types';
-import { getActiveJobBoards, getJobCodeById } from '@/lib/firebaseService';
+import { JobCodeWithId, JobBoard } from '@/types';
+import { getActiveJobBoards, getJobCodeById, clearJobBoardsCache } from '@/lib/firebaseService';
 import { formatDate } from '@/utils/dateUtils';
 
-export default async function JobBoardSection() {
-  // 서버 컴포넌트에서 데이터 가져오기
-  const boards = await getActiveJobBoards();
-  const sortedBoards = boards
-    .sort((a, b) => b.createdAt.seconds - a.createdAt.seconds)
-    .slice(0, 4); // 최신 4개만 표시
-    
-  // JobCode 정보도 한 번에 가져오기
-  const jobCodeIds = sortedBoards.map(board => board.refJobCodeId);
-  const uniqueJobCodeIds = [...new Set(jobCodeIds)];
-  
-  // Promise.all을 사용하여 병렬로 JobCode 정보 가져오기
-  const jobCodePromises = uniqueJobCodeIds.map(async (id) => {
-    const jobCode = await getJobCodeById(id);
-    return { id, jobCode };
-  });
-  
-  const jobCodeResults = await Promise.all(jobCodePromises);
-  
-  // 조회 결과를 맵으로 변환하여 효율적인 접근 가능하도록 함
-  const jobCodesMap: {[key: string]: JobCodeWithId} = {};
-  jobCodeResults.forEach(({ id, jobCode }) => {
-    if (jobCode) {
-      jobCodesMap[id] = jobCode;
-    }
-  });
+type JobBoardWithId = JobBoard & { id: string };
+
+export default function JobBoardSection() {
+  const [sortedBoards, setSortedBoards] = useState<JobBoardWithId[]>([]);
+  const [jobCodesMap, setJobCodesMap] = useState<{[key: string]: JobCodeWithId}>({});
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadJobBoards = async () => {
+      try {
+        setIsLoading(true);
+        // 캐시를 클리어하여 최신 데이터를 가져오도록 함
+        await clearJobBoardsCache();
+        // 클라이언트 컴포넌트에서 데이터 가져오기
+        const boards = await getActiveJobBoards();
+        const sorted = boards
+          .sort((a, b) => b.createdAt.seconds - a.createdAt.seconds)
+          .slice(0, 4); // 최신 4개만 표시
+          
+        // JobCode 정보도 한 번에 가져오기
+        const jobCodeIds = sorted.map(board => board.refJobCodeId);
+        const uniqueJobCodeIds = [...new Set(jobCodeIds)];
+        
+        // Promise.all을 사용하여 병렬로 JobCode 정보 가져오기
+        const jobCodePromises = uniqueJobCodeIds.map(async (id) => {
+          const jobCode = await getJobCodeById(id);
+          return { id, jobCode };
+        });
+        
+        const jobCodeResults = await Promise.all(jobCodePromises);
+        
+        // 조회 결과를 맵으로 변환하여 효율적인 접근 가능하도록 함
+        const jobCodes: {[key: string]: JobCodeWithId} = {};
+        jobCodeResults.forEach(({ id, jobCode }) => {
+          if (jobCode) {
+            jobCodes[id] = jobCode;
+          }
+        });
+
+        setSortedBoards(sorted);
+        setJobCodesMap(jobCodes);
+      } catch (error) {
+        console.error('공고 정보 로드 오류:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadJobBoards();
+  }, []);
 
   return (
     <div className="bg-gray-50 py-4 md:py-8 mb-6 px-4 sm:px-6 lg:px-8">
@@ -48,12 +75,16 @@ export default async function JobBoardSection() {
           </Link>
         </div>
         
-        {sortedBoards.length === 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center py-10">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+          </div>
+        ) : sortedBoards.length === 0 ? (
           <div className="text-center py-10 bg-white rounded-lg shadow">
             <p className="text-gray-500">현재 모집 중인 공고가 없습니다.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {sortedBoards.map((board) => (
               <Link
                 key={board.id}

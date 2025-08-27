@@ -7,7 +7,7 @@ import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
-import { getActiveJobBoards, getJobCodeById } from '@/lib/firebaseService';
+import { getAllJobBoards, getJobCodeById, clearJobBoardsCache } from '@/lib/firebaseService';
 import { JobBoard, JobCodeWithId } from '@/types';
 
 type JobBoardWithId = JobBoard & { id: string };
@@ -15,7 +15,7 @@ type JobBoardWithId = JobBoard & { id: string };
 export default function JobBoardListClient() {
   const [jobBoards, setJobBoards] = useState<JobBoardWithId[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedLocation, setSelectedLocation] = useState<'all' | 'korea' | 'overseas'>('all');
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'active' | 'closed'>('all');
   const [jobCodesMap, setJobCodesMap] = useState<{[key: string]: JobCodeWithId}>({});
   const router = useRouter();
 
@@ -23,7 +23,9 @@ export default function JobBoardListClient() {
     const loadJobBoards = async () => {
       try {
         setIsLoading(true);
-        const boards = await getActiveJobBoards();
+        // 캐시를 먼저 클리어하여 최신 데이터를 가져오도록 함
+        await clearJobBoardsCache();
+        const boards = await getAllJobBoards();
         const sortedBoards = boards.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
         const jobCodeIds = sortedBoards.map(board => board.refJobCodeId);
         const uniqueJobCodeIds = [...new Set(jobCodeIds)];
@@ -72,13 +74,13 @@ export default function JobBoardListClient() {
           <div className="mb-4 sm:mb-8">
             <div className="mb-4">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900">업무 공고</h1>
-              <p className="mt-1 text-sm text-gray-600">현재 모집 중인 업무 공고를 확인하고 지원해보세요.</p>
+              <p className="mt-1 text-sm text-gray-600">업무 공고를 확인하고 지원해보세요.</p>
             </div>
             <div className="mt-4 flex gap-3">
               <div 
-                onClick={() => setSelectedLocation('all')}
+                onClick={() => setSelectedStatus('all')}
                 className={`px-4 py-2 rounded-lg cursor-pointer transition-all duration-300 ${
-                  selectedLocation === 'all'
+                  selectedStatus === 'all'
                     ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-500'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
@@ -86,24 +88,24 @@ export default function JobBoardListClient() {
                 <span className="text-sm font-medium">전체</span>
               </div>
               <div 
-                onClick={() => setSelectedLocation('korea')}
+                onClick={() => setSelectedStatus('active')}
                 className={`px-4 py-2 rounded-lg cursor-pointer transition-all duration-300 ${
-                  selectedLocation === 'korea'
+                  selectedStatus === 'active'
                     ? 'bg-green-100 text-green-800 ring-1 ring-green-500'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                <span className="text-sm font-medium">국내 캠프</span>
+                <span className="text-sm font-medium">모집중인 공고</span>
               </div>
               <div 
-                onClick={() => setSelectedLocation('overseas')}
+                onClick={() => setSelectedStatus('closed')}
                 className={`px-4 py-2 rounded-lg cursor-pointer transition-all duration-300 ${
-                  selectedLocation === 'overseas'
-                    ? 'bg-purple-100 text-purple-800 ring-1 ring-purple-500'
+                  selectedStatus === 'closed'
+                    ? 'bg-red-100 text-red-800 ring-1 ring-red-500'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                <span className="text-sm font-medium">해외 캠프</span>
+                <span className="text-sm font-medium">마감인 공고</span>
               </div>
             </div>
           </div>
@@ -113,15 +115,19 @@ export default function JobBoardListClient() {
             </div>
           ) : jobBoards.length === 0 ? (
             <div className="text-center py-10 bg-white rounded-lg shadow">
-              <p className="text-gray-500">현재 모집 중인 공고가 없습니다.</p>
+              <p className="text-gray-500">
+                {selectedStatus === 'active' ? '현재 모집 중인 공고가 없습니다.' : 
+                 selectedStatus === 'closed' ? '마감된 공고가 없습니다.' : 
+                 '등록된 공고가 없습니다.'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {jobBoards
                 .filter(board => {
-                  if (selectedLocation === 'all') return true;
-                  if (selectedLocation === 'korea') return board.korea;
-                  return !board.korea;
+                  if (selectedStatus === 'all') return true;
+                  if (selectedStatus === 'active') return board.status === 'active';
+                  return board.status === 'closed';
                 })
                 .map((board) => (
                   <div 
@@ -140,6 +146,13 @@ export default function JobBoardListClient() {
                             : 'bg-purple-100 text-purple-800 group-hover:bg-purple-200'
                         }`}>
                           {board.korea ? '국내' : '해외'}
+                        </span>
+                        <span className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                          board.status === 'active'
+                            ? 'bg-emerald-100 text-emerald-800 group-hover:bg-emerald-200'
+                            : 'bg-gray-100 text-gray-800 group-hover:bg-gray-200'
+                        }`}>
+                          {board.status === 'active' ? '모집중' : '마감'}
                         </span>
                       </div>
                       <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
