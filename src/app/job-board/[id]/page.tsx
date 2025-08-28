@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -163,22 +163,10 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
     loadData();
   }, [id, router, searchParams, userData?.role]);
 
-  // 동적 메타데이터 설정을 위한 useEffect 추가
+  // 동적 메타데이터 설정 - 제목만 변경
   useEffect(() => {
-    if (jobBoard) {
+    if (jobBoard && typeof document !== 'undefined') {
       document.title = `${jobBoard.title} | SMIS 멘토 채용 플랫폼`;
-      
-      // 기존 메타 태그 제거
-      const existingDescription = document.querySelector('meta[name="description"]');
-      if (existingDescription) {
-        existingDescription.remove();
-      }
-      
-      // 새로운 메타 태그 추가
-      const metaDescription = document.createElement('meta');
-      metaDescription.name = 'description';
-      metaDescription.content = jobBoard.description?.slice(0, 100) || 'SMIS 멘토 채용 플랫폼 채용공고';
-      document.head.appendChild(metaDescription);
     }
   }, [jobBoard]);
 
@@ -389,9 +377,20 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
     }
   };
 
-  const handleGoBack = () => {
-    router.back();
-  };
+  const handleGoBack = useCallback(() => {
+    // 안전한 뒤로가기 처리
+    try {
+      if (typeof window !== 'undefined' && window.history.length > 1) {
+        router.back();
+      } else {
+        router.push('/job-board');
+      }
+    } catch (error) {
+      console.error('네비게이션 오류:', error);
+      // 뒤로가기 실패 시 기본 페이지로 이동
+      router.push('/job-board');
+    }
+  }, [router]);
 
   return (
     <Layout>
