@@ -31,6 +31,7 @@ export interface LessonMaterialData {
   title: string;
   order: number;
   templateId?: string;
+  userCode?: string; // 사용자가 추가한 대주제의 코드 (D26, F26 등)
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }

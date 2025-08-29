@@ -240,6 +240,10 @@ export default function UploadPage() {
       const mats = await getLessonMaterials(userData.userId);
       console.log('기존 수업 자료:', mats.map(m => ({ title: m.title, templateId: m.templateId })));
       
+      // 사용자가 추가한 대주제 확인
+      const userAddedMaterials = mats.filter(m => !m.templateId);
+      console.log('사용자가 추가한 대주제:', userAddedMaterials.map(m => ({ id: m.id, title: m.title })));
+      
       // 5. 기존 수업 자료 중복 제거 및 접근 권한 체크
       const userCodesList = userCodes.map(uc => uc.code);
       const seenTemplateIds = new Set<string>();
@@ -248,9 +252,9 @@ export default function UploadPage() {
       const materialsToUpdate: { id: string; newTitle: string }[] = [];
       
       for (const mat of mats) {
-        // 템플릿 ID가 없는 경우 제거
+        // 템플릿 ID가 없는 경우 (사용자가 직접 추가한 대주제) - 유지
         if (!mat.templateId) {
-          materialsToRemove.push(mat.id);
+          materialsToKeep.push(mat.id);
           continue;
         }
         
@@ -304,6 +308,7 @@ export default function UploadPage() {
       
       // 9. 최종 수업 자료 가져오기
       const finalMats = await getLessonMaterials(userData.userId);
+      console.log('최종 수업 자료:', finalMats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
       setMaterials(finalMats);
       
       // 10. 각 수업 자료의 소제목 가져오기
@@ -381,15 +386,21 @@ export default function UploadPage() {
       const tpl = templates.find(t => t.id === m.templateId);
       materialCodeMap[m.id] = tpl?.code || '미지정';
     } else {
-      materialCodeMap[m.id] = '미지정';
+      // 사용자가 추가한 대주제 - userCode 필드가 있으면 해당 코드 사용, 없으면 개인 자료
+      materialCodeMap[m.id] = m.userCode || '개인 자료';
     }
   });
   
-  // 사용자가 접근할 수 있는 코드만 표시 (미지정 제외)
+  // 사용자가 접근할 수 있는 코드 + 개인 자료
   const userCodes = userJobCodes.map(jc => jc.code);
   const allMaterialCodes = Array.from(new Set(Object.values(materialCodeMap)))
-    .filter(code => userCodes.includes(code)); // 미지정 제외
-  const sortedMaterialCodes = allMaterialCodes.sort((a, b) => a.localeCompare(b));
+    .filter(code => userCodes.includes(code) || code === '개인 자료');
+  const sortedMaterialCodes = allMaterialCodes.sort((a, b) => {
+    // '개인 자료'를 맨 뒤로 정렬
+    if (a === '개인 자료') return 1;
+    if (b === '개인 자료') return -1;
+    return a.localeCompare(b);
+  });
   
   const filteredMaterials = selectedMaterialCode
     ? materials.filter(m => materialCodeMap[m.id] === selectedMaterialCode)
@@ -399,12 +410,18 @@ export default function UploadPage() {
     fetchAll();
   }, [userData]);
 
-  // 코드 필터 초기화 (사용자가 접근할 수 있는 첫 번째 코드로)
+  // 코드 필터 초기화 
   useEffect(() => {
     if (sortedMaterialCodes.length > 0 && !selectedMaterialCode) {
-      setSelectedMaterialCode(sortedMaterialCodes[0]);
+      // 개인 자료가 있는 경우 개인 자료를 우선 선택, 없으면 첫 번째 코드 선택
+      const hasPersonalMaterials = materials.some(m => !m.templateId);
+      if (hasPersonalMaterials && sortedMaterialCodes.includes('개인 자료')) {
+        setSelectedMaterialCode('개인 자료');
+      } else {
+        setSelectedMaterialCode(sortedMaterialCodes[0]);
+      }
     }
-  }, [sortedMaterialCodes, selectedMaterialCode]);
+  }, [sortedMaterialCodes, selectedMaterialCode, materials]);
 
   // 대제목 순서변경
   const handleMaterialDragEnd = async (event: import('@dnd-kit/core').DragEndEvent) => {
@@ -466,14 +483,32 @@ export default function UploadPage() {
 
   // 유저 대주제 추가
   const handleAddUserMaterial = async () => {
+    console.log('handleAddUserMaterial 시작:', { newMaterialTitle, userData, selectedMaterialCode });
+    
     if (!newMaterialTitle.trim()) {
       toast.error('대주제 이름을 입력해주세요.');
       return;
     }
     
+    // 특정 코드에서 추가하는 경우, 해당 코드 정보를 저장
+    if (!selectedMaterialCode) {
+      toast.error('코드를 선택한 후 대주제를 추가해주세요.');
+      return;
+    }
+    
     try {
       const order = materials.length;
+      console.log('대주제 추가 시도:', { userId: userData!.userId, title: newMaterialTitle.trim(), order, code: selectedMaterialCode });
+      
       const materialId = await addLessonMaterial(userData!.userId, newMaterialTitle.trim(), order);
+      console.log('대주제 추가 성공:', materialId);
+      
+      // 추가된 대주제에 코드 정보를 저장하기 위해 업데이트
+      await updateLessonMaterial(materialId, { 
+        title: newMaterialTitle.trim(),
+        // 메타데이터로 코드 저장 (Firestore 문서에 userCode 필드 추가)
+        userCode: selectedMaterialCode
+      } as any);
       
       // 로컬 상태 즉시 업데이트
       const newMaterial: LessonMaterialData = {
@@ -482,9 +517,15 @@ export default function UploadPage() {
         title: newMaterialTitle.trim(),
         order,
         templateId: undefined,
+        userCode: selectedMaterialCode,
       };
       
-      setMaterials(prev => [...prev, newMaterial]);
+      console.log('로컬 상태 업데이트:', newMaterial);
+      setMaterials(prev => {
+        const updated = [...prev, newMaterial];
+        console.log('업데이트된 materials:', updated);
+        return updated;
+      });
       setSections(prev => ({
         ...prev,
         [materialId]: []
@@ -492,7 +533,7 @@ export default function UploadPage() {
       
       setNewMaterialTitle('');
       setShowAddMaterialForm(false);
-      toast.success('대주제가 추가되었습니다.');
+      toast.success(`${selectedMaterialCode}에 대주제가 추가되었습니다.`);
     } catch (error) {
       console.error('대주제 추가 오류:', error);
       toast.error('대주제 추가 중 오류가 발생했습니다.');
@@ -760,13 +801,18 @@ export default function UploadPage() {
               {sortedMaterialCodes.map(code => (
                 <button
                   key={code}
-                  className={`px-3 py-1.5 text-sm font-medium rounded border transition-all ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded border transition-all flex items-center gap-1 ${
                     selectedMaterialCode === code 
                       ? 'bg-blue-500 border-blue-500 text-white' 
                       : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                   }`}
                   onClick={() => setSelectedMaterialCode(code)}
                 >
+                  {code === '개인 자료' && (
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  )}
                   {code}
                 </button>
               ))}
@@ -1147,10 +1193,11 @@ export default function UploadPage() {
               </SortableContext>
             </DndContext>
 
-            {/* 유저 대주제 추가 섹션 */}
-            {showAddMaterialForm ? (
+            {/* 유저 대주제 추가 섹션 - 개인 자료가 아닌 탭에서만 표시 */}
+            {selectedMaterialCode && selectedMaterialCode !== '개인 자료' && showAddMaterialForm ? (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                <h3 className="text-sm font-semibold text-blue-800 mb-3">새 대주제 추가</h3>
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">{selectedMaterialCode}에 새 대주제 추가</h3>
+                <p className="text-xs text-blue-600 mb-3">{selectedMaterialCode} 카테고리에 새로운 대주제를 추가합니다.</p>
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1158,7 +1205,7 @@ export default function UploadPage() {
                     </label>
                     <input
                       className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
-                      placeholder="예: 개인 프로젝트"
+                      placeholder="예: 개인 프로젝트, 추가 학습 자료"
                       value={newMaterialTitle}
                       onChange={e => setNewMaterialTitle(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') handleAddUserMaterial(); }}
@@ -1185,7 +1232,7 @@ export default function UploadPage() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : selectedMaterialCode && selectedMaterialCode !== '개인 자료' ? (
               <button
                 onClick={() => setShowAddMaterialForm(true)}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-4 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all text-sm font-medium"
@@ -1193,9 +1240,9 @@ export default function UploadPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                새 대주제 추가하기
+                {selectedMaterialCode}에 새 대주제 추가하기
               </button>
-            )}
+            ) : null}
           </div>
         )}
       </main>

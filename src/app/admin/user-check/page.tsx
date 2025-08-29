@@ -293,7 +293,8 @@ export default function UserCheck() {
         const tpl = templates.find(t => t.id === m.templateId);
         materialCodeMap[m.id] = tpl?.code || '미지정';
       } else {
-        materialCodeMap[m.id] = '미지정';
+        // 사용자가 추가한 대주제 - userCode 필드가 있으면 해당 코드 사용, 없으면 미지정
+        materialCodeMap[m.id] = m.userCode || '미지정';
       }
     });
     const allCodes = Array.from(new Set(Object.values(materialCodeMap)));
