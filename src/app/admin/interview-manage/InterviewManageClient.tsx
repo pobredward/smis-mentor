@@ -12,6 +12,8 @@ import { JobBoard, ApplicationHistory, User } from '@/types';
 import { useRouter } from 'next/navigation';
 import { getSMSTemplateByTypeAndJobBoard, saveSMSTemplate, updateSMSTemplate, getAllSMSTemplates, SMSTemplate, TemplateType } from '@/lib/smsTemplateService';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
+import { getInterviewLinks, InterviewLinks } from '@/lib/interviewLinksService';
+import { InterviewLinksManager } from '@/components/admin/InterviewLinksManager';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -48,6 +50,13 @@ export function InterviewManageClient() {
   const [showScriptModal, setShowScriptModal] = useState(false); // 스크립트 모달 상태 추가
   const [isEditingScript, setIsEditingScript] = useState(false); // 스크립트 수정 모드 상태 추가
   const [showPastDates, setShowPastDates] = useState(false); // 과거 면접일 표시 여부
+  
+  // 링크 관리 관련 상태 추가
+  const [interviewLinks, setInterviewLinks] = useState<InterviewLinks>({
+    zoomUrl: '',
+    canvaUrl: '',
+  });
+  const [showLinksManager, setShowLinksManager] = useState(false);
   
   // SMS 관련 상태 추가
   const [showDocumentPassMessage, setShowDocumentPassMessage] = useState(false);
@@ -86,6 +95,7 @@ export function InterviewManageClient() {
     loadInitialData();
     loadScript();
     loadSmsTemplates();
+    loadInterviewLinks();
   }, []);
 
   // 초기 데이터 로드 (더 빠르게 면접일 데이터만 먼저 가져옴)
@@ -479,6 +489,22 @@ export function InterviewManageClient() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 면접 링크 로드
+  const loadInterviewLinks = async () => {
+    try {
+      const links = await getInterviewLinks();
+      setInterviewLinks(links);
+    } catch (error) {
+      console.error('면접 링크 로드 오류:', error);
+      toast.error('면접 링크를 불러오는 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 링크 업데이트 핸들러
+  const handleLinksUpdate = (updatedLinks: InterviewLinks) => {
+    setInterviewLinks(updatedLinks);
   };
 
   // 서류 상태 변경
@@ -1590,25 +1616,33 @@ export function InterviewManageClient() {
             variant="secondary"
             size="sm"
             className="bg-blue-600 hover:bg-blue-700 text-white mr-1"
-            onClick={() => window.open("https://us06web.zoom.us/j/85134823001?pwd=dUP232JtaSI6UrGIGxlf99urSQpgKq.1", "_blank")}
+            onClick={() => window.open(interviewLinks.zoomUrl, "_blank")}
           >
             Zoom
           </Button>
-                    <Button 
+          <Button 
             variant="secondary"
             size="sm"
             className="bg-blue-600 hover:bg-blue-700 text-white mr-1"
-            onClick={() => window.open("https://www.canva.com/design/DAFvhaPK91Q/VhiME0MRIe-gqhlQlWyb9A/view?utm_content=DAFvhaPK91Q&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=haf1323a182", "_blank")}
+            onClick={() => window.open(interviewLinks.canvaUrl, "_blank")}
           >
             캔바
           </Button>
           <Button 
             variant="secondary"
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-blue-600 hover:bg-blue-700 text-white mr-1"
             onClick={() => setShowScriptModal(true)}
           >
             스크립트
+          </Button>
+          <Button 
+            variant="secondary"
+            size="sm"
+            className="bg-green-600 hover:bg-green-700 text-white"
+            onClick={() => setShowLinksManager(true)}
+          >
+            링크 관리
           </Button>
           </div>
         </div>
@@ -2717,6 +2751,13 @@ export function InterviewManageClient() {
             </div>
           </div>
         )}
+
+        {/* 링크 관리 모달 */}
+        <InterviewLinksManager
+          isOpen={showLinksManager}
+          onClose={() => setShowLinksManager(false)}
+          onUpdate={handleLinksUpdate}
+        />
       </div>
     </Layout>
   );
