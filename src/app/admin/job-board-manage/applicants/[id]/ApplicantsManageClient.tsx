@@ -66,6 +66,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   // 서류 합격/불합격 메시지 관련 상태
   const [documentPassMessage, setDocumentPassMessage] = useState('');
   const [documentFailMessage, setDocumentFailMessage] = useState('');
+  const [interviewScheduledMessage, setInterviewScheduledMessage] = useState('');
   const [interviewPassMessage, setInterviewPassMessage] = useState('');
   const [interviewFailMessage, setInterviewFailMessage] = useState('');
   const [finalPassMessage, setFinalPassMessage] = useState('');
@@ -74,6 +75,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   // 메시지 박스 표시 상태
   const [showDocumentPassMessage, setShowDocumentPassMessage] = useState(false);
   const [showDocumentFailMessage, setShowDocumentFailMessage] = useState(false);
+  const [showInterviewScheduledMessage, setShowInterviewScheduledMessage] = useState(false);
   const [showInterviewPassMessage, setShowInterviewPassMessage] = useState(false);
   const [showInterviewFailMessage, setShowInterviewFailMessage] = useState(false);
   const [showFinalPassMessage, setShowFinalPassMessage] = useState(false);
@@ -82,7 +84,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [isLoadingMessage, setIsLoadingMessage] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   
-  const [fromNumber, setFromNumber] = useState<PhoneNumber>('01067117933');
+  const [fromNumber, setFromNumber] = useState<PhoneNumber>('01076567933');
   
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
   
@@ -753,6 +755,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const closeAllMessageBoxes = () => {
     setShowDocumentPassMessage(false);
     setShowDocumentFailMessage(false);
+    setShowInterviewScheduledMessage(false);
     setShowInterviewPassMessage(false);
     setShowInterviewFailMessage(false);
     setShowFinalPassMessage(false);
@@ -782,6 +785,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       } else {
         // 기본 서류 불합격 메시지 설정
         setDocumentFailMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+      }
+      
+      // interview_scheduled 템플릿 로드
+      const interviewScheduledTemplate = await getSMSTemplateByTypeAndJobBoard('interview_scheduled', jobBoard.id);
+      if (interviewScheduledTemplate) {
+        setInterviewScheduledMessage(interviewScheduledTemplate.content);
+      } else {
+        // 기본 면접 예정 메시지 설정
+        setInterviewScheduledMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 서류 전형 합격을 축하드립니다.\n\n면접 일정을 안내드립니다.\n• 면접 일시: {면접일자} {면접시간}\n• 면접 링크: {면접링크}\n• 면접 시간: {면접시간} (약 {면접소요시간}분)\n\n준비사항: {면접참고사항}\n\n면접에 참석해주시기 바랍니다.`);
       }
       
       // interview_pass 템플릿 로드
@@ -940,6 +952,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         case 'document_fail':
           setDocumentFailMessage(content);
           break;
+        case 'interview_scheduled':
+          setInterviewScheduledMessage(content);
+          break;
         case 'interview_pass':
           setInterviewPassMessage(content);
           break;
@@ -985,6 +1000,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           return;
         }
         break;
+      case 'interview_scheduled':
+        if(showInterviewScheduledMessage) {
+          setShowInterviewScheduledMessage(false);
+          return;
+        }
+        break;
       case 'interview_pass':
         if(showInterviewPassMessage) {
           setShowInterviewPassMessage(false);
@@ -1014,6 +1035,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     // 모든 메시지 박스 숨기기
     setShowDocumentPassMessage(false);
     setShowDocumentFailMessage(false);
+    setShowInterviewScheduledMessage(false);
     setShowInterviewPassMessage(false);
     setShowInterviewFailMessage(false);
     setShowFinalPassMessage(false);
@@ -1026,6 +1048,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         break;
       case 'document_fail':
         setShowDocumentFailMessage(true);
+        break;
+      case 'interview_scheduled':
+        setShowInterviewScheduledMessage(true);
         break;
       case 'interview_pass':
         setShowInterviewPassMessage(true);
@@ -1421,6 +1446,17 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
 
                           {/* 상태에 따라 적절한 버튼 표시 */}
                           <div className="mt-2">
+                            {selectedApplication.interviewStatus === 'pending' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('interview_scheduled')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showInterviewScheduledMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                              </Button>
+                            )}
+                            
                             {selectedApplication.interviewStatus === 'passed' && (
                               <Button
                                 variant="primary"
@@ -1511,20 +1547,20 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberPass"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberPass"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -1578,20 +1614,20 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberFail"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberFail"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -1623,6 +1659,73 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         </div>
                       )}
                       
+                      {/* 면접 예정 메시지 박스 */}
+                      {showInterviewScheduledMessage && (
+                        <div className="mt-4 border border-blue-200 rounded-md p-4 bg-blue-50">
+                          <label className="block text-sm font-medium text-blue-700 mb-2">
+                            면접 예정 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-blue-300 rounded-md text-sm mb-3"
+                            rows={8}
+                            value={interviewScheduledMessage}
+                            onChange={(e) => setInterviewScheduledMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-blue-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-blue-600"
+                                  name="fromNumberScheduled"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-blue-600"
+                                  name="fromNumberScheduled"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowInterviewScheduledMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('interview_scheduled', interviewScheduledMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="success"
+                              size="sm"
+                              onClick={() => sendMessage(interviewScheduledMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
                       {/* 면접 합격 메시지 박스 */}
                       {showInterviewPassMessage && (
                         <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
@@ -1645,20 +1748,20 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberInterviewPass"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberInterviewPass"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -1712,20 +1815,20 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberInterviewFail"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberInterviewFail"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -1779,20 +1882,20 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberFinalPass"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberFinalPass"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -1846,20 +1949,20 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberFinalFail"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberFinalFail"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -2141,20 +2244,20 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       type="radio"
                       className="form-radio text-blue-600"
                       name="fromNumber"
-                      checked={fromNumber === '01067117933'}
-                      onChange={() => setFromNumber('01067117933')}
+                      checked={fromNumber === '01076567933'}
+                      onChange={() => setFromNumber('01076567933')}
                     />
-                    <span className="ml-2">010-6711-7933</span>
+                    <span className="ml-2">010-7656-7933</span>
                   </label>
                   <label className="inline-flex items-center">
                     <input
                       type="radio"
                       className="form-radio text-blue-600"
                       name="fromNumber"
-                      checked={fromNumber === '01076567933'}
-                      onChange={() => setFromNumber('01076567933')}
+                      checked={fromNumber === '01067117933'}
+                      onChange={() => setFromNumber('01067117933')}
                     />
-                    <span className="ml-2">010-7656-7933</span>
+                    <span className="ml-2">010-6711-7933</span>
                   </label>
                 </div>
               </div>

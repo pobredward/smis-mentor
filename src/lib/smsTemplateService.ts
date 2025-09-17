@@ -6,6 +6,7 @@ import { Timestamp } from 'firebase/firestore';
 export type TemplateType = 
   | 'document_pass' 
   | 'document_fail' 
+  | 'interview_scheduled'
   | 'interview_pass' 
   | 'interview_fail' 
   | 'final_pass' 

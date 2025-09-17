@@ -9,7 +9,7 @@ interface SendSMSParams {
 }
 
 // 네이버 클라우드 플랫폼 SMS API 호출 함수
-export async function sendSMS({ to, content, from = '01067117933' }: SendSMSParams): Promise<boolean> {
+export async function sendSMS({ to, content, from = '01076567933' }: SendSMSParams): Promise<boolean> {
   try {
     const timestamp = Date.now().toString();
     const serviceId = process.env.NAVER_CLOUD_SMS_SERVICE_ID;

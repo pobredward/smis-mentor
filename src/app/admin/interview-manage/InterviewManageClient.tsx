@@ -61,12 +61,14 @@ export function InterviewManageClient() {
   // SMS 관련 상태 추가
   const [showDocumentPassMessage, setShowDocumentPassMessage] = useState(false);
   const [showDocumentFailMessage, setShowDocumentFailMessage] = useState(false);
+  const [showInterviewScheduledMessage, setShowInterviewScheduledMessage] = useState(false);
   const [showInterviewPassMessage, setShowInterviewPassMessage] = useState(false);
   const [showInterviewFailMessage, setShowInterviewFailMessage] = useState(false);
   const [showFinalPassMessage, setShowFinalPassMessage] = useState(false);
   const [showFinalFailMessage, setShowFinalFailMessage] = useState(false);
   const [documentPassMessage, setDocumentPassMessage] = useState('');
   const [documentFailMessage, setDocumentFailMessage] = useState('');
+  const [interviewScheduledMessage, setInterviewScheduledMessage] = useState('');
   const [interviewPassMessage, setInterviewPassMessage] = useState('');
   const [interviewFailMessage, setInterviewFailMessage] = useState('');
   const [finalPassMessage, setFinalPassMessage] = useState('');
@@ -75,7 +77,7 @@ export function InterviewManageClient() {
   const [isLoadingMessage, setIsLoadingMessage] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   // const [smsTemplates, setSmsTemplates] = useState<SMSTemplate[]>([]);
-  const [fromNumber, setFromNumber] = useState<PhoneNumber>('01067117933');
+  const [fromNumber, setFromNumber] = useState<PhoneNumber>('01076567933');
   // const [filteredApplications, setFilteredApplications] = useState<ApplicationWithUser[]>([]);
   // const [showJobBoardInfo, setShowJobBoardInfo] = useState<boolean>(false);
   // 새로 추가: 사용자가 지원한 모든 캠프 제목 저장
@@ -1255,6 +1257,7 @@ export function InterviewManageClient() {
   const closeAllMessageBoxes = () => {
     setShowDocumentPassMessage(false);
     setShowDocumentFailMessage(false);
+    setShowInterviewScheduledMessage(false);
     setShowInterviewPassMessage(false);
     setShowInterviewFailMessage(false);
     setShowFinalPassMessage(false);
@@ -1298,6 +1301,15 @@ export function InterviewManageClient() {
       } else {
         // 기본 서류 불합격 메시지 설정
         setDocumentFailMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+      }
+      
+      // interview_scheduled 템플릿 로드
+      const interviewScheduledTemplate = await getSMSTemplateByTypeAndJobBoard('interview_scheduled', jobBoardId);
+      if (interviewScheduledTemplate) {
+        setInterviewScheduledMessage(interviewScheduledTemplate.content);
+      } else {
+        // 기본 면접 예정 메시지 설정
+        setInterviewScheduledMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 서류 전형 합격을 축하드립니다.\n\n면접 일정을 안내드립니다.\n• 면접 일시: {면접일자} {면접시간}\n• 면접 링크: {면접링크}\n• 면접 시간: {면접시간} (약 {면접소요시간}분)\n\n준비사항: {면접참고사항}\n\n면접에 참석해주시기 바랍니다.`);
       }
       
       // interview_pass 템플릿 로드
@@ -1443,6 +1455,9 @@ export function InterviewManageClient() {
         case 'document_fail':
           setDocumentFailMessage(content);
           break;
+        case 'interview_scheduled':
+          setInterviewScheduledMessage(content);
+          break;
         case 'interview_pass':
           setInterviewPassMessage(content);
           break;
@@ -1486,6 +1501,12 @@ export function InterviewManageClient() {
           return;
         }
         break;
+      case 'interview_scheduled':
+        if(showInterviewScheduledMessage) {
+          setShowInterviewScheduledMessage(false);
+          return;
+        }
+        break;
       case 'interview_pass':
         if(showInterviewPassMessage) {
           setShowInterviewPassMessage(false);
@@ -1522,6 +1543,9 @@ export function InterviewManageClient() {
         break;
       case 'document_fail':
         setShowDocumentFailMessage(true);
+        break;
+      case 'interview_scheduled':
+        setShowInterviewScheduledMessage(true);
         break;
       case 'interview_pass':
         setShowInterviewPassMessage(true);
@@ -2005,6 +2029,17 @@ export function InterviewManageClient() {
                           
                           {/* 상태에 따라 적절한 버튼 표시 */}
                           <div className="mt-2">
+                            {selectedApplication.interviewStatus === 'pending' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('interview_scheduled')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showInterviewScheduledMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                              </Button>
+                            )}
+                            
                             {selectedApplication.interviewStatus === 'passed' && (
                               <Button
                                 variant="primary"
@@ -2095,20 +2130,20 @@ export function InterviewManageClient() {
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberDocPass"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberDocPass"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -2162,20 +2197,20 @@ export function InterviewManageClient() {
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberDocFail"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberDocFail"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -2207,6 +2242,73 @@ export function InterviewManageClient() {
                         </div>
                       )}
                       
+                      {/* 면접 예정 메시지 박스 */}
+                      {showInterviewScheduledMessage && (
+                        <div className="mt-4 border border-blue-200 rounded-md p-4 bg-blue-50">
+                          <label className="block text-sm font-medium text-blue-700 mb-2">
+                            면접 예정 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-blue-300 rounded-md text-sm mb-3"
+                            rows={8}
+                            value={interviewScheduledMessage}
+                            onChange={(e) => setInterviewScheduledMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-blue-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-blue-600"
+                                  name="fromNumberIntScheduled"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-blue-600"
+                                  name="fromNumberIntScheduled"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowInterviewScheduledMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('interview_scheduled', interviewScheduledMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="success"
+                              size="sm"
+                              onClick={() => sendMessage(interviewScheduledMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
                       {/* 면접 합격 메시지 박스 */}
                       {showInterviewPassMessage && (
                         <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
@@ -2230,20 +2332,20 @@ export function InterviewManageClient() {
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberPass"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberPass"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -2298,20 +2400,20 @@ export function InterviewManageClient() {
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberInterviewFail"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberInterviewFail"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -2365,20 +2467,20 @@ export function InterviewManageClient() {
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberFinalPass"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-green-600"
                                   name="fromNumberFinalPass"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
@@ -2432,20 +2534,20 @@ export function InterviewManageClient() {
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberFinalFail"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
                                 />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
+                                <span className="ml-2 text-sm">010-7656-7933</span>
                               </label>
                               <label className="inline-flex items-center">
                                 <input
                                   type="radio"
                                   className="form-radio text-red-600"
                                   name="fromNumberFinalFail"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
                                 />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
+                                <span className="ml-2 text-sm">010-6711-7933</span>
                               </label>
                             </div>
                           </div>
