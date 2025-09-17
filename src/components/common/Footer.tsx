@@ -10,7 +10,7 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4">회사 정보</h3>
             <ul className="space-y-2">
               <li className="text-sm text-gray-500">회사명: (주)에스엠아이에스</li>
-              <li className="text-sm text-gray-500">대표: 임대환</li>
+              <li className="text-sm text-gray-500">대표: 김선희</li>
               <li className="text-sm text-gray-500">법인사업자 등록번호: 427-88-03423</li>
               <li className="text-sm text-gray-500">주소: 경기 성남시 분당구 장미로 78 SMIS 라운지&교육센터 3층</li>
               <li className="text-sm text-gray-500">채용 문의: 신선웅 (010-7656-7933)</li>
