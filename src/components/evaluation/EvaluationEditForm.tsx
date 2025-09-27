@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Evaluation, EvaluationCriteria } from '@/types/evaluation';
 import { EvaluationService, EvaluationCriteriaService } from '@/lib/evaluationService';
 import Button  from '@/components/common/Button';
@@ -27,11 +27,7 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingCriteria, setIsLoadingCriteria] = useState(true);
 
-  useEffect(() => {
-    loadCriteriaAndInitializeForm();
-  }, [evaluation]);
-
-  const loadCriteriaAndInitializeForm = async () => {
+  const loadCriteriaAndInitializeForm = useCallback(async () => {
     try {
       setIsLoadingCriteria(true);
       const criteria = await EvaluationCriteriaService.getCriteriaById(evaluation.criteriaTemplateId);
@@ -60,7 +56,11 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
     } finally {
       setIsLoadingCriteria(false);
     }
-  };
+  }, [evaluation]);
+
+  useEffect(() => {
+    loadCriteriaAndInitializeForm();
+  }, [loadCriteriaAndInitializeForm]);
 
   const handleScoreChange = (criteriaId: string, score: number) => {
     setFormData(prev => ({
@@ -108,6 +108,7 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
         scores: evaluationScores,
         criteriaFeedback: formData.criteriaFeedback,
         feedback: formData.feedback,
+        totalScore: averageScore,
         percentage
       };
 
@@ -169,20 +170,34 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
                 </div>
               </div>
 
-              {/* 점수 입력 */}
+              {/* 점수 선택 */}
               <div className="mb-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  점수 (0 - {criterion.maxScore}점)
+                  점수 선택 (0 - {criterion.maxScore}점)
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  max={criterion.maxScore}
-                  step="0.1"
-                  value={formData.scores[criterion.id] || 0}
-                  onChange={(e) => handleScoreChange(criterion.id, parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {Array.from({ length: criterion.maxScore + 1 }, (_, i) => i).map(score => (
+                    <button
+                      key={score}
+                      type="button"
+                      onClick={() => handleScoreChange(criterion.id, score)}
+                      className={`
+                        w-10 h-10 rounded-lg border font-bold transition-all hover:scale-105
+                        ${formData.scores[criterion.id] === score
+                          ? 'border-blue-500 bg-blue-500 text-white'
+                          : 'border-gray-300 hover:border-blue-300 hover:bg-blue-50'
+                        }
+                      `}
+                    >
+                      {score}
+                    </button>
+                  ))}
+                </div>
+                {formData.scores[criterion.id] !== undefined && (
+                  <p className="text-xs text-gray-600">
+                    선택된 점수: {formData.scores[criterion.id]}점
+                  </p>
+                )}
               </div>
 
               {/* 세부 피드백 */}
