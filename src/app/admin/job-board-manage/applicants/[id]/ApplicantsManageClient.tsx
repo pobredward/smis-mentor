@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { doc, updateDoc, getDoc, collection, query, where, getDocs, DocumentData, deleteField, FieldValue } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { ApplicationHistory, JobBoard, User } from '@/types';
+import EvaluationForm from '@/components/evaluation/EvaluationForm';
+import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
@@ -42,7 +44,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [jobBoard, setJobBoard] = useState<JobBoardWithId | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
-  const [feedbackText, setFeedbackText] = useState('');
   const [interviewBaseLink, setInterviewBaseLink] = useState('');
   const [interviewBaseDuration, setInterviewBaseDuration] = useState('');
   const [interviewBaseNotes, setInterviewBaseNotes] = useState('');
@@ -87,6 +88,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [fromNumber, setFromNumber] = useState<PhoneNumber>('01076567933');
   
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
+  const [showEvaluationForm, setShowEvaluationForm] = useState(false);
+  const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
+  const [evaluationKey, setEvaluationKey] = useState(0);
   
   // 모바일 상태 감지
   useEffect(() => {
@@ -106,7 +110,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     };
   }, []);
   
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
       
@@ -168,11 +172,36 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [jobBoardId, router]);
   
   useEffect(() => {
     loadData();
-  }, [jobBoardId, router]);
+    loadCurrentAdminName();
+  }, [loadData]);
+  
+  // 현재 관리자 이름 로드
+  const loadCurrentAdminName = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        // Firebase Auth의 displayName이 있으면 사용
+        if (currentUser.displayName) {
+          setCurrentAdminName(currentUser.displayName);
+          return;
+        }
+        
+        // 없으면 users 컬렉션에서 이름 조회
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          setCurrentAdminName(userData.name || '관리자');
+        }
+      }
+    } catch (error) {
+      console.error('관리자 이름 로드 오류:', error);
+      // 오류 발생 시 기본값 유지
+    }
+  };
   
   useEffect(() => {
     let filtered = [...applications];
@@ -224,7 +253,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   
   const handleSelectApplication = (app: ApplicationWithUser) => {
     setSelectedApplication(app);
-    setFeedbackText(app.interviewFeedback || '');
     
     if (app.interviewDate) {
       const date = app.interviewDate.toDate();
@@ -550,49 +578,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     }
   };
 
-  const handleSaveFeedback = async () => {
-    if (!selectedApplication) return;
-
-    try {
-      setIsLoading(true);
-      const applicationRef = doc(db, 'applicationHistories', selectedApplication.id);
-      
-      const updateData: Partial<ApplicationHistory> = {
-        interviewFeedback: feedbackText,
-        updatedAt: Timestamp.fromDate(new Date())
-      };
-
-      // Firestore 업데이트 - 비동기 작업이지만 로컬 상태 업데이트를 먼저 하기 위해 await을 사용하지 않음
-      updateDoc(applicationRef, updateData)
-        .catch((error) => {
-          console.error('면접 피드백 저장 오류:', error);
-          toast.error('면접 피드백 저장 중 오류가 발생했습니다. 다시 시도해주세요.');
-        });
-
-      // 로컬 상태 즉시 업데이트
-      const updatedApplication: ApplicationWithUser = {
-        ...selectedApplication,
-        ...updateData
-      };
-
-      // applications 배열 업데이트
-      setApplications(prevApplications => 
-        prevApplications.map(app => 
-          app.id === selectedApplication.id ? updatedApplication : app
-        )
-      );
-
-      // 선택된 지원자 상태 업데이트
-      setSelectedApplication(updatedApplication);
-
-      toast.success('면접 피드백이 저장되었습니다.');
-    } catch (error) {
-      console.error('면접 피드백 저장 오류:', error);
-      toast.error('면접 피드백 저장 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // 면접 날짜 미정으로 설정
   const handleSetUndefinedDate = async () => {
@@ -763,7 +748,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   };
 
   // 상태별 템플릿 로드 함수
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     if (!jobBoard || !jobBoard.id) return;
     
     try {
@@ -837,14 +822,14 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [jobBoard]);
 
   // 선택된 지원자가 변경될 때 모든 템플릿 로드
   useEffect(() => {
     if (selectedApplication?.user) {
       loadTemplates();
     }
-  }, [selectedApplication, jobBoard]);
+  }, [selectedApplication, loadTemplates]);
 
   // 메시지 전송 함수
   const sendMessage = async (message: string) => {
@@ -2089,31 +2074,36 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         </div>
                       )}
                       
-                      {/* 면접 피드백 */}
-                      <div className="mt-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          면접 피드백
-                        </label>
-                        <textarea
-                          value={feedbackText}
-                          onChange={(e) => setFeedbackText(e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 max-h-[100px] overflow-auto"
-                          placeholder="면접 피드백을 입력하세요..."
-                          disabled={isLoading}
-                          style={{ height: '100px', resize: 'none' }}
-                        ></textarea>
-                        <div className="mt-2 flex justify-end">
+                      {/* 새로운 평가 시스템과 기존 피드백 */}
+                      <div className="mt-6 space-y-6">
+                        {/* 평가 점수 작성 버튼 */}
+                        <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                          <div>
+                            <h3 className="font-medium text-blue-900 mb-1">평가 점수 시스템</h3>
+                            <p className="text-sm text-blue-600">
+                              체계적인 평가 항목별 점수와 피드백을 작성할 수 있습니다.
+                            </p>
+                          </div>
                           <Button
                             variant="primary"
-                            onClick={handleSaveFeedback}
-                            isLoading={isLoading}
-                            disabled={isLoading || !feedbackText.trim()}
+                            size="sm"
+                            onClick={() => setShowEvaluationForm(true)}
+                            disabled={isLoading}
                           >
-                            피드백 저장
+                            평가 작성
                           </Button>
                         </div>
+
                       </div>
                     </div>
+
+                    {/* 평가 점수 현황 */}
+                    {selectedApplication.user && (
+                      <div className="mb-6 pb-6 border-b border-gray-200">
+                        <h3 className="text-lg font-semibold mb-4">평가 점수 현황</h3>
+                        <EvaluationStageCards key={evaluationKey} userId={selectedApplication.user.id} />
+                      </div>
+                    )}
 
                     {/* 알바 & 멘토링 경력 */}
                     <div className="mb-6 pb-6">
@@ -2298,6 +2288,29 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           </div>
         )}
         
+        {/* 평가 폼 모달 */}
+        {showEvaluationForm && selectedApplication?.user && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <EvaluationForm
+                targetUserId={selectedApplication.user.id}
+                targetUserName={selectedApplication.user.name}
+                evaluatorId={auth.currentUser?.uid || ''}
+                evaluatorName={currentAdminName}
+                refApplicationId={selectedApplication.id}
+                refJobBoardId={jobBoard?.id}
+                onSuccess={() => {
+                  toast.success('평가가 성공적으로 저장되었습니다.');
+                  setShowEvaluationForm(false);
+                  // 평가 카드 새로고침
+                  setEvaluationKey(prev => prev + 1);
+                }}
+                onCancel={() => setShowEvaluationForm(false)}
+              />
+            </div>
+          </div>
+        )}
+
         {/* 프로필 이미지 모달 */}
         {showProfileImageModal && selectedApplication?.user?.profileImage && (
           <div className="fixed inset-0 bg-black bg-black/0 flex items-center justify-center z-50 p-4">

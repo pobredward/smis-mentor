@@ -10,6 +10,8 @@ import FormInput from '@/components/common/FormInput';
 import PhoneInput, { formatPhoneNumber } from '@/components/common/PhoneInput';
 import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser } from '@/lib/firebaseService';
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
+import { EvaluationSummaryCompact } from '@/components/evaluation/EvaluationSummary';
+import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
 import { Timestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 
@@ -789,6 +791,11 @@ export default function UserManage() {
                                   user.status === 'inactive' ? '비활성' : '임시'}
                               </span>
                             </div>
+                            
+                            {/* 평가 점수 요약 */}
+                            <div className="mt-2">
+                              <EvaluationSummaryCompact user={user} />
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1337,9 +1344,15 @@ export default function UserManage() {
                         )}
                       </div>
 
+                      {/* 평가 점수 섹션 */}
+                      <div className="mt-6 border-t pt-4">
+                        <h3 className="text-lg font-semibold mb-3">평가 점수 현황</h3>
+                        <EvaluationStageCards userId={selectedUser.id} />
+                      </div>
+
                       {/* 피드백 섹션 */}
                       <div className="mt-6 border-t pt-4">
-                        <h3 className="text-lg font-semibold mb-3">피드백</h3>
+                        <h3 className="text-lg font-semibold mb-3">관리자 피드백 (기존)</h3>
                         <p className="text-gray-900 whitespace-pre-line bg-gray-50 p-3 rounded min-h-[80px]">
                           {selectedUser.feedback || '-'}
                         </p>

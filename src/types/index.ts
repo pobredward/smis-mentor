@@ -61,6 +61,41 @@ export interface User {
     period: string;
     description: string;
   }[];
+  
+  // 평가 요약 정보 추가
+  evaluationSummary?: {
+    documentReview?: {
+      averageScore: number;
+      totalEvaluations: number;
+      highestScore: number;
+      lowestScore: number;
+      lastEvaluatedAt: Timestamp;
+    };
+    interview?: {
+      averageScore: number;
+      totalEvaluations: number;
+      highestScore: number;
+      lowestScore: number;
+      lastEvaluatedAt: Timestamp;
+    };
+    faceToFaceEducation?: {
+      averageScore: number;
+      totalEvaluations: number;
+      highestScore: number;
+      lowestScore: number;
+      lastEvaluatedAt: Timestamp;
+    };
+    campLife?: {
+      averageScore: number;
+      totalEvaluations: number;
+      highestScore: number;
+      lowestScore: number;
+      lastEvaluatedAt: Timestamp;
+    };
+    overallAverage: number;      // 전체 평균 점수
+    totalEvaluations: number;    // 총 평가 횟수
+    lastUpdatedAt: Timestamp;
+  };
 }
 
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager';
