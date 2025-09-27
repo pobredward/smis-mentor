@@ -89,7 +89,9 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
       let totalScore = 0;
       let scoreCount = 0;
 
-      criteriaTemplate.criteria.forEach(criterion => {
+      criteriaTemplate.criteria
+        .sort((a, b) => a.order - b.order)
+        .forEach(criterion => {
         const score = formData.scores[criterion.id] || 0;
         evaluationScores[criterion.id] = {
           score,
@@ -154,7 +156,9 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
         <div className="space-y-4">
           <h3 className="text-lg font-medium text-gray-700">평가 항목</h3>
           
-          {criteriaTemplate.criteria.map((criterion) => (
+          {criteriaTemplate.criteria
+            .sort((a, b) => a.order - b.order)
+            .map((criterion) => (
             <div key={criterion.id} className="bg-gray-50 p-4 rounded-lg">
               <div className="flex justify-between items-start mb-2">
                 <div className="flex-1">
@@ -220,7 +224,7 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
         {/* 전체 한줄평 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            한줄평
+            한줄평 (선택사항)
           </label>
           <textarea
             value={formData.feedback}

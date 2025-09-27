@@ -119,10 +119,6 @@ export default function EvaluationModalForm({
       return;
     }
 
-    if (!formData.overallFeedback.trim()) {
-      toast.error('한줄평을 입력해주세요.');
-      return;
-    }
 
     try {
       setIsSubmitting(true);
@@ -159,7 +155,9 @@ export default function EvaluationModalForm({
           {selectedCriteria ? (
             <div className="space-y-6">
               {/* 항목별 점수 입력 */}
-              {selectedCriteria.criteria.map(criteria => (
+              {selectedCriteria.criteria
+                .sort((a, b) => a.order - b.order)
+                .map(criteria => (
                 <div key={criteria.id} className="bg-white border border-gray-200 rounded-lg p-4">
                   <div className="mb-3">
                     <h4 className="font-medium text-gray-900">{criteria.name}</h4>
@@ -203,7 +201,7 @@ export default function EvaluationModalForm({
               {/* 종합 의견 */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  한줄평 *
+                  한줄평 (선택사항)
                 </label>
                 <textarea
                   value={formData.overallFeedback}

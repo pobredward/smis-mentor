@@ -305,11 +305,6 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
       return;
     }
 
-    if (!evaluationFormData.overallFeedback.trim()) {
-      toast.error('한줄평을 작성해주세요.');
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       
@@ -361,7 +356,9 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
 
         {/* 평가 항목들 */}
         <div className="space-y-4">
-          {criteria.criteria.map(criteriaItem => (
+          {criteria.criteria
+            .sort((a, b) => a.order - b.order)
+            .map(criteriaItem => (
             <div key={criteriaItem.id} className="border border-gray-200 rounded-lg p-3">
               <div className="mb-3">
                 <h5 className="font-medium text-gray-900">{criteriaItem.name}</h5>
@@ -412,7 +409,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
         {/* 종합 의견 */}
         <div className="bg-gray-50 p-3 rounded-lg">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            한줄평 *
+            한줄평 (선택사항)
           </label>
           <textarea
             value={evaluationFormData.overallFeedback}
@@ -437,7 +434,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
             variant="primary"
             onClick={handleSubmitEvaluation}
             isLoading={isSubmitting}
-            disabled={isSubmitting || !evaluationFormData.overallFeedback.trim()}
+            disabled={isSubmitting}
           >
             평가 저장
           </Button>
@@ -591,14 +588,16 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
 
                           {/* 세부 점수 바 차트 - 전체 너비 활용 */}
                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
-                            {Object.entries(evaluation.scores).map(([criteriaId, scoreData]) => {
+                            {criteriaMap[evaluation.criteriaTemplateId]?.criteria
+                              .sort((a, b) => a.order - b.order)
+                              .filter(criteriaItem => evaluation.scores[criteriaItem.id])
+                              .map((criteriaItem) => {
+                              const scoreData = evaluation.scores[criteriaItem.id];
                               const percentage = (scoreData.score / scoreData.maxScore) * 100;
-                              const criteriaTemplate = criteriaMap[evaluation.criteriaTemplateId];
-                              const criteriaItem = criteriaTemplate?.criteria.find(c => c.id === criteriaId);
-                              const criteriaName = criteriaItem?.name || criteriaId;
+                              const criteriaName = criteriaItem.name;
                               
                               return (
-                                <div key={criteriaId} className="flex-1">
+                                <div key={criteriaItem.id} className="flex-1">
                                   <div className="flex items-center justify-between mb-1">
                                     <span className="text-xs text-gray-700 font-medium" title={criteriaName}>
                                       {criteriaName}
@@ -640,13 +639,14 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                       <div className="border-t border-gray-200 pt-2">
                         <div className="text-xs font-medium text-gray-600 mb-2">항목별 평균</div>
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                          {Object.keys(evaluations[0]?.scores || {}).map(criteriaId => {
-                            const criteriaTemplate = criteriaMap[evaluations[0]?.criteriaTemplateId];
-                            const criteriaItem = criteriaTemplate?.criteria.find(c => c.id === criteriaId);
-                            const criteriaName = criteriaItem?.name || criteriaId;
+                          {criteriaMap[evaluations[0]?.criteriaTemplateId]?.criteria
+                            .sort((a, b) => a.order - b.order)
+                            .map(criteriaItem => {
+                            const criteriaId = criteriaItem.id;
+                            const criteriaName = criteriaItem.name;
                             const avgScore = evaluations.reduce((sum, evaluation) => 
                               sum + (evaluation.scores[criteriaId]?.score || 0), 0) / evaluations.length;
-                            const avgPercentage = (avgScore / (criteriaItem?.maxScore || 10)) * 100;
+                            const avgPercentage = (avgScore / criteriaItem.maxScore) * 100;
                             
                             return (
                               <div key={criteriaId} className="flex-1">
@@ -752,15 +752,17 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
 
                               {/* 세부 점수 - 그리드로 표시 */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {Object.entries(evaluation.scores).map(([criteriaId, scoreData]) => {
+                                {criteriaMap[evaluation.criteriaTemplateId]?.criteria
+                                  .sort((a, b) => a.order - b.order)
+                                  .filter(criteriaItem => evaluation.scores[criteriaItem.id])
+                                  .map((criteriaItem) => {
+                                  const scoreData = evaluation.scores[criteriaItem.id];
                                   const percentage = (scoreData.score / scoreData.maxScore) * 100;
-                                  const criteriaComment = evaluation.criteriaFeedback?.[criteriaId];
-                                  const criteriaTemplate = criteriaMap[evaluation.criteriaTemplateId];
-                                  const criteriaItem = criteriaTemplate?.criteria.find(c => c.id === criteriaId);
-                                  const criteriaName = criteriaItem?.name || criteriaId;
+                                  const criteriaComment = evaluation.criteriaFeedback?.[criteriaItem.id];
+                                  const criteriaName = criteriaItem.name;
                                   
                                   return (
-                                    <div key={criteriaId} className="bg-white p-2 rounded border">
+                                    <div key={criteriaItem.id} className="bg-white p-2 rounded border">
                                       <div className="flex items-center justify-between mb-1">
                                         <span className="text-xs font-medium text-gray-700">{criteriaName}</span>
                                         <span className={`text-sm font-bold ${getScoreColorClass(percentage)}`}>
