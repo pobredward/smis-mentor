@@ -11,7 +11,8 @@ import {
   orderBy, 
   Timestamp,
   writeBatch,
-  setDoc
+  setDoc,
+  deleteField
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { 
@@ -390,23 +391,22 @@ export class EvaluationService {
       const evaluations = await this.getUserEvaluations(userId);
       
       if (evaluations.length === 0) {
-        // 평가가 없을 때 요약 정보 초기화
-        const emptySummary = {
-          overallAverage: 0,
-          totalEvaluations: 0,
-          lastUpdatedAt: Timestamp.now()
-        };
-        
-        // User 컬렉션의 evaluationSummary 필드 초기화
+        // 평가가 없을 때 evaluationSummary 필드 완전 삭제
         await updateDoc(doc(db, 'users', userId), {
-          evaluationSummary: emptySummary,
+          evaluationSummary: deleteField(),
           updatedAt: Timestamp.now()
         });
         
-        // 별도의 요약 컬렉션에서도 문서 삭제 또는 초기화
+        // 별도의 요약 컬렉션에서도 문서 삭제
         const summaryDocRef = doc(db, this.summaryCollection, userId);
-        await deleteDoc(summaryDocRef);
+        try {
+          await deleteDoc(summaryDocRef);
+        } catch (error) {
+          // 문서가 없을 수도 있으므로 에러 무시
+          console.log('요약 문서가 이미 존재하지 않습니다:', error);
+        }
         
+        console.log('모든 평가가 삭제되어 evaluationSummary 필드를 제거했습니다.');
         return;
       }
       
