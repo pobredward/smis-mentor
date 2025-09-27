@@ -10,7 +10,8 @@ import {
   where, 
   orderBy, 
   Timestamp,
-  writeBatch
+  writeBatch,
+  setDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { 
@@ -457,10 +458,10 @@ export class EvaluationService {
       
       // 별도의 요약 컬렉션에도 저장 (선택사항)
       const summaryDocRef = doc(db, this.summaryCollection, userId);
-      await updateDoc(summaryDocRef, {
+      await setDoc(summaryDocRef, {
         userId,
         ...summary
-      });
+      }, { merge: true });
       
     } catch (error) {
       console.error('사용자 평가 요약 업데이트 오류:', error);

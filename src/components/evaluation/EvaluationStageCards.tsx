@@ -284,7 +284,31 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
   };
 
   const handleSubmitEvaluation = async () => {
-    if (!evaluationFormData || !currentUserId) return;
+    if (!evaluationFormData || !currentUserId) {
+      toast.error('평가 데이터가 올바르지 않습니다.');
+      return;
+    }
+
+    // 필수 점수 체크
+    const criteria = availableCriteria[evaluationFormData.evaluationStage];
+    if (!criteria) {
+      toast.error('평가 기준을 찾을 수 없습니다.');
+      return;
+    }
+
+    const hasAllScores = criteria.criteria.every(criteriaItem => 
+      evaluationFormData.scores[criteriaItem.id]?.score > 0
+    );
+
+    if (!hasAllScores) {
+      toast.error('모든 항목에 점수를 입력해주세요.');
+      return;
+    }
+
+    if (!evaluationFormData.overallFeedback.trim()) {
+      toast.error('한줄평을 작성해주세요.');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -298,11 +322,15 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
       toast.success('평가가 성공적으로 저장되었습니다.');
       setShowingEvaluationForm(null);
       setEvaluationFormData(null);
-      loadEvaluations(); // 목록 새로고침
+      
+      // 평가 목록 새로고침
+      await loadEvaluations();
       onEvaluationSuccess?.(); // 부모 컴포넌트에 알림
+      
     } catch (error) {
       console.error('평가 저장 오류:', error);
-      toast.error('평가 저장에 실패했습니다.');
+      const errorMessage = error instanceof Error ? error.message : '평가 저장에 실패했습니다.';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -485,6 +513,36 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
               <div className="border-t border-gray-100 bg-gray-50">
                 {hasEvaluations ? (
                   <div className="p-3">
+                    {/* 현재 관리자가 평가하지 않았다면 맨 위에 평가 작성 버튼 표시 */}
+                    {!hasCurrentUserEvaluated(stageKey) && showingEvaluationForm !== stageKey && (
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-blue-800">
+                              {stageInfo.label} 평가를 작성해주세요
+                            </p>
+                            <p className="text-xs text-blue-600">
+                              다른 관리자의 평가가 있지만, 회원님의 평가가 필요합니다.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleStartEvaluation(stageKey)}
+                            className="px-3 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1"
+                          >
+                            <span>📝</span>
+                            평가 작성
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 평가 폼 (평가가 있는 섹션에서) */}
+                    {showingEvaluationForm === stageKey && (
+                      <div className="mb-4 bg-white rounded-lg p-4 border border-gray-200">
+                        {renderEvaluationForm(stageKey)}
+                      </div>
+                    )}
+
                     {/* 평가자별 간단 요약 - 너비 최대 활용 */}
                     <div className="space-y-2 mb-3">
                       {evaluations.map((evaluation, index) => (
@@ -638,16 +696,8 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                       </div>
                     )}
 
-                    {/* 평가 작성 버튼과 상세 정보 토글 버튼 */}
-                    <div className="mt-2 flex justify-center gap-3">
-                      {!hasCurrentUserEvaluated(stageKey) && showingEvaluationForm !== stageKey && (
-                        <button
-                          onClick={() => handleStartEvaluation(stageKey)}
-                          className="px-3 py-1 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors"
-                        >
-                          📝 평가 작성
-                        </button>
-                      )}
+                    {/* 상세 정보 토글 버튼 */}
+                    <div className="mt-2 text-center">
                       <button
                         onClick={() => setDetailExpandedStage(detailExpandedStage === stageKey ? null : stageKey)}
                         className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
@@ -656,12 +706,6 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                       </button>
                     </div>
 
-                    {/* 평가 폼 (평가가 있는 섹션에서) */}
-                    {showingEvaluationForm === stageKey && (
-                      <div className="mt-4 bg-white rounded-lg p-4 border border-gray-200">
-                        {renderEvaluationForm(stageKey)}
-                      </div>
-                    )}
 
                     {/* 상세 정보 섹션 */}
                     {detailExpandedStage === stageKey && (
@@ -753,7 +797,12 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                   </div>
                 ) : (
                   <div className="p-4">
-                    {!hasCurrentUserEvaluated(stageKey) && showingEvaluationForm !== stageKey ? (
+                    {showingEvaluationForm === stageKey ? (
+                      // 평가 폼 렌더링
+                      <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        {renderEvaluationForm(stageKey)}
+                      </div>
+                    ) : !hasCurrentUserEvaluated(stageKey) ? (
                       <div className="text-center text-gray-500 mb-4">
                         <div className="text-gray-400 mb-2">📝</div>
                         <p className="text-sm mb-3">아직 {stageInfo.label} 평가가 없습니다.</p>
@@ -763,11 +812,6 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                         >
                           평가 작성하기
                         </button>
-                      </div>
-                    ) : showingEvaluationForm === stageKey ? (
-                      // 평가 폼 렌더링
-                      <div className="bg-white rounded-lg p-4 border border-gray-200">
-                        {renderEvaluationForm(stageKey)}
                       </div>
                     ) : (
                       <div className="text-center text-gray-500">
