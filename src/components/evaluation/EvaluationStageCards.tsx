@@ -308,6 +308,12 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
     try {
       setIsSubmitting(true);
       
+      console.log('🔄 Creating evaluation with:', {
+        currentUserId,
+        evaluatorName,
+        evaluationStage: evaluationFormData.evaluationStage
+      });
+      
       await EvaluationService.createEvaluation(
         evaluationFormData,
         currentUserId,

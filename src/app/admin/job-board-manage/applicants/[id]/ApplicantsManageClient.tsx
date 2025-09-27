@@ -203,13 +203,19 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           const userData = userDoc.data() as User;
           console.log('👤 User data:', { 
             name: userData.name, 
-            email: userData.email
+            email: userData.email,
+            hasName: !!userData.name,
+            nameLength: userData.name?.length || 0,
+            nameType: typeof userData.name
           });
           
-          if (userData.name) {
+          // name 필드가 존재하고 비어있지 않은 문자열인지 확인
+          if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
             console.log('✅ Using users.name:', userData.name);
-            setCurrentAdminName(userData.name);
+            setCurrentAdminName(userData.name.trim());
             return;
+          } else {
+            console.log('❌ users.name is empty or invalid:', userData.name);
           }
         }
         

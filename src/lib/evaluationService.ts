@@ -318,6 +318,8 @@ export class EvaluationService {
       const maxTotalScore = 10; // 기본 최대 점수
       const percentage = (finalScore / maxTotalScore) * 100;
       
+      console.log('💾 Saving evaluation with evaluatorName:', evaluatorName);
+      
       const evaluationData: Omit<Evaluation, 'id'> = {
         refUserId: formData.targetUserId,
         refApplicationId: formData.refApplicationId,
