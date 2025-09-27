@@ -192,26 +192,37 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const loadCurrentAdminName = async () => {
     try {
       const currentUser = auth.currentUser;
+      console.log('🔍 Current user:', currentUser?.uid, currentUser?.email);
       
       if (currentUser) {
-        // Firebase Auth의 displayName이 있으면 사용
+        // users 컬렉션에서 이름 조회 (최우선)
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        console.log('📄 User document exists:', userDoc.exists());
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          console.log('👤 User data:', { 
+            name: userData.name, 
+            email: userData.email
+          });
+          
+          if (userData.name) {
+            console.log('✅ Using users.name:', userData.name);
+            setCurrentAdminName(userData.name);
+            return;
+          }
+        }
+        
+        // users 컬렉션에 name이 없으면 Firebase Auth의 displayName 사용
         if (currentUser.displayName) {
+          console.log('✅ Using auth.displayName:', currentUser.displayName);
           setCurrentAdminName(currentUser.displayName);
           return;
         }
         
-        // 없으면 users 컬렉션에서 이름 조회
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as User;
-          const name = userData.name || '관리자';
-          setCurrentAdminName(name);
-        } else {
-          // 사용자 문서가 없으면 이메일에서 이름 추출
-          const emailName = currentUser.email?.split('@')[0] || '관리자';
-          setCurrentAdminName(emailName);
-        }
+        // 둘 다 없으면 기본값
+        console.log('⚠️ Using default name: 관리자');
+        setCurrentAdminName('관리자');
       }
     } catch (error) {
       console.error('관리자 이름 로드 오류:', error);
