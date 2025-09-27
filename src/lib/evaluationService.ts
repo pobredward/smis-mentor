@@ -390,6 +390,23 @@ export class EvaluationService {
       const evaluations = await this.getUserEvaluations(userId);
       
       if (evaluations.length === 0) {
+        // 평가가 없을 때 요약 정보 초기화
+        const emptySummary = {
+          overallAverage: 0,
+          totalEvaluations: 0,
+          lastUpdatedAt: Timestamp.now()
+        };
+        
+        // User 컬렉션의 evaluationSummary 필드 초기화
+        await updateDoc(doc(db, 'users', userId), {
+          evaluationSummary: emptySummary,
+          updatedAt: Timestamp.now()
+        });
+        
+        // 별도의 요약 컬렉션에서도 문서 삭제 또는 초기화
+        const summaryDocRef = doc(db, this.summaryCollection, userId);
+        await deleteDoc(summaryDocRef);
+        
         return;
       }
       

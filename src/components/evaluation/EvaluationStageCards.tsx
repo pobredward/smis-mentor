@@ -176,6 +176,10 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
       await EvaluationService.deleteEvaluation(evaluation.id);
       toast.success('평가가 삭제되었습니다.');
       loadEvaluations(); // 목록 새로고침
+      // 부모 컴포넌트에 변경 사항 알림 (평가 요약 업데이트)
+      if (onEvaluationSuccess) {
+        onEvaluationSuccess();
+      }
     } catch (error) {
       console.error('평가 삭제 오류:', error);
       toast.error('평가 삭제에 실패했습니다.');
@@ -186,6 +190,10 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
     setEditingEvaluation(null);
     toast.success('평가가 수정되었습니다.');
     loadEvaluations(); // 목록 새로고침
+    // 부모 컴포넌트에 변경 사항 알림 (평가 요약 업데이트)
+    if (onEvaluationSuccess) {
+      onEvaluationSuccess();
+    }
   };
 
   const handleEditCancel = () => {
