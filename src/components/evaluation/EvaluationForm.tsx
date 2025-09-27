@@ -41,7 +41,6 @@ export default function EvaluationForm({
     refJobBoardId,
     scores: {},
     overallFeedback: '',
-    evaluationDate: new Date()
   });
 
   const [criteriaTemplates, setCriteriaTemplates] = useState<EvaluationCriteria[]>([]);
@@ -309,7 +308,7 @@ export default function EvaluationForm({
                       <h4 className="font-medium text-gray-900">{criteria.name}</h4>
                       <p className="text-sm text-gray-600">{criteria.description}</p>
                       <p className="text-xs text-gray-500">
-                        가중치: {(criteria.weight * 100).toFixed(0)}% | 최대 점수: {criteria.maxScore}점
+                        최대 점수: {criteria.maxScore}점
                       </p>
                     </div>
                   </div>
@@ -373,39 +372,6 @@ export default function EvaluationForm({
           />
         </div>
 
-        {/* 평가 날짜 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              평가 날짜
-            </label>
-            <input
-              type="date"
-              value={formData.evaluationDate.toISOString().split('T')[0]}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                evaluationDate: new Date(e.target.value)
-              }))}
-              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              소요 시간 (분, 선택사항)
-            </label>
-            <input
-              type="number"
-              value={formData.duration || ''}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                duration: e.target.value ? parseInt(e.target.value) : undefined
-              }))}
-              placeholder="30"
-              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
 
 
         {/* 버튼 */}

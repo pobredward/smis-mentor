@@ -7,7 +7,6 @@ import { db } from '@/lib/firebase';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { ApplicationHistory, JobBoard, User } from '@/types';
-import EvaluationForm from '@/components/evaluation/EvaluationForm';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
@@ -88,7 +87,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [fromNumber, setFromNumber] = useState<PhoneNumber>('01076567933');
   
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
-  const [showEvaluationForm, setShowEvaluationForm] = useState(false);
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
   const [evaluationKey, setEvaluationKey] = useState(0);
   
@@ -2074,34 +2072,21 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         </div>
                       )}
                       
-                      {/* 새로운 평가 시스템과 기존 피드백 */}
-                      <div className="mt-6 space-y-6">
-                        {/* 평가 점수 작성 버튼 */}
-                        <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                          <div>
-                            <h3 className="font-medium text-blue-900 mb-1">평가 점수 시스템</h3>
-                            <p className="text-sm text-blue-600">
-                              체계적인 평가 항목별 점수와 피드백을 작성할 수 있습니다.
-                            </p>
-                          </div>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => setShowEvaluationForm(true)}
-                            disabled={isLoading}
-                          >
-                            평가 작성
-                          </Button>
-                        </div>
-
-                      </div>
                     </div>
 
                     {/* 평가 점수 현황 */}
                     {selectedApplication.user && (
                       <div className="mb-6 pb-6 border-b border-gray-200">
                         <h3 className="text-lg font-semibold mb-4">평가 점수 현황</h3>
-                        <EvaluationStageCards key={evaluationKey} userId={selectedApplication.user.id} />
+                        <EvaluationStageCards 
+                          key={evaluationKey} 
+                          userId={selectedApplication.user.id}
+                          targetUserName={selectedApplication.user.name}
+                          evaluatorName={currentAdminName}
+                          refApplicationId={selectedApplication.id}
+                          refJobBoardId={jobBoard?.id}
+                          onEvaluationSuccess={() => setEvaluationKey(prev => prev + 1)}
+                        />
                       </div>
                     )}
 
@@ -2288,28 +2273,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           </div>
         )}
         
-        {/* 평가 폼 모달 */}
-        {showEvaluationForm && selectedApplication?.user && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-              <EvaluationForm
-                targetUserId={selectedApplication.user.id}
-                targetUserName={selectedApplication.user.name}
-                evaluatorId={auth.currentUser?.uid || ''}
-                evaluatorName={currentAdminName}
-                refApplicationId={selectedApplication.id}
-                refJobBoardId={jobBoard?.id}
-                onSuccess={() => {
-                  toast.success('평가가 성공적으로 저장되었습니다.');
-                  setShowEvaluationForm(false);
-                  // 평가 카드 새로고침
-                  setEvaluationKey(prev => prev + 1);
-                }}
-                onCancel={() => setShowEvaluationForm(false)}
-              />
-            </div>
-          </div>
-        )}
 
         {/* 프로필 이미지 모달 */}
         {showProfileImageModal && selectedApplication?.user?.profileImage && (

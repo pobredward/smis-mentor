@@ -84,24 +84,24 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
     try {
       setIsLoading(true);
       
-      // 점수 데이터 구성
-      const evaluationScores: { [key: string]: { score: number; weight: number; maxScore: number } } = {};
-      let totalWeightedScore = 0;
-      let totalWeight = 0;
+      // 점수 데이터 구성 (단순 평균)
+      const evaluationScores: { [key: string]: { score: number; maxScore: number } } = {};
+      let totalScore = 0;
+      let scoreCount = 0;
 
       criteriaTemplate.criteria.forEach(criterion => {
         const score = formData.scores[criterion.id] || 0;
         evaluationScores[criterion.id] = {
           score,
-          weight: criterion.weight,
           maxScore: criterion.maxScore
         };
         
-        totalWeightedScore += score * criterion.weight;
-        totalWeight += criterion.weight;
+        totalScore += score;
+        scoreCount++;
       });
 
-      const percentage = totalWeight > 0 ? (totalWeightedScore / totalWeight) : 0;
+      const averageScore = scoreCount > 0 ? totalScore / scoreCount : 0;
+      const percentage = (averageScore / 10) * 100;
 
       // 평가 업데이트 데이터
       const updateData: Partial<Evaluation> = {
@@ -163,9 +163,6 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
                   )}
                 </div>
                 <div className="ml-4 text-right">
-                  <div className="text-sm text-gray-500">
-                    가중치: {(criterion.weight * 100).toFixed(0)}%
-                  </div>
                   <div className="text-sm text-gray-500">
                     최대: {criterion.maxScore}점
                   </div>

@@ -6,7 +6,6 @@ export type EvaluationStage = '서류 전형' | '면접 전형' | '대면 교육
 // 개별 평가 항목
 export interface EvaluationScore {
   score: number;           // 실제 점수 (1-10)
-  weight: number;          // 가중치 (0.1 ~ 1.0)
   maxScore: number;        // 최대 점수 (기본 10)
 }
 
@@ -15,7 +14,6 @@ export interface EvaluationCriteriaItem {
   id: string;
   name: string;              // 평가 항목명 (예: '의사소통능력', '기술역량' 등)
   description: string;       // 평가 기준 설명
-  weight: number;            // 가중치
   maxScore: number;          // 최대 점수
   order: number;             // 표시 순서
 }
@@ -154,6 +152,4 @@ export interface EvaluationFormData {
   };
   
   overallFeedback: string;
-  evaluationDate: Date;
-  duration?: number;
 }

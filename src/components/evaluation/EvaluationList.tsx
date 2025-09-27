@@ -196,9 +196,6 @@ export default function EvaluationList({
                     <span>
                       생성일: {format(evaluation.createdAt.toDate(), 'yyyy-MM-dd HH:mm')}
                     </span>
-                    {evaluation.duration && (
-                      <span>소요시간: {evaluation.duration}분</span>
-                    )}
                   </div>
                   {evaluation.updatedAt.seconds !== evaluation.createdAt.seconds && (
                     <div className="mt-1">

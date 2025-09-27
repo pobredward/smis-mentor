@@ -37,7 +37,6 @@ export class EvaluationCriteriaService {
             id: 'document_completeness',
             name: '서류 완성도',
             description: '지원서 작성의 완성도 및 성실성',
-            weight: 0.3,
             maxScore: 10,
             order: 1
           },
@@ -45,7 +44,6 @@ export class EvaluationCriteriaService {
             id: 'experience_relevance',
             name: '경력 적합성',
             description: '지원 분야와 관련된 경험 및 역량',
-            weight: 0.3,
             maxScore: 10,
             order: 2
           },
@@ -53,7 +51,6 @@ export class EvaluationCriteriaService {
             id: 'motivation',
             name: '지원 동기',
             description: '지원 동기의 명확성 및 진정성',
-            weight: 0.25,
             maxScore: 10,
             order: 3
           },
@@ -61,7 +58,6 @@ export class EvaluationCriteriaService {
             id: 'potential',
             name: '성장 잠재력',
             description: '향후 발전 가능성 및 학습 의지',
-            weight: 0.15,
             maxScore: 10,
             order: 4
           }
@@ -81,7 +77,6 @@ export class EvaluationCriteriaService {
             id: 'communication',
             name: '의사소통 능력',
             description: '질문 이해도, 답변의 명확성, 표현력',
-            weight: 0.25,
             maxScore: 10,
             order: 1
           },
@@ -89,7 +84,6 @@ export class EvaluationCriteriaService {
             id: 'attitude',
             name: '태도 및 자세',
             description: '면접 태도, 적극성, 예의',
-            weight: 0.2,
             maxScore: 10,
             order: 2
           },
@@ -97,7 +91,6 @@ export class EvaluationCriteriaService {
             id: 'competency',
             name: '업무 역량',
             description: '관련 경험, 기술적 이해도, 학습 의지',
-            weight: 0.3,
             maxScore: 10,
             order: 3
           },
@@ -105,7 +98,6 @@ export class EvaluationCriteriaService {
             id: 'fit',
             name: '조직 적합성',
             description: '팀워크, 조직 문화 적응도, 가치관',
-            weight: 0.25,
             maxScore: 10,
             order: 4
           }
@@ -125,7 +117,6 @@ export class EvaluationCriteriaService {
             id: 'facial_expression',
             name: '표정',
             description: '좋은 인상인지를 떠나 교육 전반적으로 어떤 표정을 짓고있는지 기준',
-            weight: 0.2,
             maxScore: 10,
             order: 1
           },
@@ -133,7 +124,6 @@ export class EvaluationCriteriaService {
             id: 'attitude',
             name: '태도',
             description: '자세가 흐트러지는지에 대한 여부나 교육에 대한 호응도 기준 (고개 끄덕임)',
-            weight: 0.3,
             maxScore: 10,
             order: 2
           },
@@ -141,7 +131,6 @@ export class EvaluationCriteriaService {
             id: 'proactivity',
             name: '적극성',
             description: '질문 여부 기준',
-            weight: 0.3,
             maxScore: 10,
             order: 3
           },
@@ -149,7 +138,6 @@ export class EvaluationCriteriaService {
             id: 'basic_manners',
             name: '기본 매너',
             description: '지각 여부 및 다른 선생님들간의 소통 시 태도',
-            weight: 0.2,
             maxScore: 10,
             order: 4
           }
@@ -169,7 +157,6 @@ export class EvaluationCriteriaService {
             id: 'adaptation',
             name: '적응력',
             description: '새로운 환경에 대한 적응 정도',
-            weight: 0.25,
             maxScore: 10,
             order: 1
           },
@@ -177,7 +164,6 @@ export class EvaluationCriteriaService {
             id: 'collaboration',
             name: '협업 능력',
             description: '동료들과의 소통 및 협력',
-            weight: 0.25,
             maxScore: 10,
             order: 2
           },
@@ -185,7 +171,6 @@ export class EvaluationCriteriaService {
             id: 'responsibility',
             name: '책임감',
             description: '맡은 역할에 대한 책임감 및 성실성',
-            weight: 0.25,
             maxScore: 10,
             order: 3
           },
@@ -193,7 +178,6 @@ export class EvaluationCriteriaService {
             id: 'leadership',
             name: '리더십',
             description: '팀을 이끄는 능력 및 솔선수범',
-            weight: 0.25,
             maxScore: 10,
             order: 4
           }
@@ -305,23 +289,21 @@ export class EvaluationService {
       
       const criteria = criteriaDoc.data() as EvaluationCriteria;
       
-      // 점수 계산
-      let totalWeightedScore = 0;
-      let totalWeight = 0;
+      // 점수 계산 (단순 평균)
+      let totalScore = 0;
+      let scoreCount = 0;
       
-      const evaluationScores: { [key: string]: { score: number; weight: number; maxScore: number } } = {};
+      const evaluationScores: { [key: string]: { score: number; maxScore: number } } = {};
       const criteriaFeedback: { [key: string]: string } = {};
       
       criteria.criteria.forEach(criteriaItem => {
         const scoreData = formData.scores[criteriaItem.id];
         if (scoreData) {
-          const weightedScore = scoreData.score * criteriaItem.weight;
-          totalWeightedScore += weightedScore;
-          totalWeight += criteriaItem.weight;
+          totalScore += scoreData.score;
+          scoreCount++;
           
           evaluationScores[criteriaItem.id] = {
             score: scoreData.score,
-            weight: criteriaItem.weight,
             maxScore: criteriaItem.maxScore
           };
           
@@ -331,7 +313,7 @@ export class EvaluationService {
         }
       });
       
-      const finalScore = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
+      const finalScore = scoreCount > 0 ? totalScore / scoreCount : 0;
       const maxTotalScore = 10; // 기본 최대 점수
       const percentage = (finalScore / maxTotalScore) * 100;
       
@@ -350,8 +332,7 @@ export class EvaluationService {
         percentage,
         feedback: formData.overallFeedback,
         criteriaFeedback,
-        evaluationDate: Timestamp.fromDate(formData.evaluationDate),
-        duration: formData.duration,
+        evaluationDate: Timestamp.now(),
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         isFinalized: true,
