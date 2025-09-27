@@ -540,6 +540,68 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                       </div>
                     )}
 
+                    {/* 항목별 평균 (여러 평가자가 있을 때만) */}
+                    {evaluations.length > 1 && (
+                      <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="text-sm font-medium text-blue-800 mb-3">📊 항목별 평균</div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                          {criteriaMap[evaluations[0]?.criteriaTemplateId]?.criteria
+                            .sort((a, b) => a.order - b.order)
+                            .map(criteriaItem => {
+                            const criteriaId = criteriaItem.id;
+                            const criteriaName = criteriaItem.name;
+                            const avgScore = evaluations.reduce((sum, evaluation) => 
+                              sum + (evaluation.scores[criteriaId]?.score || 0), 0) / evaluations.length;
+                            const avgPercentage = (avgScore / criteriaItem.maxScore) * 100;
+                            
+                            return (
+                              <div key={criteriaId} className="flex-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs text-gray-700 font-medium" title={criteriaName}>
+                                    {criteriaName}
+                                  </span>
+                                  <span className={`text-sm font-bold ${getScoreColorClass(avgPercentage)}`}>
+                                    {Math.round(avgScore)}점
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                                  <div 
+                                    className={`h-2 rounded-full transition-all duration-300 ${
+                                      avgPercentage >= 90 ? 'bg-green-500' :
+                                      avgPercentage >= 80 ? 'bg-blue-500' :
+                                      avgPercentage >= 70 ? 'bg-yellow-500' :
+                                      avgPercentage >= 60 ? 'bg-orange-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${avgPercentage}%` }}
+                                  ></div>
+                                </div>
+                                {/* 평가자별 점수 분포 미니 바 */}
+                                <div className="flex gap-0.5">
+                                  {evaluations.map((evaluation, index) => {
+                                    const score = evaluation.scores[criteriaId];
+                                    const percentage = score ? (score.score / score.maxScore) * 100 : 0;
+                                    return (
+                                      <div 
+                                        key={index}
+                                        className={`flex-1 h-1 rounded-sm transition-all duration-300 ${
+                                          percentage >= 90 ? 'bg-green-400' :
+                                          percentage >= 80 ? 'bg-blue-400' :
+                                          percentage >= 70 ? 'bg-yellow-400' :
+                                          percentage >= 60 ? 'bg-orange-400' : 'bg-red-400'
+                                        }`}
+                                        style={{ opacity: Math.max(percentage / 100, 0.3) }}
+                                        title={`${evaluation.evaluatorName}: ${score?.score || 0}점`}
+                                      ></div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* 평가자별 간단 요약 - 너비 최대 활용 */}
                     <div className="space-y-2 mb-3">
                       {evaluations.map((evaluation, index) => (
@@ -634,67 +696,6 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                       ))}
                     </div>
 
-                    {/* 항목별 평균 (여러 평가자가 있을 때만) */}
-                    {evaluations.length > 1 && (
-                      <div className="border-t border-gray-200 pt-2">
-                        <div className="text-xs font-medium text-gray-600 mb-2">항목별 평균</div>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                          {criteriaMap[evaluations[0]?.criteriaTemplateId]?.criteria
-                            .sort((a, b) => a.order - b.order)
-                            .map(criteriaItem => {
-                            const criteriaId = criteriaItem.id;
-                            const criteriaName = criteriaItem.name;
-                            const avgScore = evaluations.reduce((sum, evaluation) => 
-                              sum + (evaluation.scores[criteriaId]?.score || 0), 0) / evaluations.length;
-                            const avgPercentage = (avgScore / criteriaItem.maxScore) * 100;
-                            
-                            return (
-                              <div key={criteriaId} className="flex-1">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-xs text-gray-600 font-medium" title={criteriaName}>
-                                    {criteriaName}
-                                  </span>
-                                  <span className={`text-xs font-bold ${getScoreColorClass(avgPercentage)}`}>
-                                    {Math.round(avgScore)}점
-                                  </span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
-                                  <div 
-                                    className={`h-2 rounded-full transition-all duration-300 ${
-                                      avgPercentage >= 90 ? 'bg-green-500' :
-                                      avgPercentage >= 80 ? 'bg-blue-500' :
-                                      avgPercentage >= 70 ? 'bg-yellow-500' :
-                                      avgPercentage >= 60 ? 'bg-orange-500' : 'bg-red-500'
-                                    }`}
-                                    style={{ width: `${avgPercentage}%` }}
-                                  ></div>
-                                </div>
-                                {/* 평가자별 점수 분포 미니 바 */}
-                                <div className="flex gap-0.5">
-                                  {evaluations.map((evaluation, index) => {
-                                    const score = evaluation.scores[criteriaId];
-                                    const percentage = score ? (score.score / score.maxScore) * 100 : 0;
-                                    return (
-                                      <div 
-                                        key={index}
-                                        className={`flex-1 h-1 rounded-sm transition-all duration-300 ${
-                                          percentage >= 90 ? 'bg-green-400' :
-                                          percentage >= 80 ? 'bg-blue-400' :
-                                          percentage >= 70 ? 'bg-yellow-400' :
-                                          percentage >= 60 ? 'bg-orange-400' : 'bg-red-400'
-                                        }`}
-                                        style={{ opacity: Math.max(percentage / 100, 0.3) }}
-                                        title={`${evaluation.evaluatorName}: ${score?.score.toFixed(1) || 0}점`}
-                                      ></div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
 
                     {/* 상세 정보 토글 버튼 */}
                     <div className="mt-2 text-center">

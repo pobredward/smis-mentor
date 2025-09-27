@@ -20,6 +20,7 @@ import {
   TemplateType, 
 } from '@/lib/smsTemplateService';
 import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { cancelApplication } from '@/lib/firebaseService';
 
@@ -174,13 +175,24 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   
   useEffect(() => {
     loadData();
-    loadCurrentAdminName();
   }, [loadData]);
+
+  // Auth 상태 변경 시 관리자 이름 로드
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        loadCurrentAdminName();
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
   
   // 현재 관리자 이름 로드
   const loadCurrentAdminName = async () => {
     try {
       const currentUser = auth.currentUser;
+      
       if (currentUser) {
         // Firebase Auth의 displayName이 있으면 사용
         if (currentUser.displayName) {
@@ -190,9 +202,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         
         // 없으면 users 컬렉션에서 이름 조회
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
-          setCurrentAdminName(userData.name || '관리자');
+          const name = userData.name || '관리자';
+          setCurrentAdminName(name);
+        } else {
+          // 사용자 문서가 없으면 이메일에서 이름 추출
+          const emailName = currentUser.email?.split('@')[0] || '관리자';
+          setCurrentAdminName(emailName);
         }
       }
     } catch (error) {
