@@ -323,8 +323,6 @@ export class EvaluationService {
       
       const evaluationData: Omit<Evaluation, 'id'> = {
         refUserId: formData.targetUserId,
-        refApplicationId: formData.refApplicationId,
-        refJobBoardId: formData.refJobBoardId,
         evaluationStage: formData.evaluationStage,
         criteriaTemplateId: formData.criteriaTemplateId,
         evaluatorId,
@@ -340,7 +338,10 @@ export class EvaluationService {
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         isFinalized: true,
-        isVisible: false
+        isVisible: false,
+        // undefined가 아닌 경우에만 필드 추가
+        ...(formData.refApplicationId && { refApplicationId: formData.refApplicationId }),
+        ...(formData.refJobBoardId && { refJobBoardId: formData.refJobBoardId })
       };
       
       // 평가 저장

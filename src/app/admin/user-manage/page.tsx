@@ -12,8 +12,10 @@ import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInf
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { EvaluationSummaryCompact } from '@/components/evaluation/EvaluationSummary';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 type EditFormData = {
   name?: string;
@@ -61,7 +63,42 @@ export default function UserManage() {
   const [selectedRole, setSelectedRole] = useState<string>('all');
   const [selectedGroupRole, setSelectedGroupRole] = useState<'담임' | '수업' | '서포트' | '리더'>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
+  const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
   const router = useRouter();
+
+  // 현재 관리자 이름 로드
+  const loadCurrentAdminName = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      
+      if (currentUser) {
+        // users 컬렉션에서 이름 조회 (최우선)
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          
+          // name 필드가 존재하고 비어있지 않은 문자열인지 확인
+          if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
+            setCurrentAdminName(userData.name.trim());
+            return;
+          }
+        }
+        
+        // users 컬렉션에 name이 없으면 Firebase Auth의 displayName 사용
+        if (currentUser.displayName) {
+          setCurrentAdminName(currentUser.displayName);
+          return;
+        }
+        
+        // 둘 다 없으면 기본값
+        setCurrentAdminName('관리자');
+      }
+    } catch (error) {
+      console.error('관리자 이름 로드 오류:', error);
+      // 오류 발생 시 기본값 유지
+    }
+  };
 
   const jobGroups = [
     { value: 'junior', label: '주니어' },
@@ -116,6 +153,16 @@ export default function UserManage() {
       }
     };
     loadUsers();
+  }, []);
+
+  // Auth 상태 변경 시 관리자 이름 로드
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        loadCurrentAdminName();
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   // 검색어 및 역할 필터링 적용
@@ -1347,7 +1394,15 @@ export default function UserManage() {
                       {/* 평가 점수 섹션 */}
                       <div className="mt-6 border-t pt-4">
                         <h3 className="text-lg font-semibold mb-3">평가 점수 현황</h3>
-                        <EvaluationStageCards userId={selectedUser.id} />
+                        <EvaluationStageCards 
+                          userId={selectedUser.id}
+                          targetUserName={selectedUser.name}
+                          evaluatorName={currentAdminName}
+                          onEvaluationSuccess={() => {
+                            // 평가 추가/수정 후 사용자 목록 새로고침
+                            loadUsers();
+                          }}
+                        />
                       </div>
 
                       {/* 피드백 섹션 */}
