@@ -233,7 +233,7 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
 
         {/* 전체 한줄평 */}
         {/* 평가자 이름 입력 */}
-        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+        <div className="bg-white p-3 rounded-lg border border-gray-200">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             평가자 이름 *
           </label>

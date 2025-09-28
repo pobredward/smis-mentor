@@ -200,14 +200,6 @@ export default function EvaluationSummary({ user, showDetails = false }: Props) 
 export function EvaluationSummaryCompact({ user }: { user: User }) {
   const { evaluationSummary } = user;
 
-  if (!evaluationSummary) {
-    return (
-      <div className="text-xs text-gray-500">
-        평가 없음
-      </div>
-    );
-  }
-
   const getScoreColor = (score: number) => {
     if (score >= 9) return 'text-green-600';
     if (score >= 8) return 'text-blue-600';
@@ -216,54 +208,48 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
     return 'text-red-600';
   };
 
+  const overallAverage = evaluationSummary?.overallAverage || 0;
+  const totalEvaluations = evaluationSummary?.totalEvaluations || 0;
+
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500">종합:</span>
-        <span className={`text-sm font-medium ${getScoreColor(evaluationSummary.overallAverage)}`}>
-          {evaluationSummary.overallAverage.toFixed(1)}점
-        </span>
-        <span className="text-xs text-gray-400">
-          ({evaluationSummary.totalEvaluations}회)
+    <div className="flex items-center gap-2 text-xs flex-wrap">
+      <div className="flex items-center gap-1">
+        <span className="text-gray-500">종합:</span>
+        {evaluationSummary ? (
+          <span className={`font-medium ${getScoreColor(overallAverage)}`}>
+            {overallAverage.toFixed(1)}점
+          </span>
+        ) : (
+          <span className="font-medium text-gray-400">-</span>
+        )}
+      </div>
+      
+      <div className="flex items-center gap-1">
+        <span className="text-gray-500">서류:</span>
+        <span className="text-gray-600 font-medium">
+          {evaluationSummary?.documentReview?.averageScore.toFixed(1) || '-'}
         </span>
       </div>
       
-      <div className="flex gap-3 text-xs flex-wrap">
-        {evaluationSummary.documentReview && (
-          <div className="flex items-center gap-1">
-            <span className="text-gray-500">서류:</span>
-            <span className="text-gray-600 font-medium">
-              {evaluationSummary.documentReview.averageScore.toFixed(1)}
-            </span>
-          </div>
-        )}
-        
-        {evaluationSummary.interview && (
-          <div className="flex items-center gap-1">
-            <span className="text-gray-500">면접:</span>
-            <span className="text-blue-600 font-medium">
-              {evaluationSummary.interview.averageScore.toFixed(1)}
-            </span>
-          </div>
-        )}
-        
-        {evaluationSummary.faceToFaceEducation && (
-          <div className="flex items-center gap-1">
-            <span className="text-gray-500">교육:</span>
-            <span className="text-green-600 font-medium">
-              {evaluationSummary.faceToFaceEducation.averageScore.toFixed(1)}
-            </span>
-          </div>
-        )}
-        
-        {evaluationSummary.campLife && (
-          <div className="flex items-center gap-1">
-            <span className="text-gray-500">캠프:</span>
-            <span className="text-purple-600 font-medium">
-              {evaluationSummary.campLife.averageScore.toFixed(1)}
-            </span>
-          </div>
-        )}
+      <div className="flex items-center gap-1">
+        <span className="text-gray-500">면접:</span>
+        <span className="text-blue-600 font-medium">
+          {evaluationSummary?.interview?.averageScore.toFixed(1) || '-'}
+        </span>
+      </div>
+      
+      <div className="flex items-center gap-1">
+        <span className="text-gray-500">교육:</span>
+        <span className="text-green-600 font-medium">
+          {evaluationSummary?.faceToFaceEducation?.averageScore.toFixed(1) || '-'}
+        </span>
+      </div>
+      
+      <div className="flex items-center gap-1">
+        <span className="text-gray-500">캠프:</span>
+        <span className="text-purple-600 font-medium">
+          {evaluationSummary?.campLife?.averageScore.toFixed(1) || '-'}
+        </span>
       </div>
     </div>
   );

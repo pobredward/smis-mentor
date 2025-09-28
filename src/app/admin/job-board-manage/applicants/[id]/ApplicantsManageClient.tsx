@@ -6,7 +6,7 @@ import { doc, updateDoc, getDoc, collection, query, where, getDocs, DocumentData
 import { db } from '@/lib/firebase';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { ApplicationHistory, JobBoard, User } from '@/types';
+import { ApplicationHistory, JobBoard, User, JobCodeWithId, JobGroup, JobCodeWithGroup } from '@/types';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
@@ -22,7 +22,7 @@ import {
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
-import { cancelApplication } from '@/lib/firebaseService';
+import { cancelApplication, getAllJobCodes, addUserJobCode, getUserJobCodesInfo, updateUser } from '@/lib/firebaseService';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -90,6 +90,41 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
   const [evaluationKey, setEvaluationKey] = useState(0);
+  
+  // 직무 경험 추가 관련 상태
+  const [allJobCodes, setAllJobCodes] = useState<JobCodeWithId[]>([]);
+  const [selectedJobCodeId, setSelectedJobCodeId] = useState<string>('');
+  const [selectedGroup, setSelectedGroup] = useState<JobGroup>('junior');
+  const [selectedGroupRole, setSelectedGroupRole] = useState<'담임' | '수업' | '서포트' | '리더'>('담임');
+  const [classCodeInput, setClassCodeInput] = useState<string>('');
+  const [allGenerations, setAllGenerations] = useState<string[]>([]);
+  const [selectedGeneration, setSelectedGeneration] = useState<string>('');
+  const [filteredJobCodes, setFilteredJobCodes] = useState<JobCodeWithId[]>([]);
+  const [showJobCodeForm, setShowJobCodeForm] = useState<string | null>(null); // 어떤 지원자의 직무 경험 추가 폼을 보여줄지
+  const [userJobCodesMap, setUserJobCodesMap] = useState<Record<string, JobCodeWithGroup[]>>({}); // 각 사용자의 직무 경험 정보
+  const [isLoadingJobCodes, setIsLoadingJobCodes] = useState<Record<string, boolean>>({}); // 각 사용자별 로딩 상태
+  
+  // 직무 경험 관련 상수
+  const jobGroups = [
+    { value: 'junior', label: '주니어' },
+    { value: 'middle', label: '미들' },
+    { value: 'senior', label: '시니어' },
+    { value: 'spring', label: '스프링' },
+    { value: 'summer', label: '서머' },
+    { value: 'autumn', label: '어텀' },
+    { value: 'winter', label: '윈터' },
+    { value: 'common', label: '공통' },
+    { value: 'manager', label: '매니저' },
+  ];
+
+  const groupRoleOptions = [
+    { value: '담임', label: '담임' },
+    { value: '수업', label: '수업' },
+    { value: '서포트', label: '서포트' },
+    { value: '리더', label: '리더' },
+    { value: '매니저', label: '매니저' },
+    { value: '부매니저', label: '부매니저' },
+  ];
   
   // 모바일 상태 감지
   useEffect(() => {
@@ -165,6 +200,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           await loadUserAppliedCampsForList(app.refUserId);
         })
       );
+
+      // 각 사용자의 직무 경험 정보 로드
+      await Promise.all(
+        applicationsData.map(async (app) => {
+          if (app.user?.jobExperiences) {
+            await loadUserJobCodes(app.user.userId, app.user.jobExperiences);
+          }
+        })
+      );
     } catch (error) {
       console.error('데이터 로드 오류:', error);
       toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -187,7 +231,50 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
 
     return () => unsubscribe();
   }, []);
-  
+
+  // 직무 코드 로딩
+  useEffect(() => {
+    const loadAllJobCodes = async () => {
+      try {
+        const jobCodes = await getAllJobCodes();
+        setAllJobCodes(jobCodes);
+        
+        // 기수 목록 추출 및 정렬
+        const generations = Array.from(new Set(jobCodes.map(code => code.generation)))
+          .sort((a, b) => {
+            const numA = parseInt(a.replace(/[^0-9]/g, ''));
+            const numB = parseInt(b.replace(/[^0-9]/g, ''));
+            return numB - numA; // 내림차순 정렬
+          });
+        setAllGenerations(generations);
+      } catch (error) {
+        console.error('직무 코드 로딩 실패:', error);
+      }
+    };
+    
+    loadAllJobCodes();
+  }, []);
+
+  // 선택된 generation이 변경될 때 코드 필터링
+  useEffect(() => {
+    if (!selectedGeneration) {
+      setFilteredJobCodes([]);
+      return;
+    }
+    
+    const filtered = allJobCodes.filter(code => code.generation === selectedGeneration);
+    
+    // 코드 기준으로 정렬
+    filtered.sort((a, b) => {
+      if (a.code < b.code) return -1;
+      if (a.code > b.code) return 1;
+      return 0;
+    });
+    
+    setFilteredJobCodes(filtered);
+    setSelectedJobCodeId(''); // 선택 초기화
+  }, [selectedGeneration, allJobCodes]);
+
   // 현재 관리자 이름 로드 (이메일 기준으로 찾기)
   const loadCurrentAdminName = async () => {
     try {
@@ -697,6 +784,121 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   // 뒤로가기 처리
   const handleGoBack = () => {
     router.back();
+  };
+
+  // 직무 경험 추가 핸들러
+  const handleAddJobCode = async (userId: string) => {
+    if (!selectedJobCodeId) {
+      toast.error('직무 코드를 선택해주세요.');
+      return;
+    }
+    
+    try {
+      const updatedJobExperiences = await addUserJobCode(
+        userId,
+        selectedJobCodeId,
+        selectedGroup,
+        selectedGroupRole,
+        classCodeInput.trim() || undefined
+      );
+      
+      // 지원자 목록 업데이트
+      setApplications(prevApps => prevApps.map(app =>
+        app.user?.userId === userId
+          ? { ...app, user: { ...app.user!, jobExperiences: updatedJobExperiences } }
+          : app
+      ));
+      
+      setFilteredApplications(prevApps => prevApps.map(app =>
+        app.user?.userId === userId
+          ? { ...app, user: { ...app.user!, jobExperiences: updatedJobExperiences } }
+          : app
+      ));
+      
+      // 직무 경험 정보 다시 로드
+      await loadUserJobCodes(userId, updatedJobExperiences);
+      
+      // 폼 초기화
+      setSelectedJobCodeId('');
+      setSelectedGeneration('');
+      setSelectedGroupRole('담임');
+      setClassCodeInput('');
+      setShowJobCodeForm(null);
+      
+      toast.success('직무 코드가 추가되었습니다.');
+    } catch (error) {
+      console.error('직무 코드 추가 실패:', error);
+      toast.error('직무 코드 추가에 실패했습니다.');
+    }
+  };
+
+  // 직무 경험 추가 폼 토글
+  const toggleJobCodeForm = (userId: string) => {
+    if (showJobCodeForm === userId) {
+      setShowJobCodeForm(null);
+      // 폼 초기화
+      setSelectedJobCodeId('');
+      setSelectedGeneration('');
+      setSelectedGroupRole('담임');
+      setClassCodeInput('');
+    } else {
+      setShowJobCodeForm(userId);
+    }
+  };
+
+
+  // 사용자의 직무 경험 정보 로드
+  const loadUserJobCodes = async (userId: string, jobExperiences?: Array<{id: string, group: JobGroup, groupRole: string, classCode?: string}>) => {
+    if (!jobExperiences || jobExperiences.length === 0) {
+      setUserJobCodesMap(prev => ({ ...prev, [userId]: [] }));
+      return;
+    }
+
+    setIsLoadingJobCodes(prev => ({ ...prev, [userId]: true }));
+    try {
+      const jobCodes = await getUserJobCodesInfo(jobExperiences);
+      setUserJobCodesMap(prev => ({ ...prev, [userId]: jobCodes }));
+    } catch (error) {
+      console.error('직무 경험 정보 로드 실패:', error);
+      setUserJobCodesMap(prev => ({ ...prev, [userId]: [] }));
+    } finally {
+      setIsLoadingJobCodes(prev => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  // 직무 경험 삭제 핸들러
+  const handleRemoveJobCode = async (userId: string, jobCodeId: string) => {
+    const user = applications.find(app => app.user?.userId === userId)?.user;
+    if (!user) return;
+    
+    try {
+      const updatedJobExperiences = user.jobExperiences?.filter(exp => 
+        exp.id !== jobCodeId
+      ) || [];
+      
+      await updateUser(userId, { jobExperiences: updatedJobExperiences });
+      
+      // 지원자 목록 업데이트
+      setApplications(prevApps => prevApps.map(app =>
+        app.user?.userId === userId
+          ? { ...app, user: { ...app.user!, jobExperiences: updatedJobExperiences } }
+          : app
+      ));
+      
+      setFilteredApplications(prevApps => prevApps.map(app =>
+        app.user?.userId === userId
+          ? { ...app, user: { ...app.user!, jobExperiences: updatedJobExperiences } }
+          : app
+      ));
+
+      // 직무 경험 정보 다시 로드
+      await loadUserJobCodes(userId, updatedJobExperiences);
+      
+      toast.success('직무 경험이 삭제되었습니다.');
+    } catch (error) {
+      console.error('직무 경험 삭제 실패:', error);
+      toast.error('직무 경험 삭제에 실패했습니다.');
+    }
   };
   
   // SMS 템플릿 로드
@@ -1308,12 +1510,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
 
                         {/* 지원자 정보와 상태 배지 */}
                         <div className="flex flex-1 justify-between items-center">
-                          {/* 왼쪽: 지원자 기본 정보 */}
-                          <div className="flex flex-col mr-2 flex-grow-0 max-w-[70%]">
-                            <h3 className="font-medium text-gray-900 truncate">
+                          {/* 왼쪽: 지원자 기본 정보 (너비 제한) */}
+                          <div className="flex flex-col mr-2 flex-grow-0 max-w-[60%] min-w-0 overflow-hidden">
+                            <h3 className="text-sm font-medium text-gray-900 truncate">
                             {app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}
                             </h3>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-gray-500 truncate">
                               연락처: {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
                             </p>
                             <p className="text-xs text-gray-400 truncate">
@@ -1329,27 +1531,57 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             </p>
                           </div>
                           
-                          {/* 오른쪽: 상태 배지 */}
-                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {/* 오른쪽: 상태 배지 (고정 너비) */}
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0 min-w-[40%]">
                             <div className="flex items-center gap-1">
                               <span className="text-xs text-gray-500">서류:</span>
                               {getStatusBadge(app.applicationStatus, 'application')}
+                              {app.user?.evaluationSummary?.documentReview && (
+                                <span className="text-xs text-gray-600 font-medium">
+                                  ({app.user.evaluationSummary.documentReview.averageScore.toFixed(1)})
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-1">
                               <span className="text-xs text-gray-500">면접:</span>
                               {app.interviewStatus 
                                 ? getStatusBadge(app.interviewStatus, 'interview')
                                 : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
+                              {app.user?.evaluationSummary?.interview && (
+                                <span className="text-xs text-blue-600 font-medium">
+                                  ({app.user.evaluationSummary.interview.averageScore.toFixed(1)})
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-1">
                               <span className="text-xs text-gray-500">최종:</span>
                               {app.finalStatus 
                                 ? getStatusBadge(app.finalStatus, 'final')
                                 : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
+                              {app.user?.evaluationSummary?.faceToFaceEducation && (
+                                <span className="text-xs text-green-600 font-medium">
+                                  ({app.user.evaluationSummary.faceToFaceEducation.averageScore.toFixed(1)})
+                                </span>
+                              )}
                             </div>
+                            {/* 직무 경험 코드 및 캠프 점수 표시 */}
+                            {app.user?.jobExperiences && app.user.jobExperiences.length > 0 && userJobCodesMap[app.user.userId] && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-gray-500">캠프:</span>
+                                <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-700 font-medium">
+                                  {userJobCodesMap[app.user.userId]?.map(jobCode => jobCode.code).join(', ')}
+                                </span>
+                                {app.user?.evaluationSummary?.campLife && (
+                                  <span className="text-xs text-purple-600 font-medium">
+                                    ({app.user.evaluationSummary.campLife.averageScore.toFixed(1)})
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
+                      
                     </div>
                   ))}
                 </div>
@@ -2140,6 +2372,215 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       )}
                       
                     </div>
+
+                    {/* 직무 경험 관리 섹션 */}
+                    {selectedApplication.finalStatus === 'finalAccepted' && selectedApplication.user && (
+                      <div className="mb-6 pb-6 border-b border-gray-200">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg font-semibold">직무 경험 관리</h3>
+                          <Button
+                            onClick={() => toggleJobCodeForm(selectedApplication.user!.userId)}
+                            className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md"
+                          >
+                            {showJobCodeForm === selectedApplication.user.userId ? '취소' : '직무 추가'}
+                          </Button>
+                        </div>
+                        
+                        {/* 기존 직무 경험 목록 */}
+                        {isLoadingJobCodes[selectedApplication.user.userId] ? (
+                          <div className="py-4">
+                            <div className="animate-pulse h-4 bg-gray-200 rounded w-32"></div>
+                          </div>
+                        ) : userJobCodesMap[selectedApplication.user.userId]?.length === 0 ? (
+                          <p className="text-gray-500 mb-4">등록된 직무 경험이 없습니다.</p>
+                          ) : (
+                            <div className="space-y-3 mb-4">
+                              {userJobCodesMap[selectedApplication.user.userId]?.map(jobCode => {
+                                const exp = selectedApplication.user?.jobExperiences?.find(exp => exp.id === jobCode.id);
+                                const groupRole = exp?.groupRole;
+                                const classCode = exp?.classCode;
+                                return (
+                                  <div key={jobCode.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1 min-w-0">
+                                        {/* 메인 정보 */}
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <h4 className="text-sm font-medium text-gray-900 truncate">
+                                            {jobCode.generation} {jobCode.name}
+                                          </h4>
+                                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                            {jobCode.code}
+                                          </span>
+                                        </div>
+                                        
+                                        {/* 배지들 */}
+                                        <div className="flex flex-wrap gap-2">
+                                          {jobCode.group && (
+                                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                              jobCode.group === 'junior' ? 'bg-green-100 text-green-700' :
+                                              jobCode.group === 'middle' ? 'bg-yellow-100 text-yellow-700' :
+                                              jobCode.group === 'senior' ? 'bg-red-100 text-red-700' :
+                                              jobCode.group === 'spring' ? 'bg-blue-100 text-blue-700' :
+                                              jobCode.group === 'summer' ? 'bg-purple-100 text-purple-700' :
+                                              jobCode.group === 'autumn' ? 'bg-orange-100 text-orange-700' :
+                                              jobCode.group === 'winter' ? 'bg-pink-100 text-pink-700' :
+                                              jobCode.group === 'common' ? 'bg-gray-100 text-gray-700' :
+                                              jobCode.group === 'manager' ? 'bg-indigo-100 text-indigo-700' :
+                                              'bg-gray-100 text-gray-700'
+                                            }`}>
+                                              {jobCode.group === 'junior' ? '주니어' :
+                                               jobCode.group === 'middle' ? '미들' :
+                                               jobCode.group === 'senior' ? '시니어' :
+                                               jobCode.group === 'spring' ? '스프링' :
+                                               jobCode.group === 'summer' ? '서머' :
+                                               jobCode.group === 'autumn' ? '어텀' :
+                                               jobCode.group === 'winter' ? '윈터' :
+                                               jobCode.group === 'common' ? '공통' :
+                                               '매니저'}
+                                            </span>
+                                          )}
+                                          {groupRole && (
+                                            <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium">
+                                              {groupRole}
+                                            </span>
+                                          )}
+                                          {classCode && (
+                                            <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-medium">
+                                              {classCode}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* 삭제 버튼 */}
+                                      <button
+                                        onClick={() => handleRemoveJobCode(selectedApplication.user!.userId, jobCode.id)}
+                                        className="ml-3 flex-shrink-0 p-1 text-gray-400 hover:text-red-500 focus:outline-none focus:text-red-500 transition-colors"
+                                        aria-label="직무 경험 삭제"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                        {/* 직무 경험 추가 폼 */}
+                        {showJobCodeForm === selectedApplication.user?.userId && (
+                          <div className="mt-4 p-3 sm:p-4 bg-gray-50 rounded-lg border">
+                            <h4 className="text-sm sm:text-md font-medium text-gray-700 mb-3 sm:mb-4">직무 경험 추가</h4>
+                            
+                            <div className="space-y-3 sm:space-y-4">
+                              {/* 기수 선택 */}
+                              <div>
+                                <label className="block text-sm text-gray-600 mb-1 sm:mb-2">기수</label>
+                                <select
+                                  value={selectedGeneration}
+                                  onChange={(e) => setSelectedGeneration(e.target.value)}
+                                  className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                  <option value="">기수 선택...</option>
+                                  {allGenerations.map(gen => (
+                                    <option key={gen} value={gen}>
+                                      {gen}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              {/* 직무 코드 선택 */}
+                              <div>
+                                <label className="block text-sm text-gray-600 mb-1 sm:mb-2">직무 코드</label>
+                                <select
+                                  value={selectedJobCodeId}
+                                  onChange={(e) => setSelectedJobCodeId(e.target.value)}
+                                  className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  disabled={!selectedGeneration || filteredJobCodes.length === 0}
+                                >
+                                  <option value="">직무 코드 선택...</option>
+                                  {filteredJobCodes.map(jobCode => (
+                                    <option 
+                                      key={jobCode.id} 
+                                      value={jobCode.id}
+                                      title={`${jobCode.code} - ${jobCode.name}`}
+                                    >
+                                      {jobCode.code} - {jobCode.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              {/* 모바일: 세로 배치, 데스크톱: 가로 배치 */}
+                              <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-4">
+                                {/* 그룹 선택 */}
+                                <div>
+                                  <label className="block text-sm text-gray-600 mb-1 sm:mb-2">그룹</label>
+                                  <select
+                                    value={selectedGroup}
+                                    onChange={(e) => setSelectedGroup(e.target.value as JobGroup)}
+                                    className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  >
+                                    {jobGroups.map((group, index) => (
+                                      <option key={`group-option-${group.value}-${index}`} value={group.value}>
+                                        {group.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                
+                                {/* 역할 선택 */}
+                                <div>
+                                  <label className="block text-sm text-gray-600 mb-1 sm:mb-2">역할</label>
+                                  <select
+                                    value={selectedGroupRole}
+                                    onChange={(e) => setSelectedGroupRole(e.target.value as '담임' | '수업' | '서포트' | '리더')}
+                                    className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  >
+                                    {groupRoleOptions.map((role) => (
+                                      <option key={role.value} value={role.value}>{role.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                
+                                {/* 반 코드 입력 */}
+                                <div>
+                                  <label className="block text-sm text-gray-600 mb-1 sm:mb-2">반 코드</label>
+                                  <input
+                                    type="text"
+                                    value={classCodeInput}
+                                    onChange={e => setClassCodeInput(e.target.value)}
+                                    placeholder="반 코드 입력"
+                                    className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    maxLength={32}
+                                  />
+                                </div>
+                              </div>
+                              
+                              {/* 버튼들 - 모바일에서 세로 배치 */}
+                              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
+                                <Button
+                                  onClick={() => handleAddJobCode(selectedApplication.user!.userId)}
+                                  disabled={!selectedJobCodeId}
+                                  className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300"
+                                >
+                                  추가
+                                </Button>
+                                <Button
+                                  onClick={() => toggleJobCodeForm(selectedApplication.user!.userId)}
+                                  className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                                >
+                                  취소
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* 평가 점수 현황 */}
                     {selectedApplication.user && (
