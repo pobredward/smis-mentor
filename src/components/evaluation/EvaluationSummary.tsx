@@ -3,6 +3,7 @@
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { User } from '@/types';
+import { getScoreTextColor, getScoreColorSet, getScoreGradeFromTen } from '@/utils/scoreColorUtils';
 
 interface Props {
   user: User;
@@ -20,23 +21,6 @@ export default function EvaluationSummary({ user, showDetails = false }: Props) 
     );
   }
 
-  const getScoreColor = (score: number) => {
-    if (score >= 9) return 'text-green-600 bg-green-50 border-green-200';
-    if (score >= 8) return 'text-blue-600 bg-blue-50 border-blue-200';
-    if (score >= 7) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-    if (score >= 6) return 'text-orange-600 bg-orange-50 border-orange-200';
-    return 'text-red-600 bg-red-50 border-red-200';
-  };
-
-  const getScoreGrade = (score: number) => {
-    if (score >= 9) return 'A+';
-    if (score >= 8) return 'A';
-    if (score >= 7) return 'B+';
-    if (score >= 6) return 'B';
-    if (score >= 5) return 'C+';
-    if (score >= 4) return 'C';
-    return 'D';
-  };
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
@@ -51,14 +35,14 @@ export default function EvaluationSummary({ user, showDetails = false }: Props) 
           </div>
           <div className="text-right">
             <div className={`inline-flex items-center px-4 py-2 rounded-lg border ${
-              getScoreColor(evaluationSummary.overallAverage)
+              getScoreColorSet(evaluationSummary.overallAverage)
             }`}>
               <span className="text-2xl font-bold mr-2">
                 {evaluationSummary.overallAverage.toFixed(1)}
               </span>
               <div className="text-right">
                 <div className="text-sm font-medium">
-                  {getScoreGrade(evaluationSummary.overallAverage)}
+                  {getScoreGradeFromTen(evaluationSummary.overallAverage)}
                 </div>
                 <div className="text-xs">/ 10.0</div>
               </div>
@@ -200,23 +184,15 @@ export default function EvaluationSummary({ user, showDetails = false }: Props) 
 export function EvaluationSummaryCompact({ user }: { user: User }) {
   const { evaluationSummary } = user;
 
-  const getScoreColor = (score: number) => {
-    if (score >= 9) return 'text-green-600';
-    if (score >= 8) return 'text-blue-600';
-    if (score >= 7) return 'text-yellow-600';
-    if (score >= 6) return 'text-orange-600';
-    return 'text-red-600';
-  };
 
   const overallAverage = evaluationSummary?.overallAverage || 0;
-  const totalEvaluations = evaluationSummary?.totalEvaluations || 0;
 
   return (
     <div className="flex items-center gap-2 text-xs flex-wrap">
       <div className="flex items-center gap-1">
         <span className="text-gray-500">종합:</span>
         {evaluationSummary ? (
-          <span className={`font-medium ${getScoreColor(overallAverage)}`}>
+          <span className={`font-medium ${getScoreTextColor(overallAverage)}`}>
             {overallAverage.toFixed(1)}점
           </span>
         ) : (
@@ -226,28 +202,44 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
       
       <div className="flex items-center gap-1">
         <span className="text-gray-500">서류:</span>
-        <span className="text-gray-600 font-medium">
+        <span className={`font-medium ${
+          evaluationSummary?.documentReview?.averageScore 
+            ? getScoreTextColor(evaluationSummary.documentReview.averageScore)
+            : 'text-gray-600'
+        }`}>
           {evaluationSummary?.documentReview?.averageScore.toFixed(1) || '-'}
         </span>
       </div>
       
       <div className="flex items-center gap-1">
         <span className="text-gray-500">면접:</span>
-        <span className="text-blue-600 font-medium">
+        <span className={`font-medium ${
+          evaluationSummary?.interview?.averageScore 
+            ? getScoreTextColor(evaluationSummary.interview.averageScore)
+            : 'text-gray-600'
+        }`}>
           {evaluationSummary?.interview?.averageScore.toFixed(1) || '-'}
         </span>
       </div>
       
       <div className="flex items-center gap-1">
         <span className="text-gray-500">교육:</span>
-        <span className="text-green-600 font-medium">
+        <span className={`font-medium ${
+          evaluationSummary?.faceToFaceEducation?.averageScore 
+            ? getScoreTextColor(evaluationSummary.faceToFaceEducation.averageScore)
+            : 'text-gray-600'
+        }`}>
           {evaluationSummary?.faceToFaceEducation?.averageScore.toFixed(1) || '-'}
         </span>
       </div>
       
       <div className="flex items-center gap-1">
         <span className="text-gray-500">캠프:</span>
-        <span className="text-purple-600 font-medium">
+        <span className={`font-medium ${
+          evaluationSummary?.campLife?.averageScore 
+            ? getScoreTextColor(evaluationSummary.campLife.averageScore)
+            : 'text-gray-600'
+        }`}>
           {evaluationSummary?.campLife?.averageScore.toFixed(1) || '-'}
         </span>
       </div>

@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Evaluation, EvaluationStage } from '@/types/evaluation';
 import { EvaluationService } from '@/lib/evaluationService';
+import { getScoreTextColor, getScoreLightBackgroundColor } from '@/utils/scoreColorUtils';
 
 interface Props {
   userId: string;
@@ -40,12 +41,7 @@ export default function EvaluationList({
   };
 
   const getScoreColor = (score: number, maxScore: number = 10) => {
-    const percentage = (score / maxScore) * 100;
-    if (percentage >= 90) return 'text-green-600 bg-green-50';
-    if (percentage >= 80) return 'text-blue-600 bg-blue-50';
-    if (percentage >= 70) return 'text-yellow-600 bg-yellow-50';
-    if (percentage >= 60) return 'text-orange-600 bg-orange-50';
-    return 'text-red-600 bg-red-50';
+    return `${getScoreTextColor(score, maxScore)} ${getScoreLightBackgroundColor(score, maxScore)}`;
   };
 
   const getEvaluationStageLabel = (stage: EvaluationStage) => {

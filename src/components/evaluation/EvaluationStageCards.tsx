@@ -9,6 +9,7 @@ import { EvaluationService, EvaluationCriteriaService } from '@/lib/evaluationSe
 import EvaluationEditForm from './EvaluationEditForm';
 import Button from '@/components/common/Button';
 import { toast } from 'react-hot-toast';
+import { getScoreTextColor, getScoreBackgroundColor } from '@/utils/scoreColorUtils';
 
 interface Props {
   userId: string;
@@ -52,7 +53,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
     if (currentUser) {
       setCurrentUserId(currentUser.uid);
     }
-  }, [userId]);
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadEvaluations = async () => {
     try {
@@ -150,11 +151,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
   };
 
   const getScoreColorClass = (percentage: number) => {
-    if (percentage >= 90) return 'text-green-600';
-    if (percentage >= 80) return 'text-blue-600';
-    if (percentage >= 70) return 'text-yellow-600';
-    if (percentage >= 60) return 'text-orange-600';
-    return 'text-red-600';
+    return getScoreTextColor(percentage, 100);
   };
 
   const calculateStageAverage = (evaluations: Evaluation[]) => {
@@ -602,29 +599,19 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
                                   <div 
-                                    className={`h-2 rounded-full transition-all duration-300 ${
-                                      avgPercentage >= 90 ? 'bg-green-500' :
-                                      avgPercentage >= 80 ? 'bg-blue-500' :
-                                      avgPercentage >= 70 ? 'bg-yellow-500' :
-                                      avgPercentage >= 60 ? 'bg-orange-500' : 'bg-red-500'
-                                    }`}
+                                    className={`h-2 rounded-full transition-all duration-300 ${getScoreBackgroundColor(avgPercentage, 100)}`}
                                     style={{ width: `${avgPercentage}%` }}
                                   ></div>
                                 </div>
                                 {/* 평가자별 점수 분포 미니 바 */}
                                 <div className="flex gap-0.5">
-                                  {evaluations.map((evaluation, index) => {
+                                  {evaluations.map((evaluation) => {
                                     const score = evaluation.scores[criteriaId];
                                     const percentage = score ? (score.score / score.maxScore) * 100 : 0;
                                     return (
                                       <div 
-                                        key={index}
-                                        className={`flex-1 h-1 rounded-sm transition-all duration-300 ${
-                                          percentage >= 90 ? 'bg-green-400' :
-                                          percentage >= 80 ? 'bg-blue-400' :
-                                          percentage >= 70 ? 'bg-yellow-400' :
-                                          percentage >= 60 ? 'bg-orange-400' : 'bg-red-400'
-                                        }`}
+                                        key={evaluation.id}
+                                        className={`flex-1 h-1 rounded-sm transition-all duration-300 ${getScoreBackgroundColor(percentage, 100).replace('bg-', 'bg-').replace('-500', '-400')}`}
                                         style={{ opacity: Math.max(percentage / 100, 0.3) }}
                                         title={`${evaluation.evaluatorName}: ${score?.score || 0}점`}
                                       ></div>
@@ -640,7 +627,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
 
                     {/* 평가자별 간단 요약 - 너비 최대 활용 */}
                     <div className="space-y-2 mb-3">
-                      {evaluations.map((evaluation, index) => (
+                      {evaluations.map((evaluation) => (
                         <div
                           key={evaluation.id}
                           className="bg-white border-l-2 border-gray-300 pl-3 py-2"
@@ -648,12 +635,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                           {/* 평가자 정보 헤더 */}
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${
-                                evaluation.percentage >= 90 ? 'bg-green-500' :
-                                evaluation.percentage >= 80 ? 'bg-blue-500' :
-                                evaluation.percentage >= 70 ? 'bg-yellow-500' :
-                                evaluation.percentage >= 60 ? 'bg-orange-500' : 'bg-red-500'
-                              }`}></div>
+                              <div className={`w-2 h-2 rounded-full ${getScoreBackgroundColor(evaluation.percentage, 100)}`}></div>
                               <span className="text-sm font-medium text-gray-800">
                                 {evaluation.evaluatorName}
                               </span>
@@ -706,12 +688,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                                   </div>
                                   <div className="w-full bg-gray-200 rounded-full h-2">
                                     <div 
-                                      className={`h-2 rounded-full transition-all duration-300 ${
-                                        percentage >= 90 ? 'bg-green-500' :
-                                        percentage >= 80 ? 'bg-blue-500' :
-                                        percentage >= 70 ? 'bg-yellow-500' :
-                                        percentage >= 60 ? 'bg-orange-500' : 'bg-red-500'
-                                      }`}
+                                      className={`h-2 rounded-full transition-all duration-300 ${getScoreBackgroundColor(percentage, 100)}`}
                                       style={{ width: `${percentage}%` }}
                                     ></div>
                                   </div>
@@ -723,9 +700,9 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                           {/* 한줄평 */}
                           {evaluation.feedback && (
                             <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded italic">
-                              "{evaluation.feedback.length > 80 
+                              &quot;{evaluation.feedback.length > 80 
                                 ? evaluation.feedback.substring(0, 80) + '...' 
-                                : evaluation.feedback}"
+                                : evaluation.feedback}&quot;
                             </div>
                           )}
                         </div>
@@ -748,7 +725,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                     {detailExpandedStage === stageKey && (
                       <div className="mt-3 pt-3 border-t border-gray-200 bg-white rounded p-3">
                         <div className="space-y-4">
-                          {evaluations.map((evaluation, index) => (
+                          {evaluations.map((evaluation) => (
                             <div key={evaluation.id} className="border-l-2 border-gray-300 pl-3">
                               <div className="flex justify-between items-center mb-3">
                                 <div className="flex items-center gap-2">
@@ -809,12 +786,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                                       
                                       <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
                                         <div 
-                                          className={`h-2 rounded-full transition-all duration-300 ${
-                                            percentage >= 90 ? 'bg-green-500' :
-                                            percentage >= 80 ? 'bg-blue-500' :
-                                            percentage >= 70 ? 'bg-yellow-500' :
-                                            percentage >= 60 ? 'bg-orange-500' : 'bg-red-500'
-                                          }`}
+                                          className={`h-2 rounded-full transition-all duration-300 ${getScoreBackgroundColor(percentage, 100)}`}
                                           style={{ width: `${percentage}%` }}
                                         ></div>
                                       </div>
