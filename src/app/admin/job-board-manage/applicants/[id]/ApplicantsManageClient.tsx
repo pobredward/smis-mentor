@@ -188,51 +188,83 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     return () => unsubscribe();
   }, []);
   
-  // 현재 관리자 이름 로드
+  // 현재 관리자 이름 로드 (이메일 기준으로 찾기)
   const loadCurrentAdminName = async () => {
     try {
       const currentUser = auth.currentUser;
-      console.log('🔍 Current user:', currentUser?.uid, currentUser?.email);
+      console.log('🔍 Current user in applicants:', currentUser?.uid, currentUser?.email);
       
-      if (currentUser) {
-        // users 컬렉션에서 이름 조회 (최우선)
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        console.log('📄 User document exists:', userDoc.exists());
+      if (currentUser && currentUser.email) {
+        // 이메일을 기준으로 users 컬렉션에서 사용자 찾기
+        console.log('📧 Searching for user by email in applicants:', currentUser.email);
         
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as User;
-          console.log('👤 User data:', { 
-            name: userData.name, 
-            email: userData.email,
-            hasName: !!userData.name,
-            nameLength: userData.name?.length || 0,
-            nameType: typeof userData.name
+        try {
+          const usersSnapshot = await getDocs(collection(db, 'users'));
+          const userByEmail = usersSnapshot.docs.find(doc => {
+            const data = doc.data() as User;
+            return data.email === currentUser.email;
           });
           
-          // name 필드가 존재하고 비어있지 않은 문자열인지 확인
+          if (userByEmail) {
+            const userData = userByEmail.data() as User;
+            console.log('✅ Found user by email in applicants:', { 
+              docId: userByEmail.id,
+              name: userData.name, 
+              email: userData.email,
+              hasName: !!userData.name,
+              nameLength: userData.name?.length || 0,
+              nameType: typeof userData.name
+            });
+            
+            if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
+              console.log('✅ Using users.name from email search in applicants:', userData.name);
+              setCurrentAdminName(userData.name.trim());
+              return;
+            } else {
+              console.log('❌ users.name is empty or invalid in applicants:', userData.name);
+            }
+          } else {
+            console.log('❌ No user found by email in users collection (applicants)');
+          }
+        } catch (emailSearchError) {
+          console.error('Email search error in applicants:', emailSearchError);
+        }
+        
+        // UID로도 시도해보기 (백업 방법)
+        console.log('🔄 Trying UID as backup in applicants:', currentUser.uid);
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          console.log('📄 Found user by UID in applicants:', { 
+            name: userData.name, 
+            email: userData.email 
+          });
+          
           if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-            console.log('✅ Using users.name:', userData.name);
+            console.log('✅ Using users.name from UID search in applicants:', userData.name);
             setCurrentAdminName(userData.name.trim());
             return;
-          } else {
-            console.log('❌ users.name is empty or invalid:', userData.name);
           }
         }
         
-        // users 컬렉션에 name이 없으면 Firebase Auth의 displayName 사용
+        // Firebase Auth의 displayName 사용
         if (currentUser.displayName) {
-          console.log('✅ Using auth.displayName:', currentUser.displayName);
+          console.log('✅ Using auth.displayName in applicants:', currentUser.displayName);
           setCurrentAdminName(currentUser.displayName);
           return;
         }
         
-        // 둘 다 없으면 기본값
-        console.log('⚠️ Using default name: 관리자');
+        // 이메일에서 이름 부분 추출 (최후의 수단)
+        const emailName = currentUser.email.split('@')[0];
+        console.log('⚠️ Using email name as fallback in applicants:', emailName);
+        setCurrentAdminName(emailName);
+      } else {
+        console.log('❌ No current user or email in applicants');
         setCurrentAdminName('관리자');
       }
     } catch (error) {
       console.error('관리자 이름 로드 오류:', error);
-      // 오류 발생 시 기본값 유지
+      setCurrentAdminName('관리자');
     }
   };
   
