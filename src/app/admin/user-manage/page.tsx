@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import React from 'react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -100,6 +100,29 @@ export default function UserManage() {
     }
   };
 
+  // 사용자 목록 불러오기 함수
+  const loadUsers = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const fetchedUsers = await getAllUsers();
+      
+      // 가입일시를 기준으로 오름차순 정렬 (가장 오래된 순)
+      const sortedUsers = [...fetchedUsers].sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      setUsers(sortedUsers);
+      setFilteredUsers(sortedUsers);
+    } catch (error) {
+      console.error('사용자 목록 로딩 실패:', error);
+      toast.error('사용자 정보를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const jobGroups = [
     { value: 'junior', label: '주니어' },
     { value: 'middle', label: '미들' },
@@ -131,29 +154,8 @@ export default function UserManage() {
 
   // 사용자 목록 불러오기
   useEffect(() => {
-    const loadUsers = async () => {
-      setIsLoading(true);
-      try {
-        const fetchedUsers = await getAllUsers();
-        
-        // 가입일시를 기준으로 오름차순 정렬 (가장 오래된 순)
-        const sortedUsers = [...fetchedUsers].sort((a, b) => {
-          const dateA = a.createdAt?.toDate?.() || new Date(0);
-          const dateB = b.createdAt?.toDate?.() || new Date(0);
-          return dateB.getTime() - dateA.getTime();
-        });
-        
-        setUsers(sortedUsers);
-        setFilteredUsers(sortedUsers);
-      } catch (error) {
-        console.error('사용자 목록 로딩 실패:', error);
-        toast.error('사용자 정보를 불러오는 중 오류가 발생했습니다.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
     loadUsers();
-  }, []);
+  }, [loadUsers]);
 
   // Auth 상태 변경 시 관리자 이름 로드
   useEffect(() => {
