@@ -3,10 +3,9 @@
  * 
  * 색상 기준:
  * - 90점 이상 (9점 이상): 초록색 (우수)
- * - 80-89점 (8-8.9점): 파란색 (양호)  
- * - 70-79점 (7-7.9점): 노란색 (보통)
- * - 60-69점 (6-6.9점): 주황색 (미흡)
- * - 60점 미만 (6점 미만): 빨간색 (부족)
+ * - 70-89점 (7-8.9점): 파란색 (양호)  
+ * - 50-69점 (5-6.9점): 주황색 (보통)
+ * - 50점 미만 (5점 미만): 빨간색 (부족)
  */
 
 /**
@@ -19,9 +18,8 @@ export function getScoreTextColor(score: number, maxScore: number = 10): string 
   const percentage = (score / maxScore) * 100;
   
   if (percentage >= 90) return 'text-green-600';
-  if (percentage >= 80) return 'text-blue-600';
-  if (percentage >= 70) return 'text-yellow-600';
-  if (percentage >= 60) return 'text-orange-600';
+  if (percentage >= 70) return 'text-blue-600';
+  if (percentage >= 50) return 'text-orange-600';
   return 'text-red-600';
 }
 
@@ -35,9 +33,8 @@ export function getScoreBackgroundColor(score: number, maxScore: number = 10): s
   const percentage = (score / maxScore) * 100;
   
   if (percentage >= 90) return 'bg-green-500';
-  if (percentage >= 80) return 'bg-blue-500';
-  if (percentage >= 70) return 'bg-yellow-500';
-  if (percentage >= 60) return 'bg-orange-500';
+  if (percentage >= 70) return 'bg-blue-500';
+  if (percentage >= 50) return 'bg-orange-500';
   return 'bg-red-500';
 }
 
@@ -51,9 +48,8 @@ export function getScoreColorSet(score: number, maxScore: number = 10): string {
   const percentage = (score / maxScore) * 100;
   
   if (percentage >= 90) return 'text-green-600 bg-green-50 border-green-200';
-  if (percentage >= 80) return 'text-blue-600 bg-blue-50 border-blue-200';
-  if (percentage >= 70) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-  if (percentage >= 60) return 'text-orange-600 bg-orange-50 border-orange-200';
+  if (percentage >= 70) return 'text-blue-600 bg-blue-50 border-blue-200';
+  if (percentage >= 50) return 'text-orange-600 bg-orange-50 border-orange-200';
   return 'text-red-600 bg-red-50 border-red-200';
 }
 
@@ -67,9 +63,8 @@ export function getScoreLightBackgroundColor(score: number, maxScore: number = 1
   const percentage = (score / maxScore) * 100;
   
   if (percentage >= 90) return 'bg-green-50';
-  if (percentage >= 80) return 'bg-blue-50';
-  if (percentage >= 70) return 'bg-yellow-50';
-  if (percentage >= 60) return 'bg-orange-50';
+  if (percentage >= 70) return 'bg-blue-50';
+  if (percentage >= 50) return 'bg-orange-50';
   return 'bg-red-50';
 }
 
@@ -84,12 +79,11 @@ export function getScoreGrade(score: number, maxScore: number = 10): string {
   
   if (percentage >= 95) return 'A+';
   if (percentage >= 90) return 'A';
-  if (percentage >= 85) return 'B+';
-  if (percentage >= 80) return 'B';
-  if (percentage >= 75) return 'C+';
-  if (percentage >= 70) return 'C';
-  if (percentage >= 60) return 'D';
-  return 'F';
+  if (percentage >= 80) return 'B+';
+  if (percentage >= 70) return 'B';
+  if (percentage >= 60) return 'C+';
+  if (percentage >= 50) return 'C';
+  return 'D';
 }
 
 /**
@@ -98,11 +92,11 @@ export function getScoreGrade(score: number, maxScore: number = 10): string {
  * @returns 점수 등급
  */
 export function getScoreGradeFromTen(score: number): string {
-  if (score >= 9) return 'A+';
-  if (score >= 8) return 'A';
-  if (score >= 7) return 'B+';
-  if (score >= 6) return 'B';
-  if (score >= 5) return 'C+';
-  if (score >= 4) return 'C';
+  if (score >= 9.5) return 'A+';
+  if (score >= 9) return 'A';
+  if (score >= 8) return 'B+';
+  if (score >= 7) return 'B';
+  if (score >= 6) return 'C+';
+  if (score >= 5) return 'C';
   return 'D';
 }
