@@ -152,4 +152,5 @@ export interface EvaluationFormData {
   };
   
   overallFeedback: string;
+  evaluatorName: string; // 평가자 이름 (직접 입력)
 }

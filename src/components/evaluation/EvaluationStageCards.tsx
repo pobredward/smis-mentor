@@ -254,7 +254,8 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
       refApplicationId,
       refJobBoardId,
       scores: {},
-      overallFeedback: ''
+      overallFeedback: '',
+      evaluatorName: evaluatorName // 기본값으로 설정
     };
 
     setEvaluationFormData(formData);
@@ -313,19 +314,25 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
       return;
     }
 
+    // 평가자 이름 체크
+    if (!evaluationFormData.evaluatorName.trim()) {
+      toast.error('평가자 이름을 입력해주세요.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       
       console.log('🔄 Creating evaluation with:', {
         currentUserId,
-        evaluatorName,
+        evaluatorName: evaluationFormData.evaluatorName,
         evaluationStage: evaluationFormData.evaluationStage
       });
       
       await EvaluationService.createEvaluation(
         evaluationFormData,
         currentUserId,
-        evaluatorName
+        evaluationFormData.evaluatorName
       );
 
       toast.success('평가가 성공적으로 저장되었습니다.');
@@ -366,6 +373,21 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
         <div className="border-b border-gray-200 pb-2 mb-4">
           <h4 className="font-medium text-gray-900">{stage} 평가 작성</h4>
           <p className="text-sm text-gray-600">각 항목에 대해 점수를 선택하고 코멘트를 작성해주세요.</p>
+        </div>
+
+        {/* 평가자 이름 입력 */}
+        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            평가자 이름 *
+          </label>
+          <input
+            type="text"
+            value={evaluationFormData.evaluatorName}
+            onChange={(e) => setEvaluationFormData(prev => ({ ...prev!, evaluatorName: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            placeholder="평가자 이름을 입력하세요"
+            required
+          />
         </div>
 
         {/* 평가 항목들 */}

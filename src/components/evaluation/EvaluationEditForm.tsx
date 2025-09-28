@@ -15,13 +15,15 @@ interface EvaluationFormData {
   scores: { [criteriaId: string]: number };
   criteriaFeedback: { [criteriaId: string]: string };
   feedback: string;
+  evaluatorName: string;
 }
 
 export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: Props) {
   const [formData, setFormData] = useState<EvaluationFormData>({
     scores: {},
     criteriaFeedback: {},
-    feedback: ''
+    feedback: '',
+    evaluatorName: ''
   });
   const [criteriaTemplate, setCriteriaTemplate] = useState<EvaluationCriteria | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,7 +50,8 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
         setFormData({
           scores: initialScores,
           criteriaFeedback: initialFeedback,
-          feedback: evaluation.feedback || ''
+          feedback: evaluation.feedback || '',
+          evaluatorName: evaluation.evaluatorName || ''
         });
       }
     } catch (error) {
@@ -81,6 +84,12 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
     
     if (!criteriaTemplate) return;
 
+    // 평가자 이름 체크
+    if (!formData.evaluatorName.trim()) {
+      alert('평가자 이름을 입력해주세요.');
+      return;
+    }
+
     try {
       setIsLoading(true);
       
@@ -110,6 +119,7 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
         scores: evaluationScores,
         criteriaFeedback: formData.criteriaFeedback,
         feedback: formData.feedback,
+        evaluatorName: formData.evaluatorName.trim(),
         totalScore: averageScore,
         percentage
       };
@@ -222,6 +232,21 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
         </div>
 
         {/* 전체 한줄평 */}
+        {/* 평가자 이름 입력 */}
+        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            평가자 이름 *
+          </label>
+          <input
+            type="text"
+            value={formData.evaluatorName}
+            onChange={(e) => setFormData(prev => ({ ...prev, evaluatorName: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="평가자 이름을 입력하세요"
+            required
+          />
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             한줄평 (선택사항)
