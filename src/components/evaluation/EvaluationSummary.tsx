@@ -184,22 +184,8 @@ export default function EvaluationSummary({ user, showDetails = false }: Props) 
 export function EvaluationSummaryCompact({ user }: { user: User }) {
   const { evaluationSummary } = user;
 
-
-  const overallAverage = evaluationSummary?.overallAverage || 0;
-
   return (
     <div className="flex items-center gap-2 text-xs flex-wrap">
-      <div className="flex items-center gap-1">
-        <span className="text-gray-500">종합:</span>
-        {evaluationSummary ? (
-          <span className={`font-medium ${getScoreTextColor(overallAverage)}`}>
-            {overallAverage.toFixed(1)}점
-          </span>
-        ) : (
-          <span className="font-medium text-gray-400">-</span>
-        )}
-      </div>
-      
       <div className="flex items-center gap-1">
         <span className="text-gray-500">서류:</span>
         <span className={`font-medium ${
