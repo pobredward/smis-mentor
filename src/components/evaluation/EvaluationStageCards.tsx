@@ -9,7 +9,6 @@ import { EvaluationService, EvaluationCriteriaService } from '@/lib/evaluationSe
 import EvaluationEditForm from './EvaluationEditForm';
 import Button from '@/components/common/Button';
 import { toast } from 'react-hot-toast';
-import { getScoreTextColor, getScoreBackgroundColor } from '@/utils/scoreColorUtils';
 
 interface Props {
   userId: string;
@@ -150,9 +149,6 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
     return configs[stage];
   };
 
-  const getScoreColorClass = (percentage: number) => {
-    return getScoreTextColor(percentage, 100);
-  };
 
   const calculateStageAverage = (evaluations: Evaluation[]) => {
     if (evaluations.length === 0) return 0;
@@ -160,17 +156,14 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
     return total / evaluations.length;
   };
 
-  const handleEditEvaluation = (evaluation: Evaluation) => {
-    setEditingEvaluation(evaluation);
-  };
 
-  const handleDeleteEvaluation = async (evaluation: Evaluation) => {
+  const handleDeleteEvaluation = async (evaluationId: string) => {
     if (!confirm('이 평가를 삭제하시겠습니까? 삭제된 평가는 복구할 수 없습니다.')) {
       return;
     }
 
     try {
-      await EvaluationService.deleteEvaluation(evaluation.id);
+      await EvaluationService.deleteEvaluation(evaluationId);
       toast.success('평가가 삭제되었습니다.');
       loadEvaluations(); // 목록 새로고침
       // 부모 컴포넌트에 변경 사항 알림 (평가 요약 업데이트)
@@ -197,9 +190,6 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
     setEditingEvaluation(null);
   };
 
-  const canEditEvaluation = (evaluation: Evaluation) => {
-    return currentUserId && evaluation.evaluatorId === currentUserId;
-  };
 
   const hasCurrentUserEvaluated = (stage: EvaluationStage) => {
     if (!currentUserId) return false;
@@ -497,341 +487,287 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
         return (
           <div
             key={stage}
-            className={`border rounded-lg ${stageInfo.borderColor} ${stageInfo.bgColor} transition-all duration-200`}
+            className="border rounded-xl border-gray-200 bg-white shadow-sm hover:shadow-md transition-all duration-200"
           >
-            {/* 헤더 */}
+            {/* 헤더 - 통일된 레이아웃 */}
             <div 
-              className="p-4 cursor-pointer"
-              onClick={() => setExpandedStage(isExpanded ? null : stageKey)}
+              className="p-4 cursor-pointer hover:bg-gray-50 rounded-t-xl transition-colors duration-200"
+              onClick={() => {
+                if (hasEvaluations) {
+                  // 평가가 있으면 상세보기 토글
+                  setDetailExpandedStage(detailExpandedStage === stageKey ? null : stageKey);
+                } else {
+                  // 평가가 없으면 기존 토글 (평가 작성 폼)
+                  setExpandedStage(isExpanded ? null : stageKey);
+                }
+              }}
             >
-              <div className="flex items-center justify-between">
+              {/* 첫 번째 행 - 제목과 총점 */}
+              <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">{stageInfo.icon}</span>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+                    hasEvaluations 
+                      ? average >= 90 ? 'bg-green-100 text-green-600' :
+                        average >= 80 ? 'bg-blue-100 text-blue-600' :
+                        average >= 70 ? 'bg-yellow-100 text-yellow-600' :
+                        average >= 60 ? 'bg-orange-100 text-orange-600' :
+                        'bg-red-100 text-red-600'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {stageInfo.icon}
+                  </div>
                   <div>
-                    <h3 className={`font-semibold ${stageInfo.textColor}`}>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">
                       {stageInfo.label}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {hasEvaluations ? `${evaluations.length}개의 평가` : '평가 없음'}
+                      {hasEvaluations ? `${evaluations.length}개 평가` : '평가 없음'}
                     </p>
                   </div>
                 </div>
                 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {hasEvaluations && (
-                        <div className="text-right">
-                          <div className={`text-xl font-bold ${getScoreColorClass(average)}`}>
-                            {Math.round(average)}점
-                          </div>
-                        </div>
-                      )}
-                      
+                <div className="flex items-center gap-3">
+                  {/* 총점 */}
+                  {hasEvaluations && (
+                    <div className={`px-3 py-1.5 rounded-lg font-bold text-lg border ${
+                      average >= 90 ? 'text-green-600 border-green-200 bg-green-50' :
+                      average >= 80 ? 'text-blue-600 border-blue-200 bg-blue-50' :
+                      average >= 70 ? 'text-yellow-600 border-yellow-200 bg-yellow-50' :
+                      average >= 60 ? 'text-orange-600 border-orange-200 bg-orange-50' :
+                      'text-red-600 border-red-200 bg-red-50'
+                    }`}>
+                      {Math.round(average)}점
                     </div>
-
-                    <div className={`transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
+                  )}
+                  
+                  {/* 토글 화살표 */}
+                  <div className={`transform transition-transform duration-200 ${
+                    hasEvaluations 
+                      ? (detailExpandedStage === stageKey ? 'rotate-180' : '') 
+                      : (isExpanded ? 'rotate-180' : '')
+                  }`}>
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
+                </div>
               </div>
+              
+              {/* 두 번째 행 - 항목별 점수 (2x2 그리드) */}
+              {hasEvaluations && evaluations.length > 0 && criteriaMap[evaluations[0]?.criteriaTemplateId] && (
+                <div className="grid grid-cols-2 gap-2">
+                  {criteriaMap[evaluations[0]?.criteriaTemplateId]?.criteria
+                    .sort((a, b) => a.order - b.order)
+                    .slice(0, 4) // 4개 모두 표시
+                    .map(criteriaItem => {
+                      const criteriaId = criteriaItem.id;
+                      const criteriaName = criteriaItem.name;
+                      const avgScore = evaluations.reduce((sum, evaluation) => 
+                        sum + (evaluation.scores[criteriaId]?.score || 0), 0) / evaluations.length;
+                      const avgPercentage = (avgScore / criteriaItem.maxScore) * 100;
+                      
+                      // 통일된 색상 시스템
+                      const getScoreColor = (percentage: number) => {
+                        if (percentage >= 90) return 'text-green-600';
+                        if (percentage >= 80) return 'text-blue-600';
+                        if (percentage >= 70) return 'text-yellow-600';
+                        if (percentage >= 60) return 'text-orange-600';
+                        return 'text-red-600';
+                      };
+
+                      const getDotColor = (percentage: number) => {
+                        if (percentage >= 90) return 'bg-green-500';
+                        if (percentage >= 80) return 'bg-blue-500';
+                        if (percentage >= 70) return 'bg-yellow-500';
+                        if (percentage >= 60) return 'bg-orange-500';
+                        return 'bg-red-500';
+                      };
+                      
+                      return (
+                        <div 
+                          key={criteriaId} 
+                          className="flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-lg border border-gray-100 text-sm hover:bg-gray-100 transition-colors duration-150"
+                          title={`${criteriaName}: ${Math.round(avgScore)}점`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getDotColor(avgPercentage)}`} />
+                            <span className="text-gray-700 truncate font-medium">
+                              {criteriaName}
+                            </span>
+                          </div>
+                          <span className={`font-bold ml-2 flex-shrink-0 ${getScoreColor(avgPercentage)}`}>
+                            {Math.round(avgScore)}
+                          </span>
+                        </div>
+                      );
+                    })
+                  }
+                </div>
+              )}
             </div>
 
-            {/* 확장된 내용 - 플랫 디자인 */}
-            {isExpanded && (
-              <div className="border-t border-gray-100 bg-gray-50">
-                {hasEvaluations ? (
-                  <div className="p-3">
-                    {/* 현재 관리자가 평가하지 않았다면 맨 위에 평가 작성 버튼 표시 */}
-                    {!hasCurrentUserEvaluated(stageKey) && showingEvaluationForm !== stageKey && (
-                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div className="flex items-center justify-between">
+            {/* 평가가 없을 때 - 평가 작성 폼 */}
+            {!hasEvaluations && isExpanded && (
+              <div className="border-t border-gray-100 bg-gray-50 rounded-b-xl">
+                <div className="p-4">
+                  {/* 평가 작성 버튼 */}
+                  {!hasCurrentUserEvaluated(stageKey) && showingEvaluationForm !== stageKey && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 text-lg">📝</span>
+                          </div>
                           <div>
-                            <p className="text-sm font-medium text-blue-800">
+                            <p className="text-sm font-semibold text-blue-800">
                               {stageInfo.label} 평가를 작성해주세요
                             </p>
                             <p className="text-xs text-blue-600">
-                              다른 관리자의 평가가 있지만, 회원님의 평가가 필요합니다.
+                              이 단계의 평가를 작성해주세요.
                             </p>
                           </div>
-                          <button
-                            onClick={() => handleStartEvaluation(stageKey)}
-                            className="px-3 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1"
-                          >
-                            <span>📝</span>
-                            평가 작성
-                          </button>
+                        </div>
+                        <button
+                          onClick={() => handleStartEvaluation(stageKey)}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors duration-150 shadow-sm"
+                        >
+                          <span>📝</span>
+                          평가 작성
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 평가 폼 */}
+                  {showingEvaluationForm === stageKey && (
+                    <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                      {renderEvaluationForm(stageKey)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 평가가 있을 때 - 상세보기 */}
+            {hasEvaluations && detailExpandedStage === stageKey && (
+              <div className="border-t border-gray-100 bg-gray-50 rounded-b-xl">
+                <div className="p-4 space-y-4">
+                  {evaluations.map((evaluation) => (
+                    <div key={evaluation.id} className="bg-white rounded-lg p-4 border border-gray-100 shadow-sm">
+                      {/* 평가자 정보 헤더 */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+                            <span className="text-white text-sm font-semibold">
+                              {evaluation.evaluatorName?.charAt(0) || '?'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">{evaluation.evaluatorName}</p>
+                            <p className="text-sm text-gray-500">
+                              {format(evaluation.createdAt.toDate(), 'yyyy.MM.dd HH:mm', { locale: ko })}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* 총점 */}
+                        <div className={`font-bold text-lg ${
+                          evaluation.percentage >= 90 ? 'text-green-600' :
+                          evaluation.percentage >= 80 ? 'text-blue-600' :
+                          evaluation.percentage >= 70 ? 'text-yellow-600' :
+                          evaluation.percentage >= 60 ? 'text-orange-600' :
+                          'text-red-600'
+                        }`}>
+                          {Math.round(evaluation.percentage)}점
                         </div>
                       </div>
-                    )}
 
-                    {/* 평가 폼 (평가가 있는 섹션에서) */}
-                    {showingEvaluationForm === stageKey && (
-                      <div className="mb-4 bg-white rounded-lg p-4 border border-gray-200">
-                        {renderEvaluationForm(stageKey)}
-                      </div>
-                    )}
-
-                    {/* 항목별 평균 (여러 평가자가 있을 때만) */}
-                    {evaluations.length > 1 && (
-                      <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="text-sm font-medium text-blue-800 mb-3">📊 항목별 평균</div>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                          {criteriaMap[evaluations[0]?.criteriaTemplateId]?.criteria
-                            .sort((a, b) => a.order - b.order)
-                            .map(criteriaItem => {
-                            const criteriaId = criteriaItem.id;
+                      {/* 세부 점수 그리드 */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                        {criteriaMap[evaluation.criteriaTemplateId]?.criteria
+                          .sort((a, b) => a.order - b.order)
+                          .map(criteriaItem => {
+                            const scoreData = evaluation.scores[criteriaItem.id];
+                            if (!scoreData) return null;
+                            
+                            const percentage = (scoreData.score / scoreData.maxScore) * 100;
                             const criteriaName = criteriaItem.name;
-                            const avgScore = evaluations.reduce((sum, evaluation) => 
-                              sum + (evaluation.scores[criteriaId]?.score || 0), 0) / evaluations.length;
-                            const avgPercentage = (avgScore / criteriaItem.maxScore) * 100;
+                            const criteriaFeedback = evaluation.criteriaFeedback?.[criteriaItem.id];
                             
                             return (
-                              <div key={criteriaId} className="flex-1">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-xs text-gray-700 font-medium" title={criteriaName}>
-                                    {criteriaName}
-                                  </span>
-                                  <span className={`text-sm font-bold ${getScoreColorClass(avgPercentage)}`}>
-                                    {Math.round(avgScore)}점
+                              <div key={criteriaItem.id} className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="text-sm font-semibold text-gray-800">{criteriaName}</span>
+                                  <span className={`text-sm font-bold ${
+                                    percentage >= 90 ? 'text-green-600' :
+                                    percentage >= 80 ? 'text-blue-600' :
+                                    percentage >= 70 ? 'text-yellow-600' :
+                                    percentage >= 60 ? 'text-orange-600' : 
+                                    'text-red-600'
+                                  }`}>
+                                    {Math.round(scoreData.score)}점
                                   </span>
                                 </div>
-                                <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                                
+                                <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
                                   <div 
-                                    className={`h-2 rounded-full transition-all duration-300 ${getScoreBackgroundColor(avgPercentage, 100)}`}
-                                    style={{ width: `${avgPercentage}%` }}
+                                    className={`h-2 rounded-full transition-all duration-300 ${
+                                      percentage >= 90 ? 'bg-green-500' :
+                                      percentage >= 80 ? 'bg-blue-500' :
+                                      percentage >= 70 ? 'bg-yellow-500' :
+                                      percentage >= 60 ? 'bg-orange-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${percentage}%` }}
                                   ></div>
                                 </div>
-                                {/* 평가자별 점수 분포 미니 바 */}
-                                <div className="flex gap-0.5">
-                                  {evaluations.map((evaluation) => {
-                                    const score = evaluation.scores[criteriaId];
-                                    const percentage = score ? (score.score / score.maxScore) * 100 : 0;
-                                    return (
-                                      <div 
-                                        key={evaluation.id}
-                                        className={`flex-1 h-1 rounded-sm transition-all duration-300 ${getScoreBackgroundColor(percentage, 100).replace('bg-', 'bg-').replace('-500', '-400')}`}
-                                        style={{ opacity: Math.max(percentage / 100, 0.3) }}
-                                        title={`${evaluation.evaluatorName}: ${score?.score || 0}점`}
-                                      ></div>
-                                    );
-                                  })}
-                                </div>
+
+                                {/* 기준별 피드백 */}
+                                {criteriaFeedback && (
+                                  <div className="mt-3 p-3 bg-white rounded border-l-4 border-blue-200">
+                                    <p className="text-xs font-semibold text-blue-700 mb-1">💬 평가 의견</p>
+                                    <p className="text-sm text-gray-700 leading-relaxed">{criteriaFeedback}</p>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
-                        </div>
                       </div>
-                    )}
 
-                    {/* 평가자별 간단 요약 - 너비 최대 활용 */}
-                    <div className="space-y-2 mb-3">
-                      {evaluations.map((evaluation) => (
-                        <div
-                          key={evaluation.id}
-                          className="bg-white border-l-2 border-gray-300 pl-3 py-2"
-                        >
-                          {/* 평가자 정보 헤더 */}
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${getScoreBackgroundColor(evaluation.percentage, 100)}`}></div>
-                              <span className="text-sm font-medium text-gray-800">
-                                {evaluation.evaluatorName}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {format(evaluation.evaluationDate.toDate(), 'MM/dd HH:mm', { locale: ko })}
-                              </span>
-                              {canEditEvaluation(evaluation) && (
-                                <div className="flex items-center gap-1 ml-2">
-                                  <button
-                                    onClick={() => handleEditEvaluation(evaluation)}
-                                    className="text-xs text-blue-600 hover:text-blue-800 px-1 py-0.5 rounded hover:bg-blue-50"
-                                    title="수정"
-                                  >
-                                    ✏️
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteEvaluation(evaluation)}
-                                    className="text-xs text-red-600 hover:text-red-800 px-1 py-0.5 rounded hover:bg-red-50"
-                                    title="삭제"
-                                  >
-                                    🗑️
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            <div className={`text-lg font-bold ${getScoreColorClass(evaluation.percentage)}`}>
-                              {Math.round(evaluation.percentage)}점
+                      {/* 전체 한줄평 */}
+                      {evaluation.feedback && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                          <div className="flex items-start gap-2">
+                            <div className="text-blue-500 mt-0.5">💭</div>
+                            <div>
+                              <p className="text-sm font-semibold text-blue-800 mb-1">전체 평가</p>
+                              <p className="text-sm text-blue-700 leading-relaxed">{evaluation.feedback}</p>
                             </div>
                           </div>
-
-                          {/* 세부 점수 바 차트 - 전체 너비 활용 */}
-                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2">
-                            {criteriaMap[evaluation.criteriaTemplateId]?.criteria
-                              .sort((a, b) => a.order - b.order)
-                              .filter(criteriaItem => evaluation.scores[criteriaItem.id])
-                              .map((criteriaItem) => {
-                              const scoreData = evaluation.scores[criteriaItem.id];
-                              const percentage = (scoreData.score / scoreData.maxScore) * 100;
-                              const criteriaName = criteriaItem.name;
-                              
-                              return (
-                                <div key={criteriaItem.id} className="flex-1">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs text-gray-700 font-medium" title={criteriaName}>
-                                      {criteriaName}
-                                    </span>
-                                    <span className={`text-xs font-bold ${getScoreColorClass(percentage)}`}>
-                                      {Math.round(scoreData.score)}점
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                      className={`h-2 rounded-full transition-all duration-300 ${getScoreBackgroundColor(percentage, 100)}`}
-                                      style={{ width: `${percentage}%` }}
-                                    ></div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* 한줄평 */}
-                          {evaluation.feedback && (
-                            <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded italic">
-                              &quot;{evaluation.feedback.length > 80 
-                                ? evaluation.feedback.substring(0, 80) + '...' 
-                                : evaluation.feedback}&quot;
-                            </div>
-                          )}
                         </div>
-                      ))}
-                    </div>
+                      )}
 
-
-                    {/* 상세 정보 토글 버튼 */}
-                    <div className="mt-2 text-center">
-                      <button
-                        onClick={() => setDetailExpandedStage(detailExpandedStage === stageKey ? null : stageKey)}
-                        className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
-                      >
-                        {detailExpandedStage === stageKey ? '▲ 접기' : '▼ 상세보기'}
-                      </button>
-                    </div>
-
-
-                    {/* 상세 정보 섹션 */}
-                    {detailExpandedStage === stageKey && (
-                      <div className="mt-3 pt-3 border-t border-gray-200 bg-white rounded p-3">
-                        <div className="space-y-4">
-                          {evaluations.map((evaluation) => (
-                            <div key={evaluation.id} className="border-l-2 border-gray-300 pl-3">
-                              <div className="flex justify-between items-center mb-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-800">{evaluation.evaluatorName}</span>
-                                  <span className="text-xs text-gray-500">
-                                    {format(evaluation.evaluationDate.toDate(), 'MM/dd HH:mm', { locale: ko })}
-                                  </span>
-                                  {canEditEvaluation(evaluation) && (
-                                    <div className="flex items-center gap-1 ml-2">
-                                      <button
-                                        onClick={() => handleEditEvaluation(evaluation)}
-                                        className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
-                                        title="수정"
-                                      >
-                                        ✏️ 수정
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteEvaluation(evaluation)}
-                                        className="text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50"
-                                        title="삭제"
-                                      >
-                                        🗑️ 삭제
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className={`text-lg font-bold ${getScoreColorClass(evaluation.percentage)}`}>
-                                  {Math.round(evaluation.percentage)}점
-                                </div>
-                              </div>
-
-                              {/* 한줄평 */}
-                              {evaluation.feedback && (
-                                <div className="mb-3 p-2 bg-gray-50 rounded text-sm text-gray-700">
-                                  <span className="text-gray-500">💬</span> {evaluation.feedback}
-                                </div>
-                              )}
-
-                              {/* 세부 점수 - 그리드로 표시 */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {criteriaMap[evaluation.criteriaTemplateId]?.criteria
-                                  .sort((a, b) => a.order - b.order)
-                                  .filter(criteriaItem => evaluation.scores[criteriaItem.id])
-                                  .map((criteriaItem) => {
-                                  const scoreData = evaluation.scores[criteriaItem.id];
-                                  const percentage = (scoreData.score / scoreData.maxScore) * 100;
-                                  const criteriaComment = evaluation.criteriaFeedback?.[criteriaItem.id];
-                                  const criteriaName = criteriaItem.name;
-                                  
-                                  return (
-                                    <div key={criteriaItem.id} className="bg-white p-2 rounded border">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-medium text-gray-700">{criteriaName}</span>
-                                        <span className={`text-sm font-bold ${getScoreColorClass(percentage)}`}>
-                                          {Math.round(scoreData.score)}점
-                                        </span>
-                                      </div>
-                                      
-                                      <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                                        <div 
-                                          className={`h-2 rounded-full transition-all duration-300 ${getScoreBackgroundColor(percentage, 100)}`}
-                                          style={{ width: `${percentage}%` }}
-                                        ></div>
-                                      </div>
-                                      
-                                      {criteriaComment && (
-                                        <div className="text-xs text-gray-600 bg-gray-50 p-1 rounded">
-                                          {criteriaComment}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
+                      {/* 수정/삭제 버튼 (본인 평가만) */}
+                      {currentUserId === evaluation.evaluatorId && (
+                        <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+                          <button
+                            onClick={() => setEditingEvaluation(evaluation)}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors duration-150"
+                          >
+                            <span>✏️</span>
+                            수정
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEvaluation(evaluation.id)}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-colors duration-150"
+                          >
+                            <span>🗑️</span>
+                            삭제
+                          </button>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-4">
-                    {showingEvaluationForm === stageKey ? (
-                      // 평가 폼 렌더링
-                      <div className="bg-white rounded-lg p-4 border border-gray-200">
-                        {renderEvaluationForm(stageKey)}
-                      </div>
-                    ) : !hasCurrentUserEvaluated(stageKey) ? (
-                      <div className="text-center text-gray-500 mb-4">
-                        <div className="text-gray-400 mb-2">📝</div>
-                        <p className="text-sm mb-3">아직 {stageInfo.label} 평가가 없습니다.</p>
-                        <button
-                          onClick={() => handleStartEvaluation(stageKey)}
-                          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                        >
-                          평가 작성하기
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-center text-gray-500">
-                        <div className="text-gray-400 mb-2">✅</div>
-                        <p className="text-sm">이미 평가를 완료했습니다.</p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
