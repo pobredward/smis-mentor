@@ -35,7 +35,7 @@ export default function EvaluationSummary({ user, showDetails = false }: Props) 
           </div>
           <div className="text-right">
             <div className={`inline-flex items-center px-4 py-2 rounded-lg border ${
-              getScoreColorSet(evaluationSummary.overallAverage)
+              getScoreColorSet(evaluationSummary.overallAverage, 10)
             }`}>
               <span className="text-2xl font-bold mr-2">
                 {evaluationSummary.overallAverage.toFixed(1)}
@@ -190,7 +190,7 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
         <span className="text-gray-500">서류:</span>
         <span className={`font-medium ${
           evaluationSummary?.documentReview?.averageScore 
-            ? getScoreTextColor(evaluationSummary.documentReview.averageScore)
+            ? getScoreTextColor(evaluationSummary.documentReview.averageScore, 10)
             : 'text-gray-600'
         }`}>
           {evaluationSummary?.documentReview?.averageScore.toFixed(1) || '-'}
@@ -201,7 +201,7 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
         <span className="text-gray-500">면접:</span>
         <span className={`font-medium ${
           evaluationSummary?.interview?.averageScore 
-            ? getScoreTextColor(evaluationSummary.interview.averageScore)
+            ? getScoreTextColor(evaluationSummary.interview.averageScore, 10)
             : 'text-gray-600'
         }`}>
           {evaluationSummary?.interview?.averageScore.toFixed(1) || '-'}
@@ -212,7 +212,7 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
         <span className="text-gray-500">교육:</span>
         <span className={`font-medium ${
           evaluationSummary?.faceToFaceEducation?.averageScore 
-            ? getScoreTextColor(evaluationSummary.faceToFaceEducation.averageScore)
+            ? getScoreTextColor(evaluationSummary.faceToFaceEducation.averageScore, 10)
             : 'text-gray-600'
         }`}>
           {evaluationSummary?.faceToFaceEducation?.averageScore.toFixed(1) || '-'}
@@ -223,7 +223,7 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
         <span className="text-gray-500">캠프:</span>
         <span className={`font-medium ${
           evaluationSummary?.campLife?.averageScore 
-            ? getScoreTextColor(evaluationSummary.campLife.averageScore)
+            ? getScoreTextColor(evaluationSummary.campLife.averageScore, 10)
             : 'text-gray-600'
         }`}>
           {evaluationSummary?.campLife?.averageScore.toFixed(1) || '-'}

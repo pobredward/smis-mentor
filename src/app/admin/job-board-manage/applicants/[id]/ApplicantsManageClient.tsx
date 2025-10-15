@@ -23,6 +23,7 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { cancelApplication, getAllJobCodes, addUserJobCode, getUserJobCodesInfo, updateUser } from '@/lib/firebaseService';
+import { getScoreTextColor } from '@/utils/scoreColorUtils';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -1537,7 +1538,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                               <span className="text-xs text-gray-500">서류:</span>
                               {getStatusBadge(app.applicationStatus, 'application')}
                               {app.user?.evaluationSummary?.documentReview && (
-                                <span className="text-xs text-gray-600 font-medium">
+                                <span className={`text-xs font-medium ${getScoreTextColor(app.user.evaluationSummary.documentReview.averageScore, 10)}`}>
                                   ({app.user.evaluationSummary.documentReview.averageScore.toFixed(1)})
                                 </span>
                               )}
@@ -1548,7 +1549,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 ? getStatusBadge(app.interviewStatus, 'interview')
                                 : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
                               {app.user?.evaluationSummary?.interview && (
-                                <span className="text-xs text-blue-600 font-medium">
+                                <span className={`text-xs font-medium ${getScoreTextColor(app.user.evaluationSummary.interview.averageScore, 10)}`}>
                                   ({app.user.evaluationSummary.interview.averageScore.toFixed(1)})
                                 </span>
                               )}
@@ -1559,7 +1560,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 ? getStatusBadge(app.finalStatus, 'final')
                                 : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
                               {app.user?.evaluationSummary?.faceToFaceEducation && (
-                                <span className="text-xs text-green-600 font-medium">
+                                <span className={`text-xs font-medium ${getScoreTextColor(app.user.evaluationSummary.faceToFaceEducation.averageScore, 10)}`}>
                                   ({app.user.evaluationSummary.faceToFaceEducation.averageScore.toFixed(1)})
                                 </span>
                               )}
@@ -1572,7 +1573,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   {userJobCodesMap[app.user.userId]?.map(jobCode => jobCode.code).join(', ')}
                                 </span>
                                 {app.user?.evaluationSummary?.campLife && (
-                                  <span className="text-xs text-purple-600 font-medium">
+                                  <span className={`text-xs font-medium ${getScoreTextColor(app.user.evaluationSummary.campLife.averageScore, 10)}`}>
                                     ({app.user.evaluationSummary.campLife.averageScore.toFixed(1)})
                                   </span>
                                 )}

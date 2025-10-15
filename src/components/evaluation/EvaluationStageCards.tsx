@@ -9,6 +9,7 @@ import { EvaluationService, EvaluationCriteriaService } from '@/lib/evaluationSe
 import EvaluationEditForm from './EvaluationEditForm';
 import Button from '@/components/common/Button';
 import { toast } from 'react-hot-toast';
+import { getScoreTextColor, getScoreBackgroundColor, getScoreColorSet } from '@/utils/scoreColorUtils';
 
 interface Props {
   userId: string;
@@ -507,11 +508,14 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
                     hasEvaluations 
-                      ? average >= 90 ? 'bg-green-100 text-green-600' :
-                        average >= 80 ? 'bg-blue-100 text-blue-600' :
-                        average >= 70 ? 'bg-yellow-100 text-yellow-600' :
-                        average >= 60 ? 'bg-orange-100 text-orange-600' :
-                        'bg-red-100 text-red-600'
+                      ? (() => {
+                          const percentage = average;
+                          if (percentage >= 90) return 'bg-green-100 text-green-600';
+                          if (percentage >= 80) return 'bg-blue-100 text-blue-600';
+                          if (percentage >= 70) return 'bg-yellow-100 text-yellow-600';
+                          if (percentage >= 60) return 'bg-orange-100 text-orange-600';
+                          return 'bg-red-100 text-red-600';
+                        })()
                       : 'bg-gray-100 text-gray-500'
                   }`}>
                     {stageInfo.icon}
@@ -529,13 +533,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                 <div className="flex items-center gap-3">
                   {/* 총점 */}
                   {hasEvaluations && (
-                    <div className={`px-3 py-1.5 rounded-lg font-bold text-lg border ${
-                      average >= 90 ? 'text-green-600 border-green-200 bg-green-50' :
-                      average >= 80 ? 'text-blue-600 border-blue-200 bg-blue-50' :
-                      average >= 70 ? 'text-yellow-600 border-yellow-200 bg-yellow-50' :
-                      average >= 60 ? 'text-orange-600 border-orange-200 bg-orange-50' :
-                      'text-red-600 border-red-200 bg-red-50'
-                    }`}>
+                    <div className={`px-3 py-1.5 rounded-lg font-bold text-lg border ${getScoreColorSet(average, 10)}`}>
                       {Math.round(average)}점
                     </div>
                   )}
@@ -566,22 +564,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                         sum + (evaluation.scores[criteriaId]?.score || 0), 0) / evaluations.length;
                       const avgPercentage = (avgScore / criteriaItem.maxScore) * 100;
                       
-                      // 통일된 색상 시스템
-                      const getScoreColor = (percentage: number) => {
-                        if (percentage >= 90) return 'text-green-600';
-                        if (percentage >= 80) return 'text-blue-600';
-                        if (percentage >= 70) return 'text-yellow-600';
-                        if (percentage >= 60) return 'text-orange-600';
-                        return 'text-red-600';
-                      };
-
-                      const getDotColor = (percentage: number) => {
-                        if (percentage >= 90) return 'bg-green-500';
-                        if (percentage >= 80) return 'bg-blue-500';
-                        if (percentage >= 70) return 'bg-yellow-500';
-                        if (percentage >= 60) return 'bg-orange-500';
-                        return 'bg-red-500';
-                      };
+                      // 통일된 색상 시스템 사용
                       
                       return (
                         <div 
@@ -590,12 +573,12 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                           title={`${criteriaName}: ${Math.round(avgScore)}점`}
                         >
                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getDotColor(avgPercentage)}`} />
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getScoreBackgroundColor(avgPercentage, 10)}`} />
                             <span className="text-gray-700 truncate font-medium">
                               {criteriaName}
                             </span>
                           </div>
-                          <span className={`font-bold ml-2 flex-shrink-0 ${getScoreColor(avgPercentage)}`}>
+                          <span className={`font-bold ml-2 flex-shrink-0 ${getScoreTextColor(avgPercentage, 10)}`}>
                             {Math.round(avgScore)}
                           </span>
                         </div>
@@ -671,13 +654,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                         </div>
                         
                         {/* 총점 */}
-                        <div className={`font-bold text-lg ${
-                          evaluation.percentage >= 90 ? 'text-green-600' :
-                          evaluation.percentage >= 80 ? 'text-blue-600' :
-                          evaluation.percentage >= 70 ? 'text-yellow-600' :
-                          evaluation.percentage >= 60 ? 'text-orange-600' :
-                          'text-red-600'
-                        }`}>
+                        <div className={`font-bold text-lg ${getScoreTextColor(evaluation.percentage, 10)}`}>
                           {Math.round(evaluation.percentage)}점
                         </div>
                       </div>
@@ -698,25 +675,14 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                               <div key={criteriaItem.id} className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                                 <div className="flex items-center justify-between mb-3">
                                   <span className="text-sm font-semibold text-gray-800">{criteriaName}</span>
-                                  <span className={`text-sm font-bold ${
-                                    percentage >= 90 ? 'text-green-600' :
-                                    percentage >= 80 ? 'text-blue-600' :
-                                    percentage >= 70 ? 'text-yellow-600' :
-                                    percentage >= 60 ? 'text-orange-600' : 
-                                    'text-red-600'
-                                  }`}>
+                                  <span className={`text-sm font-bold ${getScoreTextColor(percentage, 10)}`}>
                                     {Math.round(scoreData.score)}점
                                   </span>
                                 </div>
                                 
                                 <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
                                   <div 
-                                    className={`h-2 rounded-full transition-all duration-300 ${
-                                      percentage >= 90 ? 'bg-green-500' :
-                                      percentage >= 80 ? 'bg-blue-500' :
-                                      percentage >= 70 ? 'bg-yellow-500' :
-                                      percentage >= 60 ? 'bg-orange-500' : 'bg-red-500'
-                                    }`}
+                                    className={`h-2 rounded-full transition-all duration-300 ${getScoreBackgroundColor(percentage, 10)}`}
                                     style={{ width: `${percentage}%` }}
                                   ></div>
                                 </div>
