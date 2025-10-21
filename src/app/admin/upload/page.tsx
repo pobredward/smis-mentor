@@ -39,7 +39,7 @@ function SectionEditor({
   onSectionsChange,
 }: {
   sections: LessonMaterialTemplateSection[];
-  onSectionsChange: (sections: LessonMaterialTemplateSection[]) => void;
+  onSectionsChange: (sections: LessonMaterialTemplateSection[]) => void | Promise<void>;
 }) {
   const safeSections = Array.isArray(initialSections) ? initialSections : [];
   const [sections, setSections] = useState<LessonMaterialTemplateSection[]>([...safeSections].sort((a, b) => a.order - b.order));
@@ -48,6 +48,7 @@ function SectionEditor({
   const [editingValue, setEditingValue] = useState('');
   const [editingLinks, setEditingLinks] = useState<{ label: string; url: string }[]>([]);
   const [newLinks, setNewLinks] = useState<{ label: string; url: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -56,12 +57,19 @@ function SectionEditor({
   }, [initialSections]);
 
   // Firestore 반영
-  const saveToFirestore = (newSections: LessonMaterialTemplateSection[]) => {
-    onSectionsChange(newSections);
+  const saveToFirestore = async (newSections: LessonMaterialTemplateSection[]) => {
+    setIsLoading(true);
+    try {
+      await onSectionsChange(newSections);
+    } catch (error) {
+      console.error('섹션 저장 실패:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // 소제목 추가
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!input.trim()) return;
     const newSection: LessonMaterialTemplateSection = {
       id: uuidv4(),
@@ -74,7 +82,7 @@ function SectionEditor({
     setInput('');
     setNewLinks([]);
     inputRef.current?.focus();
-    saveToFirestore(newSections);
+    await saveToFirestore(newSections);
   };
 
   // 소제목 인라인 수정 시작
@@ -85,7 +93,7 @@ function SectionEditor({
   };
 
   // 소제목 인라인 수정 완료
-  const handleEditComplete = () => {
+  const handleEditComplete = async () => {
     if (editingId && editingValue.trim()) {
       const newSections = sections.map(s =>
         s.id === editingId ? { ...s, title: editingValue.trim(), links: editingLinks.filter(l => l.label && l.url) } : s
@@ -94,7 +102,7 @@ function SectionEditor({
       setEditingId(null);
       setEditingValue('');
       setEditingLinks([]);
-      saveToFirestore(newSections);
+      await saveToFirestore(newSections);
     }
   };
 
@@ -106,10 +114,10 @@ function SectionEditor({
   };
 
   // 소제목 삭제
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const newSections = sections.filter(s => s.id !== id).map((s, idx) => ({ ...s, order: idx }));
     setSections(newSections);
-    saveToFirestore(newSections);
+    await saveToFirestore(newSections);
   };
 
   // 드래그
@@ -117,14 +125,14 @@ function SectionEditor({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { distance: 5 } })
   );
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = sections.findIndex(s => s.id === active.id);
     const newIndex = sections.findIndex(s => s.id === over.id);
     const newSections = arrayMove(sections, oldIndex, newIndex).map((s, idx) => ({ ...s, order: idx }));
     setSections(newSections);
-    saveToFirestore(newSections);
+    await saveToFirestore(newSections);
   };
 
   // 링크 추가/수정/삭제 핸들러
@@ -353,9 +361,17 @@ function SectionEditor({
                 </button>
                 <button
                   onClick={handleAdd}
-                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 border border-transparent rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
+                  disabled={isLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 border border-transparent rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  소제목 추가
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                      저장 중...
+                    </div>
+                  ) : (
+                    '소제목 추가'
+                  )}
                 </button>
               </div>
             </div>
@@ -751,10 +767,19 @@ export default function AdminUploadTemplatePage() {
                             </div>
                             <SectionEditor
                               sections={editing === tpl ? sections : (tpl.sections || [])}
-                              onSectionsChange={editing === tpl ? setSections : (newSections) => {
-                                // 편집 모드가 아닐 때는 바로 저장
-                                updateLessonMaterialTemplate(tpl.id, { sections: newSections });
-                                fetchTemplates();
+                              onSectionsChange={async (newSections) => {
+                                // 편집 모드든 아니든 항상 바로 저장
+                                try {
+                                  if (editing === tpl) {
+                                    // 편집 모드일 때는 로컬 상태도 업데이트
+                                    setSections(newSections);
+                                  }
+                                  await updateLessonMaterialTemplate(tpl.id, { sections: newSections });
+                                  await fetchTemplates();
+                                } catch (error) {
+                                  console.error('소주제 업데이트 실패:', error);
+                                  setError('소주제 업데이트에 실패했습니다.');
+                                }
                               }}
                             />
                           </div>
