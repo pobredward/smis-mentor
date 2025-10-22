@@ -243,7 +243,6 @@ export default function UserCheck() {
         </div>
         <div className="p-3 sm:p-4 flex-grow">
           <h3 className="font-bold text-base sm:text-lg text-gray-900">{user.name}</h3>
-          <p className="text-xs sm:text-sm text-gray-500 truncate">{user.phoneNumber ? formatPhoneNumber(user.phoneNumber) : '-'}</p>
         </div>
       </div>
     );
