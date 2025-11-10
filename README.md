@@ -20,6 +20,35 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Firebase Storage 설정
+
+이 프로젝트는 Firebase Storage를 사용하여 프로필 이미지와 파일을 관리합니다.
+
+### 빠른 시작
+
+```bash
+# Firebase 설정 확인
+npm run check-firebase
+
+# Storage Rules 배포
+npm run deploy:storage
+
+# CORS 설정 (Google Cloud SDK 필요)
+gsutil cors set cors.json gs://smis-mentor.firebasestorage.app
+```
+
+### 상세 가이드
+
+- **빠른 해결**: [QUICK_FIX.md](./QUICK_FIX.md) - Firebase Console에서 즉시 해결하는 방법
+- **상세 설정**: [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) - 전체 설정 프로세스
+
+### 주요 파일
+
+- `serviceAccountKey.json` - Firebase Admin SDK 인증 키 (Git에 커밋되지 않음)
+- `storage.rules` - Firebase Storage 보안 규칙
+- `cors.json` - CORS 설정
+- `check-firebase-setup.js` - 설정 확인 스크립트
+
 ## 네이버 클라우드 플랫폼 SMS API 설정
 
 이 프로젝트는 네이버 클라우드 플랫폼의 SMS API를 사용하여 문자 메시지를 발송합니다. 

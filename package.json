@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "check-firebase": "node check-firebase-setup.js",
+    "deploy:storage": "firebase deploy --only storage"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

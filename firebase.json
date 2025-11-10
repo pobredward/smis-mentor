@@ -1,5 +1,8 @@
 {
-  "storage": {
-    "rules": "cors.json"
-  }
+  "storage": [
+    {
+      "bucket": "smis-mentor.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ]
 }
