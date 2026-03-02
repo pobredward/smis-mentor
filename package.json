@@ -19,6 +19,13 @@
     "deploy:functions": "firebase deploy --only functions",
     "deploy:storage": "firebase deploy --only storage",
     "deploy:web": "npm run deploy --workspace=packages/web",
+    "build:mobile:dev:ios": "npm run build:dev:ios --workspace=packages/mobile",
+    "build:mobile:dev:android": "npm run build:dev:android --workspace=packages/mobile",
+    "build:mobile:preview:ios": "npm run build:preview:ios --workspace=packages/mobile",
+    "build:mobile:preview:android": "npm run build:preview:android --workspace=packages/mobile",
+    "build:mobile:prod:ios": "npm run build:prod:ios --workspace=packages/mobile",
+    "build:mobile:prod:android": "npm run build:prod:android --workspace=packages/mobile",
+    "build:mobile:prod:all": "npm run build:prod:all --workspace=packages/mobile",
     "lint": "npm run lint --workspaces",
     "clean": "rm -rf node_modules packages/*/node_modules functions/node_modules"
   },

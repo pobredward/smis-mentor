@@ -36,6 +36,11 @@ yarn-error.log*
 # Firebase service account key
 serviceAccountKey.json
 managesheet-export-*.json
+google-services.json
+GoogleService-Info.plist
+# Allow Firebase files in mobile package
+!packages/mobile/GoogleService-Info.plist
+!packages/mobile/google-services.json
 
 # vercel
 .vercel
@@ -43,3 +48,28 @@ managesheet-export-*.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Expo
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# EAS
+.eas/
+google-play-service-account.json
+
+# Metro
+.metro-health-check*
+
+# macOS
+.DS_Store
+
+# Temporary files created by Metro to check the health of the file watcher
+.metro-health-check*
