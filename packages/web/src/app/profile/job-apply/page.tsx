@@ -370,6 +370,7 @@ export default function JobApplyStatus() {
           </div>
         </div>
       )}
+      </Layout>
     </>
   );
 } 
