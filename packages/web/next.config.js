@@ -5,10 +5,6 @@ const nextConfig = {
     // 실제 문제가 해결되면 제거하는 것이 좋습니다.
     ignoreBuildErrors: true,
   },
-  eslint: {
-    // 빌드 시 ESLint 검사도 일시적으로 비활성화
-    ignoreDuringBuilds: true,
-  },
 }
 
 module.exports = nextConfig 
