@@ -322,7 +322,7 @@ export function JobBoardDetailScreen({
               </View>
               <View style={styles.divider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>교육 기간</Text>
+                <Text style={styles.infoLabel}>캠프 기간</Text>
                 <View style={styles.infoValueContainer}>
                   <Text style={styles.infoValue}>
                     {formatDate(jobCode.startDate)}

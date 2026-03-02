@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
@@ -18,11 +18,6 @@ const jobCodeSchema = z.object({
   generation: z.string().min(1, '기수를 입력해주세요.'),
   code: z.string().min(1, '코드를 입력해주세요.'),
   name: z.string().min(1, '업무 이름을 입력해주세요.'),
-  eduDates: z.array(
-    z.object({
-      date: z.string().min(1, '교육 날짜를 입력해주세요.')
-    })
-  ).min(1, '최소 하나 이상의 교육 날짜가 필요합니다.'),
   startDate: z.string().min(1, '시작 날짜를 입력해주세요.'),
   endDate: z.string().min(1, '종료 날짜를 입력해주세요.'),
   location: z.string().min(1, '위치를 입력해주세요.'),
@@ -52,14 +47,8 @@ export default function JobGenerate() {
   } = useForm<JobCodeFormValues>({
     resolver: zodResolver(jobCodeSchema),
     defaultValues: {
-      eduDates: [{ date: '' }],
       korea: 'true',
     },
-  });
-
-  const { fields, append, remove, replace } = useFieldArray({
-    control,
-    name: 'eduDates',
   });
 
   // 업무 코드 목록 로드
@@ -116,11 +105,6 @@ export default function JobGenerate() {
     setIsEditing(true);
     setEditingJobCode(jobCode);
     
-    // 교육 날짜 배열 설정
-    const eduDatesArray = jobCode.eduDates.map(date => ({
-      date: formatDate(date)
-    }));
-    
     // 폼 값 설정
     setValue('generation', jobCode.generation);
     setValue('code', jobCode.code);
@@ -129,9 +113,6 @@ export default function JobGenerate() {
     setValue('endDate', formatDate(jobCode.endDate));
     setValue('location', jobCode.location);
     setValue('korea', jobCode.korea ? 'true' : 'false');
-    
-    // 교육 날짜 배열 설정 (useFieldArray)
-    replace(eduDatesArray);
   };
 
   // 수정 취소 핸들러
@@ -144,7 +125,6 @@ export default function JobGenerate() {
       generation: '',
       code: '',
       name: '',
-      eduDates: [{ date: '' }],
       startDate: '',
       endDate: '',
       location: '',
@@ -157,7 +137,6 @@ export default function JobGenerate() {
     setIsLoading(true);
     try {
       // 날짜 변환
-      const eduDates = data.eduDates.map(d => Timestamp.fromDate(new Date(d.date)));
       const startDate = Timestamp.fromDate(new Date(data.startDate));
       const endDate = Timestamp.fromDate(new Date(data.endDate));
 
@@ -165,7 +144,7 @@ export default function JobGenerate() {
         generation: data.generation,
         code: data.code,
         name: data.name,
-        eduDates,
+        eduDates: [],
         startDate,
         endDate,
         location: data.location,
@@ -202,7 +181,6 @@ export default function JobGenerate() {
         generation: '',
         code: '',
         name: '',
-        eduDates: [{ date: '' }],
         startDate: '',
         endDate: '',
         location: '',
@@ -312,46 +290,6 @@ export default function JobGenerate() {
                   error={errors.name?.message}
                   {...register('name')}
                 />
-
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-medium mb-1">
-                    교육 날짜
-                  </label>
-                  {fields.map((field, index) => (
-                    <div key={field.id} className="flex mb-2">
-                      <input
-                        type="date"
-                        className={`w-full px-3 py-2 border ${
-                          errors.eduDates?.[index]?.date ? 'border-red-500' : 'border-gray-300'
-                        } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-                        {...register(`eduDates.${index}.date`)}
-                      />
-                      {index > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => remove(index)}
-                          className="ml-2 p-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {errors.eduDates && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.eduDates.message}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => append({ date: '' })}
-                    className="mt-2 px-3 py-1 text-sm text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50"
-                  >
-                    교육 날짜 추가
-                  </button>
-                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="mb-4">

@@ -468,16 +468,6 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                         <p><span className="font-medium">이름:</span> {jobCode.name}</p>
                         <p><span className="font-medium">기간:</span> {formatDateOnly(jobCode.startDate)} ~ {formatDateOnly(jobCode.endDate)}</p>
                         <p><span className="font-medium">위치:</span> {jobCode.location}</p>
-                        <div>
-                          <p className="font-medium">교육 날짜:</p>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {jobCode.eduDates.map((date, index) => (
-                              <span key={index} className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded">
-                                {formatDateOnly(date)}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
                       </div>
                     )}
 
@@ -657,19 +647,6 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                           <p className="font-medium">
                             {formatDateOnly(jobCode.startDate)} ~ {formatDateOnly(jobCode.endDate)}
                           </p>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <p className="text-sm text-gray-600 mb-1">교육 일정</p>
-                          <div className="flex flex-wrap gap-2">
-                            {jobCode.eduDates.map((date, index) => (
-                              <span 
-                                key={index}
-                                className="inline-block px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded"
-                              >
-                                {formatDateOnly(date)}
-                              </span>
-                            ))}
-                          </div>
                         </div>
                       </div>
                     </div>

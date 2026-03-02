@@ -60,7 +60,6 @@ export function JobGenerateScreen({
   const [editingJobCode, setEditingJobCode] = useState<JobCodeWithId | null>(null);
   const [generations, setGenerations] = useState<string[]>([]);
   const [selectedGeneration, setSelectedGeneration] = useState<string | null>(null);
-  const [eduDatesInput, setEduDatesInput] = useState<string>('');
   const [koreaSwitch, setKoreaSwitch] = useState(true);
 
   const {
@@ -122,18 +121,11 @@ export function JobGenerateScreen({
   const onSubmit = async (data: JobCodeFormValues) => {
     setIsLoading(true);
     try {
-      // 교육 날짜 파싱 (쉼표로 구분된 날짜들)
-      const eduDatesArray = eduDatesInput
-        .split(',')
-        .map((d) => d.trim())
-        .filter((d) => d)
-        .map((d) => Timestamp.fromDate(new Date(d)));
-
       const jobCodeData = {
         generation: data.generation,
         code: data.code,
         name: data.name,
-        eduDates: eduDatesArray,
+        eduDates: [],
         startDate: Timestamp.fromDate(new Date(data.startDate)),
         endDate: Timestamp.fromDate(new Date(data.endDate)),
         location: data.location,
@@ -153,7 +145,6 @@ export function JobGenerateScreen({
 
       // 폼 초기화
       reset();
-      setEduDatesInput('');
       setKoreaSwitch(true);
       setIsEditing(false);
       setEditingJobCode(null);
@@ -200,12 +191,6 @@ export function JobGenerateScreen({
     setValue('endDate', formatDate(jobCode.endDate));
     setValue('location', jobCode.location);
     setKoreaSwitch(jobCode.korea);
-
-    // 교육 날짜 문자열로 변환
-    const eduDatesStr = jobCode.eduDates
-      .map((date) => formatDate(date))
-      .join(', ');
-    setEduDatesInput(eduDatesStr);
   };
 
   // 수정 취소
@@ -213,7 +198,6 @@ export function JobGenerateScreen({
     setIsEditing(false);
     setEditingJobCode(null);
     reset();
-    setEduDatesInput('');
     setKoreaSwitch(true);
   };
 
@@ -302,18 +286,6 @@ export function JobGenerateScreen({
               )}
             />
             {errors.name && <Text style={styles.errorText}>{errors.name.message}</Text>}
-          </View>
-
-          {/* Edu Dates */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>교육 날짜 (쉼표로 구분)</Text>
-            <TextInput
-              style={styles.input}
-              value={eduDatesInput}
-              onChangeText={setEduDatesInput}
-              placeholder="예: 2024-01-01, 2024-01-08"
-              multiline
-            />
           </View>
 
           {/* Start Date */}
