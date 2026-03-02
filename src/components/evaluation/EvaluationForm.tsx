@@ -153,11 +153,6 @@ export default function EvaluationForm({
       return;
     }
 
-    if (!formData.overallFeedback.trim()) {
-      toast.error('종합 피드백을 입력해주세요.');
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       const evaluationId = await EvaluationService.createEvaluation(
@@ -357,7 +352,7 @@ export default function EvaluationForm({
         {/* 종합 피드백 (한줄평) */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            한줄평 *
+            한줄평 (선택사항)
           </label>
           <textarea
             value={formData.overallFeedback}
@@ -368,7 +363,6 @@ export default function EvaluationForm({
             placeholder="해당 단계에 대한 전반적인 한줄평을 작성해주세요..."
             className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             rows={3}
-            required
           />
         </div>
 

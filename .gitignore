@@ -35,6 +35,7 @@ yarn-error.log*
 
 # Firebase service account key
 serviceAccountKey.json
+managesheet-export-*.json
 
 # vercel
 .vercel

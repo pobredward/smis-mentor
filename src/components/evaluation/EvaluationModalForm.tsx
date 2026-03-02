@@ -209,7 +209,6 @@ export default function EvaluationModalForm({
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows={3}
                   placeholder="전체적인 평가 의견을 작성해주세요..."
-                  required
                 />
               </div>
             </div>

@@ -1,0 +1,6 @@
+# Allow all crawlers
+User-agent: *
+Allow: /
+
+# Sitemap locations
+Sitemap: https://www.smis-mentor.com/sitemap.xml 
