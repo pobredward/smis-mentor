@@ -38,7 +38,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   const [editedTitle, setEditedTitle] = useState('');
   const [editedStatus, setEditedStatus] = useState<'active' | 'closed'>('active');
   const [editedInterviewDates, setEditedInterviewDates] = useState<{ start: string; end: string }[]>([]);
-  const [editedInterviewBaseDuration, setEditedInterviewBaseDuration] = useState(30);
+  const [editedInterviewBaseDuration, setEditedInterviewBaseDuration] = useState(60);
   const [editedInterviewBaseLink, setEditedInterviewBaseLink] = useState('');
   const [editedInterviewBaseNotes, setEditedInterviewBaseNotes] = useState('');
   const [selectedInterviewDate, setSelectedInterviewDate] = useState<string | null>(null);
@@ -49,6 +49,9 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isProfileErrorModalOpen, setIsProfileErrorModalOpen] = useState(false);
   const [profileErrorType, setProfileErrorType] = useState<'image' | 'selfIntro' | 'jobMotivation' | null>(null);
+  const [interviewDatesText, setInterviewDatesText] = useState('');
+  const [newInterviewDate, setNewInterviewDate] = useState('');
+  const [newInterviewTime, setNewInterviewTime] = useState('');
 
   const { userData } = useAuth();
   const router = useRouter();
@@ -80,7 +83,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
         
         // 면접 기본정보 초기화
         setEditedInterviewBaseLink(board.interviewBaseLink || '');
-        setEditedInterviewBaseDuration(board.interviewBaseDuration || 30);
+        setEditedInterviewBaseDuration(board.interviewBaseDuration || 60);
         setEditedInterviewBaseNotes(board.interviewBaseNotes || '');
 
         // jobCode 정보 로드
@@ -102,8 +105,34 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
           setFilteredJobCodes(filtered);
         }
 
-        // interviewDates 설정
+        // interviewDates를 텍스트로 변환
         if (board.interviewDates && Array.isArray(board.interviewDates)) {
+          const datesText = board.interviewDates
+            .filter(date => date && date.start)
+            .map(date => {
+              try {
+                const startDate = date.start instanceof Timestamp ? 
+                  date.start.toDate() : 
+                  new Date(date.start);
+                
+                const year = startDate.getFullYear();
+                const month = String(startDate.getMonth() + 1).padStart(2, '0');
+                const day = String(startDate.getDate()).padStart(2, '0');
+                const hours = String(startDate.getHours()).padStart(2, '0');
+                const minutes = String(startDate.getMinutes()).padStart(2, '0');
+
+                return `${year}-${month}-${day} ${hours}:${minutes}`;
+              } catch (error) {
+                console.error('날짜 변환 오류:', error);
+                return null;
+              }
+            })
+            .filter(date => date !== null)
+            .join('\n');
+
+          setInterviewDatesText(datesText);
+          
+          // 기존 형식도 유지 (화면 표시용)
           const formattedDates = board.interviewDates
             .filter(date => date && date.start && date.end)
             .map(date => {
@@ -116,7 +145,6 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                   date.end.toDate() : 
                   new Date(date.end);
 
-                // 날짜 및 시간을 로컬 시간대 기준으로 포맷팅 (YYYY-MM-DDTHH:MM 형식)
                 const padZero = (num: number) => String(num).padStart(2, '0');
                 
                 const startYear = startDate.getFullYear();
@@ -144,6 +172,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
 
           setEditedInterviewDates(formattedDates);
         } else {
+          setInterviewDatesText('');
           setEditedInterviewDates([]);
         }
 
@@ -194,6 +223,44 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
     if (!jobBoard || !jobCode) return;
 
     try {
+      // 텍스트로 입력된 면접 일정 파싱
+      const parsedInterviewDates = interviewDatesText
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          try {
+            // 형식: "2024-01-15 14:00" 또는 "2024-01-15 14:00:00"
+            const trimmed = line.trim();
+            const dateMatch = trimmed.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+            
+            if (!dateMatch) {
+              console.warn('잘못된 날짜 형식:', line);
+              return null;
+            }
+
+            const [, year, month, day, hour, minute] = dateMatch;
+            const startDate = new Date(
+              parseInt(year),
+              parseInt(month) - 1,
+              parseInt(day),
+              parseInt(hour),
+              parseInt(minute)
+            );
+
+            // 종료 시간은 시작 시간 + interviewBaseDuration (분)
+            const endDate = new Date(startDate.getTime() + editedInterviewBaseDuration * 60 * 1000);
+
+            return {
+              start: Timestamp.fromDate(startDate),
+              end: Timestamp.fromDate(endDate)
+            };
+          } catch (error) {
+            console.error('날짜 파싱 오류:', error, line);
+            return null;
+          }
+        })
+        .filter(date => date !== null);
+
       const docRef = doc(db, 'jobBoards', id);
       await updateDoc(docRef, {
         title: editedTitle,
@@ -202,13 +269,8 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
         refJobCodeId: editedJobCodeId,
         generation: jobCode.generation,
         jobCode: jobCode.code,
-        interviewDates: editedInterviewDates
-          .filter(date => date.start && date.end)
-          .map(date => ({
-            start: Timestamp.fromDate(new Date(date.start)),
-            end: Timestamp.fromDate(new Date(date.end))
-          })),
-        interviewBaseDuration: Number(editedInterviewBaseDuration) || 30,
+        interviewDates: parsedInterviewDates,
+        interviewBaseDuration: Number(editedInterviewBaseDuration) || 60,
         interviewBaseLink: editedInterviewBaseLink || '',
         interviewBaseNotes: editedInterviewBaseNotes || '',
         interviewPassword: jobBoard.interviewPassword || '',
@@ -232,6 +294,38 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       console.error('공고 수정 오류:', error);
       toast.error('공고 수정 중 오류가 발생했습니다.');
     }
+  };
+
+  const handleAddInterviewDate = () => {
+    if (!newInterviewDate || !newInterviewTime) {
+      toast.error('날짜와 시간을 모두 입력해주세요.');
+      return;
+    }
+
+    const dateTimeString = `${newInterviewDate} ${newInterviewTime}`;
+    const currentDates = interviewDatesText ? interviewDatesText.split('\n') : [];
+    
+    // 중복 체크
+    if (currentDates.includes(dateTimeString)) {
+      toast.error('이미 추가된 면접 일정입니다.');
+      return;
+    }
+
+    const newDatesText = [...currentDates, dateTimeString].sort().join('\n');
+    setInterviewDatesText(newDatesText);
+    
+    // 입력 필드 초기화
+    setNewInterviewDate('');
+    setNewInterviewTime('');
+    
+    toast.success('면접 일정이 추가되었습니다.');
+  };
+
+  const handleRemoveInterviewDate = (dateToRemove: string) => {
+    const currentDates = interviewDatesText.split('\n').filter(date => date.trim());
+    const newDates = currentDates.filter(date => date !== dateToRemove);
+    setInterviewDatesText(newDates.join('\n'));
+    toast.success('면접 일정이 삭제되었습니다.');
   };
 
   const handleDelete = async () => {
@@ -258,52 +352,37 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       
       // 면접 기본정보 초기화
       setEditedInterviewBaseLink(jobBoard.interviewBaseLink || '');
-      setEditedInterviewBaseDuration(jobBoard.interviewBaseDuration || 30);
+      setEditedInterviewBaseDuration(jobBoard.interviewBaseDuration || 60);
       setEditedInterviewBaseNotes(jobBoard.interviewBaseNotes || '');
       
-      // interviewDates 초기화
+      // interviewDates를 텍스트로 변환
       if (jobBoard.interviewDates && Array.isArray(jobBoard.interviewDates)) {
-        const formattedDates = jobBoard.interviewDates
-          .filter(date => date && date.start && date.end)
+        const datesText = jobBoard.interviewDates
+          .filter(date => date && date.start)
           .map(date => {
             try {
               const startDate = date.start instanceof Timestamp ? 
                 date.start.toDate() : 
                 new Date(date.start);
               
-              const endDate = date.end instanceof Timestamp ? 
-                date.end.toDate() : 
-                new Date(date.end);
+              const year = startDate.getFullYear();
+              const month = String(startDate.getMonth() + 1).padStart(2, '0');
+              const day = String(startDate.getDate()).padStart(2, '0');
+              const hours = String(startDate.getHours()).padStart(2, '0');
+              const minutes = String(startDate.getMinutes()).padStart(2, '0');
 
-              // 날짜 및 시간을 로컬 시간대 기준으로 포맷팅 (YYYY-MM-DDTHH:MM 형식)
-              const padZero = (num: number) => String(num).padStart(2, '0');
-              
-              const startYear = startDate.getFullYear();
-              const startMonth = padZero(startDate.getMonth() + 1);
-              const startDay = padZero(startDate.getDate());
-              const startHours = padZero(startDate.getHours());
-              const startMinutes = padZero(startDate.getMinutes());
-              
-              const endYear = endDate.getFullYear();
-              const endMonth = padZero(endDate.getMonth() + 1);
-              const endDay = padZero(endDate.getDate());
-              const endHours = padZero(endDate.getHours());
-              const endMinutes = padZero(endDate.getMinutes());
-
-              return {
-                start: `${startYear}-${startMonth}-${startDay}T${startHours}:${startMinutes}`,
-                end: `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`
-              };
+              return `${year}-${month}-${day} ${hours}:${minutes}`;
             } catch (error) {
               console.error('날짜 변환 오류:', error);
               return null;
             }
           })
-          .filter(date => date !== null);
+          .filter(date => date !== null)
+          .join('\n');
 
-        setEditedInterviewDates(formattedDates);
+        setInterviewDatesText(datesText);
       } else {
-        setEditedInterviewDates([]);
+        setInterviewDatesText('');
       }
     }
     router.replace(`/job-board/${id}`);
@@ -503,62 +582,28 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                       />
                     </div>
 
-                    {/* 면접 일정 */}
-                    <div>
-                      <h3 className="text-lg font-medium mb-2">면접 일정</h3>
-                      {editedInterviewDates.map((date, index) => (
-                        <div key={index} className="flex gap-2 mb-2">
-                          <input
-                            type="datetime-local"
-                            value={date.start}
-                            onChange={(e) => {
-                              const newDates = [...editedInterviewDates];
-                              newDates[index] = { ...newDates[index], start: e.target.value };
-                              setEditedInterviewDates(newDates);
-                            }}
-                            className="border rounded px-2 py-1"
-                          />
-                          <span className="self-center">~</span>
-                          <input
-                            type="datetime-local"
-                            value={date.end}
-                            onChange={(e) => {
-                              const newDates = [...editedInterviewDates];
-                              newDates[index] = { ...newDates[index], end: e.target.value };
-                              setEditedInterviewDates(newDates);
-                            }}
-                            className="border rounded px-2 py-1"
-                          />
-                          <Button
-                            variant="danger"
-                            onClick={() => {
-                              const newDates = editedInterviewDates.filter((_, i) => i !== index);
-                              setEditedInterviewDates(newDates);
-                            }}
-                          >
-                            삭제
-                          </Button>
-                        </div>
-                      ))}
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          setEditedInterviewDates([
-                            ...editedInterviewDates,
-                            { start: '', end: '' }
-                          ]);
-                        }}
-                        className="mt-2"
-                      >
-                        면접 일정 추가
-                      </Button>
-                    </div>
-
                     {/* 면접 정보 */}
-                    <div className="mt-6">
-                      <h3 className="text-lg font-medium mb-4">면접 정보</h3>
+                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h3 className="text-lg font-semibold mb-4 text-blue-900">면접 기본 정보</h3>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            면접 소요 시간 (분) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            value={editedInterviewBaseDuration}
+                            onChange={(e) => setEditedInterviewBaseDuration(Number(e.target.value))}
+                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                            placeholder="60"
+                            min="1"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            면접 시작 시간에 이 값을 더해 종료 시간이 자동 계산됩니다
+                          </p>
+                        </div>
+                        
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             면접 링크
@@ -567,26 +612,13 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                             type="text"
                             value={editedInterviewBaseLink}
                             onChange={(e) => setEditedInterviewBaseLink(e.target.value)}
-                            className="w-full p-2 border rounded"
+                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                             placeholder="https://zoom.us/j/..."
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            면접 시간 (분)
-                          </label>
-                          <input
-                            type="number"
-                            value={editedInterviewBaseDuration}
-                            onChange={(e) => setEditedInterviewBaseDuration(Number(e.target.value))}
-                            className="w-full p-2 border rounded"
-                            placeholder="30"
                           />
                         </div>
                       </div>
 
-                      <div className="mb-4">
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           면접 안내사항
                         </label>
@@ -594,10 +626,115 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                           value={editedInterviewBaseNotes}
                           onChange={(e) => setEditedInterviewBaseNotes(e.target.value)}
                           rows={3}
-                          className="w-full p-2 border rounded"
+                          className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                           placeholder="면접 준비사항 등을 입력하세요..."
                         />
                       </div>
+                    </div>
+
+                    {/* 면접 일정 */}
+                    <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                      <h3 className="text-lg font-semibold mb-4 text-green-900">면접 일정 추가</h3>
+                      
+                      {/* 일정 추가 입력 */}
+                      <div className="mb-4 p-3 bg-white rounded border border-green-300">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              날짜 (년-월-일)
+                            </label>
+                            <input
+                              type="text"
+                              value={newInterviewDate}
+                              onChange={(e) => setNewInterviewDate(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 font-mono"
+                              placeholder="2026-07-22"
+                              pattern="\d{4}-\d{2}-\d{2}"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">형식: YYYY-MM-DD</p>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              시작 시간 (24시간)
+                            </label>
+                            <input
+                              type="text"
+                              value={newInterviewTime}
+                              onChange={(e) => setNewInterviewTime(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 font-mono"
+                              placeholder="14:00"
+                              pattern="\d{2}:\d{2}"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">형식: HH:MM</p>
+                          </div>
+                          
+                          <div className="flex items-end">
+                            <Button
+                              type="button"
+                              variant="primary"
+                              onClick={handleAddInterviewDate}
+                              className="w-full bg-green-600 hover:bg-green-700"
+                            >
+                              면접 일정 추가
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        <p className="text-xs text-gray-500 mt-2">
+                          * 종료 시간은 위에 설정한 면접 소요 시간({editedInterviewBaseDuration}분)을 더해 자동 계산됩니다
+                        </p>
+                      </div>
+
+                      {/* 추가된 일정 목록 */}
+                      {interviewDatesText && (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium text-gray-700">추가된 면접 일정</h4>
+                          <div className="space-y-2">
+                            {interviewDatesText.split('\n').filter(date => date.trim()).map((dateTime, index) => {
+                              // 종료 시간 계산
+                              const [datePart, timePart] = dateTime.split(' ');
+                              let endTimeStr = '';
+                              try {
+                                const [year, month, day] = datePart.split('-');
+                                const [hour, minute] = timePart.split(':');
+                                const startDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute));
+                                const endDate = new Date(startDate.getTime() + editedInterviewBaseDuration * 60 * 1000);
+                                const endHour = String(endDate.getHours()).padStart(2, '0');
+                                const endMinute = String(endDate.getMinutes()).padStart(2, '0');
+                                endTimeStr = `${endHour}:${endMinute}`;
+                              } catch (e) {
+                                endTimeStr = '??:??';
+                              }
+                              
+                              return (
+                                <div 
+                                  key={index} 
+                                  className="flex items-center justify-between p-3 bg-white rounded border border-gray-200"
+                                >
+                                  <span className="font-mono text-sm">
+                                    {dateTime} ~ {endTimeStr} ({editedInterviewBaseDuration}분)
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => handleRemoveInterviewDate(dateTime)}
+                                  >
+                                    삭제
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {!interviewDatesText && (
+                        <div className="text-center py-4 text-gray-500 text-sm">
+                          추가된 면접 일정이 없습니다
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex justify-end gap-2 mt-6">
