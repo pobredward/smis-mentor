@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { RecruitmentStackScreenProps } from '../navigation/types';
 import {
   getAllJobBoards,
@@ -16,15 +17,27 @@ import {
   JobCodeWithId,
 } from '../services/jobBoardService';
 import { Timestamp } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RecruitmentStackParamList, MainTabsParamList } from '../navigation/types';
 
-export function RecruitmentListScreen({
-  navigation,
-}: RecruitmentStackScreenProps<'RecruitmentList'>) {
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<RecruitmentStackParamList, 'RecruitmentList'>,
+  BottomTabScreenProps<MainTabsParamList>
+>;
+
+export function RecruitmentListScreen({ navigation }: Props) {
+  const { userData } = useAuth();
   const [jobBoards, setJobBoards] = useState<JobBoardWithId[]>([]);
   const [jobCodesMap, setJobCodesMap] = useState<{
     [key: string]: JobCodeWithId;
   }>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedStatus, setSelectedStatus] = useState<'active' | 'closed'>('active');
+
+  const isAdmin = userData?.role === 'admin';
 
   useEffect(() => {
     loadJobBoards();
@@ -69,7 +82,13 @@ export function RecruitmentListScreen({
     return `${year}.${month}.${day}(${dayOfWeek})`;
   };
 
-  const filteredJobBoards = jobBoards.filter((board) => board.status === 'active');
+  // 필터링된 공고 목록 (일반 유저는 active만, 관리자는 선택한 상태)
+  const filteredJobBoards = jobBoards.filter((board) => {
+    if (!isAdmin) {
+      return board.status === 'active';
+    }
+    return board.status === selectedStatus;
+  });
 
   const renderJobBoard = ({ item }: { item: JobBoardWithId }) => {
     const jobCode = jobCodesMap[item.refJobCodeId];
@@ -156,13 +175,66 @@ export function RecruitmentListScreen({
 
   return (
     <View style={styles.container}>
+      {/* 관리자 컨트롤 영역 */}
+      {isAdmin && (
+        <View style={styles.adminControls}>
+          <View style={styles.filterButtons}>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedStatus === 'active' && styles.filterButtonActive,
+              ]}
+              onPress={() => setSelectedStatus('active')}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedStatus === 'active' && styles.filterButtonTextActive,
+                ]}
+              >
+                모집중
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedStatus === 'closed' && styles.filterButtonActive,
+              ]}
+              onPress={() => setSelectedStatus('closed')}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedStatus === 'closed' && styles.filterButtonTextActive,
+                ]}
+              >
+                마감
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => navigation.navigate('JobBoardWrite')}
+          >
+            <Ionicons name="add" size={20} color="#fff" />
+            <Text style={styles.createButtonText}>공고 작성</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3b82f6" />
         </View>
       ) : filteredJobBoards.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>현재 모집 중인 공고가 없습니다.</Text>
+          <Text style={styles.emptyText}>
+            {!isAdmin
+              ? '현재 모집 중인 공고가 없습니다.'
+              : selectedStatus === 'active'
+              ? '현재 모집 중인 공고가 없습니다.'
+              : '마감된 공고가 없습니다.'}
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -181,6 +253,54 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f3f4f6',
+  },
+  adminControls: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    gap: 12,
+  },
+  filterButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  filterButtonTextActive: {
+    color: '#ffffff',
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#8b5cf6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

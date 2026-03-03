@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewNavigation } from 'react-native-webview';
@@ -18,14 +18,7 @@ export function EducationScreen() {
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
-  useEffect(() => {
-    console.log('🔄 EducationScreen: activeJobCodeId 변경됨:', activeJobCodeId);
-    if (activeJobCodeId) {
-      loadEducationLinks();
-    }
-  }, [userData?.activeJobExperienceId, userData?.jobExperiences?.[0]?.id]);
-
-  const loadEducationLinks = async () => {
+  const loadEducationLinks = useCallback(async () => {
     if (!activeJobCodeId) {
       console.log('⚠️ EducationScreen: activeJobCodeId 없음');
       setLoading(false);
@@ -57,7 +50,14 @@ export function EducationScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeJobCodeId]);
+
+  useEffect(() => {
+    console.log('🔄 EducationScreen: activeJobCodeId 변경됨:', activeJobCodeId);
+    if (activeJobCodeId) {
+      loadEducationLinks();
+    }
+  }, [activeJobCodeId, loadEducationLinks]);
 
   const handleNavigationStateChange = (linkId: string) => (navState: WebViewNavigation) => {
     setCanGoBack((prev) => ({
@@ -120,6 +120,16 @@ export function EducationScreen() {
           >
             <Text style={styles.addButtonLargeText}>+ 첫 링크 추가하기</Text>
           </TouchableOpacity>
+        )}
+        {isAdmin && activeJobCodeId && (
+          <AddLinkModal
+            visible={showAddModal}
+            onClose={() => setShowAddModal(false)}
+            jobCodeId={activeJobCodeId}
+            linkType="educationLinks"
+            userId={userData?.userId || ''}
+            onSuccess={loadEducationLinks}
+          />
         )}
       </View>
     );

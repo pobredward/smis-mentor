@@ -11,11 +11,12 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useForm, Controller, useFieldArray } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import DropDownPicker from 'react-native-dropdown-picker';
 import {
   createJobBoard,
   getAllJobBoards,
@@ -66,6 +67,12 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
   const [isCreating, setIsCreating] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [interviewDatesInput, setInterviewDatesInput] = useState<string>('');
+  
+  // Dropdown states
+  const [generationDropdownOpen, setGenerationDropdownOpen] = useState(false);
+  const [jobCodeDropdownOpen, setJobCodeDropdownOpen] = useState(false);
+  const [generationItems, setGenerationItems] = useState<Array<{ label: string; value: string }>>([]);
+  const [jobCodeItems, setJobCodeItems] = useState<Array<{ label: string; value: string }>>([]);
 
   const {
     control,
@@ -109,9 +116,15 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
         }
       );
 
+      // Dropdown 아이템 생성
+      const genItems = generations.map(gen => ({ label: gen, value: gen }));
+      setGenerationItems(genItems);
+
       if (generations.length > 0) {
         setSelectedGeneration(generations[0]);
-        setFilteredJobCodes(codes.filter((code) => code.generation === generations[0]));
+        const filtered = codes.filter((code) => code.generation === generations[0]);
+        setFilteredJobCodes(filtered);
+        updateJobCodeItems(filtered);
       }
 
       // 공고 목록 로드
@@ -128,11 +141,21 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
     }
   };
 
+  // Job Code 아이템 업데이트 함수
+  const updateJobCodeItems = (codes: JobCodeWithId[]) => {
+    const items = codes.map(code => ({
+      label: `${code.code} - ${code.name}`,
+      value: code.id,
+    }));
+    setJobCodeItems(items);
+  };
+
   // 기수 선택 핸들러
   const handleGenerationChange = (generation: string) => {
     setSelectedGeneration(generation);
     const filtered = jobCodes.filter((code) => code.generation === generation);
     setFilteredJobCodes(filtered);
+    updateJobCodeItems(filtered);
     setValue('refJobCodeId', '');
   };
 
@@ -169,7 +192,9 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
     const jobCode = jobCodes.find((code) => code.id === jobBoard.refJobCodeId);
     if (jobCode) {
       setSelectedGeneration(jobCode.generation);
-      setFilteredJobCodes(jobCodes.filter((code) => code.generation === jobCode.generation));
+      const filtered = jobCodes.filter((code) => code.generation === jobCode.generation);
+      setFilteredJobCodes(filtered);
+      updateJobCodeItems(filtered);
     }
 
     // 면접 날짜 문자열로 변환
@@ -307,33 +332,24 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
             {/* 기수 선택 */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>기수 선택</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {Array.from(new Set(jobCodes.map((c) => c.generation)))
-                  .sort((a, b) => {
-                    const numA = parseInt(a.replace(/\D/g, ''));
-                    const numB = parseInt(b.replace(/\D/g, ''));
-                    return numB - numA;
-                  })
-                  .map((gen) => (
-                    <TouchableOpacity
-                      key={gen}
-                      style={[
-                        styles.filterChip,
-                        selectedGeneration === gen && styles.filterChipActive,
-                      ]}
-                      onPress={() => handleGenerationChange(gen)}
-                    >
-                      <Text
-                        style={[
-                          styles.filterChipText,
-                          selectedGeneration === gen && styles.filterChipTextActive,
-                        ]}
-                      >
-                        {gen}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-              </ScrollView>
+              <DropDownPicker
+                open={generationDropdownOpen}
+                value={selectedGeneration}
+                items={generationItems}
+                setOpen={setGenerationDropdownOpen}
+                setValue={setSelectedGeneration}
+                setItems={setGenerationItems}
+                onChangeValue={(value) => {
+                  if (value) handleGenerationChange(value);
+                }}
+                placeholder="기수를 선택하세요"
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                listMode="SCROLLVIEW"
+                zIndex={2000}
+                zIndexInverse={1000}
+              />
             </View>
 
             {/* 업무 코드 선택 */}
@@ -345,27 +361,25 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
                 control={control}
                 name="refJobCodeId"
                 render={({ field: { onChange, value } }) => (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {filteredJobCodes.map((code) => (
-                      <TouchableOpacity
-                        key={code.id}
-                        style={[
-                          styles.filterChip,
-                          value === code.id && styles.filterChipActive,
-                        ]}
-                        onPress={() => onChange(code.id)}
-                      >
-                        <Text
-                          style={[
-                            styles.filterChipText,
-                            value === code.id && styles.filterChipTextActive,
-                          ]}
-                        >
-                          {code.code} - {code.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                  <DropDownPicker
+                    open={jobCodeDropdownOpen}
+                    value={value}
+                    items={jobCodeItems}
+                    setOpen={setJobCodeDropdownOpen}
+                    setValue={(callback) => {
+                      const newValue = typeof callback === 'function' ? callback(value) : callback;
+                      onChange(newValue);
+                    }}
+                    setItems={setJobCodeItems}
+                    placeholder="업무 코드를 선택하세요"
+                    style={[styles.dropdown, errors.refJobCodeId && styles.inputError]}
+                    dropDownContainerStyle={styles.dropdownContainer}
+                    textStyle={styles.dropdownText}
+                    listMode="SCROLLVIEW"
+                    disabled={!selectedGeneration}
+                    zIndex={1000}
+                    zIndexInverse={2000}
+                  />
                 )}
               />
               {errors.refJobCodeId && (
@@ -665,6 +679,22 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 12,
     marginTop: 4,
+  },
+  dropdown: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    minHeight: 50,
+  },
+  dropdownContainer: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: '#111827',
   },
   filterChip: {
     paddingHorizontal: 16,

@@ -625,7 +625,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                           <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
                         </svg>
                       </Button>
-                      <h1 className="text-lg font-semibold text-gray-900">{jobBoard.generation} {jobBoard.title}</h1>
+                      <h1 className="text-lg font-semibold text-gray-900">{jobBoard.title}</h1>
                     </div>
                   </div>
 
@@ -655,7 +655,17 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                   {/* 공고 본문 */}
                   <div className="mb-8">
                     <div
-                      className="prose prose-slate max-w-none [&>h1]:text-4xl [&>h1]:font-bold [&>h1]:mb-4 [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:mb-3 [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:mb-2 [&>p]:whitespace-pre-wrap [&>p:empty]:h-[1em] [&>p:empty]:block [&>p]:min-h-[1.5em] [&>ul]:list-disc [&>ul]:pl-[1.625em] [&>ol]:list-decimal [&>ol]:pl-[1.625em]"
+                      className="prose prose-slate max-w-none 
+                        [&>*]:my-1
+                        [&>h1]:text-4xl [&>h1]:font-bold [&>h1]:mb-2 [&>h1]:mt-3 [&>h1]:leading-tight 
+                        [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:mb-1.5 [&>h2]:mt-2.5 [&>h2]:leading-tight 
+                        [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:mb-1.5 [&>h3]:mt-2 [&>h3]:leading-tight 
+                        [&>p]:whitespace-pre-wrap [&>p]:mb-1 [&>p]:mt-1 [&>p]:leading-relaxed 
+                        [&>p:empty]:h-[0.5em] [&>p:empty]:block [&>p]:min-h-[1.2em] 
+                        [&>ul]:list-disc [&>ul]:pl-[1.625em] [&>ul]:mb-1 [&>ul]:mt-1 [&>ul>li]:mb-0.5 [&>ul>li]:leading-relaxed
+                        [&>ol]:list-decimal [&>ol]:pl-[1.625em] [&>ol]:mb-1 [&>ol]:mt-1 [&>ol>li]:mb-0.5 [&>ol>li]:leading-relaxed
+                        [&>ul>li>p]:mb-0 [&>ul>li>p]:mt-0
+                        [&>ol>li>p]:mb-0 [&>ol>li>p]:mt-0"
                       dangerouslySetInnerHTML={{ __html: jobBoard.description }}
                     />
                   </div>

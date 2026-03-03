@@ -24,6 +24,7 @@ export type RecruitmentStackParamList = {
   RecruitmentList: { openApplicationTab?: boolean } | undefined;
   JobBoardDetail: { jobBoardId: string };
   JobBoardEdit: { jobBoardId: string };
+  JobBoardWrite: undefined;
 };
 
 // Admin Stack (관리자 스택)

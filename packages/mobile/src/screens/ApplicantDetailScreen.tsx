@@ -208,7 +208,7 @@ export function ApplicantDetailScreen({
       if (app.interviewBaseNotes) {
         setInterviewNotes(app.interviewBaseNotes);
       } else {
-        setInterviewNotes('회의 ID: 301 652 0037\n비밀번호: 1234\n면접 전 미리 Zoom에 접속하여 테스트해주시기 바랍니다.');
+        setInterviewNotes('회의 ID: 301 652 0037\n비밀번호: 1234\n면접 시작 5분 전 접속 바랍니다.');
       }
 
       // 지원 장소 로드
