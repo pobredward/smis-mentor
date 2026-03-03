@@ -4,6 +4,7 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
+    "start:clear": "bash scripts/clear-cache-and-start.sh",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
@@ -52,7 +53,7 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-tab-view": "^4.2.2",
-    "react-native-webview": "13.15.0",
+    "react-native-webview": "13.16.1",
     "uuid": "^11.1.0",
     "zod": "^3.24.2"
   },
