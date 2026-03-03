@@ -36,16 +36,6 @@
     }
   },
   "submit": {
-    "production": {
-      "ios": {
-        "appleId": "your-apple-id@example.com",
-        "ascAppId": "placeholder",
-        "appleTeamId": "placeholder"
-      },
-      "android": {
-        "serviceAccountKeyPath": "./google-play-service-account.json",
-        "track": "internal"
-      }
-    }
+    "production": {}
   }
 }
