@@ -331,7 +331,7 @@ export default function ReviewsContent() {
                             onClick={() => toggleReview(review.id)}
                             className="flex-1 text-left"
                           >
-                            <h3 className="text-lg font-semibold text-gray-900 mb-1">{review.title}</h3>
+                            <h3 className="text-base font-semibold text-gray-900 mb-1">{review.title}</h3>
                             {review.writer && (
                               <p className="text-sm text-gray-600">작성자: {review.writer}</p>
                             )}
