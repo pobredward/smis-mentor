@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import DaumPostcode, { Address } from 'react-daum-postcode';
 import toast from 'react-hot-toast';
-import { getUserByPhone, updateUser, createUser, signOut, signUp, sendVerificationEmail } from '@/lib/firebaseService';
+import { getUserByPhone, updateUser, createUser, signUp } from '@/lib/firebaseService';
 import { getUserInfoFromRRN } from '@/utils/userUtils';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
@@ -119,8 +119,6 @@ export default function SignUpDetails() {
       if (existingUser && existingUser.status === 'temp') {
         // Firebase Auth에 사용자 등록
         const userCredential = await signUp(email, decodeURIComponent(password));
-        // 이메일 인증 메일 발송
-        await sendVerificationEmail(userCredential.user);
         
         const now = Timestamp.now();
         
@@ -154,24 +152,11 @@ export default function SignUpDetails() {
           major2: major2 || ''
         });
         
-        toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
-        
-        // 로그아웃 후 메인 페이지로 이동
-        setTimeout(async () => {
-          try {
-            await signOut(); // 로그아웃 수행
-            toast.success('회원가입 완료! 로그인 후 서비스를 이용해 주세요.', { duration: 5000 });
-            router.push('/');
-          } catch (error) {
-            console.error('로그아웃 실패:', error);
-            router.push('/');
-          }
-        }, 1000);
+        toast.success('회원가입이 완료되었습니다!');
+        router.push('/');
       } else {
         // Firebase Auth에 사용자 등록
         const userCredential = await signUp(email, decodeURIComponent(password));
-        // 이메일 인증 메일 발송
-        await sendVerificationEmail(userCredential.user);
 
         const now = Timestamp.now();
 
@@ -219,19 +204,8 @@ export default function SignUpDetails() {
           updatedAt: now
         });
 
-        toast.success('회원가입이 완료되었습니다. 이메일 인증을 위한 메일을 발송했습니다.');
-        
-        // 로그아웃 후 메인 페이지로 이동
-        setTimeout(async () => {
-          try {
-            await signOut(); // 로그아웃 수행
-            toast.success('회원가입 완료! 로그인 후 서비스를 이용해 주세요.', { duration: 5000 });
-            router.push('/');
-          } catch (error) {
-            console.error('로그아웃 실패:', error);
-            router.push('/');
-          }
-        }, 1000);
+        toast.success('회원가입이 완료되었습니다!');
+        router.push('/');
       }
     } catch (error) {
       console.error('회원가입 오류:', error);

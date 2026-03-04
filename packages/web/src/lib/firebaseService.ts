@@ -49,6 +49,12 @@ export const createUser = async (userData: Omit<User, 'userId' | 'id'>) => {
 
 export const getUserById = async (userId: string) => {
   try {
+    // userId 유효성 검사
+    if (!userId || typeof userId !== 'string') {
+      console.error('유효하지 않은 userId:', userId);
+      return null;
+    }
+
     // 캐시에서 데이터 확인
     const cachedUser = await getCache<User>(CACHE_STORE.USERS, userId);
     if (cachedUser) {
@@ -58,9 +64,12 @@ export const getUserById = async (userId: string) => {
 
     // 캐시에 없는 경우 Firestore에서 조회
     const userDoc = await getDoc(doc(db, 'users', userId));
-    if (!userDoc.exists()) return null;
+    if (!userDoc.exists()) {
+      console.warn('사용자를 찾을 수 없음:', userId);
+      return null;
+    }
     
-    const userData = userDoc.data() as User;
+    const userData = { ...userDoc.data(), userId } as User;
     
     // 캐시에 저장 (1시간 유효)
     await setCache(CACHE_STORE.USERS, userData, CACHE_TTL.MEDIUM);
@@ -68,12 +77,18 @@ export const getUserById = async (userId: string) => {
     return userData;
   } catch (error) {
     console.error('사용자 정보 가져오기 실패:', error);
-    throw error;
+    return null; // throw 대신 null 반환
   }
 };
 
 export const getUserByEmail = async (email: string) => {
   try {
+    // email 유효성 검사
+    if (!email || typeof email !== 'string') {
+      console.error('유효하지 않은 email:', email);
+      return null;
+    }
+
     const q = query(collection(db, 'users'), where('email', '==', email));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
@@ -86,6 +101,12 @@ export const getUserByEmail = async (email: string) => {
 
 export const getUserByPhone = async (phoneNumber: string) => {
   try {
+    // phoneNumber 유효성 검사
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
+      console.error('유효하지 않은 phoneNumber:', phoneNumber);
+      return null;
+    }
+
     const q = query(collection(db, 'users'), where('phoneNumber', '==', phoneNumber));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
