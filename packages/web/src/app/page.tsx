@@ -25,7 +25,7 @@ async function ReviewsSection() {
             멘토링 참여 후기
           </h2>
           <Link
-            href="/reviews"
+            href="/recruitment?tab=review"
             className="inline-flex items-center text-blue-600 hover:text-blue-700"
           >
             더 보기
@@ -43,7 +43,7 @@ async function ReviewsSection() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {reviews.map((review) => (
               <Link
-                href="/reviews"
+                href="/recruitment?tab=review"
                 key={review.reviewId}
                 className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200"
               >

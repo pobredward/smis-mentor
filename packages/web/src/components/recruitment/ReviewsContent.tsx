@@ -376,7 +376,7 @@ export default function ReviewsContent() {
                       {review.isOpen && (
                         <div className="px-6 pb-4 border-t border-gray-200">
                           <div 
-                            className="prose max-w-none mt-4"
+                            className="mt-4 text-gray-700 [&_blockquote]:border-0 [&_blockquote]:pl-0 [&_blockquote]:italic-0 [&_blockquote]:font-normal [&_blockquote]:text-gray-700 [&_p]:mb-2 [&_p]:leading-relaxed"
                             dangerouslySetInnerHTML={{ __html: review.content }}
                           />
                         </div>

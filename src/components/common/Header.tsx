@@ -135,7 +135,7 @@ const MobileMenu = memo(forwardRef<HTMLDivElement, {
             지원 현황
           </Link>
           <Link
-            href="/reviews"
+            href="/recruitment?tab=review"
             className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
             onClick={onClose}
           >
@@ -279,7 +279,7 @@ const Header = () => {
               <Link href="/profile/job-apply" className="text-sm font-medium text-gray-700 hover:text-gray-900">
                 지원 현황
               </Link>
-              <Link href="/reviews" className="text-sm font-medium text-gray-700 hover:text-gray-900">
+              <Link href="/recruitment?tab=review" className="text-sm font-medium text-gray-700 hover:text-gray-900">
                 참여 후기
               </Link>
               {userData?.jobExperiences && userData.jobExperiences.length > 0 && (

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Layout from '@/components/common/Layout';
 import JobBoardListContent from '@/components/recruitment/JobBoardListContent';
 import JobApplyStatusContent from '@/components/recruitment/JobApplyStatusContent';
@@ -16,7 +17,15 @@ const tabs: { id: TabName; title: string }[] = [
 ];
 
 export default function RecruitmentPage() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') as TabName | null;
   const [activeTab, setActiveTab] = useState<TabName>('jobBoard');
+
+  useEffect(() => {
+    if (tabParam && tabs.some(tab => tab.id === tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   return (
     <Layout>
