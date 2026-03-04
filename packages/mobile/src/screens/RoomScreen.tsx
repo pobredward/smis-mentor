@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StudentList, StudentDetailModal } from '../components';
-import { STSheetStudent } from '@smis-mentor/shared';
+import { STSheetStudent, CampType } from '@smis-mentor/shared';
 
 export function RoomScreen() {
-  const [selectedStudent, setSelectedStudent] = useState<STSheetStudent | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [allStudents, setAllStudents] = useState<STSheetStudent[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [campType, setCampType] = useState<CampType>('EJ');
 
-  const handleStudentPress = (student: STSheetStudent) => {
-    setSelectedStudent(student);
+  const handleStudentPress = (student: STSheetStudent, index: number, students: STSheetStudent[]) => {
+    setSelectedIndex(index);
+    setAllStudents(students);
     setModalVisible(true);
+  };
+
+  const handleCampTypeChange = (type: CampType) => {
+    setCampType(type);
   };
 
   return (
@@ -17,11 +24,14 @@ export function RoomScreen() {
       <StudentList
         filterType="room"
         onStudentPress={handleStudentPress}
+        onCampTypeChange={handleCampTypeChange}
       />
       <StudentDetailModal
         visible={modalVisible}
-        student={selectedStudent}
+        students={allStudents}
+        initialIndex={selectedIndex}
         onClose={() => setModalVisible(false)}
+        campType={campType}
       />
     </View>
   );

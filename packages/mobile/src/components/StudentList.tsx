@@ -11,19 +11,21 @@ import {
   ScrollView,
   TextInput,
 } from 'react-native';
-import { STSheetStudent } from '@smis-mentor/shared';
+import { STSheetStudent, CampCode, CampType } from '@smis-mentor/shared';
 import { stSheetService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import { jobCodesService } from '../services';
 
 interface StudentListProps {
   filterType: 'class' | 'room';
-  onStudentPress: (student: STSheetStudent) => void;
+  onStudentPress: (student: STSheetStudent, index: number, students: STSheetStudent[]) => void;
+  onCampTypeChange?: (campType: CampType) => void;
 }
 
 export const StudentList: React.FC<StudentListProps> = ({
   filterType,
   onStudentPress,
+  onCampTypeChange,
 }) => {
   const { userData } = useAuth();
   const [allStudents, setAllStudents] = useState<STSheetStudent[]>([]);
@@ -33,9 +35,11 @@ export const StudentList: React.FC<StudentListProps> = ({
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-  const [campCode, setCampCode] = useState<string>('E27');
+  const [campCode, setCampCode] = useState<CampCode>('E27');
+  const [campType, setCampType] = useState<CampType>('EJ');
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const isAdmin = userData?.role === 'admin';
 
   // 활성 기수의 code 가져오기
   useEffect(() => {
@@ -44,21 +48,34 @@ export const StudentList: React.FC<StudentListProps> = ({
       if (!activeJobCodeId || typeof activeJobCodeId !== 'string') {
         console.log('유효한 activeJobCodeId가 없습니다. 기본값 E27 사용');
         setCampCode('E27');
+        const type = stSheetService.getCampType('E27');
+        setCampType(type);
+        onCampTypeChange?.(type);
         return;
       }
       
       try {
         const jobCodes = await jobCodesService.getJobCodesByIds([activeJobCodeId]);
         if (jobCodes.length > 0 && jobCodes[0].code) {
-          console.log('캠프 코드 로드 성공:', jobCodes[0].code);
-          setCampCode(jobCodes[0].code);
+          const code = jobCodes[0].code as CampCode;
+          console.log('캠프 코드 로드 성공:', code);
+          setCampCode(code);
+          const type = stSheetService.getCampType(code);
+          setCampType(type);
+          onCampTypeChange?.(type);
         } else {
           console.log('캠프 코드를 찾을 수 없습니다. 기본값 E27 사용');
           setCampCode('E27');
+          const type = stSheetService.getCampType('E27');
+          setCampType(type);
+          onCampTypeChange?.(type);
         }
       } catch (error) {
         console.error('캠프 코드 로드 실패:', error);
         setCampCode('E27'); // 에러 시 기본값 사용
+        const type = stSheetService.getCampType('E27');
+        setCampType(type);
+        onCampTypeChange?.(type);
       }
     };
     
@@ -71,11 +88,6 @@ export const StudentList: React.FC<StudentListProps> = ({
       setLoading(true);
       const data = await stSheetService.getCachedData(campCode);
       setAllStudents(data);
-      
-      // 첫 로드 시 데이터가 없으면 자동 동기화
-      if (data.length === 0) {
-        await handleSync();
-      }
     } catch (error) {
       console.error('학생 목록 로드 실패:', error);
       Alert.alert('오류', '학생 목록을 불러오는데 실패했습니다.');
@@ -107,6 +119,11 @@ export const StudentList: React.FC<StudentListProps> = ({
   };
 
   const handleSync = async () => {
+    if (!isAdmin) {
+      Alert.alert('권한 없음', '동기화는 관리자만 수행할 수 있습니다.');
+      return;
+    }
+
     try {
       setSyncing(true);
       await stSheetService.syncSTSheet(campCode);
@@ -141,6 +158,27 @@ export const StudentList: React.FC<StudentListProps> = ({
     acc[mentorKey].push(student);
     return acc;
   }, {} as Record<string, STSheetStudent[]>);
+
+  // 방 명단일 때 멘토별 성별 판단 (해당 유닛의 첫 번째 학생 성별 기준)
+  const getMentorGender = (mentorKey: string): 'M' | 'F' | null => {
+    if (filterType !== 'room') return null;
+    const students = groupedByMentor[mentorKey];
+    if (!students || students.length === 0) return null;
+    return students[0].gender || null;
+  };
+
+  // 방 명단일 때 멘토를 성별로 분류
+  const mentorsByGender = filterType === 'room' 
+    ? Object.keys(groupedByMentor).reduce((acc, mentor) => {
+        const gender = getMentorGender(mentor);
+        if (gender === 'M') {
+          acc.male.push(mentor);
+        } else if (gender === 'F') {
+          acc.female.push(mentor);
+        }
+        return acc;
+      }, { male: [] as string[], female: [] as string[] })
+    : { male: [], female: [] };
 
   // 검색 필터링
   const filteredStudents = searchQuery.trim()
@@ -215,44 +253,107 @@ export const StudentList: React.FC<StudentListProps> = ({
               <Text style={styles.searchIcon}>🔍</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
-            onPress={handleSync}
-            disabled={syncing}
-          >
-            <Text style={styles.syncButtonText}>
-              {syncing ? '동기화 중...' : '동기화'}
-            </Text>
-          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
+              onPress={handleSync}
+              disabled={syncing}
+            >
+              <Text style={styles.syncButtonText}>
+                {syncing ? '동기화 중...' : '동기화'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       {/* 멘토/반 선택 - 검색 중일 때는 숨김 */}
       {!searchQuery.trim() && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterContainer}
-          contentContainerStyle={styles.filterContent}
-        >
-          {Object.keys(groupedByMentor).sort().map((mentor) => (
-            <TouchableOpacity
-              key={mentor}
-              style={[
-                styles.filterChip,
-                selectedMentor === mentor && styles.filterChipActive
-              ]}
-              onPress={() => setSelectedMentor(mentor)}
-            >
-              <Text style={[
-                styles.filterChipText,
-                selectedMentor === mentor && styles.filterChipTextActive
-              ]}>
-                {mentor}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        filterType === 'room' ? (
+          // 방 명단: 성별로 구분 (세로 배치)
+          <View style={styles.filterContainerVertical}>
+            {mentorsByGender.male.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.filterRow}
+                contentContainerStyle={styles.filterContent}
+              >
+                {mentorsByGender.male.sort().map((mentor) => (
+                  <TouchableOpacity
+                    key={mentor}
+                    style={[
+                      styles.filterChip,
+                      styles.filterChipMale,
+                      selectedMentor === mentor && styles.filterChipActiveMale
+                    ]}
+                    onPress={() => setSelectedMentor(mentor)}
+                  >
+                    <Text style={[
+                      styles.filterChipText,
+                      selectedMentor === mentor && styles.filterChipTextActive
+                    ]}>
+                      {mentor}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            {mentorsByGender.female.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.filterRow}
+                contentContainerStyle={styles.filterContent}
+              >
+                {mentorsByGender.female.sort().map((mentor) => (
+                  <TouchableOpacity
+                    key={mentor}
+                    style={[
+                      styles.filterChip,
+                      styles.filterChipFemale,
+                      selectedMentor === mentor && styles.filterChipActiveFemale
+                    ]}
+                    onPress={() => setSelectedMentor(mentor)}
+                  >
+                    <Text style={[
+                      styles.filterChipText,
+                      selectedMentor === mentor && styles.filterChipTextActive
+                    ]}>
+                      {mentor}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        ) : (
+          // 반 명단: 기존 방식 (가로 배치)
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterContainer}
+            contentContainerStyle={styles.filterContent}
+          >
+            {Object.keys(groupedByMentor).sort().map((mentor) => (
+              <TouchableOpacity
+                key={mentor}
+                style={[
+                  styles.filterChip,
+                  selectedMentor === mentor && styles.filterChipActive
+                ]}
+                onPress={() => setSelectedMentor(mentor)}
+              >
+                <Text style={[
+                  styles.filterChipText,
+                  selectedMentor === mentor && styles.filterChipTextActive
+                ]}>
+                  {mentor}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )
       )}
 
       {/* 검색 결과 안내 */}
@@ -291,7 +392,7 @@ export const StudentList: React.FC<StudentListProps> = ({
             ).sort(([roomA], [roomB]) => roomA.localeCompare(roomB));
 
             // 2인실 그룹과 일반 호수 분리
-            const result: JSX.Element[] = [];
+            const result: React.ReactElement[] = [];
             let i = 0;
 
             while (i < roomGroups.length) {
@@ -320,11 +421,13 @@ export const StudentList: React.FC<StudentListProps> = ({
                         <View key={roomNum} style={styles.singleRoomGroup}>
                           <Text style={styles.roomHeaderSmall}>{roomNum}호</Text>
                           <View style={styles.smallRoomCards}>
-                            {roomStudents.map((item) => (
+                            {roomStudents.map((item) => {
+                              const globalIndex = displayStudents.findIndex(s => s.studentId === item.studentId);
+                              return (
                               <TouchableOpacity
                                 key={item.studentId}
                                 style={styles.studentCardDouble}
-                                onPress={() => onStudentPress(item)}
+                                onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                               >
                                 <View style={styles.cardTop}>
                                   <Text 
@@ -360,7 +463,8 @@ export const StudentList: React.FC<StudentListProps> = ({
                                   </Text>
                                 </View>
                               </TouchableOpacity>
-                            ))}
+                            );
+                            })}
                           </View>
                         </View>
                       ))}
@@ -375,11 +479,13 @@ export const StudentList: React.FC<StudentListProps> = ({
                   <View key={roomNumber} style={styles.roomSection}>
                     <Text style={styles.roomHeader}>{roomNumber}호</Text>
                     <View style={styles.roomGrid}>
-                      {students.map((item) => (
+                      {students.map((item) => {
+                        const globalIndex = displayStudents.findIndex(s => s.studentId === item.studentId);
+                        return (
                         <TouchableOpacity
                           key={item.studentId}
                           style={styles.studentCard}
-                          onPress={() => onStudentPress(item)}
+                          onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                         >
                           <View style={styles.cardTop}>
                             <Text 
@@ -415,7 +521,8 @@ export const StudentList: React.FC<StudentListProps> = ({
                             </Text>
                           </View>
                         </TouchableOpacity>
-                      ))}
+                      );
+                      })}
                     </View>
                   </View>
                 );
@@ -432,10 +539,10 @@ export const StudentList: React.FC<StudentListProps> = ({
           data={displayStudents}
           keyExtractor={(item) => item.studentId}
           numColumns={4}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <TouchableOpacity
               style={styles.studentCardClass}
-              onPress={() => onStudentPress(item)}
+              onPress={() => onStudentPress(item, index, displayStudents)}
             >
               <View style={styles.cardTop}>
                 <Text 
@@ -600,39 +707,74 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
-    maxHeight: 60,
+    maxHeight: 50,
+  },
+  filterContainerVertical: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingVertical: 4,
+  },
+  filterRow: {
+    maxHeight: 50,
+    marginVertical: 2,
   },
   filterContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 2,
     flexDirection: 'row',
     alignItems: 'center',
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     backgroundColor: '#f1f5f9',
-    marginRight: 8,
+    marginRight: 6,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    height: 40,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
   filterChipActive: {
     backgroundColor: '#3b82f6',
     borderColor: '#2563eb',
-    height: 40,
+    height: 28,
   },
   filterChipText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#64748b',
     fontWeight: '500' as '500',
   },
   filterChipTextActive: {
     color: '#fff',
     fontWeight: '600' as '600',
+  },
+  genderLabel: {
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  genderLabelText: {
+    fontSize: 14,
+  },
+  filterChipMale: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+  },
+  filterChipActiveMale: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#2563eb',
+  },
+  filterChipFemale: {
+    backgroundColor: '#fef9c3',
+    borderColor: '#fde047',
+  },
+  filterChipActiveFemale: {
+    backgroundColor: '#eab308',
+    borderColor: '#ca8a04',
   },
   listContainer: {
     paddingHorizontal: 12,
