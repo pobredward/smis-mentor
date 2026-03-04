@@ -1498,14 +1498,14 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         {/* 프로필 이미지 */}
                         <div className="flex-shrink-0 mr-3">
                           {app.user?.profileImage ? (
-                            <img 
-                              src={app.user.profileImage} 
-                              alt={app.user?.name || '프로필'} 
-                              className="w-15 h-15 rounded object-cover border border-gray-100"
+                            <img
+                              src={app.user.profileImage}
+                              alt={app.user?.name || '프로필'}
+                              className="w-16 h-16 rounded object-cover border border-gray-100"
                               style={{ aspectRatio: '1 / 1' }}
                             />
                           ) : (
-                            <div className="w-15 h-15 rounded bg-gray-200 flex items-center justify-center text-gray-500" style={{ aspectRatio: '1 / 1' }}>
+                            <div className="w-16 h-16 rounded bg-gray-200 flex items-center justify-center text-gray-500" style={{ aspectRatio: '1 / 1' }}>
                               {app.user?.name ? app.user.name.charAt(0) : '?'}
                             </div>
                           )}
@@ -1537,32 +1537,32 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           {/* 오른쪽: 상태 배지 (고정 너비) */}
                           <div className="flex flex-col items-end gap-1 flex-shrink-0 min-w-[40%]">
                             <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-500">서류:</span>
+                              <span className="text-[10px] text-gray-500">서류:</span>
                               {getStatusBadge(app.applicationStatus, 'application')}
                               {app.user?.evaluationSummary?.documentReview && (
-                                <span className={`text-xs font-medium ${getScoreTextColor(app.user.evaluationSummary.documentReview.averageScore, 10)}`}>
+                                <span className={`text-[10px] font-medium ${getScoreTextColor(app.user.evaluationSummary.documentReview.averageScore, 10)}`}>
                                   ({app.user.evaluationSummary.documentReview.averageScore.toFixed(1)})
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-500">면접:</span>
-                              {app.interviewStatus 
+                              <span className="text-[10px] text-gray-500">면접:</span>
+                              {app.interviewStatus
                                 ? getStatusBadge(app.interviewStatus, 'interview')
                                 : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
                               {app.user?.evaluationSummary?.interview && (
-                                <span className={`text-xs font-medium ${getScoreTextColor(app.user.evaluationSummary.interview.averageScore, 10)}`}>
+                                <span className={`text-[10px] font-medium ${getScoreTextColor(app.user.evaluationSummary.interview.averageScore, 10)}`}>
                                   ({app.user.evaluationSummary.interview.averageScore.toFixed(1)})
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-500">최종:</span>
-                              {app.finalStatus 
+                              <span className="text-[10px] text-gray-500">최종:</span>
+                              {app.finalStatus
                                 ? getStatusBadge(app.finalStatus, 'final')
                                 : <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">미정</span>}
                               {app.user?.evaluationSummary?.faceToFaceEducation && (
-                                <span className={`text-xs font-medium ${getScoreTextColor(app.user.evaluationSummary.faceToFaceEducation.averageScore, 10)}`}>
+                                <span className={`text-[10px] font-medium ${getScoreTextColor(app.user.evaluationSummary.faceToFaceEducation.averageScore, 10)}`}>
                                   ({app.user.evaluationSummary.faceToFaceEducation.averageScore.toFixed(1)})
                                 </span>
                               )}
@@ -1570,12 +1570,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             {/* 직무 경험 코드 및 캠프 점수 표시 */}
                             {app.user?.jobExperiences && app.user.jobExperiences.length > 0 && userJobCodesMap[app.user.userId] && (
                               <div className="flex items-center gap-1">
-                                <span className="text-xs text-gray-500">캠프:</span>
+                                <span className="text-[10px] text-gray-500">캠프:</span>
                                 <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-700 font-medium">
                                   {userJobCodesMap[app.user.userId]?.map(jobCode => jobCode.code).join(', ')}
                                 </span>
                                 {app.user?.evaluationSummary?.campLife && (
-                                  <span className={`text-xs font-medium ${getScoreTextColor(app.user.evaluationSummary.campLife.averageScore, 10)}`}>
+                                  <span className={`text-[10px] font-medium ${getScoreTextColor(app.user.evaluationSummary.campLife.averageScore, 10)}`}>
                                     ({app.user.evaluationSummary.campLife.averageScore.toFixed(1)})
                                   </span>
                                 )}

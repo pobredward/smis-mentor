@@ -11,7 +11,8 @@ import {
   getApplicationsByJobBoardId, 
   updateJobBoard, 
   createJobBoard,
-  getAllJobCodes
+  getAllJobCodes,
+  clearJobBoardsCache
 } from '@/lib/firebaseService';
 import { JobBoardWithId, ApplicationHistoryWithId, JobCodeWithId } from '@/types';
 
@@ -26,6 +27,7 @@ export default function JobBoardManage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('active');
   
   // 공고 생성/수정 폼 상태
   const [selectedJobBoard, setSelectedJobBoard] = useState<JobBoardWithApplications | null>(null);
@@ -50,6 +52,9 @@ export default function JobBoardManage() {
     const loadData = async () => {
       try {
         setIsLoading(true);
+        
+        // 관리자 페이지에서는 항상 최신 데이터를 보기 위해 캐시 클리어
+        await clearJobBoardsCache();
         
         // 업무 코드 로드
         const jobCodeData = await getAllJobCodes();
@@ -637,6 +642,53 @@ export default function JobBoardManage() {
 
       
           <>
+            {/* 필터 토글 버튼 */}
+            <div className="mb-4 bg-white rounded-lg shadow p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-700">상태:</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                      statusFilter === 'all'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    전체
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('active')}
+                    className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                      statusFilter === 'active'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    모집중
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('closed')}
+                    className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                      statusFilter === 'closed'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    마감
+                  </button>
+                </div>
+                <span className="ml-auto text-sm text-gray-500">
+                  {statusFilter === 'all' 
+                    ? `총 ${jobBoards.length}개`
+                    : statusFilter === 'active'
+                    ? `${jobBoards.filter(b => b.status === 'active').length}개`
+                    : `${jobBoards.filter(b => b.status === 'closed').length}개`
+                  }
+                </span>
+              </div>
+            </div>
+
             {/* 데스크탑 뷰 */}
             <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
               <div className="overflow-x-auto">
@@ -650,7 +702,9 @@ export default function JobBoardManage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {jobBoards.map((board) => {
+                    {jobBoards
+                      .filter(board => statusFilter === 'all' || board.status === statusFilter)
+                      .map((board) => {
                       // 상태별 지원자 수 계산
                       const pendingCount = board.applications.filter(app => app.applicationStatus === 'pending').length;
                       const interviewCount = board.applications.filter(app => app.interviewStatus === 'pending').length;
@@ -724,7 +778,9 @@ export default function JobBoardManage() {
 
             {/* 모바일 뷰 - 카드 형태 */}
             <div className="md:hidden space-y-4">
-              {jobBoards.map((board) => {
+              {jobBoards
+                .filter(board => statusFilter === 'all' || board.status === statusFilter)
+                .map((board) => {
                 // 상태별 지원자 수 계산
                 const pendingCount = board.applications.filter(app => app.applicationStatus === 'pending').length;
                 const interviewCount = board.applications.filter(app => app.interviewStatus === 'pending').length;
