@@ -7,7 +7,6 @@ import { AdminNavigator } from './AdminNavigator';
 import {
   HomeScreen,
   CampScreen,
-  SettingsScreen,
   ProfileScreen,
 } from '../screens';
 import { useAuth } from '../context/AuthContext';
@@ -34,11 +33,6 @@ export function MainTabs() {
         name="Camp"
         component={CampScreen}
         options={{ title: '캠프' }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{ title: '설정' }}
       />
       <Tab.Screen
         name="Profile"

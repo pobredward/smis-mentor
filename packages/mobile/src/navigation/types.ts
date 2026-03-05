@@ -14,7 +14,6 @@ export type MainTabsParamList = {
   Home: undefined;
   Recruitment: undefined;
   Camp: undefined;
-  Settings: undefined;
   Profile: undefined;
   Admin: undefined;
 };
