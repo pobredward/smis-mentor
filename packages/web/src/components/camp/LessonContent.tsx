@@ -666,18 +666,10 @@ export default function LessonContent() {
   }
 
   return (
-    <div className="py-6">
-      {/* 헤더 */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">수업 자료 업로드</h1>
-        <p className="text-gray-600 text-sm leading-relaxed">
-          참여하는 캠프 코드의 자료만 확인 가능합니다
-        </p>
-      </div>
-
+    <div className="py-4">
       {/* 코드별 필터 탭 */}
       {sortedMaterialCodes.length > 1 && (
-        <div className="mb-6">
+        <div className="mb-4 px-4">
           <div className="flex flex-wrap gap-2">
             {sortedMaterialCodes.map((code) => (
               <button
@@ -713,7 +705,7 @@ export default function LessonContent() {
 
       {/* 에러 메시지 */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm">
+        <div className="mb-4 mx-4 p-3 bg-red-50 border border-red-200 rounded text-sm">
           <div className="flex items-center">
             <svg
               className="w-4 h-4 text-red-500 mr-2"
@@ -735,7 +727,7 @@ export default function LessonContent() {
 
       {/* 대주제 목록 */}
       {filteredMaterials.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+        <div className="text-center py-12 mx-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
           <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
             <svg
               className="w-6 h-6 text-gray-400"
@@ -757,7 +749,7 @@ export default function LessonContent() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 sm:space-y-2 px-2">
           {filteredMaterials.map((material) => {
             const sectionCount = sections[material.id]?.length || 0;
             const tpl = material.templateId
@@ -767,20 +759,36 @@ export default function LessonContent() {
             return (
               <div
                 key={material.id}
-                className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all"
+                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all"
               >
                 {/* 카드 헤더 */}
-                <div className="p-4">
+                <div className="p-3 sm:p-4 bg-gray-50 border-b border-gray-200">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      {/* 아이콘 */}
+                      <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg
+                          className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                      </div>
                       <div>
-                        <h3 className="font-medium text-gray-900">{material.title}</h3>
-                        <p className="text-xs text-gray-500">{sectionCount}개 소제목</p>
+                        <h3 className="text-sm sm:text-base font-medium text-gray-900">{material.title}</h3>
+                        <p className="text-[10px] sm:text-xs text-gray-500">{sectionCount}개 소제목</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
                       {tpl && tpl.links && tpl.links.length > 0 && (
-                        <div className="flex gap-1 mr-2">
+                        <div className="flex gap-1 mr-1 sm:mr-2">
                           {tpl.links.slice(0, 2).map((l, idx) =>
                             l.label && l.url ? (
                               <a
@@ -788,7 +796,7 @@ export default function LessonContent() {
                                 href={l.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all"
+                                className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all"
                                 aria-label={l.label}
                               >
                                 {l.label}
@@ -823,8 +831,8 @@ export default function LessonContent() {
                 </div>
 
                 {/* 카드 본문 - 항상 표시 */}
-                <div className="px-4 pb-4 border-t border-gray-100">
-                    <div className="space-y-2 mt-3">
+                <div className="px-3 sm:px-4 pb-3 sm:pb-4 bg-white">
+                    <div className="space-y-1.5 sm:space-y-2 mt-2 sm:mt-3">
                       {sections[material.id]?.length === 0 ? (
                         <div className="text-center py-6 text-gray-400">
                           <svg
@@ -847,7 +855,7 @@ export default function LessonContent() {
                         sections[material.id]?.map((section) => (
                           <div
                             key={section.id}
-                            className="border-b border-gray-200 last:border-b-0 py-2.5 transition-all group"
+                            className="border-b border-gray-200 last:border-b-0 py-2 sm:py-2.5 transition-all group"
                           >
                             {editingSection?.materialId === material.id &&
                             editingSection?.section.id === section.id ? (
@@ -860,16 +868,16 @@ export default function LessonContent() {
                             ) : (
                               <>
                                 {/* 소제목 컴팩트 레이아웃 */}
-                                <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center justify-between gap-2 sm:gap-3">
                                   {/* 왼쪽: 제목, 링크 */}
-                                  <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap flex-1 min-w-0">
+                                    <div className="flex items-center gap-1 sm:gap-1.5">
                                       {section.isFromTemplate && (
-                                        <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-gray-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                           <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                                         </svg>
                                       )}
-                                      <h4 className={`font-medium text-sm ${section.isFromTemplate ? 'text-gray-700' : 'text-gray-800'}`}>
+                                      <h4 className={`font-medium text-xs sm:text-sm ${section.isFromTemplate ? 'text-gray-700' : 'text-gray-800'}`}>
                                         {section.title}
                                       </h4>
                                     </div>
@@ -882,9 +890,9 @@ export default function LessonContent() {
                                             href={link.url}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                                            className="inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
                                           >
-                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                             </svg>
                                             {link.label}
@@ -895,20 +903,20 @@ export default function LessonContent() {
                                   </div>
                                   
                                   {/* 오른쪽: 액션 버튼들 */}
-                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
                                     {/* 공개보기/원본 버튼 */}
                                     <a
                                       href={section.viewUrl || undefined}
                                       target="_blank"
                                       rel="noopener"
-                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                      className={`inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium transition-all ${
                                         section.viewUrl
                                           ? 'bg-blue-500 text-white hover:bg-blue-600'
                                           : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
                                       }`}
                                     >
                                       <svg
-                                        className="w-3 h-3 hidden sm:block"
+                                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 hidden sm:block"
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -933,14 +941,14 @@ export default function LessonContent() {
                                       href={section.originalUrl || undefined}
                                       target="_blank"
                                       rel="noopener"
-                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                      className={`inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium transition-all ${
                                         section.originalUrl
                                           ? 'bg-green-500 text-white hover:bg-green-600'
                                           : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
                                       }`}
                                     >
                                       <svg
-                                        className="w-3 h-3 hidden sm:block"
+                                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 hidden sm:block"
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -959,11 +967,11 @@ export default function LessonContent() {
                                       onClick={() =>
                                         setEditingSection({ materialId: material.id, section })
                                       }
-                                      className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
+                                      className="p-0.5 sm:p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
                                       title="수정"
                                     >
                                       <svg
-                                        className="w-3 h-3"
+                                        className="w-2.5 h-2.5 sm:w-3 sm:h-3"
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -979,11 +987,11 @@ export default function LessonContent() {
                                     {!section.isFromTemplate && (
                                       <button
                                         onClick={() => handleDeleteSection(material.id, section.id)}
-                                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                                        className="p-0.5 sm:p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
                                         title="삭제"
                                       >
                                         <svg
-                                          className="w-3 h-3"
+                                          className="w-2.5 h-2.5 sm:w-3 sm:h-3"
                                           fill="none"
                                           stroke="currentColor"
                                           viewBox="0 0 24 24"
@@ -1015,10 +1023,10 @@ export default function LessonContent() {
                     ) : (
                       <button
                         onClick={() => setAddingSectionFor(material.id)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 mt-3 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-all text-sm"
+                        className="w-full flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 mt-2 sm:mt-3 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-all text-xs sm:text-sm"
                       >
                         <svg
-                          className="w-4 h-4"
+                          className="w-3 h-3 sm:w-4 sm:h-4"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -1044,7 +1052,7 @@ export default function LessonContent() {
       {selectedMaterialCode && selectedMaterialCode !== '개인 자료' && (
         <>
           {showAddMaterialForm ? (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4 mx-4">
               <h3 className="text-sm font-semibold text-blue-800 mb-2">
                 {selectedMaterialCode}에 새 대주제 추가
               </h3>
@@ -1090,7 +1098,8 @@ export default function LessonContent() {
           ) : (
             <button
               onClick={() => setShowAddMaterialForm(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-4 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all text-sm font-medium"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-4 mx-4 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all text-sm font-medium"
+              style={{ width: 'calc(100% - 2rem)' }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
