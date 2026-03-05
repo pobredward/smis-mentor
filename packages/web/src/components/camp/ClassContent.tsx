@@ -178,7 +178,7 @@ export default function ClassContent() {
               <button
                 key={classKey}
                 onClick={() => setSelectedClass(classKey)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
                   selectedClass === classKey
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -200,42 +200,42 @@ export default function ClassContent() {
         </div>
       )}
 
-      {/* 학생 목록 - 4열 그리드 */}
+      {/* 학생 목록 - 4열 그리드 (모바일 최적화) */}
       <div className="flex-1 overflow-y-auto p-4">
         {displayStudents.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">반을 선택해주세요.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-4 gap-1">
             {displayStudents.map(student => (
               <button
                 key={student.studentId}
                 onClick={() => setSelectedStudent(student)}
-                className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all text-left"
+                className="bg-white rounded-lg p-2.5 border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all text-left"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className={`text-base font-bold truncate ${
+                <div className="mb-1.5">
+                  <h3 className={`text-sm font-bold truncate leading-tight ${
                     student.gender === 'M' ? 'text-blue-600' : 'text-yellow-600'
                   }`}>
                     {student.name}
                   </h3>
-                  <span className="text-xs text-gray-900 font-medium ml-1 flex-shrink-0">
+                  <p className="text-[10px] text-gray-900 font-medium truncate">
                     {student.classNumber || '-'}
-                  </span>
+                  </p>
                 </div>
                 
-                <div className="h-px bg-gray-200 my-2"></div>
+                <div className="h-px bg-gray-200 my-1.5"></div>
                 
-                <div className="space-y-0.5 text-xs text-gray-600">
+                <div className="space-y-0.5 text-[10px] text-gray-600">
                   <p className="truncate">{student.englishName || '-'}</p>
-                  <p>
+                  <p className="truncate">
                     <span>{student.gender === 'M' ? '남' : '여'}</span>
                     <span className="mx-1">•</span>
                     <span>{student.grade}</span>
                   </p>
-                  <p className="truncate text-[11px]">반: {student.classMentor || '-'}</p>
-                  <p className="truncate text-[11px]">유닛: {student.unitMentor || '-'}</p>
+                  <p className="truncate text-[9px]">반: {student.classMentor || '-'}</p>
+                  <p className="truncate text-[9px]">유닛: {student.unitMentor || '-'}</p>
                 </div>
               </button>
             ))}
