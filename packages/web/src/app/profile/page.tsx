@@ -44,9 +44,22 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const fetchJobCodes = async () => {
-      if (userData?.jobExperiences && userData.jobExperiences.length > 0) {
+      if (userData) {
         try {
-          const jobCodesInfo = await getUserJobCodesInfo(userData.jobExperiences);
+          let jobCodesInfo;
+          
+          // 관리자는 모든 캠프 코드 조회
+          if (userData.role === 'admin') {
+            const { getAllJobCodes } = await import('@/lib/firebaseService');
+            jobCodesInfo = await getAllJobCodes();
+          } 
+          // 일반 사용자는 자신의 캠프 코드만 조회
+          else if (userData.jobExperiences && userData.jobExperiences.length > 0) {
+            jobCodesInfo = await getUserJobCodesInfo(userData.jobExperiences);
+          } else {
+            jobCodesInfo = [];
+          }
+          
           // generation 기준으로 정렬 (generation은 문자열이므로 숫자로 변환하여 정렬)
           const sortedJobCodes = [...jobCodesInfo].sort((a, b) => {
             // generation에서 숫자만 추출 (예: "1기" -> 1, "10기" -> 10)
@@ -170,7 +183,9 @@ export default function ProfilePage() {
             className="w-full border-b px-4 sm:px-6 py-3 hover:bg-gray-50 transition-colors"
           >
             <div className="flex justify-between items-start">
-              <h2 className="text-lg font-semibold">SMIS 캠프 참여 이력</h2>
+              <h2 className="text-lg font-semibold">
+                {userData.role === 'admin' ? '전체 캠프 코드' : 'SMIS 캠프 참여 이력'}
+              </h2>
               {jobCodes.length > 0 && (
                 <span className="text-gray-500 text-sm font-semibold flex-shrink-0 ml-2">
                   {jobCodesExpanded ? '▼' : '▶'}

@@ -133,10 +133,40 @@ export const updateUser = async (userId: string, updates: Partial<User>) => {
 export const updateUserActiveJobCode = async (userId: string, jobCodeId: string) => {
   try {
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-      activeJobExperienceId: jobCodeId,
-      updatedAt: Timestamp.now()
-    });
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('사용자를 찾을 수 없습니다.');
+    }
+    
+    const userData = userDoc.data() as User;
+    
+    // 관리자이고 jobExperiences에 해당 jobCodeId가 없는 경우 추가
+    if (userData.role === 'admin') {
+      const jobExperiences = userData.jobExperiences || [];
+      const hasJobCode = jobExperiences.some(exp => exp.id === jobCodeId);
+      
+      if (!hasJobCode) {
+        // jobExperiences에 추가
+        await updateDoc(userRef, {
+          activeJobExperienceId: jobCodeId,
+          jobExperiences: [...jobExperiences, { id: jobCodeId }],
+          updatedAt: Timestamp.now()
+        });
+      } else {
+        // 이미 있는 경우 activeJobExperienceId만 업데이트
+        await updateDoc(userRef, {
+          activeJobExperienceId: jobCodeId,
+          updatedAt: Timestamp.now()
+        });
+      }
+    } else {
+      // 일반 사용자는 기존 로직대로
+      await updateDoc(userRef, {
+        activeJobExperienceId: jobCodeId,
+        updatedAt: Timestamp.now()
+      });
+    }
     
     // 해당 사용자 캐시 삭제
     await clearUserCache(userId);

@@ -35,19 +35,28 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [jobCodesExpanded, setJobCodesExpanded] = useState(true);
 
   useEffect(() => {
-    if (userData?.jobExperiences) {
+    if (userData) {
       loadJobCodes();
     }
-  }, [userData?.jobExperiences]);
+  }, [userData]);
 
   const loadJobCodes = async () => {
-    if (!userData?.jobExperiences || userData.jobExperiences.length === 0) {
+    if (!userData) {
       return;
     }
 
     try {
       setLoadingJobCodes(true);
-      const codes = await jobCodesService.getJobCodesByIds(userData.jobExperiences);
+      let codes: JobCode[] = [];
+      
+      // 관리자는 모든 캠프 코드 조회
+      if (userData.role === 'admin') {
+        codes = await jobCodesService.getAllJobCodes();
+      } 
+      // 일반 사용자는 자신의 캠프 코드만 조회
+      else if (userData.jobExperiences && userData.jobExperiences.length > 0) {
+        codes = await jobCodesService.getJobCodesByIds(userData.jobExperiences);
+      }
       
       // 기수별 내림차순 정렬 (27기, 26기, ... 순서)
       const sortedCodes = codes.sort((a, b) => {
@@ -192,7 +201,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               activeOpacity={0.7}
             >
               <View style={styles.sectionHeaderContent}>
-                <Text style={styles.sectionTitle}>SMIS 캠프 참여 이력</Text>
+                <Text style={styles.sectionTitle}>
+                  {userData.role === 'admin' ? '전체 캠프 코드' : 'SMIS 캠프 참여 이력'}
+                </Text>
                 {jobCodes.length > 0 && (
                   <Text style={styles.expandIcon}>
                     {jobCodesExpanded ? '▼' : '▶'}
