@@ -238,11 +238,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                           disabled={changingJobCode || isActive}
                         >
                           <View style={styles.jobCodeMain}>
-                            <View style={styles.jobCodeLeft}>
-                              <Text style={styles.jobCodeText}>
-                                {jobCode.generation} {jobCode.name}
-                              </Text>
-                            </View>
+                            <Text style={styles.jobCodeText}>
+                              {jobCode.generation} {jobCode.name}
+                            </Text>
                             <View style={styles.jobCodeBadges}>
                               {isActive && (
                                 <View style={styles.activeBadge}>
@@ -613,8 +611,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    padding: 8,
+    marginBottom: 8,
   },
   jobCodeItemActive: {
     borderColor: '#3b82f6',
@@ -625,20 +623,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  jobCodeLeft: {
-    flex: 1,
+    gap: 8,
   },
   jobCodeText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
     color: '#1e293b',
+    flex: 1,
   },
   jobCodeBadges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
     alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   activeBadge: {
     backgroundColor: '#3b82f6',

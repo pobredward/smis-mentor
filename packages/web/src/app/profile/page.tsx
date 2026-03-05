@@ -205,7 +205,7 @@ export default function ProfilePage() {
               ) : jobCodes.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">등록된 참여 이력이 없습니다.</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {jobCodes.map((job) => {
                     const exp = userData?.jobExperiences?.find(exp => exp.id === job.id);
                     const isActive = userData?.activeJobExperienceId === job.id;
@@ -214,33 +214,59 @@ export default function ProfilePage() {
                         key={job.id as string}
                         onClick={() => handleJobCodeSelect(job.id as string)}
                         disabled={changingJobCode || isActive}
-                        className={`w-full flex justify-between items-center py-2 px-3 rounded-lg transition-all ${
+                        className={`w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-1.5 px-2.5 rounded-lg transition-all ${
                           isActive 
                             ? 'bg-blue-50 border-2 border-blue-200 cursor-default' 
                             : 'border border-gray-200 hover:bg-gray-50 hover:border-gray-300 cursor-pointer'
                         } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
-                        <div className="flex-shrink-0 min-w-0 font-medium text-gray-900">
+                        <div className="hidden sm:block flex-shrink-0 min-w-0 font-medium text-gray-900 text-sm">
                           {job.generation} {job.name}
                         </div>
-                        <div className="flex gap-x-2 flex-shrink-0">
+                        {/* 모바일: 양쪽 정렬로 활성 뱃지 오른쪽 */}
+                        <div className="flex justify-between sm:hidden items-center gap-x-1.5 flex-wrap">
+                          <div className="flex gap-x-1.5 flex-wrap">
+                            {job.code && (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300 font-semibold">
+                                {job.code}
+                              </span>
+                            )}
+                            {exp?.groupRole && (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
+                                {exp.groupRole}
+                              </span>
+                            )}
+                            {exp?.classCode && (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-semibold">
+                                {exp.classCode}
+                              </span>
+                            )}
+                          </div>
                           {isActive && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-blue-500 text-white font-semibold">
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
+                              활성
+                            </span>
+                          )}
+                        </div>
+                        {/* 데스크탑: 활성 뱃지 맨 앞 */}
+                        <div className="hidden sm:flex items-center gap-x-1.5 flex-wrap">
+                          {isActive && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
                               활성
                             </span>
                           )}
                           {job.code && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-300 font-semibold">
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300 font-semibold">
                               {job.code}
                             </span>
                           )}
                           {exp?.groupRole && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
                               {exp.groupRole}
                             </span>
                           )}
                           {exp?.classCode && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-semibold">
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-semibold">
                               {exp.classCode}
                             </span>
                           )}
