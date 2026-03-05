@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '@/components/common/Header';
 import Footer from '@/components/common/Footer';
+import Button from '@/components/common/Button';
 import {
   getLessonMaterialTemplates,
   addLessonMaterialTemplate,
@@ -163,12 +165,12 @@ function SectionEditor({
             <div className="space-y-2">
               {sections.map(s => (
                 <SortableItem key={s.id} id={s.id}>
-                  <div className="bg-white border border-emerald-100 rounded-lg p-3 hover:border-emerald-200 hover:shadow-sm transition-all group">
+                  <div className="bg-white border border-gray-200 rounded-lg p-3 hover:border-gray-300 hover:shadow-sm transition-all group">
                     {editingId === s.id ? (
                       <div className="space-y-3">
                         <div>
                           <input
-                            className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent transition-all bg-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
                             value={editingValue}
                             onChange={e => setEditingValue(e.target.value)}
                             placeholder="소제목명"
@@ -178,25 +180,27 @@ function SectionEditor({
                         </div>
                         {/* 링크들 수정 */}
                         <div>
-                          <label className="block text-sm font-medium text-emerald-800 mb-2">소제목 링크들 (선택)</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">소제목 링크들 (선택)</label>
                           <div className="space-y-2">
                             {editingLinks.map((l, idx) => (
-                              <div key={idx} className="flex gap-2 items-center bg-emerald-50 rounded-lg p-2 border border-emerald-100">
-                                <input
-                                  className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                  placeholder="링크 제목"
-                                  value={l.label}
-                                  onChange={e => handleLinkChange(editingLinks, setEditingLinks, idx, 'label', e.target.value)}
-                                />
-                                <input
-                                  className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                  placeholder="URL"
-                                  value={l.url}
-                                  onChange={e => handleLinkChange(editingLinks, setEditingLinks, idx, 'url', e.target.value)}
-                                />
+                              <div key={idx} className="flex flex-col sm:flex-row gap-2 bg-gray-50 rounded-lg p-2 border border-gray-200">
+                                <div className="flex gap-2 flex-1">
+                                  <input
+                                    className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    placeholder="링크 제목"
+                                    value={l.label}
+                                    onChange={e => handleLinkChange(editingLinks, setEditingLinks, idx, 'label', e.target.value)}
+                                  />
+                                  <input
+                                    className="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    placeholder="URL"
+                                    value={l.url}
+                                    onChange={e => handleLinkChange(editingLinks, setEditingLinks, idx, 'url', e.target.value)}
+                                  />
+                                </div>
                                 <button
                                   onClick={() => handleLinkRemove(editingLinks, setEditingLinks, idx)}
-                                  className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
+                                  className="self-start px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
                                 >
                                   삭제
                                 </button>
@@ -204,7 +208,7 @@ function SectionEditor({
                             ))}
                             <button
                               onClick={() => handleLinkAdd(editingLinks, setEditingLinks)}
-                              className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 transition-all"
+                              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 transition-all"
                             >
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -213,7 +217,7 @@ function SectionEditor({
                             </button>
                           </div>
                         </div>
-                        <div className="flex gap-2 justify-end pt-3 border-t border-emerald-200">
+                        <div className="flex gap-2 justify-end pt-3 border-t border-gray-200">
                           <button
                             onClick={handleEditCancel}
                             className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
@@ -222,7 +226,7 @@ function SectionEditor({
                           </button>
                           <button
                             onClick={handleEditComplete}
-                            className="px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 border border-transparent rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                           >
                             완료
                           </button>
@@ -233,8 +237,8 @@ function SectionEditor({
                         {/* 소제목 헤더 */}
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-emerald-100 rounded flex items-center justify-center">
-                              <span className="text-emerald-700 font-medium text-xs">
+                            <div className="w-6 h-6 bg-blue-100 rounded flex items-center justify-center">
+                              <span className="text-blue-700 font-medium text-xs">
                                 {sections.findIndex(sec => sec.id === s.id) + 1}
                               </span>
                             </div>
@@ -243,7 +247,7 @@ function SectionEditor({
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => handleEdit(s.id, s.title, s.links)}
-                              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-all"
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
                               title="수정"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -302,20 +306,20 @@ function SectionEditor({
       </DndContext>
       
       {/* 소제목 추가 폼 */}
-      <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-lg p-4">
+      <div className="bg-gradient-to-r from-blue-50 to-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+          <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
             <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
           </div>
-          <h5 className="text-sm font-semibold text-emerald-800">새 소제목 추가</h5>
+          <h5 className="text-sm font-semibold text-blue-800">새 소제목 추가</h5>
         </div>
         <div className="space-y-3">
           <div>
             <input
               ref={inputRef}
-              className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent transition-all bg-white"
+              className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
               placeholder="소제목 (예: 오리엔테이션)"
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -325,25 +329,27 @@ function SectionEditor({
           </div>
           {/* 링크들 추가 */}
           <div>
-            <label className="block text-sm font-medium text-emerald-800 mb-2">소제목 링크들 (선택)</label>
+            <label className="block text-sm font-medium text-blue-800 mb-2">소제목 링크들 (선택)</label>
             <div className="space-y-2">
               {newLinks.map((l, idx) => (
-                <div key={idx} className="flex gap-2 items-center bg-white rounded-lg p-2 border border-emerald-100">
-                  <input
-                    className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    placeholder="링크 제목"
-                    value={l.label}
-                    onChange={e => handleLinkChange(newLinks, setNewLinks, idx, 'label', e.target.value)}
-                  />
-                  <input
-                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    placeholder="URL"
-                    value={l.url}
-                    onChange={e => handleLinkChange(newLinks, setNewLinks, idx, 'url', e.target.value)}
-                  />
+                <div key={idx} className="flex flex-col sm:flex-row gap-2 bg-white rounded-lg p-2 border border-blue-100">
+                  <div className="flex gap-2 flex-1">
+                    <input
+                      className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="링크 제목"
+                      value={l.label}
+                      onChange={e => handleLinkChange(newLinks, setNewLinks, idx, 'label', e.target.value)}
+                    />
+                    <input
+                      className="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="URL"
+                      value={l.url}
+                      onChange={e => handleLinkChange(newLinks, setNewLinks, idx, 'url', e.target.value)}
+                    />
+                  </div>
                   <button
                     onClick={() => handleLinkRemove(newLinks, setNewLinks, idx)}
-                    className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
+                    className="self-start px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
                   >
                     삭제
                   </button>
@@ -352,7 +358,7 @@ function SectionEditor({
               <div className="flex gap-2 justify-between items-center">
                 <button
                   onClick={() => handleLinkAdd(newLinks, setNewLinks)}
-                  className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 transition-all"
+                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 transition-all"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -362,7 +368,7 @@ function SectionEditor({
                 <button
                   onClick={handleAdd}
                   disabled={isLoading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 border border-transparent rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
                     <div className="flex items-center gap-2">
@@ -383,6 +389,7 @@ function SectionEditor({
 }
 
 export default function AdminUploadTemplatePage() {
+  const router = useRouter();
   const [templates, setTemplates] = useState<LessonMaterialTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -391,11 +398,13 @@ export default function AdminUploadTemplatePage() {
   const [title, setTitle] = useState('');
   const [sections, setSections] = useState<LessonMaterialTemplateSection[]>([]);
   const [selectedCode, setSelectedCode] = useState('');
-  const [selectedCodeFilter, setSelectedCodeFilter] = useState('전체');
+  const [selectedGeneration, setSelectedGeneration] = useState('');
+  const [selectedCodeFilter, setSelectedCodeFilter] = useState('');
+  const [showAllGenerations, setShowAllGenerations] = useState(false);
   const [links, setLinks] = useState<{ label: string; url: string }[]>([]);
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [jobCodesLoading, setJobCodesLoading] = useState(false);
-  const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
+  const [referenceTemplateId, setReferenceTemplateId] = useState<string>('');
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -426,6 +435,43 @@ export default function AdminUploadTemplatePage() {
     fetchJobCodes();
   }, []);
 
+  // 첫 로드 시 기본 기수 선택 (jobCodes가 로드된 후)
+  useEffect(() => {
+    if (jobCodes.length > 0 && !selectedGeneration) {
+      const generations = Array.from(new Set(jobCodes.map(jc => jc.generation)))
+        .sort((a, b) => {
+          const numA = parseInt(a.match(/\d+/)?.[0] || '0', 10);
+          const numB = parseInt(b.match(/\d+/)?.[0] || '0', 10);
+          return numB - numA; // 내림차순
+        });
+      
+      if (generations.length > 0) {
+        setSelectedGeneration(generations[0]);
+      }
+    }
+  }, [jobCodes, selectedGeneration]);
+
+  // 기수 선택 시 첫 번째 코드 자동 선택
+  useEffect(() => {
+    if (selectedGeneration && jobCodes.length > 0) {
+      const codesForGen = Array.from(new Set(jobCodes.filter(jc => jc.generation === selectedGeneration).map(jc => jc.code)));
+      if (codesForGen.length > 0 && !selectedCodeFilter) {
+        setSelectedCodeFilter(codesForGen[0]);
+      }
+    }
+  }, [selectedGeneration, jobCodes, selectedCodeFilter]);
+
+  // 템플릿 복사
+  const handleCopyTemplate = (template: LessonMaterialTemplate) => {
+    setShowForm(true);
+    setEditing(null);
+    setTitle(template.title);
+    setSections(template.sections || []);
+    setSelectedCode(''); // 코드는 비워서 새로 선택하게
+    setLinks(template.links || []);
+    setReferenceTemplateId(template.id);
+  };
+
   // 템플릿 추가/수정
   const handleSave = async () => {
     if (!title.trim()) return;
@@ -441,6 +487,7 @@ export default function AdminUploadTemplatePage() {
     setSections([]);
     setSelectedCode('');
     setLinks([]);
+    setReferenceTemplateId('');
     fetchTemplates();
   };
 
@@ -451,8 +498,21 @@ export default function AdminUploadTemplatePage() {
     fetchTemplates();
   };
 
-  // 사용 가능한 코드 목록 (중복 제거)
-  const availableCodes = Array.from(new Set(jobCodes.map(jc => jc.code))).sort((a, b) => {
+  // 사용 가능한 기수 목록 (중복 제거 및 정렬)
+  const availableGenerations = Array.from(new Set(jobCodes.map(jc => jc.generation)))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0] || '0', 10);
+      const numB = parseInt(b.match(/\d+/)?.[0] || '0', 10);
+      return numB - numA; // 내림차순
+    });
+
+  // 선택된 기수에 해당하는 코드 목록
+  const codesForSelectedGeneration = selectedGeneration
+    ? Array.from(new Set(jobCodes.filter(jc => jc.generation === selectedGeneration).map(jc => jc.code)))
+    : [];
+
+  // 사용 가능한 코드 목록 (중복 제거 및 정렬)
+  const availableCodes = codesForSelectedGeneration.sort((a, b) => {
     // 숫자 부분을 추출하여 비교 (예: "D26" -> 26, "F23_1" -> 23)
     const getNumericPart = (code: string) => {
       const match = code.match(/\d+/);
@@ -471,35 +531,38 @@ export default function AdminUploadTemplatePage() {
     return a.localeCompare(b) as number;
   });
   
-  const filteredTemplates = selectedCodeFilter === '전체'
-    ? templates
-    : templates.filter(t => (t.code || '미지정') === selectedCodeFilter);
-
-  // 토글 함수 - 토글 시 바로 편집 모드로 진입
-  const toggleTemplate = (template: LessonMaterialTemplate) => {
-    setExpandedTemplates(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(template.id)) {
-        newSet.delete(template.id);
-        // 접을 때 편집 모드 해제
-        if (editing?.id === template.id) {
-          setEditing(null);
-          setTitle('');
-          setSections([]);
-          setSelectedCode('');
-          setLinks([]);
-        }
-      } else {
-        newSet.add(template.id);
-        // 펼칠 때 편집 모드로 진입
-        setEditing(template);
-        setTitle(template.title);
-        setSections(template.sections || []);
-        setSelectedCode(template.code || '');
-        setLinks(template.links || []);
+  // 필터링된 템플릿 목록
+  const filteredTemplates = templates.filter(t => {
+    const templateCode = t.code || '미지정';
+    
+    // 기수 필터 적용
+    if (selectedGeneration) {
+      const jobCode = jobCodes.find(jc => jc.code === templateCode);
+      if (!jobCode || jobCode.generation !== selectedGeneration) {
+        return false;
       }
-      return newSet;
-    });
+    }
+    
+    // 코드 필터 적용
+    if (selectedCodeFilter && templateCode !== selectedCodeFilter) {
+      return false;
+    }
+    
+    return true;
+  });
+
+  // 편집 모드 진입
+  const handleEdit = (template: LessonMaterialTemplate) => {
+    setEditing(template);
+    setTitle(template.title);
+    setSections(template.sections || []);
+    setSelectedCode(template.code || '');
+    setLinks(template.links || []);
+  };
+
+  // 뒤로가기 (관리자 페이지로)
+  const handleGoBack = () => {
+    router.back();
   };
 
   return (
@@ -508,8 +571,20 @@ export default function AdminUploadTemplatePage() {
       <main className="max-w-4xl mx-auto px-4 py-6 w-full min-h-[70vh]">
         {/* 헤더 섹션 */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">수업자료 템플릿 관리</h1>
-          <p className="text-gray-600 text-sm leading-relaxed">
+          <div className="flex items-center">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mr-3 text-blue-600 hover:text-blue-800 border-none shadow-none"
+              onClick={handleGoBack}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            </Button>
+            <h1 className="text-2xl font-bold text-gray-900">수업자료 템플릿 관리</h1>
+          </div>
+          <p className="text-gray-600 text-sm leading-relaxed mt-1">
             캠프별 수업자료 업로드 템플릿 제작 페이지
           </p>
         </div>
@@ -533,26 +608,104 @@ export default function AdminUploadTemplatePage() {
             <p className="mt-3 text-gray-500 text-sm">템플릿을 불러오는 중...</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {/* 상단 액션 바 */}
-            <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-              {/* 코드별 필터 */}
-              <div className="flex flex-wrap gap-2">
-                {['전체', ...Array.from(new Set(templates.map(t => t.code || '미지정')))].map(code => (
-                  <button
-                    key={code}
-                    className={`px-3 py-1.5 text-sm font-medium rounded border transition-all ${
-                      selectedCodeFilter === code 
-                        ? 'bg-blue-500 border-blue-500 text-white' 
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                    onClick={() => setSelectedCodeFilter(code)}
-                  >
-                    {code}
-                  </button>
-                ))}
+          <div className="space-y-4">
+            {/* 필터 영역 - 하나의 박스에 기수와 코드 함께 */}
+            <div className="bg-white p-4 rounded-lg shadow mb-6">
+              <div className="space-y-4">
+                {/* 기수별 필터 버튼 */}
+                <div>
+                  <div className="flex flex-wrap gap-2">
+                    {/* 처음 3개 기수만 표시 */}
+                    {availableGenerations.slice(0, 3).map(gen => (
+                      <button
+                        key={gen}
+                        className={`px-3 py-1.5 text-sm rounded-full border font-medium transition-all ${
+                          selectedGeneration === gen
+                            ? 'bg-blue-100 border-blue-300 text-blue-800'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                        onClick={() => {
+                          setSelectedGeneration(gen);
+                        }}
+                      >
+                        {gen}
+                      </button>
+                    ))}
+                    
+                    {/* 숨기기/더보기 버튼 - 3개 초과시에만 표시 */}
+                    {availableGenerations.length > 3 && (
+                      <button
+                        className={`px-3 py-1.5 text-sm rounded-full border font-medium transition-all ${
+                          showAllGenerations
+                            ? 'bg-gray-400 border-gray-400 text-white'
+                            : 'bg-gray-100 border-gray-300 text-gray-800 hover:bg-gray-200'
+                        }`}
+                        onClick={() => setShowAllGenerations(!showAllGenerations)}
+                      >
+                        {showAllGenerations ? '숨기기' : `더보기 (${availableGenerations.length - 3})`}
+                      </button>
+                    )}
+                    
+                    {/* 나머지 기수 표시 - 토글 시에만 표시 */}
+                    {showAllGenerations && availableGenerations.slice(3).map(gen => (
+                      <button
+                        key={gen}
+                        className={`px-3 py-1.5 text-sm rounded-full border font-medium transition-all ${
+                          selectedGeneration === gen
+                            ? 'bg-blue-100 border-blue-300 text-blue-800'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                        onClick={() => {
+                          setSelectedGeneration(gen);
+                        }}
+                      >
+                        {gen}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 캠프 코드별 필터 */}
+                <div>
+                  <div className="flex flex-wrap gap-2">
+                    {availableCodes.map(code => {
+                      const jobCode = jobCodes.find(jc => jc.code === code);
+                      const templateCount = templates.filter(t => {
+                        const templateCode = t.code || '미지정';
+                        if (selectedGeneration) {
+                          const jc = jobCodes.find(j => j.code === templateCode);
+                          return templateCode === code && jc?.generation === selectedGeneration;
+                        }
+                        return templateCode === code;
+                      }).length;
+                  
+                  return (
+                    <button
+                      key={code}
+                      className={`px-3 py-1.5 text-sm rounded-full border font-medium transition-all ${
+                        selectedCodeFilter === code 
+                          ? 'bg-blue-100 border-blue-300 text-blue-800'
+                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                      onClick={() => setSelectedCodeFilter(code)}
+                      title={jobCode?.name || code}
+                    >
+                      {code}
+                      {templateCount > 0 && (
+                        <span className="ml-1.5 text-xs opacity-75">
+                          ({templateCount})
+                        </span>
+                      )}
+                    </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-              
+            </div>
+
+            {/* 상단 액션 바 */}
+            <div className="flex justify-end">
               {/* 템플릿 추가 버튼 */}
               <button
                 onClick={() => { 
@@ -562,8 +715,9 @@ export default function AdminUploadTemplatePage() {
                   setSections([]); 
                   setSelectedCode(''); 
                   setLinks([]); 
+                  setReferenceTemplateId('');
                 }}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-all text-sm font-medium"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium shadow-sm"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -571,6 +725,196 @@ export default function AdminUploadTemplatePage() {
                 템플릿 추가
               </button>
             </div>
+
+            {/* 템플릿 추가/수정 폼 - 최상단에 위치 */}
+            {showForm && (
+              <div className="bg-white rounded-lg shadow-md p-4">
+                {/* 헤더 */}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    {referenceTemplateId ? '📋 템플릿 복사' : '➕ 새 템플릿 추가'}
+                  </h3>
+                  <button
+                    onClick={() => { 
+                      setShowForm(false); 
+                      setEditing(null); 
+                      setTitle(''); 
+                      setSections([]); 
+                      setSelectedCode(''); 
+                      setLinks([]); 
+                      setReferenceTemplateId('');
+                    }}
+                    className="text-gray-400 hover:text-gray-600 transition-all"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {/* 참조 템플릿 선택 */}
+                  {!referenceTemplateId && (
+                    <div>
+                      <select
+                        className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                        value=""
+                        onChange={e => {
+                          if (e.target.value) {
+                            const refTemplate = templates.find(t => t.id === e.target.value);
+                            if (refTemplate) {
+                              setTitle(refTemplate.title);
+                              setSections(refTemplate.sections || []);
+                              setLinks(refTemplate.links || []);
+                              setReferenceTemplateId(e.target.value);
+                            }
+                          }
+                        }}
+                      >
+                        <option value="">💡 기존 템플릿 복사하기 (선택)</option>
+                        {templates
+                          .sort((a, b) => {
+                            const codeA = a.code || '미지정';
+                            const codeB = b.code || '미지정';
+                            const getNumericPart = (code: string) => {
+                              const match = code.match(/\d+/);
+                              return match ? parseInt(match[0], 10) : 0;
+                            };
+                            const numA = getNumericPart(codeA);
+                            const numB = getNumericPart(codeB);
+                            if (numA !== numB) return numB - numA;
+                            if (codeA !== codeB) return codeA.localeCompare(codeB);
+                            return a.title.localeCompare(b.title);
+                          })
+                          .map(tpl => (
+                            <option key={tpl.id} value={tpl.id}>
+                              [{tpl.code || '미지정'}] {tpl.title}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* 템플릿명과 코드 - 그리드 레이아웃 */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <input
+                        className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                        value={title}
+                        onChange={e => setTitle(e.target.value)}
+                        placeholder="템플릿명 (예: 드림멘토링)"
+                      />
+                    </div>
+                    <div>
+                      {jobCodesLoading ? (
+                        <div className="text-gray-400 text-sm py-1.5">로딩 중...</div>
+                      ) : (
+                        <select
+                          className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                          value={selectedCode}
+                          onChange={e => setSelectedCode(e.target.value)}
+                        >
+                          <option value="">코드 선택</option>
+                          {availableCodes.map(code => {
+                            const jobCode = jobCodes.find(jc => jc.code === code);
+                            return (
+                              <option key={code} value={code}>
+                                {code} - {jobCode?.name || ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 대주제 링크 - 컴팩트 */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium text-gray-600">대주제 링크</span>
+                      {links.length === 0 && (
+                        <button
+                          onClick={() => setLinks([{ label: '', url: '' }])}
+                          className="text-xs text-blue-600 hover:text-blue-700"
+                        >
+                          + 추가
+                        </button>
+                      )}
+                    </div>
+                    {links.length > 0 && (
+                      <div className="space-y-2">
+                        {links.map((l, idx) => (
+                          <div key={idx} className="flex flex-col sm:flex-row gap-1.5">
+                            <div className="flex gap-1.5 flex-1">
+                              <input
+                                className="w-24 sm:w-28 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                placeholder="제목"
+                                value={l.label}
+                                onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
+                              />
+                              <input
+                                className="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                placeholder="URL"
+                                value={l.url}
+                                onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
+                              />
+                            </div>
+                            <button
+                              onClick={() => setLinks(links.filter((_, i) => i !== idx))}
+                              className="self-start p-1 text-red-500 hover:bg-red-50 rounded"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setLinks([...links, { label: '', url: '' }])}
+                          className="text-xs text-blue-600 hover:text-blue-700"
+                        >
+                          + 링크 추가
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 소제목 에디터 - 접을 수 있게 */}
+                  <details open>
+                    <summary className="text-xs font-medium text-gray-600 cursor-pointer hover:text-gray-800 mb-2">
+                      소제목 구성 ({sections.length}개)
+                    </summary>
+                    <div className="pl-2">
+                      <SectionEditor sections={sections} onSectionsChange={setSections} />
+                    </div>
+                  </details>
+
+                  {/* 버튼 */}
+                  <div className="flex gap-2 justify-end pt-2 border-t border-gray-200">
+                    <button
+                      onClick={() => { 
+                        setShowForm(false); 
+                        setEditing(null); 
+                        setTitle(''); 
+                        setSections([]); 
+                        setSelectedCode(''); 
+                        setLinks([]); 
+                        setReferenceTemplateId('');
+                      }}
+                      className="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-all"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      className="px-3 py-1.5 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 transition-all"
+                    >
+                      저장
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 템플릿 리스트 */}
             {filteredTemplates.length === 0 ? (
@@ -586,23 +930,14 @@ export default function AdminUploadTemplatePage() {
             ) : (
               <div className="space-y-3">
                 {filteredTemplates.map(tpl => {
-                  const isExpanded = expandedTemplates.has(tpl.id);
                   const sectionCount = tpl.sections?.length || 0;
                   
                   return (
-                    <div key={tpl.id} className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all">
-                      {/* 카드 헤더 - 항상 표시 */}
-                      <div 
-                        className="p-4 cursor-pointer"
-                        onClick={() => toggleTemplate(tpl)}
-                      >
+                    <div key={tpl.id} className="bg-white rounded-lg shadow-md">
+                      {/* 카드 헤더 */}
+                      <div className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
-                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                            </div>
                             <div>
                               <h3 className="font-medium text-gray-900">{tpl.title}</h3>
                               <div className="flex items-center gap-2">
@@ -625,7 +960,6 @@ export default function AdminUploadTemplatePage() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all"
-                                      onClick={(e) => e.stopPropagation()}
                                       aria-label={l.label}
                                     >
                                       {l.label}
@@ -635,10 +969,16 @@ export default function AdminUploadTemplatePage() {
                               </div>
                             )}
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(tpl.id);
-                              }}
+                              onClick={() => handleEdit(tpl)}
+                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
+                              title="템플릿 수정"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDelete(tpl.id)}
                               className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
                               title="삭제"
                             >
@@ -646,262 +986,176 @@ export default function AdminUploadTemplatePage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
                             </button>
-                            <svg 
-                              className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
-                              fill="none" 
-                              stroke="currentColor" 
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
                           </div>
                         </div>
                       </div>
 
-                      {/* 카드 본문 - 토글로 표시/숨김 */}
-                      {isExpanded && (
-                        <div className="px-4 pb-4 border-t border-gray-100">
-                          {/* 템플릿 수정 폼 */}
-                          {editing === tpl && (
-                            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-4 mt-4 mb-6 shadow-sm">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
-                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </div>
-                                <h4 className="text-base font-semibold text-indigo-900">대주제 관리</h4>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-sm font-medium text-indigo-800 mb-1">템플릿명</label>
-                                  <input
-                                    className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent transition-all bg-white"
-                                    value={title}
-                                    onChange={e => setTitle(e.target.value)}
-                                    aria-label="템플릿명"
-                                    autoFocus
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-indigo-800 mb-1">코드</label>
-                                  <select
-                                    className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent transition-all bg-white"
-                                    value={selectedCode}
-                                    onChange={e => setSelectedCode(e.target.value)}
-                                    aria-label="코드"
-                                  >
-                                    <option value="">코드 선택</option>
-                                    {availableCodes.map(code => (
-                                      <option key={code} value={code}>{code}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                              {/* 대주제 링크 수정 */}
-                              <div className="mt-3">
-                                <label className="block text-sm font-medium text-indigo-800 mb-2">대주제 링크들 (선택)</label>
-                                <div className="space-y-2">
-                                  {links.map((l, idx) => (
-                                    <div key={idx} className="flex gap-2 items-center bg-white rounded-lg p-2 border border-indigo-100">
-                                      <input
-                                        className="w-32 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                        placeholder="링크 제목"
-                                        value={l.label}
-                                        onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
-                                      />
-                                      <input
-                                        className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                        placeholder="URL"
-                                        value={l.url}
-                                        onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
-                                      />
-                                      <button
-                                        onClick={() => setLinks(links.filter((_, i) => i !== idx))}
-                                        className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
-                                      >
-                                        삭제
-                                      </button>
-                                    </div>
-                                  ))}
-                                  <button
-                                    onClick={() => setLinks([...links, { label: '', url: '' }])}
-                                    className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 transition-all"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                    </svg>
-                                    링크 추가
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="flex gap-2 justify-end pt-4 border-t border-indigo-200 mt-4">
+                      {/* 카드 본문 - 항상 표시 */}
+                      <div className="px-4 pb-4 border-t border-gray-100">
+                        {/* 템플릿 수정 폼 - 통합 */}
+                        {editing === tpl ? (
+                            <div className="bg-gray-50 rounded-lg p-3 mt-3">
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-sm font-semibold text-gray-900">✏️ 템플릿 수정</h4>
                                 <button
                                   onClick={() => {
                                     setEditing(null);
+                                    setTitle('');
+                                    setSections([]);
+                                    setSelectedCode('');
                                     setLinks([]);
                                   }}
-                                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
+                                  className="text-gray-400 hover:text-gray-600"
                                 >
-                                  취소
-                                </button>
-                                <button
-                                  onClick={handleSave}
-                                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
-                                >
-                                  수정 완료
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
                                 </button>
                               </div>
+                              
+                              <div className="space-y-3">
+                                {/* 대주제 섹션 */}
+                                <div className="space-y-2">
+                                  <h5 className="text-xs font-semibold text-gray-700">대주제</h5>
+                                  {/* 템플릿명과 코드 - 그리드 */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <input
+                                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                                      value={title}
+                                      onChange={e => setTitle(e.target.value)}
+                                      placeholder="템플릿명"
+                                    />
+                                    <select
+                                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                                      value={selectedCode}
+                                      onChange={e => setSelectedCode(e.target.value)}
+                                    >
+                                      <option value="">코드 선택</option>
+                                      {availableCodes.map(code => (
+                                        <option key={code} value={code}>{code}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  {/* 대주제 링크들 */}
+                                  <div>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-xs font-medium text-gray-600">대주제 링크</span>
+                                      <button
+                                        onClick={() => setLinks([...links, { label: '', url: '' }])}
+                                        className="text-xs text-blue-600 hover:text-blue-700"
+                                      >
+                                        + 추가
+                                      </button>
+                                    </div>
+                                    {links.length > 0 && (
+                                      <div className="space-y-2">
+                                        {links.map((l, idx) => (
+                                          <div key={idx} className="flex flex-col sm:flex-row gap-1.5 bg-white rounded p-1.5 border border-gray-200">
+                                            <div className="flex gap-1.5 flex-1">
+                                              <input
+                                                className="w-24 sm:w-28 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                placeholder="제목"
+                                                value={l.label}
+                                                onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
+                                              />
+                                              <input
+                                                className="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                placeholder="URL"
+                                                value={l.url}
+                                                onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
+                                              />
+                                            </div>
+                                            <button
+                                              onClick={() => setLinks(links.filter((_, i) => i !== idx))}
+                                              className="self-start p-1 text-red-500 hover:bg-red-50 rounded"
+                                            >
+                                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* 소제목 섹션 */}
+                                <div className="space-y-2">
+                                  <h5 className="text-xs font-semibold text-gray-700">소제목</h5>
+                                  <SectionEditor
+                                    sections={sections}
+                                    onSectionsChange={setSections}
+                                  />
+                                </div>
+
+                                {/* 통합 버튼 */}
+                                <div className="flex gap-2 justify-end pt-3 border-t border-gray-200">
+                                  <button
+                                    onClick={() => {
+                                      setEditing(null);
+                                      setTitle('');
+                                      setSections([]);
+                                      setSelectedCode('');
+                                      setLinks([]);
+                                    }}
+                                    className="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                                  >
+                                    취소
+                                  </button>
+                                  <button
+                                    onClick={handleSave}
+                                    className="px-3 py-1.5 text-sm text-white bg-blue-600 rounded hover:bg-blue-700"
+                                  >
+                                    수정 완료
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            /* 읽기 전용 모드 - 소제목 표시 */
+                            <div className="mt-4">
+                              {tpl.sections && tpl.sections.length > 0 ? (
+                                <div className="space-y-2">
+                                  {tpl.sections.sort((a, b) => a.order - b.order).map((section, idx) => (
+                                    <div key={section.id} className="bg-white border border-gray-200 rounded-lg p-2 text-sm">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-5 h-5 bg-blue-100 rounded flex items-center justify-center text-blue-700 font-medium text-xs">
+                                          {idx + 1}
+                                        </span>
+                                        <span className="font-medium text-gray-900">{section.title}</span>
+                                      </div>
+                                      {section.links && section.links.length > 0 && (
+                                        <div className="flex gap-1.5 flex-wrap mt-1.5 ml-7">
+                                          {section.links.map((l, linkIdx) => (
+                                            <a
+                                              key={linkIdx}
+                                              href={l.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all border border-blue-200"
+                                            >
+                                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                              </svg>
+                                              {l.label}
+                                            </a>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-400 py-4 text-center">소제목이 없습니다</p>
+                              )}
                             </div>
                           )}
-                          
-                          {/* SectionEditor로 소제목 관리 - 항상 표시 */}
-                          <div className="mt-6">
-                            <div className="flex items-center gap-2 mb-4">
-                              <div className="w-5 h-5 bg-emerald-500 rounded flex items-center justify-center">
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
-                              </div>
-                              <h4 className="text-base font-semibold text-emerald-800">소제목 관리</h4>
-                            </div>
-                            <SectionEditor
-                              sections={editing === tpl ? sections : (tpl.sections || [])}
-                              onSectionsChange={async (newSections) => {
-                                // 편집 모드든 아니든 항상 바로 저장
-                                try {
-                                  if (editing === tpl) {
-                                    // 편집 모드일 때는 로컬 상태도 업데이트
-                                    setSections(newSections);
-                                  }
-                                  await updateLessonMaterialTemplate(tpl.id, { sections: newSections });
-                                  await fetchTemplates();
-                                } catch (error) {
-                                  console.error('소주제 업데이트 실패:', error);
-                                  setError('소주제 업데이트에 실패했습니다.');
-                                }
-                              }}
-                            />
-                          </div>
                         </div>
-                      )}
                     </div>
                   );
                 })}
-              </div>
-            )}
-            {/* 템플릿 추가/수정 폼 */}
-            {showForm && (
-              <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                <div className="mb-4">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">새 템플릿 추가</h3>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">템플릿명</label>
-                    <input
-                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      placeholder="예: 드림멘토링"
-                      aria-label="템플릿명"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">코드</label>
-                    {jobCodesLoading ? (
-                      <div className="text-gray-400 text-sm">코드 목록 로딩 중...</div>
-                    ) : (
-                      <select
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all"
-                        value={selectedCode}
-                        onChange={e => setSelectedCode(e.target.value)}
-                        aria-label="코드"
-                      >
-                        <option value="">코드 선택</option>
-                        {availableCodes.map(code => {
-                          const jobCode = jobCodes.find(jc => jc.code === code);
-                          return (
-                            <option key={code} value={code}>
-                              {code} - {jobCode?.name || ''}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    )}
-                  </div>
-                  {/* 대주제 링크 입력 UI */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">대주제 링크들 (선택)</label>
-                    <div className="space-y-2">
-                      {links.length === 0 ? (
-                        <button
-                          onClick={() => setLinks([{ label: '', url: '' }])}
-                          className="text-sm text-blue-600 hover:text-blue-700 transition-all"
-                        >
-                          + 링크 추가
-                        </button>
-                      ) : (
-                        <>
-                          {links.map((l, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
-                              <input
-                                className="w-32 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                placeholder="링크 제목"
-                                value={l.label}
-                                onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, label: e.target.value } : item))}
-                              />
-                              <input
-                                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                placeholder="URL"
-                                value={l.url}
-                                onChange={e => setLinks(links.map((item, i) => i === idx ? { ...item, url: e.target.value } : item))}
-                              />
-                              <button
-                                onClick={() => setLinks(links.filter((_, i) => i !== idx))}
-                                className="px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded transition-all"
-                              >
-                                삭제
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            onClick={() => setLinks([...links, { label: '', url: '' }])}
-                            className="text-sm text-blue-600 hover:text-blue-700 transition-all"
-                          >
-                            + 링크 추가
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {/* 소제목(섹션) 에디터 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">소제목 구성</label>
-                    <SectionEditor sections={sections} onSectionsChange={setSections} />
-                  </div>
-                  <div className="flex gap-2 justify-end pt-4 border-t border-gray-200">
-                    <button
-                      onClick={() => { 
-                        setShowForm(false); 
-                        setEditing(null); 
-                        setTitle(''); 
-                        setSections([]); 
-                        setSelectedCode(''); 
-                        setLinks([]); 
-                      }}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
-                    >
-                      취소
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
-                    >
-                      저장
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -910,4 +1164,4 @@ export default function AdminUploadTemplatePage() {
       <Footer />
     </>
   );
-} 
+}

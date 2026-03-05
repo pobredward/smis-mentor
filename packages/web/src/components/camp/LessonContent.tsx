@@ -132,7 +132,6 @@ export default function LessonContent() {
   const [selectedMaterialCode, setSelectedMaterialCode] = useState<string>('');
   const [userJobCodes, setUserJobCodes] = useState<JobCodeWithGroup[]>([]);
   const [mounted, setMounted] = useState(false);
-  const [expandedMaterials, setExpandedMaterials] = useState<Set<string>>(new Set());
   const [showAddMaterialForm, setShowAddMaterialForm] = useState(false);
   const [newMaterialTitle, setNewMaterialTitle] = useState('');
 
@@ -760,7 +759,6 @@ export default function LessonContent() {
       ) : (
         <div className="space-y-3">
           {filteredMaterials.map((material) => {
-            const isExpanded = expandedMaterials.has(material.id);
             const sectionCount = sections[material.id]?.length || 0;
             const tpl = material.templateId
               ? templates.find((t) => t.id === material.templateId)
@@ -772,37 +770,9 @@ export default function LessonContent() {
                 className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all"
               >
                 {/* 카드 헤더 */}
-                <div
-                  className="p-4 cursor-pointer"
-                  onClick={() => {
-                    setExpandedMaterials((prev) => {
-                      const newSet = new Set(prev);
-                      if (newSet.has(material.id)) {
-                        newSet.delete(material.id);
-                      } else {
-                        newSet.add(material.id);
-                      }
-                      return newSet;
-                    });
-                  }}
-                >
+                <div className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
-                        <svg
-                          className="w-4 h-4 text-blue-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
-                      </div>
                       <div>
                         <h3 className="font-medium text-gray-900">{material.title}</h3>
                         <p className="text-xs text-gray-500">{sectionCount}개 소제목</p>
@@ -819,7 +789,6 @@ export default function LessonContent() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all"
-                                onClick={(e) => e.stopPropagation()}
                                 aria-label={l.label}
                               >
                                 {l.label}
@@ -830,10 +799,7 @@ export default function LessonContent() {
                       )}
                       {!material.templateId && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteUserMaterial(material.id);
-                          }}
+                          onClick={() => handleDeleteUserMaterial(material.id)}
                           className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded transition-all"
                           title="대주제 삭제"
                         >
@@ -852,28 +818,12 @@ export default function LessonContent() {
                           </svg>
                         </button>
                       )}
-                      <svg
-                        className={`w-4 h-4 text-gray-400 transition-transform ${
-                          isExpanded ? 'rotate-180' : ''
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
                     </div>
                   </div>
                 </div>
 
-                {/* 카드 본문 */}
-                {isExpanded && (
-                  <div className="px-4 pb-4 border-t border-gray-100">
+                {/* 카드 본문 - 항상 표시 */}
+                <div className="px-4 pb-4 border-t border-gray-100">
                     <div className="space-y-2 mt-3">
                       {sections[material.id]?.length === 0 ? (
                         <div className="text-center py-6 text-gray-400">
@@ -897,11 +847,7 @@ export default function LessonContent() {
                         sections[material.id]?.map((section) => (
                           <div
                             key={section.id}
-                            className={`rounded border p-3 transition-all group ${
-                              section.isFromTemplate
-                                ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
-                                : 'bg-gray-50 hover:bg-gray-100'
-                            }`}
+                            className="border-b border-gray-200 last:border-b-0 py-2.5 transition-all group"
                           >
                             {editingSection?.materialId === material.id &&
                             editingSection?.section.id === section.id ? (
@@ -913,19 +859,102 @@ export default function LessonContent() {
                               />
                             ) : (
                               <>
-                                {/* 소제목 헤더 */}
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="font-medium text-sm text-gray-800">
-                                      {section.title}
-                                    </h4>
-                                    {section.isFromTemplate && (
-                                      <span className="px-2 py-0.5 text-xs bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200">
-                                        관리자 설정
-                                      </span>
+                                {/* 소제목 컴팩트 레이아웃 */}
+                                <div className="flex items-center justify-between gap-3">
+                                  {/* 왼쪽: 제목, 링크 */}
+                                  <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      {section.isFromTemplate && (
+                                        <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                      <h4 className={`font-medium text-sm ${section.isFromTemplate ? 'text-gray-700' : 'text-gray-800'}`}>
+                                        {section.title}
+                                      </h4>
+                                    </div>
+                                    {/* 관리자 링크들 */}
+                                    {section.links && section.links.length > 0 && (
+                                      <>
+                                        {section.links.map((link, idx) => (
+                                          <a
+                                            key={idx}
+                                            href={link.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
+                                          >
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                            </svg>
+                                            {link.label}
+                                          </a>
+                                        ))}
+                                      </>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-1 transition-opacity">
+                                  
+                                  {/* 오른쪽: 액션 버튼들 */}
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    {/* 공개보기/원본 버튼 */}
+                                    <a
+                                      href={section.viewUrl || undefined}
+                                      target="_blank"
+                                      rel="noopener"
+                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                        section.viewUrl
+                                          ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                          : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
+                                      }`}
+                                    >
+                                      <svg
+                                        className="w-3 h-3 hidden sm:block"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                        />
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                        />
+                                      </svg>
+                                      <span className="hidden sm:inline">공개보기</span>
+                                      <span className="sm:hidden">공개</span>
+                                    </a>
+                                    <a
+                                      href={section.originalUrl || undefined}
+                                      target="_blank"
+                                      rel="noopener"
+                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                        section.originalUrl
+                                          ? 'bg-green-500 text-white hover:bg-green-600'
+                                          : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
+                                      }`}
+                                    >
+                                      <svg
+                                        className="w-3 h-3 hidden sm:block"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                        />
+                                      </svg>
+                                      원본
+                                    </a>
+                                    {/* 수정/삭제 버튼 */}
                                     <button
                                       onClick={() =>
                                         setEditingSection({ materialId: material.id, section })
@@ -970,83 +999,6 @@ export default function LessonContent() {
                                     )}
                                   </div>
                                 </div>
-
-                                {/* 관리자 링크들 */}
-                                {section.links && section.links.length > 0 && (
-                                  <div className="flex gap-1 flex-wrap mb-2">
-                                    {section.links.map((link, idx) => (
-                                      <a
-                                        key={idx}
-                                        href={link.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all"
-                                      >
-                                        {link.label}
-                                      </a>
-                                    ))}
-                                  </div>
-                                )}
-
-                                {/* 액션 버튼들 */}
-                                <div className="flex gap-2">
-                                  <a
-                                    href={section.viewUrl || undefined}
-                                    target="_blank"
-                                    rel="noopener"
-                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
-                                      section.viewUrl
-                                        ? 'bg-blue-500 text-white hover:bg-blue-600'
-                                        : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
-                                    }`}
-                                  >
-                                    <svg
-                                      className="w-3 h-3"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                      />
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                      />
-                                    </svg>
-                                    공개보기
-                                  </a>
-                                  <a
-                                    href={section.originalUrl || undefined}
-                                    target="_blank"
-                                    rel="noopener"
-                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
-                                      section.originalUrl
-                                        ? 'bg-green-500 text-white hover:bg-green-600'
-                                        : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
-                                    }`}
-                                  >
-                                    <svg
-                                      className="w-3 h-3"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                      />
-                                    </svg>
-                                    원본
-                                  </a>
-                                </div>
                               </>
                             )}
                           </div>
@@ -1082,7 +1034,6 @@ export default function LessonContent() {
                       </button>
                     )}
                   </div>
-                )}
               </div>
             );
           })}

@@ -25,6 +25,7 @@ export default function UserCheck() {
   const [groupedUsers, setGroupedUsers] = useState<Record<string, UserWithGroupInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showAllGenerations, setShowAllGenerations] = useState(false);
   
   // 그룹 순서 정의
   const groupOrder = ['manager', 'common', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
@@ -407,10 +408,40 @@ export default function UserCheck() {
             {/* 기수 선택 */}
             <div>
               <div className="flex flex-wrap gap-2">
-                {generations.map(gen => (
+                {/* 처음 3개 기수만 표시 */}
+                {generations.slice(0, 3).map(gen => (
                   <button
                     key={gen}
-                    className={`px-3 py-1.5 text-sm rounded-full border ${
+                    className={`px-3 py-1.5 text-sm rounded-full border font-medium ${
+                      selectedGeneration === gen
+                        ? 'bg-blue-100 border-blue-300 text-blue-800'
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setSelectedGeneration(gen)}
+                  >
+                    {gen}
+                  </button>
+                ))}
+                
+                {/* 숨기기/더보기 버튼 - 3개 초과시에만 표시 */}
+                {generations.length > 3 && (
+                  <button
+                    className={`px-3 py-1.5 text-sm rounded-full border font-medium transition-all ${
+                      showAllGenerations
+                        ? 'bg-gray-400 border-gray-400 text-white'
+                        : 'bg-gray-100 border-gray-300 text-gray-800 hover:bg-gray-200'
+                    }`}
+                    onClick={() => setShowAllGenerations(!showAllGenerations)}
+                  >
+                    {showAllGenerations ? '숨기기' : `더보기 (${generations.length - 3})`}
+                  </button>
+                )}
+                
+                {/* 나머지 기수 표시 - 토글 시에만 표시 */}
+                {showAllGenerations && generations.slice(3).map(gen => (
+                  <button
+                    key={gen}
+                    className={`px-3 py-1.5 text-sm rounded-full border font-medium ${
                       selectedGeneration === gen
                         ? 'bg-blue-100 border-blue-300 text-blue-800'
                         : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
