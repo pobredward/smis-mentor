@@ -304,9 +304,9 @@ export default function ReviewsContent() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-4">
         {isAdmin && (
-          <div className="mb-6">
+          <div className="mb-3">
             <Button variant="primary" onClick={handleAdd}>
               후기 작성
             </Button>
@@ -318,36 +318,36 @@ export default function ReviewsContent() {
             <p className="text-gray-500">아직 등록된 후기가 없습니다.</p>
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-6 sm:space-y-8">
             {sortedGenerations.map((generation) => (
               <div key={generation}>
-                <h2 className="text-2xl font-semibold mb-4 text-gray-800">{generation}</h2>
-                <div className="space-y-4">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-semibold mb-3 sm:mb-4 text-gray-800">{generation}</h2>
+                <div className="space-y-3 sm:space-y-4">
                   {reviewsByGeneration[generation].map((review) => (
                     <div key={review.id} className="bg-white shadow rounded-lg overflow-hidden border border-gray-200">
-                      <div className="w-full px-6 py-4 hover:bg-gray-50 transition-colors">
+                      <div className="w-full px-4 sm:px-6 py-3 sm:py-4 hover:bg-gray-50 transition-colors">
                         <div className="flex justify-between items-start">
                           <button
                             onClick={() => toggleReview(review.id)}
                             className="flex-1 text-left"
                           >
-                            <h3 className="text-base font-semibold text-gray-900 mb-1">{review.title}</h3>
+                            <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-1">{review.title}</h3>
                             {review.writer && (
-                              <p className="text-sm text-gray-600">작성자: {review.writer}</p>
+                              <p className="text-xs sm:text-sm text-gray-600">작성자: {review.writer}</p>
                             )}
                           </button>
-                          <div className="flex items-center gap-2 ml-4">
+                          <div className="flex items-center gap-1 sm:gap-2 ml-2 sm:ml-4">
                             {isAdmin && (
-                              <div className="flex gap-2">
+                              <div className="flex gap-1 sm:gap-2">
                                 <button
                                   onClick={() => handleEdit(review)}
-                                  className="text-sm px-3 py-1 text-blue-600 hover:bg-blue-50 rounded"
+                                  className="text-xs sm:text-sm px-2 sm:px-3 py-1 text-blue-600 hover:bg-blue-50 rounded"
                                 >
                                   ✏️
                                 </button>
                                 <button
                                   onClick={() => handleDelete(review.id)}
-                                  className="text-sm px-3 py-1 text-red-600 hover:bg-red-50 rounded"
+                                  className="text-xs sm:text-sm px-2 sm:px-3 py-1 text-red-600 hover:bg-red-50 rounded"
                                   disabled={isDeleting}
                                 >
                                   🗑️
@@ -359,7 +359,7 @@ export default function ReviewsContent() {
                               className="p-1"
                             >
                               <svg
-                                className={`w-5 h-5 text-gray-500 transition-transform ${
+                                className={`w-4 h-4 sm:w-5 sm:h-5 text-gray-500 transition-transform ${
                                   review.isOpen ? 'transform rotate-180' : ''
                                 }`}
                                 fill="none"
@@ -374,9 +374,9 @@ export default function ReviewsContent() {
                       </div>
                       
                       {review.isOpen && (
-                        <div className="px-6 pb-4 border-t border-gray-200">
+                        <div className="px-4 sm:px-6 pb-3 sm:pb-4 border-t border-gray-200">
                           <div 
-                            className="mt-4 text-gray-700 [&_blockquote]:border-0 [&_blockquote]:pl-0 [&_blockquote]:italic-0 [&_blockquote]:font-normal [&_blockquote]:text-gray-700 [&_p]:mb-2 [&_p]:leading-relaxed"
+                            className="mt-3 sm:mt-4 text-gray-700 [&_blockquote]:border-0 [&_blockquote]:pl-0 [&_blockquote]:italic-0 [&_blockquote]:font-normal [&_blockquote]:text-gray-700 [&_p]:mb-2 [&_p]:leading-relaxed"
                             dangerouslySetInnerHTML={{ __html: review.content }}
                           />
                         </div>
