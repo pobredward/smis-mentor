@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Layout from '@/components/common/Layout';
 import LessonContent from '@/components/camp/LessonContent';
+import EducationContent from '@/components/camp/EducationContent';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
 
@@ -44,7 +45,9 @@ export default function CampPage() {
       </div>
 
       {/* 탭 컨텐츠 */}
-      {activeTab === 'lesson' ? (
+      {activeTab === 'education' ? (
+        <EducationContent />
+      ) : activeTab === 'lesson' ? (
         <LessonContent />
       ) : (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
@@ -53,7 +56,6 @@ export default function CampPage() {
           </svg>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">캠프 정보</h3>
           <p className="text-gray-600">
-            {activeTab === 'education' && '교육 자료는 추후 제공됩니다.'}
             {activeTab === 'tasks' && '업무 정보는 추후 제공됩니다.'}
             {activeTab === 'schedule' && '시간표는 추후 제공됩니다.'}
             {activeTab === 'guide' && '인솔표는 추후 제공됩니다.'}
