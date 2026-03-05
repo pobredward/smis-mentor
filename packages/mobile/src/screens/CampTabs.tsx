@@ -71,7 +71,6 @@ export function LessonScreen() {
   const [userJobCodes, setUserJobCodes] = useState<JobCodeWithGroup[]>([]);
   const [selectedMaterialCode, setSelectedMaterialCode] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [expandedMaterials, setExpandedMaterials] = useState<Set<string>>(new Set());
   const [addingSectionFor, setAddingSectionFor] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<{
     materialId: string;
@@ -323,6 +322,15 @@ export function LessonScreen() {
   const filteredMaterials = selectedMaterialCode
     ? materials.filter((m) => materialCodeMap[m.id] === selectedMaterialCode)
     : materials;
+
+  // 커스텀 대주제가 먼저 오도록 정렬 (templateId가 없는 것이 위로)
+  const sortedFilteredMaterials = [...filteredMaterials].sort((a, b) => {
+    // templateId가 없는 것(커스텀)이 위로
+    if (!a.templateId && b.templateId) return -1;
+    if (a.templateId && !b.templateId) return 1;
+    // 둘 다 커스텀이거나 둘 다 템플릿이면 order 순서 유지
+    return a.order - b.order;
+  });
 
   // 코드 필터 초기화
   useEffect(() => {
@@ -652,12 +660,6 @@ export function LessonScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView}>
-        {/* 헤더 */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>수업 자료 업로드</Text>
-          <Text style={styles.headerSubtitle}>참여하는 캠프 코드의 자료만 확인 가능합니다</Text>
-        </View>
-
         {/* 코드별 필터 탭 */}
         {sortedMaterialCodes.length > 1 && (
           <View style={styles.filterContainer}>
@@ -685,8 +687,57 @@ export function LessonScreen() {
           </View>
         )}
 
+        {/* 유저 대주제 추가 */}
+        {selectedMaterialCode && selectedMaterialCode !== '개인 자료' && (
+          <>
+            {showAddMaterialForm ? (
+              <View style={styles.addMaterialForm}>
+                <Text style={styles.addMaterialFormTitle}>
+                  {selectedMaterialCode}에 새 대주제 추가
+                </Text>
+                <Text style={styles.addMaterialFormSubtitle}>
+                  {selectedMaterialCode} 카테고리에 새로운 대주제를 추가합니다.
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="대주제 이름 (예: 개인 프로젝트)"
+                  value={newMaterialTitle}
+                  onChangeText={setNewMaterialTitle}
+                />
+                <View style={styles.formActions}>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => {
+                      setShowAddMaterialForm(false);
+                      setNewMaterialTitle('');
+                    }}
+                  >
+                    <Text style={styles.cancelButtonText}>취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.saveButton}
+                    onPress={handleAddUserMaterial}
+                  >
+                    <Text style={styles.saveButtonText}>추가하기</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.addMaterialButton}
+                onPress={() => setShowAddMaterialForm(true)}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#3b82f6" />
+                <Text style={styles.addMaterialButtonText}>
+                  {selectedMaterialCode}에 새 대주제 추가하기
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+
         {/* 대주제 목록 */}
-        {filteredMaterials.length === 0 ? (
+        {sortedFilteredMaterials.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="document-outline" size={64} color="#cbd5e1" />
             <Text style={styles.emptyTitle}>등록된 수업 자료가 없습니다</Text>
@@ -696,8 +747,7 @@ export function LessonScreen() {
           </View>
         ) : (
           <View style={styles.materialsContainer}>
-            {filteredMaterials.map((material) => {
-              const isExpanded = expandedMaterials.has(material.id);
+            {sortedFilteredMaterials.map((material) => {
               const sectionCount = sections[material.id]?.length || 0;
               const tpl = material.templateId
                 ? templates.find((t) => t.id === material.templateId)
@@ -706,20 +756,7 @@ export function LessonScreen() {
               return (
                 <View key={material.id} style={styles.materialCard}>
                   {/* 대주제 헤더 */}
-                  <TouchableOpacity
-                    style={styles.materialHeader}
-                    onPress={() => {
-                      setExpandedMaterials((prev) => {
-                        const newSet = new Set(prev);
-                        if (newSet.has(material.id)) {
-                          newSet.delete(material.id);
-                        } else {
-                          newSet.add(material.id);
-                        }
-                        return newSet;
-                      });
-                    }}
-                  >
+                  <View style={styles.materialHeader}>
                     <View style={styles.materialHeaderLeft}>
                       <View style={styles.materialIcon}>
                         <Ionicons name="document-text-outline" size={20} color="#3b82f6" />
@@ -731,40 +768,33 @@ export function LessonScreen() {
                     </View>
                     <View style={styles.materialHeaderRight}>
                       {tpl && tpl.links && tpl.links.length > 0 && (
-                        <TouchableOpacity
-                          style={styles.linkButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            if (tpl.links && tpl.links[0]?.url) {
-                              Linking.openURL(tpl.links[0].url);
-                            }
-                          }}
-                        >
-                          <Ionicons name="link-outline" size={16} color="#3b82f6" />
-                        </TouchableOpacity>
+                        <View style={styles.templateLinksContainer}>
+                          {tpl.links.slice(0, 2).map((l, idx) =>
+                            l.label && l.url ? (
+                              <TouchableOpacity
+                                key={idx}
+                                style={styles.templateLinkBadge}
+                                onPress={() => Linking.openURL(l.url)}
+                              >
+                                <Text style={styles.templateLinkBadgeText}>{l.label}</Text>
+                              </TouchableOpacity>
+                            ) : null
+                          )}
+                        </View>
                       )}
                       {!material.templateId && (
                         <TouchableOpacity
-                          style={styles.deleteButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDeleteUserMaterial(material.id);
-                          }}
+                          style={styles.deleteIconButton}
+                          onPress={() => handleDeleteUserMaterial(material.id)}
                         >
-                          <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                          <Ionicons name="trash-outline" size={16} color="#d1d5db" />
                         </TouchableOpacity>
                       )}
-                      <Ionicons
-                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={20}
-                        color="#9ca3af"
-                      />
                     </View>
-                  </TouchableOpacity>
+                  </View>
 
-                  {/* 소제목 목록 */}
-                  {isExpanded && (
-                    <View style={styles.sectionsContainer}>
+                  {/* 소제목 목록 - 항상 표시 */}
+                  <View style={styles.sectionsContainer}>
                       {sections[material.id]?.length === 0 ? (
                         <View style={styles.emptySections}>
                           <Ionicons name="albums-outline" size={32} color="#cbd5e1" />
@@ -836,18 +866,84 @@ export function LessonScreen() {
                               </View>
                             ) : (
                               <>
-                                <View style={styles.sectionHeader}>
-                                  <View style={styles.sectionHeaderLeft}>
-                                    <Text style={styles.sectionTitle}>{section.title}</Text>
-                                    {section.isFromTemplate && (
-                                      <View style={styles.templateBadge}>
-                                        <Text style={styles.templateBadgeText}>관리자 설정</Text>
+                                {/* 소제목 컴팩트 레이아웃 */}
+                                <View style={styles.sectionContent}>
+                                  {/* 왼쪽: 제목, 관리자 링크 */}
+                                  <View style={styles.sectionLeft}>
+                                    <View style={styles.sectionTitleRow}>
+                                      {section.isFromTemplate && (
+                                        <Ionicons name="lock-closed" size={12} color="#9ca3af" style={{ marginRight: 4 }} />
+                                      )}
+                                      <Text style={[styles.sectionTitle, section.isFromTemplate && styles.sectionTitleTemplate]}>
+                                        {section.title}
+                                      </Text>
+                                    </View>
+                                    {/* 관리자 링크들 */}
+                                    {section.links && section.links.length > 0 && (
+                                      <View style={styles.adminLinksContainer}>
+                                        {section.links.map((link, idx) => (
+                                          <TouchableOpacity
+                                            key={idx}
+                                            style={styles.adminLinkChip}
+                                            onPress={() => Linking.openURL(link.url)}
+                                          >
+                                            <Ionicons name="open-outline" size={10} color="#374151" />
+                                            <Text style={styles.adminLinkChipText}>{link.label}</Text>
+                                          </TouchableOpacity>
+                                        ))}
                                       </View>
                                     )}
                                   </View>
+
+                                  {/* 오른쪽: 액션 버튼들 */}
                                   <View style={styles.sectionActions}>
+                                    {/* 공개보기/원본 버튼 */}
                                     <TouchableOpacity
-                                      style={styles.actionButton}
+                                      style={[
+                                        styles.actionLinkButton,
+                                        styles.actionLinkButtonView,
+                                        !section.viewUrl && styles.actionLinkButtonDisabled,
+                                      ]}
+                                      onPress={() => section.viewUrl && Linking.openURL(section.viewUrl)}
+                                      disabled={!section.viewUrl}
+                                    >
+                                      <Ionicons
+                                        name="eye-outline"
+                                        size={12}
+                                        color={section.viewUrl ? '#ffffff' : '#9ca3af'}
+                                      />
+                                      <Text
+                                        style={[
+                                          styles.actionLinkButtonText,
+                                          !section.viewUrl && styles.actionLinkButtonTextDisabled,
+                                        ]}
+                                      >
+                                        공개
+                                      </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                      style={[
+                                        styles.actionLinkButton,
+                                        styles.actionLinkButtonOriginal,
+                                        !section.originalUrl && styles.actionLinkButtonDisabled,
+                                      ]}
+                                      onPress={() =>
+                                        section.originalUrl && Linking.openURL(section.originalUrl)
+                                      }
+                                      disabled={!section.originalUrl}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.actionLinkButtonText,
+                                          !section.originalUrl && styles.actionLinkButtonTextDisabled,
+                                        ]}
+                                      >
+                                        원본
+                                      </Text>
+                                    </TouchableOpacity>
+                                    {/* 수정/삭제 버튼 */}
+                                    <TouchableOpacity
+                                      style={styles.editButton}
                                       onPress={() => {
                                         setEditingSection({
                                           materialId: material.id,
@@ -858,94 +954,19 @@ export function LessonScreen() {
                                         setSectionOriginalUrl(section.originalUrl || '');
                                       }}
                                     >
-                                      <Ionicons name="pencil-outline" size={16} color="#3b82f6" />
+                                      <Ionicons name="pencil-outline" size={12} color="#9ca3af" />
                                     </TouchableOpacity>
                                     {!section.isFromTemplate && (
                                       <TouchableOpacity
-                                        style={styles.actionButton}
+                                        style={styles.editButton}
                                         onPress={() =>
                                           handleDeleteSection(material.id, section.id)
                                         }
                                       >
-                                        <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                                        <Ionicons name="trash-outline" size={12} color="#9ca3af" />
                                       </TouchableOpacity>
                                     )}
                                   </View>
-                                </View>
-
-                                {/* 관리자 링크들 */}
-                                {section.links && section.links.length > 0 && (
-                                  <View style={styles.linksContainer}>
-                                    {section.links.map((link, idx) => (
-                                      <TouchableOpacity
-                                        key={idx}
-                                        style={styles.linkChip}
-                                        onPress={() => Linking.openURL(link.url)}
-                                      >
-                                        <Ionicons
-                                          name="link-outline"
-                                          size={12}
-                                          color="#10b981"
-                                        />
-                                        <Text style={styles.linkChipText}>{link.label}</Text>
-                                      </TouchableOpacity>
-                                    ))}
-                                  </View>
-                                )}
-
-                                {/* 액션 버튼들 */}
-                                <View style={styles.sectionLinks}>
-                                  <TouchableOpacity
-                                    style={[
-                                      styles.sectionLinkButton,
-                                      !section.viewUrl && styles.sectionLinkButtonDisabled,
-                                    ]}
-                                    onPress={() =>
-                                      section.viewUrl && Linking.openURL(section.viewUrl)
-                                    }
-                                    disabled={!section.viewUrl}
-                                  >
-                                    <Ionicons
-                                      name="eye-outline"
-                                      size={14}
-                                      color={section.viewUrl ? '#ffffff' : '#9ca3af'}
-                                    />
-                                    <Text
-                                      style={[
-                                        styles.sectionLinkButtonText,
-                                        !section.viewUrl && styles.sectionLinkButtonTextDisabled,
-                                      ]}
-                                    >
-                                      공개보기
-                                    </Text>
-                                  </TouchableOpacity>
-                                  <TouchableOpacity
-                                    style={[
-                                      styles.sectionLinkButton,
-                                      styles.sectionLinkButtonOriginal,
-                                      !section.originalUrl &&
-                                        styles.sectionLinkButtonDisabled,
-                                    ]}
-                                    onPress={() =>
-                                      section.originalUrl && Linking.openURL(section.originalUrl)
-                                    }
-                                    disabled={!section.originalUrl}
-                                  >
-                                    <Ionicons
-                                      name="document-outline"
-                                      size={14}
-                                      color={section.originalUrl ? '#ffffff' : '#9ca3af'}
-                                    />
-                                    <Text
-                                      style={[
-                                        styles.sectionLinkButtonText,
-                                        !section.originalUrl &&
-                                          styles.sectionLinkButtonTextDisabled,
-                                      ]}
-                                    >
-                                      원본
-                                    </Text>
-                                  </TouchableOpacity>
                                 </View>
                               </>
                             )}
@@ -1001,65 +1022,15 @@ export function LessonScreen() {
                           style={styles.addSectionButton}
                           onPress={() => setAddingSectionFor(material.id)}
                         >
-                          <Ionicons name="add-circle-outline" size={20} color="#3b82f6" />
-                          <Text style={styles.addSectionButtonText}>소제목 추가하기</Text>
+                          <Ionicons name="add-circle-outline" size={16} color="#9ca3af" />
+                          <Text style={styles.addSectionButtonText}>소제목 추가</Text>
                         </TouchableOpacity>
                       )}
                     </View>
-                  )}
                 </View>
               );
             })}
           </View>
-        )}
-
-        {/* 유저 대주제 추가 */}
-        {selectedMaterialCode && selectedMaterialCode !== '개인 자료' && (
-          <>
-            {showAddMaterialForm ? (
-              <View style={styles.addMaterialForm}>
-                <Text style={styles.addMaterialFormTitle}>
-                  {selectedMaterialCode}에 새 대주제 추가
-                </Text>
-                <Text style={styles.addMaterialFormSubtitle}>
-                  {selectedMaterialCode} 카테고리에 새로운 대주제를 추가합니다.
-                </Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="대주제 이름 (예: 개인 프로젝트)"
-                  value={newMaterialTitle}
-                  onChangeText={setNewMaterialTitle}
-                />
-                <View style={styles.formActions}>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => {
-                      setShowAddMaterialForm(false);
-                      setNewMaterialTitle('');
-                    }}
-                  >
-                    <Text style={styles.cancelButtonText}>취소</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.saveButton}
-                    onPress={handleAddUserMaterial}
-                  >
-                    <Text style={styles.saveButtonText}>추가하기</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.addMaterialButton}
-                onPress={() => setShowAddMaterialForm(true)}
-              >
-                <Ionicons name="add-circle-outline" size={20} color="#3b82f6" />
-                <Text style={styles.addMaterialButtonText}>
-                  {selectedMaterialCode}에 새 대주제 추가하기
-                </Text>
-              </TouchableOpacity>
-            )}
-          </>
         )}
       </ScrollView>
     </View>
@@ -1091,22 +1062,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  header: {
-    padding: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginTop: 4,
   },
   filterContainer: {
     backgroundColor: '#ffffff',
@@ -1161,12 +1116,20 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     marginBottom: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   materialHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
+    backgroundColor: '#f9fafb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   materialHeaderLeft: {
     flexDirection: 'row',
@@ -1200,6 +1163,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  templateLinksContainer: {
+    flexDirection: 'row',
+    gap: 4,
+    marginRight: 8,
+  },
+  templateLinkBadge: {
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  templateLinkBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#1d4ed8',
+  },
+  deleteIconButton: {
+    padding: 4,
+  },
   linkButton: {
     padding: 4,
   },
@@ -1207,8 +1189,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   sectionsContainer: {
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    backgroundColor: '#ffffff',
     padding: 16,
     paddingTop: 12,
   },
@@ -1223,16 +1204,91 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   sectionCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 12,
-    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingVertical: 8,
   },
   sectionCardTemplate: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#d1fae5',
+    backgroundColor: 'transparent',
+  },
+  sectionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  sectionLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  sectionTitleTemplate: {
+    color: '#374151',
+  },
+  adminLinksContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  adminLinkChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  adminLinkChipText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  sectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  actionLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  actionLinkButtonView: {
+    backgroundColor: '#3b82f6',
+  },
+  actionLinkButtonOriginal: {
+    backgroundColor: '#10b981',
+  },
+  actionLinkButtonDisabled: {
+    backgroundColor: '#e5e7eb',
+  },
+  actionLinkButtonText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  actionLinkButtonTextDisabled: {
+    color: '#9ca3af',
+  },
+  editButton: {
+    padding: 2,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1247,11 +1303,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
   templateBadge: {
     backgroundColor: '#d1fae5',
     paddingHorizontal: 8,
@@ -1265,14 +1316,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#065f46',
   },
-  sectionActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
   actionButton: {
     padding: 4,
   },
   linksContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  linkChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#d1fae5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  linkChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065f46',
+  },
+  sectionLinks: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
@@ -1387,19 +1456,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#dbeafe',
+    gap: 4,
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: '#d1d5db',
     borderStyle: 'dashed',
-    borderRadius: 8,
-    paddingVertical: 12,
+    borderRadius: 6,
+    paddingVertical: 8,
     marginTop: 8,
   },
   addSectionButtonText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#3b82f6',
+    color: '#6b7280',
   },
   addMaterialForm: {
     backgroundColor: '#dbeafe',
@@ -1408,7 +1477,7 @@ const styles = StyleSheet.create({
     borderColor: '#bfdbfe',
     padding: 16,
     margin: 16,
-    marginTop: 0,
+    marginBottom: 12,
     gap: 12,
   },
   addMaterialFormTitle: {
@@ -1432,7 +1501,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     margin: 16,
-    marginTop: 0,
+    marginBottom: 12,
   },
   addMaterialButtonText: {
     fontSize: 14,

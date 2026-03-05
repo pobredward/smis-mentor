@@ -341,6 +341,15 @@ export default function LessonContent() {
     ? materials.filter((m) => materialCodeMap[m.id] === selectedMaterialCode)
     : materials;
 
+  // 커스텀 대주제가 먼저 오도록 정렬 (templateId가 없는 것이 위로)
+  const sortedFilteredMaterials = [...filteredMaterials].sort((a, b) => {
+    // templateId가 없는 것(커스텀)이 위로
+    if (!a.templateId && b.templateId) return -1;
+    if (a.templateId && !b.templateId) return 1;
+    // 둘 다 커스텀이거나 둘 다 템플릿이면 order 순서 유지
+    return a.order - b.order;
+  });
+
   // 코드 필터 초기화
   useEffect(() => {
     if (sortedMaterialCodes.length > 0 && !selectedMaterialCode) {
@@ -703,6 +712,73 @@ export default function LessonContent() {
         </div>
       )}
 
+      {/* 유저 대주제 추가 */}
+      {selectedMaterialCode && selectedMaterialCode !== '개인 자료' && (
+        <>
+          {showAddMaterialForm ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mx-4 mb-4">
+              <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                {selectedMaterialCode}에 새 대주제 추가
+              </h3>
+              <p className="text-xs text-blue-600 mb-3">
+                {selectedMaterialCode} 카테고리에 새로운 대주제를 추가합니다.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    대주제 이름
+                  </label>
+                  <input
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                    placeholder="예: 개인 프로젝트, 추가 학습 자료"
+                    value={newMaterialTitle}
+                    onChange={(e) => setNewMaterialTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddUserMaterial();
+                    }}
+                    aria-label="대주제 이름"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => {
+                      setShowAddMaterialForm(false);
+                      setNewMaterialTitle('');
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleAddUserMaterial}
+                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                  >
+                    추가하기
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddMaterialForm(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 mx-4 mb-4 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all text-sm font-medium"
+              style={{ width: 'calc(100% - 2rem)' }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                />
+              </svg>
+              {selectedMaterialCode}에 새 대주제 추가하기
+            </button>
+          )}
+        </>
+      )}
+
       {/* 에러 메시지 */}
       {error && (
         <div className="mb-4 mx-4 p-3 bg-red-50 border border-red-200 rounded text-sm">
@@ -726,7 +802,7 @@ export default function LessonContent() {
       )}
 
       {/* 대주제 목록 */}
-      {filteredMaterials.length === 0 ? (
+      {sortedFilteredMaterials.length === 0 ? (
         <div className="text-center py-12 mx-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
           <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
             <svg
@@ -750,7 +826,7 @@ export default function LessonContent() {
         </div>
       ) : (
         <div className="space-y-3 sm:space-y-2 px-2">
-          {filteredMaterials.map((material) => {
+          {sortedFilteredMaterials.map((material) => {
             const sectionCount = sections[material.id]?.length || 0;
             const tpl = material.templateId
               ? templates.find((t) => t.id === material.templateId)
@@ -1023,10 +1099,10 @@ export default function LessonContent() {
                     ) : (
                       <button
                         onClick={() => setAddingSectionFor(material.id)}
-                        className="w-full flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 mt-2 sm:mt-3 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-all text-xs sm:text-sm"
+                        className="w-full flex items-center justify-center gap-1 px-2 py-1 mt-2 text-gray-500 bg-transparent border border-dashed border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 hover:text-gray-700 transition-all text-xs"
                       >
                         <svg
-                          className="w-3 h-3 sm:w-4 sm:h-4"
+                          className="w-3 h-3"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -1038,7 +1114,7 @@ export default function LessonContent() {
                             d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                           />
                         </svg>
-                        소제목 추가하기
+                        소제목 추가
                       </button>
                     )}
                   </div>
@@ -1046,73 +1122,6 @@ export default function LessonContent() {
             );
           })}
         </div>
-      )}
-
-      {/* 유저 대주제 추가 */}
-      {selectedMaterialCode && selectedMaterialCode !== '개인 자료' && (
-        <>
-          {showAddMaterialForm ? (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4 mx-4">
-              <h3 className="text-sm font-semibold text-blue-800 mb-2">
-                {selectedMaterialCode}에 새 대주제 추가
-              </h3>
-              <p className="text-xs text-blue-600 mb-3">
-                {selectedMaterialCode} 카테고리에 새로운 대주제를 추가합니다.
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    대주제 이름
-                  </label>
-                  <input
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
-                    placeholder="예: 개인 프로젝트, 추가 학습 자료"
-                    value={newMaterialTitle}
-                    onChange={(e) => setNewMaterialTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddUserMaterial();
-                    }}
-                    aria-label="대주제 이름"
-                    autoFocus
-                  />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => {
-                      setShowAddMaterialForm(false);
-                      setNewMaterialTitle('');
-                    }}
-                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleAddUserMaterial}
-                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
-                  >
-                    추가하기
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAddMaterialForm(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-4 mx-4 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all text-sm font-medium"
-              style={{ width: 'calc(100% - 2rem)' }}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-              {selectedMaterialCode}에 새 대주제 추가하기
-            </button>
-          )}
-        </>
       )}
     </div>
   );
