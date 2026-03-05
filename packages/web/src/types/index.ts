@@ -25,6 +25,7 @@ export interface User {
     groupRole: JobExperienceGroupRole,
     classCode?: string
   }>;
+  activeJobExperienceId?: string;
   partTimeJobs?: PartTimeJob[];
   createdAt: Timestamp;
   updatedAt: Timestamp;

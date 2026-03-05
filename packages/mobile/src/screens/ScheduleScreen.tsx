@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import { useWebViewCache } from '../context/WebViewCacheContext';
 import { useAuth } from '../context/AuthContext';
 import { AddLinkModal } from '../components';
-import { generationResourcesService } from '../services';
+import { generationResourcesService, ResourceLink } from '../services';
 
 export function ScheduleScreen() {
   const { schedules, loadingStates, zoomLevels, setZoomLevel, applyZoom, renderWebView, refreshResources, loading } = useWebViewCache();
   const { userData } = useAuth();
   const [selectedScheduleId, setSelectedScheduleId] = useState(schedules[0]?.id);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<ResourceLink | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editUrl, setEditUrl] = useState('');
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
@@ -67,6 +72,55 @@ export function ScheduleScreen() {
     );
   };
 
+  const handleMoveSchedule = async (index: number, direction: 'left' | 'right') => {
+    if (!activeJobCodeId) return;
+    
+    const newIndex = direction === 'left' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= schedules.length) return;
+
+    try {
+      const newSchedules = [...schedules];
+      const [removed] = newSchedules.splice(index, 1);
+      newSchedules.splice(newIndex, 0, removed);
+
+      await generationResourcesService.reorderLinks(activeJobCodeId, 'scheduleLinks', newSchedules);
+      await refreshResources();
+    } catch (error) {
+      console.error('순서 변경 실패:', error);
+      Alert.alert('오류', '순서 변경에 실패했습니다.');
+    }
+  };
+
+  const openEditModalDirectly = (schedule: ResourceLink) => {
+    setEditingSchedule(schedule);
+    setEditTitle(schedule.title);
+    setEditUrl(schedule.url);
+    setShowEditModal(true);
+  };
+
+  const handleEditSchedule = async () => {
+    if (!activeJobCodeId || !editingSchedule || !editTitle.trim() || !editUrl.trim()) {
+      Alert.alert('오류', '제목과 URL을 모두 입력해주세요.');
+      return;
+    }
+
+    try {
+      const updatedSchedules = schedules.map(schedule =>
+        schedule.id === editingSchedule.id
+          ? { ...schedule, title: editTitle.trim(), url: editUrl.trim() }
+          : schedule
+      );
+
+      await generationResourcesService.reorderLinks(activeJobCodeId, 'scheduleLinks', updatedSchedules);
+      await refreshResources();
+      setShowEditModal(false);
+      Alert.alert('성공', '시간표가 수정되었습니다.');
+    } catch (error) {
+      console.error('시간표 수정 실패:', error);
+      Alert.alert('오류', '시간표 수정에 실패했습니다.');
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -105,40 +159,97 @@ export function ScheduleScreen() {
   return (
     <View style={styles.container}>
       {/* 시간표 선택 버튼들 */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.buttonContainer}
-        contentContainerStyle={styles.buttonContent}
-      >
-        {isAdmin && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowAddModal(true)}
-          >
-            <Text style={styles.addButtonText}>+</Text>
-          </TouchableOpacity>
-        )}
+      <View style={[styles.buttonContainer, editMode && styles.buttonContainerEdit]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.buttonContent, editMode && styles.buttonContentEdit]}
+        >
+          {isAdmin && (
+            <>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setShowAddModal(true)}
+              >
+                <Text style={styles.addButtonText}>+</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.editButton, editMode && styles.editButtonActive]}
+                onPress={() => setEditMode(!editMode)}
+              >
+                <Text style={styles.editButtonText}>✏️</Text>
+              </TouchableOpacity>
+            </>
+          )}
 
-        {schedules.map((schedule) => (
-          <TouchableOpacity
-            key={schedule.id}
-            style={[
-              styles.button,
-              selectedScheduleId === schedule.id && styles.buttonActive
-            ]}
-            onPress={() => setSelectedScheduleId(schedule.id)}
-            onLongPress={() => isAdmin && handleDeleteSchedule(schedule.id)}
-          >
-            <Text style={[
-              styles.buttonText,
-              selectedScheduleId === schedule.id && styles.buttonTextActive
-            ]}>
-              {schedule.title}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+          {schedules.map((schedule, index) => (
+            <View key={schedule.id} style={[styles.linkWrapper, { marginHorizontal: 3 }]}>
+              {editMode && (
+                <View style={styles.editActionsContainer}>
+                  <View style={styles.editActionsTop}>
+                    <TouchableOpacity
+                      style={styles.editActionButton}
+                      onPress={() => openEditModalDirectly(schedule)}
+                    >
+                      <Text style={styles.editActionIcon}>✏️</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={styles.deleteActionButton}
+                      onPress={() => handleDeleteSchedule(schedule.id)}
+                    >
+                      <Text style={styles.deleteActionIcon}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  selectedScheduleId === schedule.id && !editMode && styles.buttonActive,
+                  editMode && styles.buttonEdit,
+                ]}
+                onPress={() => {
+                  if (!editMode) {
+                    setSelectedScheduleId(schedule.id);
+                  }
+                }}
+                disabled={editMode}
+              >
+                <Text style={[
+                  styles.buttonText,
+                  selectedScheduleId === schedule.id && !editMode && styles.buttonTextActive
+                ]}>
+                  {schedule.title}
+                </Text>
+              </TouchableOpacity>
+              
+              {editMode && (
+                <View style={styles.editActionsBottom}>
+                  {index > 0 && (
+                    <TouchableOpacity
+                      style={styles.moveButton}
+                      onPress={() => handleMoveSchedule(index, 'left')}
+                    >
+                      <Text style={styles.moveButtonText}>←</Text>
+                    </TouchableOpacity>
+                  )}
+                  {index < schedules.length - 1 && (
+                    <TouchableOpacity
+                      style={styles.moveButton}
+                      onPress={() => handleMoveSchedule(index, 'right')}
+                    >
+                      <Text style={styles.moveButtonText}>→</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* 줌 컨트롤 버튼들 */}
       <View style={styles.zoomControls}>
@@ -162,7 +273,6 @@ export function ScheduleScreen() {
           </View>
         )}
         
-        {/* 모든 웹뷰 렌더링 (선택된 것만 표시) */}
         {schedules.map((schedule) => (
           <View
             key={schedule.id}
@@ -187,6 +297,59 @@ export function ScheduleScreen() {
           onSuccess={refreshResources}
         />
       )}
+
+      {/* 시간표 수정 모달 */}
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.editModalOverlay}>
+          <View style={styles.editModalContainer}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>시간표 수정</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Text style={styles.editModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.editModalContent}>
+              <Text style={styles.editModalLabel}>제목</Text>
+              <TextInput
+                style={styles.editModalInput}
+                value={editTitle}
+                onChangeText={setEditTitle}
+                placeholder="예: 1주차 시간표"
+              />
+
+              <Text style={styles.editModalLabel}>URL</Text>
+              <TextInput
+                style={styles.editModalInput}
+                value={editUrl}
+                onChangeText={setEditUrl}
+                placeholder="https://..."
+                autoCapitalize="none"
+              />
+
+              <View style={styles.editModalButtons}>
+                <TouchableOpacity
+                  style={[styles.editModalButton, styles.editModalButtonCancel]}
+                  onPress={() => setShowEditModal(false)}
+                >
+                  <Text style={styles.editModalButtonTextCancel}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.editModalButton, styles.editModalButtonSave]}
+                  onPress={handleEditSchedule}
+                >
+                  <Text style={styles.editModalButtonTextSave}>저장</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -230,10 +393,21 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e2e8f0',
     maxHeight: 42,
   },
+  buttonContainerEdit: {
+    backgroundColor: '#fef3c7',
+    borderBottomColor: '#f59e0b',
+    borderBottomWidth: 2,
+    maxHeight: 'none' as any,
+  },
   buttonContent: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     flexDirection: 'row',
+    alignItems: 'center',
+  },
+  buttonContentEdit: {
+    paddingTop: 32,
+    paddingBottom: 26,
     alignItems: 'center',
   },
   addButton: {
@@ -250,15 +424,40 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
+  editButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  editButtonActive: {
+    backgroundColor: '#f59e0b',
+  },
+  editButtonText: {
+    fontSize: 14,
+  },
+  linkWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    marginHorizontal: 3,
+  },
   button: {
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 10,
     backgroundColor: '#f1f5f9',
-    marginHorizontal: 3,
   },
   buttonActive: {
     backgroundColor: '#3b82f6',
+  },
+  buttonEdit: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+    borderStyle: 'dashed',
   },
   buttonText: {
     fontSize: 13,
@@ -268,6 +467,82 @@ const styles = StyleSheet.create({
   buttonTextActive: {
     color: '#fff',
     fontWeight: '600',
+  },
+  editActionsContainer: {
+    position: 'absolute',
+    top: -24,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  editActionsTop: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  editActionsBottom: {
+    position: 'absolute',
+    bottom: -20,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 3,
+    zIndex: 10,
+  },
+  moveButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    minWidth: 18,
+    alignItems: 'center',
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  moveButtonText: {
+    fontSize: 11,
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  editActionButton: {
+    backgroundColor: '#10b981',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  deleteActionButton: {
+    backgroundColor: '#ef4444',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  editActionIcon: {
+    fontSize: 10,
+  },
+  deleteActionIcon: {
+    fontSize: 12,
+    color: '#ffffff',
+    fontWeight: '700',
+    lineHeight: 12,
   },
   zoomControls: {
     flexDirection: 'row',
@@ -337,5 +612,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f8fafc',
     zIndex: 10,
+  },
+  editModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  editModalContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  editModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  editModalClose: {
+    fontSize: 24,
+    color: '#9ca3af',
+    fontWeight: '300',
+  },
+  editModalContent: {
+    padding: 20,
+  },
+  editModalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  editModalInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    color: '#1f2937',
+  },
+  editModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  editModalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  editModalButtonCancel: {
+    backgroundColor: '#f3f4f6',
+  },
+  editModalButtonSave: {
+    backgroundColor: '#3b82f6',
+  },
+  editModalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  editModalButtonTextSave: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
