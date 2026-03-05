@@ -4,6 +4,10 @@ import { useState } from 'react';
 import Layout from '@/components/common/Layout';
 import LessonContent from '@/components/camp/LessonContent';
 import EducationContent from '@/components/camp/EducationContent';
+import ScheduleContent from '@/components/camp/ScheduleContent';
+import GuideContent from '@/components/camp/GuideContent';
+import ClassContent from '@/components/camp/ClassContent';
+import RoomContent from '@/components/camp/RoomContent';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
 
@@ -50,6 +54,18 @@ export default function CampPage() {
           <EducationContent />
         ) : activeTab === 'lesson' ? (
           <LessonContent />
+        ) : activeTab === 'schedule' ? (
+          <ScheduleContent />
+        ) : activeTab === 'guide' ? (
+          <GuideContent />
+        ) : activeTab === 'class' ? (
+          <div className="h-[calc(100vh-120px)]">
+            <ClassContent />
+          </div>
+        ) : activeTab === 'room' ? (
+          <div className="h-[calc(100vh-120px)]">
+            <RoomContent />
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
             <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -58,10 +74,6 @@ export default function CampPage() {
             <h3 className="text-lg font-semibold text-gray-900 mb-2">캠프 정보</h3>
             <p className="text-gray-600">
               {activeTab === 'tasks' && '업무 정보는 추후 제공됩니다.'}
-              {activeTab === 'schedule' && '시간표는 추후 제공됩니다.'}
-              {activeTab === 'guide' && '인솔표는 추후 제공됩니다.'}
-              {activeTab === 'class' && '반명단은 추후 제공됩니다.'}
-              {activeTab === 'room' && '방명단은 추후 제공됩니다.'}
             </p>
           </div>
         )}

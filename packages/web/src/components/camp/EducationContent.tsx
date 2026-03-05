@@ -4,9 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generationResourcesService, ResourceLink } from '@/lib/generationResourcesService';
 
-// Notion 임베드 가능 여부 확인
-const isNotionEmbedUrl = (url: string): boolean => {
-  return url.includes('/ebd//') || url.includes('embed.notion.site');
+// Notion 및 Google Sheets 임베드 가능 여부 확인
+const isEmbeddableUrl = (url: string): boolean => {
+  return url.includes('/ebd//') || 
+         url.includes('embed.notion.site') || 
+         url.includes('docs.google.com/spreadsheets');
 };
 
 export default function EducationContent() {
@@ -258,7 +260,7 @@ export default function EducationContent() {
   }
 
   const selectedLink = educationLinks.find(link => link.id === selectedLinkId);
-  const canEmbed = selectedLink ? isNotionEmbedUrl(selectedLink.url) : false;
+  const canEmbed = selectedLink ? isEmbeddableUrl(selectedLink.url) : false;
 
   return (
     <div className="h-[calc(100vh-12rem)] w-full">

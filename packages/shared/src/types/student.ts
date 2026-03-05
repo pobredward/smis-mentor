@@ -23,8 +23,8 @@ export const ST_SHEET_HEADER_MAPPING = {
   '도로명 주소': 'address',
   '세부 주소': 'addressDetail',
   '이메일 주소': 'email',
-  '출발여정': 'departureRoute',
-  '도착여정': 'arrivalRoute',
+  '입소여정': 'departureRoute',
+  '퇴소여정': 'arrivalRoute',
   
   // 기타
   '기타': 'etc',

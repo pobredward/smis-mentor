@@ -139,9 +139,9 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
 
         // 캠프 타입별 추가 필드
         if (config.type === 'EJ') {
-          // E/J 캠프: 입소공항/퇴소공항
-          student.departureRoute = getValue('출발여정', ST_SHEET_COLUMNS.DEPARTURE_ROUTE);
-          student.arrivalRoute = getValue('도착여정', ST_SHEET_COLUMNS.ARRIVAL_ROUTE);
+          // E/J 캠프: 입소여정/퇴소여정
+          student.departureRoute = getValue('입소여정', ST_SHEET_COLUMNS.DEPARTURE_ROUTE);
+          student.arrivalRoute = getValue('퇴소여정', ST_SHEET_COLUMNS.ARRIVAL_ROUTE);
         } else if (config.type === 'S') {
           // S 캠프: 단체티/여권정보
           student.shirtSize = getValue('단체티', ST_SHEET_COLUMNS.SHIRT_SIZE);
