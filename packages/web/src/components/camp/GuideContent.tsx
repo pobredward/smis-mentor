@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useResourceCache } from '@/contexts/ResourceCacheContext';
 import { generationResourcesService, ResourceLink } from '@/lib/generationResourcesService';
 
 const isEmbeddableUrl = (url: string): boolean => {
@@ -12,8 +13,7 @@ const isEmbeddableUrl = (url: string): boolean => {
 
 export default function GuideContent() {
   const { userData } = useAuth();
-  const [guideLinks, setGuideLinks] = useState<ResourceLink[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { guideLinks, loading, loadingStates, setLoadingState, refreshResources } = useResourceCache();
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState('');
@@ -24,40 +24,15 @@ export default function GuideContent() {
   const [editingLink, setEditingLink] = useState<ResourceLink | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editUrl, setEditUrl] = useState('');
-  const [iframeLoadedStates, setIframeLoadedStates] = useState<Record<string, boolean>>({});
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
-  const loadGuideLinks = useCallback(async () => {
-    if (!activeJobCodeId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      
-      const resources = await generationResourcesService.getResourcesByJobCodeId(activeJobCodeId);
-      
-      if (resources?.guideLinks) {
-        setGuideLinks(resources.guideLinks);
-        if (resources.guideLinks.length > 0 && !selectedLinkId) {
-          setSelectedLinkId(resources.guideLinks[0].id);
-        }
-      }
-    } catch (error) {
-      console.error('인솔표 링크 로드 실패:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeJobCodeId, selectedLinkId]);
-
   useEffect(() => {
-    if (activeJobCodeId) {
-      loadGuideLinks();
+    if (guideLinks.length > 0 && !selectedLinkId) {
+      setSelectedLinkId(guideLinks[0].id);
     }
-  }, [activeJobCodeId, loadGuideLinks]);
+  }, [guideLinks, selectedLinkId]);
 
   const handleAddLink = async () => {
     if (!activeJobCodeId || !newLinkTitle.trim() || !newLinkUrl.trim()) {
@@ -74,7 +49,7 @@ export default function GuideContent() {
         newLinkUrl.trim(),
         userData?.userId || ''
       );
-      await loadGuideLinks();
+      await refreshResources();
       setShowAddModal(false);
       setNewLinkTitle('');
       setNewLinkUrl('');
@@ -92,18 +67,10 @@ export default function GuideContent() {
 
     try {
       await generationResourcesService.deleteLink(activeJobCodeId, 'guideLinks', linkId);
-      
-      // 낙관적 UI 업데이트
-      const newLinks = guideLinks.filter(link => link.id !== linkId);
-      setGuideLinks(newLinks);
-      
-      if (selectedLinkId === linkId && newLinks.length > 0) {
-        setSelectedLinkId(newLinks[0].id);
-      }
+      await refreshResources();
     } catch (error) {
       console.error('인솔표 삭제 실패:', error);
       alert('인솔표 삭제에 실패했습니다.');
-      await loadGuideLinks();
     }
   };
 
@@ -118,14 +85,11 @@ export default function GuideContent() {
       const [removed] = newLinks.splice(index, 1);
       newLinks.splice(newIndex, 0, removed);
 
-      // 낙관적 UI 업데이트
-      setGuideLinks(newLinks);
-
       await generationResourcesService.reorderLinks(activeJobCodeId, 'guideLinks', newLinks);
+      await refreshResources();
     } catch (error) {
       console.error('순서 변경 실패:', error);
       alert('순서 변경에 실패했습니다.');
-      await loadGuideLinks();
     }
   };
 
@@ -149,24 +113,17 @@ export default function GuideContent() {
           : link
       );
 
-      // 낙관적 UI 업데이트
-      setGuideLinks(updatedLinks);
-      setShowEditModal(false);
-
       await generationResourcesService.reorderLinks(activeJobCodeId, 'guideLinks', updatedLinks);
+      await refreshResources();
+      setShowEditModal(false);
       alert('인솔표가 수정되었습니다.');
     } catch (error) {
       console.error('인솔표 수정 실패:', error);
       alert('인솔표 수정에 실패했습니다.');
-      await loadGuideLinks();
     }
   };
 
   const selectedLink = guideLinks.find(link => link.id === selectedLinkId);
-
-  const handleIframeLoad = (linkId: string) => {
-    setIframeLoadedStates(prev => ({ ...prev, [linkId]: true }));
-  };
 
   if (loading) {
     return (
@@ -248,11 +205,7 @@ export default function GuideContent() {
             )}
             
             <button
-              onClick={() => {
-                if (!editMode) {
-                  setSelectedLinkId(link.id);
-                }
-              }}
+              onClick={() => !editMode && setSelectedLinkId(link.id)}
               disabled={editMode}
               className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                 editMode
@@ -291,56 +244,16 @@ export default function GuideContent() {
         ))}
       </div>
 
-      <div className="p-4 bg-gray-50">
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden relative" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
-          {/* 모든 iframe을 항상 렌더링하고 opacity와 z-index로만 전환 */}
+      <div className="p-4 bg-gray-50 relative">
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
           {guideLinks.map((link) => {
-            const isSelected = selectedLinkId === link.id;
-            const isLoaded = iframeLoadedStates[link.id];
+            const isVisible = selectedLinkId === link.id;
+            const isLoading = loadingStates[link.id] ?? true;
             
-            if (isEmbeddableUrl(link.url)) {
+            if (!isEmbeddableUrl(link.url)) {
+              if (!isVisible) return null;
               return (
-                <div 
-                  key={link.id} 
-                  className="absolute inset-0 transition-opacity duration-0"
-                  style={{ 
-                    opacity: isSelected ? 1 : 0,
-                    zIndex: isSelected ? 1 : -1,
-                    pointerEvents: isSelected ? 'auto' : 'none'
-                  }}
-                >
-                  {!isLoaded && (
-                    <div 
-                      className="absolute inset-0 flex items-center justify-center bg-gray-50"
-                      style={{ 
-                        zIndex: 10,
-                        opacity: isSelected ? 1 : 0
-                      }}
-                    >
-                      <div className="text-center">
-                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-sm text-gray-600">인솔표 로딩 중...</p>
-                      </div>
-                    </div>
-                  )}
-                  <iframe
-                    src={link.url}
-                    className="w-full h-full border-0"
-                    title={link.title}
-                    onLoad={() => handleIframeLoad(link.id)}
-                  />
-                </div>
-              );
-            } else if (isSelected) {
-              return (
-                <div 
-                  key={link.id} 
-                  className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center"
-                  style={{ 
-                    opacity: 1,
-                    zIndex: 1
-                  }}
-                >
+                <div key={link.id} className="flex flex-col items-center justify-center h-full p-8 text-center">
                   <svg className="w-12 h-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
@@ -356,7 +269,33 @@ export default function GuideContent() {
                 </div>
               );
             }
-            return null;
+
+            return (
+              <div
+                key={link.id}
+                className="w-full h-full absolute top-0 left-0 transition-opacity duration-200"
+                style={{
+                  opacity: isVisible ? 1 : 0,
+                  zIndex: isVisible ? 1 : 0,
+                  pointerEvents: isVisible ? 'auto' : 'none',
+                }}
+              >
+                {isLoading && isVisible && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+                    <div className="text-center">
+                      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                      <p className="text-sm text-gray-600">로딩 중...</p>
+                    </div>
+                  </div>
+                )}
+                <iframe
+                  src={link.url}
+                  className="w-full h-full border-0"
+                  title={link.title}
+                  onLoad={() => setLoadingState(link.id, false)}
+                />
+              </div>
+            );
           })}
         </div>
       </div>

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ResourceCacheProvider } from "@/contexts/ResourceCacheContext";
 import { Toaster } from "react-hot-toast";
 import { QueryProvider } from "@/lib/queryClient";
 import AnalyticsProvider from "@/components/analytics/AnalyticsProvider";
@@ -136,10 +137,12 @@ export default function RootLayout({
       <body className={inter.className}>
         <QueryProvider>
           <AuthProvider>
-            <AnalyticsProvider>
-              <Toaster position="top-center" reverseOrder={false} />
-              {children}
-            </AnalyticsProvider>
+            <ResourceCacheProvider>
+              <AnalyticsProvider>
+                <Toaster position="top-center" reverseOrder={false} />
+                {children}
+              </AnalyticsProvider>
+            </ResourceCacheProvider>
           </AuthProvider>
         </QueryProvider>
       </body>
