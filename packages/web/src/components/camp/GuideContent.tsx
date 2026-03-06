@@ -293,16 +293,30 @@ export default function GuideContent() {
 
       <div className="p-4 bg-gray-50">
         <div className="bg-white rounded-lg shadow-sm overflow-hidden relative" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
-          {/* 모든 iframe을 미리 렌더링하고 숨김/표시만 전환 */}
+          {/* 모든 iframe을 항상 렌더링하고 opacity와 z-index로만 전환 */}
           {guideLinks.map((link) => {
             const isSelected = selectedLinkId === link.id;
             const isLoaded = iframeLoadedStates[link.id];
             
             if (isEmbeddableUrl(link.url)) {
               return (
-                <div key={link.id} className="absolute inset-0" style={{ display: isSelected ? 'block' : 'none' }}>
-                  {isSelected && !isLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
+                <div 
+                  key={link.id} 
+                  className="absolute inset-0 transition-opacity duration-0"
+                  style={{ 
+                    opacity: isSelected ? 1 : 0,
+                    zIndex: isSelected ? 1 : -1,
+                    pointerEvents: isSelected ? 'auto' : 'none'
+                  }}
+                >
+                  {!isLoaded && (
+                    <div 
+                      className="absolute inset-0 flex items-center justify-center bg-gray-50"
+                      style={{ 
+                        zIndex: 10,
+                        opacity: isSelected ? 1 : 0
+                      }}
+                    >
                       <div className="text-center">
                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                         <p className="text-sm text-gray-600">인솔표 로딩 중...</p>
@@ -319,7 +333,14 @@ export default function GuideContent() {
               );
             } else if (isSelected) {
               return (
-                <div key={link.id} className="flex flex-col items-center justify-center h-full p-8 text-center">
+                <div 
+                  key={link.id} 
+                  className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center"
+                  style={{ 
+                    opacity: 1,
+                    zIndex: 1
+                  }}
+                >
                   <svg className="w-12 h-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
