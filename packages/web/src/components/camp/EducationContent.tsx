@@ -65,6 +65,8 @@ export default function EducationContent() {
     console.log('🔄 EducationContent: activeJobCodeId 변경됨:', activeJobCodeId);
     if (activeJobCodeId) {
       loadEducationLinks();
+    } else {
+      setLoading(false);
     }
   }, [activeJobCodeId, loadEducationLinks]);
 
@@ -162,6 +164,42 @@ export default function EducationContent() {
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
         <p className="mt-4 text-gray-600">교육 자료 로딩 중...</p>
+      </div>
+    );
+  }
+
+  if (!userData) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
+        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+          <svg
+            className="w-6 h-6 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+            />
+          </svg>
+        </div>
+        <p className="text-center">로그인 후 이용 가능합니다.</p>
+      </div>
+    );
+  }
+
+  if (!activeJobCodeId) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
+        <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        </svg>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">활성 캠프를 선택해주세요</h3>
+        <p className="text-sm text-gray-600">마이페이지에서 참여 중인 캠프를 활성화하면</p>
+        <p className="text-sm text-gray-600">해당 캠프의 교육 자료를 확인할 수 있습니다.</p>
       </div>
     );
   }

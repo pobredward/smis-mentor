@@ -57,11 +57,22 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
   useEffect(() => {
+    if (!userData) {
+      // 로그인하지 않은 경우 로딩 즉시 종료
+      setLoading(false);
+      setLessonLoading(false);
+      return;
+    }
+
     if (activeJobCodeId) {
       loadResources();
       loadLessonMaterials();
+    } else {
+      // 활성 캠프가 없는 경우 로딩 종료
+      setLoading(false);
+      setLessonLoading(false);
     }
-  }, [activeJobCodeId]);
+  }, [activeJobCodeId, userData]);
 
   const loadResources = async () => {
     if (!activeJobCodeId) {
