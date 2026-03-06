@@ -16,6 +16,7 @@ export default function EducationContent() {
   const [educationLinks, setEducationLinks] = useState<ResourceLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
+  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
@@ -28,6 +29,10 @@ export default function EducationContent() {
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+
+  const setLoadingState = (id: string, isLoading: boolean) => {
+    setLoadingStates(prev => ({ ...prev, [id]: isLoading }));
+  };
 
   const loadEducationLinks = useCallback(async () => {
     if (!activeJobCodeId) {
@@ -48,6 +53,14 @@ export default function EducationContent() {
       if (resources?.educationLinks) {
         console.log('✅ EducationContent: 교육 링크 로드 성공 -', resources.educationLinks.length, '개');
         setEducationLinks(resources.educationLinks);
+        
+        // 모든 링크의 초기 로딩 상태 설정
+        const initialStates = resources.educationLinks.reduce((acc, link) => {
+          acc[link.id] = true;
+          return acc;
+        }, {} as Record<string, boolean>);
+        setLoadingStates(initialStates);
+        
         if (resources.educationLinks.length > 0) {
           setSelectedLinkId(resources.educationLinks[0].id);
         }
@@ -297,9 +310,6 @@ export default function EducationContent() {
     );
   }
 
-  const selectedLink = educationLinks.find(link => link.id === selectedLinkId);
-  const canEmbed = selectedLink ? isEmbeddableUrl(selectedLink.url) : false;
-
   return (
     <div className="h-[calc(100vh-12rem)] w-full">
       {/* 링크 선택 토글 */}
@@ -391,54 +401,83 @@ export default function EducationContent() {
       </div>
 
       {/* 선택된 링크 표시 */}
-      {selectedLink && (
-        canEmbed ? (
-          // 임베드 가능한 URL - iframe으로 표시
-          <div className="h-full bg-white w-full">
-            <iframe
-              key={selectedLink.id}
-              src={selectedLink.url}
-              className="w-full h-full border-0"
-              title={selectedLink.title}
-              allowFullScreen
-            />
-          </div>
-        ) : (
-          // 임베드 불가능한 URL - 새 탭으로 열기 안내
-          <div className="flex flex-col items-center justify-center h-full bg-gradient-to-br from-blue-50 to-indigo-50 p-8 w-full">
-            <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 text-center border border-gray-200">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">{selectedLink.title}</h3>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-yellow-800 mb-2">
-                  <strong>⚠️ 임베드 URL이 필요합니다</strong>
-                </p>
-                <p className="text-xs text-yellow-700 text-left">
-                  1. Notion 페이지에서 "공유" 클릭<br />
-                  2. "웹에 게시" 활성화<br />
-                  3. "이 페이지 임베드" 복사<br />
-                  4. iframe의 src URL만 사용
-                </p>
-              </div>
-              <a
-                href={selectedLink.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+      <div className="h-full bg-white relative">
+        {educationLinks.map((link) => {
+          const isVisible = selectedLinkId === link.id;
+          const isLoading = loadingStates[link.id] ?? true;
+          const canEmbed = isEmbeddableUrl(link.url);
+
+          if (!canEmbed) {
+            // 임베드 불가능한 URL - 선택된 경우만 표시
+            if (!isVisible) return null;
+            return (
+              <div 
+                key={link.id}
+                className="flex flex-col items-center justify-center h-full bg-gradient-to-br from-blue-50 to-indigo-50 p-8 w-full"
               >
-                <span>새 탭에서 열기</span>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
+                <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 text-center border border-gray-200">
+                  <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">{link.title}</h3>
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                    <p className="text-sm text-yellow-800 mb-2">
+                      <strong>⚠️ 임베드 URL이 필요합니다</strong>
+                    </p>
+                    <p className="text-xs text-yellow-700 text-left">
+                      1. Notion 페이지에서 "공유" 클릭<br />
+                      2. "웹에 게시" 활성화<br />
+                      3. "이 페이지 임베드" 복사<br />
+                      4. iframe의 src URL만 사용
+                    </p>
+                  </div>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  >
+                    <span>새 탭에서 열기</span>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+            );
+          }
+
+          // 임베드 가능한 URL - 모두 프리로드
+          return (
+            <div
+              key={link.id}
+              className="w-full h-full absolute top-0 left-0 transition-opacity duration-200"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                zIndex: isVisible ? 1 : 0,
+                pointerEvents: isVisible ? 'auto' : 'none',
+              }}
+            >
+              {isLoading && isVisible && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+                  <div className="flex flex-col items-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+                    <p className="mt-4 text-gray-600">로딩 중...</p>
+                  </div>
+                </div>
+              )}
+              <iframe
+                src={link.url}
+                className="w-full h-full border-0"
+                title={link.title}
+                onLoad={() => setLoadingState(link.id, false)}
+              />
             </div>
-          </div>
-        )
-      )}
+          );
+        })}
+      </div>
 
       {/* 링크 추가 모달 */}
       {showAddModal && (
