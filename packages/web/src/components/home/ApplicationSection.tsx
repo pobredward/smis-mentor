@@ -23,7 +23,8 @@ export default function ApplicationSection() {
       try {
         setIsLoading(true);
         
-        if (!userData) {
+        if (!userData || !userData.userId) {
+          setIsLoading(false);
           return;
         }
         

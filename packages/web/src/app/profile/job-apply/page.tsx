@@ -30,8 +30,11 @@ export default function JobApplyStatus() {
       try {
         setIsLoading(true);
         
-        if (!userData) {
-          router.push('/sign-in');
+        if (!userData || !userData.userId) {
+          setIsLoading(false);
+          if (!userData) {
+            router.push('/sign-in');
+          }
           return;
         }
         

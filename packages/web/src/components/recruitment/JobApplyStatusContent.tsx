@@ -29,7 +29,8 @@ export default function JobApplyStatusContent() {
       try {
         setIsLoading(true);
         
-        if (!userData) {
+        if (!userData || !userData.userId) {
+          setIsLoading(false);
           return;
         }
         
