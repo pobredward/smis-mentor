@@ -41,7 +41,7 @@ interface ResourceCache {
 const ResourceCacheContext = createContext<ResourceCache | null>(null);
 
 export function ResourceCacheProvider({ children }: { children: ReactNode }) {
-  const { userData } = useAuth();
+  const { userData, authReady } = useAuth();
   const [scheduleLinks, setScheduleLinks] = useState<ResourceLink[]>([]);
   const [guideLinks, setGuideLinks] = useState<ResourceLink[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +57,11 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
   useEffect(() => {
+    // Auth가 준비될 때까지 대기
+    if (!authReady) {
+      return;
+    }
+
     if (!userData) {
       // 로그인하지 않은 경우 로딩 즉시 종료
       setLoading(false);
@@ -72,7 +77,7 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       setLessonLoading(false);
     }
-  }, [activeJobCodeId, userData]);
+  }, [activeJobCodeId, userData, authReady]);
 
   const loadResources = async () => {
     if (!activeJobCodeId) {
