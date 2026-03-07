@@ -11,11 +11,26 @@ import {
   PanResponder,
 } from 'react-native';
 import { STSheetStudent, CampType } from '@smis-mentor/shared';
+import { useAuth } from '../context/AuthContext';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.75; // 화면의 75%
 const CARD_WIDTH = SCREEN_WIDTH * 0.9; // 화면의 90%
 const HORIZONTAL_MARGIN = (SCREEN_WIDTH - CARD_WIDTH) / 2; // 좌우 여백
+
+// 주민등록번호 마스킹 함수
+const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: string): string => {
+  if (!ssn) return '-';
+  // 관리자 또는 부매니저는 전체 공개
+  if (isAdmin || groupRole === '부매니저') return ssn;
+  // 형식: 980619-1****** (앞 6자리 + - + 첫번째 숫자 + 나머지 *)
+  const parts = ssn.split('-');
+  if (parts.length !== 2) return ssn; // 형식이 다르면 원본 반환
+  const front = parts[0];
+  const back = parts[1];
+  if (back.length === 0) return ssn;
+  return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
+};
 
 interface StudentDetailModalProps {
   visible: boolean;
@@ -32,6 +47,11 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   onClose,
   campType,
 }) => {
+  const { userData } = useAuth();
+  const isAdmin = userData?.role === 'admin';
+  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);
+  const groupRole = activeJobExp?.groupRole;
   const translateY = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0)).current;
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -142,7 +162,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             label="신상" 
             value={`${s.name} | ${s.englishName || '-'} | ${s.grade} | ${s.gender === 'M' ? '남' : '여'}`} 
           />
-          <InfoRow label="주민등록번호" value={s.ssn} />
+          <InfoRow label="주민등록번호" value={maskSSN(s.ssn, isAdmin, groupRole)} />
           <InfoRow label="도로명 주소" value={s.address} />
           <InfoRow label="세부 주소" value={s.addressDetail} />
           

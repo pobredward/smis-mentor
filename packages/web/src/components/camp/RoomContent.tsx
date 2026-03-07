@@ -4,6 +4,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { stSheetService, jobCodesService, STSheetStudent, CampCode, CampType } from '@/lib/stSheetService';
 
+// 주민등록번호 마스킹 함수
+const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: string): string => {
+  if (!ssn) return '-';
+  // 관리자 또는 부매니저는 전체 공개
+  if (isAdmin || groupRole === '부매니저') return ssn;
+  // 형식: 980619-1****** (앞 6자리 + - + 첫번째 숫자 + 나머지 *)
+  const parts = ssn.split('-');
+  if (parts.length !== 2) return ssn; // 형식이 다르면 원본 반환
+  const front = parts[0];
+  const back = parts[1];
+  if (back.length === 0) return ssn;
+  return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
+};
+
 export default function RoomContent() {
   const { userData } = useAuth();
   const [students, setStudents] = useState<STSheetStudent[]>([]);
@@ -18,6 +32,8 @@ export default function RoomContent() {
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
   const isAdmin = userData?.role === 'admin';
+  const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);
+  const groupRole = activeJobExp?.groupRole;
 
   useEffect(() => {
     const loadCampCode = async () => {
@@ -395,7 +411,7 @@ export default function RoomContent() {
                   {selectedStudent.ssn && (
                     <div className="flex py-2 border-b border-gray-100">
                       <span className="flex-1 text-xs text-gray-500">주민등록번호</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.ssn}</span>
+                      <span className="flex-[2] text-xs text-gray-900 font-medium">{maskSSN(selectedStudent.ssn, isAdmin, groupRole)}</span>
                     </div>
                   )}
                   {selectedStudent.address && (
