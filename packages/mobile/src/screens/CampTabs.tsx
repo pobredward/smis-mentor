@@ -41,17 +41,6 @@ type SectionDataWithLinks = SectionData & {
   templateSectionId?: string;
 };
 
-export function TasksScreen() {
-  return (
-    <View style={styles.container}>
-      <View style={styles.placeholderContainer}>
-        <Ionicons name="briefcase-outline" size={64} color="#cbd5e1" />
-        <Text style={styles.placeholderText}>업무 화면 (추후 구현)</Text>
-      </View>
-    </View>
-  );
-}
-
 export function RoomScreen() {
   return (
     <View style={styles.container}>

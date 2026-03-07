@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { EducationScreen } from './EducationScreen';
-import { TasksScreen, LessonScreen } from './CampTabs';
+import { LessonScreen } from './CampTabs';
+import { TasksScreen } from './TasksScreen';
 import { ClassScreen } from './ClassScreen';
 import { RoomScreen } from './RoomScreen';
 import { ScheduleScreen } from './ScheduleScreen';

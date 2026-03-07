@@ -107,3 +107,45 @@ export interface GenerationResources {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
+export type JobExperienceGroupRole = '담임' | '수업' | '서포트' | '리더' | '매니저' | '부매니저';
+
+export interface TaskAttachment {
+  type: 'image' | 'video' | 'link' | 'file';
+  url: string;
+  label: string;
+  thumbnail?: string;
+}
+
+export interface TaskCompletion {
+  userId: string;
+  userName: string;
+  userRole: JobExperienceGroupRole;
+  completedAt: Timestamp;
+}
+
+// 캘린더 기반 업무
+export interface Task {
+  id: string;
+  campCode: string;
+  title: string;
+  description: string;
+  targetRoles: JobExperienceGroupRole[];
+  
+  // 날짜 및 시간 (단순화)
+  date: Timestamp;          // 업무 날짜
+  time?: string;            // 시간 (HH:mm 형식, 옵션)
+  
+  estimatedDuration?: {
+    value: number;
+    unit: 'minutes' | 'hours';
+  };
+  
+  attachments?: TaskAttachment[];
+  priority: 'low' | 'medium' | 'high';
+  completions: TaskCompletion[];
+  
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdBy: string;
+}

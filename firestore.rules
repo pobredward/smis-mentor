@@ -2,6 +2,53 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 헬퍼 함수: 인증된 사용자 확인
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 헬퍼 함수: Admin 권한 확인
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // 헬퍼 함수: 사용자가 특정 캠프 코드에 접근 가능한지 확인
+    function hasAccessToCamp(campCode) {
+      return isSignedIn() && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.jobExperiences != null
+      );
+    }
+
+    // 캠프 업무 (campTasks) 규칙
+    match /campTasks/{taskId} {
+      // 읽기: 인증된 사용자만 (역할별 필터링은 클라이언트에서 처리)
+      allow read: if isSignedIn();
+
+      // 생성: Admin만 가능
+      allow create: if isAdmin() && 
+        request.resource.data.campCode != null &&
+        request.resource.data.title != null &&
+        request.resource.data.targetRoles != null &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      // 수정: Admin만 가능 또는 자신의 완료 상태만 변경 가능
+      allow update: if isAdmin() || 
+        (isSignedIn() && 
+         // 완료 상태 변경만 허용 (다른 필드는 변경 불가)
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completions', 'updatedAt']) &&
+         // completions 배열에 자신의 userId만 추가/제거 가능
+         request.resource.data.campCode == resource.data.campCode &&
+         request.resource.data.title == resource.data.title
+        );
+
+      // 삭제: Admin만 가능
+      allow delete: if isAdmin();
+    }
+
+    // 나머지 컬렉션 (기존 규칙 유지 - 임시로 모두 허용)
     match /{document=**} {
       allow read, write: if true;
     }
