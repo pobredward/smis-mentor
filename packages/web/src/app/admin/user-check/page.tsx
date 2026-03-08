@@ -26,11 +26,9 @@ export default function UserCheck() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showAllGenerations, setShowAllGenerations] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<string>('all'); // 추가: role 필터
+  const [selectedRole, setSelectedRole] = useState<string>('mentor');
   
-  // 추가: role 필터 옵션
   const roleFilters = [
-    { value: 'all', label: '전체' },
     { value: 'mentor', label: '멘토' },
     { value: 'foreign', label: '원어민' }
   ];
@@ -181,9 +179,7 @@ export default function UserCheck() {
         });
         
         // role 필터링 적용 후 그룹별로 분류
-        const filteredUsers = selectedRole === 'all' 
-          ? enrichedUsers 
-          : enrichedUsers.filter(user => user.role === selectedRole);
+        const filteredUsers = enrichedUsers.filter(user => user.role === selectedRole);
         
         // 사용자를 그룹별로 분류
         filteredUsers.forEach(user => {

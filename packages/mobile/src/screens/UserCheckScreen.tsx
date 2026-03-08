@@ -103,11 +103,9 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
   const [groupedUsers, setGroupedUsers] = useState<Record<string, UserWithGroupInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserWithGroupInfo | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>('all'); // 추가: role 필터
+  const [selectedRole, setSelectedRole] = useState<string>('mentor');
   
-  // 추가: role 필터 옵션
   const roleFilters = [
-    { value: 'all', label: '전체' },
     { value: 'mentor', label: '멘토' },
     { value: 'foreign', label: '원어민' }
   ];
@@ -225,9 +223,7 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
         });
 
         // role 필터링 적용
-        const filteredUsers = selectedRole === 'all' 
-          ? enrichedUsers 
-          : enrichedUsers.filter((user: UserWithGroupInfo) => user.role === selectedRole);
+        const filteredUsers = enrichedUsers.filter((user: UserWithGroupInfo) => user.role === selectedRole);
 
         setUsers(filteredUsers);
 
