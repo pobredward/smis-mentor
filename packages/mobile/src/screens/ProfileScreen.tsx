@@ -16,9 +16,10 @@ import { jobCodesService, JobCode } from '../services';
 import { SignInScreen } from './SignInScreen';
 import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
+import { SignUpStep3Screen } from './SignUpStep3Screen';
 import { ProfileEditScreen } from './ProfileEditScreen';
 
-type Screen = 'profile' | 'signin' | 'signup-step1' | 'signup-step2' | 'profile-edit';
+type Screen = 'profile' | 'signin' | 'signup-step1' | 'signup-step2' | 'signup-step3' | 'profile-edit';
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const { currentUser, userData, loading, updateActiveJobCode } = useAuth();
@@ -28,6 +29,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     phone?: string;
     email?: string;
     password?: string;
+    university?: string;
+    grade?: number;
+    isOnLeave?: boolean | null;
+    major1?: string;
+    major2?: string;
+    role?: 'mentor' | 'foreign';
   }>({});
   const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
   const [loadingJobCodes, setLoadingJobCodes] = useState(false);
@@ -103,10 +110,21 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
   const handleSignUpStep2Next = (data: { email: string; password: string }) => {
     setSignUpData({ ...signUpData, ...data });
-    // TODO: Implement education and details screens
+    setCurrentScreen('signup-step3');
+  };
+
+  const handleSignUpStep3Next = (data: {
+    university: string;
+    grade: number;
+    isOnLeave: boolean | null;
+    major1: string;
+    major2?: string;
+    role: 'mentor' | 'foreign';
+  }) => {
+    setSignUpData({ ...signUpData, ...data });
     Alert.alert(
       '회원가입 진행',
-      '회원가입 3, 4단계는 웹에서 진행해주세요.\n현재는 로그인 기능만 모바일에서 지원됩니다.',
+      '회원가입 4단계는 웹에서 진행해주세요.\n현재는 로그인 기능만 모바일에서 지원됩니다.',
       [
         {
           text: '확인',
@@ -430,6 +448,17 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           phone={signUpData.phone || ''}
           onNext={handleSignUpStep2Next}
           onBack={() => setCurrentScreen('signup-step1')}
+        />
+      );
+    case 'signup-step3':
+      return (
+        <SignUpStep3Screen
+          name={signUpData.name || ''}
+          phone={signUpData.phone || ''}
+          email={signUpData.email || ''}
+          password={signUpData.password || ''}
+          onNext={handleSignUpStep3Next}
+          onBack={() => setCurrentScreen('signup-step2')}
         />
       );
     case 'signin':

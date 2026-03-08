@@ -26,10 +26,14 @@
     "build:mobile:prod:ios": "npm run build:prod:ios --workspace=packages/mobile",
     "build:mobile:prod:android": "npm run build:prod:android --workspace=packages/mobile",
     "build:mobile:prod:all": "npm run build:prod:all --workspace=packages/mobile",
+    "migrate:user-roles": "ts-node scripts/migrate-user-roles.ts",
     "lint": "npm run lint --workspaces",
     "clean": "rm -rf node_modules packages/*/node_modules functions/node_modules"
   },
   "devDependencies": {
+    "@types/node": "^25.3.5",
+    "firebase-admin": "^13.7.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }
 }

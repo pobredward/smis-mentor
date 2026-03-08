@@ -30,6 +30,7 @@ type JobExperienceInput = {
 type FormData = {
   name: string;
   phoneNumber: string;
+  role: 'mentor_temp' | 'foreign_temp' | 'admin';
   jobExperiences: JobExperienceInput[];
 };
 
@@ -42,6 +43,12 @@ const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
   value: role,
   label: role
 }));
+
+const roleOptions = [
+  { value: 'mentor_temp', label: '멘토 (회원가입 전)' },
+  { value: 'foreign_temp', label: '원어민 (회원가입 전)' },
+  { value: 'admin', label: '관리자' },
+];
 
 export function UserGenerateScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(false);
@@ -59,6 +66,7 @@ export function UserGenerateScreen({ navigation }: any) {
     defaultValues: {
       name: '',
       phoneNumber: '',
+      role: 'mentor_temp',
       jobExperiences: [
         {
           generation: '',
@@ -116,7 +124,8 @@ export function UserGenerateScreen({ navigation }: any) {
         jobExperienceIds,
         jobExperienceGroups,
         jobExperienceGroupRoles,
-        jobExperienceClassCodes
+        jobExperienceClassCodes,
+        data.role
       );
 
       Alert.alert('성공', '임시 사용자가 생성되었습니다.', [
@@ -195,6 +204,34 @@ export function UserGenerateScreen({ navigation }: any) {
             {errors.phoneNumber && (
               <Text style={styles.errorText}>{errors.phoneNumber.message}</Text>
             )}
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>역할 *</Text>
+            <Controller
+              control={control}
+              name="role"
+              render={({ field: { onChange, value } }) => (
+                <TouchableOpacity
+                  style={styles.picker}
+                  onPress={() => {
+                    Alert.alert(
+                      '역할 선택',
+                      '',
+                      roleOptions.map((role) => ({
+                        text: role.label,
+                        onPress: () => onChange(role.value),
+                      }))
+                    );
+                  }}
+                >
+                  <Text style={styles.pickerText}>
+                    {roleOptions.find((r) => r.value === value)?.label || '멘토 (회원가입 전)'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color="#6b7280" />
+                </TouchableOpacity>
+              )}
+            />
           </View>
 
           <View style={styles.sectionHeader}>

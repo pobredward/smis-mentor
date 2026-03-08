@@ -19,7 +19,7 @@ export interface User {
   password: string;
   address: string;
   addressDetail: string;
-  role: 'user' | 'mentor' | 'admin';
+  role: 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp' | 'admin';
   jobExperiences?: Array<{
     id: string,
     group: JobGroup,

@@ -20,14 +20,14 @@ export function UserManageScreen({ navigation }: any) {
   const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
   const [searchText, setSearchText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedRole, setSelectedRole] = useState<string>('all');
+  const [selectedRole, setSelectedRole] = useState<string>('mentor');
 
   const roleFilters = [
-    { value: 'all', label: '전체' },
-    { value: 'user', label: '사용자' },
     { value: 'mentor', label: '멘토' },
     { value: 'foreign', label: '원어민' },
     { value: 'admin', label: '관리자' },
+    { value: 'mentor_temp', label: '멘토(임시)' },
+    { value: 'foreign_temp', label: '원어민(임시)' },
   ];
 
   useEffect(() => {
@@ -61,10 +61,8 @@ export function UserManageScreen({ navigation }: any) {
   const filterUsers = () => {
     let filtered = [...users];
 
-    // 역할 필터링
-    if (selectedRole !== 'all') {
-      filtered = filtered.filter((user) => user.role === selectedRole);
-    }
+    // 역할 필터링 (항상 적용)
+    filtered = filtered.filter((user) => user.role === selectedRole);
 
     // 검색어 필터링
     if (searchText.trim()) {
@@ -86,6 +84,12 @@ export function UserManageScreen({ navigation }: any) {
         return '#9333ea';
       case 'mentor':
         return '#3b82f6';
+      case 'foreign':
+        return '#10b981';
+      case 'mentor_temp':
+        return '#94a3b8';
+      case 'foreign_temp':
+        return '#94a3b8';
       default:
         return '#6b7280';
     }
@@ -97,6 +101,12 @@ export function UserManageScreen({ navigation }: any) {
         return '관리자';
       case 'mentor':
         return '멘토';
+      case 'foreign':
+        return '원어민';
+      case 'mentor_temp':
+        return '멘토(임시)';
+      case 'foreign_temp':
+        return '원어민(임시)';
       default:
         return '사용자';
     }

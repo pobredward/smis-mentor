@@ -1,6 +1,6 @@
 // 권한 관리 타입
 
-export type UserRole = 'admin' | 'mentor' | 'user' | 'foreign';
+export type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp';
 
 export interface Permission {
   // ST시트 권한
@@ -65,7 +65,21 @@ export const RolePermissions: Record<UserRole, Permission> = {
     canManageApplications: false,
     canEvaluate: false,
   },
-  user: {
+  mentor_temp: {  // 멘토 (회원가입 전): 권한 없음
+    canViewAllStudents: false,
+    canViewOwnStudents: false,
+    canEditStudentData: false,
+    canSyncSTSheet: false,
+    canManageCamp: false,
+    canManageEducation: false,
+    canManageTasks: false,
+    canManageRooms: false,
+    canManagePatients: false,
+    canManageJobBoards: false,
+    canManageApplications: false,
+    canEvaluate: false,
+  },
+  foreign_temp: {  // 원어민 (회원가입 전): 권한 없음
     canViewAllStudents: false,
     canViewOwnStudents: false,
     canEditStudentData: false,

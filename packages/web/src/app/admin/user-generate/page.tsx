@@ -24,9 +24,16 @@ const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
   label: role
 }));
 
+const roleOptions = [
+  { value: 'mentor_temp', label: '멘토 (회원가입 전)' },
+  { value: 'foreign_temp', label: '원어민 (회원가입 전)' },
+  { value: 'admin', label: '관리자' },
+];
+
 const tempUserSchema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
   phoneNumber: z.string().min(10, '유효한 휴대폰 번호를 입력해주세요.').max(11, '유효한 휴대폰 번호를 입력해주세요.'),
+  role: z.enum(['mentor_temp', 'foreign_temp', 'admin']),
   jobExperiences: z.array(
     z.object({
       value: z.string().min(1, '참가 이력을 선택해주세요.'),
@@ -65,6 +72,7 @@ export default function UserGenerate() {
   } = useForm<TempUserFormValues>({
     resolver: zodResolver(tempUserSchema),
     defaultValues: {
+      role: 'mentor_temp',
       jobExperiences: [{ value: '', group: 'junior', groupRole: '담임', classCode: '' }],
     },
   });
@@ -144,12 +152,13 @@ export default function UserGenerate() {
       const jobExperienceGroups = data.jobExperiences.map(exp => exp.group as JobGroup);
       const jobExperienceGroupRoles = data.jobExperiences.map(exp => exp.groupRole as JobExperienceGroupRole);
       const jobExperienceClassCodes = data.jobExperiences.map(exp => exp.classCode);
-      await createTempUser(db, data.name, data.phoneNumber, jobExperienceIds, jobExperienceGroups, jobExperienceGroupRoles, jobExperienceClassCodes);
+      await createTempUser(db, data.name, data.phoneNumber, jobExperienceIds, jobExperienceGroups, jobExperienceGroupRoles, jobExperienceClassCodes, data.role as 'mentor_temp' | 'foreign_temp' | 'admin');
       toast.success('임시 사용자가 성공적으로 생성되었습니다.');
       setIsSuccess(true);
       reset({
         name: '',
         phoneNumber: '',
+        role: 'mentor_temp',
         jobExperiences: [{ value: '', group: 'junior', groupRole: '담임', classCode: '' }],
       });
       setSelectedGenerations([]);
@@ -233,6 +242,27 @@ export default function UserGenerate() {
               />
             )}
           />
+
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-medium mb-1">
+              역할
+            </label>
+            <select
+              className={`w-full px-3 py-2 border ${
+                errors.role ? 'border-red-500' : 'border-gray-300'
+              } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+              {...register('role')}
+            >
+              {roleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {errors.role && (
+              <p className="mt-1 text-sm text-red-600">{errors.role.message}</p>
+            )}
+          </div>
 
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-medium mb-1">

@@ -84,7 +84,8 @@ export const createTempUser = async (
   jobExperienceIds: string[],
   jobExperienceGroups: string[] = [],
   jobExperienceGroupRoles: string[] = [],
-  jobExperienceClassCodes: (string | undefined)[] = []
+  jobExperienceClassCodes: (string | undefined)[] = [],
+  role: 'mentor_temp' | 'foreign_temp' | 'admin' = 'mentor_temp'
 ) => {
   try {
     // 동일한 이름과 전화번호를 가진 사용자가 있는지 확인
@@ -123,7 +124,7 @@ export const createTempUser = async (
       name,
       phoneNumber,
       phone: phoneNumber,
-      role: 'user',
+      role,
       jobExperiences,
       address: '',
       addressDetail: '',

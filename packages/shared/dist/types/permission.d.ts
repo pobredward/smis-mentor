@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'mentor' | 'user' | 'foreign';
+export type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp';
 export interface Permission {
     canViewAllStudents: boolean;
     canViewOwnStudents: boolean;

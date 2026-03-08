@@ -61,7 +61,7 @@ export default function UserManage() {
   const [filteredJobCodes, setFilteredJobCodes] = useState<JobCodeWithId[]>([]);
   const [showUserList, setShowUserList] = useState(true);
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<string>('all');
+  const [selectedRole, setSelectedRole] = useState<string>('mentor');
   const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
@@ -183,9 +183,12 @@ export default function UserManage() {
   ];
 
   const roleFilters = [
-    { value: 'all', label: '전체' },
-    { value: 'user', label: '사용자' },
     { value: 'mentor', label: '멘토' },
+    { value: 'foreign', label: '원어민' },
+    { value: 'admin', label: '관리자' },
+    { value: 'mentor_temp', label: '멘토 (임시)' },
+    { value: 'foreign_temp', label: '원어민 (임시)' },
+  ];
     { value: 'admin', label: '관리자' }
   ];
 
@@ -230,12 +233,10 @@ export default function UserManage() {
   // 검색어 및 역할 필터링 적용
   useEffect(() => {
     let filtered = [...users];
-    
-    // 역할 필터링
-    if (selectedRole !== 'all') {
-      filtered = filtered.filter(user => user.role === selectedRole);
-    }
-    
+
+    // 역할 필터링 (항상 적용)
+    filtered = filtered.filter(user => user.role === selectedRole);
+
     // 검색어 필터링
     if (searchTerm.trim()) {
       filtered = filtered.filter(user => 
@@ -768,9 +769,9 @@ export default function UserManage() {
       }
       
       // 검색어 필터링 다시 적용
-      setFilteredUsers(sortedUsers.filter(user => 
-        selectedRole === 'all' || user.role === selectedRole
-      ).filter(user => 
+      setFilteredUsers(sortedUsers.filter(user =>
+        user.role === selectedRole
+      ).filter(user =>
         !searchTerm.trim() || 
         (user.name?.toLowerCase?.() ?? '').includes(searchTerm.toLowerCase()) ||
         (user.email?.toLowerCase?.() ?? '').includes(searchTerm.toLowerCase()) ||
@@ -855,7 +856,7 @@ export default function UserManage() {
                 
                 {filteredUsers.length === 0 ? (
                   <div className="p-6 text-center text-gray-500">
-                    {searchTerm || selectedRole !== 'all' ? '검색 결과가 없습니다.' : '사용자가 없습니다.'}
+                    {searchTerm ? '검색 결과가 없습니다.' : '사용자가 없습니다.'}
                   </div>
                 ) : (
                   <div className="divide-y overflow-y-auto max-h-[calc(100vh-250px)]">
@@ -886,10 +887,16 @@ export default function UserManage() {
                               <span key={`role-${user.userId || index}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                 user.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
+                                user.role === 'foreign' ? 'bg-teal-100 text-teal-800' :
+                                user.role === 'mentor_temp' ? 'bg-gray-100 text-gray-600' :
+                                user.role === 'foreign_temp' ? 'bg-gray-100 text-gray-600' :
                                 'bg-gray-100 text-gray-800'
                               }`}>
-                                {user.role === 'admin' ? '관리자' : 
-                                  user.role === 'mentor' ? '멘토' : '사용자'}
+                                {user.role === 'admin' ? '관리자' :
+                                 user.role === 'mentor' ? '멘토' :
+                                 user.role === 'foreign' ? '원어민' :
+                                 user.role === 'mentor_temp' ? '멘토 (임시)' :
+                                 user.role === 'foreign_temp' ? '원어민 (임시)' : '사용자'}
                               </span>
                               <span key={`status-${user.userId || index}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 user.status === 'active' ? 'bg-green-100 text-green-800' :
@@ -1074,9 +1081,11 @@ export default function UserManage() {
                             onChange={handleEditFormChange}
                             className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
-                            <option value="user">사용자</option>
                             <option value="mentor">멘토</option>
+                            <option value="foreign">원어민</option>
                             <option value="admin">관리자</option>
+                            <option value="mentor_temp">멘토 (임시)</option>
+                            <option value="foreign_temp">원어민 (임시)</option>
                           </select>
                         </div>
 
@@ -1273,10 +1282,16 @@ export default function UserManage() {
                               <span key={`detail-role-${selectedUser.userId}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                 selectedUser.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
+                                selectedUser.role === 'foreign' ? 'bg-teal-100 text-teal-800' :
+                                selectedUser.role === 'mentor_temp' ? 'bg-gray-100 text-gray-600' :
+                                selectedUser.role === 'foreign_temp' ? 'bg-gray-100 text-gray-600' :
                                 'bg-gray-100 text-gray-800'
                               }`}>
-                                {selectedUser.role === 'admin' ? '관리자' : 
-                                 selectedUser.role === 'mentor' ? '멘토' : '사용자'}
+                                {selectedUser.role === 'admin' ? '관리자' :
+                                 selectedUser.role === 'mentor' ? '멘토' :
+                                 selectedUser.role === 'foreign' ? '원어민' :
+                                 selectedUser.role === 'mentor_temp' ? '멘토 (임시)' :
+                                 selectedUser.role === 'foreign_temp' ? '원어민 (임시)' : '사용자'}
                               </span>
                               <span key={`detail-status-${selectedUser.userId}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.status === 'active' ? 'bg-green-100 text-green-800' :

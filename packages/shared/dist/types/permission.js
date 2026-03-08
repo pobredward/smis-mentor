@@ -42,7 +42,21 @@ export const RolePermissions = {
         canManageApplications: false,
         canEvaluate: false,
     },
-    user: {
+    mentor_temp: {
+        canViewAllStudents: false,
+        canViewOwnStudents: false,
+        canEditStudentData: false,
+        canSyncSTSheet: false,
+        canManageCamp: false,
+        canManageEducation: false,
+        canManageTasks: false,
+        canManageRooms: false,
+        canManagePatients: false,
+        canManageJobBoards: false,
+        canManageApplications: false,
+        canEvaluate: false,
+    },
+    foreign_temp: {
         canViewAllStudents: false,
         canViewOwnStudents: false,
         canEditStudentData: false,

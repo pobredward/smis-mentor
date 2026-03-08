@@ -1,6 +1,6 @@
 import { collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, Timestamp, } from 'firebase/firestore';
 // ==================== 임시 사용자 생성 ====================
-export const createTempUser = async (db, name, phoneNumber, jobExperienceIds, jobExperienceGroups = [], jobExperienceGroupRoles = [], jobExperienceClassCodes = []) => {
+export const createTempUser = async (db, name, phoneNumber, jobExperienceIds, jobExperienceGroups = [], jobExperienceGroupRoles = [], jobExperienceClassCodes = [], role = 'mentor_temp') => {
     try {
         // 동일한 이름과 전화번호를 가진 사용자가 있는지 확인
         const usersRef = collection(db, 'users');
@@ -27,7 +27,7 @@ export const createTempUser = async (db, name, phoneNumber, jobExperienceIds, jo
             name,
             phoneNumber,
             phone: phoneNumber,
-            role: 'user',
+            role,
             jobExperiences,
             address: '',
             addressDetail: '',

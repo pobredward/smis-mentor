@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type UserRole = 'admin' | 'mentor' | 'member' | 'foreign';
+export type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp';
 export type UserStatus = 'active' | 'deactivated' | 'temp';
 
 export interface JobExperience {

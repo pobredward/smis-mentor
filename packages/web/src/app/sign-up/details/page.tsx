@@ -48,6 +48,7 @@ export default function SignUpDetails() {
   const isOnLeave = searchParams.get('isOnLeave');
   const major1 = searchParams.get('major1') ? decodeURIComponent(searchParams.get('major1') as string) : null;
   const major2 = searchParams.get('major2') ? decodeURIComponent(searchParams.get('major2') as string) : null;
+  const role = searchParams.get('role') as 'mentor' | 'foreign' | null;
 
   const {
     register,
@@ -126,6 +127,20 @@ export default function SignUpDetails() {
         const gradeNum = parseInt(grade, 10);
         const isOnLeaveVal = isOnLeave === 'true';
 
+        // role 결정 로직: 회원가입 시 선택한 role이 있으면 사용, 없으면 임시 사용자의 role을 정식 role로 변환
+        let finalRole = role;
+        if (!finalRole && existingUser.role) {
+          // mentor_temp -> mentor, foreign_temp -> foreign 변환
+          if (existingUser.role === 'mentor_temp') {
+            finalRole = 'mentor';
+          } else if (existingUser.role === 'foreign_temp') {
+            finalRole = 'foreign';
+          } else {
+            finalRole = existingUser.role;
+          }
+        }
+        if (!finalRole) finalRole = 'mentor'; // 기본값
+
         // 기존 임시 사용자 문서 업데이트
         await updateUser(existingUser.userId, {
           email,
@@ -141,7 +156,7 @@ export default function SignUpDetails() {
           selfIntroduction: '',
           jobMotivation: '',
           status: 'active',
-          role: 'mentor',
+          role: finalRole,
           isEmailVerified: false,
           updatedAt: now,
           lastLoginAt: now,
@@ -180,7 +195,7 @@ export default function SignUpDetails() {
           referralPath: referralPathValue,
           referrerName: data.referrerName,
           profileImage: '',
-          role: 'mentor',
+          role: role || 'mentor',
           status: 'active',
           isEmailVerified: false,
           jobExperiences: [],

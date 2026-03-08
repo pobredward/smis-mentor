@@ -1,5 +1,5 @@
 import { Firestore } from 'firebase/firestore';
-export declare const createTempUser: (db: Firestore, name: string, phoneNumber: string, jobExperienceIds: string[], jobExperienceGroups?: string[], jobExperienceGroupRoles?: string[], jobExperienceClassCodes?: (string | undefined)[]) => Promise<{
+export declare const createTempUser: (db: Firestore, name: string, phoneNumber: string, jobExperienceIds: string[], jobExperienceGroups?: string[], jobExperienceGroupRoles?: string[], jobExperienceClassCodes?: (string | undefined)[], role?: "mentor_temp" | "foreign_temp" | "admin") => Promise<{
     success: boolean;
 }>;
 export declare const adminGetAllUsers: (db: Firestore) => Promise<any[]>;

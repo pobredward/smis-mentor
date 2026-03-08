@@ -803,7 +803,7 @@ export const createTempUser = async (
       name,
       phoneNumber,
       phone: phoneNumber,
-      role: 'user',
+      role: 'mentor_temp',
       jobExperiences,
       password: '',
       address: '',
