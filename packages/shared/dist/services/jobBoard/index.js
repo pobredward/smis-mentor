@@ -1,41 +1,25 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.cancelApplication = exports.updateApplication = exports.getApplicationsByJobBoardId = exports.getApplicationsByUserId = exports.createApplication = exports.deleteJobBoard = exports.updateJobBoard = exports.getActiveJobBoards = exports.getAllJobBoards = exports.getJobBoardById = exports.createJobBoard = void 0;
-const firestore_1 = require("firebase/firestore");
+import { collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, Timestamp, } from 'firebase/firestore';
 // ==================== JobBoard 관련 서비스 ====================
-const createJobBoard = async (db, jobBoardData) => {
-    const now = firestore_1.Timestamp.now();
-    const docRef = await (0, firestore_1.addDoc)((0, firestore_1.collection)(db, 'jobBoards'), {
-        ...jobBoardData,
-        interviewPassword: jobBoardData.interviewPassword || '',
-        interviewBaseDuration: jobBoardData.interviewBaseDuration || 30,
-        interviewBaseLink: jobBoardData.interviewBaseLink || '',
-        interviewBaseNotes: jobBoardData.interviewBaseNotes || '',
-        createdAt: now,
-        updatedAt: now,
-    });
+export const createJobBoard = async (db, jobBoardData) => {
+    const now = Timestamp.now();
+    const docRef = await addDoc(collection(db, 'jobBoards'), Object.assign(Object.assign({}, jobBoardData), { interviewPassword: jobBoardData.interviewPassword || '', interviewBaseDuration: jobBoardData.interviewBaseDuration || 30, interviewBaseLink: jobBoardData.interviewBaseLink || '', interviewBaseNotes: jobBoardData.interviewBaseNotes || '', createdAt: now, updatedAt: now }));
     return docRef.id;
 };
-exports.createJobBoard = createJobBoard;
-const getJobBoardById = async (db, jobBoardId) => {
-    const jobBoardDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, 'jobBoards', jobBoardId));
+export const getJobBoardById = async (db, jobBoardId) => {
+    const jobBoardDoc = await getDoc(doc(db, 'jobBoards', jobBoardId));
     if (!jobBoardDoc.exists())
         return null;
-    return { id: jobBoardDoc.id, ...jobBoardDoc.data() };
+    return Object.assign({ id: jobBoardDoc.id }, jobBoardDoc.data());
 };
-exports.getJobBoardById = getJobBoardById;
-const getAllJobBoards = async (db) => {
+export const getAllJobBoards = async (db) => {
     try {
-        const querySnapshot = await (0, firestore_1.getDocs)((0, firestore_1.collection)(db, 'jobBoards'));
+        const querySnapshot = await getDocs(collection(db, 'jobBoards'));
         const jobBoards = await Promise.all(querySnapshot.docs.map(async (docSnapshot) => {
+            var _a;
             const jobBoardData = docSnapshot.data();
-            const jobCodeDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, 'jobCodes', jobBoardData.refJobCodeId));
+            const jobCodeDoc = await getDoc(doc(db, 'jobCodes', jobBoardData.refJobCodeId));
             const jobCodeData = jobCodeDoc.data();
-            return {
-                id: docSnapshot.id,
-                ...jobBoardData,
-                korea: jobCodeData?.korea ?? true,
-            };
+            return Object.assign(Object.assign({ id: docSnapshot.id }, jobBoardData), { korea: (_a = jobCodeData === null || jobCodeData === void 0 ? void 0 : jobCodeData.korea) !== null && _a !== void 0 ? _a : true });
         }));
         return jobBoards;
     }
@@ -44,19 +28,18 @@ const getAllJobBoards = async (db) => {
         throw error;
     }
 };
-exports.getAllJobBoards = getAllJobBoards;
-const getActiveJobBoards = async (db) => {
+export const getActiveJobBoards = async (db) => {
     try {
-        const jobBoardsRef = (0, firestore_1.collection)(db, 'jobBoards');
-        const q = (0, firestore_1.query)(jobBoardsRef, (0, firestore_1.where)('status', '==', 'active'));
-        const querySnapshot = await (0, firestore_1.getDocs)(q);
+        const jobBoardsRef = collection(db, 'jobBoards');
+        const q = query(jobBoardsRef, where('status', '==', 'active'));
+        const querySnapshot = await getDocs(q);
         const jobCodeIds = new Set();
         querySnapshot.docs.forEach((doc) => {
             const data = doc.data();
             jobCodeIds.add(data.refJobCodeId);
         });
         const jobCodePromises = Array.from(jobCodeIds).map(async (id) => {
-            const jobCodeDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, 'jobCodes', id));
+            const jobCodeDoc = await getDoc(doc(db, 'jobCodes', id));
             return {
                 id,
                 data: jobCodeDoc.data(),
@@ -68,13 +51,10 @@ const getActiveJobBoards = async (db) => {
             jobCodeMap.set(id, data);
         });
         const jobBoards = querySnapshot.docs.map((docSnapshot) => {
+            var _a;
             const jobBoardData = docSnapshot.data();
             const jobCodeData = jobCodeMap.get(jobBoardData.refJobCodeId);
-            return {
-                id: docSnapshot.id,
-                ...jobBoardData,
-                korea: jobCodeData?.korea ?? true,
-            };
+            return Object.assign(Object.assign({ id: docSnapshot.id }, jobBoardData), { korea: (_a = jobCodeData === null || jobCodeData === void 0 ? void 0 : jobCodeData.korea) !== null && _a !== void 0 ? _a : true });
         });
         return jobBoards;
     }
@@ -83,24 +63,18 @@ const getActiveJobBoards = async (db) => {
         throw error;
     }
 };
-exports.getActiveJobBoards = getActiveJobBoards;
-const updateJobBoard = async (db, jobBoardId, jobBoardData) => {
-    await (0, firestore_1.updateDoc)((0, firestore_1.doc)(db, 'jobBoards', jobBoardId), jobBoardData);
+export const updateJobBoard = async (db, jobBoardId, jobBoardData) => {
+    await updateDoc(doc(db, 'jobBoards', jobBoardId), jobBoardData);
     return jobBoardId;
 };
-exports.updateJobBoard = updateJobBoard;
-const deleteJobBoard = async (db, jobBoardId) => {
-    return await (0, firestore_1.deleteDoc)((0, firestore_1.doc)(db, 'jobBoards', jobBoardId));
+export const deleteJobBoard = async (db, jobBoardId) => {
+    return await deleteDoc(doc(db, 'jobBoards', jobBoardId));
 };
-exports.deleteJobBoard = deleteJobBoard;
 // ==================== ApplicationHistory 관련 서비스 ====================
-const createApplication = async (db, applicationData) => {
+export const createApplication = async (db, applicationData) => {
     try {
-        const docRef = await (0, firestore_1.addDoc)((0, firestore_1.collection)(db, 'applicationHistories'), {
-            ...applicationData,
-            applicationDate: firestore_1.Timestamp.now(),
-        });
-        await (0, firestore_1.updateDoc)((0, firestore_1.doc)(db, 'applicationHistories', docRef.id), {
+        const docRef = await addDoc(collection(db, 'applicationHistories'), Object.assign(Object.assign({}, applicationData), { applicationDate: Timestamp.now() }));
+        await updateDoc(doc(db, 'applicationHistories', docRef.id), {
             applicationHistoryId: docRef.id,
         });
         return docRef.id;
@@ -110,23 +84,16 @@ const createApplication = async (db, applicationData) => {
         throw error;
     }
 };
-exports.createApplication = createApplication;
-const getApplicationsByUserId = async (db, userId) => {
+export const getApplicationsByUserId = async (db, userId) => {
     try {
-        const q = (0, firestore_1.query)((0, firestore_1.collection)(db, 'applicationHistories'), (0, firestore_1.where)('refUserId', '==', userId)); // userId -> refUserId로 수정
-        const querySnapshot = await (0, firestore_1.getDocs)(q);
+        const q = query(collection(db, 'applicationHistories'), where('refUserId', '==', userId)); // userId -> refUserId로 수정
+        const querySnapshot = await getDocs(q);
         const applications = await Promise.all(querySnapshot.docs.map(async (docSnapshot) => {
             const applicationData = docSnapshot.data();
-            const jobBoardDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, 'jobBoards', applicationData.refJobBoardId || applicationData.jobBoardId) // refJobBoardId 우선 사용
+            const jobBoardDoc = await getDoc(doc(db, 'jobBoards', applicationData.refJobBoardId || applicationData.jobBoardId) // refJobBoardId 우선 사용
             );
             const jobBoardData = jobBoardDoc.data();
-            return {
-                id: docSnapshot.id,
-                ...applicationData,
-                jobBoardName: jobBoardData?.jobBoardName || '알 수 없음',
-                generation: jobBoardData?.generation || '',
-                code: jobBoardData?.code || '',
-            };
+            return Object.assign(Object.assign({ id: docSnapshot.id }, applicationData), { jobBoardName: (jobBoardData === null || jobBoardData === void 0 ? void 0 : jobBoardData.jobBoardName) || '알 수 없음', generation: (jobBoardData === null || jobBoardData === void 0 ? void 0 : jobBoardData.generation) || '', code: (jobBoardData === null || jobBoardData === void 0 ? void 0 : jobBoardData.code) || '' });
         }));
         return applications;
     }
@@ -135,13 +102,13 @@ const getApplicationsByUserId = async (db, userId) => {
         throw error;
     }
 };
-exports.getApplicationsByUserId = getApplicationsByUserId;
-const getApplicationsByJobBoardId = async (db, jobBoardId) => {
+export const getApplicationsByJobBoardId = async (db, jobBoardId) => {
+    var _a;
     try {
         console.log(`🔍 [getApplicationsByJobBoardId] 공고 ID: ${jobBoardId} 조회 시작`);
-        console.log('📊 [getApplicationsByJobBoardId] db 객체:', db?.app?.name || 'db undefined');
-        const q = (0, firestore_1.query)((0, firestore_1.collection)(db, 'applicationHistories'), (0, firestore_1.where)('refJobBoardId', '==', jobBoardId));
-        const querySnapshot = await (0, firestore_1.getDocs)(q);
+        console.log('📊 [getApplicationsByJobBoardId] db 객체:', ((_a = db === null || db === void 0 ? void 0 : db.app) === null || _a === void 0 ? void 0 : _a.name) || 'db undefined');
+        const q = query(collection(db, 'applicationHistories'), where('refJobBoardId', '==', jobBoardId));
+        const querySnapshot = await getDocs(q);
         console.log(`📦 [getApplicationsByJobBoardId] 쿼리 결과: ${querySnapshot.size}개 문서 발견`);
         const applications = await Promise.all(querySnapshot.docs.map(async (docSnapshot) => {
             const applicationData = docSnapshot.data();
@@ -149,23 +116,11 @@ const getApplicationsByJobBoardId = async (db, jobBoardId) => {
             console.log(`👤 [getApplicationsByJobBoardId] 지원서 ID: ${docSnapshot.id}, refUserId: ${applicationData.refUserId}, userId: ${applicationData.userId}`);
             if (!userId) {
                 console.warn(`⚠️ [getApplicationsByJobBoardId] 지원서 ID ${docSnapshot.id}에 userId가 없습니다.`);
-                return {
-                    id: docSnapshot.id,
-                    ...applicationData,
-                    userName: '알 수 없음',
-                    userEmail: '',
-                    userPhone: '',
-                };
+                return Object.assign(Object.assign({ id: docSnapshot.id }, applicationData), { userName: '알 수 없음', userEmail: '', userPhone: '' });
             }
-            const userDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, 'users', userId));
+            const userDoc = await getDoc(doc(db, 'users', userId));
             const userData = userDoc.data();
-            return {
-                id: docSnapshot.id,
-                ...applicationData,
-                userName: userData?.name || '알 수 없음',
-                userEmail: userData?.email || '',
-                userPhone: userData?.phoneNumber || userData?.phone || '',
-            };
+            return Object.assign(Object.assign({ id: docSnapshot.id }, applicationData), { userName: (userData === null || userData === void 0 ? void 0 : userData.name) || '알 수 없음', userEmail: (userData === null || userData === void 0 ? void 0 : userData.email) || '', userPhone: (userData === null || userData === void 0 ? void 0 : userData.phoneNumber) || (userData === null || userData === void 0 ? void 0 : userData.phone) || '' });
         }));
         console.log(`✅ [getApplicationsByJobBoardId] 최종 반환: ${applications.length}명`);
         return applications;
@@ -175,14 +130,12 @@ const getApplicationsByJobBoardId = async (db, jobBoardId) => {
         throw error;
     }
 };
-exports.getApplicationsByJobBoardId = getApplicationsByJobBoardId;
-const updateApplication = async (db, applicationId, applicationData) => {
-    await (0, firestore_1.updateDoc)((0, firestore_1.doc)(db, 'applicationHistories', applicationId), applicationData);
+export const updateApplication = async (db, applicationId, applicationData) => {
+    await updateDoc(doc(db, 'applicationHistories', applicationId), applicationData);
 };
-exports.updateApplication = updateApplication;
-const cancelApplication = async (db, applicationId) => {
+export const cancelApplication = async (db, applicationId) => {
     try {
-        await (0, firestore_1.updateDoc)((0, firestore_1.doc)(db, 'applicationHistories', applicationId), {
+        await updateDoc(doc(db, 'applicationHistories', applicationId), {
             applicationStatus: 'cancelled',
         });
         return true;
@@ -192,4 +145,3 @@ const cancelApplication = async (db, applicationId) => {
         throw error;
     }
 };
-exports.cancelApplication = cancelApplication;

@@ -16,6 +16,7 @@ import { Timestamp, doc, getDoc, collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { JOB_EXPERIENCE_GROUP_ROLES, LEGACY_GROUP_REVERSE_MAP, getGroupLabel, JobExperienceGroupRole } from '@smis-mentor/shared';
 
 type EditFormData = {
   name?: string;
@@ -61,7 +62,7 @@ export default function UserManage() {
   const [showUserList, setShowUserList] = useState(true);
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('all');
-  const [selectedGroupRole, setSelectedGroupRole] = useState<'담임' | '수업' | '서포트' | '리더'>('담임');
+  const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
   const router = useRouter();
@@ -169,34 +170,24 @@ export default function UserManage() {
     }
   }, []);
 
-  const jobGroups = [
-    { value: 'junior', label: '주니어' },
-    { value: 'middle', label: '미들' },
-    { value: 'senior', label: '시니어' },
-    { value: 'spring', label: '스프링' },
-    { value: 'summer', label: '서머' },
-    { value: 'autumn', label: '어텀' },
-    { value: 'winter', label: '윈터' },
-    { value: 'common', label: '공통' },
-    { value: 'manager', label: '매니저' },
-  ];
+  const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
+    value,
+    label
+  })).concat([{ value: 'manager', label: '매니저' }]);
 
   const roleFilters = [
     { value: 'all', label: '전체' },
     { value: 'user', label: '사용자' },
     { value: 'mentor', label: '멘토' },
+    { value: 'foreign', label: '원어민' },
     { value: 'admin', label: '관리자' }
   ];
 
   // groupRole 옵션
-  const groupRoleOptions = [
-    { value: '담임', label: '담임' },
-    { value: '수업', label: '수업' },
-    { value: '서포트', label: '서포트' },
-    { value: '리더', label: '리더' },
-    { value: '매니저', label: '매니저' },
-    { value: '부매니저', label: '부매니저' },
-  ];
+  const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+    value: role,
+    label: role
+  }));
 
   // 사용자 목록 불러오기
   useEffect(() => {
@@ -587,15 +578,7 @@ export default function UserManage() {
                         jobCode.group === 'manager' ? 'bg-black-100 text-black-800' :
                         'bg-black-100 text-black-800'
                       }`}>
-                        {jobCode.group === 'junior' ? '주니어' :
-                         jobCode.group === 'middle' ? '미들' :
-                         jobCode.group === 'senior' ? '시니어' :
-                         jobCode.group === 'spring' ? '스프링' :
-                         jobCode.group === 'summer' ? '서머' :
-                         jobCode.group === 'autumn' ? '어텀' :
-                         jobCode.group === 'winter' ? '윈터' :
-                         jobCode.group === 'common' ? '공통' :
-                         '매니저'}
+                        {getGroupLabel(jobCode.group || '')}
                       </span>
                     )}
                     {groupRole && (
@@ -619,15 +602,7 @@ export default function UserManage() {
                     {jobCode.generation} {jobCode.code} - {jobCode.name}
                     {jobCode.group && (
                       <span className="ml-1">
-                        ({jobCode.group === 'junior' ? '주니어' :
-                         jobCode.group === 'middle' ? '미들' :
-                         jobCode.group === 'senior' ? '시니어' :
-                         jobCode.group === 'spring' ? '스프링' :
-                         jobCode.group === 'summer' ? '서머' :
-                         jobCode.group === 'autumn' ? '어텀' :
-                         jobCode.group === 'winter' ? '윈터' :
-                         jobCode.group === 'common' ? '공통' :
-                         '매니저'})
+                        ({getGroupLabel(jobCode.group)})
                       </span>
                     )}
                   </div>
@@ -696,7 +671,7 @@ export default function UserManage() {
             <div className="w-full md:w-1/4">
               <select
                 value={selectedGroupRole}
-                onChange={(e) => setSelectedGroupRole(e.target.value as '담임' | '수업' | '서포트' | '리더')}
+                onChange={(e) => setSelectedGroupRole(e.target.value as JobExperienceGroupRole)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {groupRoleOptions.map((role) => (
@@ -1061,6 +1036,7 @@ export default function UserManage() {
                           >
                             <option value="user">사용자</option>
                             <option value="mentor">멘토</option>
+                            <option value="foreign">원어민</option>
                             <option value="admin">관리자</option>
                           </select>
                         </div>
@@ -1258,10 +1234,12 @@ export default function UserManage() {
                               <span key={`detail-role-${selectedUser.userId}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                 selectedUser.role === 'mentor' ? 'bg-blue-100 text-blue-800' :
+                                selectedUser.role === 'foreign' ? 'bg-teal-100 text-teal-800' :
                                 'bg-gray-100 text-gray-800'
                               }`}>
-                                {selectedUser.role === 'admin' ? '관리자' : 
-                                 selectedUser.role === 'mentor' ? '멘토' : '사용자'}
+                                {selectedUser.role === 'admin' ? '관리자' :
+                                 selectedUser.role === 'mentor' ? '멘토' :
+                                 selectedUser.role === 'foreign' ? '원어민' : '사용자'}
                               </span>
                               <span key={`detail-status-${selectedUser.userId}`} className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.status === 'active' ? 'bg-green-100 text-green-800' :

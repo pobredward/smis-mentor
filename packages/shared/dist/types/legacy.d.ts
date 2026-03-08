@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import type { JobExperienceGroupRole } from './camp';
 export interface PartTimeJob {
     period: string;
     companyName: string;
@@ -119,7 +120,7 @@ export type JobExperience = {
     refGeneration: string;
     refCode: string;
 };
-export type JobExperienceGroupRole = '담임' | '수업' | '서포트' | '리더' | '매니저' | '부매니저';
+export type { JobExperienceGroupRole };
 export interface JobBoard {
     title: string;
     description: string;

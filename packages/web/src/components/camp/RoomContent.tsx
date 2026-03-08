@@ -7,8 +7,8 @@ import { stSheetService, jobCodesService, STSheetStudent, CampCode, CampType } f
 // 주민등록번호 마스킹 함수
 const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: string): string => {
   if (!ssn) return '-';
-  // 관리자 또는 부매니저는 전체 공개
-  if (isAdmin || groupRole === '부매니저') return ssn;
+  // 관리자만 전체 공개
+  if (isAdmin) return ssn;
   // 형식: 980619-1****** (앞 6자리 + - + 첫번째 숫자 + 나머지 *)
   const parts = ssn.split('-');
   if (parts.length !== 2) return ssn; // 형식이 다르면 원본 반환

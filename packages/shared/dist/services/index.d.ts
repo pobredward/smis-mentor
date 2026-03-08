@@ -6,4 +6,6 @@ export * from './admin';
 export * from './jobBoard';
 export * from './review';
 export * from './evaluation';
+export * from './sms';
+export * from './smsTemplate';
 //# sourceMappingURL=index.d.ts.map

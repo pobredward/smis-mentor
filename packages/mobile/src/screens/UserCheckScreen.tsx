@@ -16,6 +16,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../config/firebase';
 import { adminGetAllJobCodes, adminGetUsersByJobCode, getGenerationCodes, filterMaterialsByGeneration, filterSectionsWithLinks } from '@smis-mentor/shared';
+import { getGroupLabel } from '../../../shared/src/types/camp';
 import { AdminStackScreenProps } from '../navigation/types';
 import { getLessonMaterials, getSections, getLessonMaterialTemplates, LessonMaterialData, SectionData, LessonMaterialTemplate } from '../services/lessonMaterialService';
 
@@ -43,7 +44,7 @@ interface UserWithGroupInfo {
   classCode?: string;
 }
 
-// 그룹 이름 매핑
+// 그룹 이름 매핑 - getGroupLabel 함수 사용으로 대체 가능하지만 기존 구조 유지
 const groupLabels: Record<string, string> = {
   junior: '주니어',
   middle: '미들',
@@ -91,6 +92,14 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
   const [groupedUsers, setGroupedUsers] = useState<Record<string, UserWithGroupInfo[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserWithGroupInfo | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string>('all'); // 추가: role 필터
+  
+  // 추가: role 필터 옵션
+  const roleFilters = [
+    { value: 'all', label: '전체' },
+    { value: 'mentor', label: '멘토' },
+    { value: 'foreign', label: '원어민' }
+  ];
 
   // 모든 JobCode 및 Generation 로드
   useEffect(() => {
@@ -204,11 +213,16 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
           };
         });
 
-        setUsers(enrichedUsers);
+        // role 필터링 적용
+        const filteredUsers = selectedRole === 'all' 
+          ? enrichedUsers 
+          : enrichedUsers.filter((user: UserWithGroupInfo) => user.role === selectedRole);
+
+        setUsers(filteredUsers);
 
         // 그룹별로 사용자 분류
         const grouped: Record<string, UserWithGroupInfo[]> = {};
-        enrichedUsers.forEach((user: UserWithGroupInfo) => {
+        filteredUsers.forEach((user: UserWithGroupInfo) => {
           const group = user.groupName || 'junior';
           if (!grouped[group]) {
             grouped[group] = [];
@@ -226,7 +240,7 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
     };
 
     loadUsers();
-  }, [selectedGeneration, selectedCode, jobCodes]);
+  }, [selectedGeneration, selectedCode, jobCodes, selectedRole]);
 
   // 전화번호 포맷팅
   const formatPhoneNumber = (phone?: string): string => {
@@ -514,6 +528,31 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
 
       {/* 필터 섹션 (고정) */}
       <View style={styles.stickyFilters}>
+        {/* Role 필터 */}
+        <View style={styles.filterSection}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {roleFilters.map((filter) => (
+              <TouchableOpacity
+                key={filter.value}
+                style={[
+                  styles.filterChip,
+                  selectedRole === filter.value && styles.filterChipActiveRole,
+                ]}
+                onPress={() => setSelectedRole(filter.value)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedRole === filter.value && styles.filterChipTextActiveRole,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
         {/* 기수 선택 */}
         <View style={styles.filterSection}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -856,6 +895,9 @@ const styles = StyleSheet.create({
   filterChipActive: {
     backgroundColor: '#3b82f6',
   },
+  filterChipActiveRole: {
+    backgroundColor: '#14b8a6', // teal 색상
+  },
   filterChipText: {
     fontSize: 13,
     color: '#6b7280',
@@ -863,6 +905,16 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: '#fff',
+  },
+  filterChipTextActiveRole: {
+    color: '#fff',
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 6,
+    paddingLeft: 4,
   },
   loadingContainer: {
     alignItems: 'center',

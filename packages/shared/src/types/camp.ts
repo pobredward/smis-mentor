@@ -2,6 +2,67 @@
 
 import { Timestamp } from 'firebase/firestore';
 
+// 그룹 선택지 (주니어, 미들, 시니어, 계절)
+export const JOB_EXPERIENCE_GROUPS = [
+  '주니어',
+  '미들',
+  '시니어',
+  '스프링',
+  '서머',
+  '어텀',
+  '윈터',
+  '공통',
+] as const;
+
+export type JobExperienceGroup = typeof JOB_EXPERIENCE_GROUPS[number];
+
+// 그룹 역할 선택지
+export const JOB_EXPERIENCE_GROUP_ROLES = [
+  '담임',
+  '수업',
+  '매니저',
+  'Speaking',
+  'Reading',
+  'Writing',
+  'Mix',
+  'Phonics',
+] as const;
+
+export type JobExperienceGroupRole = typeof JOB_EXPERIENCE_GROUP_ROLES[number];
+
+// 레거시 그룹 매핑 (junior/middle/senior <-> 주니어/미들/시니어)
+export const LEGACY_GROUP_MAP: Record<string, string> = {
+  'junior': '주니어',
+  'middle': '미들',
+  'senior': '시니어',
+  'spring': '스프링',
+  'summer': '서머',
+  'autumn': '어텀',
+  'winter': '윈터',
+  'common': '공통',
+};
+
+export const LEGACY_GROUP_REVERSE_MAP: Record<string, string> = {
+  '주니어': 'junior',
+  '미들': 'middle',
+  '시니어': 'senior',
+  '스프링': 'spring',
+  '서머': 'summer',
+  '어텀': 'autumn',
+  '윈터': 'winter',
+  '공통': 'common',
+};
+
+// 그룹 표시 이름 가져오기
+export const getGroupLabel = (group: string): string => {
+  return LEGACY_GROUP_MAP[group] || group;
+};
+
+// 그룹 값 가져오기
+export const getGroupValue = (label: string): string => {
+  return LEGACY_GROUP_REVERSE_MAP[label] || label;
+};
+
 export interface Camp {
   id: string;
   code: string;
@@ -108,8 +169,6 @@ export interface GenerationResources {
   updatedAt: Timestamp;
 }
 
-export type JobExperienceGroupRole = '담임' | '수업' | '서포트' | '리더' | '매니저' | '부매니저';
-
 export interface TaskAttachment {
   type: 'image' | 'video' | 'link' | 'file';
   url: string;
@@ -131,6 +190,7 @@ export interface Task {
   title: string;
   description: string;
   targetRoles: JobExperienceGroupRole[];
+  targetGroups: JobExperienceGroup[];  // 새로 추가: 대상 그룹
   
   // 날짜 및 시간 (단순화)
   date: Timestamp;          // 업무 날짜

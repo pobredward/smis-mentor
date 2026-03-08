@@ -24,6 +24,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { cancelApplication, getAllJobCodes, addUserJobCode, getUserJobCodesInfo, updateUser } from '@/lib/firebaseService';
 import { getScoreTextColor } from '@/utils/scoreColorUtils';
+import { JobExperienceGroupRole, JOB_EXPERIENCE_GROUP_ROLES } from '@smis-mentor/shared';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -96,7 +97,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [allJobCodes, setAllJobCodes] = useState<JobCodeWithId[]>([]);
   const [selectedJobCodeId, setSelectedJobCodeId] = useState<string>('');
   const [selectedGroup, setSelectedGroup] = useState<JobGroup>('junior');
-  const [selectedGroupRole, setSelectedGroupRole] = useState<'담임' | '수업' | '서포트' | '리더'>('담임');
+  const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [allGenerations, setAllGenerations] = useState<string[]>([]);
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
@@ -118,14 +119,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     { value: 'manager', label: '매니저' },
   ];
 
-  const groupRoleOptions = [
-    { value: '담임', label: '담임' },
-    { value: '수업', label: '수업' },
-    { value: '서포트', label: '서포트' },
-    { value: '리더', label: '리더' },
-    { value: '매니저', label: '매니저' },
-    { value: '부매니저', label: '부매니저' },
-  ];
+  const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+    value: role,
+    label: role
+  }));
   
   // 모바일 상태 감지
   useEffect(() => {
@@ -2538,7 +2535,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   <label className="block text-sm text-gray-600 mb-1 sm:mb-2">역할</label>
                                   <select
                                     value={selectedGroupRole}
-                                    onChange={(e) => setSelectedGroupRole(e.target.value as '담임' | '수업' | '서포트' | '리더')}
+                                    onChange={(e) => setSelectedGroupRole(e.target.value as JobExperienceGroupRole)}
                                     className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                   >
                                     {groupRoleOptions.map((role) => (

@@ -39,7 +39,7 @@ export interface Evaluation {
     totalScore: number;
     maxTotalScore: number;
     percentage: number;
-    feedback: string;
+    feedback?: string;
     criteriaFeedback?: {
         [criteriaId: string]: string;
     };
@@ -122,7 +122,7 @@ export interface EvaluationFormData {
             comment?: string;
         };
     };
-    overallFeedback: string;
+    overallFeedback?: string;
     evaluatorName: string;
 }
 //# sourceMappingURL=evaluation.d.ts.map

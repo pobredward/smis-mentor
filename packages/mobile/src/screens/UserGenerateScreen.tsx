@@ -14,6 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '../config/firebase';
 import { createTempUser, adminGetAllJobCodes } from '@smis-mentor/shared';
+import { 
+  JOB_EXPERIENCE_GROUP_ROLES, 
+  LEGACY_GROUP_REVERSE_MAP 
+} from '../../../shared/src/types/camp';
 
 type JobExperienceInput = {
   generation: string;
@@ -29,26 +33,15 @@ type FormData = {
   jobExperiences: JobExperienceInput[];
 };
 
-const jobGroups = [
-  { value: 'junior', label: '주니어' },
-  { value: 'middle', label: '미들' },
-  { value: 'senior', label: '시니어' },
-  { value: 'spring', label: '스프링' },
-  { value: 'summer', label: '서머' },
-  { value: 'autumn', label: '어텀' },
-  { value: 'winter', label: '윈터' },
-  { value: 'common', label: '공통' },
-  { value: 'manager', label: '매니저' },
-];
+const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
+  value,
+  label
+})).concat([{ value: 'manager', label: '매니저' }]);
 
-const groupRoleOptions = [
-  { value: '담임', label: '담임' },
-  { value: '수업', label: '수업' },
-  { value: '서포트', label: '서포트' },
-  { value: '리더', label: '리더' },
-  { value: '매니저', label: '매니저' },
-  { value: '부매니저', label: '부매니저' },
-];
+const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+  value: role,
+  label: role
+}));
 
 export function UserGenerateScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(false);

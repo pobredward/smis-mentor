@@ -16,6 +16,7 @@ import { Timestamp, doc, getDoc, collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { JobExperienceGroupRole, JOB_EXPERIENCE_GROUP_ROLES } from '@smis-mentor/shared';
 
 type EditFormData = {
   name?: string;
@@ -61,7 +62,7 @@ export default function UserManage() {
   const [showUserList, setShowUserList] = useState(true);
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('all');
-  const [selectedGroupRole, setSelectedGroupRole] = useState<'담임' | '수업' | '서포트' | '리더'>('담임');
+  const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
   const router = useRouter();
@@ -189,14 +190,10 @@ export default function UserManage() {
   ];
 
   // groupRole 옵션
-  const groupRoleOptions = [
-    { value: '담임', label: '담임' },
-    { value: '수업', label: '수업' },
-    { value: '서포트', label: '서포트' },
-    { value: '리더', label: '리더' },
-    { value: '매니저', label: '매니저' },
-    { value: '부매니저', label: '부매니저' },
-  ];
+  const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+    value: role,
+    label: role
+  }));
 
   // 사용자 목록 불러오기
   useEffect(() => {
@@ -696,7 +693,7 @@ export default function UserManage() {
             <div className="w-full md:w-1/4">
               <select
                 value={selectedGroupRole}
-                onChange={(e) => setSelectedGroupRole(e.target.value as '담임' | '수업' | '서포트' | '리더')}
+                onChange={(e) => setSelectedGroupRole(e.target.value as JobExperienceGroupRole)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {groupRoleOptions.map((role) => (

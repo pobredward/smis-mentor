@@ -1,23 +1,21 @@
-"use strict";
 // Google Sheets API 서비스
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.STSheetService = void 0;
-const googleapis_1 = require("googleapis");
-const types_1 = require("../../types");
-class STSheetService {
+import { google } from 'googleapis';
+import { ST_SHEET_COLUMNS } from '../../types';
+export class STSheetService {
     constructor(serviceAccountKey) {
         this.spreadsheetId = '1hHO1Lm3ezpzo6JILHRzdC2j1OhkTpRxhNzKew3tcJp8';
         this.sheetName = 'ST';
-        const auth = new googleapis_1.google.auth.GoogleAuth({
+        const auth = new google.auth.GoogleAuth({
             credentials: serviceAccountKey,
             scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
         });
-        this.sheets = googleapis_1.google.sheets({ version: 'v4', auth });
+        this.sheets = google.sheets({ version: 'v4', auth });
     }
     /**
      * 전체 ST시트 데이터 가져오기
      */
     async fetchAllStudents() {
+        var _a;
         try {
             console.log('📊 ST시트 데이터 가져오기 시작...');
             // 헤더 행 가져오기 (1행)
@@ -25,7 +23,7 @@ class STSheetService {
                 spreadsheetId: this.spreadsheetId,
                 range: `${this.sheetName}!A1:BE1`
             });
-            const headers = headerResponse.data.values?.[0] || [];
+            const headers = ((_a = headerResponse.data.values) === null || _a === void 0 ? void 0 : _a[0]) || [];
             console.log(`📋 헤더 ${headers.length}개 로드`);
             // 데이터 행 가져오기 (2행부터)
             const dataResponse = await this.sheets.spreadsheets.values.get({
@@ -89,30 +87,30 @@ class STSheetService {
         };
         return {
             // 기본 정보
-            studentId: getValue(types_1.ST_SHEET_COLUMNS.STUDENT_ID),
-            name: getValue(types_1.ST_SHEET_COLUMNS.NAME),
-            englishName: getValue(types_1.ST_SHEET_COLUMNS.ENGLISH_NAME),
-            grade: getValue(types_1.ST_SHEET_COLUMNS.GRADE),
-            gender: getValue(types_1.ST_SHEET_COLUMNS.GENDER),
+            studentId: getValue(ST_SHEET_COLUMNS.STUDENT_ID),
+            name: getValue(ST_SHEET_COLUMNS.NAME),
+            englishName: getValue(ST_SHEET_COLUMNS.ENGLISH_NAME),
+            grade: getValue(ST_SHEET_COLUMNS.GRADE),
+            gender: getValue(ST_SHEET_COLUMNS.GENDER),
             // 연락처
-            parentPhone: getValue(types_1.ST_SHEET_COLUMNS.PARENT_PHONE),
-            parentName: getValue(types_1.ST_SHEET_COLUMNS.PARENT_NAME),
-            otherPhone: getValue(types_1.ST_SHEET_COLUMNS.OTHER_PHONE),
-            otherName: getValue(types_1.ST_SHEET_COLUMNS.OTHER_NAME),
-            medication: getValue(types_1.ST_SHEET_COLUMNS.MEDICATION),
-            notes: getValue(types_1.ST_SHEET_COLUMNS.NOTES),
+            parentPhone: getValue(ST_SHEET_COLUMNS.PARENT_PHONE),
+            parentName: getValue(ST_SHEET_COLUMNS.PARENT_NAME),
+            otherPhone: getValue(ST_SHEET_COLUMNS.OTHER_PHONE),
+            otherName: getValue(ST_SHEET_COLUMNS.OTHER_NAME),
+            medication: getValue(ST_SHEET_COLUMNS.MEDICATION),
+            notes: getValue(ST_SHEET_COLUMNS.NOTES),
             // 개인정보
-            ssn: getValue(types_1.ST_SHEET_COLUMNS.SSN),
-            region: getValue(types_1.ST_SHEET_COLUMNS.REGION),
-            address: getValue(types_1.ST_SHEET_COLUMNS.ADDRESS),
-            addressDetail: getValue(types_1.ST_SHEET_COLUMNS.ADDRESS_DETAIL),
-            email: getValue(types_1.ST_SHEET_COLUMNS.EMAIL),
+            ssn: getValue(ST_SHEET_COLUMNS.SSN),
+            region: getValue(ST_SHEET_COLUMNS.REGION),
+            address: getValue(ST_SHEET_COLUMNS.ADDRESS),
+            addressDetail: getValue(ST_SHEET_COLUMNS.ADDRESS_DETAIL),
+            email: getValue(ST_SHEET_COLUMNS.EMAIL),
             // ⭐️ 멘토 및 반 배정
-            classNumber: getValue(types_1.ST_SHEET_COLUMNS.CLASS_NUMBER),
-            className: getValue(types_1.ST_SHEET_COLUMNS.CLASS_NAME),
-            classMentor: getValue(types_1.ST_SHEET_COLUMNS.CLASS_MENTOR),
-            unitMentor: getValue(types_1.ST_SHEET_COLUMNS.UNIT_MENTOR),
-            roomNumber: getValue(types_1.ST_SHEET_COLUMNS.ROOM_NUMBER),
+            classNumber: getValue(ST_SHEET_COLUMNS.CLASS_NUMBER),
+            className: getValue(ST_SHEET_COLUMNS.CLASS_NAME),
+            classMentor: getValue(ST_SHEET_COLUMNS.CLASS_MENTOR),
+            unitMentor: getValue(ST_SHEET_COLUMNS.UNIT_MENTOR),
+            roomNumber: getValue(ST_SHEET_COLUMNS.ROOM_NUMBER),
             // 메타
             rowNumber,
             lastSyncedAt: new Date(),
@@ -120,4 +118,3 @@ class STSheetService {
         };
     }
 }
-exports.STSheetService = STSheetService;

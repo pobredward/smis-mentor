@@ -11,6 +11,7 @@ import {
   Timestamp,
   Firestore,
 } from 'firebase/firestore';
+import type { JobExperienceGroupRole } from '../../types/camp';
 
 // Local types (not exported to avoid conflicts)
 interface JobCode {
@@ -41,13 +42,7 @@ type JobGroup =
   | 'common'
   | 'manager';
 
-type JobExperienceGroupRole =
-  | '담임'
-  | '수업'
-  | '서포트'
-  | '리더'
-  | '매니저'
-  | '부매니저';
+// JobExperienceGroupRole은 shared에서 import하여 사용
 
 interface JobExperienceItem {
   id: string;

@@ -1,31 +1,21 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBestReviews = exports.getRecentReviews = exports.deleteReview = exports.updateReview = exports.addReview = exports.getReviewById = exports.getReviews = void 0;
-const firestore_1 = require("firebase/firestore");
+import { collection, doc, query, orderBy, getDocs, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, limit as firestoreLimit, } from 'firebase/firestore';
 // ==================== Review 관련 서비스 ====================
-const getReviews = async (db) => {
+export const getReviews = async (db) => {
     try {
-        const reviewsQuery = (0, firestore_1.query)((0, firestore_1.collection)(db, 'reviews'), (0, firestore_1.orderBy)('createdAt', 'desc'));
-        const querySnapshot = await (0, firestore_1.getDocs)(reviewsQuery);
-        return querySnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
+        const reviewsQuery = query(collection(db, 'reviews'), orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(reviewsQuery);
+        return querySnapshot.docs.map((doc) => (Object.assign({ id: doc.id }, doc.data())));
     }
     catch (error) {
         console.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
         throw error;
     }
 };
-exports.getReviews = getReviews;
-const getReviewById = async (db, reviewId) => {
+export const getReviewById = async (db, reviewId) => {
     try {
-        const reviewDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, 'reviews', reviewId));
+        const reviewDoc = await getDoc(doc(db, 'reviews', reviewId));
         if (reviewDoc.exists()) {
-            return {
-                id: reviewDoc.id,
-                ...reviewDoc.data(),
-            };
+            return Object.assign({ id: reviewDoc.id }, reviewDoc.data());
         }
         else {
             throw new Error('해당 리뷰를 찾을 수 없습니다.');
@@ -36,15 +26,10 @@ const getReviewById = async (db, reviewId) => {
         throw error;
     }
 };
-exports.getReviewById = getReviewById;
-const addReview = async (db, reviewData) => {
+export const addReview = async (db, reviewData) => {
     try {
-        const timestamp = (0, firestore_1.serverTimestamp)();
-        const reviewRef = await (0, firestore_1.addDoc)((0, firestore_1.collection)(db, 'reviews'), {
-            ...reviewData,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-        });
+        const timestamp = serverTimestamp();
+        const reviewRef = await addDoc(collection(db, 'reviews'), Object.assign(Object.assign({}, reviewData), { createdAt: timestamp, updatedAt: timestamp }));
         return reviewRef.id;
     }
     catch (error) {
@@ -52,14 +37,10 @@ const addReview = async (db, reviewData) => {
         throw error;
     }
 };
-exports.addReview = addReview;
-const updateReview = async (db, reviewId, reviewData) => {
+export const updateReview = async (db, reviewId, reviewData) => {
     try {
-        const reviewRef = (0, firestore_1.doc)(db, 'reviews', reviewId);
-        await (0, firestore_1.updateDoc)(reviewRef, {
-            ...reviewData,
-            updatedAt: (0, firestore_1.serverTimestamp)(),
-        });
+        const reviewRef = doc(db, 'reviews', reviewId);
+        await updateDoc(reviewRef, Object.assign(Object.assign({}, reviewData), { updatedAt: serverTimestamp() }));
         return true;
     }
     catch (error) {
@@ -67,10 +48,9 @@ const updateReview = async (db, reviewId, reviewData) => {
         throw error;
     }
 };
-exports.updateReview = updateReview;
-const deleteReview = async (db, reviewId) => {
+export const deleteReview = async (db, reviewId) => {
     try {
-        await (0, firestore_1.deleteDoc)((0, firestore_1.doc)(db, 'reviews', reviewId));
+        await deleteDoc(doc(db, 'reviews', reviewId));
         return true;
     }
     catch (error) {
@@ -78,17 +58,13 @@ const deleteReview = async (db, reviewId) => {
         throw error;
     }
 };
-exports.deleteReview = deleteReview;
-const getRecentReviews = async (db, limit = 3) => {
+export const getRecentReviews = async (db, limit = 3) => {
     try {
-        const reviewsQuery = (0, firestore_1.query)((0, firestore_1.collection)(db, 'reviews'), (0, firestore_1.orderBy)('createdAt', 'desc'), (0, firestore_1.limit)(limit));
-        const querySnapshot = await (0, firestore_1.getDocs)(reviewsQuery);
+        const reviewsQuery = query(collection(db, 'reviews'), orderBy('createdAt', 'desc'), firestoreLimit(limit));
+        const querySnapshot = await getDocs(reviewsQuery);
         return querySnapshot.docs.map((doc) => {
             const data = doc.data();
-            return {
-                ...data,
-                id: doc.id,
-            };
+            return Object.assign(Object.assign({}, data), { id: doc.id });
         });
     }
     catch (error) {
@@ -96,21 +72,14 @@ const getRecentReviews = async (db, limit = 3) => {
         return [];
     }
 };
-exports.getRecentReviews = getRecentReviews;
-const getBestReviews = async (db, limit = 3) => {
+export const getBestReviews = async (db, limit = 3) => {
     try {
-        const reviewsQuery = (0, firestore_1.query)((0, firestore_1.collection)(db, 'reviews'), (0, firestore_1.orderBy)('createdAt', 'desc'));
-        const querySnapshot = await (0, firestore_1.getDocs)(reviewsQuery);
+        const reviewsQuery = query(collection(db, 'reviews'), orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(reviewsQuery);
         const allReviews = querySnapshot.docs.map((doc) => {
+            var _a;
             const data = doc.data();
-            return {
-                ...data,
-                id: doc.id,
-                rating: data.rating || 5,
-                reviewId: doc.id,
-                writer: data.author?.name || '익명',
-                generation: data.generation || '',
-            };
+            return Object.assign(Object.assign({}, data), { id: doc.id, rating: data.rating || 5, reviewId: doc.id, writer: ((_a = data.author) === null || _a === void 0 ? void 0 : _a.name) || '익명', generation: data.generation || '' });
         });
         const bestReviews = allReviews.filter((review) => review.generation === 'Best 후기');
         return bestReviews.slice(0, limit);
@@ -120,4 +89,3 @@ const getBestReviews = async (db, limit = 3) => {
         return [];
     }
 };
-exports.getBestReviews = getBestReviews;

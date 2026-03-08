@@ -20,6 +20,7 @@ export interface SectionData {
     viewUrl?: string;
     originalUrl?: string;
     order?: number;
+    templateSectionId?: string;
 }
 /**
  * 수업 자료에서 실제 링크가 있는 섹션만 필터링

@@ -14,6 +14,7 @@ export declare const adminGetJobCodeById: (db: Firestore, jobCodeId: string) => 
     id: string;
 } | null>;
 export declare const adminAddUserJobCode: (db: Firestore, userId: string, jobCodeId: string, group: string, groupRole: string, classCode?: string) => Promise<any[]>;
+export declare const adminRemoveUserJobCode: (db: Firestore, userId: string, jobCodeId: string) => Promise<any[]>;
 export declare const adminGetUserJobCodesInfo: (db: Firestore, jobExperiences: any[]) => Promise<any[]>;
 export declare const adminGetUsersByJobCode: (db: Firestore, generation: string, code: string) => Promise<any[]>;
 export declare const adminGetUserById: (db: Firestore, userId: string) => Promise<import("@firebase/firestore").DocumentData | null>;

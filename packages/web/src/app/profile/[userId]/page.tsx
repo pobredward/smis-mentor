@@ -6,6 +6,7 @@ import { getUserById, getUserJobCodesInfo } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { User, JobCode, JobCodeWithId } from '@/types';
+import { getGroupLabel } from '@smis-mentor/shared';
 
 export default function UserProfilePage({ params }: { params: Promise<{ userId: string }> }) {
   const router = useRouter();
@@ -134,15 +135,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ userId: 
                             jobCode.group === 'manager' ? 'bg-gray-100 text-black-800' :
                             'bg-black-100 text-black-800'
                           }`}>
-                            {jobCode.group === 'junior' ? '주니어' :
-                             jobCode.group === 'middle' ? '미들' :
-                             jobCode.group === 'senior' ? '시니어' :
-                             jobCode.group === 'spring' ? '스프링' :
-                             jobCode.group === 'summer' ? '서머' :
-                             jobCode.group === 'autumn' ? '어텀' :
-                             jobCode.group === 'winter' ? '윈터' :
-                             jobCode.group === 'common' ? '공통' :
-                             '매니저'}
+                            {getGroupLabel(jobCode.group || '')}
                           </span>
                         )}
                         <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 border border-gray-300">{groupRole || '미지정'}</span>

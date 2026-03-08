@@ -4,7 +4,16 @@ import { useState } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { createTask, updateTask, uploadTaskImage, uploadTaskFile } from '@/lib/taskService';
-import type { Task, TaskAttachment, JobExperienceGroupRole } from '@smis-mentor/shared/types/camp';
+import type { 
+  Task, 
+  TaskAttachment, 
+  JobExperienceGroupRole,
+  JobExperienceGroup,
+} from '@smis-mentor/shared';
+import {
+  JOB_EXPERIENCE_GROUP_ROLES,
+  JOB_EXPERIENCE_GROUPS 
+} from '@smis-mentor/shared';
 
 interface TaskFormProps {
   campCode: string;
@@ -15,7 +24,8 @@ interface TaskFormProps {
   onSuccess: () => void;
 }
 
-const roleOptions: JobExperienceGroupRole[] = ['수업', '담임', '부매니저', '매니저', '서포트', '리더'];
+const roleOptions: JobExperienceGroupRole[] = [...JOB_EXPERIENCE_GROUP_ROLES];
+const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
 
 export default function TaskFormModal({ campCode, createdBy, task, selectedDate, onClose, onSuccess }: TaskFormProps) {
   const isEdit = !!task;
@@ -33,6 +43,9 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
 
   // 대상 역할
   const [selectedRoles, setSelectedRoles] = useState<JobExperienceGroupRole[]>(task?.targetRoles || []);
+
+  // 대상 그룹 (새로 추가)
+  const [selectedGroups, setSelectedGroups] = useState<JobExperienceGroup[]>(task?.targetGroups || []);
 
   // 우선순위
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(task?.priority || 'medium');
@@ -194,6 +207,11 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
       return;
     }
 
+    if (selectedGroups.length === 0) {
+      toast.error('대상 그룹을 최소 1개 선택해주세요.');
+      return;
+    }
+
     if (!title.trim()) {
       toast.error('업무 제목을 입력해주세요.');
       return;
@@ -215,6 +233,7 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
         title: title.trim(),
         description: description.trim(),
         targetRoles: selectedRoles,
+        targetGroups: selectedGroups,
         date: Timestamp.fromDate(localDate),
         time: hasTime && time ? time : undefined,
         estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
@@ -389,6 +408,35 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
                   }`}
                 >
                   {role}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 2-1. 대상 그룹 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              🎯 대상 그룹 <span className="text-red-500">*</span>
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {groupOptions.map(group => (
+                <button
+                  key={group}
+                  type="button"
+                  onClick={() => {
+                    setSelectedGroups(prev =>
+                      prev.includes(group)
+                        ? prev.filter(g => g !== group)
+                        : [...prev, group]
+                    );
+                  }}
+                  className={`px-2.5 py-1.5 border rounded-lg transition-all text-xs ${
+                    selectedGroups.includes(group)
+                      ? 'bg-green-600 border-green-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {group}
                 </button>
               ))}
             </div>

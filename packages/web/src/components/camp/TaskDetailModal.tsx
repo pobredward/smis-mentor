@@ -98,13 +98,31 @@ export default function TaskDetailModal({
                 {task.targetRoles.map(role => (
                   <span
                     key={role}
-                    className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium"
+                    className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium"
                   >
                     {role}
                   </span>
                 ))}
               </div>
             </div>
+
+            {/* 대상 그룹 */}
+            {/* 대상 그룹 */}
+            {task.targetGroups && task.targetGroups.length > 0 && (
+              <div>
+                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">대상 그룹</h5>
+                <div className="flex flex-wrap gap-1.5">
+                  {task.targetGroups.map(group => (
+                    <span
+                      key={group}
+                      className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium"
+                    >
+                      {group}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 설명 */}
             {task.description && (

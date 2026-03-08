@@ -1,4 +1,12 @@
 import { Timestamp } from 'firebase/firestore';
+export declare const JOB_EXPERIENCE_GROUPS: readonly ["주니어", "미들", "시니어", "스프링", "서머", "어텀", "윈터", "공통"];
+export type JobExperienceGroup = typeof JOB_EXPERIENCE_GROUPS[number];
+export declare const JOB_EXPERIENCE_GROUP_ROLES: readonly ["담임", "수업", "매니저", "Speaking", "Reading", "Writing", "Mix", "Phonics"];
+export type JobExperienceGroupRole = typeof JOB_EXPERIENCE_GROUP_ROLES[number];
+export declare const LEGACY_GROUP_MAP: Record<string, string>;
+export declare const LEGACY_GROUP_REVERSE_MAP: Record<string, string>;
+export declare const getGroupLabel: (group: string) => string;
+export declare const getGroupValue: (label: string) => string;
 export interface Camp {
     id: string;
     code: string;
@@ -96,5 +104,37 @@ export interface GenerationResources {
     stSheetConfig?: STSheetConfig;
     createdAt: Timestamp;
     updatedAt: Timestamp;
+}
+export interface TaskAttachment {
+    type: 'image' | 'video' | 'link' | 'file';
+    url: string;
+    label: string;
+    thumbnail?: string;
+}
+export interface TaskCompletion {
+    userId: string;
+    userName: string;
+    userRole: JobExperienceGroupRole;
+    completedAt: Timestamp;
+}
+export interface Task {
+    id: string;
+    campCode: string;
+    title: string;
+    description: string;
+    targetRoles: JobExperienceGroupRole[];
+    targetGroups: JobExperienceGroup[];
+    date: Timestamp;
+    time?: string;
+    estimatedDuration?: {
+        value: number;
+        unit: 'minutes' | 'hours';
+    };
+    attachments?: TaskAttachment[];
+    priority: 'low' | 'medium' | 'high';
+    completions: TaskCompletion[];
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    createdBy: string;
 }
 //# sourceMappingURL=camp.d.ts.map

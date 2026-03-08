@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import type { JobExperienceGroupRole } from './camp';
 
 export interface PartTimeJob {
   period: string;
@@ -125,7 +126,8 @@ export type JobExperience = {
   refCode: string;
 };
 
-export type JobExperienceGroupRole = '담임' | '수업' | '서포트' | '리더' | '매니저' | '부매니저';
+// JobExperienceGroupRole은 camp.ts에서 import하여 re-export
+export type { JobExperienceGroupRole };
 
 export interface JobBoard {
   title: string;

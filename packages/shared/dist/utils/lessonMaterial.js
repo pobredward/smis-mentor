@@ -1,18 +1,12 @@
-"use strict";
 /**
  * 수업 자료 관련 유틸리티 함수
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.filterSectionsWithLinks = filterSectionsWithLinks;
-exports.getGenerationCodes = getGenerationCodes;
-exports.filterMaterialsByGeneration = filterMaterialsByGeneration;
-exports.getMaterialGenerationCode = getMaterialGenerationCode;
 /**
  * 수업 자료에서 실제 링크가 있는 섹션만 필터링
  * @param sections 섹션 배열
  * @returns 링크가 있는 섹션만 포함된 배열
  */
-function filterSectionsWithLinks(sections) {
+export function filterSectionsWithLinks(sections) {
     return sections.filter(section => section.viewUrl || section.originalUrl);
 }
 /**
@@ -21,12 +15,12 @@ function filterSectionsWithLinks(sections) {
  * @param templates 템플릿 배열
  * @returns 기수 배열 (내림차순)
  */
-function getGenerationCodes(materials, templates) {
+export function getGenerationCodes(materials, templates) {
     const materialCodeMap = {};
     materials.forEach(m => {
         if (m.templateId) {
             const tpl = templates.find(t => t.id === m.templateId);
-            materialCodeMap[m.id] = tpl?.code || '미지정';
+            materialCodeMap[m.id] = (tpl === null || tpl === void 0 ? void 0 : tpl.code) || '미지정';
         }
         else {
             materialCodeMap[m.id] = m.userCode || '미지정';
@@ -55,11 +49,11 @@ function getGenerationCodes(materials, templates) {
  * @param generation 기수 코드 (예: "27기")
  * @returns 필터링된 수업 자료 배열
  */
-function filterMaterialsByGeneration(materials, templates, generation) {
+export function filterMaterialsByGeneration(materials, templates, generation) {
     return materials.filter(m => {
         if (m.templateId) {
             const tpl = templates.find(t => t.id === m.templateId);
-            return tpl?.code === generation;
+            return (tpl === null || tpl === void 0 ? void 0 : tpl.code) === generation;
         }
         else {
             return m.userCode === generation;
@@ -72,10 +66,10 @@ function filterMaterialsByGeneration(materials, templates, generation) {
  * @param templates 템플릿 배열
  * @returns 기수 코드
  */
-function getMaterialGenerationCode(material, templates) {
+export function getMaterialGenerationCode(material, templates) {
     if (material.templateId) {
         const tpl = templates.find(t => t.id === material.templateId);
-        return tpl?.code || '미지정';
+        return (tpl === null || tpl === void 0 ? void 0 : tpl.code) || '미지정';
     }
     return material.userCode || '미지정';
 }

@@ -23,6 +23,11 @@ import {
   adminGetAllJobCodes,
   EvaluationStage,
 } from '@smis-mentor/shared';
+import { 
+  JOB_EXPERIENCE_GROUP_ROLES, 
+  LEGACY_GROUP_REVERSE_MAP,
+  JobExperienceGroupRole,
+} from '../../../shared/src/types/camp';
 import EvaluationStageCards from '../components/EvaluationStageCards';
 import EvaluationForm from '../components/EvaluationForm';
 
@@ -56,7 +61,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
   const [filteredJobCodes, setFilteredJobCodes] = useState<any[]>([]);
   const [selectedJobCodeId, setSelectedJobCodeId] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<JobGroup>('junior');
-  const [selectedGroupRole, setSelectedGroupRole] = useState<'담임' | '수업' | '서포트' | '리더'>('담임');
+  const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState('');
 
   // 드롭다운 open 상태
@@ -68,23 +73,18 @@ export function UserManageDetailScreen({ route, navigation }: any) {
   // 드롭다운 items
   const [generationItems, setGenerationItems] = useState<Array<{ label: string; value: string }>>([]);
   const [jobCodeItems, setJobCodeItems] = useState<Array<{ label: string; value: string }>>([]);
-  const [groupItems, setGroupItems] = useState([
-    { label: '주니어', value: 'junior' },
-    { label: '미들', value: 'middle' },
-    { label: '시니어', value: 'senior' },
-    { label: '스프링', value: 'spring' },
-    { label: '서머', value: 'summer' },
-    { label: '어텀', value: 'autumn' },
-    { label: '윈터', value: 'winter' },
-    { label: '공통', value: 'common' },
-    { label: '매니저', value: 'manager' },
-  ]);
-  const [groupRoleItems, setGroupRoleItems] = useState([
-    { label: '담임', value: '담임' },
-    { label: '수업', value: '수업' },
-    { label: '서포트', value: '서포트' },
-    { label: '리더', value: '리더' },
-  ]);
+  const [groupItems, setGroupItems] = useState(
+    Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
+      label,
+      value
+    })).concat([{ label: '매니저', value: 'manager' }])
+  );
+  const [groupRoleItems, setGroupRoleItems] = useState(
+    JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+      label: role,
+      value: role
+    }))
+  );
 
   useEffect(() => {
     loadJobCodes();
@@ -350,7 +350,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
               <Text style={styles.infoText}>
                 <Text style={styles.infoLabel}>역할: </Text>
                 <Text style={styles.infoValue}>
-                  {user.role === 'admin' ? '관리자' : user.role === 'mentor' ? '멘토' : '사용자'}
+                  {user.role === 'admin' ? '관리자' : user.role === 'mentor' ? '멘토' : user.role === 'foreign' ? '원어민' : '사용자'}
                 </Text>
               </Text>
               <Text style={styles.infoText}>

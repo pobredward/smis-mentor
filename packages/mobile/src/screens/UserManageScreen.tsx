@@ -26,6 +26,7 @@ export function UserManageScreen({ navigation }: any) {
     { value: 'all', label: '전체' },
     { value: 'user', label: '사용자' },
     { value: 'mentor', label: '멘토' },
+    { value: 'foreign', label: '원어민' },
     { value: 'admin', label: '관리자' },
   ];
 

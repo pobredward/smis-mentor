@@ -1,21 +1,12 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadProfileImage = uploadProfileImage;
-exports.deleteProfileImage = deleteProfileImage;
-exports.updateUserProfile = updateUserProfile;
-exports.updateProfileImageUrl = updateProfileImageUrl;
-exports.checkEmailExists = checkEmailExists;
-exports.checkPhoneExists = checkPhoneExists;
-exports.getUserById = getUserById;
-const storage_1 = require("firebase/storage");
-const firestore_1 = require("firebase/firestore");
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject, } from 'firebase/storage';
+import { doc, updateDoc, getDoc, query, collection, where, getDocs, } from 'firebase/firestore';
 /**
  * 프로필 이미지를 Firebase Storage에 업로드
  */
-async function uploadProfileImage(storage, userId, file, onProgress) {
+export async function uploadProfileImage(storage, userId, file, onProgress) {
     try {
-        const storageRef = (0, storage_1.ref)(storage, `profile-images/${userId}`);
-        const uploadTask = (0, storage_1.uploadBytesResumable)(storageRef, file);
+        const storageRef = ref(storage, `profile-images/${userId}`);
+        const uploadTask = uploadBytesResumable(storageRef, file);
         return new Promise((resolve, reject) => {
             uploadTask.on('state_changed', (snapshot) => {
                 const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
@@ -27,7 +18,7 @@ async function uploadProfileImage(storage, userId, file, onProgress) {
                 reject(error);
             }, async () => {
                 try {
-                    const downloadURL = await (0, storage_1.getDownloadURL)(uploadTask.snapshot.ref);
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                     resolve(downloadURL);
                 }
                 catch (error) {
@@ -44,10 +35,10 @@ async function uploadProfileImage(storage, userId, file, onProgress) {
 /**
  * 프로필 이미지 삭제
  */
-async function deleteProfileImage(storage, userId) {
+export async function deleteProfileImage(storage, userId) {
     try {
-        const storageRef = (0, storage_1.ref)(storage, `profile-images/${userId}`);
-        await (0, storage_1.deleteObject)(storageRef);
+        const storageRef = ref(storage, `profile-images/${userId}`);
+        await deleteObject(storageRef);
     }
     catch (error) {
         console.error('프로필 이미지 삭제 오류:', error);
@@ -57,13 +48,10 @@ async function deleteProfileImage(storage, userId) {
 /**
  * 사용자 정보 업데이트
  */
-async function updateUserProfile(db, userId, data) {
+export async function updateUserProfile(db, userId, data) {
     try {
-        const userRef = (0, firestore_1.doc)(db, 'users', userId);
-        await (0, firestore_1.updateDoc)(userRef, {
-            ...data,
-            updatedAt: new Date(),
-        });
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, Object.assign(Object.assign({}, data), { updatedAt: new Date() }));
     }
     catch (error) {
         console.error('사용자 정보 업데이트 오류:', error);
@@ -73,10 +61,10 @@ async function updateUserProfile(db, userId, data) {
 /**
  * 프로필 이미지 URL 업데이트
  */
-async function updateProfileImageUrl(db, userId, imageUrl) {
+export async function updateProfileImageUrl(db, userId, imageUrl) {
     try {
-        const userRef = (0, firestore_1.doc)(db, 'users', userId);
-        await (0, firestore_1.updateDoc)(userRef, {
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, {
             profileImage: imageUrl,
             updatedAt: new Date(),
         });
@@ -89,11 +77,11 @@ async function updateProfileImageUrl(db, userId, imageUrl) {
 /**
  * 이메일 중복 확인
  */
-async function checkEmailExists(db, email, excludeUserId) {
+export async function checkEmailExists(db, email, excludeUserId) {
     try {
-        const usersRef = (0, firestore_1.collection)(db, 'users');
-        const q = (0, firestore_1.query)(usersRef, (0, firestore_1.where)('email', '==', email));
-        const querySnapshot = await (0, firestore_1.getDocs)(q);
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('email', '==', email));
+        const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) {
             return false;
         }
@@ -112,11 +100,11 @@ async function checkEmailExists(db, email, excludeUserId) {
 /**
  * 전화번호 중복 확인
  */
-async function checkPhoneExists(db, phoneNumber, excludeUserId) {
+export async function checkPhoneExists(db, phoneNumber, excludeUserId) {
     try {
-        const usersRef = (0, firestore_1.collection)(db, 'users');
-        const q = (0, firestore_1.query)(usersRef, (0, firestore_1.where)('phoneNumber', '==', phoneNumber));
-        const querySnapshot = await (0, firestore_1.getDocs)(q);
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('phoneNumber', '==', phoneNumber));
+        const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) {
             return false;
         }
@@ -135,12 +123,12 @@ async function checkPhoneExists(db, phoneNumber, excludeUserId) {
 /**
  * 사용자 정보 조회
  */
-async function getUserById(db, userId) {
+export async function getUserById(db, userId) {
     try {
-        const userRef = (0, firestore_1.doc)(db, 'users', userId);
-        const userSnap = await (0, firestore_1.getDoc)(userRef);
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
-            return { userId: userSnap.id, ...userSnap.data() };
+            return Object.assign({ userId: userSnap.id }, userSnap.data());
         }
         return null;
     }

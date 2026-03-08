@@ -1,9 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.EvaluationService = exports.EvaluationCriteriaService = void 0;
-const firestore_1 = require("firebase/firestore");
+import { collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, query, where, orderBy, Timestamp, writeBatch, setDoc, deleteField } from 'firebase/firestore';
 // 평가 기준 템플릿 관리
-class EvaluationCriteriaService {
+export class EvaluationCriteriaService {
     // 기본 평가 기준 템플릿 생성
     static async createDefaultCriteria(db) {
         const defaultCriteria = [
@@ -44,8 +41,8 @@ class EvaluationCriteriaService {
                 isActive: true,
                 isDefault: true,
                 createdBy: 'system',
-                createdAt: firestore_1.Timestamp.now(),
-                updatedAt: firestore_1.Timestamp.now()
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
             },
             {
                 stage: '면접 전형',
@@ -84,8 +81,8 @@ class EvaluationCriteriaService {
                 isActive: true,
                 isDefault: true,
                 createdBy: 'system',
-                createdAt: firestore_1.Timestamp.now(),
-                updatedAt: firestore_1.Timestamp.now()
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
             },
             {
                 stage: '대면 교육',
@@ -124,8 +121,8 @@ class EvaluationCriteriaService {
                 isActive: true,
                 isDefault: true,
                 createdBy: 'system',
-                createdAt: firestore_1.Timestamp.now(),
-                updatedAt: firestore_1.Timestamp.now()
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
             },
             {
                 stage: '캠프 생활',
@@ -164,14 +161,14 @@ class EvaluationCriteriaService {
                 isActive: true,
                 isDefault: true,
                 createdBy: 'system',
-                createdAt: firestore_1.Timestamp.now(),
-                updatedAt: firestore_1.Timestamp.now()
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
             }
         ];
         try {
-            const batch = (0, firestore_1.writeBatch)(db);
+            const batch = writeBatch(db);
             for (const criteria of defaultCriteria) {
-                const docRef = (0, firestore_1.doc)((0, firestore_1.collection)(db, this.collection));
+                const docRef = doc(collection(db, this.collection));
                 batch.set(docRef, criteria);
             }
             await batch.commit();
@@ -185,12 +182,9 @@ class EvaluationCriteriaService {
     // 평가 기준 조회 (단계별)
     static async getCriteriaByStage(db, stage) {
         try {
-            const q = (0, firestore_1.query)((0, firestore_1.collection)(db, this.collection), (0, firestore_1.where)('stage', '==', stage), (0, firestore_1.where)('isActive', '==', true), (0, firestore_1.orderBy)('createdAt', 'desc'));
-            const snapshot = await (0, firestore_1.getDocs)(q);
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const q = query(collection(db, this.collection), where('stage', '==', stage), where('isActive', '==', true), orderBy('createdAt', 'desc'));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
         }
         catch (error) {
             console.error('평가 기준 조회 오류:', error);
@@ -200,12 +194,9 @@ class EvaluationCriteriaService {
     // 기본 평가 기준 조회
     static async getDefaultCriteria(db, stage) {
         try {
-            const q = (0, firestore_1.query)((0, firestore_1.collection)(db, this.collection), (0, firestore_1.where)('stage', '==', stage), (0, firestore_1.where)('isDefault', '==', true), (0, firestore_1.where)('isActive', '==', true));
-            const snapshot = await (0, firestore_1.getDocs)(q);
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }))[0];
+            const q = query(collection(db, this.collection), where('stage', '==', stage), where('isDefault', '==', true), where('isActive', '==', true));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())))[0];
         }
         catch (error) {
             console.error('기본 평가 기준 조회 오류:', error);
@@ -215,13 +206,10 @@ class EvaluationCriteriaService {
     // ID로 평가 기준 조회
     static async getCriteriaById(db, criteriaId) {
         try {
-            const docRef = (0, firestore_1.doc)(db, this.collection, criteriaId);
-            const docSnap = await (0, firestore_1.getDoc)(docRef);
+            const docRef = doc(db, this.collection, criteriaId);
+            const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
-                return {
-                    id: docSnap.id,
-                    ...docSnap.data()
-                };
+                return Object.assign({ id: docSnap.id }, docSnap.data());
             }
             return null;
         }
@@ -231,15 +219,14 @@ class EvaluationCriteriaService {
         }
     }
 }
-exports.EvaluationCriteriaService = EvaluationCriteriaService;
 EvaluationCriteriaService.collection = 'evaluationCriteria';
 // 평가 관리 서비스
-class EvaluationService {
+export class EvaluationService {
     // 평가 생성
     static async createEvaluation(db, formData, evaluatorId, evaluatorName, evaluatorRole = '관리자') {
         try {
             // 평가 기준 조회
-            const criteriaDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, 'evaluationCriteria', formData.criteriaTemplateId));
+            const criteriaDoc = await getDoc(doc(db, 'evaluationCriteria', formData.criteriaTemplateId));
             if (!criteriaDoc.exists()) {
                 throw new Error('평가 기준을 찾을 수 없습니다.');
             }
@@ -266,29 +253,13 @@ class EvaluationService {
             const finalScore = scoreCount > 0 ? totalScore / scoreCount : 0;
             const maxTotalScore = 10;
             const percentage = (finalScore / maxTotalScore) * 100;
-            const evaluationData = {
-                refUserId: formData.targetUserId,
-                evaluationStage: formData.evaluationStage,
-                criteriaTemplateId: formData.criteriaTemplateId,
-                evaluatorId,
+            const evaluationData = Object.assign(Object.assign(Object.assign({ refUserId: formData.targetUserId, evaluationStage: formData.evaluationStage, criteriaTemplateId: formData.criteriaTemplateId, evaluatorId,
                 evaluatorName,
-                evaluatorRole,
-                scores: evaluationScores,
-                totalScore: finalScore,
-                maxTotalScore,
+                evaluatorRole, scores: evaluationScores, totalScore: finalScore, maxTotalScore,
                 percentage,
-                feedback: formData.overallFeedback,
-                criteriaFeedback,
-                evaluationDate: firestore_1.Timestamp.now(),
-                createdAt: firestore_1.Timestamp.now(),
-                updatedAt: firestore_1.Timestamp.now(),
-                isFinalized: true,
-                isVisible: false,
-                ...(formData.refApplicationId && { refApplicationId: formData.refApplicationId }),
-                ...(formData.refJobBoardId && { refJobBoardId: formData.refJobBoardId })
-            };
+                criteriaFeedback, evaluationDate: Timestamp.now(), createdAt: Timestamp.now(), updatedAt: Timestamp.now(), isFinalized: true, isVisible: false }, (formData.overallFeedback && { feedback: formData.overallFeedback })), (formData.refApplicationId && { refApplicationId: formData.refApplicationId })), (formData.refJobBoardId && { refJobBoardId: formData.refJobBoardId }));
             // 평가 저장
-            const docRef = await (0, firestore_1.addDoc)((0, firestore_1.collection)(db, this.collection), evaluationData);
+            const docRef = await addDoc(collection(db, this.collection), evaluationData);
             // 사용자 평가 요약 업데이트
             await this.updateUserEvaluationSummary(db, formData.targetUserId);
             return docRef.id;
@@ -301,15 +272,12 @@ class EvaluationService {
     // 사용자별 평가 목록 조회
     static async getUserEvaluations(db, userId, stage) {
         try {
-            let q = (0, firestore_1.query)((0, firestore_1.collection)(db, this.collection), (0, firestore_1.where)('refUserId', '==', userId), (0, firestore_1.orderBy)('evaluationDate', 'desc'));
+            let q = query(collection(db, this.collection), where('refUserId', '==', userId), orderBy('evaluationDate', 'desc'));
             if (stage) {
-                q = (0, firestore_1.query)((0, firestore_1.collection)(db, this.collection), (0, firestore_1.where)('refUserId', '==', userId), (0, firestore_1.where)('evaluationStage', '==', stage), (0, firestore_1.orderBy)('evaluationDate', 'desc'));
+                q = query(collection(db, this.collection), where('refUserId', '==', userId), where('evaluationStage', '==', stage), orderBy('evaluationDate', 'desc'));
             }
-            const snapshot = await (0, firestore_1.getDocs)(q);
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
         }
         catch (error) {
             console.error('사용자 평가 조회 오류:', error);
@@ -321,13 +289,13 @@ class EvaluationService {
         try {
             const evaluations = await this.getUserEvaluations(db, userId);
             if (evaluations.length === 0) {
-                await (0, firestore_1.updateDoc)((0, firestore_1.doc)(db, 'users', userId), {
-                    evaluationSummary: (0, firestore_1.deleteField)(),
-                    updatedAt: firestore_1.Timestamp.now()
+                await updateDoc(doc(db, 'users', userId), {
+                    evaluationSummary: deleteField(),
+                    updatedAt: Timestamp.now()
                 });
-                const summaryDocRef = (0, firestore_1.doc)(db, this.summaryCollection, userId);
+                const summaryDocRef = doc(db, this.summaryCollection, userId);
                 try {
-                    await (0, firestore_1.deleteDoc)(summaryDocRef);
+                    await deleteDoc(summaryDocRef);
                 }
                 catch (error) {
                     console.log('요약 문서가 이미 존재하지 않습니다:', error);
@@ -337,7 +305,7 @@ class EvaluationService {
             const summary = {
                 overallAverage: 0,
                 totalEvaluations: evaluations.length,
-                lastUpdatedAt: firestore_1.Timestamp.now()
+                lastUpdatedAt: Timestamp.now()
             };
             const stageGroups = {
                 documentReview: evaluations.filter(e => e.evaluationStage === '서류 전형'),
@@ -381,15 +349,12 @@ class EvaluationService {
                 }
             });
             summary.overallAverage = totalCount > 0 ? totalScoreSum / totalCount : 0;
-            await (0, firestore_1.updateDoc)((0, firestore_1.doc)(db, 'users', userId), {
+            await updateDoc(doc(db, 'users', userId), {
                 evaluationSummary: summary,
-                updatedAt: firestore_1.Timestamp.now()
+                updatedAt: Timestamp.now()
             });
-            const summaryDocRef = (0, firestore_1.doc)(db, this.summaryCollection, userId);
-            await (0, firestore_1.setDoc)(summaryDocRef, {
-                userId,
-                ...summary
-            }, { merge: true });
+            const summaryDocRef = doc(db, this.summaryCollection, userId);
+            await setDoc(summaryDocRef, Object.assign({ userId }, summary), { merge: true });
         }
         catch (error) {
             console.error('사용자 평가 요약 업데이트 오류:', error);
@@ -399,11 +364,8 @@ class EvaluationService {
     // 평가 수정
     static async updateEvaluation(db, evaluationId, updateData) {
         try {
-            await (0, firestore_1.updateDoc)((0, firestore_1.doc)(db, this.collection, evaluationId), {
-                ...updateData,
-                updatedAt: firestore_1.Timestamp.now()
-            });
-            const evaluationDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, this.collection, evaluationId));
+            await updateDoc(doc(db, this.collection, evaluationId), Object.assign(Object.assign({}, updateData), { updatedAt: Timestamp.now() }));
+            const evaluationDoc = await getDoc(doc(db, this.collection, evaluationId));
             if (evaluationDoc.exists()) {
                 const evaluation = evaluationDoc.data();
                 await this.updateUserEvaluationSummary(db, evaluation.refUserId);
@@ -417,13 +379,13 @@ class EvaluationService {
     // 평가 삭제
     static async deleteEvaluation(db, evaluationId) {
         try {
-            const evaluationDoc = await (0, firestore_1.getDoc)((0, firestore_1.doc)(db, this.collection, evaluationId));
+            const evaluationDoc = await getDoc(doc(db, this.collection, evaluationId));
             if (!evaluationDoc.exists()) {
                 throw new Error('평가를 찾을 수 없습니다.');
             }
             const evaluation = evaluationDoc.data();
             const userId = evaluation.refUserId;
-            await (0, firestore_1.deleteDoc)((0, firestore_1.doc)(db, this.collection, evaluationId));
+            await deleteDoc(doc(db, this.collection, evaluationId));
             await this.updateUserEvaluationSummary(db, userId);
         }
         catch (error) {
@@ -432,6 +394,5 @@ class EvaluationService {
         }
     }
 }
-exports.EvaluationService = EvaluationService;
 EvaluationService.collection = 'evaluations';
 EvaluationService.summaryCollection = 'userEvaluationSummaries';

@@ -27,6 +27,10 @@ import {
   getScoreTextColor,
   canChangeInterviewStatus,
   canChangeFinalStatus,
+  JOB_EXPERIENCE_GROUP_ROLES,
+  LEGACY_GROUP_REVERSE_MAP,
+  getGroupLabel,
+  JobExperienceGroupRole,
 } from '@smis-mentor/shared';
 
 type JobBoardWithId = JobBoard & { id: string };
@@ -100,7 +104,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [allJobCodes, setAllJobCodes] = useState<JobCodeWithId[]>([]);
   const [selectedJobCodeId, setSelectedJobCodeId] = useState<string>('');
   const [selectedGroup, setSelectedGroup] = useState<JobGroup>('junior');
-  const [selectedGroupRole, setSelectedGroupRole] = useState<'담임' | '수업' | '서포트' | '리더'>('담임');
+  const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [allGenerations, setAllGenerations] = useState<string[]>([]);
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
@@ -110,26 +114,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState<Record<string, boolean>>({}); // 각 사용자별 로딩 상태
   
   // 직무 경험 관련 상수
-  const jobGroups = [
-    { value: 'junior', label: '주니어' },
-    { value: 'middle', label: '미들' },
-    { value: 'senior', label: '시니어' },
-    { value: 'spring', label: '스프링' },
-    { value: 'summer', label: '서머' },
-    { value: 'autumn', label: '어텀' },
-    { value: 'winter', label: '윈터' },
-    { value: 'common', label: '공통' },
-    { value: 'manager', label: '매니저' },
-  ];
+  const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
+    value,
+    label
+  })).concat([{ value: 'manager', label: '매니저' }]);
 
-  const groupRoleOptions = [
-    { value: '담임', label: '담임' },
-    { value: '수업', label: '수업' },
-    { value: '서포트', label: '서포트' },
-    { value: '리더', label: '리더' },
-    { value: '매니저', label: '매니저' },
-    { value: '부매니저', label: '부매니저' },
-  ];
+  const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+    value: role,
+    label: role
+  }));
   
   // 모바일 상태 감지
   useEffect(() => {
@@ -2431,15 +2424,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                               jobCode.group === 'manager' ? 'bg-indigo-100 text-indigo-700' :
                                               'bg-gray-100 text-gray-700'
                                             }`}>
-                                              {jobCode.group === 'junior' ? '주니어' :
-                                               jobCode.group === 'middle' ? '미들' :
-                                               jobCode.group === 'senior' ? '시니어' :
-                                               jobCode.group === 'spring' ? '스프링' :
-                                               jobCode.group === 'summer' ? '서머' :
-                                               jobCode.group === 'autumn' ? '어텀' :
-                                               jobCode.group === 'winter' ? '윈터' :
-                                               jobCode.group === 'common' ? '공통' :
-                                               '매니저'}
+                                              {getGroupLabel(jobCode.group || '')}
                                             </span>
                                           )}
                                           {groupRole && (
@@ -2540,7 +2525,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                   <label className="block text-sm text-gray-600 mb-1 sm:mb-2">역할</label>
                                   <select
                                     value={selectedGroupRole}
-                                    onChange={(e) => setSelectedGroupRole(e.target.value as '담임' | '수업' | '서포트' | '리더')}
+                                    onChange={(e) => setSelectedGroupRole(e.target.value as JobExperienceGroupRole)}
                                     className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                   >
                                     {groupRoleOptions.map((role) => (

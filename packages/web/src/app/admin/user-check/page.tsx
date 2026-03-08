@@ -10,7 +10,7 @@ import { formatPhoneNumber } from '@/components/common/PhoneInput';
 import { useRouter } from 'next/navigation';
 import { maskRRNLast } from '@/utils/userUtils';
 import { getLessonMaterials, getSections, LessonMaterialData, SectionData, getLessonMaterialTemplates, LessonMaterialTemplate } from '@/lib/lessonMaterialService';
-import { getGenerationCodes, filterMaterialsByGeneration, filterSectionsWithLinks } from '@smis-mentor/shared';
+import { getGenerationCodes, filterMaterialsByGeneration, filterSectionsWithLinks, getGroupLabel } from '@smis-mentor/shared';
 
 type UserWithGroupInfo = User & { groupName?: string };
 
@@ -26,11 +26,19 @@ export default function UserCheck() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showAllGenerations, setShowAllGenerations] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<string>('all'); // 추가: role 필터
+  
+  // 추가: role 필터 옵션
+  const roleFilters = [
+    { value: 'all', label: '전체' },
+    { value: 'mentor', label: '멘토' },
+    { value: 'foreign', label: '원어민' }
+  ];
   
   // 그룹 순서 정의
   const groupOrder = ['manager', 'common', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
   
-  // 그룹 이름 매핑
+  // 그룹 이름 매핑 - getGroupLabel 함수 사용으로 제거 가능하지만 groupOrder와 groupColors를 위해 유지
   const groupLabels: Record<string, string> = {
     'junior': '주니어',
     'middle': '미들',
@@ -172,8 +180,13 @@ export default function UserCheck() {
           grouped[group] = [];
         });
         
+        // role 필터링 적용 후 그룹별로 분류
+        const filteredUsers = selectedRole === 'all' 
+          ? enrichedUsers 
+          : enrichedUsers.filter(user => user.role === selectedRole);
+        
         // 사용자를 그룹별로 분류
-        enrichedUsers.forEach(user => {
+        filteredUsers.forEach(user => {
           const group = user.groupName || 'junior';
           if (grouped[group]) {
             grouped[group].push(user);
@@ -182,7 +195,7 @@ export default function UserCheck() {
           }
         });
         
-        setUsers(enrichedUsers);
+        setUsers(filteredUsers);
         setGroupedUsers(grouped);
       } catch (error) {
         console.error('사용자 로드 오류:', error);
@@ -193,7 +206,7 @@ export default function UserCheck() {
     };
 
     loadUsers();
-  }, [selectedGeneration, selectedCode, jobCodes]);
+  }, [selectedGeneration, selectedCode, jobCodes, selectedRole]);
 
   // 사용자 선택 핸들러 (모달 표시)
   const handleSelectUser = (user: User) => {
@@ -399,12 +412,30 @@ export default function UserCheck() {
             </Button>
             <h1 className="text-2xl font-bold">사용자 조회</h1>
           </div>
-          <p className="text-gray-500 mt-1">업무 코드별로 사용자를 조회합니다.</p>
         </div>
 
         {/* 필터 영역 */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
           <div className="space-y-4">
+            {/* Role 필터 */}
+            <div>
+              <div className="flex flex-wrap gap-2">
+                {roleFilters.map(filter => (
+                  <button
+                    key={filter.value}
+                    className={`px-3 py-1.5 text-sm rounded-full border font-medium ${
+                      selectedRole === filter.value
+                        ? 'bg-teal-100 border-teal-300 text-teal-800'
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setSelectedRole(filter.value)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
             {/* 기수 선택 */}
             <div>
               <div className="flex flex-wrap gap-2">

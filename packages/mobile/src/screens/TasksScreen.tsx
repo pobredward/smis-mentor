@@ -546,6 +546,20 @@ function TaskDetailModal({
               </View>
             </View>
 
+            {/* 대상 그룹 */}
+            {task.targetGroups && task.targetGroups.length > 0 && (
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabel}>대상 그룹</Text>
+                <View style={styles.rolesContainer}>
+                  {task.targetGroups.map(group => (
+                    <View key={group} style={styles.groupBadge}>
+                      <Text style={styles.groupBadgeText}>{group}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {/* 설명 */}
             {task.description && (
               <View style={styles.modalSection}>
@@ -977,6 +991,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#1e40af',
+  },
+  groupBadge: {
+    backgroundColor: '#d1fae5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  groupBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065f46',
   },
   descriptionText: {
     fontSize: 14,

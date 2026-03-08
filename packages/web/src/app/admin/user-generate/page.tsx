@@ -13,15 +13,16 @@ import PhoneInput from '@/components/common/PhoneInput';
 import Button from '@/components/common/Button';
 import { JobCodeWithId, JobGroup } from '@/types';
 import { useRouter } from 'next/navigation';
+import { 
+  JOB_EXPERIENCE_GROUP_ROLES, 
+  LEGACY_GROUP_REVERSE_MAP,
+  JobExperienceGroupRole,
+} from '@smis-mentor/shared';
 
-const groupRoleOptions = [
-  { value: '담임', label: '담임' },
-  { value: '수업', label: '수업' },
-  { value: '서포트', label: '서포트' },
-  { value: '리더', label: '리더' },
-  { value: '매니저', label: '매니저' },
-  { value: '부매니저', label: '부매니저' },
-];
+const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+  value: role,
+  label: role
+}));
 
 const tempUserSchema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
@@ -48,18 +49,11 @@ export default function UserGenerate() {
   const [selectedGenerations, setSelectedGenerations] = useState<string[]>([]);
   const [filteredJobCodes, setFilteredJobCodes] = useState<Record<number, JobCodeWithId[]>>({});
 
-  // 그룹 옵션 정의
-  const jobGroups = [
-    { value: 'junior', label: '주니어' },
-    { value: 'middle', label: '미들' },
-    { value: 'senior', label: '시니어' },
-    { value: 'spring', label: '스프링' },
-    { value: 'summer', label: '서머' },
-    { value: 'autumn', label: '어텀' },
-    { value: 'winter', label: '윈터' },
-    { value: 'common', label: '공통' },
-    { value: 'manager', label: '매니저' },
-  ];
+  // 그룹 옵션 정의 - shared 상수 사용
+  const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
+    value,
+    label
+  })).concat([{ value: 'manager', label: '매니저' }]);
 
   const {
     register,
@@ -148,7 +142,7 @@ export default function UserGenerate() {
     try {
       const jobExperienceIds = data.jobExperiences.map(exp => exp.value);
       const jobExperienceGroups = data.jobExperiences.map(exp => exp.group as JobGroup);
-      const jobExperienceGroupRoles = data.jobExperiences.map(exp => exp.groupRole as '담임' | '수업' | '서포트' | '리더');
+      const jobExperienceGroupRoles = data.jobExperiences.map(exp => exp.groupRole as JobExperienceGroupRole);
       const jobExperienceClassCodes = data.jobExperiences.map(exp => exp.classCode);
       await createTempUser(db, data.name, data.phoneNumber, jobExperienceIds, jobExperienceGroups, jobExperienceGroupRoles, jobExperienceClassCodes);
       toast.success('임시 사용자가 성공적으로 생성되었습니다.');
