@@ -193,7 +193,6 @@ export default function SignUpEducation() {
               ))}
             </select>
             {errors.role && <p className="mt-1 text-sm text-red-600">{errors.role.message}</p>}
-            <p className="mt-1 text-xs text-gray-500">원어민이신 경우 '원어민'을 선택해주세요.</p>
           </div>
 
           <div className="flex items-center justify-between mt-6 space-x-4">
