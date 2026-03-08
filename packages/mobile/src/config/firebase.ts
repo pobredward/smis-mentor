@@ -5,7 +5,8 @@ import { getStorage } from 'firebase/storage';
 import { 
   initializeAuth, 
   getAuth,
-  getReactNativePersistence 
+  getReactNativePersistence,
+  type Auth
 } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -33,15 +34,18 @@ const storage = getStorage(app);
 
 // Auth 초기화 (React Native용 AsyncStorage persistence 사용)
 // 중복 초기화 방지를 위해 try-catch 사용
-let auth;
-try {
-  auth = getAuth(app);
-} catch (error) {
-  // Auth가 아직 초기화되지 않은 경우에만 initializeAuth 호출
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
-}
+const initAuth = (): Auth => {
+  try {
+    return getAuth(app);
+  } catch (error) {
+    // Auth가 아직 초기화되지 않은 경우에만 initializeAuth 호출
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  }
+};
+
+const auth = initAuth();
 
 export { app, functions, db, storage, auth };
 

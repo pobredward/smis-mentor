@@ -42,6 +42,17 @@ interface UserWithGroupInfo {
   groupName?: string;
   groupRole?: string;
   classCode?: string;
+  gender?: string;
+  age?: number;
+  rrnFront?: string;
+  rrnLast?: string;
+  address?: string;
+  addressDetail?: string;
+  university?: string;
+  grade?: number;
+  isOnLeave?: boolean | null;
+  major1?: string;
+  major2?: string;
 }
 
 // 그룹 이름 매핑 - getGroupLabel 함수 사용으로 대체 가능하지만 기존 구조 유지
@@ -270,13 +281,13 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
         getLessonMaterials(userId),
         getLessonMaterialTemplates()
       ])
-        .then(async ([materials, templates]) => {
-          setMaterials(materials);
-          setTemplates(templates);
+        .then(async ([fetchedMaterials, fetchedTemplates]) => {
+          setMaterials(fetchedMaterials);
+          setTemplates(fetchedTemplates);
           
           // 각 대제목별 소제목(섹션) 동시 조회하고 링크가 있는 것만 필터링
           const sectionsEntries = await Promise.all(
-            materials.map(async (mat) => {
+            fetchedMaterials.map(async (mat) => {
               const allSections = await getSections(mat.id);
               const filteredSections = filterSectionsWithLinks(allSections);
               return [mat.id, filteredSections];
@@ -287,14 +298,14 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
           setSectionsMap(filteredSectionsMap);
           
           // 링크가 있는 섹션이 있는 자료만 표시하도록 필터링
-          const materialsWithLinks = materials.filter(mat => 
+          const materialsWithLinks = fetchedMaterials.filter(mat => 
             filteredSectionsMap[mat.id]?.length > 0
           );
           setMaterials(materialsWithLinks);
           
           // 기수 코드 추출 및 자동 선택
           if (materialsWithLinks.length > 0) {
-            const codes = getGenerationCodes(materialsWithLinks, templates);
+            const codes = getGenerationCodes(materialsWithLinks, fetchedTemplates);
             if (codes.length > 0) {
               setSelectedGeneration(codes[0]); // 가장 최근 기수 선택
             }
@@ -878,12 +889,6 @@ const styles = StyleSheet.create({
   },
   filterSectionFirst: {
     marginTop: 4,
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 12,
   },
   filterChip: {
     paddingHorizontal: 14,
