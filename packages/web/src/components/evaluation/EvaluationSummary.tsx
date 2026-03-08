@@ -193,7 +193,7 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
             ? getScoreTextColor(evaluationSummary.documentReview.averageScore, 10)
             : 'text-gray-600'
         }`}>
-          {evaluationSummary?.documentReview?.averageScore.toFixed(1) || '-'}
+          {evaluationSummary?.documentReview?.averageScore?.toFixed(1) ?? '-'}
         </span>
       </div>
       
@@ -204,7 +204,7 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
             ? getScoreTextColor(evaluationSummary.interview.averageScore, 10)
             : 'text-gray-600'
         }`}>
-          {evaluationSummary?.interview?.averageScore.toFixed(1) || '-'}
+          {evaluationSummary?.interview?.averageScore?.toFixed(1) ?? '-'}
         </span>
       </div>
       
@@ -215,7 +215,7 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
             ? getScoreTextColor(evaluationSummary.faceToFaceEducation.averageScore, 10)
             : 'text-gray-600'
         }`}>
-          {evaluationSummary?.faceToFaceEducation?.averageScore.toFixed(1) || '-'}
+          {evaluationSummary?.faceToFaceEducation?.averageScore?.toFixed(1) ?? '-'}
         </span>
       </div>
       
@@ -226,7 +226,7 @@ export function EvaluationSummaryCompact({ user }: { user: User }) {
             ? getScoreTextColor(evaluationSummary.campLife.averageScore, 10)
             : 'text-gray-600'
         }`}>
-          {evaluationSummary?.campLife?.averageScore.toFixed(1) || '-'}
+          {evaluationSummary?.campLife?.averageScore?.toFixed(1) ?? '-'}
         </span>
       </div>
     </div>

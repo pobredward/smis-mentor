@@ -444,16 +444,35 @@ export default function UserManage() {
       setFilteredJobCodes([]);
       return;
     }
-    
+
     const filtered = allJobCodes.filter(code => code.generation === selectedGeneration);
+
+    // 커스텀 정렬: J, E, S, F, G, K 순서 우선, 나머지는 알파벳 순서
+    const priorityOrder = ['J', 'E', 'S', 'F', 'G', 'K'];
     
-    // 코드 기준으로 정렬
     filtered.sort((a, b) => {
-      if (a.code < b.code) return -1;
-      if (a.code > b.code) return 1;
-      return 0;
+      const aFirstChar = a.code.charAt(0).toUpperCase();
+      const bFirstChar = b.code.charAt(0).toUpperCase();
+      
+      const aPriority = priorityOrder.indexOf(aFirstChar);
+      const bPriority = priorityOrder.indexOf(bFirstChar);
+      
+      // 둘 다 우선순위에 있는 경우
+      if (aPriority !== -1 && bPriority !== -1) {
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.code.localeCompare(b.code);
+      }
+      
+      // a만 우선순위에 있는 경우
+      if (aPriority !== -1) return -1;
+      
+      // b만 우선순위에 있는 경우
+      if (bPriority !== -1) return 1;
+      
+      // 둘 다 우선순위에 없는 경우 알파벳 순서
+      return a.code.localeCompare(b.code);
     });
-    
+
     setFilteredJobCodes(filtered);
     setSelectedJobCodeId(''); // 선택 초기화
   }, [selectedGeneration, allJobCodes]);
@@ -1423,7 +1442,7 @@ export default function UserManage() {
                       <div className="mt-6 border-t pt-4">
                         <h3 className="text-lg font-semibold mb-3">평가 점수 현황</h3>
                         <EvaluationStageCards 
-                          userId={selectedUser.id}
+                          userId={selectedUser.userId || selectedUser.id}
                           targetUserName={selectedUser.name}
                           evaluatorName={currentAdminName}
                           onEvaluationSuccess={() => {

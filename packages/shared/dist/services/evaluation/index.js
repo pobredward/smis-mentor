@@ -272,6 +272,11 @@ export class EvaluationService {
     // 사용자별 평가 목록 조회
     static async getUserEvaluations(db, userId, stage) {
         try {
+            // userId가 유효하지 않으면 빈 배열 반환
+            if (!userId) {
+                console.warn('getUserEvaluations: userId가 제공되지 않았습니다.');
+                return [];
+            }
             let q = query(collection(db, this.collection), where('refUserId', '==', userId), orderBy('evaluationDate', 'desc'));
             if (stage) {
                 q = query(collection(db, this.collection), where('refUserId', '==', userId), where('evaluationStage', '==', stage), orderBy('evaluationDate', 'desc'));

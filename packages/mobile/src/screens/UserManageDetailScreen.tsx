@@ -190,6 +190,33 @@ export function UserManageDetailScreen({ route, navigation }: any) {
     const filtered = allJobCodes.filter(
       (code) => code.generation === selectedGeneration
     );
+    
+    // 커스텀 정렬: J, E, S, F, G, K 순서 우선, 나머지는 알파벳 순서
+    const priorityOrder = ['J', 'E', 'S', 'F', 'G', 'K'];
+    
+    filtered.sort((a, b) => {
+      const aFirstChar = a.code.charAt(0).toUpperCase();
+      const bFirstChar = b.code.charAt(0).toUpperCase();
+      
+      const aPriority = priorityOrder.indexOf(aFirstChar);
+      const bPriority = priorityOrder.indexOf(bFirstChar);
+      
+      // 둘 다 우선순위에 있는 경우
+      if (aPriority !== -1 && bPriority !== -1) {
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.code.localeCompare(b.code);
+      }
+      
+      // a만 우선순위에 있는 경우
+      if (aPriority !== -1) return -1;
+      
+      // b만 우선순위에 있는 경우
+      if (bPriority !== -1) return 1;
+      
+      // 둘 다 우선순위에 없는 경우 알파벳 순서
+      return a.code.localeCompare(b.code);
+    });
+    
     setFilteredJobCodes(filtered);
     setJobCodeItems(
       filtered.map((code) => ({

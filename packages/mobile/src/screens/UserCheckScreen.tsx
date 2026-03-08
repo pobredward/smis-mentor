@@ -151,7 +151,33 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
       return;
     }
 
-    const filteredCodes = jobCodes.filter((code) => code.generation === selectedGeneration);
+    // 커스텀 정렬: J, E, S, F, G, K 순서 우선, 나머지는 알파벳 순서
+    const priorityOrder = ['J', 'E', 'S', 'F', 'G', 'K'];
+    
+    const filteredCodes = jobCodes
+      .filter((code) => code.generation === selectedGeneration)
+      .sort((a, b) => {
+        const aFirstChar = a.code.charAt(0).toUpperCase();
+        const bFirstChar = b.code.charAt(0).toUpperCase();
+        
+        const aPriority = priorityOrder.indexOf(aFirstChar);
+        const bPriority = priorityOrder.indexOf(bFirstChar);
+        
+        // 둘 다 우선순위에 있는 경우
+        if (aPriority !== -1 && bPriority !== -1) {
+          if (aPriority !== bPriority) return aPriority - bPriority;
+          return a.code.localeCompare(b.code);
+        }
+        
+        // a만 우선순위에 있는 경우
+        if (aPriority !== -1) return -1;
+        
+        // b만 우선순위에 있는 경우
+        if (bPriority !== -1) return 1;
+        
+        // 둘 다 우선순위에 없는 경우 알파벳 순서
+        return a.code.localeCompare(b.code);
+      });
     setCodesForGeneration(filteredCodes);
 
     // 기본 선택: 첫번째 코드
@@ -223,7 +249,15 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
         });
 
         // role 필터링 적용
-        const filteredUsers = enrichedUsers.filter((user: UserWithGroupInfo) => user.role === selectedRole);
+        // mentor 선택 시 mentor_temp도 포함, foreign 선택 시 foreign_temp도 포함
+        const filteredUsers = enrichedUsers.filter((user: UserWithGroupInfo) => {
+          if (selectedRole === 'mentor') {
+            return user.role === 'mentor' || user.role === 'mentor_temp';
+          } else if (selectedRole === 'foreign') {
+            return user.role === 'foreign' || user.role === 'foreign_temp';
+          }
+          return user.role === selectedRole;
+        });
 
         setUsers(filteredUsers);
 

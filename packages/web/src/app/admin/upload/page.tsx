@@ -511,25 +511,33 @@ export default function AdminUploadTemplatePage() {
     ? Array.from(new Set(jobCodes.filter(jc => jc.generation === selectedGeneration).map(jc => jc.code)))
     : [];
 
-  // 사용 가능한 코드 목록 (중복 제거 및 정렬)
-  const availableCodes = codesForSelectedGeneration.sort((a, b) => {
-    // 숫자 부분을 추출하여 비교 (예: "D26" -> 26, "F23_1" -> 23)
-    const getNumericPart = (code: string) => {
-      const match = code.match(/\d+/);
-      return match ? parseInt(match[0], 10) : 0;
-    };
+  // 커스텀 정렬: J, E, S, F, G, K 순서 우선, 나머지는 알파벳 순서
+  const availableCodes = (() => {
+    const priorityOrder = ['J', 'E', 'S', 'F', 'G', 'K'];
     
-    const numA = getNumericPart(a);
-    const numB = getNumericPart(b);
-    
-    // 숫자가 높은 것부터 (내림차순)
-    if (numA !== numB) {
-      return numB - numA;
-    }
-    
-    // 숫자가 같으면 문자열로 비교 (알파벳 순)
-    return a.localeCompare(b) as number;
-  });
+    return codesForSelectedGeneration.sort((a, b) => {
+      const aFirstChar = a.charAt(0).toUpperCase();
+      const bFirstChar = b.charAt(0).toUpperCase();
+      
+      const aPriority = priorityOrder.indexOf(aFirstChar);
+      const bPriority = priorityOrder.indexOf(bFirstChar);
+      
+      // 둘 다 우선순위에 있는 경우
+      if (aPriority !== -1 && bPriority !== -1) {
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return a.localeCompare(b);
+      }
+      
+      // a만 우선순위에 있는 경우
+      if (aPriority !== -1) return -1;
+      
+      // b만 우선순위에 있는 경우
+      if (bPriority !== -1) return 1;
+      
+      // 둘 다 우선순위에 없는 경우 알파벳 순서
+      return a.localeCompare(b);
+    });
+  })();
   
   // 필터링된 템플릿 목록
   const filteredTemplates = templates.filter(t => {

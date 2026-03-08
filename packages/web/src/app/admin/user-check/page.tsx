@@ -104,9 +104,33 @@ export default function UserCheck() {
       return;
     }
     
-    const filteredCodes = jobCodes.filter(
-      code => code.generation === selectedGeneration
-    );
+    // 커스텀 정렬: J, E, S, F, G, K 순서 우선, 나머지는 알파벳 순서
+    const priorityOrder = ['J', 'E', 'S', 'F', 'G', 'K'];
+    
+    const filteredCodes = jobCodes
+      .filter(code => code.generation === selectedGeneration)
+      .sort((a, b) => {
+        const aFirstChar = a.code.charAt(0).toUpperCase();
+        const bFirstChar = b.code.charAt(0).toUpperCase();
+        
+        const aPriority = priorityOrder.indexOf(aFirstChar);
+        const bPriority = priorityOrder.indexOf(bFirstChar);
+        
+        // 둘 다 우선순위에 있는 경우
+        if (aPriority !== -1 && bPriority !== -1) {
+          if (aPriority !== bPriority) return aPriority - bPriority;
+          return a.code.localeCompare(b.code);
+        }
+        
+        // a만 우선순위에 있는 경우
+        if (aPriority !== -1) return -1;
+        
+        // b만 우선순위에 있는 경우
+        if (bPriority !== -1) return 1;
+        
+        // 둘 다 우선순위에 없는 경우 알파벳 순서
+        return a.code.localeCompare(b.code);
+      });
     
     setCodesForGeneration(filteredCodes);
     
@@ -179,7 +203,25 @@ export default function UserCheck() {
         });
         
         // role 필터링 적용 후 그룹별로 분류
-        const filteredUsers = enrichedUsers.filter(user => user.role === selectedRole);
+        // mentor 선택 시 mentor_temp도 포함, foreign 선택 시 foreign_temp도 포함
+        const filteredUsers = enrichedUsers.filter(user => {
+          if (selectedRole === 'mentor') {
+            return user.role === 'mentor' || user.role === 'mentor_temp';
+          } else if (selectedRole === 'foreign') {
+            return user.role === 'foreign' || user.role === 'foreign_temp';
+          }
+          return user.role === selectedRole;
+        });
+        
+        console.log('🔍 User Check - 필터링 전 사용자 수:', enrichedUsers.length);
+        console.log('🔍 User Check - selectedRole:', selectedRole);
+        console.log('🔍 User Check - 필터링 후 사용자 수:', filteredUsers.length);
+        console.log('🔍 User Check - 사용자 role 분포:', 
+          enrichedUsers.reduce((acc: any, user) => {
+            acc[user.role] = (acc[user.role] || 0) + 1;
+            return acc;
+          }, {})
+        );
         
         // 사용자를 그룹별로 분류
         filteredUsers.forEach(user => {
