@@ -28,6 +28,8 @@ import {
   canChangeInterviewStatus,
   canChangeFinalStatus,
   JOB_EXPERIENCE_GROUP_ROLES,
+  MENTOR_GROUP_ROLES,
+  FOREIGN_GROUP_ROLES,
   LEGACY_GROUP_REVERSE_MAP,
   getGroupLabel,
   JobExperienceGroupRole,
@@ -119,10 +121,34 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     label
   })).concat([{ value: 'manager', label: '매니저' }]);
 
-  const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
-    value: role,
-    label: role
-  }));
+  // groupRole 옵션 - 선택된 application의 user role에 따라 다르게 표시
+  const getGroupRoleOptions = (application: ApplicationWithUser | null) => {
+    if (!application?.user) return [];
+    
+    const userRole = application.user.role;
+    
+    // mentor 또는 mentor_temp
+    if (userRole === 'mentor' || userRole === 'mentor_temp') {
+      return MENTOR_GROUP_ROLES.map(role => ({
+        value: role,
+        label: role
+      }));
+    }
+    
+    // foreign 또는 foreign_temp
+    if (userRole === 'foreign' || userRole === 'foreign_temp') {
+      return FOREIGN_GROUP_ROLES.map(role => ({
+        value: role,
+        label: role
+      }));
+    }
+    
+    // admin이나 기타 role은 모두 표시
+    return JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+      value: role,
+      label: role
+    }));
+  };
   
   // 모바일 상태 감지
   useEffect(() => {
@@ -417,6 +443,16 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     setInterviewBaseLink('https://us06web.zoom.us/j/3016520037?pwd=dd11bOqRxjjdq5ptzbnyHXmZjPTEXe.1');
     setInterviewBaseDuration('60');
     setInterviewBaseNotes('회의 ID: 301 652 0037\n비밀번호: 1234\n면접 시작 5분 전에 접속 바랍니다.');
+    
+    // selectedGroupRole을 사용자 role에 맞게 초기화
+    const userRole = app.user?.role;
+    if (userRole === 'mentor' || userRole === 'mentor_temp') {
+      setSelectedGroupRole('담임');
+    } else if (userRole === 'foreign' || userRole === 'foreign_temp') {
+      setSelectedGroupRole('Speaking');
+    } else {
+      setSelectedGroupRole('담임');
+    }
     
     // 사용자 관련 데이터가 아직 로드되지 않았다면 로드
     if (!appliedCampsMap[app.refUserId]) {
@@ -2528,7 +2564,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                     onChange={(e) => setSelectedGroupRole(e.target.value as JobExperienceGroupRole)}
                                     className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                   >
-                                    {groupRoleOptions.map((role) => (
+                                    {getGroupRoleOptions(selectedApplication).map((role) => (
                                       <option key={role.value} value={role.value}>{role.label}</option>
                                     ))}
                                   </select>

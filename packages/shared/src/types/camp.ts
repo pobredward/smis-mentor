@@ -16,18 +16,30 @@ export const JOB_EXPERIENCE_GROUPS = [
 
 export type JobExperienceGroup = typeof JOB_EXPERIENCE_GROUPS[number];
 
-// 그룹 역할 선택지
-export const JOB_EXPERIENCE_GROUP_ROLES = [
+// 그룹 역할 선택지 - 멘토용
+export const MENTOR_GROUP_ROLES = [
   '담임',
   '수업',
   '매니저',
+] as const;
+
+// 그룹 역할 선택지 - 원어민용
+export const FOREIGN_GROUP_ROLES = [
   'Speaking',
   'Reading',
   'Writing',
   'Mix',
-  'Phonics',
+  'Manager',
 ] as const;
 
+// 전체 그룹 역할 (호환성 유지)
+export const JOB_EXPERIENCE_GROUP_ROLES = [
+  ...MENTOR_GROUP_ROLES,
+  ...FOREIGN_GROUP_ROLES,
+] as const;
+
+export type MentorGroupRole = typeof MENTOR_GROUP_ROLES[number];
+export type ForeignGroupRole = typeof FOREIGN_GROUP_ROLES[number];
 export type JobExperienceGroupRole = typeof JOB_EXPERIENCE_GROUP_ROLES[number];
 
 // 레거시 그룹 매핑 (junior/middle/senior <-> 주니어/미들/시니어)

@@ -16,7 +16,7 @@ import { Timestamp, doc, getDoc, collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { JOB_EXPERIENCE_GROUP_ROLES, LEGACY_GROUP_REVERSE_MAP, getGroupLabel, JobExperienceGroupRole } from '@smis-mentor/shared';
+import { JOB_EXPERIENCE_GROUP_ROLES, MENTOR_GROUP_ROLES, FOREIGN_GROUP_ROLES, LEGACY_GROUP_REVERSE_MAP, getGroupLabel, JobExperienceGroupRole } from '@smis-mentor/shared';
 
 type EditFormData = {
   name?: string;
@@ -183,11 +183,34 @@ export default function UserManage() {
     { value: 'foreign_temp', label: '원어민(임시)' },
   ];
 
-  // groupRole 옵션
-  const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
-    value: role,
-    label: role
-  }));
+  // groupRole 옵션 - 선택된 user의 role에 따라 다르게 표시
+  const getGroupRoleOptions = () => {
+    if (!selectedUser) return [];
+    
+    const userRole = selectedUser.role;
+    
+    // mentor 또는 mentor_temp
+    if (userRole === 'mentor' || userRole === 'mentor_temp') {
+      return MENTOR_GROUP_ROLES.map(role => ({
+        value: role,
+        label: role
+      }));
+    }
+    
+    // foreign 또는 foreign_temp
+    if (userRole === 'foreign' || userRole === 'foreign_temp') {
+      return FOREIGN_GROUP_ROLES.map(role => ({
+        value: role,
+        label: role
+      }));
+    }
+    
+    // admin이나 기타 role은 모두 표시
+    return JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+      value: role,
+      label: role
+    }));
+  };
 
   // 사용자 목록 불러오기
   useEffect(() => {
@@ -269,6 +292,16 @@ export default function UserManage() {
     // 선택 초기화
     setSelectedJobCodeId('');
     setSelectedGeneration('');
+    
+    // selectedGroupRole을 사용자 role에 맞게 초기화
+    const userRole = user.role;
+    if (userRole === 'mentor' || userRole === 'mentor_temp') {
+      setSelectedGroupRole('담임');
+    } else if (userRole === 'foreign' || userRole === 'foreign_temp') {
+      setSelectedGroupRole('Speaking');
+    } else {
+      setSelectedGroupRole('담임');
+    }
     
     // 사용자의 직무 경험 정보 로드
     if (user.jobExperiences && user.jobExperiences.length > 0) {
@@ -691,7 +724,7 @@ export default function UserManage() {
                 onChange={(e) => setSelectedGroupRole(e.target.value as JobExperienceGroupRole)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {groupRoleOptions.map((role) => (
+                {getGroupRoleOptions().map((role) => (
                   <option key={role.value} value={role.value}>{role.label}</option>
                 ))}
               </select>

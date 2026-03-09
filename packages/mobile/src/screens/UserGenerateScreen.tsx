@@ -15,7 +15,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '../config/firebase';
 import { createTempUser, adminGetAllJobCodes } from '@smis-mentor/shared';
 import { 
-  JOB_EXPERIENCE_GROUP_ROLES, 
+  JOB_EXPERIENCE_GROUP_ROLES,
+  MENTOR_GROUP_ROLES,
+  FOREIGN_GROUP_ROLES,
   LEGACY_GROUP_REVERSE_MAP 
 } from '../../../shared/src/types/camp';
 
@@ -39,10 +41,24 @@ const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) 
   label
 })).concat([{ value: 'manager', label: '매니저' }]);
 
-const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
-  value: role,
-  label: role
-}));
+const getGroupRoleOptions = (role: 'mentor_temp' | 'foreign_temp' | 'admin') => {
+  if (role === 'mentor_temp') {
+    return MENTOR_GROUP_ROLES.map(r => ({
+      value: r,
+      label: r
+    }));
+  } else if (role === 'foreign_temp') {
+    return FOREIGN_GROUP_ROLES.map(r => ({
+      value: r,
+      label: r
+    }));
+  }
+  // admin은 모두 표시
+  return JOB_EXPERIENCE_GROUP_ROLES.map(r => ({
+    value: r,
+    label: r
+  }));
+};
 
 const roleOptions = [
   { value: 'mentor_temp', label: '멘토 (회원가입 전)' },
@@ -80,6 +96,7 @@ export function UserGenerateScreen({ navigation }: any) {
   });
 
   const jobExperiences = watch('jobExperiences');
+  const currentRole = watch('role');
 
   useEffect(() => {
     loadJobCodes();
@@ -410,7 +427,7 @@ export function UserGenerateScreen({ navigation }: any) {
                               Alert.alert(
                                 '역할 선택',
                                 '',
-                                groupRoleOptions.map((role) => ({
+                                getGroupRoleOptions(currentRole).map((role) => ({
                                   text: role.label,
                                   onPress: () => onChange(role.value),
                                 }))

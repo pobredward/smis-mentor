@@ -24,7 +24,9 @@ import {
   EvaluationStage,
 } from '@smis-mentor/shared';
 import { 
-  JOB_EXPERIENCE_GROUP_ROLES, 
+  JOB_EXPERIENCE_GROUP_ROLES,
+  MENTOR_GROUP_ROLES,
+  FOREIGN_GROUP_ROLES,
   LEGACY_GROUP_REVERSE_MAP,
   JobExperienceGroupRole,
 } from '../../../shared/src/types/camp';
@@ -79,12 +81,33 @@ export function UserManageDetailScreen({ route, navigation }: any) {
       value
     })).concat([{ label: '매니저', value: 'manager' }])
   );
-  const [groupRoleItems, setGroupRoleItems] = useState(
-    JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+  
+  // groupRoleItems를 user의 role에 따라 동적으로 설정
+  const getGroupRoleItems = () => {
+    const userRole = user?.role;
+    
+    if (userRole === 'mentor' || userRole === 'mentor_temp') {
+      return MENTOR_GROUP_ROLES.map(role => ({
+        label: role,
+        value: role
+      }));
+    }
+    
+    if (userRole === 'foreign' || userRole === 'foreign_temp') {
+      return FOREIGN_GROUP_ROLES.map(role => ({
+        label: role,
+        value: role
+      }));
+    }
+    
+    // admin이나 기타 role은 모두 표시
+    return JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
       label: role,
       value: role
-    }))
-  );
+    }));
+  };
+  
+  const [groupRoleItems, setGroupRoleItems] = useState(getGroupRoleItems());
 
   useEffect(() => {
     loadJobCodes();
@@ -94,6 +117,22 @@ export function UserManageDetailScreen({ route, navigation }: any) {
     loadCurrentUser();
     loadAllJobCodes();
   }, []); // 최초 1회만 실행
+
+  // user의 role이 변경될 때 groupRoleItems 및 selectedGroupRole 업데이트
+  useEffect(() => {
+    const newItems = getGroupRoleItems();
+    setGroupRoleItems(newItems);
+    
+    // selectedGroupRole을 user의 role에 맞게 초기화
+    const userRole = user?.role;
+    if (userRole === 'mentor' || userRole === 'mentor_temp') {
+      setSelectedGroupRole('담임');
+    } else if (userRole === 'foreign' || userRole === 'foreign_temp') {
+      setSelectedGroupRole('Speaking');
+    } else {
+      setSelectedGroupRole('담임');
+    }
+  }, [user?.role]);
 
   const loadCurrentUser = async () => {
     try {

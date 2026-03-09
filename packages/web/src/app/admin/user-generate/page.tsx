@@ -14,15 +14,31 @@ import Button from '@/components/common/Button';
 import { JobCodeWithId, JobGroup } from '@/types';
 import { useRouter } from 'next/navigation';
 import { 
-  JOB_EXPERIENCE_GROUP_ROLES, 
+  JOB_EXPERIENCE_GROUP_ROLES,
+  MENTOR_GROUP_ROLES,
+  FOREIGN_GROUP_ROLES,
   LEGACY_GROUP_REVERSE_MAP,
   JobExperienceGroupRole,
 } from '@smis-mentor/shared';
 
-const groupRoleOptions = JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
-  value: role,
-  label: role
-}));
+const getGroupRoleOptions = (role: 'mentor_temp' | 'foreign_temp' | 'admin') => {
+  if (role === 'mentor_temp') {
+    return MENTOR_GROUP_ROLES.map(role => ({
+      value: role,
+      label: role
+    }));
+  } else if (role === 'foreign_temp') {
+    return FOREIGN_GROUP_ROLES.map(role => ({
+      value: role,
+      label: role
+    }));
+  }
+  // admin은 모두 표시
+  return JOB_EXPERIENCE_GROUP_ROLES.map(role => ({
+    value: role,
+    label: role
+  }));
+};
 
 const roleOptions = [
   { value: 'mentor_temp', label: '멘토 (회원가입 전)' },
@@ -68,6 +84,7 @@ export default function UserGenerate() {
     control,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<TempUserFormValues>({
     resolver: zodResolver(tempUserSchema),
@@ -81,6 +98,8 @@ export default function UserGenerate() {
     control,
     name: 'jobExperiences',
   });
+
+  const currentRole = watch('role');
 
   useEffect(() => {
     const fetchJobCodes = async () => {
@@ -155,6 +174,19 @@ export default function UserGenerate() {
     setFilteredJobCodes(newFilteredCodes);
   }, [selectedGenerations, jobCodes, fields]);
 
+  // role이 변경되면 모든 jobExperiences의 groupRole을 초기화
+  useEffect(() => {
+    if (currentRole === 'mentor_temp') {
+      fields.forEach((_, index) => {
+        setValue(`jobExperiences.${index}.groupRole`, '담임');
+      });
+    } else if (currentRole === 'foreign_temp') {
+      fields.forEach((_, index) => {
+        setValue(`jobExperiences.${index}.groupRole`, 'Speaking');
+      });
+    }
+  }, [currentRole, fields, setValue]);
+
   const handleGenerationChange = (index: number, generation: string) => {
     const newSelectedGenerations = [...selectedGenerations];
     newSelectedGenerations[index] = generation;
@@ -196,7 +228,9 @@ export default function UserGenerate() {
   };
 
   const handleAddJobExperience = () => {
-    append({ value: '', group: 'junior', groupRole: '담임', classCode: '' });
+    const defaultGroupRole = currentRole === 'mentor_temp' ? '담임' : 
+                             currentRole === 'foreign_temp' ? 'Speaking' : '담임';
+    append({ value: '', group: 'junior', groupRole: defaultGroupRole, classCode: '' });
     setSelectedGenerations([...selectedGenerations, '']);
   };
 
@@ -358,7 +392,7 @@ export default function UserGenerate() {
                             className={`w-full px-3 py-2 border ${errors.jobExperiences?.[index]?.groupRole ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                             {...register(`jobExperiences.${index}.groupRole`)}
                           >
-                            {groupRoleOptions.map(role => (
+                            {getGroupRoleOptions(currentRole).map(role => (
                               <option key={role.value} value={role.value}>{role.label}</option>
                             ))}
                           </select>

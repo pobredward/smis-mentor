@@ -12,8 +12,15 @@ import type {
 } from '@smis-mentor/shared';
 import {
   JOB_EXPERIENCE_GROUP_ROLES,
+  MENTOR_GROUP_ROLES,
+  FOREIGN_GROUP_ROLES,
   JOB_EXPERIENCE_GROUPS 
 } from '@smis-mentor/shared';
+
+type TargetRoleType = 'mentor' | 'foreign';
+
+const getMentorRoles = (): JobExperienceGroupRole[] => Array.from(MENTOR_GROUP_ROLES);
+const getForeignRoles = (): JobExperienceGroupRole[] => Array.from(FOREIGN_GROUP_ROLES);
 
 interface TaskFormProps {
   campCode: string;
@@ -24,11 +31,16 @@ interface TaskFormProps {
   onSuccess: () => void;
 }
 
-const roleOptions: JobExperienceGroupRole[] = [...JOB_EXPERIENCE_GROUP_ROLES];
 const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
 
 export default function TaskFormModal({ campCode, createdBy, task, selectedDate, onClose, onSuccess }: TaskFormProps) {
   const isEdit = !!task;
+
+  // 타겟 role 타입 (멘토용/원어민용) - default는 mentor
+  const [targetRoleType, setTargetRoleType] = useState<TargetRoleType>('mentor');
+  
+  // roleOptions는 targetRoleType에 따라 동적으로 변경
+  const roleOptions = targetRoleType === 'mentor' ? getMentorRoles() : getForeignRoles();
 
   // 날짜 및 시간 (최상단)
   const [date, setDate] = useState(() => {
@@ -286,6 +298,43 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
 
         {/* 폼 */}
         <form onSubmit={handleSubmit} className="p-4 space-y-3 max-h-[calc(100vh-240px)] sm:max-h-[70vh] overflow-y-auto">
+          {/* 0. 타겟 역할 타입 선택 (mentor/foreign) */}
+          <div className="border border-purple-200 bg-purple-50/30 rounded-lg p-3">
+            <label className="block text-xs font-medium text-gray-700 mb-2">
+              🎯 업무 대상 선택 (멘토/원어민)
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetRoleType('mentor');
+                  setSelectedRoles([]); // 역할 초기화
+                }}
+                className={`flex-1 px-3 py-2 border rounded-lg transition-all text-xs font-medium ${
+                  targetRoleType === 'mentor'
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                멘토용
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetRoleType('foreign');
+                  setSelectedRoles([]); // 역할 초기화
+                }}
+                className={`flex-1 px-3 py-2 border rounded-lg transition-all text-xs font-medium ${
+                  targetRoleType === 'foreign'
+                    ? 'bg-green-600 border-green-600 text-white'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                원어민용
+              </button>
+            </div>
+          </div>
+
           {/* 1. 날짜 및 시간 */}
           <div className="border border-blue-200 bg-blue-50/30 rounded-lg p-3 space-y-2">
             <h4 className="text-xs font-semibold text-gray-900 flex items-center gap-1">
