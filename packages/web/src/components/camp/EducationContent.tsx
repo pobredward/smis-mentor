@@ -36,13 +36,11 @@ export default function EducationContent() {
 
   const loadEducationLinks = useCallback(async () => {
     if (!activeJobCodeId) {
-      console.log('⚠️ EducationContent: activeJobCodeId 없음');
       setLoading(false);
       return;
     }
 
     try {
-      console.log('📥 EducationContent: 교육 링크 로드 시작 -', activeJobCodeId);
       setLoading(true);
       
       setEducationLinks([]);
@@ -51,10 +49,8 @@ export default function EducationContent() {
       const resources = await generationResourcesService.getResourcesByJobCodeId(activeJobCodeId);
       
       if (resources?.educationLinks) {
-        console.log('✅ EducationContent: 교육 링크 로드 성공 -', resources.educationLinks.length, '개');
         setEducationLinks(resources.educationLinks);
         
-        // 모든 링크의 초기 로딩 상태 설정
         const initialStates = resources.educationLinks.reduce((acc, link) => {
           acc[link.id] = true;
           return acc;
@@ -64,18 +60,15 @@ export default function EducationContent() {
         if (resources.educationLinks.length > 0) {
           setSelectedLinkId(resources.educationLinks[0].id);
         }
-      } else {
-        console.log('⚠️ EducationContent: 해당 기수의 교육 링크 없음');
       }
     } catch (error) {
-      console.error('❌ EducationContent: 교육 링크 로드 실패:', error);
+      console.error('EducationContent: 교육 링크 로드 실패:', error);
     } finally {
       setLoading(false);
     }
   }, [activeJobCodeId]);
 
   useEffect(() => {
-    console.log('🔄 EducationContent: activeJobCodeId 변경됨:', activeJobCodeId);
     if (activeJobCodeId) {
       loadEducationLinks();
     } else {
