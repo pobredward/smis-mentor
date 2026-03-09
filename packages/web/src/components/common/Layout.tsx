@@ -12,9 +12,10 @@ type LayoutProps = {
   children: ReactNode;
   requireAuth?: boolean;
   requireAdmin?: boolean;
+  noPadding?: boolean;
 };
 
-export default function Layout({ children, requireAuth, requireAdmin }: LayoutProps) {
+export default function Layout({ children, requireAuth, requireAdmin, noPadding }: LayoutProps) {
   const { currentUser, userData, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -73,9 +74,13 @@ export default function Layout({ children, requireAuth, requireAdmin }: LayoutPr
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-grow pb-20 md:pb-0">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          {children}
-        </div>
+        {noPadding ? (
+          children
+        ) : (
+          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            {children}
+          </div>
+        )}
       </main>
       <Footer />
       <BottomNavigation />

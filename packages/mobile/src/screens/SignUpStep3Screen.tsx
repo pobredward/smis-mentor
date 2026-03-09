@@ -23,15 +23,9 @@ interface SignUpStep3ScreenProps {
     isOnLeave: boolean | null;
     major1: string;
     major2?: string;
-    role: 'mentor' | 'foreign';
   }) => void;
   onBack: () => void;
 }
-
-const roleOptions = [
-  { value: 'mentor', label: '멘토' },
-  { value: 'foreign', label: '원어민' },
-];
 
 export function SignUpStep3Screen({
   name,
@@ -46,7 +40,6 @@ export function SignUpStep3Screen({
   const [isOnLeave, setIsOnLeave] = useState<boolean | null>(false);
   const [major1, setMajor1] = useState('');
   const [major2, setMajor2] = useState('');
-  const [role, setRole] = useState<'mentor' | 'foreign'>('mentor');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -81,7 +74,6 @@ export function SignUpStep3Screen({
         isOnLeave,
         major1,
         major2,
-        role,
       });
     } catch (error) {
       console.error('교육 정보 확인 오류:', error);
@@ -104,17 +96,6 @@ export function SignUpStep3Screen({
         { text: '졸업생', onPress: () => setGrade(6) },
         { text: '취소', style: 'cancel' },
       ]
-    );
-  };
-
-  const handleRoleSelect = () => {
-    Alert.alert(
-      '역할 선택',
-      '',
-      roleOptions.map((option) => ({
-        text: option.label,
-        onPress: () => setRole(option.value as 'mentor' | 'foreign'),
-      }))
     );
   };
 
@@ -199,23 +180,6 @@ export function SignUpStep3Screen({
                 onChangeText={setMajor2}
                 editable={!isLoading}
               />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>역할</Text>
-              <TouchableOpacity
-                style={styles.picker}
-                onPress={handleRoleSelect}
-                disabled={isLoading}
-              >
-                <Text style={styles.pickerText}>
-                  {roleOptions.find((r) => r.value === role)?.label || '멘토'}
-                </Text>
-                <Text style={styles.pickerArrow}>▼</Text>
-              </TouchableOpacity>
-              <Text style={styles.helperText}>
-                원어민이신 경우 '원어민'을 선택해주세요.
-              </Text>
             </View>
 
             <View style={styles.buttonGroup}>

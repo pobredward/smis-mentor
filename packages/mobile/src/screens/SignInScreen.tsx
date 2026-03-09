@@ -119,19 +119,20 @@ export function SignInScreen({
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
+          {/* 로고/타이틀 */}
           <View style={styles.header}>
-            <Text style={styles.title}>로그인</Text>
+            <Text style={styles.title}>SMIS</Text>
             <Text style={styles.subtitle}>
-              이메일과 비밀번호로 로그인하세요
+              SMIS English Camp Recruiting Page
             </Text>
           </View>
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>이메일</Text>
+              <Text style={styles.label}>이메일 / Email</Text>
               <TextInput
                 style={styles.input}
-                placeholder="이메일 주소를 입력하세요"
+                placeholder="이메일을 입력해주세요"
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -141,25 +142,15 @@ export function SignInScreen({
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>비밀번호</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="비밀번호를 입력하세요"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  editable={!isLoading}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeButton}
-                >
-                  <Text style={styles.eyeButtonText}>
-                    {showPassword ? '숨기기' : '보기'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.label}>비밀번호 / Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="비밀번호를 입력해주세요"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={true}
+                editable={!isLoading}
+              />
             </View>
 
             <TouchableOpacity
@@ -178,19 +169,26 @@ export function SignInScreen({
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => setShowResetForm(!showResetForm)}
-              style={styles.forgotPasswordButton}
-            >
-              <Text style={styles.forgotPasswordText}>
-                비밀번호를 잊었습니까?
-              </Text>
-            </TouchableOpacity>
+            {/* 비밀번호 찾기 / 회원가입 버튼 */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                onPress={() => setShowResetForm(!showResetForm)}
+                style={styles.actionButton}
+              >
+                <Text style={styles.forgotPasswordText}>
+                  비밀번호 찾기
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity onPress={onSignUpPress} style={styles.actionButton}>
+                <Text style={styles.signUpLink}>회원가입 / Sign Up</Text>
+              </TouchableOpacity>
+            </View>
 
             {showResetForm && (
               <View style={styles.resetForm}>
                 <Text style={styles.resetFormLabel}>
-                  비밀번호 재설정 이메일을 받을 주소를 입력하세요:
+                  비밀번호 재설정 이메일 받기
                 </Text>
                 <View style={styles.resetFormInputContainer}>
                   <TextInput
@@ -215,13 +213,6 @@ export function SignInScreen({
                 </View>
               </View>
             )}
-
-            <View style={styles.signUpPrompt}>
-              <Text style={styles.signUpPromptText}>계정이 없으신가요? </Text>
-              <TouchableOpacity onPress={onSignUpPress}>
-                <Text style={styles.signUpLink}>회원가입</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </ScrollView>
@@ -236,40 +227,44 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 40,
   },
   content: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
   },
   header: {
-    marginBottom: 30,
-    marginTop: 40,
+    alignItems: 'center',
+    marginBottom: 32,
   },
   title: {
-    fontSize: 28,
+    fontSize: 36,
     fontWeight: 'bold',
-    color: '#1e293b',
+    color: '#2563eb',
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#64748b',
+    textAlign: 'center',
   },
   form: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 16,
+    padding: 24,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
     fontSize: 14,
@@ -287,29 +282,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1e293b',
   },
-  passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 8,
-  },
-  passwordInput: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1e293b',
-  },
-  eyeButton: {
-    paddingHorizontal: 16,
-  },
-  eyeButtonText: {
-    fontSize: 14,
-    color: '#3b82f6',
-    fontWeight: '600',
-  },
   loginButton: {
     backgroundColor: '#3b82f6',
     borderRadius: 8,
@@ -325,17 +297,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  forgotPasswordButton: {
-    marginTop: 16,
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 16,
+  },
+  actionButton: {
+    padding: 4,
   },
   forgotPasswordText: {
     fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  signUpLink: {
+    fontSize: 14,
     color: '#3b82f6',
+    fontWeight: '600',
   },
   resetForm: {
     marginTop: 16,
-    padding: 12,
+    padding: 16,
     backgroundColor: '#f8fafc',
     borderRadius: 8,
     borderWidth: 1,
@@ -345,6 +329,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     marginBottom: 12,
+    fontWeight: '500',
   },
   resetFormInputContainer: {
     flexDirection: 'row',
@@ -375,19 +360,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  signUpPrompt: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 24,
-  },
-  signUpPromptText: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-  signUpLink: {
-    fontSize: 14,
-    color: '#3b82f6',
-    fontWeight: '600',
   },
 });

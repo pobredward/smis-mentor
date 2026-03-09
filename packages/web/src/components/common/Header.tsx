@@ -231,39 +231,48 @@ const Header = () => {
             </nav>
           </div>
 
-          <div className="flex items-center">
-            <div className="relative ml-4" ref={dropdownRef}>
-              <button
-                onClick={toggleProfileDropdown}
-                className={`flex items-center justify-center h-10 w-10 rounded-full transition-all duration-200 ${
-                  isProfileDropdownOpen 
-                    ? 'ring-2 ring-blue-500 ring-offset-2' 
-                    : 'hover:ring-2 hover:ring-gray-300 hover:ring-offset-2'
-                }`}
+          <div className="flex items-center gap-3">
+            {currentUser ? (
+              <div className="relative ml-4" ref={dropdownRef}>
+                <button
+                  onClick={toggleProfileDropdown}
+                  className={`flex items-center justify-center h-10 w-10 rounded-full transition-all duration-200 ${
+                    isProfileDropdownOpen 
+                      ? 'ring-2 ring-blue-500 ring-offset-2' 
+                      : 'hover:ring-2 hover:ring-gray-300 hover:ring-offset-2'
+                  }`}
+                >
+                  {userData?.profileImage ? (
+                    <img 
+                      src={userData.profileImage} 
+                      alt="프로필" 
+                      className="h-10 w-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+                
+                <ProfileDropdown 
+                  isOpen={isProfileDropdownOpen} 
+                  onClose={closeProfileDropdown}
+                  currentUser={currentUser}
+                  userData={userData}
+                  onSignOut={handleSignOut}
+                />
+              </div>
+            ) : (
+              <Link 
+                href="/sign-in"
+                className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
               >
-                {currentUser && userData?.profileImage ? (
-                  <img 
-                    src={userData.profileImage} 
-                    alt="프로필" 
-                    className="h-10 w-10 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                )}
-              </button>
-              
-              <ProfileDropdown 
-                isOpen={isProfileDropdownOpen} 
-                onClose={closeProfileDropdown}
-                currentUser={currentUser}
-                userData={userData}
-                onSignOut={handleSignOut}
-              />
-            </div>
+                Login / Sign Up
+              </Link>
+            )}
           </div>
         </div>
       </div>

@@ -3,6 +3,7 @@
 import React, { ReactNode } from 'react';
 import Header from './Header';
 import Footer from './Footer';
+import BottomNavigation from './BottomNavigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import Button from './Button';
@@ -11,19 +12,18 @@ type LayoutProps = {
   children: ReactNode;
   requireAuth?: boolean;
   requireAdmin?: boolean;
+  noPadding?: boolean;
 };
 
-export default function Layout({ children, requireAuth, requireAdmin }: LayoutProps) {
+export default function Layout({ children, requireAuth, requireAdmin, noPadding }: LayoutProps) {
   const { currentUser, userData, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
-  // 로그인이 필요한 페이지로 리디렉션
   const redirectToLogin = () => {
     router.push(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
   };
 
-  // 로딩 중 표시
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -32,7 +32,6 @@ export default function Layout({ children, requireAuth, requireAdmin }: LayoutPr
     );
   }
 
-  // 인증이 필요한 페이지에서 인증 되지 않았을 때
   if (requireAuth && !currentUser) {
     return (
       <div className="min-h-screen">
@@ -56,7 +55,6 @@ export default function Layout({ children, requireAuth, requireAdmin }: LayoutPr
     );
   }
 
-  // 관리자 권한이 필요한 페이지에서 관리자가 아닐 때
   if (requireAdmin && userData?.role !== 'admin') {
     return (
       <div className="min-h-screen">
@@ -75,12 +73,17 @@ export default function Layout({ children, requireAuth, requireAdmin }: LayoutPr
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-grow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          {children}
-        </div>
+      <main className="flex-grow pb-20 md:pb-0">
+        {noPadding ? (
+          children
+        ) : (
+          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            {children}
+          </div>
+        )}
       </main>
       <Footer />
+      <BottomNavigation />
     </div>
   );
 } 

@@ -291,7 +291,7 @@ const Header = () => {
           </div>
 
           {/* 오른쪽 영역 - 로그인 관련 */}
-          <div className="flex items-center">
+          <div className="flex items-center gap-3">
             {/* 관리자 메뉴 */}
             <nav className="hidden md:flex items-center">
               {userData?.role === 'admin' && (
@@ -301,34 +301,41 @@ const Header = () => {
               )}
             </nav>
             
-            {/* 프로필 아이콘 */}
-            <div className="relative ml-4" ref={dropdownRef}>
-              <button
-                onClick={toggleProfileDropdown}
-                className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 focus:outline-none"
+            {currentUser ? (
+              <div className="relative ml-4" ref={dropdownRef}>
+                <button
+                  onClick={toggleProfileDropdown}
+                  className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 focus:outline-none"
+                >
+                  {userData?.profileImage ? (
+                    <img 
+                      src={userData.profileImage} 
+                      alt="프로필" 
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  )}
+                </button>
+                
+                <ProfileDropdown 
+                  isOpen={isProfileDropdownOpen} 
+                  onClose={closeProfileDropdown}
+                  currentUser={currentUser}
+                  userData={userData}
+                  onSignOut={handleSignOut}
+                />
+              </div>
+            ) : (
+              <Link 
+                href="/sign-in"
+                className="hidden md:block px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
               >
-                {currentUser && userData?.profileImage ? (
-                  <img 
-                    src={userData.profileImage} 
-                    alt="프로필" 
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                )}
-              </button>
-              
-              {/* 프로필 드롭다운 메뉴 */}
-              <ProfileDropdown 
-                isOpen={isProfileDropdownOpen} 
-                onClose={closeProfileDropdown}
-                currentUser={currentUser}
-                userData={userData}
-                onSignOut={handleSignOut}
-              />
-            </div>
+                Login / Sign Up
+              </Link>
+            )}
           </div>
         </div>
       </div>

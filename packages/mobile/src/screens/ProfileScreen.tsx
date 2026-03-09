@@ -14,19 +14,36 @@ import { useAuth } from '../context/AuthContext';
 import { signOut } from '../services/authService';
 import { jobCodesService, JobCode } from '../services';
 import { SignInScreen } from './SignInScreen';
+import { RoleSelectionScreen } from './RoleSelectionScreen';
 import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
+import { ForeignSignUpStep1Screen } from './ForeignSignUpStep1Screen';
+import { ForeignSignUpStep2Screen } from './ForeignSignUpStep2Screen';
 import { ProfileEditScreen } from './ProfileEditScreen';
 
-type Screen = 'profile' | 'signin' | 'signup-step1' | 'signup-step2' | 'signup-step3' | 'profile-edit';
+type Screen = 
+  | 'profile' 
+  | 'signin' 
+  | 'role-selection'
+  | 'mentor-signup-step1' 
+  | 'mentor-signup-step2' 
+  | 'mentor-signup-step3'
+  | 'foreign-signup-step1'
+  | 'foreign-signup-step2'
+  | 'profile-edit';
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const { currentUser, userData, loading, updateActiveJobCode } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('signin');
+  const [selectedRole, setSelectedRole] = useState<'mentor' | 'foreign' | null>(null);
   const [signUpData, setSignUpData] = useState<{
     name?: string;
     phone?: string;
+    firstName?: string;
+    lastName?: string;
+    middleName?: string;
+    countryCode?: string;
     email?: string;
     password?: string;
     university?: string;
@@ -34,7 +51,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     isOnLeave?: boolean | null;
     major1?: string;
     major2?: string;
-    role?: 'mentor' | 'foreign';
+    profileImage?: string;
+    cvFile?: any;
+    passportPhoto?: string;
+    foreignIdCard?: string;
   }>({});
   const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
   const [loadingJobCodes, setLoadingJobCodes] = useState(false);
@@ -103,23 +123,31 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     }
   };
 
-  const handleSignUpStep1Next = (data: { name: string; phone: string }) => {
-    setSignUpData({ ...signUpData, ...data });
-    setCurrentScreen('signup-step2');
+  const handleRoleSelect = (role: 'mentor' | 'foreign') => {
+    setSelectedRole(role);
+    if (role === 'mentor') {
+      setCurrentScreen('mentor-signup-step1');
+    } else {
+      setCurrentScreen('foreign-signup-step1');
+    }
   };
 
-  const handleSignUpStep2Next = (data: { email: string; password: string }) => {
+  const handleMentorSignUpStep1Next = (data: { name: string; phone: string }) => {
     setSignUpData({ ...signUpData, ...data });
-    setCurrentScreen('signup-step3');
+    setCurrentScreen('mentor-signup-step2');
   };
 
-  const handleSignUpStep3Next = (data: {
+  const handleMentorSignUpStep2Next = (data: { email: string; password: string }) => {
+    setSignUpData({ ...signUpData, ...data });
+    setCurrentScreen('mentor-signup-step3');
+  };
+
+  const handleMentorSignUpStep3Next = (data: {
     university: string;
     grade: number;
     isOnLeave: boolean | null;
     major1: string;
     major2?: string;
-    role: 'mentor' | 'foreign';
   }) => {
     setSignUpData({ ...signUpData, ...data });
     Alert.alert(
@@ -129,6 +157,42 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         {
           text: '확인',
           onPress: () => setCurrentScreen('signin'),
+        },
+      ]
+    );
+  };
+
+  const handleForeignSignUpStep1Next = (data: {
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    countryCode: string;
+    phone: string;
+  }) => {
+    setSignUpData({ ...signUpData, ...data });
+    setCurrentScreen('foreign-signup-step2');
+  };
+
+  const handleForeignSignUpStep2Next = (data: {
+    email: string;
+    password: string;
+    profileImage?: string;
+    cvFile?: any;
+    passportPhoto?: string;
+    foreignIdCard?: string;
+  }) => {
+    setSignUpData({ ...signUpData, ...data });
+    Alert.alert(
+      '회원가입 완료 안내',
+      '원어민 회원가입은 웹에서 최종 승인이 필요합니다.\n잠시 후 로그인 화면으로 이동합니다.',
+      [
+        {
+          text: '확인',
+          onPress: () => {
+            setCurrentScreen('signin');
+            setSelectedRole(null);
+            setSignUpData({});
+          },
         },
       ]
     );
@@ -434,38 +498,64 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
   // 로그인되지 않은 상태 - 화면 전환
   switch (currentScreen) {
-    case 'signup-step1':
+    case 'role-selection':
+      return (
+        <RoleSelectionScreen
+          onRoleSelect={handleRoleSelect}
+          onBack={() => setCurrentScreen('signin')}
+        />
+      );
+    case 'mentor-signup-step1':
       return (
         <SignUpStep1Screen
-          onNext={handleSignUpStep1Next}
+          onNext={handleMentorSignUpStep1Next}
           onSignInPress={() => setCurrentScreen('signin')}
         />
       );
-    case 'signup-step2':
+    case 'mentor-signup-step2':
       return (
         <SignUpStep2Screen
           name={signUpData.name || ''}
           phone={signUpData.phone || ''}
-          onNext={handleSignUpStep2Next}
-          onBack={() => setCurrentScreen('signup-step1')}
+          onNext={handleMentorSignUpStep2Next}
+          onBack={() => setCurrentScreen('mentor-signup-step1')}
         />
       );
-    case 'signup-step3':
+    case 'mentor-signup-step3':
       return (
         <SignUpStep3Screen
           name={signUpData.name || ''}
           phone={signUpData.phone || ''}
           email={signUpData.email || ''}
           password={signUpData.password || ''}
-          onNext={handleSignUpStep3Next}
-          onBack={() => setCurrentScreen('signup-step2')}
+          onNext={handleMentorSignUpStep3Next}
+          onBack={() => setCurrentScreen('mentor-signup-step2')}
+        />
+      );
+    case 'foreign-signup-step1':
+      return (
+        <ForeignSignUpStep1Screen
+          onNext={handleForeignSignUpStep1Next}
+          onBack={() => setCurrentScreen('role-selection')}
+        />
+      );
+    case 'foreign-signup-step2':
+      return (
+        <ForeignSignUpStep2Screen
+          firstName={signUpData.firstName || ''}
+          lastName={signUpData.lastName || ''}
+          middleName={signUpData.middleName}
+          countryCode={signUpData.countryCode || '+82'}
+          phone={signUpData.phone || ''}
+          onNext={handleForeignSignUpStep2Next}
+          onBack={() => setCurrentScreen('foreign-signup-step1')}
         />
       );
     case 'signin':
     default:
       return (
         <SignInScreen
-          onSignUpPress={() => setCurrentScreen('signup-step1')}
+          onSignUpPress={() => setCurrentScreen('role-selection')}
           onSignInSuccess={() => setCurrentScreen('profile')}
         />
       );

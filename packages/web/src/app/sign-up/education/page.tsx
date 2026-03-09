@@ -10,11 +10,6 @@ import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 
-const roleOptions = [
-  { value: 'mentor', label: '멘토' },
-  { value: 'foreign', label: '원어민' },
-];
-
 const educationSchema = z.object({
   university: z.string().min(1, '학교명을 입력해주세요.'),
   grade: z.number({
@@ -24,7 +19,6 @@ const educationSchema = z.object({
   isOnLeave: z.boolean().nullable(),
   major1: z.string().min(1, '전공을 입력해주세요.'),
   major2: z.string().optional(),
-  role: z.enum(['mentor', 'foreign']),
 });
 
 type EducationFormValues = z.infer<typeof educationSchema>;
@@ -54,7 +48,6 @@ export default function SignUpEducation() {
       isOnLeave: false,
       major1: '',
       major2: '',
-      role: 'mentor',
     },
   });
 
@@ -100,7 +93,7 @@ export default function SignUpEducation() {
       }
       
       // 다음 단계로 이동
-      router.push(`/sign-up/details?name=${encodeURIComponent(name || '')}&phone=${encodeURIComponent(phoneNumber || '')}&email=${encodeURIComponent(email || '')}&password=${encodeURIComponent(password || '')}&university=${encodeURIComponent(data.university)}&grade=${data.grade}&isOnLeave=${data.isOnLeave}&major1=${encodeURIComponent(data.major1)}&major2=${encodeURIComponent(data.major2 || '')}&role=${data.role}`);
+      router.push(`/sign-up/details?name=${encodeURIComponent(name || '')}&phone=${encodeURIComponent(phoneNumber || '')}&email=${encodeURIComponent(email || '')}&password=${encodeURIComponent(password || '')}&university=${encodeURIComponent(data.university)}&grade=${data.grade}&isOnLeave=${data.isOnLeave}&major1=${encodeURIComponent(data.major1)}&major2=${encodeURIComponent(data.major2 || '')}`);
     } catch (error) {
       console.error('교육 정보 확인 오류:', error);
       toast.error('교육 정보 확인 중 오류가 발생했습니다.');
@@ -177,23 +170,6 @@ export default function SignUpEducation() {
             error={errors.major2?.message}
             {...register('major2')}
           />
-
-          <div className="w-full mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-1">역할</label>
-            <select
-              className={`w-full px-3 py-2 border ${
-                errors.role ? 'border-red-500' : 'border-gray-300'
-              } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-              {...register('role')}
-            >
-              {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {errors.role && <p className="mt-1 text-sm text-red-600">{errors.role.message}</p>}
-          </div>
 
           <div className="flex items-center justify-between mt-6 space-x-4">
             <Button

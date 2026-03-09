@@ -92,84 +92,105 @@ export function SignInClient() {
   };
   
   return (
-    <Layout>
-      <div className="max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-center mb-6">로그인</h1>
-        
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded lg:px-8 px-4 pt-6 pb-8 mb-4">
-          <FormInput
-            label="이메일"
-            type="email"
-            placeholder="이메일 주소를 입력하세요"
-            error={errors.email?.message}
-            {...register('email')}
-          />
+    <Layout noPadding>
+      <div className="min-h-[80vh] flex items-center justify-center py-12 px-2 sm:px-6">
+        <div className="max-w-md w-full">
+          {/* 로고/타이틀 */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent mb-3">
+              SMIS
+            </h1>
+            <p className="text-gray-600 text-sm sm:text-base">SMIS English Camp Recruiting Page</p>
+          </div>
           
-          <FormInput
-            label="비밀번호"
-            type="password"
-            placeholder="비밀번호를 입력하세요"
-            error={errors.password?.message}
-            showPasswordToggle={true}
-            {...register('password')}
-          />
-          
-          <div className="flex items-center justify-between mt-6">
+          {/* 로그인 폼 */}
+          <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-xl rounded-2xl px-4 sm:px-6 py-6 sm:py-8 space-y-4">
+            <div className="w-full">
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                이메일 / Email
+              </label>
+              <input
+                type="email"
+                placeholder="이메일을 입력해주세요"
+                className={`w-full px-3 py-2 border ${
+                  errors.email ? 'border-red-500' : 'border-gray-300'
+                } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                {...register('email')}
+              />
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              )}
+            </div>
+            
+            <div className="w-full">
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                비밀번호 / Password
+              </label>
+              <input
+                type="password"
+                placeholder="비밀번호를 입력해주세요"
+                className={`w-full px-3 py-2 border ${
+                  errors.password ? 'border-red-500' : 'border-gray-300'
+                } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                {...register('password')}
+              />
+              {errors.password && (
+                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+              )}
+            </div>
+            
             <Button
               type="submit"
               variant="primary"
               fullWidth
               isLoading={isLoading}
+              className="!mt-6 !bg-blue-600 hover:!bg-blue-700 !py-3 !text-base !font-semibold"
             >
               로그인
             </Button>
-          </div>
-          
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              className="text-sm text-blue-600 hover:text-blue-800"
-              onClick={() => setShowResetForm(!showResetForm)}
-            >
-              비밀번호를 잊었습니까?
-            </button>
-          </div>
-          
-          {showResetForm && (
-            <div className="mt-4 p-3 border border-gray-200 rounded bg-gray-50">
-              <p className="text-sm text-gray-700 mb-2">비밀번호 재설정 이메일을 받을 주소를 입력하세요:</p>
-              <div className="flex space-x-2">
-                <input
-                  type="email"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  placeholder="이메일 주소"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  isLoading={isLoading}
-                  onClick={handleForgotPassword}
-                >
-                  전송
-                </Button>
-              </div>
-            </div>
-          )}
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              계정이 없으신가요?{' '}
+            
+            {/* 비밀번호 찾기 / 회원가입 버튼 */}
+            <div className="flex items-center justify-between pt-4">
+              <button
+                type="button"
+                className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+                onClick={() => setShowResetForm(!showResetForm)}
+              >
+                비밀번호 찾기
+              </button>
               <Link
                 href="/sign-up"
-                className="text-blue-600 hover:text-blue-800"
+                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
               >
-                회원가입
+                회원가입 / Sign Up
               </Link>
-            </p>
-          </div>
-        </form>
+            </div>
+            
+            {/* 비밀번호 재설정 폼 */}
+            {showResetForm && (
+              <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <p className="text-sm text-gray-700 mb-3 font-medium">비밀번호 재설정 이메일 받기</p>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="이메일 주소"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    isLoading={isLoading}
+                    onClick={handleForgotPassword}
+                  >
+                    전송
+                  </Button>
+                </div>
+              </div>
+            )}
+          </form>
+        </div>
       </div>
     </Layout>
   );
