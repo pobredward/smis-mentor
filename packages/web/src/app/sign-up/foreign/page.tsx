@@ -10,6 +10,7 @@ import { getUserByPhone } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
+import ProgressSteps from '@/components/common/ProgressSteps';
 
 const countryCodes = [
   { code: '+82', country: 'South Korea', flag: '🇰🇷' },
@@ -76,87 +77,118 @@ export default function ForeignSignUpStep1() {
   };
   
   return (
-    <Layout>
-      <div className="max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-center mb-2">Foreign Teacher Sign Up</h1>
-        <p className="text-gray-600 text-center mb-6">Please enter your personal information</p>
-        
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded lg:px-8 px-6 pt-6 pb-8 mb-4">
-          <div className="mb-2 text-sm font-medium text-gray-700">
-            Step 1/2: Personal Information
+    <Layout noPadding>
+      <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
+        <div className="max-w-lg w-full">
+          {/* 헤더 */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-green-600 to-emerald-800 bg-clip-text text-transparent">
+              Foreign Teacher Sign Up
+            </h1>
+            <p className="text-gray-600">Please enter your personal information</p>
           </div>
-          
-          <FormInput
-            label="First Name"
-            type="text"
-            placeholder="First Name"
-            error={errors.firstName?.message}
-            {...register('firstName')}
-          />
-          
-          <FormInput
-            label="Last Name"
-            type="text"
-            placeholder="Last Name"
-            error={errors.lastName?.message}
-            {...register('lastName')}
-          />
-          
-          <FormInput
-            label="Middle Name (Optional)"
-            type="text"
-            placeholder="Middle Name (Optional)"
-            error={errors.middleName?.message}
-            {...register('middleName')}
-          />
 
-          <div className="w-full mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-1">
-              Phone Number
-            </label>
-            <div className="flex gap-2">
-              <select
-                className="w-24 px-2 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                {...register('countryCode')}
-              >
-                {countryCodes.map((item) => (
-                  <option key={item.code} value={item.code}>
-                    {item.flag} {item.code}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="tel"
-                className={`flex-1 min-w-0 px-3 py-2 border ${
-                  errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
-                } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-                placeholder="Phone Number"
-                {...register('phoneNumber')}
+          <div className="bg-white shadow-xl rounded-2xl lg:px-10 px-6 pt-8 pb-10">
+            {/* 진행 표시기 */}
+            <ProgressSteps
+              currentStep={1}
+              totalSteps={2}
+              steps={['Personal Info', 'Account']}
+            />
+
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* First Name */}
+              <FormInput
+                label="First Name"
+                type="text"
+                placeholder="Enter your first name"
+                error={errors.firstName?.message}
+                {...register('firstName')}
               />
-            </div>
-            {errors.phoneNumber && (
-              <p className="mt-1 text-sm text-red-600">{errors.phoneNumber.message}</p>
-            )}
+              
+              {/* Last Name */}
+              <FormInput
+                label="Last Name"
+                type="text"
+                placeholder="Enter your last name"
+                error={errors.lastName?.message}
+                {...register('lastName')}
+              />
+              
+              {/* Middle Name */}
+              <FormInput
+                label="Middle Name (Optional)"
+                type="text"
+                placeholder="Enter your middle name (optional)"
+                error={errors.middleName?.message}
+                {...register('middleName')}
+              />
+
+              {/* Phone Number */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Phone Number
+                </label>
+                <div className="flex gap-3">
+                  <select
+                    className="px-3 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    {...register('countryCode')}
+                  >
+                    {countryCodes.map((item) => (
+                      <option key={item.code} value={item.code}>
+                        {item.flag} {item.code}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    className={`flex-1 px-4 py-3 border ${
+                      errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
+                    } rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent`}
+                    placeholder="Phone number"
+                    {...register('phoneNumber')}
+                  />
+                </div>
+                {errors.phoneNumber && (
+                  <p className="mt-2 text-sm text-red-600">{errors.phoneNumber.message}</p>
+                )}
+              </div>
+              
+              {/* 버튼 그룹 */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push('/sign-up')}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  isLoading={isLoading}
+                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800"
+                >
+                  Next
+                </Button>
+              </div>
+            </form>
           </div>
-          
-          <div className="flex items-center justify-between mt-6 space-x-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.push('/sign-up')}
-            >
-              Back
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              isLoading={isLoading}
-            >
-              Next
-            </Button>
+
+          {/* 하단 링크 */}
+          <div className="text-center mt-6">
+            <p className="text-gray-600 text-sm">
+              Already have an account?{' '}
+              <button
+                onClick={() => router.push('/sign-in')}
+                className="text-green-600 hover:text-green-700 font-semibold hover:underline"
+              >
+                Sign In
+              </button>
+            </p>
           </div>
-        </form>
+        </div>
       </div>
     </Layout>
   );

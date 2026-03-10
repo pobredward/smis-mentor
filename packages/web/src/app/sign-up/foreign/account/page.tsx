@@ -10,7 +10,8 @@ import { getUserByEmail } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
-import { FaUpload } from 'react-icons/fa';
+import ProgressSteps from '@/components/common/ProgressSteps';
+import { FaUpload, FaEnvelope, FaLock } from 'react-icons/fa';
 
 const step2Schema = z.object({
   email: z.string().email('Please enter a valid email address.'),
@@ -128,168 +129,190 @@ export default function ForeignSignUpStep2() {
   };
 
   return (
-    <Layout>
-      <div className="max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-center mb-2">Foreign Teacher Sign Up</h1>
-        <p className="text-gray-600 text-center mb-6">Please upload your account information and documents</p>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded lg:px-8 px-4 pt-6 pb-8 mb-4">
-          <div className="mb-4 text-sm font-medium text-gray-700">
-            Step 2/2: Account Information & Documents
+    <Layout noPadding>
+      <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
+        <div className="max-w-2xl w-full">
+          {/* 헤더 */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-green-600 to-emerald-800 bg-clip-text text-transparent">
+              Account & Documents
+            </h1>
+            <p className="text-gray-600">Upload your account information and required documents</p>
           </div>
 
-          <FormInput
-            label="Email"
-            type="email"
-            placeholder="Enter your email address"
-            error={errors.email?.message}
-            {...register('email')}
-          />
+          <div className="bg-white shadow-xl rounded-2xl lg:px-10 px-6 pt-8 pb-10">
+            {/* 진행 표시기 */}
+            <ProgressSteps
+              currentStep={2}
+              totalSteps={2}
+              steps={['Personal Info', 'Account']}
+            />
 
-          <div className="w-full mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-1">Password</label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                className={`w-full px-3 py-2 border ${
-                  errors.password ? 'border-red-500' : 'border-gray-300'
-                } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-                placeholder="Enter your password"
-                {...register('password')}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-blue-600 text-sm font-medium"
-              >
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>}
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* Email */}
+              <div className="relative">
+                <div className="absolute left-3 top-[38px] text-gray-400">
+                  <FaEnvelope className="w-5 h-5" />
+                </div>
+                <FormInput
+                  label="Email"
+                  type="email"
+                  placeholder="example@email.com"
+                  error={errors.email?.message}
+                  className="pl-12"
+                  {...register('email')}
+                />
+              </div>
+
+              {/* Password */}
+              <div className="relative">
+                <div className="absolute left-3 top-[38px] text-gray-400">
+                  <FaLock className="w-5 h-5" />
+                </div>
+                <FormInput
+                  label="Password"
+                  type="password"
+                  placeholder="8+ characters with letters, numbers & symbols"
+                  error={errors.password?.message}
+                  showPasswordToggle={true}
+                  className="pl-12"
+                  {...register('password')}
+                />
+              </div>
+
+              {/* Confirm Password */}
+              <div className="relative">
+                <div className="absolute left-3 top-[38px] text-gray-400">
+                  <FaLock className="w-5 h-5" />
+                </div>
+                <FormInput
+                  label="Confirm Password"
+                  type="password"
+                  placeholder="Re-enter your password"
+                  error={errors.confirmPassword?.message}
+                  showPasswordToggle={true}
+                  className="pl-12"
+                  {...register('confirmPassword')}
+                />
+              </div>
+
+              <div className="border-t border-gray-200 my-8"></div>
+
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Required Documents</h3>
+
+              {/* Profile Photo */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Profile Photo <span className="text-red-500">*</span>
+                </label>
+                <label className="flex items-center justify-center w-full px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all">
+                  <FaUpload className="w-5 h-5 mr-2 text-green-600" />
+                  <span className="text-sm text-gray-700 font-medium">
+                    {profileImage ? profileImage.name : 'Click to upload profile photo'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleFileChange(e, setProfileImage, setProfileImagePreview)}
+                  />
+                </label>
+                {profileImagePreview && (
+                  <div className="mt-3">
+                    <img src={profileImagePreview} alt="Profile Preview" className="w-32 h-32 object-cover rounded-lg shadow-md" />
+                  </div>
+                )}
+              </div>
+
+              {/* CV */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  CV (PDF Format) <span className="text-red-500">*</span>
+                </label>
+                <label className="flex items-center justify-center w-full px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all">
+                  <FaUpload className="w-5 h-5 mr-2 text-green-600" />
+                  <span className="text-sm text-gray-700 font-medium">
+                    {cvFile ? cvFile.name : 'Click to upload your CV (PDF)'}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={(e) => handleFileChange(e, setCvFile)}
+                  />
+                </label>
+              </div>
+
+              {/* Passport Photo */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Passport Photo <span className="text-red-500">*</span>
+                </label>
+                <label className="flex items-center justify-center w-full px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all">
+                  <FaUpload className="w-5 h-5 mr-2 text-green-600" />
+                  <span className="text-sm text-gray-700 font-medium">
+                    {passportPhoto ? passportPhoto.name : 'Click to upload passport photo'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleFileChange(e, setPassportPhoto, setPassportPhotoPreview)}
+                  />
+                </label>
+                {passportPhotoPreview && (
+                  <div className="mt-3">
+                    <img src={passportPhotoPreview} alt="Passport Preview" className="w-full max-w-md h-48 object-cover rounded-lg shadow-md" />
+                  </div>
+                )}
+              </div>
+
+              {/* Alien Registration Card */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Alien Registration Card (Optional)
+                </label>
+                <label className="flex items-center justify-center w-full px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
+                  <FaUpload className="w-5 h-5 mr-2 text-gray-500" />
+                  <span className="text-sm text-gray-600 font-medium">
+                    {foreignIdCard ? foreignIdCard.name : 'Click to upload (if applicable)'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleFileChange(e, setForeignIdCard, setForeignIdCardPreview)}
+                  />
+                </label>
+                {foreignIdCardPreview && (
+                  <div className="mt-3">
+                    <img src={foreignIdCardPreview} alt="ID Card Preview" className="w-full max-w-md h-48 object-cover rounded-lg shadow-md" />
+                  </div>
+                )}
+              </div>
+
+              {/* 버튼 그룹 */}
+              <div className="flex gap-3 pt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.back()}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  isLoading={isLoading}
+                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800"
+                >
+                  Complete Registration
+                </Button>
+              </div>
+            </form>
           </div>
-
-          <div className="w-full mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-1">Confirm Password</label>
-            <div className="relative">
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                className={`w-full px-3 py-2 border ${
-                  errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-                } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-                placeholder="Re-enter your password"
-                {...register('confirmPassword')}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-2.5 text-blue-600 text-sm font-medium"
-              >
-                {showConfirmPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>}
-          </div>
-
-          <div className="border-t border-gray-200 my-6"></div>
-
-          {/* 프로필 사진 */}
-          <div className="w-full mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-1">
-              Profile Photo *
-            </label>
-            <label className="flex items-center justify-center w-full px-4 py-3 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-              <FaUpload className="w-5 h-5 mr-2 text-blue-600" />
-              <span className="text-sm text-blue-600 font-medium">
-                {profileImage ? profileImage.name : 'Upload Profile Photo'}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleFileChange(e, setProfileImage, setProfileImagePreview)}
-              />
-            </label>
-            {profileImagePreview && (
-              <img src={profileImagePreview} alt="Profile Preview" className="mt-2 w-32 h-32 object-cover rounded-lg" />
-            )}
-          </div>
-
-          {/* CV */}
-          <div className="w-full mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-1">
-              CV (PDF) *
-            </label>
-            <label className="flex items-center justify-center w-full px-4 py-3 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-              <FaUpload className="w-5 h-5 mr-2 text-blue-600" />
-              <span className="text-sm text-blue-600 font-medium">
-                {cvFile ? cvFile.name : 'Upload CV (PDF Format)'}
-              </span>
-              <input
-                type="file"
-                accept=".pdf"
-                className="hidden"
-                onChange={(e) => handleFileChange(e, setCvFile)}
-              />
-            </label>
-          </div>
-
-          {/* Passport Photo */}
-          <div className="w-full mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-1">
-              Passport Photo *
-            </label>
-            <label className="flex items-center justify-center w-full px-4 py-3 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-              <FaUpload className="w-5 h-5 mr-2 text-blue-600" />
-              <span className="text-sm text-blue-600 font-medium">
-                {passportPhoto ? passportPhoto.name : 'Upload Passport Photo'}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleFileChange(e, setPassportPhoto, setPassportPhotoPreview)}
-              />
-            </label>
-            {passportPhotoPreview && (
-              <img src={passportPhotoPreview} alt="Passport Preview" className="mt-2 w-full h-48 object-cover rounded-lg" />
-            )}
-          </div>
-
-          {/* 외국인등록증 */}
-          <div className="w-full mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-1">
-              Alien Registration Card (Optional)
-            </label>
-            <label className="flex items-center justify-center w-full px-4 py-3 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-              <FaUpload className="w-5 h-5 mr-2 text-gray-600" />
-              <span className="text-sm text-gray-600 font-medium">
-                {foreignIdCard ? foreignIdCard.name : 'Upload Alien Registration Card'}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleFileChange(e, setForeignIdCard, setForeignIdCardPreview)}
-              />
-            </label>
-            {foreignIdCardPreview && (
-              <img src={foreignIdCardPreview} alt="ID Card Preview" className="mt-2 w-full h-48 object-cover rounded-lg" />
-            )}
-          </div>
-
-          <div className="flex items-center justify-between mt-6 space-x-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-            >
-              Back
-            </Button>
-            <Button type="submit" variant="primary" fullWidth isLoading={isLoading}>
-              Complete
-            </Button>
-          </div>
-        </form>
+        </div>
       </div>
     </Layout>
   );

@@ -11,6 +11,7 @@ import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
+import ProgressSteps from '@/components/common/ProgressSteps';
 
 const step1Schema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
@@ -124,117 +125,146 @@ export default function MentorSignUpStep1() {
   };
   
   return (
-    <Layout>
-      <div className="max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-center mb-2">멘토 회원가입</h1>
-        <p className="text-gray-600 text-center mb-6">개인 정보를 입력해주세요</p>
-        
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded lg:px-8 px-4 pt-6 pb-8 mb-4">
-          <div className="mb-2 text-sm font-medium text-gray-700">
-            1/4 단계: 개인 정보
+    <Layout noPadding>
+      <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
+        <div className="max-w-lg w-full">
+          {/* 헤더 */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+              멘토 회원가입
+            </h1>
+            <p className="text-gray-600">개인 정보를 입력해주세요</p>
           </div>
           
-          <FormInput
-            label="이름"
-            type="text"
-            placeholder="실명을 입력하세요"
-            error={errors.name?.message}
-            {...register('name')}
-          />
-          
-          <FormInput
-            label="휴대폰 번호"
-            type="tel"
-            placeholder="'-' 없이 입력하세요"
-            error={errors.phoneNumber?.message}
-            {...register('phoneNumber')}
-          />
-          
-          <div className="flex items-center justify-between mt-6 space-x-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.push('/sign-up')}
-            >
-              이전
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              isLoading={isLoading}
-            >
-              다음
-            </Button>
+          <div className="bg-white shadow-xl rounded-2xl lg:px-10 px-6 pt-8 pb-10">
+            {/* 진행 표시기 */}
+            <ProgressSteps
+              currentStep={1}
+              totalSteps={4}
+              steps={['개인정보', '이메일', '교육정보', '상세정보']}
+            />
+
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* 이름 입력 */}
+              <FormInput
+                label="이름"
+                type="text"
+                placeholder="실명을 입력하세요"
+                error={errors.name?.message}
+                {...register('name')}
+              />
+              
+              {/* 휴대폰 번호 입력 */}
+              <FormInput
+                label="휴대폰 번호"
+                type="tel"
+                placeholder="'-' 없이 숫자만 입력하세요"
+                error={errors.phoneNumber?.message}
+                {...register('phoneNumber')}
+              />
+              
+              {/* 버튼 그룹 */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push('/sign-up')}
+                  className="flex-1"
+                >
+                  이전
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  isLoading={isLoading}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                >
+                  다음
+                </Button>
+              </div>
+            </form>
           </div>
-        </form>
 
-        {/* Case 1: 사용자 확인 모달 */}
-        {showConfirmModal && (
-          <Modal
-            isOpen={showConfirmModal}
-            onClose={() => setShowConfirmModal(false)}
-            title="멘토 정보 확인"
-          >
-            <div className="p-4">
-              <div className="text-gray-700 mb-6">
-                {jobCodesInfo.map((job, index) => (
-                  <p key={index} className="mb-2">{job.generation} {job.code} - {job.name}</p>
-                ))}
-                <p className="mt-4">위 업무에 참여하신 {userName} 멘토가 맞습니까?</p>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <Button variant="secondary" onClick={handleConfirmNo}>
-                  아니오
-                </Button>
-                <Button variant="primary" onClick={handleConfirmYes}>
-                  예
-                </Button>
-              </div>
-            </div>
-          </Modal>
-        )}
-
-        {/* Case 1-2: 잘못된 정보 모달 */}
-        {showWrongInfoModal && (
-          <Modal
-            isOpen={showWrongInfoModal}
-            onClose={() => {}}
-            title="정보 확인"
-          >
-            <div className="p-4">
-              <p className="text-gray-700 mb-4">
-                관리자가 정보를 잘못 입력했네요. 일단 회원가입을 이어서 진행하시고, 잘못된 정보는 관리자에게 카톡이나 문자 주시면 바로 수정하겠습니다. 관리자 번호: 010-7656-7933 신선웅
-              </p>
-              <div className="flex justify-end">
-                <Button variant="primary" onClick={handleWrongInfoOk}>
-                  예
-                </Button>
-              </div>
-            </div>
-          </Modal>
-        )}
-
-        {/* Case 2: 이미 가입된 사용자 모달 */}
-        {showAlreadyRegisteredModal && (
-          <Modal
-            isOpen={showAlreadyRegisteredModal}
-            onClose={() => {}}
-            title="가입 정보 확인"
-          >
-            <div className="p-4">
-              <p className="text-gray-700 mb-4">
-                이미 가입된 유저입니다. 회원 정보를 잊으셨으면 관리자에게 카톡이나 문자 바랍니다. 관리자 번호: 010-7656-7933 신선웅
-              </p>
-              <div className="flex justify-end">
-                <Button variant="primary" onClick={handleAlreadyRegisteredOk}>
-                  예
-                </Button>
-              </div>
-            </div>
-          </Modal>
-        )}
+          {/* 하단 링크 */}
+          <div className="text-center mt-6">
+            <p className="text-gray-600 text-sm">
+              이미 계정이 있으신가요?{' '}
+              <button
+                onClick={() => router.push('/sign-in')}
+                className="text-blue-600 hover:text-blue-700 font-semibold hover:underline"
+              >
+                로그인하기
+              </button>
+            </p>
+          </div>
+        </div>
       </div>
+
+      {/* Case 1: 사용자 확인 모달 */}
+      {showConfirmModal && (
+        <Modal
+          isOpen={showConfirmModal}
+          onClose={() => setShowConfirmModal(false)}
+          title="멘토 정보 확인"
+        >
+          <div className="p-4">
+            <div className="text-gray-700 mb-6">
+              {jobCodesInfo.map((job, index) => (
+                <p key={index} className="mb-2">{job.generation} {job.code} - {job.name}</p>
+              ))}
+              <p className="mt-4">위 업무에 참여하신 {userName} 멘토가 맞습니까?</p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <Button variant="secondary" onClick={handleConfirmNo}>
+                아니오
+              </Button>
+              <Button variant="primary" onClick={handleConfirmYes}>
+                예
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Case 1-2: 잘못된 정보 모달 */}
+      {showWrongInfoModal && (
+        <Modal
+          isOpen={showWrongInfoModal}
+          onClose={() => {}}
+          title="정보 확인"
+        >
+          <div className="p-4">
+            <p className="text-gray-700 mb-4">
+              관리자가 정보를 잘못 입력했네요. 일단 회원가입을 이어서 진행하시고, 잘못된 정보는 관리자에게 카톡이나 문자 주시면 바로 수정하겠습니다. 관리자 번호: 010-7656-7933 신선웅
+            </p>
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={handleWrongInfoOk}>
+                예
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Case 2: 이미 가입된 사용자 모달 */}
+      {showAlreadyRegisteredModal && (
+        <Modal
+          isOpen={showAlreadyRegisteredModal}
+          onClose={() => {}}
+          title="가입 정보 확인"
+        >
+          <div className="p-4">
+            <p className="text-gray-700 mb-4">
+              이미 가입된 유저입니다. 회원 정보를 잊으셨으면 관리자에게 카톡이나 문자 바랍니다. 관리자 번호: 010-7656-7933 신선웅
+            </p>
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={handleAlreadyRegisteredOk}>
+                예
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Layout>
   );
 }
