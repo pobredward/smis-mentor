@@ -311,8 +311,9 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
 
   const handleApply = async () => {
     if (!userData || !jobBoard) {
-      toast.error('로그인이 필요합니다.');
-      router.push('/sign-in');
+      // 비로그인 상태: 회원가입 페이지로 안내
+      toast.error('로그인 후 프로필 사진 업로드, 자기소개서 및 지원동기를 작성해야 지원할 수 있습니다.');
+      router.push('/sign-up');
       return;
     }
 
@@ -892,23 +893,23 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">지원하려면 로그인이 필요합니다</h3>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">지원하려면 회원가입이 필요합니다</h3>
                         <p className="text-gray-600 mb-6">
-                          로그인 후 이 공고에 지원할 수 있습니다.<br />
+                          로그인하고 프로필 사진 업로드, 자기소개서 및 지원동기를 작성해야 지원할 수 있습니다.<br />
                           아직 회원이 아니신가요? 가입 후 멘토로 활동해보세요!
                         </p>
                         <div className="flex flex-col sm:flex-row gap-3 justify-center">
                           <Button
                             variant="primary"
-                            onClick={() => router.push('/sign-in')}
-                          >
-                            로그인하기
-                          </Button>
-                          <Button
-                            variant="outline"
                             onClick={() => router.push('/sign-up')}
                           >
                             회원가입하기
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => router.push('/sign-in')}
+                          >
+                            이미 계정이 있으신가요?
                           </Button>
                         </div>
                       </div>

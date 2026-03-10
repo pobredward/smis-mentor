@@ -160,7 +160,7 @@ export default function SignUpDetails() {
         setTimeout(async () => {
           try {
             await signOut(); // 로그아웃 수행
-            toast.success('회원가입 완료! 로그인 후 서비스를 이용해 주세요.', { duration: 5000 });
+            toast.success('회원가입 완료! 로그인 후 프로필 사진과 자기소개서 & 지원동기를 작성해주세요.', { duration: 5000 });
             router.push('/');
           } catch (error) {
             console.error('로그아웃 실패:', error);
@@ -225,7 +225,7 @@ export default function SignUpDetails() {
         setTimeout(async () => {
           try {
             await signOut(); // 로그아웃 수행
-            toast.success('회원가입 완료! 로그인 후 서비스를 이용해 주세요.', { duration: 5000 });
+            toast.success('회원가입 완료! 로그인 후 프로필 사진과 자기소개서 & 지원동기를 작성해주세요.', { duration: 5000 });
             router.push('/');
           } catch (error) {
             console.error('로그아웃 실패:', error);

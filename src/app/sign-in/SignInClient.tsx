@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { signIn, resetPassword } from '@/lib/firebaseService';
+import { signIn, resetPassword, getUserByEmail } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -39,19 +39,38 @@ export function SignInClient() {
     setIsLoading(true);
     try {
       await signIn(data.email, data.password);
-      toast.success('로그인에 성공했습니다. 로그인 정보가 브라우저에 안전하게 저장되어 다음에도 자동으로 로그인됩니다.', { 
-        duration: 4000 
-      });
       
-      // URL에서 redirect 매개변수 확인
-      const params = new URLSearchParams(window.location.search);
-      const redirectTo = params.get('redirect');
+      // 사용자 정보 조회
+      const userRecord = await getUserByEmail(data.email);
       
-      // 지연 후 리디렉션
-      setTimeout(() => {
-        // redirectTo가 있으면 해당 경로로, 없으면 메인 페이지로 이동
-        router.push(redirectTo || '/');
-      }, 1000);
+      // 멘토이고 프로필이 미완성인 경우 체크
+      const isMentor = userRecord?.role === 'mentor';
+      const hasProfileImage = !!userRecord?.profileImage;
+      const hasSelfIntro = !!userRecord?.selfIntroduction;
+      const hasJobMotivation = !!userRecord?.jobMotivation;
+      const isProfileIncomplete = isMentor && (!hasProfileImage || !hasSelfIntro || !hasJobMotivation);
+      
+      if (isProfileIncomplete) {
+        toast.success('로그인에 성공했습니다!', { duration: 2000 });
+        setTimeout(() => {
+          alert('프로필 이미지 업로드, 자기소개서 & 지원동기를 작성해주세요.');
+          router.push('/profile/edit');
+        }, 500);
+      } else {
+        toast.success('로그인에 성공했습니다. 로그인 정보가 브라우저에 안전하게 저장되어 다음에도 자동으로 로그인됩니다.', { 
+          duration: 4000 
+        });
+        
+        // URL에서 redirect 매개변수 확인
+        const params = new URLSearchParams(window.location.search);
+        const redirectTo = params.get('redirect');
+        
+        // 지연 후 리디렉션
+        setTimeout(() => {
+          // redirectTo가 있으면 해당 경로로, 없으면 메인 페이지로 이동
+          router.push(redirectTo || '/');
+        }, 1000);
+      }
     } catch (error) {
       console.error('로그인 오류:', error);
       const firebaseError = error as FirebaseError;

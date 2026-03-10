@@ -168,7 +168,16 @@ export default function SignUpDetails() {
         });
         
         toast.success('회원가입이 완료되었습니다!');
-        router.push('/');
+        
+        // 멘토인 경우 프로필 작성 유도
+        if (finalRole === 'mentor') {
+          setTimeout(() => {
+            toast.success('프로필 사진과 자기소개서 & 지원동기를 작성해주세요!', { duration: 5000 });
+          }, 500);
+          router.push('/profile/edit');
+        } else {
+          router.push('/');
+        }
       } else {
         // Firebase Auth에 사용자 등록
         const userCredential = await signUp(email, decodeURIComponent(password));
@@ -220,7 +229,16 @@ export default function SignUpDetails() {
         });
 
         toast.success('회원가입이 완료되었습니다!');
-        router.push('/');
+        
+        // 멘토인 경우 프로필 작성 유도
+        if (role === 'mentor') {
+          setTimeout(() => {
+            toast.success('프로필 사진과 자기소개서 & 지원동기를 작성해주세요!', { duration: 5000 });
+          }, 500);
+          router.push('/profile/edit');
+        } else {
+          router.push('/');
+        }
       }
     } catch (error) {
       console.error('회원가입 오류:', error);
