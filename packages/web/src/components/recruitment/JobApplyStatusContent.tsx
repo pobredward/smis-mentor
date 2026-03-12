@@ -193,7 +193,7 @@ export default function JobApplyStatusContent() {
 
   return (
     <>
-      <div className="space-y-4 px-4 sm:px-6 lg:px-8">
+      <div className="space-y-4 px-4 sm:px-6 lg:px-8 pt-4">
         {applications.map((app) => (
           <div key={app.applicationHistoryId} className="bg-white shadow rounded-lg p-6">
             <div className="mb-4">
