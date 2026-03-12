@@ -105,8 +105,8 @@ export function InterviewManageClient() {
     try {
       setLoadingDates(true);
       const jobBoardsRef = collection(db, 'jobBoards');
-      const jobBoardsQuery = query(jobBoardsRef, where('status', '==', 'active'));
-      const jobBoardsSnapshot = await getDocs(jobBoardsQuery);
+      // active와 closed 상태의 채용 공고 모두 가져오기
+      const jobBoardsSnapshot = await getDocs(jobBoardsRef);
       
       const jobBoardsData = jobBoardsSnapshot.docs.map(doc => ({
         ...doc.data() as JobBoard,
@@ -131,8 +131,8 @@ export function InterviewManageClient() {
     try {
       setLoading(true);
       const jobBoardsRef = collection(db, 'jobBoards');
-      const jobBoardsQuery = query(jobBoardsRef, where('status', '==', 'active'));
-      const jobBoardsSnapshot = await getDocs(jobBoardsQuery);
+      // active와 closed 상태의 채용 공고 모두 가져오기
+      const jobBoardsSnapshot = await getDocs(jobBoardsRef);
       
       const jobBoardsData = jobBoardsSnapshot.docs.map(doc => ({
         ...doc.data() as JobBoard,
@@ -154,6 +154,11 @@ export function InterviewManageClient() {
     try {
       const interviewDateMap = new Map<string, InterviewDateInfo>();
       
+      // 5개월 전 날짜 계산
+      const now = new Date();
+      const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const fiveMonthsAgoTimestamp = Timestamp.fromDate(fiveMonthsAgo);
+      
       // '미정' 날짜를 위한 객체 생성
       const undefinedDateKey = 'undefined-date';
       interviewDateMap.set(undefinedDateKey, {
@@ -164,36 +169,70 @@ export function InterviewManageClient() {
         interviews: []
       });
       
-      // 모든 면접 예정인 지원자 가져오기 (한 번의 쿼리로)
+      // 최근 5개월 이내 면접일이 있거나, 면접일이 없는 서류 합격자만 가져오기
       const applicationsRef = collection(db, 'applicationHistories');
       const q = query(
         applicationsRef, 
-        where('applicationStatus', '==', 'accepted')
+        where('applicationStatus', '==', 'accepted'),
+        where('interviewDate', '>=', fiveMonthsAgoTimestamp)
       );
       
-      const applicationsSnapshot = await getDocs(q);
-      const applications = await Promise.all(
-        applicationsSnapshot.docs.map(async (docSnapshot) => {
-          const data = docSnapshot.data() as ApplicationHistory;
-          
-          // 채용 공고 ID 확인
-          const jobBoard = jobBoardsData.find(jb => jb.id === data.refJobBoardId);
-          if (!jobBoard) return null;
-          
-          // 사용자 정보 가져오기
-          const userRef = doc(db, 'users', data.refUserId);
-          const userDoc = await getDoc(userRef);
-          const userData = userDoc.exists() ? userDoc.data() as User : undefined;
-          
-          return {
-            ...data,
-            id: docSnapshot.id,
-            user: userData ? { ...userData, id: userDoc.id } : undefined,
-            jobBoardTitle: jobBoard.title,
-            jobCode: jobBoard.jobCode // jobCode 추가
-          } as ApplicationWithUser & { jobBoardTitle: string; jobCode: string };
+      // 면접일이 없는 경우를 위한 추가 쿼리
+      const qNoDate = query(
+        applicationsRef,
+        where('applicationStatus', '==', 'accepted'),
+        where('interviewDate', '==', null)
+      );
+      
+      const [applicationsSnapshot, noDateSnapshot] = await Promise.all([
+        getDocs(q),
+        getDocs(qNoDate)
+      ]);
+      
+      // 두 결과를 합침
+      const allDocs = [...applicationsSnapshot.docs, ...noDateSnapshot.docs];
+      
+      // 사용자 ID를 모아서 한 번에 조회
+      const userIds = [...new Set(allDocs.map(doc => doc.data().refUserId))];
+      const usersMap = new Map<string, User & { id: string }>();
+      
+      // 사용자 정보를 배치로 조회 (최대 30개씩)
+      const userBatches = [];
+      for (let i = 0; i < userIds.length; i += 30) {
+        userBatches.push(userIds.slice(i, i + 30));
+      }
+      
+      await Promise.all(
+        userBatches.map(async (batch) => {
+          const usersQuery = query(
+            collection(db, 'users'),
+            where('__name__', 'in', batch)
+          );
+          const usersSnapshot = await getDocs(usersQuery);
+          usersSnapshot.docs.forEach(doc => {
+            usersMap.set(doc.id, { ...doc.data() as User, id: doc.id });
+          });
         })
       );
+      
+      const applications = allDocs.map((docSnapshot) => {
+        const data = docSnapshot.data() as ApplicationHistory;
+        
+        // 채용 공고 ID 확인
+        const jobBoard = jobBoardsData.find(jb => jb.id === data.refJobBoardId);
+        if (!jobBoard) return null;
+        
+        // 사용자 정보 가져오기 (이미 조회한 맵에서)
+        const userData = usersMap.get(data.refUserId);
+        
+        return {
+          ...data,
+          id: docSnapshot.id,
+          user: userData,
+          jobBoardTitle: jobBoard.title,
+          jobCode: jobBoard.jobCode
+        } as ApplicationWithUser & { jobBoardTitle: string; jobCode: string };
+      });
       
       // null 값 제거
       const validApplications = applications
@@ -233,19 +272,21 @@ export function InterviewManageClient() {
           dateInfo.interviews.push(app);
           }
         } else {
-          // 면접일이 없는 경우 '미정' 그룹에 추가
-          const undefinedDateInfo = interviewDateMap.get(undefinedDateKey)!;
-          // 미정 그룹에서도 동일 유저 체크
-          const existingUserInterview = undefinedDateInfo.interviews.find(
-            interview => interview.user?.id === app.user?.id
-          );
+          // 면접일이 없는 경우, 면접 상태가 'pending'(예정)이거나 상태가 없을 때만 '미정' 그룹에 추가
+          if (!app.interviewStatus || app.interviewStatus === 'pending') {
+            const undefinedDateInfo = interviewDateMap.get(undefinedDateKey)!;
+            // 미정 그룹에서도 동일 유저 체크
+            const existingUserInterview = undefinedDateInfo.interviews.find(
+              interview => interview.user?.id === app.user?.id
+            );
 
-          if (existingUserInterview) {
-            // 동일 유저의 기존 면접이 있는 경우, jobBoardTitle을 합침
-            existingUserInterview.jobBoardTitle = `${existingUserInterview.jobBoardTitle} / ${app.jobBoardTitle}`;
-          } else {
-            // 새로운 유저의 면접인 경우 추가
-          undefinedDateInfo.interviews.push(app);
+            if (existingUserInterview) {
+              // 동일 유저의 기존 면접이 있는 경우, jobBoardTitle을 합침
+              existingUserInterview.jobBoardTitle = `${existingUserInterview.jobBoardTitle} / ${app.jobBoardTitle}`;
+            } else {
+              // 새로운 유저의 면접인 경우 추가
+            undefinedDateInfo.interviews.push(app);
+            }
           }
         }
       }
@@ -255,32 +296,42 @@ export function InterviewManageClient() {
         interviewDateMap.delete(undefinedDateKey);
       }
       
-      // 녹화 영상 URL 정보 가져오기
-      for (const [key, dateInfo] of interviewDateMap.entries()) {
-        if (key !== undefinedDateKey) {
+      // 녹화 영상 URL 정보 가져오기 (병렬 처리)
+      const dateKeys = Array.from(interviewDateMap.keys()).filter(key => key !== undefinedDateKey);
+      const recordingUrls = await Promise.all(
+        dateKeys.map(async (key) => {
           try {
+            const dateInfo = interviewDateMap.get(key)!;
             const dateTimeKey = format(dateInfo.date, 'yyyy-MM-dd-HH:mm');
             const interviewDateRef = doc(db, 'interviewDates', dateTimeKey);
             const interviewDateDoc = await getDoc(interviewDateRef);
             
             if (interviewDateDoc.exists()) {
-              const data = interviewDateDoc.data();
-              dateInfo.recordingUrl = data.recordingUrl;
+              return { key, recordingUrl: interviewDateDoc.data().recordingUrl };
             }
+            return { key, recordingUrl: undefined };
           } catch (error) {
             console.error('녹화 영상 URL 로드 오류:', error);
+            return { key, recordingUrl: undefined };
           }
+        })
+      );
+      
+      // 녹화 URL 업데이트
+      recordingUrls.forEach(({ key, recordingUrl }) => {
+        if (recordingUrl) {
+          interviewDateMap.get(key)!.recordingUrl = recordingUrl;
         }
-      }
+      });
       
       // Map을 배열로 변환
       const interviewDatesInfo = Array.from(interviewDateMap.values());
       
-      // 날짜 기준 오름차순 정렬 (미정은 항상 마지막)
+      // 날짜 기준 내림차순 정렬 (최신순, 미정은 항상 마지막)
       interviewDatesInfo.sort((a, b) => {
         if (a.formattedDate === '날짜 미정') return 1;
         if (b.formattedDate === '날짜 미정') return -1;
-        return a.date.getTime() - b.date.getTime();
+        return b.date.getTime() - a.date.getTime();
       });
       
       setInterviewDates(interviewDatesInfo);
@@ -1595,6 +1646,8 @@ export function InterviewManageClient() {
   const filterInterviewDates = useMemo(() => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // 5개월 전 날짜 계산
+    const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, now.getDate());
     
     const futureDates = interviewDates.filter(dateInfo => {
       // '날짜 미정'은 항상 표시
@@ -1606,8 +1659,8 @@ export function InterviewManageClient() {
     const pastDates = interviewDates.filter(dateInfo => {
       // '날짜 미정'은 제외
       if (dateInfo.formattedDate === '날짜 미정') return false;
-      // 오늘 이전 날짜만 필터링
-      return dateInfo.date.getTime() < today.getTime();
+      // 5개월 이내의 과거 날짜만 필터링
+      return dateInfo.date.getTime() < today.getTime() && dateInfo.date.getTime() >= fiveMonthsAgo.getTime();
     });
     
     return { futureDates, pastDates };
@@ -1810,10 +1863,10 @@ export function InterviewManageClient() {
                                 <img 
                                   src={app.user.profileImage} 
                                   alt={app.user?.name || '프로필'} 
-                                  className="w-15 h-15 rounded object-cover border border-gray-100"
+                                  className="w-10 h-10 rounded object-cover border border-gray-100"
                                 />
                               ) : (
-                                <div className="w-15 h-15 rounded bg-gray-200 flex items-center justify-center text-gray-500">
+                                <div className="w-10 h-10 rounded bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
                                   {app.user?.name ? app.user.name.charAt(0) : '?'}
                                 </div>
                               )}
@@ -1905,7 +1958,7 @@ export function InterviewManageClient() {
                               <img 
                                 src={selectedApplication.user?.profileImage} 
                                 alt={selectedApplication.user?.name || '프로필'} 
-                                className="w-20 h-20 rounded object-cover border border-gray-100"
+                                className="w-16 h-16 rounded object-cover border border-gray-100"
                               />
                             ) : (
                               <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xl">
