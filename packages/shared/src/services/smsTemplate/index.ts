@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, Firestore, doc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, Firestore, doc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { TemplateType, SMSTemplate } from '../../types/sms';
 
 // 템플릿 저장
@@ -52,6 +52,12 @@ export async function getSMSTemplateByTypeAndJobBoard(
   jobBoardId?: string
 ): Promise<SMSTemplate | null> {
   try {
+    // jobBoardId가 명시적으로 undefined인 경우 조기 반환
+    if (jobBoardId === undefined) {
+      console.warn('getSMSTemplateByTypeAndJobBoard: jobBoardId is undefined');
+      return null;
+    }
+    
     const templatesRef = collection(db, 'smsTemplates');
     
     // 1. 해당 타입 + 공고 ID에 특화된 템플릿 검색

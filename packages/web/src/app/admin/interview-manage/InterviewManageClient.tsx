@@ -15,6 +15,7 @@ import { SMSMessageBox } from '@/components/admin/SMSMessageBox';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { getInterviewLinks, InterviewLinks } from '@/lib/interviewLinksService';
 import { InterviewLinksManager } from '@/components/admin/InterviewLinksManager';
+import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -39,18 +40,17 @@ export function InterviewManageClient() {
   const [interviewDates, setInterviewDates] = useState<InterviewDateInfo[]>([]);
   const [selectedDate, setSelectedDate] = useState<InterviewDateInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingDates, setLoadingDates] = useState(true); // 면접일 토글 로딩 상태 추가
+  const [loadingDates, setLoadingDates] = useState(true);
   const [selectedApplication, setSelectedApplication] = useState<ApplicationWithUser | null>(null);
-  const [feedbackText, setFeedbackText] = useState('');
   const [interviewTime, setInterviewTime] = useState('');
   const [newSelectedDate, setNewSelectedDate] = useState('');
   const [scriptText, setScriptText] = useState('');
   const [showDetail, setShowDetail] = useState(false);
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState('');
-  const [showScriptModal, setShowScriptModal] = useState(false); // 스크립트 모달 상태 추가
-  const [isEditingScript, setIsEditingScript] = useState(false); // 스크립트 수정 모드 상태 추가
-  const [showPastDates, setShowPastDates] = useState(false); // 과거 면접일 표시 여부
+  const [showScriptModal, setShowScriptModal] = useState(false);
+  const [isEditingScript, setIsEditingScript] = useState(false);
+  const [showPastDates, setShowPastDates] = useState(false);
   
   // 링크 관리 관련 상태 추가
   const [interviewLinks, setInterviewLinks] = useState<InterviewLinks>({
@@ -94,7 +94,6 @@ export function InterviewManageClient() {
   
   // 데이터 로드
   useEffect(() => {
-    // 첫 로딩 시 빠르게 면접일 데이터만 먼저 가져옴
     loadInitialData();
     loadScript();
     loadSmsTemplates();
@@ -361,7 +360,6 @@ export function InterviewManageClient() {
   // 지원자 선택
   const handleSelectApplication = async (app: ApplicationWithUser) => {
     setSelectedApplication(app);
-    setFeedbackText(app.interviewFeedback || '');
     setShowDetail(true);
     
     // 화면 최상단으로 스크롤
@@ -475,7 +473,6 @@ export function InterviewManageClient() {
   const handleSelectDate = (dateInfo: InterviewDateInfo) => {
     setSelectedDate(dateInfo);
     setSelectedApplication(null);
-    setFeedbackText('');
     setShowDetail(false); // 상세 보기 모드 해제
     
     // 선택된 면접일의 jobCode별 지원자 수 계산
@@ -1053,79 +1050,7 @@ export function InterviewManageClient() {
   };
 
   // 피드백 저장
-  const handleSaveFeedback = async () => {
-    if (!selectedApplication) return;
-
-    try {
-      setLoading(true);
-      const applicationRef = doc(db, 'applicationHistories', selectedApplication.id);
-      
-      await updateDoc(applicationRef, {
-        interviewFeedback: feedbackText,
-        updatedAt: Timestamp.fromDate(new Date())
-      });
-
-      toast.success('면접 피드백이 저장되었습니다.');
-      
-      // UI 업데이트 - 선택된 날짜의 인터뷰 목록 업데이트
-      if (selectedDate) {
-        const updatedInterviews = selectedDate.interviews.map(interview => {
-          if (interview.id === selectedApplication.id) {
-            return { ...interview, interviewFeedback: feedbackText };
-          }
-          return interview;
-        });
-        
-        setSelectedDate({
-          ...selectedDate,
-          interviews: updatedInterviews
-        });
-        
-        // 전체 면접 날짜 목록의 데이터도 업데이트
-        const updatedDates = interviewDates.map(dateInfo => {
-          if (dateInfo.formattedDate === selectedDate.formattedDate) {
-            return {
-              ...dateInfo,
-              interviews: updatedInterviews
-            };
-          } else {
-            // 다른 날짜에도 동일한 지원자가 있는지 확인하고 업데이트
-            const dateHasApplication = dateInfo.interviews.some(
-              interview => interview.id === selectedApplication.id
-            );
-            
-            if (dateHasApplication) {
-              return {
-                ...dateInfo,
-                interviews: dateInfo.interviews.map(interview => {
-                  if (interview.id === selectedApplication.id) {
-                    return { ...interview, interviewFeedback: feedbackText };
-                  }
-                  return interview;
-                })
-              };
-            }
-          }
-          return dateInfo;
-        });
-        
-        setInterviewDates(updatedDates);
-        
-        // 선택된 지원자 정보도 업데이트
-        setSelectedApplication({
-          ...selectedApplication,
-          interviewFeedback: feedbackText
-        });
-      }
-      
-    } catch (error) {
-      console.error('피드백 저장 오류:', error);
-      toast.error('면접 피드백을 저장하는 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // 현재 사용자 정보 로드
   // 전화번호에 하이픈 추가 함수
   const formatPhoneNumber = (phoneNumber: string) => {
     if (!phoneNumber) return '';
@@ -1864,10 +1789,10 @@ export function InterviewManageClient() {
                                 <img 
                                   src={app.user.profileImage} 
                                   alt={app.user?.name || '프로필'} 
-                                  className="w-10 h-10 rounded object-cover border border-gray-100"
+                                  className="w-14 h-14 rounded object-cover border border-gray-100"
                                 />
                               ) : (
-                                <div className="w-10 h-10 rounded bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
+                                <div className="w-14 h-14 rounded bg-gray-200 flex items-center justify-center text-gray-500 text-base">
                                   {app.user?.name ? app.user.name.charAt(0) : '?'}
                                 </div>
                               )}
@@ -1959,10 +1884,10 @@ export function InterviewManageClient() {
                               <img 
                                 src={selectedApplication.user?.profileImage} 
                                 alt={selectedApplication.user?.name || '프로필'} 
-                                className="w-16 h-16 rounded object-cover border border-gray-100"
+                                className="w-24 h-24 rounded object-cover border border-gray-100"
                               />
                             ) : (
-                              <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xl">
+                              <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-3xl">
                                 {selectedApplication.user?.name ? selectedApplication.user?.name.charAt(0) : '?'}
                               </div>
                             )}
@@ -2046,7 +1971,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('document_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showDocumentPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showDocumentPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -2057,7 +1982,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('document_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showDocumentFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showDocumentFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -2090,7 +2015,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('interview_scheduled')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewScheduledMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewScheduledMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -2101,7 +2026,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('interview_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -2112,7 +2037,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('interview_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -2143,7 +2068,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('final_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showFinalPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showFinalPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -2154,7 +2079,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('final_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showFinalFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showFinalFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -2624,29 +2549,64 @@ export function InterviewManageClient() {
                         </div>
                       )}
                       
-                      {/* 면접 피드백 */}
+                      {/* 면접 일자 수정 */}
                       <div className="mt-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          면접 피드백
-                        </label>
-                        <textarea
-                          value={feedbackText}
-                          onChange={(e) => setFeedbackText(e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px] min-h-[250px] overflow-auto"
-                          placeholder="면접 피드백을 입력하세요..."
-                          disabled={loading}
-                          style={{ height: '100px', resize: 'none' }}
-                        ></textarea>
-                        <div className="mt-2 flex justify-end">
-                          <Button
-                            variant="primary"
-                            onClick={handleSaveFeedback}
-                            isLoading={loading}
-                            disabled={loading || !feedbackText.trim()}
-                          >
-                            피드백 저장
-                          </Button>
+                        <h3 className="text-lg font-semibold mb-4">면접 일자</h3>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={newSelectedDate}
+                              onChange={(e) => setNewSelectedDate(e.target.value)}
+                              placeholder="2026-01-01"
+                              className="w-32 p-2 text-sm border border-gray-300 rounded-md"
+                            />
+                            <input
+                              type="text"
+                              value={interviewTime}
+                              onChange={(e) => setInterviewTime(e.target.value)}
+                              placeholder="14:00"
+                              className="w-24 p-2 text-sm border border-gray-300 rounded-md"
+                            />
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handleSaveInterviewInfo}
+                              disabled={loading || !newSelectedDate || !interviewTime}
+                              isLoading={loading}
+                            >
+                              변경
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={handleSetUndefinedDate}
+                              disabled={loading}
+                              isLoading={loading}
+                            >
+                              미정
+                            </Button>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            현재: {selectedApplication.interviewDate 
+                              ? format(selectedApplication.interviewDate.toDate(), 'yyyy-MM-dd (E) HH:mm', { locale: ko })
+                              : '날짜 미정'}
+                          </div>
                         </div>
+                      </div>
+                      
+                      {/* 평가 점수 */}
+                      <div className="mt-6">
+                        <h3 className="text-lg font-semibold mb-4">평가 점수</h3>
+                        {selectedApplication.refUserId && auth.currentUser && (
+                          <EvaluationStageCards
+                            userId={selectedApplication.refUserId}
+                            targetUserName={selectedApplication.user?.name || ''}
+                            evaluatorName={auth.currentUser.displayName || ''}
+                            refApplicationId={selectedApplication.id}
+                            refJobBoardId={selectedApplication.refJobBoardId}
+                          />
+                        )}
                       </div>
                     </div>
 

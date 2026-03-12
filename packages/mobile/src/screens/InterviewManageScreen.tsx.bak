@@ -403,6 +403,7 @@ export function InterviewManageScreen({
   const handleSelectDate = (dateInfo: InterviewDateInfo) => {
     setSelectedDate(dateInfo);
     setSelectedApplication(null);
+    setShowDetail(false);
 
     if (dateInfo.interviews.length > 0) {
       const jobCodeCountMap = new Map<string, number>();
@@ -430,6 +431,7 @@ export function InterviewManageScreen({
   // 지원자 선택
   const handleSelectApplication = async (app: ApplicationWithUser) => {
     setSelectedApplication(app);
+    setShowDetail(true);
 
     if (app.interviewDate) {
       const time = format(app.interviewDate.toDate(), 'HH:mm');
@@ -1038,6 +1040,294 @@ export function InterviewManageScreen({
   if (loading && !loadingDates) {
     return (
       <SafeAreaView style={styles.container}>
+                  { label: '선택', value: '' },
+                  { label: '예정', value: 'pending' },
+                  { label: '완료', value: 'complete' },
+                  { label: '합격', value: 'passed' },
+                  { label: '불합격', value: 'failed' },
+                  { label: '불참', value: 'absent' },
+                ]}
+                setOpen={setOpenInterviewStatus}
+                setValue={(callback) => {
+                  const newValue =
+                    typeof callback === 'function'
+                      ? callback(selectedApplication.interviewStatus || '')
+                      : callback;
+                  if (newValue) {
+                    handleStatusChange(selectedApplication.id, newValue, 'interview');
+                  }
+                }}
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                listMode="SCROLLVIEW"
+                scrollViewProps={{
+                  nestedScrollEnabled: true,
+                }}
+                zIndex={2000}
+                zIndexInverse={2000}
+              />
+              {selectedApplication.interviewStatus === 'pending' && (
+                <TouchableOpacity
+                  style={styles.smsToggleButtonSmall}
+                  onPress={() => toggleSMSMessage('interview_scheduled')}
+                >
+                  <Text style={styles.smsToggleButtonTextSmall}>
+                    {showSMSMessage.interview_scheduled ? '닫기' : '메시지'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {selectedApplication.interviewStatus === 'passed' && (
+                <TouchableOpacity
+                  style={styles.smsToggleButtonSmall}
+                  onPress={() => toggleSMSMessage('interview_pass')}
+                >
+                  <Text style={styles.smsToggleButtonTextSmall}>
+                    {showSMSMessage.interview_pass ? '닫기' : '메시지'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {selectedApplication.interviewStatus === 'failed' && (
+                <TouchableOpacity
+                  style={styles.smsToggleButtonSmall}
+                  onPress={() => toggleSMSMessage('interview_fail')}
+                >
+                  <Text style={styles.smsToggleButtonTextSmall}>
+                    {showSMSMessage.interview_fail ? '닫기' : '메시지'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* 최종 상태 */}
+            <View style={styles.statusColumn}>
+              <Text style={styles.statusColumnLabel}>최종 상태</Text>
+              <DropDownPicker
+                open={openFinalStatus}
+                value={selectedApplication.finalStatus || ''}
+                items={[
+                  { label: '선택', value: '' },
+                  { label: '합격', value: 'finalAccepted' },
+                  { label: '불합격', value: 'finalRejected' },
+                  { label: '불참', value: 'absent' },
+                ]}
+                setOpen={setOpenFinalStatus}
+                setValue={(callback) => {
+                  const newValue =
+                    typeof callback === 'function'
+                      ? callback(selectedApplication.finalStatus || '')
+                      : callback;
+                  if (newValue) {
+                    handleStatusChange(selectedApplication.id, newValue, 'final');
+                  }
+                }}
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                listMode="SCROLLVIEW"
+                scrollViewProps={{
+                  nestedScrollEnabled: true,
+                }}
+                zIndex={1000}
+                zIndexInverse={3000}
+              />
+              {selectedApplication.finalStatus === 'finalAccepted' && (
+                <TouchableOpacity
+                  style={styles.smsToggleButtonSmall}
+                  onPress={() => toggleSMSMessage('final_pass')}
+                >
+                  <Text style={styles.smsToggleButtonTextSmall}>
+                    {showSMSMessage.final_pass ? '닫기' : '메시지'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {selectedApplication.finalStatus === 'finalRejected' && (
+                <TouchableOpacity
+                  style={styles.smsToggleButtonSmall}
+                  onPress={() => toggleSMSMessage('final_fail')}
+                >
+                  <Text style={styles.smsToggleButtonTextSmall}>
+                    {showSMSMessage.final_fail ? '닫기' : '메시지'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* SMS 메시지 박스들 - 그리드 아래에 배치 */}
+          {showSMSMessage.document_pass && (
+            <SMSMessageBox
+              title="서류 합격 메시지"
+              type="document_pass"
+              message={smsMessages.document_pass}
+              onMessageChange={(text) =>
+                setSmsMessages((prev) => ({ ...prev, document_pass: text }))
+              }
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              currentJobBoardId={selectedApplication.refJobBoardId}
+              onSave={() => handleSaveSMSTemplate('document_pass')}
+              onSend={() => handleSendSMS('document_pass')}
+              onCancel={() => toggleSMSMessage('document_pass')}
+              isSaving={isSavingSMS}
+              isSending={isSendingSMS}
+              backgroundColor="#d1fae5"
+              borderColor="#10b981"
+              sendButtonColor="#10b981"
+            />
+          )}
+
+          {showSMSMessage.document_fail && (
+            <SMSMessageBox
+              title="서류 불합격 메시지"
+              type="document_fail"
+              message={smsMessages.document_fail}
+              onMessageChange={(text) =>
+                setSmsMessages((prev) => ({ ...prev, document_fail: text }))
+              }
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              currentJobBoardId={selectedApplication.refJobBoardId}
+              onSave={() => handleSaveSMSTemplate('document_fail')}
+              onSend={() => handleSendSMS('document_fail')}
+              onCancel={() => toggleSMSMessage('document_fail')}
+              isSaving={isSavingSMS}
+              isSending={isSendingSMS}
+              backgroundColor="#fee2e2"
+              borderColor="#ef4444"
+              sendButtonColor="#ef4444"
+            />
+          )}
+
+          {showSMSMessage.interview_scheduled && (
+            <SMSMessageBox
+              title="면접 예정 메시지"
+              type="interview_scheduled"
+              message={smsMessages.interview_scheduled}
+              onMessageChange={(text) =>
+                setSmsMessages((prev) => ({ ...prev, interview_scheduled: text }))
+              }
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              currentJobBoardId={selectedApplication.refJobBoardId}
+              onSave={() => handleSaveSMSTemplate('interview_scheduled')}
+              onSend={() => handleSendSMS('interview_scheduled')}
+              onCancel={() => toggleSMSMessage('interview_scheduled')}
+              isSaving={isSavingSMS}
+              isSending={isSendingSMS}
+              backgroundColor="#dbeafe"
+              borderColor="#3b82f6"
+              sendButtonColor="#3b82f6"
+            />
+          )}
+
+          {showSMSMessage.interview_pass && (
+            <SMSMessageBox
+              title="면접 합격 메시지"
+              type="interview_pass"
+              message={smsMessages.interview_pass}
+              onMessageChange={(text) =>
+                setSmsMessages((prev) => ({ ...prev, interview_pass: text }))
+              }
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              currentJobBoardId={selectedApplication.refJobBoardId}
+              onSave={() => handleSaveSMSTemplate('interview_pass')}
+              onSend={() => handleSendSMS('interview_pass')}
+              onCancel={() => toggleSMSMessage('interview_pass')}
+              isSaving={isSavingSMS}
+              isSending={isSendingSMS}
+              backgroundColor="#d1fae5"
+              borderColor="#10b981"
+              sendButtonColor="#10b981"
+            />
+          )}
+
+          {showSMSMessage.interview_fail && (
+            <SMSMessageBox
+              title="면접 불합격 메시지"
+              type="interview_fail"
+              message={smsMessages.interview_fail}
+              onMessageChange={(text) =>
+                setSmsMessages((prev) => ({ ...prev, interview_fail: text }))
+              }
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              currentJobBoardId={selectedApplication.refJobBoardId}
+              onSave={() => handleSaveSMSTemplate('interview_fail')}
+              onSend={() => handleSendSMS('interview_fail')}
+              onCancel={() => toggleSMSMessage('interview_fail')}
+              isSaving={isSavingSMS}
+              isSending={isSendingSMS}
+              backgroundColor="#fee2e2"
+              borderColor="#ef4444"
+              sendButtonColor="#ef4444"
+            />
+          )}
+
+          {showSMSMessage.final_pass && (
+            <SMSMessageBox
+              title="최종 합격 메시지"
+              type="final_pass"
+              message={smsMessages.final_pass}
+              onMessageChange={(text) =>
+                setSmsMessages((prev) => ({ ...prev, final_pass: text }))
+              }
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              currentJobBoardId={selectedApplication.refJobBoardId}
+              onSave={() => handleSaveSMSTemplate('final_pass')}
+              onSend={() => handleSendSMS('final_pass')}
+              onCancel={() => toggleSMSMessage('final_pass')}
+              isSaving={isSavingSMS}
+              isSending={isSendingSMS}
+              backgroundColor="#d1fae5"
+              borderColor="#10b981"
+              sendButtonColor="#10b981"
+            />
+          )}
+
+          {showSMSMessage.final_fail && (
+            <SMSMessageBox
+              title="최종 불합격 메시지"
+              type="final_fail"
+              message={smsMessages.final_fail}
+              onMessageChange={(text) =>
+                setSmsMessages((prev) => ({ ...prev, final_fail: text }))
+              }
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              currentJobBoardId={selectedApplication.refJobBoardId}
+              onSave={() => handleSaveSMSTemplate('final_fail')}
+              onSend={() => handleSendSMS('final_fail')}
+              onCancel={() => toggleSMSMessage('final_fail')}
+              isSaving={isSavingSMS}
+              isSending={isSendingSMS}
+              backgroundColor="#fee2e2"
+              borderColor="#ef4444"
+              sendButtonColor="#ef4444"
+            />
+          )}
+        </View>
+
+        {/* 평가 점수 */}
+        <View style={styles.detailSection}>
+          <Text style={styles.detailSectionTitle}>평가 점수</Text>
+          {selectedApplication.user?.userId && (
+            <EvaluationStageCards
+              key={evaluationRefreshKey}
+              userId={selectedApplication.user.userId}
+              onAddEvaluation={handleAddEvaluation}
+            />
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
+
+  if (loading && !loadingDates) {
+    return (
+      <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3b82f6" />
           <Text style={styles.loadingText}>로딩 중...</Text>
@@ -1628,22 +1918,22 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   profileImage: {
-    width: 72,
-    height: 72,
+    width: 56,
+    height: 56,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
   profileImagePlaceholder: {
-    width: 72,
-    height: 72,
+    width: 56,
+    height: 56,
     borderRadius: 8,
     backgroundColor: '#d1d5db',
     alignItems: 'center',
     justifyContent: 'center',
   },
   profileImagePlaceholderText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
     color: '#6b7280',
   },

@@ -1,4 +1,4 @@
-import { TemplateType } from '../../types/sms';
+import { TemplateType } from '../types/sms';
 
 // 기본 템플릿 메시지 (템플릿이 없을 경우 사용)
 export const DEFAULT_SMS_TEMPLATES: Record<TemplateType, string> = {

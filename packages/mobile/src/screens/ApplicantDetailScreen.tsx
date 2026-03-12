@@ -35,6 +35,9 @@ import {
 import { AdminStackScreenProps } from '../navigation/types';
 import { EvaluationStageCards, EvaluationForm, SMSMessageBox } from '../components';
 import { sendCustomSMS } from '../services';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
+import { Timestamp } from 'firebase/firestore';
 
 interface User {
   id: string;
@@ -265,8 +268,14 @@ export function ApplicantDetailScreen({
   useEffect(() => {
     loadData();
     loadCurrentUser();
-    loadTemplates(); // 템플릿 로드 추가
-  }, [loadData, loadTemplates]);
+  }, [loadData]);
+
+  // jobBoardId가 변경되면 템플릿 로드
+  useEffect(() => {
+    if (jobBoardId) {
+      loadTemplates();
+    }
+  }, [jobBoardId, loadTemplates]);
 
   // 템플릿 로드 함수 (웹과 동일한 로직)
   const loadTemplates = useCallback(async () => {
@@ -932,10 +941,10 @@ export function ApplicantDetailScreen({
               {application?.interviewStatus === 'pending' && (
                 <TouchableOpacity
                   style={styles.statusMessageButton}
-                  onPress={() => setShowInterviewSettings(!showInterviewSettings)}
+                  onPress={() => showMessageBox('interview_scheduled')}
                 >
                   <Text style={styles.statusMessageButtonText}>
-                    {showInterviewSettings ? '면접 정보 닫기' : '면접 정보 열기'}
+                    {showInterviewScheduledMessage ? '메시지 닫기' : '메시지 열기'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1030,6 +1039,8 @@ export function ApplicantDetailScreen({
           {/* 서류 메시지 박스들 - 전체 너비 */}
           {showDocumentPassMessage && (
             <SMSMessageBox
+              type="document_pass"
+              currentJobBoardId={jobBoardId}
               message={documentPassMessage}
               onMessageChange={setDocumentPassMessage}
               fromNumber={fromNumber}
@@ -1050,6 +1061,8 @@ export function ApplicantDetailScreen({
 
           {showDocumentFailMessage && (
             <SMSMessageBox
+              type="document_fail"
+              currentJobBoardId={jobBoardId}
               message={documentFailMessage}
               onMessageChange={setDocumentFailMessage}
               fromNumber={fromNumber}
@@ -1071,6 +1084,8 @@ export function ApplicantDetailScreen({
           {/* 면접 메시지 박스들 - 전체 너비 */}
           {showInterviewScheduledMessage && (
             <SMSMessageBox
+              type="interview_scheduled"
+              currentJobBoardId={jobBoardId}
               message={interviewScheduledMessage}
               onMessageChange={setInterviewScheduledMessage}
               fromNumber={fromNumber}
@@ -1090,6 +1105,8 @@ export function ApplicantDetailScreen({
           
           {showInterviewPassMessage && (
             <SMSMessageBox
+              type="interview_pass"
+              currentJobBoardId={jobBoardId}
               message={interviewPassMessage}
               onMessageChange={setInterviewPassMessage}
               fromNumber={fromNumber}
@@ -1110,6 +1127,8 @@ export function ApplicantDetailScreen({
           
           {showInterviewFailMessage && (
             <SMSMessageBox
+              type="interview_fail"
+              currentJobBoardId={jobBoardId}
               message={interviewFailMessage}
               onMessageChange={setInterviewFailMessage}
               fromNumber={fromNumber}
@@ -1131,6 +1150,8 @@ export function ApplicantDetailScreen({
           {/* 최종 메시지 박스들 - 전체 너비 */}
           {showFinalPassMessage && (
             <SMSMessageBox
+              type="final_pass"
+              currentJobBoardId={jobBoardId}
               message={finalPassMessage}
               onMessageChange={setFinalPassMessage}
               fromNumber={fromNumber}
@@ -1151,6 +1172,8 @@ export function ApplicantDetailScreen({
           
           {showFinalFailMessage && (
             <SMSMessageBox
+              type="final_fail"
+              currentJobBoardId={jobBoardId}
               message={finalFailMessage}
               onMessageChange={setFinalFailMessage}
               fromNumber={fromNumber}
@@ -1168,264 +1191,90 @@ export function ApplicantDetailScreen({
               title="최종 불합격 메시지 내용"
             />
           )}
-
-          {/* 면접 정보 설정 박스 */}
-          {showInterviewSettings && (
-            <View style={[styles.messageBox, styles.messageBoxInfo]}>
-              <Text style={styles.messageBoxTitle}>면접 정보 설정</Text>
-              
-              <Text style={styles.inputLabel}>면접 날짜 (필수)</Text>
-              <TextInput
-                style={styles.textInput}
-                value={interviewDate}
-                onChangeText={setInterviewDate}
-                placeholder="2024-03-15 형식으로 입력"
-                placeholderTextColor="#9ca3af"
-              />
-
-              <Text style={styles.inputLabel}>면접 시간 (필수)</Text>
-              <TextInput
-                style={styles.textInput}
-                value={interviewTime}
-                onChangeText={setInterviewTime}
-                placeholder="14:30 형식으로 입력"
-                placeholderTextColor="#9ca3af"
-              />
-              
-              {/* 날짜/시간 저장 버튼들 */}
-              <View style={[styles.messageBoxButtons, { marginTop: 12 }]}>
-                <TouchableOpacity
-                  style={[styles.messageButton, styles.messageButtonPrimary]}
-                  onPress={async () => {
-                    // 면접 날짜/시간 저장 (SMS 전송 없이)
-                    try {
-                      // 날짜와 시간이 입력되었는지 확인
-                      if (!interviewDate || !interviewTime) {
-                        Alert.alert('오류', '면접 날짜와 시간을 모두 입력해주세요.');
-                        return;
-                      }
-                      
-                      // Firestore Timestamp 가져오기
-                      const { Timestamp } = await import('firebase/firestore');
-                      
-                      // 날짜와 시간을 JavaScript Date로 변환
-                      const interviewDateTime = new Date(`${interviewDate}T${interviewTime}`);
-                      
-                      // 날짜가 유효한지 확인
-                      if (isNaN(interviewDateTime.getTime())) {
-                        Alert.alert('오류', '유효한 날짜와 시간을 입력해주세요.\n날짜: YYYY-MM-DD (예: 2024-03-15)\n시간: HH:mm (예: 14:30)');
-                        return;
-                      }
-                      
-                      // Application 업데이트
-                      const updates: any = {
-                        interviewDate: Timestamp.fromDate(interviewDateTime),
-                      };
-                      
-                      // base 정보도 함께 저장
-                      if (interviewLink) updates.interviewBaseLink = interviewLink;
-                      if (interviewDuration) updates.interviewBaseDuration = parseInt(interviewDuration);
-                      if (interviewNotes) updates.interviewBaseNotes = interviewNotes;
-                      
-                      // 로컬 상태 즉시 업데이트
-                      setApplication(prev => prev ? { ...prev, ...updates } : prev);
-                      
-                      // DB 업데이트는 백그라운드로
-                      await updateApplication(db, applicationId, updates);
-                      
-                      Alert.alert('성공', '면접 날짜/시간이 저장되었습니다.');
-                    } catch (error) {
-                      console.error('면접 날짜/시간 저장 오류:', error);
-                      Alert.alert('오류', '면접 날짜/시간 저장 중 오류가 발생했습니다.');
-                    }
-                  }}
-                  disabled={isSavingTemplate || isSendingSMS || !interviewDate || !interviewTime}
-                >
-                  <Text style={styles.messageButtonTextPrimary}>날짜/시간 저장</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.messageButton, styles.messageButtonSecondary]}
-                  onPress={async () => {
-                    // 면접 날짜 미정으로 설정
-                    try {
-                      // 로컬 상태 즉시 업데이트
-                      setApplication(prev => prev ? { ...prev, interviewDate: null } : prev);
-                      setInterviewDate('');
-                      setInterviewTime('');
-                      
-                      // DB 업데이트는 백그라운드로
-                      await updateApplication(db, applicationId, { interviewDate: null });
-                      
-                      Alert.alert('성공', '면접 날짜가 미정으로 설정되었습니다.');
-                    } catch (error) {
-                      console.error('면접 날짜 변경 오류:', error);
-                      Alert.alert('오류', '면접 날짜 변경 중 오류가 발생했습니다.');
-                    }
-                  }}
-                  disabled={isSavingTemplate || isSendingSMS}
-                >
-                  <Text style={styles.messageButtonTextSecondary}>미정으로 설정</Text>
-                </TouchableOpacity>
-              </View>
-              
-              {/* 구분선 */}
-              <View style={styles.divider} />
-              
-              <Text style={styles.inputLabel}>면접 링크 (수정 불가)</Text>
-              <TextInput
-                style={[styles.textInput, styles.textInputReadonly]}
-                value={interviewLink}
-                editable={false}
-                placeholder="https://zoom.us/j/..."
-                placeholderTextColor="#9ca3af"
-              />
-
-              <Text style={styles.inputLabel}>예상 소요시간 (분) (수정 불가)</Text>
-              <TextInput
-                style={[styles.textInput, styles.textInputReadonly]}
-                value={interviewDuration}
-                editable={false}
-                placeholder="30"
-                keyboardType="numeric"
-                placeholderTextColor="#9ca3af"
-              />
-
-              <Text style={styles.inputLabel}>면접 안내사항 (수정 불가)</Text>
-              <TextInput
-                style={[styles.messageInput, styles.textInputReadonly]}
-                multiline
-                numberOfLines={3}
-                value={interviewNotes}
-                editable={false}
-                placeholder="면접 준비사항이나 추가 안내사항..."
-                placeholderTextColor="#9ca3af"
-              />
-
-              <Text style={styles.inputLabel}>면접 예정 SMS 내용</Text>
-              <TextInput
-                style={styles.messageInput}
-                multiline
-                numberOfLines={5}
-                value={interviewScheduledMessage}
-                onChangeText={setInterviewScheduledMessage}
-                placeholder="면접 예정 메시지를 입력하세요..."
-                placeholderTextColor="#9ca3af"
-              />
-              
-              <View style={styles.fromNumberSection}>
-                <Text style={styles.fromNumberLabel}>발신번호 선택</Text>
-                <View style={styles.radioGroup}>
-                  <TouchableOpacity
-                    style={styles.radioOption}
-                    onPress={() => setFromNumber('01076567933')}
-                  >
-                    <View style={styles.radio}>
-                      {fromNumber === '01076567933' && <View style={styles.radioSelected} />}
-                    </View>
-                    <Text style={styles.radioLabel}>010-7656-7933 (대표)</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={styles.radioOption}
-                    onPress={() => setFromNumber('01067117933')}
-                  >
-                    <View style={styles.radio}>
-                      {fromNumber === '01067117933' && <View style={styles.radioSelected} />}
-                    </View>
-                    <Text style={styles.radioLabel}>010-6711-7933</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* SMS 관련 버튼들 */}
-              <View style={styles.messageBoxButtons}>
-                <TouchableOpacity
-                  style={[styles.messageButton, styles.messageButtonCancel]}
-                  onPress={() => {
-                    setShowInterviewSettings(false);
-                    setInterviewStatus(application?.interviewStatus || '');
-                  }}
-                  disabled={isSavingTemplate || isSendingSMS}
-                >
-                  <Text style={styles.messageButtonTextCancel}>취소</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.messageButton, styles.saveButton]}
-                  onPress={async () => {
-                    // 템플릿만 저장
-                    await saveTemplate('interview_scheduled', interviewScheduledMessage);
-                  }}
-                  disabled={isSavingTemplate || isSendingSMS}
-                >
-                  {isSavingTemplate ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>템플릿 저장</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-              
-              <View style={[styles.messageBoxButtons, { marginTop: 8 }]}>
-                <TouchableOpacity
-                  style={[styles.messageButton, styles.messageButtonInfo]}
-                  onPress={async () => {
-                    // SMS만 전송 (날짜/시간은 이미 저장되어 있어야 함)
-                    try {
-                      if (!application?.interviewDate && (!interviewDate || !interviewTime)) {
-                        Alert.alert('오류', '먼저 "날짜/시간 저장" 버튼을 눌러 면접 날짜와 시간을 저장해주세요.');
-                        return;
-                      }
-                      
-                      // SMS 전송 (변수 치환 포함)
-                      let year, month, day, hours, minutes;
-                      
-                      if (application?.interviewDate) {
-                        // 저장된 날짜 사용
-                        const date = application.interviewDate.toDate();
-                        year = date.getFullYear();
-                        month = String(date.getMonth() + 1).padStart(2, '0');
-                        day = String(date.getDate()).padStart(2, '0');
-                        hours = String(date.getHours()).padStart(2, '0');
-                        minutes = String(date.getMinutes()).padStart(2, '0');
-                      } else if (interviewDate && interviewTime) {
-                        // 입력된 날짜 사용 (저장 직후)
-                        const interviewDateTime = new Date(`${interviewDate}T${interviewTime}`);
-                        year = interviewDateTime.getFullYear();
-                        month = String(interviewDateTime.getMonth() + 1).padStart(2, '0');
-                        day = String(interviewDateTime.getDate()).padStart(2, '0');
-                        hours = String(interviewDateTime.getHours()).padStart(2, '0');
-                        minutes = String(interviewDateTime.getMinutes()).padStart(2, '0');
-                      }
-                      
-                      const messageWithVariables = interviewScheduledMessage
-                        .replace(/{면접일자}/g, `${year}년 ${month}월 ${day}일`)
-                        .replace(/{면접시간}/g, `${hours}:${minutes}`)
-                        .replace(/{면접링크}/g, interviewLink || '')
-                        .replace(/{면접소요시간}/g, interviewDuration || '')
-                        .replace(/{면접참고사항}/g, interviewNotes || '');
-                      
-                      await sendSMS('interview_scheduled', messageWithVariables);
-                      
-                      setShowInterviewSettings(false);
-                    } catch (error) {
-                      console.error('SMS 전송 오류:', error);
-                      Alert.alert('오류', 'SMS 전송 중 오류가 발생했습니다.');
-                    }
-                  }}
-                  disabled={isSavingTemplate || isSendingSMS}
-                >
-                  {isSendingSMS ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.messageButtonTextInfo}>SMS 전송</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
         </View>
+
+        {/* 면접 일자 수정 */}
+        {application?.interviewStatus === 'pending' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>면접 일자</Text>
+            <View style={styles.interviewDateContainer}>
+              <View style={styles.dateInputButtonRow}>
+                <TextInput
+                  style={styles.dateInput}
+                  value={interviewDate}
+                  onChangeText={setInterviewDate}
+                  placeholder="2026-01-01"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="default"
+                />
+                <TextInput
+                  style={styles.timeInput}
+                  value={interviewTime}
+                  onChangeText={setInterviewTime}
+                  placeholder="14:00"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="default"
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.dateChangeButton,
+                    (!interviewDate || !interviewTime) && styles.dateChangeButtonDisabled,
+                  ]}
+                  onPress={async () => {
+                    if (!interviewDate || !interviewTime) {
+                      Alert.alert('알림', '날짜와 시간을 모두 입력해주세요.');
+                      return;
+                    }
+                    try {
+                      const dateTimeStr = `${interviewDate} ${interviewTime}`;
+                      const dateTimeObj = new Date(dateTimeStr);
+                      
+                      if (isNaN(dateTimeObj.getTime())) {
+                        Alert.alert('오류', '올바른 날짜/시간 형식이 아닙니다.');
+                        return;
+                      }
+
+                      await updateApplication(db, application.id, {
+                        interviewDate: Timestamp.fromDate(dateTimeObj),
+                      });
+
+                      Alert.alert('성공', '면접 일자가 변경되었습니다.');
+                      loadData();
+                    } catch (error) {
+                      console.error('면접 일자 변경 오류:', error);
+                      Alert.alert('오류', '면접 일자 변경에 실패했습니다.');
+                    }
+                  }}
+                  disabled={!interviewDate || !interviewTime}
+                >
+                  <Text style={styles.dateChangeButtonText}>변경</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dateUnsetButton}
+                  onPress={async () => {
+                    try {
+                      await updateApplication(db, application.id, {
+                        interviewDate: null,
+                      });
+                      Alert.alert('성공', '면접 일자가 미정으로 변경되었습니다.');
+                      loadData();
+                    } catch (error) {
+                      console.error('면접 일자 미정 변경 오류:', error);
+                      Alert.alert('오류', '면접 일자 변경에 실패했습니다.');
+                    }
+                  }}
+                >
+                  <Text style={styles.dateUnsetButtonText}>미정</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.currentDateInfo}>
+                현재: {application.interviewDate
+                  ? format(application.interviewDate.toDate(), 'yyyy-MM-dd (E) HH:mm', { locale: ko })
+                  : '날짜 미정'}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* 자기소개서 */}
         {application.user?.selfIntroduction && (
@@ -1869,6 +1718,72 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1d5db',
     backgroundColor: '#ffffff',
+  },
+  interviewDateContainer: {
+    marginTop: 12,
+  },
+  dateInputButtonRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    backgroundColor: '#ffffff',
+    color: '#111827',
+    width: 105,
+  },
+  timeInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    backgroundColor: '#ffffff',
+    color: '#111827',
+    width: 70,
+  },
+  dateChangeButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  dateChangeButtonDisabled: {
+    backgroundColor: '#d1d5db',
+    opacity: 0.6,
+  },
+  dateChangeButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dateUnsetButton: {
+    backgroundColor: '#6b7280',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  dateUnsetButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  currentDateInfo: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
   },
 });
 

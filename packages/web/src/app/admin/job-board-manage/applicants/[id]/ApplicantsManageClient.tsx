@@ -6,6 +6,7 @@ import { doc, updateDoc, getDoc, collection, query, where, getDocs, DocumentData
 import { db } from '@/lib/firebase';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
 import { ApplicationHistory, JobBoard, User, JobCodeWithId, JobGroup, JobCodeWithGroup } from '@/types';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
 import { Timestamp } from 'firebase/firestore';
@@ -1722,7 +1723,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 }}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showDocumentPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showDocumentPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -1735,7 +1736,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 }}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showDocumentFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showDocumentFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -1768,7 +1769,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('interview_scheduled')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewScheduledMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewScheduledMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -1779,7 +1780,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('interview_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -1790,7 +1791,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('interview_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -1821,7 +1822,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('final_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showFinalPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showFinalPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -1832,7 +1833,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('final_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showFinalFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showFinalFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -1980,97 +1981,50 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         />
                       )}
                       
-                      {/* 면접 정보 입력 폼 */}
+                      {/* 면접 일자 수정 */}
                       {selectedApplication.interviewStatus === 'pending' && (
-                        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                          <h3 className="text-md font-medium text-blue-800 mb-3">면접 정보</h3>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 날짜 (수정 가능)
-                              </label>
-                              <input
-                                type="date"
-                                value={interviewDate}
-                                onChange={(e) => setInterviewDate(e.target.value)}
-                                className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md"
-                              />
-                            </div>
-                            
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 시간 (수정 가능)
-                              </label>
-                              <input
-                                type="time"
-                                value={interviewTime}
-                                onChange={(e) => setInterviewTime(e.target.value)}
-                                className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md"
-                              />
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 링크 (수정 불가)
-                              </label>
+                        <div className="mt-4">
+                          <h3 className="text-lg font-semibold mb-4">면접 일자</h3>
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
                               <input
                                 type="text"
-                                value={interviewBaseLink}
-                                readOnly
-                                className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md bg-gray-50"
-                                placeholder="https://zoom.us/j/..."
+                                value={interviewDate}
+                                onChange={(e) => setInterviewDate(e.target.value)}
+                                placeholder="2026-01-01"
+                                className="w-32 p-2 text-sm border border-gray-300 rounded-md"
                               />
-                            </div>
-                            
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                면접 시간 (분) (수정 불가)
-                              </label>
                               <input
-                                type="number"
-                                value={interviewBaseDuration}
-                                readOnly
-                                className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md bg-gray-50"
-                                placeholder="30"
+                                type="text"
+                                value={interviewTime}
+                                onChange={(e) => setInterviewTime(e.target.value)}
+                                placeholder="14:00"
+                                className="w-24 p-2 text-sm border border-gray-300 rounded-md"
                               />
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={handleSaveInterviewInfo}
+                                disabled={isLoading || !interviewDate || !interviewTime}
+                                isLoading={isLoading}
+                              >
+                                변경
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={handleSetUndefinedDate}
+                                disabled={isLoading}
+                                isLoading={isLoading}
+                              >
+                                미정
+                              </Button>
                             </div>
-                          </div>
-                          
-                          <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              면접 참고사항 (수정 불가)
-                            </label>
-                            <textarea
-                              value={interviewBaseNotes}
-                              readOnly
-                              className="w-full p-1 text-xs md:p-2 md:text-sm border border-gray-300 rounded-md bg-gray-50"
-                              rows={3}
-                              placeholder="면접 참고사항을 입력하세요..."
-                            />
-                          </div>
-                          
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="primary"
-                              onClick={handleSaveInterviewInfo}
-                              isLoading={isLoading}
-                              disabled={isLoading || !interviewDate || !interviewTime}
-                              className="text-xs md:text-sm"
-                            >
-                              면접 날짜/시간 저장
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              onClick={handleSetUndefinedDate}
-                              isLoading={isLoading}
-                              disabled={isLoading}
-                              className="text-xs md:text-sm"
-                            >
-                              미정으로 설정
-                            </Button>
+                            <div className="text-xs text-gray-500">
+                              현재: {selectedApplication.interviewDate 
+                                ? format(selectedApplication.interviewDate.toDate(), 'yyyy-MM-dd (E) HH:mm', { locale: ko })
+                                : '날짜 미정'}
+                            </div>
                           </div>
                         </div>
                       )}

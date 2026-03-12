@@ -10,16 +10,24 @@ export const JOB_EXPERIENCE_GROUPS = [
     '윈터',
     '공통',
 ];
-// 그룹 역할 선택지
-export const JOB_EXPERIENCE_GROUP_ROLES = [
+// 그룹 역할 선택지 - 멘토용
+export const MENTOR_GROUP_ROLES = [
     '담임',
     '수업',
     '매니저',
+];
+// 그룹 역할 선택지 - 원어민용
+export const FOREIGN_GROUP_ROLES = [
     'Speaking',
     'Reading',
     'Writing',
     'Mix',
-    'Phonics',
+    'Manager',
+];
+// 전체 그룹 역할 (호환성 유지)
+export const JOB_EXPERIENCE_GROUP_ROLES = [
+    ...MENTOR_GROUP_ROLES,
+    ...FOREIGN_GROUP_ROLES,
 ];
 // 레거시 그룹 매핑 (junior/middle/senior <-> 주니어/미들/시니어)
 export const LEGACY_GROUP_MAP = {

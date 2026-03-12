@@ -360,7 +360,6 @@ export function InterviewManageClient() {
   // 지원자 선택
   const handleSelectApplication = async (app: ApplicationWithUser) => {
     setSelectedApplication(app);
-    setFeedbackText(app.interviewFeedback || '');
     setShowDetail(true);
     
     // 화면 최상단으로 스크롤
@@ -474,7 +473,6 @@ export function InterviewManageClient() {
   const handleSelectDate = (dateInfo: InterviewDateInfo) => {
     setSelectedDate(dateInfo);
     setSelectedApplication(null);
-    setFeedbackText('');
     setShowDetail(false); // 상세 보기 모드 해제
     
     // 선택된 면접일의 jobCode별 지원자 수 계산
@@ -2045,7 +2043,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('document_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showDocumentPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showDocumentPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -2056,7 +2054,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('document_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showDocumentFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showDocumentFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -2089,7 +2087,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('interview_scheduled')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewScheduledMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewScheduledMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -2100,7 +2098,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('interview_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -2111,7 +2109,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('interview_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -2142,7 +2140,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('final_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showFinalPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showFinalPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -2153,7 +2151,7 @@ export function InterviewManageClient() {
                                 onClick={() => showMessageBox('final_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showFinalFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showFinalFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>

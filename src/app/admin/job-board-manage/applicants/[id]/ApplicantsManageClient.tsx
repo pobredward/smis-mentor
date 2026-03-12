@@ -1687,7 +1687,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 }}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showDocumentPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showDocumentPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -1700,7 +1700,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 }}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showDocumentFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showDocumentFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -1733,7 +1733,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('interview_scheduled')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewScheduledMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewScheduledMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -1744,7 +1744,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('interview_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -1755,7 +1755,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('interview_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showInterviewFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showInterviewFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -1786,7 +1786,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('final_pass')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showFinalPassMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showFinalPassMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                             
@@ -1797,7 +1797,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 onClick={() => showMessageBox('final_fail')}
                                 className="text-xs md:text-sm w-full"
                               >
-                                {showFinalFailMessage ? "메세지 내용 닫기" : "메세지 내용 열기"}
+                                {showFinalFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>

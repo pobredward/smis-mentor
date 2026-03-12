@@ -1,7 +1,11 @@
 import { Timestamp } from 'firebase/firestore';
 export declare const JOB_EXPERIENCE_GROUPS: readonly ["주니어", "미들", "시니어", "스프링", "서머", "어텀", "윈터", "공통"];
 export type JobExperienceGroup = typeof JOB_EXPERIENCE_GROUPS[number];
-export declare const JOB_EXPERIENCE_GROUP_ROLES: readonly ["담임", "수업", "매니저", "Speaking", "Reading", "Writing", "Mix", "Phonics"];
+export declare const MENTOR_GROUP_ROLES: readonly ["담임", "수업", "매니저"];
+export declare const FOREIGN_GROUP_ROLES: readonly ["Speaking", "Reading", "Writing", "Mix", "Manager"];
+export declare const JOB_EXPERIENCE_GROUP_ROLES: readonly ["담임", "수업", "매니저", "Speaking", "Reading", "Writing", "Mix", "Manager"];
+export type MentorGroupRole = typeof MENTOR_GROUP_ROLES[number];
+export type ForeignGroupRole = typeof FOREIGN_GROUP_ROLES[number];
 export type JobExperienceGroupRole = typeof JOB_EXPERIENCE_GROUP_ROLES[number];
 export declare const LEGACY_GROUP_MAP: Record<string, string>;
 export declare const LEGACY_GROUP_REVERSE_MAP: Record<string, string>;
