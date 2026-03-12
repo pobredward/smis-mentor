@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
 import { useAuth } from '../context/AuthContext';
 import { AddLinkModal } from '../components';
@@ -20,8 +21,30 @@ export function ScheduleScreen() {
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
   const selectedSchedule = schedules.find(s => s.id === selectedScheduleId) || schedules[0];
-  const currentZoom = selectedScheduleId ? (zoomLevels[selectedScheduleId] || 0.6) : 0.6;
+  
+  // 구글 시트인지 확인하는 함수
+  const isGoogleSheet = (url: string) => {
+    return url.includes('docs.google.com/spreadsheets') || url.includes('sheets.google.com');
+  };
+
+  // 선택된 시간표가 구글 시트인지 확인
+  const isSelectedScheduleGoogleSheet = selectedSchedule ? isGoogleSheet(selectedSchedule.url) : false;
+  
+  // 구글 시트가 아닌 경우 기본 줌을 1.0(100%)로 설정
+  const defaultZoom = isSelectedScheduleGoogleSheet ? 0.6 : 1.0;
+  const currentZoom = selectedScheduleId ? (zoomLevels[selectedScheduleId] || defaultZoom) : defaultZoom;
   const isLoading = selectedScheduleId ? (loadingStates[selectedScheduleId] ?? true) : true;
+
+  // 시간표가 변경되었을 때 구글 시트가 아니면 줌을 100%로 자동 설정
+  useEffect(() => {
+    if (selectedScheduleId && selectedSchedule && !isSelectedScheduleGoogleSheet) {
+      // 이미 설정된 줌 레벨이 없는 경우에만 1.0으로 설정
+      if (zoomLevels[selectedScheduleId] === undefined) {
+        setZoomLevel(selectedScheduleId, 1.0);
+        applyZoom(selectedScheduleId, 1.0);
+      }
+    }
+  }, [selectedScheduleId, selectedSchedule, isSelectedScheduleGoogleSheet]);
 
   const handleZoomIn = () => {
     if (!selectedScheduleId) return;
@@ -121,6 +144,16 @@ export function ScheduleScreen() {
     }
   };
 
+  if (!activeJobCodeId) {
+    return (
+      <View style={styles.centerContainer}>
+        <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
+        <Text style={styles.loginRequiredTitle}>로그인 필요</Text>
+        <Text style={styles.emptyText}>로그인 후 이용 가능합니다.</Text>
+      </View>
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -142,7 +175,7 @@ export function ScheduleScreen() {
             <Text style={styles.addButtonLargeText}>+ 첫 시간표 추가하기</Text>
           </TouchableOpacity>
         )}
-        {isAdmin && activeJobCodeId && (
+        {isAdmin && (
           <AddLinkModal
             visible={showAddModal}
             onClose={() => setShowAddModal(false)}
@@ -251,18 +284,20 @@ export function ScheduleScreen() {
         </ScrollView>
       </View>
 
-      {/* 줌 컨트롤 버튼들 */}
-      <View style={styles.zoomControls}>
-        <TouchableOpacity style={styles.zoomButton} onPress={handleZoomOut}>
-          <Text style={styles.zoomButtonText}>-</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.zoomResetButton} onPress={handleZoomReset}>
-          <Text style={styles.zoomResetText}>{Math.round(currentZoom * 100)}%</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.zoomButton} onPress={handleZoomIn}>
-          <Text style={styles.zoomButtonText}>+</Text>
-        </TouchableOpacity>
-      </View>
+      {/* 줌 컨트롤 버튼들 - 구글 시트일 때만 표시 */}
+      {isSelectedScheduleGoogleSheet && (
+        <View style={styles.zoomControls}>
+          <TouchableOpacity style={styles.zoomButton} onPress={handleZoomOut}>
+            <Text style={styles.zoomButtonText}>-</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.zoomResetButton} onPress={handleZoomReset}>
+            <Text style={styles.zoomResetText}>{Math.round(currentZoom * 100)}%</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.zoomButton} onPress={handleZoomIn}>
+            <Text style={styles.zoomButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* 웹뷰 컨테이너 */}
       <View style={styles.webViewContainer}>
@@ -372,9 +407,16 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   emptyText: {
-    fontSize: 16,
-    color: '#64748b',
-    marginBottom: 20,
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  loginRequiredTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 16,
   },
   addButtonLarge: {
     backgroundColor: '#3b82f6',
