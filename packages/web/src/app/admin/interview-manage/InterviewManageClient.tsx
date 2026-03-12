@@ -11,6 +11,7 @@ import Button from '@/components/common/Button';
 import { JobBoard, ApplicationHistory, User } from '@/types';
 import { useRouter } from 'next/navigation';
 import { getSMSTemplateByTypeAndJobBoard, saveSMSTemplate, updateSMSTemplate, getAllSMSTemplates, SMSTemplate, TemplateType } from '@/lib/smsTemplateService';
+import { SMSMessageBox } from '@/components/admin/SMSMessageBox';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { getInterviewLinks, InterviewLinks } from '@/lib/interviewLinksService';
 import { InterviewLinksManager } from '@/components/admin/InterviewLinksManager';
@@ -2163,69 +2164,22 @@ export function InterviewManageClient() {
                       {/* 메시지 박스 영역 - 그리드 밖으로 이동 */}
                       {/* 합격 메시지 박스 */}
                       {showDocumentPassMessage && (
-                        <div className="mt-4 border border-green-200 rounded-md p-4 bg-green-50">
-                          <label className="block text-sm font-medium text-green-700 mb-2">
-                            서류 합격 메시지 내용
-                          </label>
-                          <textarea
-                            className="w-full p-2 border border-green-300 rounded-md text-sm mb-3"
-                            rows={5}
-                            value={documentPassMessage}
-                            onChange={(e) => setDocumentPassMessage(e.target.value)}
-                          />
-                          <div className="mb-3">
-                            <label className="block text-sm font-medium text-green-700 mb-2">
-                              발신번호 선택
-                            </label>
-                            <div className="flex items-center space-x-4">
-                              <label className="inline-flex items-center">
-                                <input
-                                  type="radio"
-                                  className="form-radio text-green-600"
-                                  name="fromNumberDocPass"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
-                                />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
-                              </label>
-                              <label className="inline-flex items-center">
-                                <input
-                                  type="radio"
-                                  className="form-radio text-green-600"
-                                  name="fromNumberDocPass"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
-                                />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
-                              </label>
-                            </div>
-                          </div>
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setShowDocumentPassMessage(false)}
-                            >
-                              취소
-                            </Button>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => saveTemplate('document_pass', documentPassMessage)}
-                              isLoading={isSavingTemplate}
-                            >
-                              저장
-                            </Button>
-                            <Button
-                              variant="success"
-                              size="sm"
-                              onClick={() => sendMessage(documentPassMessage)}
-                              isLoading={isLoadingMessage}
-                            >
-                              전송
-                            </Button>
-                          </div>
-                        </div>
+                        <SMSMessageBox
+                          title="서류 합격 메시지 내용"
+                          type="document_pass"
+                          message={documentPassMessage}
+                          onMessageChange={setDocumentPassMessage}
+                          fromNumber={fromNumber}
+                          onFromNumberChange={setFromNumber}
+                          currentJobBoardId={selectedApplication?.refJobBoardId || ''}
+                          onSave={() => saveTemplate('document_pass', documentPassMessage)}
+                          onSend={() => sendMessage(documentPassMessage)}
+                          onCancel={() => setShowDocumentPassMessage(false)}
+                          isSaving={isSavingTemplate}
+                          isSending={isLoadingMessage}
+                          backgroundColor="#d1fae5"
+                          buttonColor="#10b981"
+                        />
                       )}
                       
                       {/* 불합격 메시지 박스 */}

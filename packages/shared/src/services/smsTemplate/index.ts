@@ -146,9 +146,78 @@ export function replaceTemplateVariables(
 export const DEFAULT_SMS_TEMPLATES: Record<TemplateType, string> = {
   document_pass: '안녕하세요, {이름}님.\n서류 전형 합격을 축하드립니다.\n다음 면접 일정을 안내드리겠습니다.',
   document_fail: '안녕하세요, {이름}님.\n지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다.',
-  interview_scheduled: '안녕하세요, {이름}님.\n서류 전형 합격을 축하드립니다.\n\n면접 일정을 안내드립니다.\n• 면접 링크: {면접링크}\n• 소요 시간: 약 {면접소요시간}분\n\n참고사항: {면접참고사항}\n\n면접에 참석해주시기 바랍니다.',
+  interview_scheduled: '안녕하세요, {이름}님.\n서류 전형 합격을 축하드립니다.\n\n면접 일정을 안내드립니다.\n• 면접 일시: {면접일자} {면접시간}\n• 면접 링크: {면접링크}\n• 소요 시간: 약 {면접소요시간}분\n\n참고사항: {면접참고사항}\n\n면접에 참석해주시기 바랍니다.',
   interview_pass: '안녕하세요, {이름}님.\n면접에 참여해주셔서 감사합니다.\n면접 전형 합격을 축하드립니다.',
   interview_fail: '안녕하세요, {이름}님.\n면접에 참여해주셔서 감사합니다.\n아쉽게도 이번 면접 전형에 합격하지 못하셨습니다.',
   final_pass: '축하합니다, {이름}님!\n최종 합격하셨습니다.\n입사 관련 안내사항은 추후 이메일로 전달드릴 예정입니다.',
   final_fail: '안녕하세요, {이름}님.\n지원해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다.',
 };
+
+// 특정 타입의 모든 템플릿 조회 (다른 공고 포함)
+export async function getTemplatesByType(db: Firestore, type: TemplateType) {
+  try {
+    const templatesRef = collection(db, 'smsTemplates');
+    const q = query(templatesRef, where('type', '==', type));
+    const querySnapshot = await getDocs(q);
+    
+    const templates = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as any[];
+    
+    // 최신순으로 정렬
+    return templates.sort((a, b) => 
+      b.updatedAt.toMillis() - a.updatedAt.toMillis()
+    );
+  } catch (error) {
+    console.error('타입별 템플릿 조회 오류:', error);
+    throw error;
+  }
+}
+
+// 템플릿과 함께 공고 정보도 가져오기
+export async function getTemplatesWithJobBoardInfo(db: Firestore, type: TemplateType) {
+  try {
+    const templates = await getTemplatesByType(db, type);
+    
+    // 공고 정보를 병렬로 가져오기
+    const templatesWithJobBoard = await Promise.all(
+      templates.map(async (template: any) => {
+        if (!template.refJobBoardId) {
+          return {
+            ...template,
+            jobBoardTitle: '공통 템플릿',
+            jobBoardGeneration: null,
+          };
+        }
+        
+        try {
+          const jobBoardRef = doc(db, 'jobBoards', template.refJobBoardId);
+          const jobBoardDoc = await getDoc(jobBoardRef);
+          
+          if (jobBoardDoc.exists()) {
+            const jobBoardData = jobBoardDoc.data();
+            return {
+              ...template,
+              jobBoardTitle: jobBoardData.title || '제목 없음',
+              jobBoardGeneration: jobBoardData.generation || null,
+            };
+          }
+        } catch (error) {
+          console.error('공고 정보 조회 실패:', error);
+        }
+        
+        return {
+          ...template,
+          jobBoardTitle: '알 수 없음',
+          jobBoardGeneration: null,
+        };
+      })
+    );
+    
+    return templatesWithJobBoard;
+  } catch (error) {
+    console.error('템플릿 및 공고 정보 조회 오류:', error);
+    throw error;
+  }
+}

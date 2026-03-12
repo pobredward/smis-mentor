@@ -210,4 +210,73 @@ export function replaceTemplateVariables(template: string, variables: Record<str
   }
   
   return result;
+}
+
+// 특정 타입의 모든 템플릿 조회 (다른 공고 포함)
+export async function getTemplatesByType(type: TemplateType) {
+  try {
+    const templatesRef = collection(db, 'smsTemplates');
+    const q = query(templatesRef, where('type', '==', type));
+    const querySnapshot = await getDocs(q);
+    
+    const templates = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as SMSTemplate[];
+    
+    // 최신순으로 정렬
+    return templates.sort((a, b) => 
+      b.updatedAt.toMillis() - a.updatedAt.toMillis()
+    );
+  } catch (error) {
+    console.error('타입별 템플릿 조회 오류:', error);
+    throw error;
+  }
+}
+
+// 템플릿과 함께 공고 정보도 가져오기
+export async function getTemplatesWithJobBoardInfo(type: TemplateType) {
+  try {
+    const templates = await getTemplatesByType(type);
+    
+    // 공고 정보를 병렬로 가져오기
+    const templatesWithJobBoard = await Promise.all(
+      templates.map(async (template) => {
+        if (!template.refJobBoardId) {
+          return {
+            ...template,
+            jobBoardTitle: '공통 템플릿',
+            jobBoardGeneration: null,
+          };
+        }
+        
+        try {
+          const jobBoardRef = doc(db, 'jobBoards', template.refJobBoardId);
+          const jobBoardDoc = await getDoc(jobBoardRef);
+          
+          if (jobBoardDoc.exists()) {
+            const jobBoardData = jobBoardDoc.data();
+            return {
+              ...template,
+              jobBoardTitle: jobBoardData.title || '제목 없음',
+              jobBoardGeneration: jobBoardData.generation || null,
+            };
+          }
+        } catch (error) {
+          console.error('공고 정보 조회 실패:', error);
+        }
+        
+        return {
+          ...template,
+          jobBoardTitle: '알 수 없음',
+          jobBoardGeneration: null,
+        };
+      })
+    );
+    
+    return templatesWithJobBoard;
+  } catch (error) {
+    console.error('템플릿 및 공고 정보 조회 오류:', error);
+    throw error;
+  }
 } 
