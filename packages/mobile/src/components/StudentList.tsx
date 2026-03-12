@@ -11,6 +11,7 @@ import {
   ScrollView,
   TextInput,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampCode, CampType } from '@smis-mentor/shared';
 import { stSheetService } from '../services';
 import { useAuth } from '../context/AuthContext';
@@ -44,13 +45,10 @@ export const StudentList: React.FC<StudentListProps> = ({
   // 활성 기수의 code 가져오기
   useEffect(() => {
     const loadCampCode = async () => {
-      // activeJobCodeId가 없거나 유효하지 않으면 기본값 사용
+      // activeJobCodeId가 없으면 로그인하지 않은 상태
       if (!activeJobCodeId || typeof activeJobCodeId !== 'string') {
-        console.log('유효한 activeJobCodeId가 없습니다. 기본값 E27 사용');
-        setCampCode('E27');
-        const type = stSheetService.getCampType('E27');
-        setCampType(type);
-        onCampTypeChange?.(type);
+        console.log('activeJobCodeId가 없습니다. 로그인이 필요합니다.');
+        setLoading(false);
         return;
       }
       
@@ -64,18 +62,12 @@ export const StudentList: React.FC<StudentListProps> = ({
           setCampType(type);
           onCampTypeChange?.(type);
         } else {
-          console.log('캠프 코드를 찾을 수 없습니다. 기본값 E27 사용');
-          setCampCode('E27');
-          const type = stSheetService.getCampType('E27');
-          setCampType(type);
-          onCampTypeChange?.(type);
+          console.log('캠프 코드를 찾을 수 없습니다.');
+          setLoading(false);
         }
       } catch (error) {
         console.error('캠프 코드 로드 실패:', error);
-        setCampCode('E27'); // 에러 시 기본값 사용
-        const type = stSheetService.getCampType('E27');
-        setCampType(type);
-        onCampTypeChange?.(type);
+        setLoading(false);
       }
     };
     
@@ -207,6 +199,16 @@ export const StudentList: React.FC<StudentListProps> = ({
         }
       })
     : [];
+
+  if (!activeJobCodeId) {
+    return (
+      <View style={styles.centerContainer}>
+        <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
+        <Text style={styles.loginRequiredTitle}>로그인 필요</Text>
+        <Text style={styles.emptyText}>로그인 후 이용 가능합니다.</Text>
+      </View>
+    );
+  }
 
   if (loading) {
     return (
@@ -961,8 +963,15 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#64748b',
+    fontSize: 14,
+    color: '#6b7280',
     textAlign: 'center',
+    marginTop: 8,
+  },
+  loginRequiredTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 16,
   },
 });

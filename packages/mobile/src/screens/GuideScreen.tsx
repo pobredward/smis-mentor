@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
 import { useAuth } from '../context/AuthContext';
 import { AddLinkModal } from '../components';
@@ -121,6 +122,16 @@ export function GuideScreen() {
     }
   };
 
+  if (!activeJobCodeId) {
+    return (
+      <View style={styles.centerContainer}>
+        <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
+        <Text style={styles.loginRequiredTitle}>로그인 필요</Text>
+        <Text style={styles.emptyText}>로그인 후 이용 가능합니다.</Text>
+      </View>
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -142,7 +153,7 @@ export function GuideScreen() {
             <Text style={styles.addButtonLargeText}>+ 첫 인솔표 추가하기</Text>
           </TouchableOpacity>
         )}
-        {isAdmin && activeJobCodeId && (
+        {isAdmin && (
           <AddLinkModal
             visible={showAddModal}
             onClose={() => setShowAddModal(false)}
@@ -372,9 +383,16 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   emptyText: {
-    fontSize: 16,
-    color: '#64748b',
-    marginBottom: 20,
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  loginRequiredTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 16,
   },
   addButtonLarge: {
     backgroundColor: '#3b82f6',
