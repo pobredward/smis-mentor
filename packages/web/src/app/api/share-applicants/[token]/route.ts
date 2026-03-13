@@ -64,17 +64,53 @@ export async function GET(
         const appDoc = await getDoc(doc(db, 'applicationHistories', appId));
         if (!appDoc.exists()) return null;
         
-        const application = { id: appDoc.id, ...appDoc.data() } as ApplicationHistory;
+        const appData = appDoc.data() as ApplicationHistory;
         
         // 사용자 정보 조회
-        const userDoc = await getDoc(doc(db, 'users', application.refUserId));
-        if (!userDoc.exists()) return { ...application, user: null };
+        const userDoc = await getDoc(doc(db, 'users', appData.refUserId));
+        let userData = null;
         
-        const user = { id: userDoc.id, ...userDoc.data() } as User;
+        if (userDoc.exists()) {
+          const rawUserData = userDoc.data();
+          userData = {
+            ...rawUserData,
+            id: userDoc.id,
+            // Timestamp를 ISO 문자열로 변환
+            createdAt: rawUserData.createdAt?.toDate?.()?.toISOString() || null,
+            updatedAt: rawUserData.updatedAt?.toDate?.()?.toISOString() || null,
+            lastLoginAt: rawUserData.lastLoginAt?.toDate?.()?.toISOString() || null,
+            evaluationSummary: rawUserData.evaluationSummary ? {
+              ...rawUserData.evaluationSummary,
+              documentReview: rawUserData.evaluationSummary.documentReview ? {
+                ...rawUserData.evaluationSummary.documentReview,
+                lastEvaluatedAt: rawUserData.evaluationSummary.documentReview.lastEvaluatedAt?.toDate?.()?.toISOString() || null,
+              } : undefined,
+              interview: rawUserData.evaluationSummary.interview ? {
+                ...rawUserData.evaluationSummary.interview,
+                lastEvaluatedAt: rawUserData.evaluationSummary.interview.lastEvaluatedAt?.toDate?.()?.toISOString() || null,
+              } : undefined,
+              faceToFaceEducation: rawUserData.evaluationSummary.faceToFaceEducation ? {
+                ...rawUserData.evaluationSummary.faceToFaceEducation,
+                lastEvaluatedAt: rawUserData.evaluationSummary.faceToFaceEducation.lastEvaluatedAt?.toDate?.()?.toISOString() || null,
+              } : undefined,
+              campLife: rawUserData.evaluationSummary.campLife ? {
+                ...rawUserData.evaluationSummary.campLife,
+                lastEvaluatedAt: rawUserData.evaluationSummary.campLife.lastEvaluatedAt?.toDate?.()?.toISOString() || null,
+              } : undefined,
+              lastUpdatedAt: rawUserData.evaluationSummary.lastUpdatedAt?.toDate?.()?.toISOString() || null,
+            } : undefined,
+          };
+        }
         
         return {
-          ...application,
-          user,
+          id: appDoc.id,
+          ...appData,
+          // Timestamp를 ISO 문자열로 변환
+          applicationDate: appData.applicationDate?.toDate?.()?.toISOString() || null,
+          interviewDate: appData.interviewDate?.toDate?.()?.toISOString() || null,
+          createdAt: appData.createdAt?.toDate?.()?.toISOString() || null,
+          updatedAt: appData.updatedAt?.toDate?.()?.toISOString() || null,
+          user: userData,
         };
       })
     );

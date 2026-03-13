@@ -221,7 +221,7 @@ export function SharedApplicantsClient({ token }: Props) {
                           <div className="flex items-center gap-2 text-gray-600">
                             <span className="font-medium">지원일:</span>
                             <span>
-                              {format(app.applicationDate.toDate(), 'yyyy.MM.dd HH:mm', { locale: ko })}
+                              {format(new Date(app.applicationDate), 'yyyy.MM.dd HH:mm', { locale: ko })}
                             </span>
                           </div>
                         </div>
@@ -280,7 +280,7 @@ export function SharedApplicantsClient({ token }: Props) {
                           <div className="mt-3 p-3 bg-indigo-50 rounded-lg">
                             <p className="text-sm font-medium text-indigo-900 mb-1">면접 일정</p>
                             <p className="text-sm text-indigo-700">
-                              {format(app.interviewDate.toDate(), 'yyyy년 M월 d일 HH:mm', { locale: ko })}
+                              {format(new Date(app.interviewDate), 'yyyy년 M월 d일 HH:mm', { locale: ko })}
                             </p>
                           </div>
                         )}
