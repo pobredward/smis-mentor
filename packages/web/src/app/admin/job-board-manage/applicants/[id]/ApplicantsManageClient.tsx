@@ -1490,59 +1490,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           </div>
         ) : (
           <>
-            {/* 공유 링크 생성 버튼 */}
-            <div className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="text-sm text-gray-600">
-                총 <span className="font-semibold text-gray-900">{filteredApplications.length}</span>명의 지원자
-                {selectedForShare.length > 0 && (
-                  <span className="ml-2 text-primary">
-                    ({selectedForShare.length}명 선택됨)
-                  </span>
-                )}
-              </div>
-              <div className="flex gap-2">
-                {selectedForShare.length > 0 && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setSelectedForShare([])}
-                  >
-                    선택 해제
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    if (selectedForShare.length === filteredApplications.length) {
-                      setSelectedForShare([]);
-                    } else {
-                      setSelectedForShare(filteredApplications.map(app => app.id));
-                    }
-                  }}
-                >
-                  {selectedForShare.length === filteredApplications.length ? '전체 해제' : '전체 선택'}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (selectedForShare.length === 0) {
-                      toast.error('공유할 지원자를 선택해주세요.');
-                      return;
-                    }
-                    setShowShareLinkModal(true);
-                  }}
-                  className="flex items-center gap-2"
-                  disabled={selectedForShare.length === 0}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                  </svg>
-                  선택 항목 공유
-                </Button>
-              </div>
-            </div>
-
             {/* 모바일 최적화 레이아웃 */}
             <div className="flex flex-col lg:grid lg:grid-cols-5 gap-6">
             {/* 모바일 뷰에서는 상세 정보가 선택된 경우에만 지원자 목록을 숨깁니다 */}
@@ -1579,34 +1526,14 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                   {filteredApplications.map((app) => (
                     <div 
                       key={app.id}
-                      className={`p-2 lg:p-4 hover:bg-gray-50 ${  
+                      className={`p-2 lg:p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
                         selectedApplication?.id === app.id ? 'bg-blue-50' : ''
-                      } ${selectedForShare.includes(app.id) ? 'bg-green-50' : ''}`}
+                      }`}
+                      onClick={() => handleSelectApplication(app)}
                     >
                       <div className="flex items-center">
-                        {/* 체크박스 */}
-                        <div className="flex-shrink-0 mr-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedForShare.includes(app.id)}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              if (selectedForShare.includes(app.id)) {
-                                setSelectedForShare(selectedForShare.filter(id => id !== app.id));
-                              } else {
-                                setSelectedForShare([...selectedForShare, app.id]);
-                              }
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
-                          />
-                        </div>
-
                         {/* 프로필 이미지 */}
-                        <div 
-                          className="flex-shrink-0 mr-3 cursor-pointer"
-                          onClick={() => handleSelectApplication(app)}
-                        >
+                        <div className="flex-shrink-0 mr-3">
                           {app.user?.profileImage ? (
                             <img
                               src={app.user.profileImage}
@@ -1622,10 +1549,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                         </div>
 
                         {/* 지원자 정보와 상태 배지 */}
-                        <div 
-                          className="flex flex-1 justify-between items-center cursor-pointer"
-                          onClick={() => handleSelectApplication(app)}
-                        >
+                        <div className="flex flex-1 justify-between items-center">
                           {/* 왼쪽: 지원자 기본 정보 (너비 제한) */}
                           <div className="flex flex-col mr-2 flex-grow-0 max-w-[60%] min-w-0 overflow-hidden">
                             <h3 className="text-sm font-medium text-gray-900 truncate">
@@ -1725,14 +1649,14 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                     <div className="mb-6 pb-6 border-b border-gray-200">
                       <div className="flex justify-between items-start">
                         <div>
-                          <div className="flex items-center">
+                          <div className="flex items-center gap-3">
                             <h2 className="text-xl font-bold text-gray-900">
                               {selectedApplication.user?.name || selectedApplication.refUserId}
                             </h2>
                             {selectedApplication.user?.profileImage && (
                               <button
                                 onClick={() => setShowProfileImageModal(true)}
-                                className="ml-2 p-1 text-blue-600 hover:text-blue-800 rounded-full hover:bg-blue-100 transition-colors duration-150"
+                                className="p-1 text-blue-600 hover:text-blue-800 rounded-full hover:bg-blue-100 transition-colors duration-150"
                                 title="프로필 이미지 크게 보기"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1741,6 +1665,20 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 </svg>
                               </button>
                             )}
+                            {/* 공유 버튼 추가 */}
+                            <button
+                              onClick={() => {
+                                setSelectedForShare([selectedApplication.id]);
+                                setShowShareLinkModal(true);
+                              }}
+                              className="p-2 text-primary hover:text-primary-dark bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors duration-150 flex items-center gap-2"
+                              title="이 지원자 정보 공유"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                              </svg>
+                              <span className="text-sm font-medium">공유</span>
+                            </button>
                           </div>
                           {selectedApplication.user && (
                             <div className="mt-2 space-y-1 text-sm text-gray-600">

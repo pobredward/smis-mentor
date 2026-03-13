@@ -144,12 +144,17 @@ export function ShareLinkModal({
 
               {/* 캠프 정보 */}
               <div className="mb-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">캠프 정보</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">공유 정보</h3>
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-base font-semibold text-gray-900">{jobBoardTitle}</p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    선택된 지원자: <span className="font-semibold text-primary">{selectedApplicationIds.length}명</span>
+                  <p className="text-base font-semibold text-gray-900 mb-2">{jobBoardTitle}</p>
+                  <p className="text-sm text-gray-600">
+                    공유할 지원자: <span className="font-semibold text-primary">{selectedApplicationIds.length}명</span>
                   </p>
+                  {selectedApplicationIds.length === 1 && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      이 지원자의 모든 정보 (기본정보, 학력, 경력, 자기소개, 평가점수)가 공유됩니다
+                    </p>
+                  )}
                 </div>
               </div>
 
