@@ -34,6 +34,8 @@ export function SharedApplicantsClient({ token }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const [showProfileImageModal, setShowProfileImageModal] = useState(false);
+  const [selectedProfileImage, setSelectedProfileImage] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -217,14 +219,33 @@ export function SharedApplicantsClient({ token }: Props) {
                     {/* 헤더: 프로필 사진, 이름, 상태 */}
                     <div className="flex items-center gap-3 mb-3">
                       {/* 프로필 사진 */}
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 relative group">
                         {(user?.profileImage || user?.profileImageUrl) && !hasImageError ? (
-                          <img
-                            src={user.profileImage || user.profileImageUrl}
-                            alt={user.name || '프로필'}
-                            className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-gray-200"
-                            onError={() => handleImageError(app.id, user.profileImage || user.profileImageUrl || '')}
-                          />
+                          <>
+                            <img
+                              src={user.profileImage || user.profileImageUrl}
+                              alt={user.name || '프로필'}
+                              className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-gray-200"
+                              onError={() => handleImageError(app.id, user.profileImage || user.profileImageUrl || '')}
+                            />
+                            {/* 확대 버튼 */}
+                            <button
+                              onClick={() => {
+                                setSelectedProfileImage({
+                                  url: user.profileImage || user.profileImageUrl || '',
+                                  name: user.name || '프로필'
+                                });
+                                setShowProfileImageModal(true);
+                              }}
+                              className="absolute inset-0 w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                              title="프로필 이미지 크게 보기"
+                            >
+                              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                          </>
                         ) : (
                           <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
                             <svg className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -482,6 +503,36 @@ export function SharedApplicantsClient({ token }: Props) {
       </div>
     </main>
     <Footer />
+
+    {/* 프로필 이미지 모달 */}
+    {showProfileImageModal && selectedProfileImage && (
+      <div 
+        className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+        onClick={() => setShowProfileImageModal(false)}
+      >
+        <div 
+          className="relative bg-white rounded-lg p-1 max-w-2xl max-h-[90vh] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => setShowProfileImageModal(false)}
+            className="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors z-10"
+            aria-label="닫기"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="w-full h-full max-h-[calc(90vh-2rem)] overflow-hidden">
+            <img
+              src={selectedProfileImage.url}
+              alt={selectedProfileImage.name}
+              className="w-full h-auto object-contain"
+            />
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 );
 }
