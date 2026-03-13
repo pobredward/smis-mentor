@@ -113,10 +113,13 @@ export const getTasksByDate = async (
     });
 
     console.log('날짜별 업무 필터링:', {
-      targetDate: targetDate.toISOString(),
+      targetDate: {
+        year: targetDate.getFullYear(),
+        month: targetDate.getMonth() + 1,
+        date: targetDate.getDate()
+      },
       totalTasks: allTasks.length,
-      filteredTasks: filtered.length,
-      allTaskDates: allTasks.map(t => new Date(t.date.toDate()).toISOString())
+      filteredTasks: filtered.length
     });
 
     // 시간 순으로 정렬

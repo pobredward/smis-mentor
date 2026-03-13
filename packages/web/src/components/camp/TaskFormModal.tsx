@@ -101,9 +101,11 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
   const handleMouseEnter = (date: Date) => {
     if (!isDragging) return;
     
-    const dateStr = date.toISOString().split('T')[0];
+    // 로컬 날짜로 비교
     const isAlreadySelected = selectedDates.some(
-      d => d.toISOString().split('T')[0] === dateStr
+      d => d.getFullYear() === date.getFullYear() && 
+           d.getMonth() === date.getMonth() && 
+           d.getDate() === date.getDate()
     );
     
     if (!isAlreadySelected) {
@@ -132,9 +134,11 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
       return;
     }
 
-    const dateStr = dateToToggle.toISOString().split('T')[0];
+    // 로컬 날짜로 비교
     const existingIndex = selectedDates.findIndex(
-      d => d.toISOString().split('T')[0] === dateStr
+      d => d.getFullYear() === dateToToggle.getFullYear() && 
+           d.getMonth() === dateToToggle.getMonth() && 
+           d.getDate() === dateToToggle.getDate()
     );
 
     if (existingIndex >= 0) {
@@ -163,9 +167,11 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
 
     for (let day = 1; day <= daysInMonth; day++) {
       const currentDate = new Date(currentYear, currentMonth, day);
-      const dateStr = currentDate.toISOString().split('T')[0];
+      // 로컬 날짜로 비교
       const isSelected = selectedDates.some(
-        d => d.toISOString().split('T')[0] === dateStr
+        d => d.getFullYear() === currentDate.getFullYear() && 
+             d.getMonth() === currentDate.getMonth() && 
+             d.getDate() === currentDate.getDate()
       );
       const isToday = 
         today.getDate() === day && 

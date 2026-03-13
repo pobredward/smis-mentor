@@ -137,15 +137,16 @@ export default function JobBoardManage() {
     loadData();
   }, [searchParams]);
   
-  // 날짜 포맷팅 함수
+  // 날짜 포맷팅 함수 (로컬 타임존)
   const formatDate = (timestamp: Timestamp) => {
     if (!timestamp || typeof timestamp.toDate !== 'function') {
       return '날짜 없음';
     }
     const date = timestamp.toDate();
-    // 로컬 시간대로 변환
-    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-    return localDate.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
   
   // 공고 수정 핸들러
@@ -285,12 +286,12 @@ export default function JobBoardManage() {
           korea: formData.korea,
           status: 'active' as const,
           interviewDates: formData.interviewDates.map(date => {
-            const localDate = new Date(date);
-            // UTC 시간으로 변환
-            const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+            // 로컬 날짜를 그대로 사용 (자정 기준)
+            const [year, month, day] = date.split('-').map(Number);
+            const localDate = new Date(year, month - 1, day, 0, 0, 0, 0);
             return {
-              start: Timestamp.fromDate(utcDate),
-              end: Timestamp.fromDate(utcDate)
+              start: Timestamp.fromDate(localDate),
+              end: Timestamp.fromDate(localDate)
             };
           }),
           interviewBaseLink: formData.interviewBaseLink || '',
@@ -315,12 +316,12 @@ export default function JobBoardManage() {
           jobCode: formData.jobCode,
           korea: formData.korea,
           interviewDates: formData.interviewDates.map(date => {
-            const localDate = new Date(date);
-            // UTC 시간으로 변환
-            const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+            // 로컬 날짜를 그대로 사용 (자정 기준)
+            const [year, month, day] = date.split('-').map(Number);
+            const localDate = new Date(year, month - 1, day, 0, 0, 0, 0);
             return {
-              start: Timestamp.fromDate(utcDate),
-              end: Timestamp.fromDate(utcDate)
+              start: Timestamp.fromDate(localDate),
+              end: Timestamp.fromDate(localDate)
             };
           }),
           interviewBaseLink: formData.interviewBaseLink || '',

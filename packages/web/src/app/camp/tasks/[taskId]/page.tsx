@@ -88,13 +88,16 @@ export default function TaskDetailPage() {
   };
 
   const handleBack = () => {
-    // 업무의 날짜로 캠프 페이지로 이동
+    // 업무의 날짜로 캠프 페이지로 이동 (로컬 타임존)
     if (task) {
       const date = task.date.toDate();
-      const dateStr = date.toISOString().split('T')[0];
-      router.push(`/camp?date=${dateStr}`);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      router.push(`/camp/tasks?date=${dateStr}`);
     } else {
-      router.push('/camp');
+      router.push('/camp/tasks');
     }
   };
 
