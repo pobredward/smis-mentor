@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import Header from '@/components/common/Header';
+import Footer from '@/components/common/Footer';
 import Button from '@/components/common/Button';
 import { ApplicationHistory, User } from '@/types';
 import { getScoreTextColor } from '@smis-mentor/shared';
@@ -93,26 +95,34 @@ export function SharedApplicantsClient({ token }: Props) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600 text-sm">지원자 정보를 불러오는 중...</p>
-        </div>
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-gray-600 text-sm">지원자 정보를 불러오는 중...</p>
+          </div>
+        </main>
+        <Footer />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="text-center max-w-md">
-          <div className="text-6xl mb-4">🔒</div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">접근할 수 없습니다</h1>
-          <p className="text-gray-600 text-sm mb-6">{error}</p>
-          <Button onClick={() => window.location.href = '/'}>
-            홈으로 돌아가기
-          </Button>
-        </div>
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center p-4">
+          <div className="text-center max-w-md">
+            <div className="text-6xl mb-4">🔒</div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">접근할 수 없습니다</h1>
+            <p className="text-gray-600 text-sm mb-6">{error}</p>
+            <Button onClick={() => window.location.href = '/'}>
+              홈으로 돌아가기
+            </Button>
+          </div>
+        </main>
+        <Footer />
       </div>
     );
   }
@@ -127,56 +137,58 @@ export function SharedApplicantsClient({ token }: Props) {
   const minutesRemaining = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
-        {/* 헤더 */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mb-3 sm:mb-4 relative">
-          {/* 링크 만료 시간 (박스 밖) */}
-          <div className="absolute -top-2 right-2 sm:right-4 bg-white px-2 py-0.5 rounded shadow-sm border border-gray-200">
-            <p className="text-xs text-gray-500">
-              만료: {format(expiresAt, 'M/d HH:mm', { locale: ko })}
-              {timeRemaining > 0 && (
-                <span className="text-orange-600 ml-1">
-                  ({hoursRemaining > 0 && `${hoursRemaining}h `}{minutesRemaining}m)
-                </span>
-              )}
-            </p>
-          </div>
-
-          <div className="mb-3">
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">
-              {data.jobBoard.title}
-            </h1>
-            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-              <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
-                {data.jobBoard.generation}
-              </span>
-              <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                {data.jobBoard.jobCode}
-              </span>
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <Header />
+      <main className="flex-grow">
+        <div className="max-w-4xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
+          {/* 헤더 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mb-3 sm:mb-4 relative">
+            {/* 링크 만료 시간 (박스 밖) */}
+            <div className="absolute -top-2 right-2 sm:right-4 bg-white px-2 py-0.5 rounded shadow-sm border border-gray-200">
+              <p className="text-xs text-gray-500">
+                만료: {format(expiresAt, 'M/d HH:mm', { locale: ko })}
+                {timeRemaining > 0 && (
+                  <span className="text-orange-600 ml-1">
+                    ({hoursRemaining > 0 && `${hoursRemaining}h `}{minutesRemaining}m)
+                  </span>
+                )}
+              </p>
             </div>
-          </div>
-          
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3">
-            <div className="flex items-start gap-2">
-              <span className="text-blue-600 text-base sm:text-lg flex-shrink-0">ℹ️</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-blue-900 mb-0.5">임시 공유 링크</p>
-                <p className="text-xs text-blue-700">
-                  임시로 공유된 지원자 정보입니다. 만료 시간 이후 자동 차단됩니다.
-                </p>
+
+            <div className="mb-3">
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">
+                {data.jobBoard.title}
+              </h1>
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
+                  {data.jobBoard.generation}
+                </span>
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full">
+                  {data.jobBoard.jobCode}
+                </span>
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3">
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 text-base sm:text-lg flex-shrink-0">ℹ️</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-blue-900 mb-0.5">임시 공유 링크</p>
+                  <p className="text-xs text-blue-700">
+                    임시로 공유된 지원자 정보입니다. 만료 시간 이후 자동 차단됩니다.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* 지원자 목록 */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-gray-200">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900">
-              지원자 목록
-            </h2>
-          </div>
+          {/* 지원자 목록 */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-gray-200">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+                지원자 목록
+              </h2>
+            </div>
           
           <div className="divide-y divide-gray-200">
             {data.applications.length === 0 ? (
@@ -190,14 +202,34 @@ export function SharedApplicantsClient({ token }: Props) {
                 
                 return (
                   <div key={app.id} className="px-3 sm:px-4 py-4 border-b border-gray-200 last:border-b-0">
-                    {/* 헤더: 이름과 상태 */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900">
-                        {user?.name || '알 수 없음'}
-                      </h3>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(app)}`}>
-                        {getStatusText(app)}
-                      </span>
+                    {/* 헤더: 프로필 사진, 이름, 상태 */}
+                    <div className="flex items-center gap-3 mb-3">
+                      {/* 프로필 사진 */}
+                      <div className="flex-shrink-0">
+                        {user?.profileImageUrl ? (
+                          <img
+                            src={user.profileImageUrl}
+                            alt={user.name || '프로필'}
+                            className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-gray-200"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
+                            <svg className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* 이름과 상태 */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate">
+                          {user?.name || '알 수 없음'}
+                        </h3>
+                        <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(app)}`}>
+                          {getStatusText(app)}
+                        </span>
+                      </div>
                     </div>
 
                     {/* 기본 정보 섹션 */}
@@ -435,6 +467,8 @@ export function SharedApplicantsClient({ token }: Props) {
           <p className="mt-1">개인정보 보호를 위해 링크를 타인과 공유하지 마세요.</p>
         </div>
       </div>
-    </div>
-  );
+    </main>
+    <Footer />
+  </div>
+);
 }
