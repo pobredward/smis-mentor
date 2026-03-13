@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -25,6 +25,8 @@ const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function TaskContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const { userData, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,10 +57,14 @@ export default function TaskContent() {
     const dateParam = searchParams?.get('date');
     if (dateParam) {
       try {
-        const date = new Date(dateParam);
-        if (!isNaN(date.getTime())) {
-          setSelectedDate(date);
-          setCurrentDate(date);
+        // YYYY-MM-DD 형식을 로컬 타임존으로 파싱
+        const [year, month, day] = dateParam.split('-').map(Number);
+        if (year && month && day) {
+          const date = new Date(year, month - 1, day);
+          if (!isNaN(date.getTime())) {
+            setSelectedDate(date);
+            setCurrentDate(date);
+          }
         }
       } catch (error) {
         console.error('날짜 파라미터 파싱 오류:', error);
@@ -167,10 +173,18 @@ export default function TaskContent() {
     }
   }, [currentDate, currentCampCode]);
 
-  // 날짜 클릭 핸들러
+  // 날짜 클릭 핸들러 - URL 업데이트
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
     loadTasksForDate(date);
+    
+    // URL에 날짜 파라미터 추가 (로컬 타임존 기준)
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const currentPath = pathname || '/camp/tasks';
+    router.push(`${currentPath}?date=${dateStr}`, { scroll: false });
   };
 
   // 업무 완료 토글
