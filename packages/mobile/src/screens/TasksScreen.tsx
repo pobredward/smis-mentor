@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,12 @@ import {
   Linking,
   TextInput,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import Holidays from 'date-holidays';
 import { useAuth } from '../context/AuthContext';
 import { Timestamp } from 'firebase/firestore';
 import {
@@ -46,6 +48,17 @@ interface JobCodeWithGroup {
 }
 
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+
+const hd = new Holidays('KR');
+
+// 대체휴무 및 임시공휴일 등 추가 공휴일 정의
+const ADDITIONAL_HOLIDAYS: Record<string, string> = {
+  '2026-03-02': '삼일절 대체휴일',
+  '2026-05-06': '어린이날 대체휴일',
+  '2026-08-17': '광복절 대체휴일',
+  '2026-10-05': '개천절 대체휴일',
+  // 필요에 따라 추가
+};
 
 export function TasksScreen() {
   const { userData, loading: authLoading } = useAuth();
@@ -178,19 +191,39 @@ export function TasksScreen() {
 
   // 업무 완료 토글
   const handleToggleComplete = async (taskId: string) => {
-    if (!userData || !currentGroupRole) {
+    if (!userData) {
       Alert.alert('오류', '사용자 정보를 불러올 수 없습니다.');
       return;
     }
 
+    // 관리자이거나 currentGroupRole이 있는 경우 처리
+    const role = currentGroupRole || '담임' as JobExperienceGroupRole; // 관리자는 기본 역할 사용
+
     try {
-      await toggleTaskCompletion(taskId, userData.userId, userData.name, currentGroupRole);
+      await toggleTaskCompletion(taskId, userData.userId, userData.name, role);
       await loadTasksForDate(selectedDate);
     } catch (error) {
       console.error('업무 완료 토글 오류:', error);
       Alert.alert('오류', '업무 상태 변경 중 오류가 발생했습니다.');
     }
   };
+
+  // 공휴일 확인 함수
+  const isHoliday = useMemo(() => {
+    return (date: Date) => {
+      // date-holidays 라이브러리 체크
+      const holidays = hd.isHoliday(date);
+      if (holidays !== false) return true;
+      
+      // 추가 공휴일 체크 (대체휴무 등)
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      
+      return dateStr in ADDITIONAL_HOLIDAYS;
+    };
+  }, []);
 
   // 캘린더 렌더링
   const renderCalendar = () => {
@@ -220,6 +253,9 @@ export function TasksScreen() {
       const hasTask = taskDates.has(dateStr);
       const isSelected = selectedDate.toDateString() === date.toDateString();
       const isToday = new Date().toDateString() === date.toDateString();
+      const dayOfWeek = date.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isHolidayDate = isHoliday(date);
 
       days.push(
         <TouchableOpacity
@@ -235,6 +271,7 @@ export function TasksScreen() {
           <Text
             style={[
               styles.calendarDayText,
+              (isWeekend || isHolidayDate) && !isSelected && styles.calendarDayTextWeekend,
               isSelected && styles.calendarDayTextSelected,
               isToday && !isSelected && styles.calendarDayTextToday,
             ]}
@@ -294,7 +331,7 @@ export function TasksScreen() {
     <View style={styles.container}>
       <ScrollView style={styles.scrollView}>
         {/* 캘린더 헤더 */}
-        <View style={styles.calendarHeader}>
+        <View style={styles.calendarHeaderSection}>
           <TouchableOpacity
             onPress={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
             style={styles.navButton}
@@ -321,8 +358,7 @@ export function TasksScreen() {
                 <Text
                   style={[
                     styles.weekDayText,
-                    i === 0 && styles.weekDayTextSunday,
-                    i === 6 && styles.weekDayTextSaturday,
+                    (i === 0 || i === 6) && styles.weekDayTextWeekend,
                   ]}
                 >
                   {day}
@@ -399,6 +435,7 @@ export function TasksScreen() {
       <TaskAddModal
         visible={showAddModal}
         campCode={currentCampCode}
+        initialDate={selectedDate}
         onClose={() => setShowAddModal(false)}
         onSuccess={() => {
           setShowAddModal(false);
@@ -432,20 +469,6 @@ function TaskCard({
       activeOpacity={0.7}
     >
       <View style={styles.taskCardContent}>
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation();
-            onToggle(task.id);
-          }}
-          style={styles.checkbox}
-        >
-          <Ionicons
-            name={isCompleted ? 'checkbox' : 'square-outline'}
-            size={24}
-            color={isCompleted ? '#3b82f6' : '#9ca3af'}
-          />
-        </TouchableOpacity>
-
         <View style={styles.taskInfo}>
           <View style={styles.taskMeta}>
             {timeStr && (
@@ -476,6 +499,20 @@ function TaskCard({
             )}
           </View>
         </View>
+
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation();
+            onToggle(task.id);
+          }}
+          style={styles.checkbox}
+        >
+          <Ionicons
+            name={isCompleted ? 'checkbox' : 'square-outline'}
+            size={24}
+            color={isCompleted ? '#3b82f6' : '#9ca3af'}
+          />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -686,11 +723,13 @@ function TaskDetailModal({
 function TaskAddModal({
   visible,
   campCode,
+  initialDate,
   onClose,
   onSuccess,
 }: {
   visible: boolean;
   campCode: string;
+  initialDate?: Date;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -698,7 +737,7 @@ function TaskAddModal({
   const [targetRoleType, setTargetRoleType] = useState<'mentor' | 'foreign'>('mentor');
   
   // 날짜 및 시간
-  const [date, setDate] = useState(new Date());
+  const [date, setDate] = useState(initialDate || new Date());
   const [time, setTime] = useState('');
   const [hasTime, setHasTime] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -722,6 +761,13 @@ function TaskAddModal({
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // 모달이 열릴 때 initialDate로 날짜 초기화
+  useEffect(() => {
+    if (visible && initialDate) {
+      setDate(initialDate);
+    }
+  }, [visible, initialDate]);
 
   // roleOptions는 targetRoleType에 따라 동적으로 변경
   const getMentorRoles = (): JobExperienceGroupRole[] => Array.from(MENTOR_GROUP_ROLES);
@@ -748,7 +794,7 @@ function TaskAddModal({
     // 빈 칸 추가
     for (let i = 0; i < startDayOfWeek; i++) {
       days.push(
-        <View key={`empty-${i}`} style={styles.calendarDay} />
+        <View key={`empty-${i}`} style={styles.modalCalendarDay} />
       );
     }
 
@@ -766,6 +812,16 @@ function TaskAddModal({
         today.getDate() === day && 
         today.getMonth() === month && 
         today.getFullYear() === year;
+      const dayOfWeek = currentDate.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      
+      // 공휴일 체크 (라이브러리 + 추가 공휴일)
+      const holidays = hd.isHoliday(currentDate);
+      const yearStr = currentDate.getFullYear();
+      const monthStr = String(currentDate.getMonth() + 1).padStart(2, '0');
+      const dayStr = String(currentDate.getDate()).padStart(2, '0');
+      const dateStr = `${yearStr}-${monthStr}-${dayStr}`;
+      const isHolidayDate = holidays !== false || dateStr in ADDITIONAL_HOLIDAYS;
 
       days.push(
         <TouchableOpacity
@@ -775,14 +831,15 @@ function TaskAddModal({
             setShowDatePicker(false);
           }}
           style={[
-            styles.calendarDay,
-            isSelected && styles.calendarDaySelected,
-            isToday && !isSelected && styles.calendarDayToday,
+            styles.modalCalendarDay,
+            isSelected && styles.modalCalendarDaySelected,
+            isToday && !isSelected && styles.modalCalendarDayToday,
           ]}
         >
           <Text
             style={[
-              styles.calendarDayText,
+              styles.modalCalendarDayText,
+              (isWeekend || isHolidayDate) && !isSelected && styles.calendarDayTextWeekend,
               isSelected && styles.calendarDayTextSelected,
               isToday && !isSelected && styles.calendarDayTextToday,
             ]}
@@ -938,16 +995,24 @@ function TaskAddModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.addModalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>새 업무 추가</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#9ca3af" />
-            </TouchableOpacity>
-          </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.addModalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>새 업무 추가</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#9ca3af" />
+              </TouchableOpacity>
+            </View>
 
-          <ScrollView style={styles.addModalContent}>
+            <ScrollView 
+              style={styles.addModalContent}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
             {/* 0. 타겟 역할 타입 선택 (mentor/foreign) - 보라색 테두리 */}
             <View style={[styles.formGroup, styles.sectionBorderPurple]}>
               <Text style={styles.formLabel}>🎯 업무 대상 선택 (멘토/원어민)</Text>
@@ -1020,11 +1085,11 @@ function TaskAddModal({
 
               {/* 인라인 달력 */}
               {showDatePicker && (
-                <View style={styles.calendarContainer}>
+                <View style={styles.modalCalendarContainer}>
                   {/* 월 네비게이션 */}
-                  <View style={styles.calendarHeader}>
+                  <View style={styles.modalCalendarHeader}>
                     <TouchableOpacity
-                      style={styles.calendarNavButton}
+                      style={styles.modalCalendarNavButton}
                       onPress={() => {
                         const newDate = new Date(date);
                         newDate.setMonth(date.getMonth() - 1);
@@ -1033,11 +1098,11 @@ function TaskAddModal({
                     >
                       <Ionicons name="chevron-back" size={20} color="#6b7280" />
                     </TouchableOpacity>
-                    <Text style={styles.calendarTitle}>
+                    <Text style={styles.modalCalendarTitle}>
                       {date.getFullYear()}년 {date.getMonth() + 1}월
                     </Text>
                     <TouchableOpacity
-                      style={styles.calendarNavButton}
+                      style={styles.modalCalendarNavButton}
                       onPress={() => {
                         const newDate = new Date(date);
                         newDate.setMonth(date.getMonth() + 1);
@@ -1049,14 +1114,13 @@ function TaskAddModal({
                   </View>
 
                   {/* 요일 헤더 */}
-                  <View style={styles.calendarWeekDays}>
+                  <View style={styles.modalCalendarWeekDays}>
                     {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
                       <Text
                         key={day}
                         style={[
-                          styles.calendarWeekDayText,
-                          i === 0 && styles.calendarWeekDaySunday,
-                          i === 6 && styles.calendarWeekDaySaturday,
+                          styles.modalCalendarWeekDayText,
+                          (i === 0 || i === 6) && styles.weekDayTextWeekend,
                         ]}
                       >
                         {day}
@@ -1065,7 +1129,7 @@ function TaskAddModal({
                   </View>
 
                   {/* 날짜 그리드 */}
-                  <View style={styles.calendarGrid}>
+                  <View style={styles.modalCalendarGrid}>
                     {renderCalendar()}
                   </View>
                 </View>
@@ -1319,6 +1383,7 @@ function TaskAddModal({
           </View>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1329,6 +1394,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   scrollView: {
+    flex: 1,
+  },
+  keyboardAvoidingView: {
     flex: 1,
   },
   centerContainer: {
@@ -1354,63 +1422,64 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
-  calendarHeader: {
+  calendarHeaderSection: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: '#ffffff',
   },
   navButton: {
-    padding: 8,
+    padding: 6,
   },
   calendarTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#111827',
   },
   calendarContainer: {
     backgroundColor: '#ffffff',
     marginHorizontal: 16,
-    marginVertical: 8,
+    marginBottom: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    padding: 8,
+    paddingVertical: 8,
   },
   weekDaysRow: {
     flexDirection: 'row',
     marginBottom: 4,
+    paddingHorizontal: 4,
   },
   weekDayCell: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   weekDayText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#6b7280',
   },
-  weekDayTextSunday: {
+  weekDayTextWeekend: {
     color: '#ef4444',
-  },
-  weekDayTextSaturday: {
-    color: '#3b82f6',
   },
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    paddingHorizontal: 4,
   },
   calendarCell: {
-    width: `${100 / 7}%`,
-    height: 36, // aspectRatio 대신 고정 높이
+    flexBasis: '14.285714%',
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 2,
+    paddingVertical: 2,
     borderRadius: 6,
-    position: 'relative',
   },
   calendarCellSelected: {
     backgroundColor: '#3b82f6',
@@ -1424,8 +1493,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   calendarDayText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
+  },
+  calendarDayTextWeekend: {
+    color: '#ef4444',
   },
   calendarDayTextSelected: {
     color: '#ffffff',
@@ -1546,9 +1618,8 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    padding: 16,
   },
   modalContainer: {
     backgroundColor: '#ffffff',
@@ -1733,18 +1804,18 @@ const styles = StyleSheet.create({
   // 업무 추가 모달 스타일
   addModalContainer: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     width: '100%',
-    maxHeight: '90%',
+    maxHeight: '95%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
   },
   addModalContent: {
     padding: 16,
-    maxHeight: 500,
   },
   formGroup: {
     marginBottom: 16,
@@ -1843,77 +1914,68 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '500',
   },
-  calendarContainer: {
+  modalCalendarContainer: {
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
-    padding: 12,
+    paddingVertical: 8,
     marginTop: 8,
   },
-  calendarHeader: {
+  modalCalendarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 8,
+    paddingHorizontal: 12,
   },
-  calendarNavButton: {
+  modalCalendarNavButton: {
     padding: 4,
   },
-  calendarTitle: {
+  modalCalendarTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#111827',
   },
-  calendarWeekDays: {
+  modalCalendarWeekDays: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 4,
+    paddingHorizontal: 4,
   },
-  calendarWeekDayText: {
+  modalCalendarWeekDayText: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#6b7280',
   },
-  calendarWeekDaySunday: {
-    color: '#ef4444',
-  },
-  calendarWeekDaySaturday: {
-    color: '#3b82f6',
-  },
-  calendarGrid: {
+  modalCalendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    paddingHorizontal: 4,
   },
-  calendarDay: {
-    width: `${100 / 7}%`,
-    aspectRatio: 1,
+  modalCalendarDay: {
+    flexBasis: '14.285714%',
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    paddingVertical: 2,
   },
-  calendarDaySelected: {
+  modalCalendarDaySelected: {
     backgroundColor: '#3b82f6',
     borderRadius: 6,
   },
-  calendarDayToday: {
+  modalCalendarDayToday: {
     backgroundColor: '#dbeafe',
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#93c5fd',
   },
-  calendarDayText: {
-    fontSize: 14,
+  modalCalendarDayText: {
+    fontSize: 13,
     color: '#374151',
-  },
-  calendarDayTextSelected: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  calendarDayTextToday: {
-    color: '#3b82f6',
-    fontWeight: '600',
   },
   required: {
     color: '#ef4444',

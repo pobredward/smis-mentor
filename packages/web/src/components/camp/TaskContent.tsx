@@ -21,11 +21,6 @@ import TaskFormModal from './TaskFormModal';
 import TaskDetailModal from './TaskDetailModal';
 
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
-const priorityConfig = {
-  high: { color: 'text-red-500', bg: 'bg-red-100', label: '중요', icon: '🔴' },
-  medium: { color: 'text-yellow-600', bg: 'bg-yellow-100', label: '보통', icon: '🟡' },
-  low: { color: 'text-gray-500', bg: 'bg-gray-100', label: '낮음', icon: '⚪' },
-};
 
 export default function TaskContent() {
   const { userData, loading: authLoading } = useAuth();
@@ -162,13 +157,16 @@ export default function TaskContent() {
 
   // 업무 완료 토글
   const handleToggleComplete = async (taskId: string) => {
-    if (!userData || !currentGroupRole) {
+    if (!userData) {
       toast.error('사용자 정보를 불러올 수 없습니다.');
       return;
     }
 
+    // 관리자이거나 currentGroupRole이 있는 경우 처리
+    const role = currentGroupRole || '담임' as JobExperienceGroupRole; // 관리자는 기본 역할 사용
+
     try {
-      await toggleTaskCompletion(taskId, userData.userId, userData.name, currentGroupRole);
+      await toggleTaskCompletion(taskId, userData.userId, userData.name, role);
       await loadTasksForDate(selectedDate);
       toast.success('업무 상태가 변경되었습니다.');
     } catch (error) {
@@ -208,7 +206,6 @@ export default function TaskContent() {
         time: task.time,
         estimatedDuration: task.estimatedDuration,
         attachments: task.attachments,
-        priority: task.priority,
         createdBy: userData.userId,
       };
 
@@ -479,7 +476,6 @@ function TaskCard({
   onClick: () => void;
 }) {
   const isCompleted = task.completions.some(c => c.userId === currentUserId);
-  const priorityInfo = priorityConfig[task.priority];
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
 
@@ -489,29 +485,11 @@ function TaskCard({
       onClick={onClick}
     >
       <div className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={isCompleted}
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-          onChange={(e) => {
-            e.stopPropagation();
-            onToggle(task.id);
-          }}
-          className="mt-1 w-5 h-5 cursor-pointer"
-        />
-
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             {timeStr && (
               <span className="text-sm font-semibold text-blue-600">{timeStr}</span>
             )}
-            {/* 우선순위 - 아이콘으로 표시 */}
-            <span className={`flex items-center gap-1 text-xs ${priorityInfo.color}`} title={`우선순위: ${priorityInfo.label}`}>
-              {priorityInfo.icon}
-              <span className="font-medium">{priorityInfo.label}</span>
-            </span>
             {durationStr && (
               <span className="text-xs text-gray-500">{durationStr}</span>
             )}
@@ -530,6 +508,19 @@ function TaskCard({
             )}
           </div>
         </div>
+
+        <input
+          type="checkbox"
+          checked={isCompleted}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+          onChange={(e) => {
+            e.stopPropagation();
+            onToggle(task.id);
+          }}
+          className="mt-1 w-5 h-5 cursor-pointer flex-shrink-0"
+        />
       </div>
     </div>
   );

@@ -35,6 +35,7 @@
     "@react-navigation/native-stack": "^6.11.0",
     "@smis-mentor/shared": "file:../shared",
     "@types/uuid": "^10.0.0",
+    "date-holidays": "^3.26.9",
     "expo": "~54.0.33",
     "expo-checkbox": "~5.0.8",
     "expo-dev-client": "~6.0.20",
