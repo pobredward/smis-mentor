@@ -33,6 +33,7 @@ export function SharedApplicantsClient({ token }: Props) {
   const [data, setData] = useState<SharedData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -47,6 +48,11 @@ export function SharedApplicantsClient({ token }: Props) {
 
         const result = await response.json();
         setData(result);
+        
+        // 디버깅: 프로필 이미지 URL 확인
+        result.applications.forEach((app: any) => {
+          console.log('지원자:', app.user?.name, '프로필 URL:', app.user?.profileImageUrl);
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
       } finally {
@@ -58,6 +64,11 @@ export function SharedApplicantsClient({ token }: Props) {
       fetchData();
     }
   }, [token]);
+
+  const handleImageError = (appId: string, profileUrl: string) => {
+    console.error('이미지 로딩 실패:', profileUrl);
+    setImageErrors(prev => ({ ...prev, [appId]: true }));
+  };
 
   const getStatusText = (app: ApplicationWithUser) => {
     if (app.finalStatus === 'finalAccepted') return '최종 합격';
@@ -199,6 +210,7 @@ export function SharedApplicantsClient({ token }: Props) {
               data.applications.map((app) => {
                 const user = app.user;
                 const evaluationSummary = user?.evaluationSummary;
+                const hasImageError = imageErrors[app.id];
                 
                 return (
                   <div key={app.id} className="px-3 sm:px-4 py-4 border-b border-gray-200 last:border-b-0">
@@ -206,11 +218,12 @@ export function SharedApplicantsClient({ token }: Props) {
                     <div className="flex items-center gap-3 mb-3">
                       {/* 프로필 사진 */}
                       <div className="flex-shrink-0">
-                        {user?.profileImageUrl ? (
+                        {user?.profileImageUrl && !hasImageError ? (
                           <img
                             src={user.profileImageUrl}
                             alt={user.name || '프로필'}
                             className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-gray-200"
+                            onError={() => handleImageError(app.id, user.profileImageUrl)}
                           />
                         ) : (
                           <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
