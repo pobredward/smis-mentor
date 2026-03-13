@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useForm, Controller } from 'react-hook-form';
+import DropDownPicker from 'react-native-dropdown-picker';
 import { db } from '../config/firebase';
 import { createTempUser, adminGetAllJobCodes } from '@smis-mentor/shared';
 import { 
@@ -72,6 +73,13 @@ export function UserGenerateScreen({ navigation }: any) {
   const [generations, setGenerations] = useState<string[]>([]);
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(true);
 
+  // Dropdown states
+  const [roleOpen, setRoleOpen] = useState(false);
+  const [generationOpens, setGenerationOpens] = useState<{ [key: number]: boolean }>({});
+  const [jobCodeOpens, setJobCodeOpens] = useState<{ [key: number]: boolean }>({});
+  const [groupOpens, setGroupOpens] = useState<{ [key: number]: boolean }>({});
+  const [groupRoleOpens, setGroupRoleOpens] = useState<{ [key: number]: boolean }>({});
+
   const {
     control,
     handleSubmit,
@@ -97,6 +105,15 @@ export function UserGenerateScreen({ navigation }: any) {
 
   const jobExperiences = watch('jobExperiences');
   const currentRole = watch('role');
+
+  // Close all dropdowns helper
+  const closeAllDropdowns = () => {
+    setRoleOpen(false);
+    setGenerationOpens({});
+    setJobCodeOpens({});
+    setGroupOpens({});
+    setGroupRoleOpens({});
+  };
 
   useEffect(() => {
     loadJobCodes();
@@ -201,7 +218,11 @@ export function UserGenerateScreen({ navigation }: any) {
         <Text style={styles.headerTitle}>임시 사용자 생성</Text>
       </View>
 
-      <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        style={styles.scrollView}
+        onScrollBeginDrag={closeAllDropdowns}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.form}>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>이름 *</Text>
@@ -255,24 +276,34 @@ export function UserGenerateScreen({ navigation }: any) {
               control={control}
               name="role"
               render={({ field: { onChange, value } }) => (
-                <TouchableOpacity
-                  style={styles.picker}
-                  onPress={() => {
-                    Alert.alert(
-                      '역할 선택',
-                      '',
-                      roleOptions.map((role) => ({
-                        text: role.label,
-                        onPress: () => onChange(role.value),
-                      }))
-                    );
+                <DropDownPicker
+                  open={roleOpen}
+                  value={value}
+                  items={roleOptions}
+                  setOpen={(callback) => {
+                    const newValue = typeof callback === 'function' ? callback(roleOpen) : callback;
+                    if (newValue) {
+                      setGenerationOpens({});
+                      setJobCodeOpens({});
+                      setGroupOpens({});
+                      setGroupRoleOpens({});
+                    }
+                    setRoleOpen(newValue);
                   }}
-                >
-                  <Text style={styles.pickerText}>
-                    {roleOptions.find((r) => r.value === value)?.label || '멘토 (회원가입 전)'}
-                  </Text>
-                  <Ionicons name="chevron-down" size={20} color="#6b7280" />
-                </TouchableOpacity>
+                  setValue={(callback) => {
+                    const newValue = typeof callback === 'function' ? callback(value) : callback;
+                    onChange(newValue);
+                  }}
+                  placeholder="역할을 선택하세요"
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                  textStyle={styles.dropdownText}
+                  labelStyle={styles.dropdownLabel}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  listMode="SCROLLVIEW"
+                  zIndex={5000}
+                  zIndexInverse={1000}
+                />
               )}
             />
           </View>
@@ -310,32 +341,41 @@ export function UserGenerateScreen({ navigation }: any) {
                       name={`jobExperiences.${index}.generation`}
                       rules={{ required: '기수를 선택해주세요' }}
                       render={({ field: { onChange, value } }) => (
-                        <View style={styles.pickerContainer}>
-                          <TouchableOpacity
-                            style={styles.picker}
-                            onPress={() => {
-                              Alert.alert(
-                                '기수 선택',
-                                '',
-                                generations.map((gen) => ({
-                                  text: gen,
-                                  onPress: () => {
-                                    onChange(gen);
-                                    // 기수 변경 시 직무 코드 초기화
-                                    const newExperiences = [...jobExperiences];
-                                    newExperiences[index].jobCodeId = '';
-                                    reset({ ...watch(), jobExperiences: newExperiences });
-                                  },
-                                }))
-                              );
+                          <DropDownPicker
+                            open={generationOpens[index] || false}
+                            value={value || null}
+                            items={generations.map((gen) => ({ label: gen, value: gen }))}
+                            setOpen={(callback) => {
+                              const newValue = typeof callback === 'function' 
+                                ? callback(generationOpens[index] || false) 
+                                : callback;
+                              if (newValue) {
+                                setRoleOpen(false);
+                                setJobCodeOpens({});
+                                setGroupOpens({});
+                                setGroupRoleOpens({});
+                              }
+                              setGenerationOpens({ ...generationOpens, [index]: newValue });
                             }}
-                          >
-                            <Text style={value ? styles.pickerText : styles.pickerPlaceholder}>
-                              {value || '기수 선택...'}
-                            </Text>
-                            <Ionicons name="chevron-down" size={20} color="#6b7280" />
-                          </TouchableOpacity>
-                        </View>
+                            setValue={(callback) => {
+                              const newValue = typeof callback === 'function' ? callback(value) : callback;
+                              onChange(newValue);
+                              // 기수 변경 시 직무 코드 초기화
+                              const newExperiences = [...jobExperiences];
+                              newExperiences[index].jobCodeId = '';
+                              reset({ ...watch(), jobExperiences: newExperiences });
+                            }}
+                            placeholder="기수 선택..."
+                            style={styles.dropdown}
+                            dropDownContainerStyle={styles.dropdownContainer}
+                            textStyle={styles.dropdownText}
+                            labelStyle={styles.dropdownLabel}
+                            placeholderStyle={styles.dropdownPlaceholder}
+                            listMode="SCROLLVIEW"
+                            maxHeight={200}
+                            zIndex={4000 - index}
+                            zIndexInverse={1000 + index}
+                          />
                       )}
                     />
                   </View>
@@ -352,34 +392,43 @@ export function UserGenerateScreen({ navigation }: any) {
                         const filteredCodes = generation ? getFilteredJobCodes(generation) : [];
 
                         return (
-                          <TouchableOpacity
-                            style={styles.picker}
-                            disabled={!generation}
-                            onPress={() => {
-                              if (filteredCodes.length === 0) {
-                                Alert.alert('알림', '선택한 기수에 해당하는 직무가 없습니다.');
-                                return;
-                              }
-                              Alert.alert(
-                                '직무 코드 선택',
-                                '',
-                                filteredCodes.map((code: any) => ({
-                                  text: `${code.code} - ${code.name}`,
-                                  onPress: () => onChange(code.id),
-                                }))
-                              );
-                            }}
-                          >
-                            <Text
-                              style={value ? styles.pickerText : styles.pickerPlaceholder}
-                              numberOfLines={1}
-                            >
-                              {value
-                                ? jobCodes.find((c) => c.id === value)?.name || '직무 코드'
-                                : '직무 코드를 선택하세요'}
-                            </Text>
-                            <Ionicons name="chevron-down" size={20} color="#6b7280" />
-                          </TouchableOpacity>
+                            <DropDownPicker
+                              open={jobCodeOpens[index] || false}
+                              value={value || null}
+                              items={filteredCodes.map((code: any) => ({
+                                label: `${code.code} - ${code.name}`,
+                                value: code.id,
+                              }))}
+                              setOpen={(callback) => {
+                                const newValue = typeof callback === 'function' 
+                                  ? callback(jobCodeOpens[index] || false) 
+                                  : callback;
+                                if (newValue) {
+                                  setRoleOpen(false);
+                                  setGenerationOpens({});
+                                  setGroupOpens({});
+                                  setGroupRoleOpens({});
+                                }
+                                setJobCodeOpens({ ...jobCodeOpens, [index]: newValue });
+                              }}
+                              setValue={(callback) => {
+                                const newValue = typeof callback === 'function' ? callback(value) : callback;
+                                onChange(newValue);
+                              }}
+                              disabled={!generation}
+                              placeholder="직무 코드를 선택하세요"
+                              style={[styles.dropdown, !generation && styles.dropdownDisabled]}
+                              dropDownContainerStyle={styles.dropdownContainer}
+                              textStyle={styles.dropdownText}
+                              labelStyle={styles.dropdownLabel}
+                              placeholderStyle={styles.dropdownPlaceholder}
+                              listMode="SCROLLVIEW"
+                              maxHeight={250}
+                              searchable={true}
+                              searchPlaceholder="검색..."
+                              zIndex={3000 - index}
+                              zIndexInverse={2000 + index}
+                            />
                         );
                       }}
                     />
@@ -393,24 +442,37 @@ export function UserGenerateScreen({ navigation }: any) {
                         control={control}
                         name={`jobExperiences.${index}.group`}
                         render={({ field: { onChange, value } }) => (
-                          <TouchableOpacity
-                            style={styles.picker}
-                            onPress={() => {
-                              Alert.alert(
-                                '그룹 선택',
-                                '',
-                                jobGroups.map((group) => ({
-                                  text: group.label,
-                                  onPress: () => onChange(group.value),
-                                }))
-                              );
-                            }}
-                          >
-                            <Text style={styles.pickerText}>
-                              {jobGroups.find((g) => g.value === value)?.label || '주니어'}
-                            </Text>
-                            <Ionicons name="chevron-down" size={20} color="#6b7280" />
-                          </TouchableOpacity>
+                            <DropDownPicker
+                              open={groupOpens[index] || false}
+                              value={value}
+                              items={jobGroups}
+                              setOpen={(callback) => {
+                                const newValue = typeof callback === 'function' 
+                                  ? callback(groupOpens[index] || false) 
+                                  : callback;
+                                if (newValue) {
+                                  setRoleOpen(false);
+                                  setGenerationOpens({});
+                                  setJobCodeOpens({});
+                                  setGroupRoleOpens({});
+                                }
+                                setGroupOpens({ ...groupOpens, [index]: newValue });
+                              }}
+                              setValue={(callback) => {
+                                const newValue = typeof callback === 'function' ? callback(value) : callback;
+                                onChange(newValue);
+                              }}
+                              placeholder="그룹 선택"
+                              style={styles.dropdown}
+                              dropDownContainerStyle={styles.dropdownContainer}
+                              textStyle={styles.dropdownText}
+                              labelStyle={styles.dropdownLabel}
+                              placeholderStyle={styles.dropdownPlaceholder}
+                              listMode="SCROLLVIEW"
+                              maxHeight={200}
+                              zIndex={2000 - index}
+                              zIndexInverse={3000 + index}
+                            />
                         )}
                       />
                     </View>
@@ -421,22 +483,37 @@ export function UserGenerateScreen({ navigation }: any) {
                         control={control}
                         name={`jobExperiences.${index}.groupRole`}
                         render={({ field: { onChange, value } }) => (
-                          <TouchableOpacity
-                            style={styles.picker}
-                            onPress={() => {
-                              Alert.alert(
-                                '역할 선택',
-                                '',
-                                getGroupRoleOptions(currentRole).map((role) => ({
-                                  text: role.label,
-                                  onPress: () => onChange(role.value),
-                                }))
-                              );
-                            }}
-                          >
-                            <Text style={styles.pickerText}>{value || '담임'}</Text>
-                            <Ionicons name="chevron-down" size={20} color="#6b7280" />
-                          </TouchableOpacity>
+                            <DropDownPicker
+                              open={groupRoleOpens[index] || false}
+                              value={value}
+                              items={getGroupRoleOptions(currentRole)}
+                              setOpen={(callback) => {
+                                const newValue = typeof callback === 'function' 
+                                  ? callback(groupRoleOpens[index] || false) 
+                                  : callback;
+                                if (newValue) {
+                                  setRoleOpen(false);
+                                  setGenerationOpens({});
+                                  setJobCodeOpens({});
+                                  setGroupOpens({});
+                                }
+                                setGroupRoleOpens({ ...groupRoleOpens, [index]: newValue });
+                              }}
+                              setValue={(callback) => {
+                                const newValue = typeof callback === 'function' ? callback(value) : callback;
+                                onChange(newValue);
+                              }}
+                              placeholder="역할 선택"
+                              style={styles.dropdown}
+                              dropDownContainerStyle={styles.dropdownContainer}
+                              textStyle={styles.dropdownText}
+                              labelStyle={styles.dropdownLabel}
+                              placeholderStyle={styles.dropdownPlaceholder}
+                              listMode="SCROLLVIEW"
+                              maxHeight={200}
+                              zIndex={1000 - index}
+                              zIndexInverse={4000 + index}
+                            />
                         )}
                       />
                     </View>
@@ -584,34 +661,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
   },
-  pickerContainer: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-  },
-  picker: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  pickerText: {
-    fontSize: 16,
-    color: '#111827',
-    flex: 1,
-  },
-  pickerPlaceholder: {
-    fontSize: 16,
-    color: '#9ca3af',
-    flex: 1,
-  },
   row: {
     flexDirection: 'row',
+  },
+  dropdown: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    minHeight: 48,
+  },
+  dropdownDisabled: {
+    backgroundColor: '#f3f4f6',
+    opacity: 0.6,
+  },
+  dropdownContainer: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: '#111827',
+  },
+  dropdownLabel: {
+    fontSize: 16,
+    color: '#111827',
+  },
+  dropdownPlaceholder: {
+    fontSize: 16,
+    color: '#9ca3af',
   },
   addButton: {
     flexDirection: 'row',
