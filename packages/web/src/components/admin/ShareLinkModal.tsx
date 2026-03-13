@@ -182,10 +182,10 @@ export function ShareLinkModal({
                       setExpirationHours(10 / 60);
                       setCustomMinutes('');
                     }}
-                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
+                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 10 / 60 && !customMinutes
-                        ? 'border-primary bg-primary/5 text-primary font-semibold'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                        ? 'border-primary bg-primary text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
                     }`}
                   >
                     10분
@@ -196,10 +196,10 @@ export function ShareLinkModal({
                       setExpirationHours(0.5);
                       setCustomMinutes('');
                     }}
-                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
+                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 0.5 && !customMinutes
-                        ? 'border-primary bg-primary/5 text-primary font-semibold'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                        ? 'border-primary bg-primary text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
                     }`}
                   >
                     30분
@@ -210,10 +210,10 @@ export function ShareLinkModal({
                       setExpirationHours(1);
                       setCustomMinutes('');
                     }}
-                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
+                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 1 && !customMinutes
-                        ? 'border-primary bg-primary/5 text-primary font-semibold'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                        ? 'border-primary bg-primary text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
                     }`}
                   >
                     1시간
@@ -224,10 +224,10 @@ export function ShareLinkModal({
                       setExpirationHours(3);
                       setCustomMinutes('');
                     }}
-                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
+                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 3 && !customMinutes
-                        ? 'border-primary bg-primary/5 text-primary font-semibold'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                        ? 'border-primary bg-primary text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
                     }`}
                   >
                     3시간
@@ -238,10 +238,10 @@ export function ShareLinkModal({
                       setExpirationHours(24);
                       setCustomMinutes('');
                     }}
-                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
+                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 24 && !customMinutes
-                        ? 'border-primary bg-primary/5 text-primary font-semibold'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                        ? 'border-primary bg-primary text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
                     }`}
                   >
                     1일
@@ -252,10 +252,10 @@ export function ShareLinkModal({
                       setExpirationHours(168);
                       setCustomMinutes('');
                     }}
-                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
+                    className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 168 && !customMinutes
-                        ? 'border-primary bg-primary/5 text-primary font-semibold'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                        ? 'border-primary bg-primary text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
                     }`}
                   >
                     7일
