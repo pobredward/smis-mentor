@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
@@ -23,6 +24,7 @@ import TaskDetailModal from './TaskDetailModal';
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function TaskContent() {
+  const searchParams = useSearchParams();
   const { userData, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +49,22 @@ export default function TaskContent() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // URL 파라미터에서 날짜 읽기
+  useEffect(() => {
+    const dateParam = searchParams?.get('date');
+    if (dateParam) {
+      try {
+        const date = new Date(dateParam);
+        if (!isNaN(date.getTime())) {
+          setSelectedDate(date);
+          setCurrentDate(date);
+        }
+      } catch (error) {
+        console.error('날짜 파라미터 파싱 오류:', error);
+      }
+    }
+  }, [searchParams]);
 
   // 활성화된 캠프 정보 가져오기
   const fetchActiveJobCode = async () => {
@@ -181,6 +199,8 @@ export default function TaskContent() {
 
     try {
       await deleteTask(taskId);
+      setShowTaskDetail(false); // 모달 닫기
+      setSelectedTask(null);
       await fetchTasks();
       toast.success('업무가 삭제되었습니다.');
     } catch (error) {

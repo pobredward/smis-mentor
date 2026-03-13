@@ -7,6 +7,7 @@ import { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
 export type RootStackParamList = {
   MainTabs: undefined;
   StudentDetail: { studentId: string };
+  TaskDetail: { taskId: string; taskDate?: string };
 };
 
 // Bottom Tabs (메인 하단 탭)

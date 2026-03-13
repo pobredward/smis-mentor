@@ -3,6 +3,7 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import { MainTabs } from './MainTabs';
+import TaskDetailScreen from '../screens/TaskDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -20,15 +21,47 @@ const CustomLightTheme = {
   },
 };
 
+// 딥링킹 설정
+const linking = {
+  prefixes: ['smismentor://', 'https://smis-mentor.com'],
+  config: {
+    screens: {
+      MainTabs: {
+        screens: {
+          Camp: {
+            screens: {
+              Tasks: 'camp/tasks',
+            },
+          },
+        },
+      },
+      TaskDetail: {
+        path: 'camp/tasks/:taskId',
+        parse: {
+          taskId: (taskId: string) => taskId,
+        },
+      },
+    },
+  },
+};
+
 export function RootNavigator() {
   return (
-    <NavigationContainer theme={CustomLightTheme}>
+    <NavigationContainer theme={CustomLightTheme} linking={linking}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
         }}
       >
         <Stack.Screen name="MainTabs" component={MainTabs} />
+        <Stack.Screen 
+          name="TaskDetail" 
+          component={TaskDetailScreen}
+          options={{
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

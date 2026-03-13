@@ -27,14 +27,23 @@ export const createTask = async (
     const localDate = new Date(taskData.date.toDate());
     localDate.setHours(0, 0, 0, 0);
     
-    const docRef = await addDoc(collection(db, TASKS_COLLECTION), {
-      ...taskData,
-      date: Timestamp.fromDate(localDate),
+    // undefined 값 필터링
+    const cleanedData: Record<string, any> = {
       campCode,
+      date: Timestamp.fromDate(localDate),
       completions: [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+    };
+
+    // taskData의 각 필드를 확인하고 undefined가 아닌 값만 추가
+    Object.entries(taskData).forEach(([key, value]) => {
+      if (value !== undefined && key !== 'date') {
+        cleanedData[key] = value;
+      }
     });
+
+    const docRef = await addDoc(collection(db, TASKS_COLLECTION), cleanedData);
 
     return docRef.id;
   } catch (error) {

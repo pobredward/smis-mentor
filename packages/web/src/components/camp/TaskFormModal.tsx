@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { createTask, updateTask, uploadTaskImage, uploadTaskFile } from '@/lib/taskService';
@@ -43,11 +43,11 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
   const roleOptions = targetRoleType === 'mentor' ? getMentorRoles() : getForeignRoles();
 
   // 날짜 및 시간 (최상단)
-  const [date, setDate] = useState(() => {
+  const [selectedDates, setSelectedDates] = useState<Date[]>(() => {
     if (task?.date) {
-      return task.date.toDate();
+      return [task.date.toDate()];
     }
-    return selectedDate;
+    return [selectedDate];
   });
   const [showCalendar, setShowCalendar] = useState(false);
   const [time, setTime] = useState(task?.time || '');
@@ -83,9 +83,68 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
 
   const [submitting, setSubmitting] = useState(false);
 
-  // 달력 관련 state
-  const [currentMonth, setCurrentMonth] = useState(date.getMonth());
-  const [currentYear, setCurrentYear] = useState(date.getFullYear());
+  // 달력 관련 state - 첫 번째 선택된 날짜를 기준으로 초기화
+  const firstSelectedDate = selectedDates[0] || new Date();
+  const [currentMonth, setCurrentMonth] = useState(firstSelectedDate.getMonth());
+  const [currentYear, setCurrentYear] = useState(firstSelectedDate.getFullYear());
+
+  // 드래그 선택을 위한 state
+  const [isDragging, setIsDragging] = useState(false);
+
+  // 마우스 다운으로 드래그 시작
+  const handleMouseDown = (date: Date) => {
+    setIsDragging(true);
+    toggleDateSelection(date);
+  };
+
+  // 마우스 엔터로 드래그 중 날짜 선택
+  const handleMouseEnter = (date: Date) => {
+    if (!isDragging) return;
+    
+    const dateStr = date.toISOString().split('T')[0];
+    const isAlreadySelected = selectedDates.some(
+      d => d.toISOString().split('T')[0] === dateStr
+    );
+    
+    if (!isAlreadySelected) {
+      setSelectedDates([...selectedDates, date]);
+    }
+  };
+
+  // 마우스 업으로 드래그 종료
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // 컴포넌트 마운트 시 전역 마우스 업 이벤트 등록
+  useEffect(() => {
+    const handleGlobalMouseUp = () => setIsDragging(false);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => document.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, []);
+
+  // 날짜 선택/해제 핸들러
+  const toggleDateSelection = (dateToToggle: Date) => {
+    // 수정 모드에서는 단일 날짜만 선택 가능
+    if (isEdit) {
+      setSelectedDates([dateToToggle]);
+      setShowCalendar(false);
+      return;
+    }
+
+    const dateStr = dateToToggle.toISOString().split('T')[0];
+    const existingIndex = selectedDates.findIndex(
+      d => d.toISOString().split('T')[0] === dateStr
+    );
+
+    if (existingIndex >= 0) {
+      // 이미 선택된 경우 제거
+      setSelectedDates(selectedDates.filter((_, i) => i !== existingIndex));
+    } else {
+      // 선택되지 않은 경우 추가
+      setSelectedDates([...selectedDates, dateToToggle]);
+    }
+  };
 
   // 달력 렌더링
   const renderCalendar = () => {
@@ -95,39 +154,50 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
 
     // 빈 칸
     for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push(<div key={`empty-${i}`} className="h-8"></div>);
+      days.push(<div key={`empty-${i}`} style={{ width: `${100 / 7}%`, height: '32px' }}></div>);
     }
 
     // 날짜
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     for (let day = 1; day <= daysInMonth; day++) {
       const currentDate = new Date(currentYear, currentMonth, day);
-      const isSelected = 
-        date.getDate() === day && 
-        date.getMonth() === currentMonth && 
-        date.getFullYear() === currentYear;
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const isSelected = selectedDates.some(
+        d => d.toISOString().split('T')[0] === dateStr
+      );
       const isToday = 
-        new Date().getDate() === day && 
-        new Date().getMonth() === currentMonth && 
-        new Date().getFullYear() === currentYear;
+        today.getDate() === day && 
+        today.getMonth() === currentMonth && 
+        today.getFullYear() === currentYear;
+      
+      const dayOfWeek = currentDate.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
       days.push(
-        <button
+        <div
           key={day}
-          type="button"
-          onClick={() => {
-            setDate(currentDate);
-            setShowCalendar(false);
-          }}
-          className={`h-8 flex items-center justify-center text-sm rounded-lg transition-colors ${
-            isSelected
-              ? 'bg-blue-600 text-white font-semibold'
-              : isToday
-              ? 'bg-blue-50 text-blue-600 font-semibold'
-              : 'text-gray-700 hover:bg-gray-100'
-          }`}
+          style={{ width: `${100 / 7}%`, height: '32px' }}
+          className="flex items-center justify-center"
+          onMouseDown={() => handleMouseDown(currentDate)}
+          onMouseEnter={() => handleMouseEnter(currentDate)}
+          onMouseUp={handleMouseUp}
         >
-          {day}
-        </button>
+          <div
+            className={`w-8 h-8 flex items-center justify-center text-sm rounded-lg transition-colors cursor-pointer select-none ${
+              isSelected
+                ? 'bg-blue-600 text-white font-semibold'
+                : isToday
+                ? 'bg-blue-50 text-blue-600 font-semibold'
+                : isWeekend
+                ? 'text-red-500 hover:bg-gray-100'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {day}
+          </div>
+        </div>
       );
     }
 
@@ -197,8 +267,8 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!date) {
-      toast.error('날짜를 선택해주세요.');
+    if (selectedDates.length === 0) {
+      toast.error('날짜를 하나 이상 선택해주세요.');
       return;
     }
 
@@ -229,38 +299,67 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
     setSubmitting(true);
 
     try {
-      // 로컬 타임존으로 날짜 생성
-      const localDate = new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        0, 0, 0, 0
-      );
-      
-      const taskData = {
-        campCode,
-        title: title.trim(),
-        description: description.trim(),
-        targetRoles: selectedRoles,
-        targetGroups: selectedGroups,
-        date: Timestamp.fromDate(localDate),
-        time: hasTime && time ? time : undefined,
-        estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
-          ? {
-              value: parseFloat(durationMinutes),
-              unit: 'minutes' as const,
-            }
-          : undefined,
-        attachments: attachments.length > 0 ? attachments : undefined,
-        createdBy,
-      };
-
       if (isEdit && task) {
+        // 수정 모드: 단일 날짜만 업데이트
+        const localDate = new Date(
+          selectedDates[0].getFullYear(),
+          selectedDates[0].getMonth(),
+          selectedDates[0].getDate(),
+          0, 0, 0, 0
+        );
+        
+        const taskData = {
+          campCode,
+          title: title.trim(),
+          description: description.trim(),
+          targetRoles: selectedRoles,
+          targetGroups: selectedGroups,
+          date: Timestamp.fromDate(localDate),
+          time: hasTime && time ? time : undefined,
+          estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
+            ? {
+                value: parseFloat(durationMinutes),
+                unit: 'minutes' as const,
+              }
+            : undefined,
+          attachments: attachments.length > 0 ? attachments : undefined,
+          createdBy,
+        };
+
         await updateTask(task.id, taskData);
         toast.success('업무가 수정되었습니다.');
       } else {
-        await createTask(campCode, taskData);
-        toast.success('업무가 생성되었습니다.');
+        // 생성 모드: 선택된 각 날짜에 대해 업무 생성
+        for (const selectedDate of selectedDates) {
+          const localDate = new Date(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            selectedDate.getDate(),
+            0, 0, 0, 0
+          );
+          
+          const taskData = {
+            campCode,
+            title: title.trim(),
+            description: description.trim(),
+            targetRoles: selectedRoles,
+            targetGroups: selectedGroups,
+            date: Timestamp.fromDate(localDate),
+            time: hasTime && time ? time : undefined,
+            estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
+              ? {
+                  value: parseFloat(durationMinutes),
+                  unit: 'minutes' as const,
+                }
+              : undefined,
+            attachments: attachments.length > 0 ? attachments : undefined,
+            createdBy,
+          };
+
+          await createTask(campCode, taskData);
+        }
+        
+        toast.success(`${selectedDates.length}개의 업무가 생성되었습니다.`);
       }
 
       onSuccess();
@@ -344,7 +443,9 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors text-left flex items-center justify-between"
               >
                 <span className="text-gray-900">
-                  {date.getFullYear()}년 {date.getMonth() + 1}월 {date.getDate()}일
+                  {isEdit 
+                    ? `${selectedDates[0]?.getFullYear()}년 ${selectedDates[0]?.getMonth() + 1}월 ${selectedDates[0]?.getDate()}일`
+                    : `날짜 선택하기 (${selectedDates.length}개 선택됨)`}
                 </span>
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -394,16 +495,22 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
                   </div>
 
                   {/* 요일 헤더 */}
-                  <div className="grid grid-cols-7 gap-1 mb-1">
-                    {weekDays.map(day => (
-                      <div key={day} className="text-xs text-center font-medium text-gray-600">
+                  <div className="flex mb-1">
+                    {weekDays.map((day, i) => (
+                      <div 
+                        key={day} 
+                        style={{ width: `${100 / 7}%` }}
+                        className={`text-xs text-center font-medium ${
+                          i === 0 || i === 6 ? 'text-red-500' : 'text-gray-600'
+                        }`}
+                      >
                         {day}
                       </div>
                     ))}
                   </div>
 
                   {/* 날짜 그리드 */}
-                  <div className="grid grid-cols-7 gap-1">
+                  <div className="flex flex-wrap">
                     {renderCalendar()}
                   </div>
                 </div>

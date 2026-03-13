@@ -17,6 +17,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import Holidays from 'date-holidays';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { Timestamp } from 'firebase/firestore';
 import {
@@ -61,6 +62,8 @@ const ADDITIONAL_HOLIDAYS: Record<string, string> = {
 };
 
 export function TasksScreen() {
+  const navigation = useNavigation();
+  const route = useRoute();
   const { userData, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,13 +77,31 @@ export function TasksScreen() {
   const [selectedDateTasks, setSelectedDateTasks] = useState<Task[]>([]);
 
   // 모달 상태
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
   const isManager = currentGroupRole === 'manager';
   const canAddTask = isAdmin || isManager;
+
+  // route params에서 selectedDate 및 refresh 가져오기
+  useEffect(() => {
+    const params = route.params as any;
+    if (params?.selectedDate) {
+      try {
+        const date = new Date(params.selectedDate);
+        if (!isNaN(date.getTime())) {
+          setSelectedDate(date);
+          setCurrentDate(date);
+        }
+      } catch (error) {
+        console.error('날짜 파라미터 파싱 오류:', error);
+      }
+    }
+    if (params?.refresh) {
+      // refresh 파라미터가 있으면 업무 다시 불러오기
+      fetchTasks();
+    }
+  }, [route.params]);
 
   // 활성화된 캠프 정보 가져오기
   const fetchActiveJobCode = async () => {
@@ -398,8 +419,12 @@ export function TasksScreen() {
                   currentUserId={userData.userId}
                   onToggle={handleToggleComplete}
                   onPress={() => {
-                    setSelectedTask(task);
-                    setShowDetailModal(true);
+                    // TaskDetailScreen으로 이동
+                    const taskDate = selectedDate.toISOString().split('T')[0];
+                    (navigation as any).navigate('TaskDetail', {
+                      taskId: task.id,
+                      taskDate,
+                    });
                   }}
                 />
               ))}
@@ -407,19 +432,6 @@ export function TasksScreen() {
           )}
         </View>
       </ScrollView>
-
-      {/* 업무 상세 모달 */}
-      {selectedTask && (
-        <TaskDetailModal
-          visible={showDetailModal}
-          task={selectedTask}
-          isAdmin={isAdmin}
-          onClose={() => {
-            setShowDetailModal(false);
-            setSelectedTask(null);
-          }}
-        />
-      )}
 
       {/* 업무 추가 FAB */}
       {canAddTask && currentCampCode && (
@@ -506,216 +518,16 @@ function TaskCard({
             onToggle(task.id);
           }}
           style={styles.checkbox}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons
             name={isCompleted ? 'checkbox' : 'square-outline'}
-            size={24}
+            size={28}
             color={isCompleted ? '#3b82f6' : '#9ca3af'}
           />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
-  );
-}
-
-// 업무 상세 모달 컴포넌트
-function TaskDetailModal({
-  visible,
-  task,
-  isAdmin,
-  onClose,
-}: {
-  visible: boolean;
-  task: Task;
-  isAdmin: boolean;
-  onClose: () => void;
-}) {
-  const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long',
-  });
-  const timeStr = formatTime(task.time);
-  const durationStr = formatDuration(task.estimatedDuration);
-
-  // 링크와 이미지 분리
-  const linkAttachments = task.attachments?.filter(a => a.type === 'link') || [];
-  const imageAttachments = task.attachments?.filter(a => a.type === 'image') || [];
-  const otherAttachments = task.attachments?.filter(a => a.type !== 'link' && a.type !== 'image') || [];
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          {/* 헤더 */}
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>업무 상세</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#9ca3af" />
-            </TouchableOpacity>
-          </View>
-
-          {/* 내용 */}
-          <ScrollView style={styles.modalContent}>
-            {/* 제목 */}
-            <View style={styles.modalSection}>
-              <Text style={styles.modalTaskTitle}>{task.title}</Text>
-            </View>
-
-            {/* 날짜 및 시간 */}
-            <View style={styles.modalSection}>
-              <View style={styles.infoRow}>
-                <Ionicons name="calendar-outline" size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{dateStr}</Text>
-              </View>
-              {timeStr && (
-                <View style={styles.infoRow}>
-                  <Ionicons name="time-outline" size={16} color="#6b7280" />
-                  <Text style={styles.infoText}>
-                    {timeStr}
-                    {durationStr && ` (${durationStr})`}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* 대상 역할 */}
-            <View style={styles.modalSection}>
-              <Text style={styles.sectionLabel}>대상 역할</Text>
-              <View style={styles.rolesContainer}>
-                {task.targetRoles.map(role => (
-                  <View key={role} style={styles.roleBadge}>
-                    <Text style={styles.roleBadgeText}>{role}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* 대상 그룹 */}
-            {task.targetGroups && task.targetGroups.length > 0 && (
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>대상 그룹</Text>
-                <View style={styles.rolesContainer}>
-                  {task.targetGroups.map(group => (
-                    <View key={group} style={styles.groupBadge}>
-                      <Text style={styles.groupBadgeText}>{group}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* 설명 */}
-            {task.description && (
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>상세 설명</Text>
-                <Text style={styles.descriptionText}>{task.description}</Text>
-              </View>
-            )}
-
-            {/* 링크 (최우선) */}
-            {linkAttachments.length > 0 && (
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>링크</Text>
-                {linkAttachments.map((attachment, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={styles.attachmentItem}
-                    onPress={() => Linking.openURL(attachment.url)}
-                  >
-                    <View style={styles.attachmentInfo}>
-                      <Text style={styles.attachmentIcon}>🔗</Text>
-                      <Text style={styles.attachmentLabel} numberOfLines={1}>
-                        {attachment.label}
-                      </Text>
-                    </View>
-                    <Ionicons name="open-outline" size={16} color="#9ca3af" />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* 이미지 */}
-            {imageAttachments.length > 0 && (
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>이미지</Text>
-                {imageAttachments.map((attachment, idx) => (
-                  <View key={idx} style={styles.imageContainer}>
-                    <Image
-                      source={{ uri: attachment.url }}
-                      style={styles.attachmentImageFull}
-                      contentFit="cover"
-                      transition={0}
-                      cachePolicy="memory-disk"
-                      priority="high"
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* 기타 파일 */}
-            {otherAttachments.length > 0 && (
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>첨부파일</Text>
-                {otherAttachments.map((attachment, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={styles.attachmentItem}
-                    onPress={() => Linking.openURL(attachment.url)}
-                  >
-                    <View style={styles.attachmentInfo}>
-                      <Text style={styles.attachmentIcon}>
-                        {attachment.type === 'video' && '🎥'}
-                        {attachment.type === 'file' && '📎'}
-                      </Text>
-                      <Text style={styles.attachmentLabel} numberOfLines={1}>
-                        {attachment.label}
-                      </Text>
-                    </View>
-                    <Ionicons name="open-outline" size={16} color="#9ca3af" />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* 완료 현황 (Admin) */}
-            {isAdmin && task.completions.length > 0 && (
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionLabel}>
-                  완료 현황 ({task.completions.length}명)
-                </Text>
-                <View style={styles.completionsContainer}>
-                  {task.completions.map((completion, idx) => (
-                    <View key={idx} style={styles.completionBadge}>
-                      <Text style={styles.completionText}>
-                        {completion.userName} ({completion.userRole})
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </ScrollView>
-
-          {/* 푸터 */}
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.closeModalButton}
-              onPress={onClose}
-            >
-              <Text style={styles.closeModalButtonText}>닫기</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -737,7 +549,8 @@ function TaskAddModal({
   const [targetRoleType, setTargetRoleType] = useState<'mentor' | 'foreign'>('mentor');
   
   // 날짜 및 시간
-  const [date, setDate] = useState(initialDate || new Date());
+  const [selectedDates, setSelectedDates] = useState<Date[]>([initialDate || new Date()]);
+  const [calendarMonth, setCalendarMonth] = useState(initialDate || new Date());
   const [time, setTime] = useState('');
   const [hasTime, setHasTime] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -765,7 +578,8 @@ function TaskAddModal({
   // 모달이 열릴 때 initialDate로 날짜 초기화
   useEffect(() => {
     if (visible && initialDate) {
-      setDate(initialDate);
+      setSelectedDates([initialDate]);
+      setCalendarMonth(initialDate);
     }
   }, [visible, initialDate]);
 
@@ -777,12 +591,57 @@ function TaskAddModal({
   // 그룹 옵션
   const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
 
-  // 날짜 변경 핸들러는 이제 사용 안 함 (인라인 달력 사용)
+  // 날짜 선택/해제 핸들러
+  const toggleDateSelection = (dateToToggle: Date) => {
+    const dateStr = dateToToggle.toISOString().split('T')[0];
+    const existingIndex = selectedDates.findIndex(
+      d => d.toISOString().split('T')[0] === dateStr
+    );
+
+    if (existingIndex >= 0) {
+      // 이미 선택된 경우 제거
+      setSelectedDates(selectedDates.filter((_, i) => i !== existingIndex));
+    } else {
+      // 선택되지 않은 경우 추가
+      setSelectedDates([...selectedDates, dateToToggle]);
+    }
+  };
+
+  // 드래그 선택을 위한 state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartDate, setDragStartDate] = useState<Date | null>(null);
+
+  // 드래그 시작
+  const handlePressIn = (date: Date) => {
+    setIsDragging(true);
+    setDragStartDate(date);
+    toggleDateSelection(date);
+  };
+
+  // 드래그 중
+  const handleDragMove = (date: Date) => {
+    if (!isDragging || !dragStartDate) return;
+    
+    const dateStr = date.toISOString().split('T')[0];
+    const isAlreadySelected = selectedDates.some(
+      d => d.toISOString().split('T')[0] === dateStr
+    );
+    
+    if (!isAlreadySelected) {
+      setSelectedDates([...selectedDates, date]);
+    }
+  };
+
+  // 드래그 종료
+  const handlePressOut = () => {
+    setIsDragging(false);
+    setDragStartDate(null);
+  };
 
   // 달력 렌더링
   const renderCalendar = () => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
     
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -804,10 +663,10 @@ function TaskAddModal({
 
     for (let day = 1; day <= daysInMonth; day++) {
       const currentDate = new Date(year, month, day);
-      const isSelected = 
-        date.getDate() === day && 
-        date.getMonth() === month && 
-        date.getFullYear() === year;
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const isSelected = selectedDates.some(
+        d => d.toISOString().split('T')[0] === dateStr
+      );
       const isToday = 
         today.getDate() === day && 
         today.getMonth() === month && 
@@ -820,33 +679,37 @@ function TaskAddModal({
       const yearStr = currentDate.getFullYear();
       const monthStr = String(currentDate.getMonth() + 1).padStart(2, '0');
       const dayStr = String(currentDate.getDate()).padStart(2, '0');
-      const dateStr = `${yearStr}-${monthStr}-${dayStr}`;
-      const isHolidayDate = holidays !== false || dateStr in ADDITIONAL_HOLIDAYS;
+      const holidayDateStr = `${yearStr}-${monthStr}-${dayStr}`;
+      const isHolidayDate = holidays !== false || holidayDateStr in ADDITIONAL_HOLIDAYS;
 
       days.push(
-        <TouchableOpacity
+        <View
           key={day}
-          onPress={() => {
-            setDate(currentDate);
-            setShowDatePicker(false);
-          }}
-          style={[
-            styles.modalCalendarDay,
-            isSelected && styles.modalCalendarDaySelected,
-            isToday && !isSelected && styles.modalCalendarDayToday,
-          ]}
+          style={styles.modalCalendarDay}
+          onStartShouldSetResponder={() => true}
+          onResponderGrant={() => handlePressIn(currentDate)}
+          onResponderMove={() => handleDragMove(currentDate)}
+          onResponderRelease={handlePressOut}
         >
-          <Text
+          <View
             style={[
-              styles.modalCalendarDayText,
-              (isWeekend || isHolidayDate) && !isSelected && styles.calendarDayTextWeekend,
-              isSelected && styles.calendarDayTextSelected,
-              isToday && !isSelected && styles.calendarDayTextToday,
+              styles.modalCalendarDayInner,
+              isSelected && styles.modalCalendarDaySelected,
+              isToday && !isSelected && styles.modalCalendarDayToday,
             ]}
           >
-            {day}
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.modalCalendarDayText,
+                (isWeekend || isHolidayDate) && !isSelected && styles.calendarDayTextWeekend,
+                isSelected && styles.calendarDayTextSelected,
+                isToday && !isSelected && styles.calendarDayTextToday,
+              ]}
+            >
+              {day}
+            </Text>
+          </View>
+        </View>
       );
     }
 
@@ -936,6 +799,11 @@ function TaskAddModal({
       return;
     }
 
+    if (selectedDates.length === 0) {
+      Alert.alert('오류', '날짜를 하나 이상 선택해주세요.');
+      return;
+    }
+
     // 시간 형식 검증
     if (hasTime && time) {
       const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
@@ -947,34 +815,39 @@ function TaskAddModal({
 
     setIsSubmitting(true);
     try {
-      const localDate = new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        0, 0, 0, 0
-      );
+      // 선택된 각 날짜에 대해 업무 생성
+      for (const selectedDate of selectedDates) {
+        const localDate = new Date(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate(),
+          0, 0, 0, 0
+        );
 
-      const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'createdBy'> = {
-        campCode,
-        title: title.trim(),
-        description: description.trim(),
-        date: Timestamp.fromDate(localDate),
-        time: hasTime && time ? time : undefined,
-        estimatedDuration:
-          estimatedDuration && !isNaN(Number(estimatedDuration))
-            ? { value: Number(estimatedDuration), unit: 'minutes' }
-            : undefined,
-        targetRoles,
-        targetGroups,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      };
+        const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'createdBy'> = {
+          campCode,
+          title: title.trim(),
+          description: description.trim(),
+          date: Timestamp.fromDate(localDate),
+          time: hasTime && time ? time : undefined,
+          estimatedDuration:
+            estimatedDuration && !isNaN(Number(estimatedDuration))
+              ? { value: Number(estimatedDuration), unit: 'minutes' }
+              : undefined,
+          targetRoles,
+          targetGroups,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        };
 
-      await createTask(campCode, taskData);
-      Alert.alert('성공', '업무가 추가되었습니다.');
+        await createTask(campCode, taskData);
+      }
+      
+      Alert.alert('성공', `${selectedDates.length}개의 업무가 추가되었습니다.`);
       
       // 폼 초기화
       setTargetRoleType('mentor');
-      setDate(new Date());
+      setSelectedDates([new Date()]);
+      setCalendarMonth(new Date());
       setTime('');
       setHasTime(false);
       setTargetRoles([]);
@@ -995,11 +868,11 @@ function TaskAddModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoidingView}
-      >
-        <View style={styles.modalOverlay}>
+      <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidingView}
+        >
           <View style={styles.addModalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>새 업무 추가</Text>
@@ -1063,18 +936,14 @@ function TaskAddModal({
               <Text style={styles.formLabel}>
                 📅 날짜 및 시간 <Text style={styles.required}>*</Text>
               </Text>
-              
+
               {/* 날짜 선택 버튼 */}
               <TouchableOpacity
                 style={styles.datePickerButton}
                 onPress={() => setShowDatePicker(!showDatePicker)}
               >
                 <Text style={styles.datePickerButtonText}>
-                  {date.toLocaleDateString('ko-KR', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
+                  날짜 선택하기 ({selectedDates.length}개 선택됨)
                 </Text>
                 <Ionicons 
                   name={showDatePicker ? "chevron-up" : "chevron-down"} 
@@ -1091,22 +960,22 @@ function TaskAddModal({
                     <TouchableOpacity
                       style={styles.modalCalendarNavButton}
                       onPress={() => {
-                        const newDate = new Date(date);
-                        newDate.setMonth(date.getMonth() - 1);
-                        setDate(newDate);
+                        const newDate = new Date(calendarMonth);
+                        newDate.setMonth(calendarMonth.getMonth() - 1);
+                        setCalendarMonth(newDate);
                       }}
                     >
                       <Ionicons name="chevron-back" size={20} color="#6b7280" />
                     </TouchableOpacity>
                     <Text style={styles.modalCalendarTitle}>
-                      {date.getFullYear()}년 {date.getMonth() + 1}월
+                      {calendarMonth.getFullYear()}년 {calendarMonth.getMonth() + 1}월
                     </Text>
                     <TouchableOpacity
                       style={styles.modalCalendarNavButton}
                       onPress={() => {
-                        const newDate = new Date(date);
-                        newDate.setMonth(date.getMonth() + 1);
-                        setDate(newDate);
+                        const newDate = new Date(calendarMonth);
+                        newDate.setMonth(calendarMonth.getMonth() + 1);
+                        setCalendarMonth(newDate);
                       }}
                     >
                       <Ionicons name="chevron-forward" size={20} color="#6b7280" />
@@ -1382,8 +1251,8 @@ function TaskAddModal({
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </View>
-      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1394,9 +1263,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   scrollView: {
-    flex: 1,
-  },
-  keyboardAvoidingView: {
     flex: 1,
   },
   centerContainer: {
@@ -1571,6 +1437,7 @@ const styles = StyleSheet.create({
   },
   checkbox: {
     marginTop: 4,
+    padding: 4,
   },
   taskInfo: {
     flex: 1,
@@ -1618,8 +1485,14 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 16,
+  },
+  keyboardAvoidingView: {
+    maxWidth: 500,
+    width: '100%',
+    maxHeight: '90%',
   },
   modalContainer: {
     backgroundColor: '#ffffff',
@@ -1804,14 +1677,13 @@ const styles = StyleSheet.create({
   // 업무 추가 모달 스타일
   addModalContainer: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 16,
     width: '100%',
-    maxHeight: '95%',
+    maxHeight: '100%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 5,
   },
   addModalContent: {
@@ -1880,8 +1752,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   checkbox: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
     borderRadius: 4,
     borderWidth: 2,
     borderColor: '#d1d5db',
@@ -1940,10 +1812,9 @@ const styles = StyleSheet.create({
   modalCalendarWeekDays: {
     flexDirection: 'row',
     marginBottom: 4,
-    paddingHorizontal: 4,
   },
   modalCalendarWeekDayText: {
-    flex: 1,
+    width: `${100 / 7}%`,
     textAlign: 'center',
     fontSize: 11,
     fontWeight: '600',
@@ -1952,16 +1823,18 @@ const styles = StyleSheet.create({
   modalCalendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 4,
   },
   modalCalendarDay: {
-    flexBasis: '14.285714%',
-    flexGrow: 0,
-    flexShrink: 0,
-    height: 36,
+    width: `${100 / 7}%`,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
+  },
+  modalCalendarDayInner: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalCalendarDaySelected: {
     backgroundColor: '#3b82f6',
