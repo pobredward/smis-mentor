@@ -18,7 +18,7 @@
       "bundleIdentifier": "com.smis.smismentor",
       "googleServicesFile": "./GoogleService-Info.plist",
       "buildNumber": "1",
-      "associatedDomains": ["applinks:smis-mentor.com"],
+      "associatedDomains": ["applinks:smis-mentor.com", "applinks:www.smis-mentor.com"],
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.",
         "NSCameraUsageDescription": "이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.",
@@ -43,6 +43,11 @@
             {
               "scheme": "https",
               "host": "smis-mentor.com",
+              "pathPrefix": "/camp/tasks"
+            },
+            {
+              "scheme": "https",
+              "host": "www.smis-mentor.com",
               "pathPrefix": "/camp/tasks"
             }
           ],

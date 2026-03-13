@@ -10,6 +10,7 @@ import {
   Linking,
   Modal as RNModal,
   SafeAreaView,
+  Share,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -126,6 +127,22 @@ export default function TaskDetailScreen() {
     } as any);
   };
 
+  const handleShare = async () => {
+    if (!task) return;
+    
+    const url = `https://smis-mentor.com/camp/tasks/${task.id}`;
+    
+    try {
+      await Share.share({
+        title: task.title,
+        message: `${task.title}\n\n${task.description || '업무를 확인해주세요'}\n\n${url}`,
+        url: url,
+      });
+    } catch (error) {
+      console.error('공유 오류:', error);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -163,6 +180,11 @@ export default function TaskDetailScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerActions}>
+          {/* 공유 버튼 */}
+          <TouchableOpacity onPress={handleShare} style={styles.shareButton}>
+            <Ionicons name="share-outline" size={22} color="#1f2937" />
+          </TouchableOpacity>
+
           {/* 완료 버튼 */}
           <TouchableOpacity
             onPress={handleToggleComplete}
@@ -197,13 +219,13 @@ export default function TaskDetailScreen() {
           {/* 날짜 및 시간 */}
           <View style={styles.section}>
             <View style={styles.infoRow}>
-              <Ionicons name="calendar-outline" size={18} color="#6b7280" />
+              <Ionicons name="calendar-outline" size={16} color="#6b7280" />
               <Text style={styles.infoText}>{dateStr}</Text>
             </View>
 
             {timeStr && (
               <View style={styles.infoRow}>
-                <Ionicons name="time-outline" size={18} color="#6b7280" />
+                <Ionicons name="time-outline" size={16} color="#6b7280" />
                 <Text style={styles.infoText}>
                   {timeStr}
                   {durationStr && ` (${durationStr})`}
@@ -262,7 +284,7 @@ export default function TaskDetailScreen() {
                       {attachment.label}
                     </Text>
                   </View>
-                  <Ionicons name="open-outline" size={18} color="#9ca3af" />
+                  <Ionicons name="open-outline" size={16} color="#9ca3af" />
                 </TouchableOpacity>
               ))}
             </View>
@@ -308,7 +330,7 @@ export default function TaskDetailScreen() {
                       {attachment.label}
                     </Text>
                   </View>
-                  <Ionicons name="open-outline" size={18} color="#9ca3af" />
+                  <Ionicons name="open-outline" size={16} color="#9ca3af" />
                 </TouchableOpacity>
               ))}
             </View>
@@ -402,6 +424,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  shareButton: {
+    padding: 8,
+  },
   completeButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -427,112 +452,112 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   card: {
-    padding: 20,
+    padding: 16,
     backgroundColor: '#ffffff',
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#111827',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   section: {
-    marginTop: 20,
+    marginTop: 16,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 8,
   },
   infoText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#374151',
     fontWeight: '500',
   },
   sectionLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     color: '#6b7280',
-    marginBottom: 10,
+    marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   badgeContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   roleBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     backgroundColor: '#dbeafe',
-    borderRadius: 20,
+    borderRadius: 16,
   },
   roleBadgeText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#1e40af',
   },
   groupBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     backgroundColor: '#d1fae5',
-    borderRadius: 20,
+    borderRadius: 16,
   },
   groupBadgeText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#065f46',
   },
   description: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#374151',
-    lineHeight: 24,
+    lineHeight: 22,
   },
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
+    padding: 12,
     backgroundColor: '#f9fafb',
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   attachmentInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     flex: 1,
   },
   attachmentIcon: {
-    fontSize: 18,
+    fontSize: 16,
   },
   attachmentLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#374151',
     flex: 1,
   },
   attachmentImage: {
     width: '100%',
-    height: 300,
+    height: 250,
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   imageLabel: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#6b7280',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   completionBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     backgroundColor: '#d1fae5',
-    borderRadius: 20,
+    borderRadius: 16,
   },
   completionText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#065f46',
   },

@@ -489,6 +489,9 @@ export default function TaskContent() {
             setShowTaskDetail(false);
             setSelectedTask(null);
           }}
+          onOpenFullPage={() => {
+            router.push(`/camp/tasks/${selectedTask.id}`);
+          }}
         />
       )}
     </div>
