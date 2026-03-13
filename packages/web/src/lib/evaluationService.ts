@@ -156,16 +156,16 @@ export class EvaluationCriteriaService {
         description: '캠프 생활에서 사용되는 평가 기준입니다.',
         criteria: [
           {
-            id: 'adaptation',
-            name: '적응력',
-            description: '새로운 환경에 대한 적응 정도',
+            id: 'mentor_manager_collaboration',
+            name: '멘토&매니저 협업',
+            description: '멘토 간 협업 및 매니저와의 원활한 소통 및 협력',
             maxScore: 10,
             order: 1
           },
           {
-            id: 'collaboration',
-            name: '협업 능력',
-            description: '동료들과의 소통 및 협력',
+            id: 'student_management',
+            name: '학생 생활 관리',
+            description: '학생들의 생활 관리 및 지도 능력',
             maxScore: 10,
             order: 2
           },
@@ -177,9 +177,9 @@ export class EvaluationCriteriaService {
             order: 3
           },
           {
-            id: 'leadership',
-            name: '리더십',
-            description: '팀을 이끄는 능력 및 솔선수범',
+            id: 'popularity',
+            name: '인기도',
+            description: '학생들이 이 멘토를 얼마나 좋아하고 따르는지',
             maxScore: 10,
             order: 4
           }
