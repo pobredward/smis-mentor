@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { stSheetService, jobCodesService, STSheetStudent, CampCode, CampType } from '@/lib/stSheetService';
 
@@ -27,8 +27,11 @@ export default function RoomContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [campCode, setCampCode] = useState<CampCode>('E27');
+  const [campCode, setCampCode] = useState<CampCode | null>(null);
   const [campType, setCampType] = useState<CampType>('EJ');
+  const [isTemporaryData, setIsTemporaryData] = useState(false);
+  const [useTemporaryDataSetting, setUseTemporaryDataSetting] = useState(true);
+  const [hasRealData, setHasRealData] = useState(false);
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
   const isAdmin = userData?.role === 'admin';
@@ -61,10 +64,18 @@ export default function RoomContent() {
   }, [activeJobCodeId]);
 
   const loadAllStudents = useCallback(async () => {
+    if (!campCode) return; // campCode가 없으면 로드하지 않음
+    
     try {
       setLoading(true);
       const data = await stSheetService.getCachedData(campCode);
+      const isTemp = await stSheetService.isTemporaryData(campCode);
+      const useTempSetting = await stSheetService.getUseTemporaryDataSetting(campCode);
+      const hasReal = await stSheetService.hasRealData(campCode);
       setStudents(data);
+      setIsTemporaryData(isTemp);
+      setUseTemporaryDataSetting(useTempSetting);
+      setHasRealData(hasReal);
     } catch (error) {
       console.error('학생 목록 로드 실패:', error);
       alert('학생 목록을 불러오는데 실패했습니다.');
@@ -85,6 +96,11 @@ export default function RoomContent() {
       return;
     }
 
+    if (!campCode) {
+      alert('캠프 코드를 불러오는 중입니다.');
+      return;
+    }
+
     try {
       setSyncing(true);
       await stSheetService.syncSTSheet(campCode);
@@ -98,35 +114,62 @@ export default function RoomContent() {
     }
   };
 
-  // 유닛멘토별로 그룹화
-  const groupedByMentor = students.reduce((acc, student) => {
-    const mentorKey = student.unitMentor || '';
-    if (!mentorKey) return acc;
-    
-    if (!acc[mentorKey]) {
-      acc[mentorKey] = [];
+  const handleToggleTemporaryData = async () => {
+    if (!isAdmin) {
+      alert('설정 변경은 관리자만 수행할 수 있습니다.');
+      return;
     }
-    acc[mentorKey].push(student);
-    return acc;
-  }, {} as Record<string, STSheetStudent[]>);
+
+    if (!campCode) {
+      alert('캠프 코드를 불러오는 중입니다.');
+      return;
+    }
+
+    try {
+      const newSetting = !useTemporaryDataSetting;
+      await stSheetService.setUseTemporaryDataSetting(campCode, newSetting);
+      setUseTemporaryDataSetting(newSetting);
+      await loadAllStudents();
+      alert(`임시 데이터 표시가 ${newSetting ? '활성화' : '비활성화'}되었습니다.`);
+    } catch (error) {
+      console.error('설정 변경 실패:', error);
+      alert('설정 변경에 실패했습니다.');
+    }
+  };
+
+  // 유닛멘토별로 그룹화
+  const groupedByMentor = useMemo(() => {
+    return students.reduce((acc, student) => {
+      const mentorKey = student.unitMentor || '';
+      if (!mentorKey) return acc;
+      
+      if (!acc[mentorKey]) {
+        acc[mentorKey] = [];
+      }
+      acc[mentorKey].push(student);
+      return acc;
+    }, {} as Record<string, STSheetStudent[]>);
+  }, [students]);
 
   // 멘토별 성별 판단
-  const getMentorGender = (mentorKey: string): 'M' | 'F' | null => {
+  const getMentorGender = useCallback((mentorKey: string): 'M' | 'F' | null => {
     const students = groupedByMentor[mentorKey];
     if (!students || students.length === 0) return null;
     return students[0].gender || null;
-  };
+  }, [groupedByMentor]);
 
   // 멘토를 성별로 분류
-  const mentorsByGender = Object.keys(groupedByMentor).reduce((acc, mentor) => {
-    const gender = getMentorGender(mentor);
-    if (gender === 'M') {
-      acc.male.push(mentor);
-    } else if (gender === 'F') {
-      acc.female.push(mentor);
-    }
-    return acc;
-  }, { male: [] as string[], female: [] as string[] });
+  const mentorsByGender = useMemo(() => {
+    return Object.keys(groupedByMentor).reduce((acc, mentor) => {
+      const gender = getMentorGender(mentor);
+      if (gender === 'M') {
+        acc.male.push(mentor);
+      } else if (gender === 'F') {
+        acc.female.push(mentor);
+      }
+      return acc;
+    }, { male: [] as string[], female: [] as string[] });
+  }, [groupedByMentor, getMentorGender]);
 
   // 검색 필터링
   const displayStudents = searchQuery.trim()
@@ -150,10 +193,10 @@ export default function RoomContent() {
   // 첫 번째 멘토 자동 선택
   useEffect(() => {
     const allMentors = [...mentorsByGender.male.sort(), ...mentorsByGender.female.sort()];
-    if (allMentors.length > 0 && !selectedMentor) {
+    if (allMentors.length > 0 && !selectedMentor && !searchQuery.trim()) {
       setSelectedMentor(allMentors[0]);
     }
-  }, [students]);
+  }, [mentorsByGender.male.length, mentorsByGender.female.length, selectedMentor, searchQuery]);
 
   if (loading) {
     return (
@@ -237,16 +280,48 @@ export default function RoomContent() {
             </button>
           )}
           {isAdmin && (
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {syncing ? '동기화 중...' : '동기화'}
-            </button>
+            <>
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {syncing ? '동기화 중...' : '동기화'}
+              </button>
+              <button
+                onClick={handleToggleTemporaryData}
+                className={`px-3 py-1.5 text-xs rounded-lg ${
+                  useTemporaryDataSetting
+                    ? 'bg-amber-600 text-white hover:bg-amber-700'
+                    : 'bg-gray-600 text-white hover:bg-gray-700'
+                }`}
+                title={useTemporaryDataSetting ? '임시 데이터 표시 중' : '실제 데이터 표시 중'}
+              >
+                {useTemporaryDataSetting ? '임시데이터 OFF' : '임시데이터 ON'}
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* 임시 데이터 안내 배너 */}
+      {isTemporaryData && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-xs text-amber-800">
+              <span className="font-semibold">임시 데이터입니다.</span>
+              <span className="ml-1">
+                {hasRealData 
+                  ? '관리자가 임시 데이터 표시를 활성화했습니다.'
+                  : '방 배정이 완료되면 실제 명단으로 표기됩니다.'}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 멘토 토글 - 성별로 2줄 */}
       {!searchQuery.trim() && (

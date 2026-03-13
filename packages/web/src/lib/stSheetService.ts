@@ -210,21 +210,286 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
   }
 };
 
+// 임시 데이터 생성 함수
+const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
+  const campPrefix = campCode.charAt(0); // 'E', 'J', 'S' 추출
+  const campType = campPrefix === 'S' ? 'S' : 'EJ';
+  
+  // 학생 이름 풀 (성별 구분 명확하게)
+  const maleNames = [
+    '김민준', '이도윤', '박서준', '최예준', '정시우', '강지호', '조준우', '윤건우',
+    '장우진', '임현우', '한지훈', '오준혁', '신도현', '송민재', '배시우', '권유찬',
+    '황준서', '홍지환', '구태윤', '노승우', '양현준', '탁준영', '석민석', '하윤호'
+  ];
+  const femaleNames = [
+    '김서연', '이지우', '박서윤', '최수아', '정하윤', '강지유', '조예은', '윤채원',
+    '장소율', '임하은', '한지민', '오예린', '신서현', '송지안', '배다은', '권수빈',
+    '황민서', '홍유나', '구채은', '노서아', '양서영', '탁지원', '석예진', '하윤서'
+  ];
+  
+  // 미국식 영어 이름 (성별 구분)
+  const maleEnglishNames = [
+    'James', 'John', 'Robert', 'Michael', 'William', 'David', 'Richard', 'Joseph',
+    'Thomas', 'Charles', 'Daniel', 'Matthew', 'Anthony', 'Mark', 'Andrew', 'Joshua',
+    'Christopher', 'Ryan', 'Nicholas', 'Jacob', 'Tyler', 'Brandon', 'Kevin', 'Justin'
+  ];
+  const femaleEnglishNames = [
+    'Emma', 'Olivia', 'Ava', 'Isabella', 'Sophia', 'Mia', 'Charlotte', 'Amelia',
+    'Harper', 'Evelyn', 'Abigail', 'Emily', 'Elizabeth', 'Sofia', 'Grace', 'Victoria',
+    'Hannah', 'Madison', 'Lily', 'Chloe', 'Ella', 'Aria', 'Scarlett', 'Zoe'
+  ];
+  
+  // 반 멘토 (남성 4명, 여성 4명 - 확실한 성별 구분)
+  const maleMentors = ['김준호', '이민수', '박태현', '최동욱', '정현우', '강민석', '조성민', '윤재혁'];
+  const femaleMentors = ['김서연', '이지은', '박수빈', '최예린', '정하늘', '강유나', '조민지', '윤채영'];
+  
+  // 유닛 멘토 (남성 6명, 여성 6명)
+  const maleUnitMentors = ['박준영', '김성민', '이도훈', '최현우', '정우진', '강민호'];
+  const femaleUnitMentors = ['김민서', '이수빈', '박지은', '최서영', '정예나', '강채린'];
+  
+  // 반 이름 풀 (영어로)
+  const classNames = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa', 'Lambda', 'Omega'];
+  
+  // 입소/퇴소 공항 (EJ 캠프용)
+  const airports = ['김포공항', '청주공항', '김해공항', '직접입소'];
+  
+  // 지역
+  const regions = ['서울', '경기', '인천', '부산', '대구', '대전', '광주', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
+  
+  // 복용약 & 알레르기
+  const medications = ['없음', '없음', '없음', '없음', '없음', '알레르기비염', '아토피', '천식', '비염약 복용'];
+  
+  // 티셔츠 사이즈 (S 캠프용)
+  const shirtSizes = ['XS', 'S', 'M', 'L', 'XL'];
+  
+  // 학년 (G3~G8: 초3~중2)
+  const grades = ['G3', 'G4', 'G5', 'G6', 'G7', 'G8'];
+  
+  const students: STSheetStudent[] = [];
+  const usedClassNames = new Set<string>();
+  
+  // 8개 반, 각 반당 9-12명 (여자는 짝수)
+  for (let classIndex = 1; classIndex <= 8; classIndex++) {
+    const classNum = classIndex.toString().padStart(2, '0');
+    
+    // 반당 학생 수 결정 (9, 10, 11, 12명 중 랜덤, 여자는 짝수)
+    const totalStudents = [9, 10, 11, 12][Math.floor(Math.random() * 4)];
+    const femaleCount = totalStudents === 9 ? 4 : Math.floor(totalStudents / 2);
+    const maleCount = totalStudents - femaleCount;
+    
+    // 반 멘토 배정 (남학생 많으면 남자 멘토, 여학생 많거나 같으면 여자 멘토)
+    const classMentor = femaleCount >= maleCount 
+      ? femaleMentors[classIndex - 1] 
+      : maleMentors[classIndex - 1];
+    
+    // 반 이름 랜덤 선택 (중복 방지)
+    let className = classNames[classIndex - 1];
+    if (usedClassNames.has(className)) {
+      const availableNames = classNames.filter(name => !usedClassNames.has(name));
+      className = availableNames[Math.floor(Math.random() * availableNames.length)] || className;
+    }
+    usedClassNames.add(className);
+    
+    // 여학생 먼저, 남학생 나중에 (1~6번 여자, 7~12번 남자)
+    for (let studentIndex = 1; studentIndex <= totalStudents; studentIndex++) {
+      const isFemale = studentIndex <= femaleCount;
+      const studentNum = studentIndex.toString().padStart(2, '0');
+      
+      // 고유번호: J.001, J.002 ... (3자리)
+      const globalIndex = (classIndex - 1) * 12 + studentIndex;
+      const studentId = `${campPrefix}.${globalIndex.toString().padStart(3, '0')}`;
+      
+      // 반번호: J01.01, J01.02 ... (반.학생)
+      const classNumber = `${campPrefix}${classNum}.${studentNum}`;
+      
+      const nameIndex = (classIndex - 1) * 6 + studentIndex - 1;
+      const name = isFemale 
+        ? femaleNames[nameIndex % femaleNames.length] 
+        : maleNames[nameIndex % maleNames.length];
+      const englishName = isFemale
+        ? femaleEnglishNames[nameIndex % femaleEnglishNames.length]
+        : maleEnglishNames[nameIndex % maleEnglishNames.length];
+      
+      // 유닛 멘토 배정 (여학생은 여성 유닛, 남학생은 남성 유닛)
+      const unitMentor = isFemale
+        ? femaleUnitMentors[Math.floor((classIndex - 1) / 2) % femaleUnitMentors.length]
+        : maleUnitMentors[Math.floor((classIndex - 1) / 2) % maleUnitMentors.length];
+      
+      // 호수 배정 (유닛별로 묶이도록)
+      const unitIndex = isFemale
+        ? Math.floor((classIndex - 1) / 2) % femaleUnitMentors.length
+        : Math.floor((classIndex - 1) / 2) % maleUnitMentors.length;
+      const roomBase = isFemale ? 400 + unitIndex * 10 : 100 + unitIndex * 10;
+      const roomInUnit = Math.floor((studentIndex - 1) / 2) + 1;
+      const roomNumber = (roomBase + roomInUnit).toString();
+      
+      // 학년 랜덤 (G3~G8)
+      const grade = grades[Math.floor(Math.random() * grades.length)];
+      
+      // 주민등록번호 생성
+      const gradeNum = parseInt(grade.substring(1));
+      const birthYear = gradeNum <= 6 
+        ? (18 - (gradeNum - 3)).toString().padStart(2, '0')  // G3=15년생, G4=14년생 ...
+        : (18 - (gradeNum - 3)).toString().padStart(2, '0');  // G7=11년생, G8=10년생
+      const birthMonth = (Math.floor(Math.random() * 12) + 1).toString().padStart(2, '0');
+      const birthDay = (Math.floor(Math.random() * 28) + 1).toString().padStart(2, '0');
+      const genderNum = isFemale ? '2' : '1';
+      const ssn = `${birthYear}${birthMonth}${birthDay}-${genderNum}******`;
+      
+      // 연락처
+      const parentPhone = `010-${Math.floor(Math.random() * 9000 + 1000)}-${Math.floor(Math.random() * 9000 + 1000)}`;
+      const parentSuffix = isFemale ? '모' : '부';
+      const parentName = `${name.slice(0, 1)}${parentSuffix}`;
+      
+      // 주소
+      const region = regions[Math.floor(Math.random() * regions.length)];
+      const addressTemplates = [
+        `${region} 대로 ${Math.floor(Math.random() * 900 + 100)}`,
+        `${region} 중앙로 ${Math.floor(Math.random() * 500 + 1)}`,
+        `${region} 번영로 ${Math.floor(Math.random() * 300 + 1)}`
+      ];
+      const address = addressTemplates[Math.floor(Math.random() * addressTemplates.length)];
+      const addressDetail = `${Math.floor(Math.random() * 20 + 1)}동 ${Math.floor(Math.random() * 500 + 100)}호`;
+      
+      const medication = medications[Math.floor(Math.random() * medications.length)];
+      
+      const student: STSheetStudent = {
+        studentId,
+        name,
+        englishName,
+        gender: isFemale ? 'F' : 'M',
+        grade,
+        parentPhone,
+        parentName,
+        medication,
+        notes: '',
+        ssn,
+        region,
+        address,
+        addressDetail,
+        email: `${englishName.toLowerCase()}${Math.floor(Math.random() * 99)}@example.com`,
+        classNumber,
+        className,
+        classMentor,
+        unitMentor,
+        unit: unitMentor,
+        roomNumber,
+      };
+      
+      if (campType === 'EJ') {
+        student.departureRoute = airports[Math.floor(Math.random() * airports.length)];
+        student.arrivalRoute = airports[Math.floor(Math.random() * airports.length)];
+      } else {
+        student.shirtSize = shirtSizes[Math.floor(Math.random() * shirtSizes.length)];
+        student.passportName = englishName.toUpperCase();
+        student.passportNumber = `M${Math.floor(Math.random() * 90000000 + 10000000)}`;
+        const year = 2027 + Math.floor(Math.random() * 3);
+        const month = (Math.floor(Math.random() * 12) + 1).toString().padStart(2, '0');
+        const day = (Math.floor(Math.random() * 28) + 1).toString().padStart(2, '0');
+        student.passportExpiry = `${year}-${month}-${day}`;
+      }
+      
+      students.push(student);
+    }
+  }
+  
+  return students;
+};
+
 export const stSheetService = {
   getCachedData: async (campCode: CampCode = 'E27'): Promise<STSheetStudent[]> => {
     try {
+      // 설정 먼저 확인
+      const useTemporaryData = await stSheetService.getUseTemporaryDataSetting(campCode);
+      
+      // 임시 데이터 사용 설정이 켜져있으면 무조건 임시 데이터 반환
+      if (useTemporaryData) {
+        console.log(`⚠️ ${campCode} 임시 데이터 표시 설정이 활성화되어 있습니다.`);
+        return getTemporaryData(campCode);
+      }
+      
+      // 임시 데이터 사용 설정이 꺼져있으면 실제 데이터만 반환
       const docRef = doc(db, 'stSheetCache', campCode);
       const docSnap = await getDoc(docRef);
-
       if (docSnap.exists()) {
         const data = docSnap.data();
         return data.data || [];
       }
+      
+      // 실제 데이터도 없으면 빈 배열 반환
       return [];
     } catch (error) {
       console.error('Firestore 데이터 로드 실패:', error);
       throw error;
     }
+  },
+
+  // 임시 데이터 여부 확인
+  isTemporaryData: async (campCode: CampCode = 'E27'): Promise<boolean> => {
+    try {
+      const useTemporaryData = await stSheetService.getUseTemporaryDataSetting(campCode);
+      
+      // 임시 데이터 사용 설정이 켜져있으면 무조건 true
+      if (useTemporaryData) {
+        return true;
+      }
+      
+      // 임시 데이터 사용 설정이 꺼져있으면 무조건 false
+      return false;
+    } catch (error) {
+      console.error('임시 데이터 확인 실패:', error);
+      return true;
+    }
+  },
+
+  // 임시 데이터 사용 설정 가져오기
+  getUseTemporaryDataSetting: async (campCode: CampCode = 'E27'): Promise<boolean> => {
+    try {
+      const docRef = doc(db, 'campSettings', campCode);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data()?.useTemporaryData ?? false;
+      }
+      
+      // 기본값: 실제 데이터가 없으면 임시 데이터 표시, 있으면 실제 데이터 표시
+      const hasReal = await stSheetService.hasRealData(campCode);
+      return !hasReal; // 실제 데이터가 없으면 true (임시 데이터 표시)
+    } catch (error) {
+      console.error('설정 조회 실패:', error);
+      return false;
+    }
+  },
+
+  // 임시 데이터 사용 설정 변경 (관리자만)
+  setUseTemporaryDataSetting: async (campCode: CampCode = 'E27', useTemporaryData: boolean): Promise<void> => {
+    try {
+      const docRef = doc(db, 'campSettings', campCode);
+      await setDoc(docRef, {
+        campCode,
+        useTemporaryData,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (error) {
+      console.error('설정 저장 실패:', error);
+      throw error;
+    }
+  },
+
+  // 실제 데이터 존재 여부 확인 (새로 추가)
+  hasRealData: async (campCode: CampCode = 'E27'): Promise<boolean> => {
+    try {
+      const docRef = doc(db, 'stSheetCache', campCode);
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists() && docSnap.data()?.data && docSnap.data()?.data.length > 0;
+    } catch (error) {
+      console.error('실제 데이터 확인 실패:', error);
+      return false;
+    }
+  },
+
+  // 강제로 임시 데이터 표시 (관리자용)
+  getTemporaryDataForced: async (campCode: CampCode = 'E27'): Promise<STSheetStudent[]> => {
+    return getTemporaryData(campCode);
   },
 
   getStudentsByMentor: async (
