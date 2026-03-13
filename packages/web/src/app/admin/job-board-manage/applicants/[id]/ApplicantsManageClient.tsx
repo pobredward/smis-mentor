@@ -21,6 +21,7 @@ import {
   TemplateType, 
 } from '@/lib/smsTemplateService';
 import { SMSMessageBox } from '@/components/admin/SMSMessageBox';
+import { ShareLinkModal } from '@/components/admin/ShareLinkModal';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { PhoneNumber } from '@/lib/naverCloudSMS';
@@ -116,6 +117,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [showJobCodeForm, setShowJobCodeForm] = useState<string | null>(null); // 어떤 지원자의 직무 경험 추가 폼을 보여줄지
   const [userJobCodesMap, setUserJobCodesMap] = useState<Record<string, JobCodeWithGroup[]>>({}); // 각 사용자의 직무 경험 정보
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState<Record<string, boolean>>({}); // 각 사용자별 로딩 상태
+  
+  // 공유 링크 관련 상태
+  const [showShareLinkModal, setShowShareLinkModal] = useState(false);
+  const [selectedForShare, setSelectedForShare] = useState<string[]>([]);
   
   // 직무 경험 관련 상수
   const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
@@ -1467,7 +1472,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             </div>
           </div>
         </div>
-        
+
         {isLoading && !selectedApplication ? (
           <div className="flex justify-center py-10">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
@@ -1484,8 +1489,30 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             </Button>
           </div>
         ) : (
-          // 모바일 최적화 레이아웃
-          <div className="flex flex-col lg:grid lg:grid-cols-5 gap-6">
+          <>
+            {/* 공유 링크 생성 버튼 */}
+            <div className="mb-4 flex justify-between items-center">
+              <div className="text-sm text-gray-600">
+                총 <span className="font-semibold text-gray-900">{filteredApplications.length}</span>명의 지원자
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setSelectedForShare(filteredApplications.map(app => app.id));
+                  setShowShareLinkModal(true);
+                }}
+                className="flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                현재 목록 공유
+              </Button>
+            </div>
+
+            {/* 모바일 최적화 레이아웃 */}
+            <div className="flex flex-col lg:grid lg:grid-cols-5 gap-6">
             {/* 모바일 뷰에서는 상세 정보가 선택된 경우에만 지원자 목록을 숨깁니다 */}
             {(!selectedApplication || !isMobile) && (
             <div className={`${selectedApplication && isMobile ? 'hidden' : 'block'} lg:col-span-2`}>
@@ -2335,6 +2362,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
               </div>
             )}
           </div>
+          </>
         )}
         
         {/* SMS 템플릿 선택 모달 */}
@@ -2456,6 +2484,21 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           </div>
         )}
       </div>
+
+      {/* 공유 링크 모달 */}
+      {showShareLinkModal && jobBoard && currentAdminName && (
+        <ShareLinkModal
+          isOpen={showShareLinkModal}
+          onClose={() => {
+            setShowShareLinkModal(false);
+            setSelectedForShare([]);
+          }}
+          jobBoardId={jobBoardId}
+          jobBoardTitle={jobBoard.title}
+          selectedApplicationIds={selectedForShare}
+          currentUserId={auth.currentUser?.uid || ''}
+        />
+      )}
     </Layout>
   );
 } 

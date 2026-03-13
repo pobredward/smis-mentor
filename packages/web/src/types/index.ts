@@ -187,4 +187,15 @@ export interface Review {
   rating?: number;
   writer?: string;
   reviewId?: string;
+}
+
+export interface ShareToken {
+  id: string;
+  token: string;
+  refJobBoardId: string;
+  refApplicationIds: string[];
+  expiresAt: Timestamp;
+  createdAt: Timestamp;
+  createdBy: string;
+  isActive: boolean;
 } 
