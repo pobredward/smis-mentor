@@ -473,8 +473,8 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   }, [router]);
 
   return (
-    <Layout>
-      <div className="container mx-auto px-0 sm:px-6 lg:px-8">
+    <Layout noPadding>
+      <div className="max-w-7xl mx-auto py-6 px-2 sm:px-6 lg:px-8">
         {isLoading ? (
           <div className="flex justify-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
@@ -492,7 +492,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
           </div>
         ) : (
           <div className="bg-white overflow-hidden">
-            <div className="p-4 sm:p-6">
+            <div className="p-2 sm:p-6">
               {isEditing ? (
                 <div className="space-y-6">
                   <div className="mb-6">
