@@ -4,10 +4,40 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generationResourcesService, ResourceLink } from '@/lib/generationResourcesService';
 
+// Notion URL을 임베드 가능한 URL로 변환
+const convertToEmbedUrl = (url: string): string => {
+  // 이미 임베드 URL인 경우
+  if (url.includes('/ebd//') || url.includes('embed.notion.site')) {
+    return url;
+  }
+  
+  // 일반 Notion URL을 임베드 URL로 변환
+  if (url.includes('notion.site/') || url.includes('notion.so/')) {
+    try {
+      const urlObj = new URL(url);
+      const pathname = urlObj.pathname;
+      const hash = urlObj.hash;
+      
+      // pathname에서 페이지 ID 추출
+      const pageIdMatch = pathname.match(/([a-zA-Z0-9]{32}|[a-zA-Z0-9]{8}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{12})/);
+      
+      if (pageIdMatch) {
+        const pageId = pageIdMatch[1];
+        // 임베드 URL 형식으로 변환
+        return `https://${urlObj.hostname}/ebd//${pageId}${hash}`;
+      }
+    } catch (e) {
+      console.error('URL 변환 오류:', e);
+    }
+  }
+  
+  return url;
+};
+
 // Notion 및 Google Sheets 임베드 가능 여부 확인
 const isEmbeddableUrl = (url: string): boolean => {
-  return url.includes('/ebd//') || 
-         url.includes('embed.notion.site') || 
+  return url.includes('notion.site') || 
+         url.includes('notion.so') ||
          url.includes('docs.google.com/spreadsheets');
 };
 
@@ -17,6 +47,7 @@ export default function EducationContent() {
   const [loading, setLoading] = useState(true);
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
+  const [iframeErrors, setIframeErrors] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
@@ -32,6 +63,10 @@ export default function EducationContent() {
 
   const setLoadingState = (id: string, isLoading: boolean) => {
     setLoadingStates(prev => ({ ...prev, [id]: isLoading }));
+  };
+
+  const setIframeError = (id: string, hasError: boolean) => {
+    setIframeErrors(prev => ({ ...prev, [id]: hasError }));
   };
 
   const loadEducationLinks = useCallback(async () => {
@@ -260,21 +295,31 @@ export default function EducationContent() {
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    임베드 URL
-                    <span className="text-xs text-gray-500 ml-2">
-                      (Notion 공유 → 이 페이지 임베드 → iframe src)
-                    </span>
-                  </label>
-                  <input
-                    type="url"
-                    value={newLinkUrl}
-                    onChange={(e) => setNewLinkUrl(e.target.value)}
-                    placeholder="https://smis.notion.site/ebd//..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  노션 URL
+                  <span className="text-xs text-gray-500 ml-2">
+                    (공유 링크나 임베드 링크 모두 가능)
+                  </span>
+                </label>
+                <input
+                  type="url"
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  placeholder="https://smis.notion.site/..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs text-blue-800 mb-1">
+                    <strong>💡 사용 가능한 URL 형식:</strong>
+                  </p>
+                  <ul className="text-xs text-blue-700 space-y-1 ml-4 list-disc">
+                    <li>일반 공유 링크: https://smis.notion.site/페이지명-ID</li>
+                    <li>임베드 링크: https://smis.notion.site/ebd//ID</li>
+                    <li>Google Sheets: docs.google.com/spreadsheets/...</li>
+                  </ul>
                 </div>
+              </div>
                 
                 <div className="flex gap-2 pt-2">
                   <button
@@ -443,6 +488,9 @@ export default function EducationContent() {
           }
 
           // 임베드 가능한 URL - 모두 프리로드
+          const embedUrl = convertToEmbedUrl(link.url);
+          const hasIframeError = iframeErrors[link.id] || false;
+          
           return (
             <div
               key={link.id}
@@ -453,20 +501,58 @@ export default function EducationContent() {
                 pointerEvents: isVisible ? 'auto' : 'none',
               }}
             >
-              {isLoading && isVisible && (
+              {isLoading && isVisible && !hasIframeError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
                   <div className="flex flex-col items-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-                    <p className="mt-4 text-gray-600">로딩 중...</p>
+                    <p className="mt-4 text-gray-600">노션 페이지 로딩 중...</p>
                   </div>
                 </div>
               )}
-              <iframe
-                src={link.url}
-                className="w-full h-full border-0"
-                title={link.title}
-                onLoad={() => setLoadingState(link.id, false)}
-              />
+              {hasIframeError && isVisible ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 p-8">
+                  <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 text-center border border-gray-200">
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                      <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-3">{link.title}</h3>
+                    <p className="text-sm text-gray-600 mb-6">
+                      임베드 표시에 문제가 있습니다. 새 탭에서 열어주세요.
+                    </p>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    >
+                      <span>새 탭에서 열기</span>
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <iframe
+                  src={embedUrl}
+                  className="w-full h-full border-0"
+                  title={link.title}
+                  onLoad={() => {
+                    setLoadingState(link.id, false);
+                    setIframeError(link.id, false);
+                  }}
+                  onError={() => {
+                    console.error('iframe 로드 오류:', embedUrl);
+                    setLoadingState(link.id, false);
+                    setIframeError(link.id, true);
+                  }}
+                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                  referrerPolicy="no-referrer"
+                  loading="eager"
+                />
+              )}
             </div>
           );
         })}
@@ -510,9 +596,12 @@ export default function EducationContent() {
                   type="url"
                   value={newLinkUrl}
                   onChange={(e) => setNewLinkUrl(e.target.value)}
-                  placeholder="https://..."
+                  placeholder="https://smis.notion.site/..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  💡 일반 공유 링크와 임베드 링크 모두 사용 가능합니다
+                </p>
               </div>
               
               <div className="flex gap-2 pt-2">

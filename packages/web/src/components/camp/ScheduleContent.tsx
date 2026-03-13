@@ -5,9 +5,39 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useResourceCache } from '@/contexts/ResourceCacheContext';
 import { generationResourcesService, ResourceLink } from '@/lib/generationResourcesService';
 
+// Notion URL을 임베드 가능한 URL로 변환
+const convertToEmbedUrl = (url: string): string => {
+  // 이미 임베드 URL인 경우
+  if (url.includes('/ebd//') || url.includes('embed.notion.site')) {
+    return url;
+  }
+  
+  // 일반 Notion URL을 임베드 URL로 변환
+  if (url.includes('notion.site/') || url.includes('notion.so/')) {
+    try {
+      const urlObj = new URL(url);
+      const pathname = urlObj.pathname;
+      const hash = urlObj.hash;
+      
+      // pathname에서 페이지 ID 추출
+      const pageIdMatch = pathname.match(/([a-zA-Z0-9]{32}|[a-zA-Z0-9]{8}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{12})/);
+      
+      if (pageIdMatch) {
+        const pageId = pageIdMatch[1];
+        // 임베드 URL 형식으로 변환
+        return `https://${urlObj.hostname}/ebd//${pageId}${hash}`;
+      }
+    } catch (e) {
+      console.error('URL 변환 오류:', e);
+    }
+  }
+  
+  return url;
+};
+
 const isEmbeddableUrl = (url: string): boolean => {
-  return url.includes('/ebd//') || 
-         url.includes('embed.notion.site') || 
+  return url.includes('notion.site') || 
+         url.includes('notion.so') ||
          url.includes('docs.google.com/spreadsheets');
 };
 
@@ -15,6 +45,7 @@ export default function ScheduleContent() {
   const { userData } = useAuth();
   const { scheduleLinks, loading, loadingStates, setLoadingState, refreshResources } = useResourceCache();
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
+  const [iframeErrors, setIframeErrors] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
@@ -27,6 +58,10 @@ export default function ScheduleContent() {
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+
+  const setIframeError = (id: string, hasError: boolean) => {
+    setIframeErrors(prev => ({ ...prev, [id]: hasError }));
+  };
 
   useEffect(() => {
     if (scheduleLinks.length > 0 && !selectedLinkId) {
@@ -306,6 +341,9 @@ export default function ScheduleContent() {
               );
             }
 
+            const embedUrl = convertToEmbedUrl(link.url);
+            const hasIframeError = iframeErrors[link.id] || false;
+            
             return (
               <div
                 key={link.id}
@@ -316,20 +354,58 @@ export default function ScheduleContent() {
                   pointerEvents: isVisible ? 'auto' : 'none',
                 }}
               >
-                {isLoading && isVisible && (
+                {isLoading && isVisible && !hasIframeError && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
                     <div className="text-center">
                       <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                      <p className="text-sm text-gray-600">로딩 중...</p>
+                      <p className="text-sm text-gray-600">노션 페이지 로딩 중...</p>
                     </div>
                   </div>
                 )}
-                <iframe
-                  src={link.url}
-                  className="w-full h-full border-0"
-                  title={link.title}
-                  onLoad={() => setLoadingState(link.id, false)}
-                />
+                {hasIframeError && isVisible ? (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-gradient-to-br from-blue-50 to-indigo-50">
+                    <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 border border-gray-200">
+                      <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                        <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-3">{link.title}</h3>
+                      <p className="text-sm text-gray-600 mb-6">
+                        임베드 표시에 문제가 있습니다. 새 탭에서 열어주세요.
+                      </p>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                      >
+                        <span>새 탭에서 열기</span>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <iframe
+                    src={embedUrl}
+                    className="w-full h-full border-0"
+                    title={link.title}
+                    onLoad={() => {
+                      setLoadingState(link.id, false);
+                      setIframeError(link.id, false);
+                    }}
+                    onError={() => {
+                      console.error('iframe 로드 오류:', embedUrl);
+                      setLoadingState(link.id, false);
+                      setIframeError(link.id, true);
+                    }}
+                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                    referrerPolicy="no-referrer"
+                    loading="eager"
+                  />
+                )}
               </div>
             );
           })}
@@ -371,9 +447,12 @@ export default function ScheduleContent() {
                   type="url"
                   value={newLinkUrl}
                   onChange={(e) => setNewLinkUrl(e.target.value)}
-                  placeholder="https://..."
+                  placeholder="https://smis.notion.site/..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  💡 일반 공유 링크와 임베드 링크 모두 사용 가능합니다
+                </p>
               </div>
             </div>
             
