@@ -2479,7 +2479,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       </div>
 
       {/* 공유 링크 모달 */}
-      {showShareLinkModal && jobBoard && currentAdminName && (
+      {showShareLinkModal && jobBoard && currentAdminName && selectedApplication && (
         <ShareLinkModal
           isOpen={showShareLinkModal}
           onClose={() => {
@@ -2490,6 +2490,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           jobBoardTitle={jobBoard.title}
           selectedApplicationIds={selectedForShare}
           currentUserId={auth.currentUser?.uid || ''}
+          applicantName={selectedApplication.user?.name || '알 수 없음'}
         />
       )}
     </Layout>

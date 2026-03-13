@@ -13,6 +13,7 @@ interface ShareLinkModalProps {
   jobBoardTitle: string;
   selectedApplicationIds: string[];
   currentUserId: string;
+  applicantName?: string;
 }
 
 export function ShareLinkModal({
@@ -22,16 +23,14 @@ export function ShareLinkModal({
   jobBoardTitle,
   selectedApplicationIds,
   currentUserId,
+  applicantName,
 }: ShareLinkModalProps) {
   const [expirationHours, setExpirationHours] = useState(1);
+  const [customMinutes, setCustomMinutes] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
-
-  // 시간을 분으로 변환하는 헬퍼 함수
-  const hoursToMinutes = (hours: number) => hours * 60;
-  const minutesToHours = (minutes: number) => minutes / 60;
 
   useEffect(() => {
     if (!isOpen) {
@@ -39,12 +38,23 @@ export function ShareLinkModal({
       setExpiresAt(null);
       setIsCopied(false);
       setExpirationHours(1);
+      setCustomMinutes('');
     }
   }, [isOpen]);
 
   const handleGenerate = async () => {
     if (selectedApplicationIds.length === 0) {
       toast.error('선택된 지원자가 없습니다.');
+      return;
+    }
+
+    // 사용자 정의 분 입력이 있으면 해당 값 사용
+    const finalExpirationHours = customMinutes 
+      ? parseInt(customMinutes) / 60 
+      : expirationHours;
+
+    if (customMinutes && (parseInt(customMinutes) < 1 || parseInt(customMinutes) > 43200)) {
+      toast.error('유효 시간은 1분에서 30일(43200분) 사이여야 합니다.');
       return;
     }
 
@@ -59,7 +69,7 @@ export function ShareLinkModal({
         body: JSON.stringify({
           jobBoardId,
           applicationIds: selectedApplicationIds,
-          expirationHours,
+          expirationHours: finalExpirationHours,
           createdBy: currentUserId,
         }),
       });
@@ -152,13 +162,11 @@ export function ShareLinkModal({
                 <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
                   <p className="text-sm sm:text-base font-semibold text-gray-900 mb-2 break-words">{jobBoardTitle}</p>
                   <p className="text-xs sm:text-sm text-gray-600">
-                    공유할 지원자: <span className="font-semibold text-primary">{selectedApplicationIds.length}명</span>
+                    공유할 지원자: <span className="font-semibold text-primary">{applicantName || `${selectedApplicationIds.length}명`}</span>
                   </p>
-                  {selectedApplicationIds.length === 1 && (
-                    <p className="text-xs text-gray-500 mt-2">
-                      이 지원자의 모든 정보 (기본정보, 학력, 경력, 자기소개, 평가점수)가 공유됩니다
-                    </p>
-                  )}
+                  <p className="text-xs text-gray-500 mt-2">
+                    이 지원자의 모든 정보 (기본정보, 학력, 경력, 자기소개, 평가점수)가 공유됩니다
+                  </p>
                 </div>
               </div>
 
@@ -167,12 +175,15 @@ export function ShareLinkModal({
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                   링크 유효 시간
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2 mb-3">
                   {/* 10분 */}
                   <button
-                    onClick={() => setExpirationHours(10 / 60)}
+                    onClick={() => {
+                      setExpirationHours(10 / 60);
+                      setCustomMinutes('');
+                    }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
-                      expirationHours === 10 / 60
+                      expirationHours === 10 / 60 && !customMinutes
                         ? 'border-primary bg-primary/5 text-primary font-semibold'
                         : 'border-gray-200 text-gray-700 hover:border-gray-300'
                     }`}
@@ -181,9 +192,12 @@ export function ShareLinkModal({
                   </button>
                   {/* 30분 */}
                   <button
-                    onClick={() => setExpirationHours(0.5)}
+                    onClick={() => {
+                      setExpirationHours(0.5);
+                      setCustomMinutes('');
+                    }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
-                      expirationHours === 0.5
+                      expirationHours === 0.5 && !customMinutes
                         ? 'border-primary bg-primary/5 text-primary font-semibold'
                         : 'border-gray-200 text-gray-700 hover:border-gray-300'
                     }`}
@@ -192,9 +206,12 @@ export function ShareLinkModal({
                   </button>
                   {/* 1시간 */}
                   <button
-                    onClick={() => setExpirationHours(1)}
+                    onClick={() => {
+                      setExpirationHours(1);
+                      setCustomMinutes('');
+                    }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
-                      expirationHours === 1
+                      expirationHours === 1 && !customMinutes
                         ? 'border-primary bg-primary/5 text-primary font-semibold'
                         : 'border-gray-200 text-gray-700 hover:border-gray-300'
                     }`}
@@ -203,9 +220,12 @@ export function ShareLinkModal({
                   </button>
                   {/* 3시간 */}
                   <button
-                    onClick={() => setExpirationHours(3)}
+                    onClick={() => {
+                      setExpirationHours(3);
+                      setCustomMinutes('');
+                    }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
-                      expirationHours === 3
+                      expirationHours === 3 && !customMinutes
                         ? 'border-primary bg-primary/5 text-primary font-semibold'
                         : 'border-gray-200 text-gray-700 hover:border-gray-300'
                     }`}
@@ -214,9 +234,12 @@ export function ShareLinkModal({
                   </button>
                   {/* 24시간 */}
                   <button
-                    onClick={() => setExpirationHours(24)}
+                    onClick={() => {
+                      setExpirationHours(24);
+                      setCustomMinutes('');
+                    }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
-                      expirationHours === 24
+                      expirationHours === 24 && !customMinutes
                         ? 'border-primary bg-primary/5 text-primary font-semibold'
                         : 'border-gray-200 text-gray-700 hover:border-gray-300'
                     }`}
@@ -225,15 +248,39 @@ export function ShareLinkModal({
                   </button>
                   {/* 7일 */}
                   <button
-                    onClick={() => setExpirationHours(168)}
+                    onClick={() => {
+                      setExpirationHours(168);
+                      setCustomMinutes('');
+                    }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm ${
-                      expirationHours === 168
+                      expirationHours === 168 && !customMinutes
                         ? 'border-primary bg-primary/5 text-primary font-semibold'
                         : 'border-gray-200 text-gray-700 hover:border-gray-300'
                     }`}
                   >
                     7일
                   </button>
+                </div>
+                
+                {/* 직접 입력 (분 단위) */}
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">직접 입력</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="43200"
+                      value={customMinutes}
+                      onChange={(e) => setCustomMinutes(e.target.value)}
+                      onFocus={() => setExpirationHours(0)}
+                      className="flex-1 px-2 sm:px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-xs sm:text-sm"
+                      placeholder="분 단위로 입력 (예: 45)"
+                    />
+                    <span className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">분</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    1분 ~ 30일(43200분)까지 설정 가능
+                  </p>
                 </div>
               </div>
 
