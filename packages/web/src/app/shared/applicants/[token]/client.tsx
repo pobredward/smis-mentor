@@ -51,7 +51,7 @@ export function SharedApplicantsClient({ token }: Props) {
         
         // 디버깅: 프로필 이미지 URL 확인
         result.applications.forEach((app: any) => {
-          console.log('지원자:', app.user?.name, '프로필 URL:', app.user?.profileImageUrl);
+          console.log('지원자:', app.user?.name, 'profileImage:', app.user?.profileImage, 'profileImageUrl:', app.user?.profileImageUrl);
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
@@ -218,12 +218,12 @@ export function SharedApplicantsClient({ token }: Props) {
                     <div className="flex items-center gap-3 mb-3">
                       {/* 프로필 사진 */}
                       <div className="flex-shrink-0">
-                        {user?.profileImageUrl && !hasImageError ? (
+                        {(user?.profileImage || user?.profileImageUrl) && !hasImageError ? (
                           <img
-                            src={user.profileImageUrl}
+                            src={user.profileImage || user.profileImageUrl}
                             alt={user.name || '프로필'}
                             className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-gray-200"
-                            onError={() => handleImageError(app.id, user.profileImageUrl)}
+                            onError={() => handleImageError(app.id, user.profileImage || user.profileImageUrl || '')}
                           />
                         ) : (
                           <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
