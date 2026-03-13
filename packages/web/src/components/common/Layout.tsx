@@ -24,6 +24,8 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
     router.push(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
   };
 
+  const shouldHideFooter = pathname.startsWith('/camp') || pathname.startsWith('/admin');
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -50,7 +52,7 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
             </div>
           </div>
         </div>
-        <Footer />
+        {!shouldHideFooter && <Footer />}
       </div>
     );
   }
@@ -65,7 +67,7 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
             <p className="mt-2 text-sm text-gray-500">이 페이지는 관리자만 접근할 수 있습니다.</p>
           </div>
         </div>
-        <Footer />
+        {!shouldHideFooter && <Footer />}
       </div>
     );
   }
@@ -82,7 +84,7 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
           </div>
         )}
       </main>
-      <Footer />
+      {!shouldHideFooter && <Footer />}
       <BottomNavigation />
     </div>
   );
