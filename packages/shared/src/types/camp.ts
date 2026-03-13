@@ -214,7 +214,6 @@ export interface Task {
   };
   
   attachments?: TaskAttachment[];
-  priority: 'low' | 'medium' | 'high';
   completions: TaskCompletion[];
   
   createdAt: Timestamp;

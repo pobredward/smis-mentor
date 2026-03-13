@@ -9,8 +9,11 @@ import {
   Alert,
   Modal,
   Linking,
+  TextInput,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { Timestamp } from 'firebase/firestore';
@@ -23,9 +26,18 @@ import {
   createTask,
   formatTime,
   formatDuration,
+  uploadTaskImage,
 } from '../services/taskService';
 import { getUserJobCodesInfo } from '../services/authService';
-import type { Task, JobExperienceGroupRole } from '../../../shared/src/types/camp';
+import type { Task, JobExperienceGroupRole, TaskAttachment } from '../../../shared/src/types/camp';
+import {
+  MENTOR_GROUP_ROLES,
+  FOREIGN_GROUP_ROLES,
+  JOB_EXPERIENCE_GROUPS,
+  type JobExperienceGroup,
+  type MentorGroupRole,
+  type ForeignGroupRole,
+} from '../../../shared/src/types/camp';
 
 interface JobCodeWithGroup {
   generation: string;
@@ -57,8 +69,11 @@ export function TasksScreen() {
   // 모달 상태
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
+  const isManager = currentGroupRole === 'manager';
+  const canAddTask = isAdmin || isManager;
 
   // 활성화된 캠프 정보 가져오기
   const fetchActiveJobCode = async () => {
@@ -375,6 +390,27 @@ export function TasksScreen() {
           }}
         />
       )}
+
+      {/* 업무 추가 FAB */}
+      {canAddTask && currentCampCode && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setShowAddModal(true)}
+        >
+          <Ionicons name="add" size={28} color="#ffffff" />
+        </TouchableOpacity>
+      )}
+
+      {/* 업무 추가 모달 */}
+      <TaskAddModal
+        visible={showAddModal}
+        campCode={currentCampCode}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={() => {
+          setShowAddModal(false);
+          fetchTasks();
+        }}
+      />
     </View>
   );
 }
@@ -660,6 +696,710 @@ function TaskDetailModal({
               onPress={onClose}
             >
               <Text style={styles.closeModalButtonText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// 업무 추가 모달 컴포넌트
+function TaskAddModal({
+  visible,
+  campCode,
+  onClose,
+  onSuccess,
+}: {
+  visible: boolean;
+  campCode: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  // 타겟 역할 타입 (멘토용/원어민용)
+  const [targetRoleType, setTargetRoleType] = useState<'mentor' | 'foreign'>('mentor');
+  
+  // 날짜 및 시간
+  const [date, setDate] = useState(new Date());
+  const [time, setTime] = useState('');
+  const [hasTime, setHasTime] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  
+  // 대상 역할
+  const [targetRoles, setTargetRoles] = useState<JobExperienceGroupRole[]>([]);
+  
+  // 대상 그룹
+  const [targetGroups, setTargetGroups] = useState<JobExperienceGroup[]>([]);
+  
+  // 우선순위
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  
+  // 업무 제목 & 설명
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  
+  // 소요 시간
+  const [estimatedDuration, setEstimatedDuration] = useState('');
+  
+  // 첨부파일
+  const [linkLabel, setLinkLabel] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // roleOptions는 targetRoleType에 따라 동적으로 변경
+  const getMentorRoles = (): JobExperienceGroupRole[] => Array.from(MENTOR_GROUP_ROLES);
+  const getForeignRoles = (): JobExperienceGroupRole[] => Array.from(FOREIGN_GROUP_ROLES);
+  const roleOptions = targetRoleType === 'mentor' ? getMentorRoles() : getForeignRoles();
+  
+  // 그룹 옵션
+  const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
+
+  // 날짜 변경 핸들러는 이제 사용 안 함 (인라인 달력 사용)
+
+  // 달력 렌더링
+  const renderCalendar = () => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDayOfWeek = firstDay.getDay();
+    const daysInMonth = lastDay.getDate();
+
+    const days: JSX.Element[] = [];
+
+    // 빈 칸 추가
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(
+        <View key={`empty-${i}`} style={styles.calendarDay} />
+      );
+    }
+
+    // 날짜 추가
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const currentDate = new Date(year, month, day);
+      const isSelected = 
+        date.getDate() === day && 
+        date.getMonth() === month && 
+        date.getFullYear() === year;
+      const isToday = 
+        today.getDate() === day && 
+        today.getMonth() === month && 
+        today.getFullYear() === year;
+
+      days.push(
+        <TouchableOpacity
+          key={day}
+          onPress={() => {
+            setDate(currentDate);
+            setShowDatePicker(false);
+          }}
+          style={[
+            styles.calendarDay,
+            isSelected && styles.calendarDaySelected,
+            isToday && !isSelected && styles.calendarDayToday,
+          ]}
+        >
+          <Text
+            style={[
+              styles.calendarDayText,
+              isSelected && styles.calendarDayTextSelected,
+              isToday && !isSelected && styles.calendarDayTextToday,
+            ]}
+          >
+            {day}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return days;
+  };
+
+  // 이미지 선택 핸들러
+  const handlePickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (!permissionResult.granted) {
+        Alert.alert('권한 필요', '사진 라이브러리 접근 권한이 필요합니다.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        selectionLimit: 5,
+      });
+
+      if (!result.canceled && result.assets) {
+        setUploadingImage(true);
+        try {
+          for (const asset of result.assets) {
+            const fileName = asset.fileName || `image_${Date.now()}.jpg`;
+            const uploadedAttachment = await uploadTaskImage('temp', asset.uri, fileName);
+            setAttachments((prev) => [...prev, uploadedAttachment]);
+          }
+          Alert.alert('성공', '이미지가 업로드되었습니다.');
+        } catch (error) {
+          console.error('이미지 업로드 오류:', error);
+          Alert.alert('오류', '이미지 업로드 중 오류가 발생했습니다.');
+        } finally {
+          setUploadingImage(false);
+        }
+      }
+    } catch (error) {
+      console.error('이미지 선택 오류:', error);
+      Alert.alert('오류', '이미지 선택 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAddLink = () => {
+    if (!linkLabel.trim() || !linkUrl.trim()) {
+      Alert.alert('오류', '링크 이름과 URL을 모두 입력해주세요.');
+      return;
+    }
+
+    setAttachments([
+      ...attachments,
+      {
+        type: 'link',
+        url: linkUrl.trim(),
+        label: linkLabel.trim(),
+      },
+    ]);
+    setLinkLabel('');
+    setLinkUrl('');
+  };
+
+  const handleRemoveAttachment = (index: number) => {
+    setAttachments(attachments.filter((_, i) => i !== index));
+  };
+
+  const toggleRole = (role: JobExperienceGroupRole) => {
+    setTargetRoles((prev) =>
+      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
+    );
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim()) {
+      Alert.alert('오류', '업무 제목을 입력해주세요.');
+      return;
+    }
+
+    if (targetRoles.length === 0) {
+      Alert.alert('오류', '대상 역할을 하나 이상 선택해주세요.');
+      return;
+    }
+
+    if (targetGroups.length === 0) {
+      Alert.alert('오류', '대상 그룹을 하나 이상 선택해주세요.');
+      return;
+    }
+
+    // 시간 형식 검증
+    if (hasTime && time) {
+      const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!timePattern.test(time)) {
+        Alert.alert('오류', '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    try {
+      const localDate = new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+        0, 0, 0, 0
+      );
+
+      const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions'> = {
+        campCode,
+        title: title.trim(),
+        description: description.trim() || undefined,
+        date: Timestamp.fromDate(localDate),
+        time: hasTime && time ? time : undefined,
+        priority,
+        estimatedDuration:
+          estimatedDuration && !isNaN(Number(estimatedDuration))
+            ? { value: Number(estimatedDuration), unit: 'minutes' }
+            : undefined,
+        targetRoles,
+        targetGroups: targetGroups.length > 0 ? targetGroups : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      };
+
+      await createTask(campCode, taskData);
+      Alert.alert('성공', '업무가 추가되었습니다.');
+      
+      // 폼 초기화
+      setTargetRoleType('mentor');
+      setDate(new Date());
+      setTime('');
+      setHasTime(false);
+      setTargetRoles([]);
+      setTargetGroups([]);
+      setPriority('medium');
+      setTitle('');
+      setDescription('');
+      setEstimatedDuration('');
+      setAttachments([]);
+      
+      onSuccess();
+    } catch (error) {
+      console.error('업무 추가 오류:', error);
+      Alert.alert('오류', '업무 추가 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.addModalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>새 업무 추가</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.addModalContent}>
+            {/* 0. 타겟 역할 타입 선택 (mentor/foreign) - 보라색 테두리 */}
+            <View style={[styles.formGroup, styles.sectionBorderPurple]}>
+              <Text style={styles.formLabel}>🎯 업무 대상 선택 (멘토/원어민)</Text>
+              <View style={styles.roleTypeButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.roleTypeButton,
+                    targetRoleType === 'mentor' && styles.roleTypeButtonMentorActive,
+                  ]}
+                  onPress={() => {
+                    setTargetRoleType('mentor');
+                    setTargetRoles([]);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.roleTypeButtonText,
+                      targetRoleType === 'mentor' && styles.roleTypeButtonTextActive,
+                    ]}
+                  >
+                    멘토용
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.roleTypeButton,
+                    targetRoleType === 'foreign' && styles.roleTypeButtonForeignActive,
+                  ]}
+                  onPress={() => {
+                    setTargetRoleType('foreign');
+                    setTargetRoles([]);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.roleTypeButtonText,
+                      targetRoleType === 'foreign' && styles.roleTypeButtonTextActive,
+                    ]}
+                  >
+                    원어민용
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* 1. 날짜 및 시간 - 파란색 테두리 */}
+            <View style={[styles.formGroup, styles.sectionBorderBlue]}>
+              <Text style={styles.formLabel}>
+                📅 날짜 및 시간 <Text style={styles.required}>*</Text>
+              </Text>
+              
+              {/* 날짜 선택 버튼 */}
+              <TouchableOpacity
+                style={styles.datePickerButton}
+                onPress={() => setShowDatePicker(!showDatePicker)}
+              >
+                <Text style={styles.datePickerButtonText}>
+                  {date.toLocaleDateString('ko-KR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </Text>
+                <Ionicons 
+                  name={showDatePicker ? "chevron-up" : "chevron-down"} 
+                  size={20} 
+                  color="#6b7280" 
+                />
+              </TouchableOpacity>
+
+              {/* 인라인 달력 */}
+              {showDatePicker && (
+                <View style={styles.calendarContainer}>
+                  {/* 월 네비게이션 */}
+                  <View style={styles.calendarHeader}>
+                    <TouchableOpacity
+                      style={styles.calendarNavButton}
+                      onPress={() => {
+                        const newDate = new Date(date);
+                        newDate.setMonth(date.getMonth() - 1);
+                        setDate(newDate);
+                      }}
+                    >
+                      <Ionicons name="chevron-back" size={20} color="#6b7280" />
+                    </TouchableOpacity>
+                    <Text style={styles.calendarTitle}>
+                      {date.getFullYear()}년 {date.getMonth() + 1}월
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.calendarNavButton}
+                      onPress={() => {
+                        const newDate = new Date(date);
+                        newDate.setMonth(date.getMonth() + 1);
+                        setDate(newDate);
+                      }}
+                    >
+                      <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* 요일 헤더 */}
+                  <View style={styles.calendarWeekDays}>
+                    {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
+                      <Text
+                        key={day}
+                        style={[
+                          styles.calendarWeekDayText,
+                          i === 0 && styles.calendarWeekDaySunday,
+                          i === 6 && styles.calendarWeekDaySaturday,
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    ))}
+                  </View>
+
+                  {/* 날짜 그리드 */}
+                  <View style={styles.calendarGrid}>
+                    {renderCalendar()}
+                  </View>
+                </View>
+              )}
+
+              {/* 시간 지정 체크박스 */}
+              <View style={styles.timeCheckboxContainer}>
+                <TouchableOpacity
+                  style={styles.checkboxButton}
+                  onPress={() => setHasTime(!hasTime)}
+                >
+                  <View style={[styles.checkbox, hasTime && styles.checkboxChecked]}>
+                    {hasTime && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>시간 지정</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 시간 입력 */}
+              {hasTime && (
+                <TextInput
+                  style={styles.formInput}
+                  value={time}
+                  onChangeText={setTime}
+                  placeholder="24시간 형식 (예: 14:30)"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numbers-and-punctuation"
+                />
+              )}
+            </View>
+
+            {/* 2. 대상 역할 */}
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>
+                👥 대상 역할 <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.roleButtons}>
+                {roleOptions.map((role) => (
+                  <TouchableOpacity
+                    key={role}
+                    style={[
+                      styles.roleButton,
+                      targetRoles.includes(role) && styles.roleButtonActive,
+                    ]}
+                    onPress={() => toggleRole(role)}
+                  >
+                    <Text
+                      style={[
+                        styles.roleButtonText,
+                        targetRoles.includes(role) && styles.roleButtonTextActive,
+                      ]}
+                    >
+                      {role}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* 3. 대상 그룹 */}
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>
+                🎯 대상 그룹 <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.roleButtons}>
+                {groupOptions.map((group) => (
+                  <TouchableOpacity
+                    key={group}
+                    style={[
+                      styles.groupButton,
+                      targetGroups.includes(group) && styles.groupButtonActive,
+                    ]}
+                    onPress={() => {
+                      setTargetGroups((prev) =>
+                        prev.includes(group)
+                          ? prev.filter((g) => g !== group)
+                          : [...prev, group]
+                      );
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.groupButtonText,
+                        targetGroups.includes(group) && styles.groupButtonTextActive,
+                      ]}
+                    >
+                      {group}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* 4. 우선순위 */}
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>⭐ 우선순위</Text>
+              <View style={styles.priorityButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.priorityButton,
+                    priority === 'high' && styles.priorityButtonHighActive,
+                  ]}
+                  onPress={() => setPriority('high')}
+                >
+                  <Text style={styles.priorityButtonIcon}>🔴</Text>
+                  <Text
+                    style={[
+                      styles.priorityButtonText,
+                      priority === 'high' && styles.priorityButtonTextActive,
+                    ]}
+                  >
+                    중요
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.priorityButton,
+                    priority === 'medium' && styles.priorityButtonMediumActive,
+                  ]}
+                  onPress={() => setPriority('medium')}
+                >
+                  <Text style={styles.priorityButtonIcon}>🟡</Text>
+                  <Text
+                    style={[
+                      styles.priorityButtonText,
+                      priority === 'medium' && styles.priorityButtonTextActive,
+                    ]}
+                  >
+                    보통
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.priorityButton,
+                    priority === 'low' && styles.priorityButtonLowActive,
+                  ]}
+                  onPress={() => setPriority('low')}
+                >
+                  <Text style={styles.priorityButtonIcon}>⚪</Text>
+                  <Text
+                    style={[
+                      styles.priorityButtonText,
+                      priority === 'low' && styles.priorityButtonTextActive,
+                    ]}
+                  >
+                    낮음
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* 5. 업무 제목 */}
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>
+                ✏️ 업무 제목 <Text style={styles.required}>*</Text>
+              </Text>
+              <TextInput
+                style={styles.formInput}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="예: 학생 명단 확인"
+                placeholderTextColor="#9ca3af"
+              />
+            </View>
+
+            {/* 6. 업무 설명 */}
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>📝 업무 설명</Text>
+              <TextInput
+                style={[styles.formInput, styles.formTextArea]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="업무에 대한 상세 설명"
+                placeholderTextColor="#9ca3af"
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+
+            {/* 7. 소요 시간 (옵션) */}
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>⏱️ 예상 소요시간 (선택)</Text>
+              <View style={styles.durationContainer}>
+                <TextInput
+                  style={[styles.formInput, styles.durationInput]}
+                  value={estimatedDuration}
+                  onChangeText={setEstimatedDuration}
+                  placeholder="0"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                />
+                <Text style={styles.durationUnitLabel}>분</Text>
+              </View>
+            </View>
+
+            {/* 8. 첨부파일 및 링크 */}
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>📎 첨부파일 및 링크</Text>
+              
+              {/* 업로드 버튼들 */}
+              <View style={styles.uploadButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.uploadButton}
+                  onPress={handlePickImage}
+                  disabled={uploadingImage}
+                >
+                  <Ionicons name="image-outline" size={16} color="#6b7280" />
+                  <Text style={styles.uploadButtonText}>이미지</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.uploadButton, styles.uploadButtonLink]}
+                  onPress={() => {
+                    if (!linkLabel.trim() || !linkUrl.trim()) {
+                      Alert.alert('알림', '아래 링크 정보를 입력한 후 버튼을 눌러주세요.');
+                      return;
+                    }
+                    setAttachments([
+                      ...attachments,
+                      {
+                        type: 'link',
+                        url: linkUrl.trim(),
+                        label: linkLabel.trim(),
+                      },
+                    ]);
+                    setLinkLabel('');
+                    setLinkUrl('');
+                  }}
+                >
+                  <Ionicons name="link-outline" size={16} color="#1e40af" />
+                  <Text style={[styles.uploadButtonText, styles.uploadButtonTextLink]}>링크</Text>
+                </TouchableOpacity>
+              </View>
+
+              {uploadingImage && (
+                <View style={styles.uploadingContainer}>
+                  <ActivityIndicator size="small" color="#3b82f6" />
+                  <Text style={styles.uploadingText}>업로드 중...</Text>
+                </View>
+              )}
+
+              {/* 링크 입력 필드 */}
+              <View style={styles.linkInputContainer}>
+                <TextInput
+                  style={[styles.formInput, styles.linkInput]}
+                  value={linkLabel}
+                  onChangeText={setLinkLabel}
+                  placeholder="링크 이름 (예: 구글 드라이브)"
+                  placeholderTextColor="#9ca3af"
+                />
+                <TextInput
+                  style={[styles.formInput, styles.linkInput]}
+                  value={linkUrl}
+                  onChangeText={setLinkUrl}
+                  placeholder="URL (https://...)"
+                  placeholderTextColor="#9ca3af"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              {/* 첨부파일 목록 */}
+              {attachments.length > 0 && (
+                <View style={styles.attachmentsList}>
+                  {attachments.map((attachment, index) => (
+                    <View key={index} style={styles.attachmentPreview}>
+                      <View style={styles.attachmentPreviewInfo}>
+                        <Text style={styles.attachmentPreviewIcon}>
+                          {attachment.type === 'image' && '🖼️'}
+                          {attachment.type === 'link' && '🔗'}
+                          {attachment.type === 'file' && '📎'}
+                        </Text>
+                        <Text style={styles.attachmentPreviewLabel} numberOfLines={1}>
+                          {attachment.label}
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={() => {
+                        setAttachments(attachments.filter((_, i) => i !== index));
+                      }}>
+                        <Ionicons name="close-circle" size={20} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </ScrollView>
+
+          {/* 푸터 버튼 */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.cancelModalButton}
+              onPress={onClose}
+              disabled={isSubmitting}
+            >
+              <Text style={styles.cancelModalButtonText}>취소</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.submitModalButton, isSubmitting && styles.submitModalButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.submitModalButtonText}>추가하기</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -1082,5 +1822,471 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
+  },
+  // FAB 스타일
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  // 업무 추가 모달 스타일
+  addModalContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    width: '100%',
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  addModalContent: {
+    padding: 16,
+    maxHeight: 500,
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  sectionBorderPurple: {
+    borderWidth: 1,
+    borderColor: '#d8b4fe',
+    backgroundColor: '#faf5ff',
+    borderRadius: 8,
+    padding: 12,
+  },
+  sectionBorderBlue: {
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    padding: 12,
+  },
+  roleTypeButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  roleTypeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+  },
+  roleTypeButtonMentorActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  roleTypeButtonForeignActive: {
+    backgroundColor: '#10b981',
+    borderColor: '#10b981',
+  },
+  roleTypeButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  roleTypeButtonTextActive: {
+    color: '#ffffff',
+  },
+  timeCheckboxContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  checkboxButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  checkboxLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  datePickerButtonText: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  calendarContainer: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  calendarNavButton: {
+    padding: 4,
+  },
+  calendarTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  calendarWeekDays: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  calendarWeekDayText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  calendarWeekDaySunday: {
+    color: '#ef4444',
+  },
+  calendarWeekDaySaturday: {
+    color: '#3b82f6',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+  },
+  calendarDaySelected: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 6,
+  },
+  calendarDayToday: {
+    backgroundColor: '#dbeafe',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+  },
+  calendarDayText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  calendarDayTextSelected: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  calendarDayTextToday: {
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+  required: {
+    color: '#ef4444',
+  },
+  formInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#111827',
+  },
+  formTextArea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  datePreview: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+  },
+  priorityButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  priorityButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  priorityButtonHighActive: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
+  },
+  priorityButtonMediumActive: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#eab308',
+  },
+  priorityButtonLowActive: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#6b7280',
+  },
+  priorityButtonActive: {
+    borderColor: 'transparent',
+  },
+  priorityButtonIcon: {
+    fontSize: 14,
+  },
+  priorityButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  priorityButtonTextActive: {
+    color: '#374151',
+  },
+  durationContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  durationInput: {
+    flex: 1,
+  },
+  durationUnitLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  durationUnitButtons: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  durationUnitButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  durationUnitButtonActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  durationUnitText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  durationUnitTextActive: {
+    color: '#ffffff',
+  },
+  groupButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  groupButtonActive: {
+    backgroundColor: '#d1fae5',
+    borderColor: '#10b981',
+  },
+  groupButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  groupButtonTextActive: {
+    color: '#065f46',
+  },
+  attachmentsList: {
+    marginTop: 8,
+  },
+  roleButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  roleButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  roleButtonActive: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#3b82f6',
+  },
+  roleButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  roleButtonTextActive: {
+    color: '#1e40af',
+  },
+  linkInputContainer: {
+    flexDirection: 'column',
+    gap: 8,
+    marginTop: 8,
+  },
+  linkInput: {
+    flex: 1,
+  },
+  uploadButtonsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  uploadButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+  },
+  uploadButtonLink: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#93c5fd',
+  },
+  uploadButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  uploadButtonTextLink: {
+    color: '#1e40af',
+  },
+  uploadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  uploadingText: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  attachmentPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  attachmentPreviewInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  attachmentPreviewIcon: {
+    fontSize: 14,
+  },
+  attachmentPreviewLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    flex: 1,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  cancelModalButton: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelModalButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  submitModalButton: {
+    flex: 1,
+    backgroundColor: '#3b82f6',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitModalButtonDisabled: {
+    opacity: 0.5,
+  },
+  submitModalButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
