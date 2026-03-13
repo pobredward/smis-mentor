@@ -197,102 +197,239 @@ export function SharedApplicantsClient({ token }: Props) {
                 const evaluationSummary = user?.evaluationSummary;
                 
                 return (
-                  <div key={app.id} className="px-6 py-5 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {user?.name || '알 수 없음'}
-                          </h3>
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(app)}`}>
-                            {getStatusText(app)}
-                          </span>
+                  <div key={app.id} className="px-6 py-6 border-b border-gray-200 last:border-b-0">
+                    {/* 헤더: 이름과 상태 */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {user?.name || '알 수 없음'}
+                      </h3>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(app)}`}>
+                        {getStatusText(app)}
+                      </span>
+                    </div>
+
+                    {/* 기본 정보 섹션 */}
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        기본 정보
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm bg-gray-50 rounded-lg p-4">
+                        <div>
+                          <span className="font-medium text-gray-600">이메일:</span>
+                          <p className="text-gray-900 mt-1">{user?.email || '-'}</p>
                         </div>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-                          <div className="flex items-center gap-2 text-gray-600">
-                            <span className="font-medium">이메일:</span>
-                            <span>{user?.email || '-'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600">
-                            <span className="font-medium">전화번호:</span>
-                            <span>{user?.phoneNumber || '-'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600">
-                            <span className="font-medium">지원일:</span>
-                            <span>
-                              {format(new Date(app.applicationDate), 'yyyy.MM.dd HH:mm', { locale: ko })}
-                            </span>
-                          </div>
+                        <div>
+                          <span className="font-medium text-gray-600">전화번호:</span>
+                          <p className="text-gray-900 mt-1">{user?.phoneNumber || '-'}</p>
                         </div>
-
-                        {user?.university && (
-                          <div className="mt-2 text-sm text-gray-600">
-                            <span className="font-medium">학교:</span> {user.university}
-                            {user.major1 && ` | 전공: ${user.major1}`}
-                            {user.grade && ` | ${user.grade}학년`}
-                          </div>
-                        )}
-
-                        {/* 평가 점수 요약 */}
-                        {evaluationSummary && (
-                          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {evaluationSummary.documentReview && (
-                              <div className="bg-gray-50 rounded-lg p-3">
-                                <p className="text-xs text-gray-500 mb-1">서류 평가</p>
-                                <p className={`text-lg font-bold ${getScoreTextColor(evaluationSummary.documentReview.averageScore)}`}>
-                                  {evaluationSummary.documentReview.averageScore.toFixed(1)}점
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  {evaluationSummary.documentReview.totalEvaluations}회 평가
-                                </p>
-                              </div>
-                            )}
-                            
-                            {evaluationSummary.interview && (
-                              <div className="bg-gray-50 rounded-lg p-3">
-                                <p className="text-xs text-gray-500 mb-1">면접 평가</p>
-                                <p className={`text-lg font-bold ${getScoreTextColor(evaluationSummary.interview.averageScore)}`}>
-                                  {evaluationSummary.interview.averageScore.toFixed(1)}점
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  {evaluationSummary.interview.totalEvaluations}회 평가
-                                </p>
-                              </div>
-                            )}
-                            
-                            {evaluationSummary.overallAverage > 0 && (
-                              <div className="bg-primary/5 rounded-lg p-3 sm:col-span-2">
-                                <p className="text-xs text-gray-500 mb-1">전체 평균</p>
-                                <p className={`text-lg font-bold ${getScoreTextColor(evaluationSummary.overallAverage)}`}>
-                                  {evaluationSummary.overallAverage.toFixed(1)}점
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  총 {evaluationSummary.totalEvaluations}회 평가
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* 면접 일정 */}
-                        {app.interviewDate && (
-                          <div className="mt-3 p-3 bg-indigo-50 rounded-lg">
-                            <p className="text-sm font-medium text-indigo-900 mb-1">면접 일정</p>
-                            <p className="text-sm text-indigo-700">
-                              {format(new Date(app.interviewDate), 'yyyy년 M월 d일 HH:mm', { locale: ko })}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* 지원 경로 */}
+                        <div>
+                          <span className="font-medium text-gray-600">나이:</span>
+                          <p className="text-gray-900 mt-1">{user?.age ? `${user.age}세` : '-'}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-600">성별:</span>
+                          <p className="text-gray-900 mt-1">{user?.gender === 'M' ? '남성' : user?.gender === 'F' ? '여성' : '-'}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <span className="font-medium text-gray-600">주소:</span>
+                          <p className="text-gray-900 mt-1">
+                            {user?.address || '-'}
+                            {user?.addressDetail && ` (${user.addressDetail})`}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-600">지원일:</span>
+                          <p className="text-gray-900 mt-1">
+                            {format(new Date(app.applicationDate), 'yyyy.MM.dd HH:mm', { locale: ko })}
+                          </p>
+                        </div>
                         {app.applicationPath && (
-                          <div className="mt-2 text-sm text-gray-600">
-                            <span className="font-medium">지원 경로:</span> {app.applicationPath}
+                          <div className="md:col-span-2">
+                            <span className="font-medium text-gray-600">지원 경로:</span>
+                            <p className="text-gray-900 mt-1">
+                              {app.applicationPath}
+                              {user?.referrerName && ` (추천인: ${user.referrerName})`}
+                            </p>
                           </div>
                         )}
                       </div>
                     </div>
+
+                    {/* 학력 정보 */}
+                    {user?.university && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                          </svg>
+                          학력 정보
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm bg-gray-50 rounded-lg p-4">
+                          <div>
+                            <span className="font-medium text-gray-600">학교:</span>
+                            <p className="text-gray-900 mt-1">{user.university}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">학년:</span>
+                            <p className="text-gray-900 mt-1">
+                              {user.grade === 6 ? '졸업생' : user.grade ? `${user.grade}학년` : '-'}
+                              {user.isOnLeave === true && ' (휴학)'}
+                              {user.isOnLeave === false && user.grade !== 6 && ' (재학)'}
+                            </p>
+                          </div>
+                          {user.major1 && (
+                            <div>
+                              <span className="font-medium text-gray-600">전공:</span>
+                              <p className="text-gray-900 mt-1">
+                                {user.major1}
+                                {user.major2 && ` / ${user.major2}`}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 알바 경력 */}
+                    {user?.partTimeJobs && user.partTimeJobs.length > 0 && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          알바 경력
+                        </h4>
+                        <div className="space-y-3">
+                          {user.partTimeJobs.map((job, index) => (
+                            <div key={index} className="bg-gray-50 rounded-lg p-4 text-sm">
+                              <div className="flex items-start justify-between mb-2">
+                                <p className="font-medium text-gray-900">{job.companyName}</p>
+                                <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">{job.period}</span>
+                              </div>
+                              <p className="text-gray-700 mb-1">직책: {job.position}</p>
+                              <p className="text-gray-600 text-xs leading-relaxed">{job.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 멘토링 경력 (jobExperiences) */}
+                    {user?.jobExperiences && user.jobExperiences.length > 0 && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                          </svg>
+                          멘토링 경력
+                        </h4>
+                        <div className="space-y-2">
+                          {user.jobExperiences.map((exp, index) => (
+                            <div key={index} className="bg-gray-50 rounded-lg p-3 text-sm flex items-center justify-between">
+                              <div>
+                                <span className="font-medium text-gray-900">{exp.groupRole}</span>
+                                {exp.classCode && <span className="text-gray-600 ml-2">({exp.classCode})</span>}
+                              </div>
+                              <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
+                                {exp.group === 'junior' ? '초등' : exp.group === 'middle' ? '중등' : exp.group === 'senior' ? '고등' : exp.group}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 자기소개 및 지원동기 */}
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        자기소개 및 지원동기
+                      </h4>
+                      <div className="space-y-4">
+                        {user?.selfIntroduction && (
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-xs font-medium text-gray-600 mb-2">자기소개</p>
+                            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{user.selfIntroduction}</p>
+                          </div>
+                        )}
+                        {user?.jobMotivation && (
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-xs font-medium text-gray-600 mb-2">지원동기</p>
+                            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{user.jobMotivation}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 평가 점수 요약 */}
+                    {evaluationSummary && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          평가 점수
+                        </h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {evaluationSummary.documentReview && (
+                            <div className="bg-gray-50 rounded-lg p-4 text-center">
+                              <p className="text-xs text-gray-500 mb-2">서류 평가</p>
+                              <p className={`text-2xl font-bold ${getScoreTextColor(evaluationSummary.documentReview.averageScore)}`}>
+                                {evaluationSummary.documentReview.averageScore.toFixed(1)}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {evaluationSummary.documentReview.totalEvaluations}회 평가
+                              </p>
+                            </div>
+                          )}
+                          
+                          {evaluationSummary.interview && (
+                            <div className="bg-gray-50 rounded-lg p-4 text-center">
+                              <p className="text-xs text-gray-500 mb-2">면접 평가</p>
+                              <p className={`text-2xl font-bold ${getScoreTextColor(evaluationSummary.interview.averageScore)}`}>
+                                {evaluationSummary.interview.averageScore.toFixed(1)}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {evaluationSummary.interview.totalEvaluations}회 평가
+                              </p>
+                            </div>
+                          )}
+                          
+                          {evaluationSummary.overallAverage > 0 && (
+                            <div className="bg-primary/10 rounded-lg p-4 text-center sm:col-span-2">
+                              <p className="text-xs text-gray-500 mb-2">전체 평균</p>
+                              <p className={`text-2xl font-bold ${getScoreTextColor(evaluationSummary.overallAverage)}`}>
+                                {evaluationSummary.overallAverage.toFixed(1)}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                총 {evaluationSummary.totalEvaluations}회 평가
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 면접 일정 */}
+                    {app.interviewDate && (
+                      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                        <p className="text-sm font-semibold text-indigo-900 mb-1 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          면접 일정
+                        </p>
+                        <p className="text-sm text-indigo-700 ml-6">
+                          {format(new Date(app.interviewDate), 'yyyy년 M월 d일 HH:mm', { locale: ko })}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 );
               })
