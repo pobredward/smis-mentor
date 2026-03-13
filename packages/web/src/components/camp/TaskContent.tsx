@@ -45,6 +45,7 @@ export default function TaskContent() {
   const [showTaskDetail, setShowTaskDetail] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isCopyMode, setIsCopyMode] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
 
@@ -260,26 +261,15 @@ export default function TaskContent() {
       return;
     }
 
-    try {
-      const taskData = {
-        campCode: currentCampCode,
-        title: `${task.title} (복사본)`,
-        description: task.description,
-        targetRoles: task.targetRoles,
-        date: task.date,
-        time: task.time,
-        estimatedDuration: task.estimatedDuration,
-        attachments: task.attachments,
-        createdBy: userData.userId,
-      };
-
-      await createTask(currentCampCode, taskData);
-      await fetchTasks();
-      toast.success('업무가 복사되었습니다.');
-    } catch (error) {
-      console.error('업무 복사 오류:', error);
-      toast.error('업무 복사 중 오류가 발생했습니다.');
-    }
+    // 복사 모달 열기
+    const { id, createdAt, updatedAt, createdBy, completions, ...taskDataWithoutId } = task;
+    setEditingTask({
+      ...taskDataWithoutId,
+      title: `${task.title} (복사본)`,
+    } as Task);
+    setIsCopyMode(true);
+    setShowTaskDetail(false);
+    setShowTaskForm(true);
   };
 
   // 캘린더 렌더링
@@ -484,10 +474,12 @@ export default function TaskContent() {
           campCode={currentCampCode}
           createdBy={userData.userId}
           task={editingTask}
+          isCopyMode={isCopyMode}
           selectedDate={selectedDate}
           onClose={() => {
             setShowTaskForm(false);
             setEditingTask(null);
+            setIsCopyMode(false);
           }}
           onSuccess={() => {
             fetchTasks();
@@ -516,8 +508,6 @@ export default function TaskContent() {
           }}
           onCopy={() => {
             handleCopyTask(selectedTask);
-            setShowTaskDetail(false);
-            setSelectedTask(null);
           }}
           onOpenFullPage={() => {
             router.push(`/camp/tasks/${selectedTask.id}`);

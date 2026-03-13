@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Alert,
   Linking,
@@ -42,6 +43,8 @@ export default function TaskDetailScreen() {
   const [currentGroupRole, setCurrentGroupRole] = useState<JobExperienceGroupRole | null>(null);
 
   const isAdmin = userData?.role === 'admin';
+  const isManager = currentGroupRole === '매니저' || currentGroupRole === 'Manager';
+  const canEditTask = isAdmin || isManager;
 
   useEffect(() => {
     loadTask();
@@ -143,6 +146,44 @@ export default function TaskDetailScreen() {
     }
   };
 
+  const handleEdit = () => {
+    if (!task) return;
+    
+    console.log('handleEdit called, navigating back with editTaskId:', task.id);
+    
+    // handleBack과 동일한 구조로 navigation
+    navigation.navigate('MainTabs', {
+      screen: 'Camp',
+      params: {
+        screen: 'Tasks',
+        params: {
+          selectedDate: task.date.toDate().toISOString(),
+          editTaskId: task.id,
+          refresh: Date.now(),
+        },
+      },
+    } as any);
+  };
+
+  const handleCopy = () => {
+    if (!task) return;
+    
+    console.log('handleCopy called, navigating back with copyTaskId:', task.id);
+    
+    // handleBack과 동일한 구조로 navigation
+    navigation.navigate('MainTabs', {
+      screen: 'Camp',
+      params: {
+        screen: 'Tasks',
+        params: {
+          selectedDate: task.date.toDate().toISOString(),
+          copyTaskId: task.id,
+          refresh: Date.now(),
+        },
+      },
+    } as any);
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -200,13 +241,6 @@ export default function TaskDetailScreen() {
               {isCompleted ? '✓ 완료됨' : '완료 표시'}
             </Text>
           </TouchableOpacity>
-
-          {/* 삭제 버튼 (관리자) */}
-          {isAdmin && (
-            <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-              <Ionicons name="trash-outline" size={20} color="#ef4444" />
-            </TouchableOpacity>
-          )}
         </View>
       </View>
 
@@ -356,6 +390,59 @@ export default function TaskDetailScreen() {
         </View>
       </ScrollView>
 
+      {/* 하단 액션 버튼 (관리자 또는 매니저) */}
+      {canEditTask && (
+        <View style={styles.actionButtons}>
+          <Pressable
+            onPress={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Copy button pressed');
+              handleCopy();
+            }}
+            style={({ pressed }) => [
+              styles.actionButton,
+              styles.copyButton,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.copyButtonText}>복사</Text>
+          </Pressable>
+          <Pressable
+            onPress={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Edit button pressed');
+              handleEdit();
+            }}
+            style={({ pressed }) => [
+              styles.actionButton,
+              styles.editActionButton,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.editActionButtonText}>수정</Text>
+          </Pressable>
+          {isAdmin && (
+            <Pressable
+              onPress={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Delete button pressed');
+                handleDelete();
+              }}
+              style={({ pressed }) => [
+                styles.actionButton,
+                styles.deleteActionButton,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Text style={styles.deleteActionButtonText}>삭제</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       {/* 이미지 확대 모달 */}
       {selectedImage && (
         <RNModal
@@ -425,6 +512,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   shareButton: {
+    padding: 8,
+  },
+  editButton: {
     padding: 8,
   },
   completeButton: {
@@ -560,6 +650,49 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#065f46',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 16,
+    paddingBottom: 20,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonPressed: {
+    opacity: 0.7,
+  },
+  copyButton: {
+    backgroundColor: '#dcfce7',
+  },
+  copyButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#16a34a',
+  },
+  editActionButton: {
+    backgroundColor: '#dbeafe',
+  },
+  editActionButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
+  deleteActionButton: {
+    backgroundColor: '#fee2e2',
+  },
+  deleteActionButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#dc2626',
   },
   imageModal: {
     flex: 1,

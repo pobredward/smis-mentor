@@ -26,6 +26,7 @@ interface TaskFormProps {
   campCode: string;
   createdBy: string;
   task?: Task | null;
+  isCopyMode?: boolean;
   selectedDate: Date;
   onClose: () => void;
   onSuccess: () => void;
@@ -33,8 +34,8 @@ interface TaskFormProps {
 
 const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
 
-export default function TaskFormModal({ campCode, createdBy, task, selectedDate, onClose, onSuccess }: TaskFormProps) {
-  const isEdit = !!task;
+export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = false, selectedDate, onClose, onSuccess }: TaskFormProps) {
+  const isEdit = !!task && !isCopyMode;
 
   // 타겟 role 타입 (멘토용/원어민용) - default는 mentor
   const [targetRoleType, setTargetRoleType] = useState<TargetRoleType>('mentor');
@@ -387,7 +388,7 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
         {/* 헤더 */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">
-            {isEdit ? '업무 수정' : '새 업무 추가'}
+            {isEdit ? '업무 수정' : isCopyMode ? '업무 복사' : '새 업무 추가'}
           </h3>
           <button
             onClick={onClose}
@@ -622,7 +623,7 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="업무에 대한 상세 설명"
-              rows={3}
+              rows={8}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             />
           </div>
@@ -729,7 +730,7 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
             disabled={submitting || uploadingFiles}
             className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? '저장 중...' : isEdit ? '수정하기' : '추가하기'}
+            {submitting ? '저장 중...' : isEdit ? '수정하기' : isCopyMode ? '복사하기' : '추가하기'}
           </button>
         </div>
       </div>

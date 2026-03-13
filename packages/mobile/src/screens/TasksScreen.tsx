@@ -27,6 +27,7 @@ import {
   toggleTaskCompletion,
   deleteTask,
   createTask,
+  updateTask,
   formatTime,
   formatDuration,
   uploadTaskImage,
@@ -78,17 +79,23 @@ export function TasksScreen() {
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const isAdmin = userData?.role === 'admin';
-  const isManager = currentGroupRole === 'manager';
+  const isManager = currentGroupRole === '매니저' || currentGroupRole === 'Manager';
   const canAddTask = isAdmin || isManager;
 
-  // route params에서 selectedDate 및 refresh 가져오기
+  // route params에서 selectedDate 및 refresh, editTaskId 가져오기
   useEffect(() => {
     const params = route.params as any;
-    if (params?.selectedDate) {
+    console.log('TasksScreen received params:', params);
+    
+    // params가 중첩된 경우 처리
+    const actualParams = params?.params || params;
+    
+    if (actualParams?.selectedDate) {
       try {
-        const date = new Date(params.selectedDate);
+        const date = new Date(actualParams.selectedDate);
         if (!isNaN(date.getTime())) {
           setSelectedDate(date);
           setCurrentDate(date);
@@ -97,11 +104,52 @@ export function TasksScreen() {
         console.error('날짜 파라미터 파싱 오류:', error);
       }
     }
-    if (params?.refresh) {
+    
+    // editTaskId 처리 (한 번만 실행)
+    if (actualParams?.editTaskId && tasks.length > 0) {
+      console.log('editTaskId found:', actualParams.editTaskId);
+      const taskToEdit = tasks.find(t => t.id === actualParams.editTaskId);
+      console.log('taskToEdit:', taskToEdit);
+      if (taskToEdit && !editingTask) {
+        setEditingTask(taskToEdit);
+        setShowAddModal(true);
+        
+        // params 초기화 (무한 루프 방지)
+        navigation.setParams({ 
+          params: { 
+            ...actualParams, 
+            editTaskId: undefined 
+          } 
+        } as any);
+      }
+    }
+    
+    // copyTaskId 처리 (한 번만 실행)
+    if (actualParams?.copyTaskId && tasks.length > 0) {
+      console.log('copyTaskId found:', actualParams.copyTaskId);
+      const taskToCopy = tasks.find(t => t.id === actualParams.copyTaskId);
+      console.log('taskToCopy:', taskToCopy);
+      if (taskToCopy && !editingTask) {
+        // 복사할 업무의 데이터를 editingTask에 설정하되, id는 제거
+        const { id, createdAt, updatedAt, createdBy, completions, ...taskDataWithoutId } = taskToCopy;
+        setEditingTask(taskDataWithoutId as any);
+        setShowAddModal(true);
+        
+        // params 초기화 (무한 루프 방지)
+        navigation.setParams({ 
+          params: { 
+            ...actualParams, 
+            copyTaskId: undefined 
+          } 
+        } as any);
+      }
+    }
+    
+    if (actualParams?.refresh) {
       // refresh 파라미터가 있으면 업무 다시 불러오기
       fetchTasks();
     }
-  }, [route.params]);
+  }, [route.params, tasks.length]);
 
   // 활성화된 캠프 정보 가져오기
   const fetchActiveJobCode = async () => {
@@ -461,14 +509,19 @@ export function TasksScreen() {
         </TouchableOpacity>
       )}
 
-      {/* 업무 추가 모달 */}
+      {/* 업무 추가/수정 모달 */}
       <TaskAddModal
         visible={showAddModal}
         campCode={currentCampCode}
         initialDate={selectedDate}
-        onClose={() => setShowAddModal(false)}
+        editingTask={editingTask}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditingTask(null);
+        }}
         onSuccess={() => {
           setShowAddModal(false);
+          setEditingTask(null);
           fetchTasks();
         }}
       />
@@ -549,20 +602,25 @@ function TaskCard({
   );
 }
 
-// 업무 추가 모달 컴포넌트
+// 업무 추가/수정 모달 컴포넌트
 function TaskAddModal({
   visible,
   campCode,
   initialDate,
+  editingTask,
   onClose,
   onSuccess,
 }: {
   visible: boolean;
   campCode: string;
   initialDate?: Date;
+  editingTask?: Task | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const isEdit = !!editingTask?.id;
+  const isCopy = !!editingTask && !editingTask.id;
+  
   // 타겟 역할 타입 (멘토용/원어민용)
   const [targetRoleType, setTargetRoleType] = useState<'mentor' | 'foreign'>('mentor');
   
@@ -593,13 +651,59 @@ function TaskAddModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // 모달이 열릴 때 initialDate로 날짜 초기화
+  // 모달이 열릴 때 초기화 또는 수정/복사 데이터 로드
   useEffect(() => {
-    if (visible && initialDate) {
-      setSelectedDates([initialDate]);
-      setCalendarMonth(initialDate);
+    if (visible) {
+      if (editingTask) {
+        // 수정 또는 복사 모드: 기존 업무 데이터 로드
+        setSelectedDates([editingTask.date.toDate()]);
+        setCalendarMonth(editingTask.date.toDate());
+        
+        // 시간 설정
+        if (editingTask.time) {
+          setHasTime(true);
+          setTime(editingTask.time);
+        } else {
+          setHasTime(false);
+          setTime('');
+        }
+        
+        // 역할 타입 설정
+        const firstRole = editingTask.targetRoles[0];
+        const isForeignRole = Array.from(FOREIGN_GROUP_ROLES).includes(firstRole as any);
+        setTargetRoleType(isForeignRole ? 'foreign' : 'mentor');
+        
+        // 대상 역할 및 그룹 설정
+        setTargetRoles(editingTask.targetRoles);
+        setTargetGroups(editingTask.targetGroups || []);
+        
+        // 제목, 설명, 소요시간 설정
+        setTitle(editingTask.title);
+        setDescription(editingTask.description || '');
+        setEstimatedDuration(editingTask.estimatedDuration ? String(editingTask.estimatedDuration.value) : '');
+        
+        // 첨부파일 설정
+        setAttachments(editingTask.attachments || []);
+      } else {
+        // 추가 모드: 초기화
+        if (initialDate) {
+          setSelectedDates([initialDate]);
+          setCalendarMonth(initialDate);
+        }
+        setHasTime(false);
+        setTime('');
+        setTargetRoleType('mentor');
+        setTargetRoles([]);
+        setTargetGroups([]);
+        setTitle('');
+        setDescription('');
+        setEstimatedDuration('');
+        setAttachments([]);
+        setLinkLabel('');
+        setLinkUrl('');
+      }
     }
-  }, [visible, initialDate]);
+  }, [visible, editingTask, initialDate]);
 
   // roleOptions는 targetRoleType에 따라 동적으로 변경
   const getMentorRoles = (): JobExperienceGroupRole[] => Array.from(MENTOR_GROUP_ROLES);
@@ -833,17 +937,16 @@ function TaskAddModal({
 
     setIsSubmitting(true);
     try {
-      // 선택된 각 날짜에 대해 업무 생성
-      for (const selectedDate of selectedDates) {
+      if (isEdit && editingTask) {
+        // 수정 모드: 기존 업무 수정
         const localDate = new Date(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          selectedDate.getDate(),
+          selectedDates[0].getFullYear(),
+          selectedDates[0].getMonth(),
+          selectedDates[0].getDate(),
           0, 0, 0, 0
         );
 
-        const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'createdBy'> = {
-          campCode,
+        const taskData: Partial<Task> = {
           title: title.trim(),
           description: description.trim(),
           date: Timestamp.fromDate(localDate),
@@ -857,10 +960,38 @@ function TaskAddModal({
           attachments: attachments.length > 0 ? attachments : undefined,
         };
 
-        await createTask(campCode, taskData);
+        await updateTask(editingTask.id, taskData);
+        Alert.alert('성공', '업무가 수정되었습니다.');
+      } else {
+        // 추가 모드: 선택된 각 날짜에 대해 업무 생성
+        for (const selectedDate of selectedDates) {
+          const localDate = new Date(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            selectedDate.getDate(),
+            0, 0, 0, 0
+          );
+
+          const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'createdBy'> = {
+            campCode,
+            title: title.trim(),
+            description: description.trim(),
+            date: Timestamp.fromDate(localDate),
+            time: hasTime && time ? time : undefined,
+            estimatedDuration:
+              estimatedDuration && !isNaN(Number(estimatedDuration))
+                ? { value: Number(estimatedDuration), unit: 'minutes' }
+                : undefined,
+            targetRoles,
+            targetGroups,
+            attachments: attachments.length > 0 ? attachments : undefined,
+          };
+
+          await createTask(campCode, taskData);
+        }
+        
+        Alert.alert('성공', `${selectedDates.length}개의 업무가 추가되었습니다.`);
       }
-      
-      Alert.alert('성공', `${selectedDates.length}개의 업무가 추가되었습니다.`);
       
       // 폼 초기화
       setTargetRoleType('mentor');
@@ -877,8 +1008,8 @@ function TaskAddModal({
       
       onSuccess();
     } catch (error) {
-      console.error('업무 추가 오류:', error);
-      Alert.alert('오류', '업무 추가 중 오류가 발생했습니다.');
+      console.error('업무 처리 오류:', error);
+      Alert.alert('오류', `업무 ${isEdit ? '수정' : '추가'} 중 오류가 발생했습니다.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -893,7 +1024,9 @@ function TaskAddModal({
         >
           <View style={styles.addModalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>새 업무 추가</Text>
+              <Text style={styles.modalTitle}>
+                {isEdit ? '업무 수정' : isCopy ? '업무 복사' : '새 업무 추가'}
+              </Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                 <Ionicons name="close" size={24} color="#9ca3af" />
               </TouchableOpacity>
@@ -1264,7 +1397,9 @@ function TaskAddModal({
               {isSubmitting ? (
                 <ActivityIndicator color="#ffffff" />
               ) : (
-                <Text style={styles.submitModalButtonText}>추가하기</Text>
+                <Text style={styles.submitModalButtonText}>
+                  {isEdit ? '수정하기' : isCopy ? '복사하기' : '추가하기'}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
