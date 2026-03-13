@@ -184,8 +184,8 @@ export function ShareLinkModal({
                     }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 10 / 60 && !customMinutes
-                        ? 'border-primary bg-primary text-white shadow-md'
-                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-blue-500 hover:bg-blue-50'
                     }`}
                   >
                     10분
@@ -198,8 +198,8 @@ export function ShareLinkModal({
                     }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 0.5 && !customMinutes
-                        ? 'border-primary bg-primary text-white shadow-md'
-                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-blue-500 hover:bg-blue-50'
                     }`}
                   >
                     30분
@@ -212,8 +212,8 @@ export function ShareLinkModal({
                     }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 1 && !customMinutes
-                        ? 'border-primary bg-primary text-white shadow-md'
-                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-blue-500 hover:bg-blue-50'
                     }`}
                   >
                     1시간
@@ -226,8 +226,8 @@ export function ShareLinkModal({
                     }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 3 && !customMinutes
-                        ? 'border-primary bg-primary text-white shadow-md'
-                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-blue-500 hover:bg-blue-50'
                     }`}
                   >
                     3시간
@@ -240,8 +240,8 @@ export function ShareLinkModal({
                     }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 24 && !customMinutes
-                        ? 'border-primary bg-primary text-white shadow-md'
-                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-blue-500 hover:bg-blue-50'
                     }`}
                   >
                     1일
@@ -254,8 +254,8 @@ export function ShareLinkModal({
                     }}
                     className={`px-2 sm:px-4 py-2 sm:py-3 rounded-lg border-2 transition-all text-xs sm:text-sm font-medium ${
                       expirationHours === 168 && !customMinutes
-                        ? 'border-primary bg-primary text-white shadow-md'
-                        : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/10'
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                        : 'border-gray-200 text-gray-700 hover:border-blue-500 hover:bg-blue-50'
                     }`}
                   >
                     7일
@@ -273,7 +273,7 @@ export function ShareLinkModal({
                       value={customMinutes}
                       onChange={(e) => setCustomMinutes(e.target.value)}
                       onFocus={() => setExpirationHours(0)}
-                      className="flex-1 px-2 sm:px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-xs sm:text-sm"
+                      className="flex-1 px-2 sm:px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
                       placeholder="분 단위로 입력 (예: 45)"
                     />
                     <span className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">분</span>
