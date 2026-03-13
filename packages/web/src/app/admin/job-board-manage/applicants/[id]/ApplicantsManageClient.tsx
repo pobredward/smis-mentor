@@ -1579,7 +1579,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                   {filteredApplications.map((app) => (
                     <div 
                       key={app.id}
-                      className={`p-2 lg:p-4 hover:bg-gray-50 ${
+                      className={`p-2 lg:p-4 hover:bg-gray-50 ${ 
                         selectedApplication?.id === app.id ? 'bg-blue-50' : ''
                       } ${selectedForShare.includes(app.id) ? 'bg-green-50' : ''}`}
                     >
