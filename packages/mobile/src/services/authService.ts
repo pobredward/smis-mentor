@@ -17,8 +17,15 @@ import {
   where,
   Timestamp,
 } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../config/firebase';
 import { User } from '../types';
+
+const STORAGE_KEYS = {
+  REMEMBER_ME: '@smis_remember_me',
+  SAVED_EMAIL: '@smis_saved_email',
+  LOGIN_EXPIRY: '@smis_login_expiry',
+} as const;
 
 // 사용자 조회
 export const getUserByEmail = async (email: string): Promise<User | null> => {
@@ -191,7 +198,12 @@ export const resetPassword = async (email: string) => {
 
 export const signOut = async () => {
   try {
+    // Firebase 로그아웃
     await firebaseSignOut(auth);
+    
+    // 저장된 로그인 정보 삭제 (단, 사용자가 명시적으로 로그아웃하는 경우에만)
+    // "로그인 저장" 기능은 유지하되, 로그아웃 시에는 세션을 완전히 종료
+    // 다음 로그인 시 다시 "로그인 저장"을 선택할 수 있음
   } catch (error) {
     console.error('로그아웃 실패:', error);
     throw error;
