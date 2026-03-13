@@ -4,12 +4,6 @@ import { useState } from 'react';
 import type { Task } from '@smis-mentor/shared/types/camp';
 import { formatTime, formatDuration } from '@/lib/taskService';
 
-const priorityConfig = {
-  high: { icon: '🔴', label: '중요', color: 'text-red-500' },
-  medium: { icon: '🟡', label: '보통', color: 'text-yellow-600' },
-  low: { icon: '⚪', label: '낮음', color: 'text-gray-500' },
-};
-
 interface TaskDetailModalProps {
   task: Task;
   isAdmin: boolean;
@@ -28,7 +22,6 @@ export default function TaskDetailModal({
   onCopy,
 }: TaskDetailModalProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const priorityInfo = priorityConfig[task.priority];
   const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
@@ -60,12 +53,8 @@ export default function TaskDetailModal({
 
           {/* 내용 - 간격 줄이기 */}
           <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
-            {/* 제목 및 우선순위 */}
+            {/* 제목 */}
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`text-xl ${priorityInfo.color}`}>{priorityInfo.icon}</span>
-                <span className={`text-xs font-medium ${priorityInfo.color}`}>우선순위: {priorityInfo.label}</span>
-              </div>
               <h4 className="text-lg font-bold text-gray-900">{task.title}</h4>
             </div>
 

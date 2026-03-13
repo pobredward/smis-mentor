@@ -47,12 +47,6 @@ interface JobCodeWithGroup {
 
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
-const priorityConfig = {
-  high: { color: '#ef4444', label: '중요', icon: '🔴' },
-  medium: { color: '#eab308', label: '보통', icon: '🟡' },
-  low: { color: '#6b7280', label: '낮음', icon: '⚪' },
-};
-
 export function TasksScreen() {
   const { userData, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -208,7 +202,7 @@ export function TasksScreen() {
     const startDayOfWeek = firstDay.getDay();
     const daysInMonth = lastDay.getDate();
 
-    const days: JSX.Element[] = [];
+    const days: React.ReactElement[] = [];
 
     // 빈 칸 추가
     for (let i = 0; i < startDayOfWeek; i++) {
@@ -428,7 +422,6 @@ function TaskCard({
   onPress: () => void;
 }) {
   const isCompleted = task.completions.some(c => c.userId === currentUserId);
-  const priorityInfo = priorityConfig[task.priority];
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
 
@@ -458,12 +451,6 @@ function TaskCard({
             {timeStr && (
               <Text style={styles.taskTime}>{timeStr}</Text>
             )}
-            <View style={styles.priorityBadge}>
-              <Text style={styles.priorityIcon}>{priorityInfo.icon}</Text>
-              <Text style={[styles.priorityLabel, { color: priorityInfo.color }]}>
-                {priorityInfo.label}
-              </Text>
-            </View>
             {durationStr && (
               <Text style={styles.taskDuration}>{durationStr}</Text>
             )}
@@ -506,7 +493,6 @@ function TaskDetailModal({
   isAdmin: boolean;
   onClose: () => void;
 }) {
-  const priorityInfo = priorityConfig[task.priority];
   const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
@@ -540,16 +526,8 @@ function TaskDetailModal({
 
           {/* 내용 */}
           <ScrollView style={styles.modalContent}>
-            {/* 제목 및 우선순위 */}
+            {/* 제목 */}
             <View style={styles.modalSection}>
-              <View style={styles.priorityRow}>
-                <Text style={[styles.priorityIcon, { color: priorityInfo.color }]}>
-                  {priorityInfo.icon}
-                </Text>
-                <Text style={[styles.priorityText, { color: priorityInfo.color }]}>
-                  우선순위: {priorityInfo.label}
-                </Text>
-              </View>
               <Text style={styles.modalTaskTitle}>{task.title}</Text>
             </View>
 
@@ -731,9 +709,6 @@ function TaskAddModal({
   // 대상 그룹
   const [targetGroups, setTargetGroups] = useState<JobExperienceGroup[]>([]);
   
-  // 우선순위
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
-  
   // 업무 제목 & 설명
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -768,7 +743,7 @@ function TaskAddModal({
     const startDayOfWeek = firstDay.getDay();
     const daysInMonth = lastDay.getDate();
 
-    const days: JSX.Element[] = [];
+    const days: React.ReactElement[] = [];
 
     // 빈 칸 추가
     for (let i = 0; i < startDayOfWeek; i++) {
@@ -922,19 +897,18 @@ function TaskAddModal({
         0, 0, 0, 0
       );
 
-      const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions'> = {
+      const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'createdBy'> = {
         campCode,
         title: title.trim(),
-        description: description.trim() || undefined,
+        description: description.trim(),
         date: Timestamp.fromDate(localDate),
         time: hasTime && time ? time : undefined,
-        priority,
         estimatedDuration:
           estimatedDuration && !isNaN(Number(estimatedDuration))
             ? { value: Number(estimatedDuration), unit: 'minutes' }
             : undefined,
         targetRoles,
-        targetGroups: targetGroups.length > 0 ? targetGroups : undefined,
+        targetGroups,
         attachments: attachments.length > 0 ? attachments : undefined,
       };
 
@@ -948,7 +922,6 @@ function TaskAddModal({
       setHasTime(false);
       setTargetRoles([]);
       setTargetGroups([]);
-      setPriority('medium');
       setTitle('');
       setDescription('');
       setEstimatedDuration('');
@@ -1186,65 +1159,7 @@ function TaskAddModal({
               </View>
             </View>
 
-            {/* 4. 우선순위 */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>⭐ 우선순위</Text>
-              <View style={styles.priorityButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.priorityButton,
-                    priority === 'high' && styles.priorityButtonHighActive,
-                  ]}
-                  onPress={() => setPriority('high')}
-                >
-                  <Text style={styles.priorityButtonIcon}>🔴</Text>
-                  <Text
-                    style={[
-                      styles.priorityButtonText,
-                      priority === 'high' && styles.priorityButtonTextActive,
-                    ]}
-                  >
-                    중요
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.priorityButton,
-                    priority === 'medium' && styles.priorityButtonMediumActive,
-                  ]}
-                  onPress={() => setPriority('medium')}
-                >
-                  <Text style={styles.priorityButtonIcon}>🟡</Text>
-                  <Text
-                    style={[
-                      styles.priorityButtonText,
-                      priority === 'medium' && styles.priorityButtonTextActive,
-                    ]}
-                  >
-                    보통
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.priorityButton,
-                    priority === 'low' && styles.priorityButtonLowActive,
-                  ]}
-                  onPress={() => setPriority('low')}
-                >
-                  <Text style={styles.priorityButtonIcon}>⚪</Text>
-                  <Text
-                    style={[
-                      styles.priorityButtonText,
-                      priority === 'low' && styles.priorityButtonTextActive,
-                    ]}
-                  >
-                    낮음
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* 5. 업무 제목 */}
+            {/* 4. 업무 제목 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>
                 ✏️ 업무 제목 <Text style={styles.required}>*</Text>
@@ -1258,7 +1173,7 @@ function TaskAddModal({
               />
             </View>
 
-            {/* 6. 업무 설명 */}
+            {/* 5. 업무 설명 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>📝 업무 설명</Text>
               <TextInput
@@ -1273,7 +1188,7 @@ function TaskAddModal({
               />
             </View>
 
-            {/* 7. 소요 시간 (옵션) */}
+            {/* 6. 소요 시간 (옵션) */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>⏱️ 예상 소요시간 (선택)</Text>
               <View style={styles.durationContainer}>
@@ -1289,7 +1204,7 @@ function TaskAddModal({
               </View>
             </View>
 
-            {/* 8. 첨부파일 및 링크 */}
+            {/* 7. 첨부파일 및 링크 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>📎 첨부파일 및 링크</Text>
               
@@ -1600,18 +1515,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#3b82f6',
   },
-  priorityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  priorityIcon: {
-    fontSize: 12,
-  },
-  priorityLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
   taskDuration: {
     fontSize: 11,
     color: '#6b7280',
@@ -1680,19 +1583,6 @@ const styles = StyleSheet.create({
   },
   modalSection: {
     marginBottom: 16,
-  },
-  priorityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  priorityIcon: {
-    fontSize: 20,
-  },
-  priorityText: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   modalTaskTitle: {
     fontSize: 18,
@@ -2054,45 +1944,6 @@ const styles = StyleSheet.create({
   priorityButtons: {
     flexDirection: 'row',
     gap: 8,
-  },
-  priorityButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  priorityButtonHighActive: {
-    backgroundColor: '#fee2e2',
-    borderColor: '#ef4444',
-  },
-  priorityButtonMediumActive: {
-    backgroundColor: '#fef3c7',
-    borderColor: '#eab308',
-  },
-  priorityButtonLowActive: {
-    backgroundColor: '#f3f4f6',
-    borderColor: '#6b7280',
-  },
-  priorityButtonActive: {
-    borderColor: 'transparent',
-  },
-  priorityButtonIcon: {
-    fontSize: 14,
-  },
-  priorityButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  priorityButtonTextActive: {
-    color: '#374151',
   },
   durationContainer: {
     flexDirection: 'row',

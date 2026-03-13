@@ -59,9 +59,6 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
   // 대상 그룹 (새로 추가)
   const [selectedGroups, setSelectedGroups] = useState<JobExperienceGroup[]>(task?.targetGroups || []);
 
-  // 우선순위
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(task?.priority || 'medium');
-
   // 업무 제목 & 설명
   const [title, setTitle] = useState(task?.title || '');
   const [description, setDescription] = useState(task?.description || '');
@@ -255,7 +252,6 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
             }
           : undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
-        priority,
         createdBy,
       };
 
@@ -491,47 +487,7 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
             </div>
           </div>
 
-          {/* 3. 우선순위 */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">⭐ 우선순위</label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setPriority('high')}
-                className={`flex-1 px-3 py-2 border rounded-lg transition-all text-xs flex items-center justify-center gap-1.5 ${
-                  priority === 'high'
-                    ? 'bg-red-100 border-red-500 text-red-700'
-                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                🔴 <span className="font-medium">중요</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPriority('medium')}
-                className={`flex-1 px-3 py-2 border rounded-lg transition-all text-xs flex items-center justify-center gap-1.5 ${
-                  priority === 'medium'
-                    ? 'bg-yellow-100 border-yellow-500 text-yellow-700'
-                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                🟡 <span className="font-medium">보통</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPriority('low')}
-                className={`flex-1 px-3 py-2 border rounded-lg transition-all text-xs flex items-center justify-center gap-1.5 ${
-                  priority === 'low'
-                    ? 'bg-gray-100 border-gray-500 text-gray-700'
-                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                ⚪ <span className="font-medium">낮음</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 4. 업무 제목 */}
+          {/* 3. 업무 제목 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               ✏️ 업무 제목 <span className="text-red-500">*</span>
@@ -546,7 +502,7 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
             />
           </div>
 
-          {/* 5. 업무 설명 */}
+          {/* 4. 업무 설명 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">📝 업무 설명</label>
             <textarea
@@ -558,7 +514,7 @@ export default function TaskFormModal({ campCode, createdBy, task, selectedDate,
             />
           </div>
 
-          {/* 소요 시간 (옵션) */}
+          {/* 5. 소요 시간 (옵션) */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">⏱️ 예상 소요시간 (선택)</label>
             <div className="flex items-center gap-2">
