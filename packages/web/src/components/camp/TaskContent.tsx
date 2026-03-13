@@ -173,6 +173,36 @@ export default function TaskContent() {
     }
   }, [currentDate, currentCampCode]);
 
+  // selectedDate가 변경될 때 해당 날짜의 업무 로드
+  useEffect(() => {
+    if (currentCampCode && selectedDate) {
+      loadTasksForDate(selectedDate);
+    }
+  }, [selectedDate, currentCampCode]);
+
+  // 페이지 포커스 시 업무 새로고침 (다른 페이지에서 돌아올 때)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && currentCampCode && selectedDate) {
+        loadTasksForDate(selectedDate);
+      }
+    };
+
+    const handleFocus = () => {
+      if (currentCampCode && selectedDate) {
+        loadTasksForDate(selectedDate);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [currentCampCode, selectedDate]);
+
   // 날짜 클릭 핸들러 - URL 업데이트
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);

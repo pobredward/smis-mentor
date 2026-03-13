@@ -204,6 +204,24 @@ export function TasksScreen() {
     }
   }, [currentDate, currentCampCode]);
 
+  // selectedDate가 변경될 때 해당 날짜의 업무 로드
+  useEffect(() => {
+    if (currentCampCode && selectedDate) {
+      loadTasksForDate(selectedDate);
+    }
+  }, [selectedDate, currentCampCode]);
+
+  // 화면 포커스 시 업무 새로고침 (다른 화면에서 돌아올 때)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (currentCampCode && selectedDate) {
+        loadTasksForDate(selectedDate);
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, currentCampCode, selectedDate]);
+
   // 날짜 클릭 핸들러
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
@@ -517,7 +535,7 @@ function TaskCard({
             e.stopPropagation();
             onToggle(task.id);
           }}
-          style={styles.checkbox}
+          style={styles.taskCheckbox}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons
@@ -1010,7 +1028,7 @@ function TaskAddModal({
                   style={styles.checkboxButton}
                   onPress={() => setHasTime(!hasTime)}
                 >
-                  <View style={[styles.checkbox, hasTime && styles.checkboxChecked]}>
+                  <View style={[styles.timeCheckbox, hasTime && styles.checkboxChecked]}>
                     {hasTime && <Ionicons name="checkmark" size={14} color="#ffffff" />}
                   </View>
                   <Text style={styles.checkboxLabel}>시간 지정</Text>
@@ -1435,7 +1453,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
   },
-  checkbox: {
+  taskCheckbox: {
     marginTop: 4,
     padding: 4,
   },
@@ -1641,11 +1659,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#065f46',
   },
-  modalFooter: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
   closeModalButton: {
     backgroundColor: '#f3f4f6',
     paddingVertical: 12,
@@ -1751,7 +1764,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  checkbox: {
+  timeCheckbox: {
     width: 20,
     height: 20,
     borderRadius: 4,
