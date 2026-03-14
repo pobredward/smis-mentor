@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
+// @ts-ignore - date-holidays 타입 정의가 없음
+import Holidays from 'date-holidays';
 import {
   getTasksByCampCode,
   getTasksByDate,
@@ -22,6 +24,16 @@ import TaskFormModal from './TaskFormModal';
 import TaskDetailModal from './TaskDetailModal';
 
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+
+// @ts-ignore
+const hd = new Holidays('KR');
+
+const ADDITIONAL_HOLIDAYS: Record<string, string> = {
+  '2026-03-02': '삼일절 대체휴일',
+  '2026-05-06': '어린이날 대체휴일',
+  '2026-08-17': '광복절 대체휴일',
+  '2026-10-05': '개천절 대체휴일',
+};
 
 export default function TaskContent() {
   const searchParams = useSearchParams();
@@ -299,6 +311,21 @@ export default function TaskContent() {
     }
   };
 
+  // 공휴일 확인 함수
+  const isHoliday = useMemo(() => {
+    return (date: Date) => {
+      const holidays = hd.isHoliday(date);
+      if (holidays !== false) return true;
+      
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      
+      return dateStr in ADDITIONAL_HOLIDAYS;
+    };
+  }, []);
+
   // 캘린더 렌더링
   const renderCalendar = () => {
     const year = currentDate.getFullYear();
@@ -328,6 +355,10 @@ export default function TaskContent() {
       const hasTask = taskDates.has(dateStr);
       const isSelected = selectedDate.toDateString() === date.toDateString();
       const isToday = new Date().toDateString() === date.toDateString();
+      const dayOfWeek = date.getDay();
+      const isSunday = dayOfWeek === 0;
+      const isSaturday = dayOfWeek === 6;
+      const isHolidayDate = isHoliday(date);
 
       days.push(
         <button
@@ -343,7 +374,17 @@ export default function TaskContent() {
               : 'hover:bg-gray-50 text-gray-500'
           }`}
         >
-          <span className="text-xs">{day}</span>
+          <span 
+            className={`text-xs ${
+              !isSelected && (isSunday || isHolidayDate) 
+                ? 'text-red-500' 
+                : !isSelected && isSaturday 
+                ? 'text-blue-500' 
+                : ''
+            }`}
+          >
+            {day}
+          </span>
           {hasTask && !isSelected && (
             <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 rounded-full bg-blue-500" />
           )}
@@ -559,7 +600,7 @@ function TaskCard({
   onToggle: (taskId: string) => void;
   onClick: () => void;
 }) {
-  const isCompleted = task.completions.some(c => c.userId === currentUserId);
+  const isCompleted = task.completions.some((c: { userId: string }) => c.userId === currentUserId);
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
 

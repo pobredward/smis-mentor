@@ -341,7 +341,8 @@ export function TasksScreen() {
       const isSelected = selectedDate.toDateString() === date.toDateString();
       const isToday = new Date().toDateString() === date.toDateString();
       const dayOfWeek = date.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isSunday = dayOfWeek === 0;
+      const isSaturday = dayOfWeek === 6;
       const isHolidayDate = isHoliday(date);
 
       days.push(
@@ -358,7 +359,8 @@ export function TasksScreen() {
           <Text
             style={[
               styles.calendarDayText,
-              (isWeekend || isHolidayDate) && !isSelected && styles.calendarDayTextWeekend,
+              (isSunday || isHolidayDate) && !isSelected && styles.calendarDayTextSundayHoliday,
+              isSaturday && !isSelected && styles.calendarDayTextSaturday,
               isSelected && styles.calendarDayTextSelected,
               isToday && !isSelected && styles.calendarDayTextToday,
             ]}
@@ -794,7 +796,8 @@ function TaskAddModal({
         today.getMonth() === month && 
         today.getFullYear() === year;
       const dayOfWeek = currentDate.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isSunday = dayOfWeek === 0;
+      const isSaturday = dayOfWeek === 6;
       
       // 공휴일 체크 (라이브러리 + 추가 공휴일)
       const holidays = hd.isHoliday(currentDate);
@@ -823,7 +826,8 @@ function TaskAddModal({
             <Text
               style={[
                 styles.modalCalendarDayText,
-                (isWeekend || isHolidayDate) && !isSelected && styles.calendarDayTextWeekend,
+                (isSunday || isHolidayDate) && !isSelected && styles.calendarDayTextSundayHoliday,
+                isSaturday && !isSelected && styles.calendarDayTextSaturday,
                 isSelected && styles.calendarDayTextSelected,
                 isToday && !isSelected && styles.calendarDayTextToday,
               ]}
@@ -1515,8 +1519,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6b7280',
   },
-  calendarDayTextWeekend: {
+  calendarDayTextSundayHoliday: {
     color: '#ef4444',
+  },
+  calendarDayTextSaturday: {
+    color: '#3b82f6',
   },
   calendarDayTextSelected: {
     color: '#ffffff',
