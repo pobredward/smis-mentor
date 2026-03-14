@@ -9,9 +9,10 @@ export const size = {
 };
 export const contentType = 'image/png';
 
-export default async function Image({ params }: { params: { taskId: string } }) {
+export default async function Image({ params }: { params: Promise<{ taskId: string }> }) {
   try {
-    const task = await getTaskById(params.taskId);
+    const { taskId } = await params;
+    const task = await getTaskById(taskId);
     
     if (!task) {
       return new ImageResponse(

@@ -4,10 +4,11 @@ import { getTaskById } from '@/lib/taskService';
 export async function generateMetadata({ 
   params 
 }: { 
-  params: { taskId: string } 
+  params: Promise<{ taskId: string }> 
 }): Promise<Metadata> {
   try {
-    const task = await getTaskById(params.taskId);
+    const { taskId } = await params;
+    const task = await getTaskById(taskId);
     
     if (!task) {
       return {
@@ -26,7 +27,7 @@ export async function generateMetadata({
     
     const timeStr = task.time ? ` ${task.time}` : '';
     const description = `${dateStr}${timeStr}`;
-    const url = `https://www.smis-mentor.com/camp/tasks/${params.taskId}`;
+    const url = `https://www.smis-mentor.com/camp/tasks/${taskId}`;
 
     return {
       title: `${task.title} - SMIS 멘토 업무`,
@@ -39,7 +40,7 @@ export async function generateMetadata({
         type: 'article',
         images: [
           {
-            url: `/camp/tasks/${params.taskId}/opengraph-image`,
+            url: `https://www.smis-mentor.com/camp/tasks/${taskId}/opengraph-image`,
             width: 1200,
             height: 630,
             alt: task.title,
@@ -50,7 +51,7 @@ export async function generateMetadata({
         card: 'summary_large_image',
         title: task.title,
         description: description,
-        images: [`/camp/tasks/${params.taskId}/opengraph-image`],
+        images: [`https://www.smis-mentor.com/camp/tasks/${taskId}/opengraph-image`],
       },
     };
   } catch (error) {
