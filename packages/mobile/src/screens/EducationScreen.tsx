@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   toggleText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: '#64748b',
   },

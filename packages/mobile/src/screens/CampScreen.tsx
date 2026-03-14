@@ -108,10 +108,10 @@ const styles = StyleSheet.create({
     minHeight: 42,
   },
   tabActive: {
-    // 활성 탭 추가 스타일
+    // 활성 탭 추가 스타일.
   },
   tabText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: '#64748b',
     textAlign: 'center',

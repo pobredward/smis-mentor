@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   buttonText: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#64748b',
     fontWeight: '600',
   },
