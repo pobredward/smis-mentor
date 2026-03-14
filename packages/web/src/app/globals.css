@@ -42,3 +42,10 @@ body {
     padding: 3rem 2rem;
   }
 }
+
+/* 모바일에서 하단 네비게이션 여백 추가 */
+@media (max-width: 768px) {
+  .notion-page-wrapper {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+}
