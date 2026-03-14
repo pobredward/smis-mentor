@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, ReactNode, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useAuth } from './AuthContext';
 import { generationResourcesService, ResourceLink } from '../services';
@@ -65,7 +65,9 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
 
         const allSheets = [...(resources.scheduleLinks || []), ...(resources.guideLinks || [])];
         const initialLoadingStates = allSheets.reduce((acc, sheet) => ({ ...acc, [sheet.id]: true }), {});
-        const initialZoomLevels = allSheets.reduce((acc, sheet) => ({ ...acc, [sheet.id]: 0.6 }), {});
+        // Android는 1.0, iOS는 0.6 기본 줌
+        const defaultZoom = Platform.OS === 'android' ? 1.0 : 0.6;
+        const initialZoomLevels = allSheets.reduce((acc, sheet) => ({ ...acc, [sheet.id]: defaultZoom }), {});
         
         setLoadingStates(initialLoadingStates);
         setZoomLevelsState(initialZoomLevels);
@@ -131,8 +133,9 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
     // Notion 페이지 확인
     const isNotionPage = sheet.url.includes('notion.site') || sheet.url.includes('notion.so');
     
-    // Notion 페이지는 zoom 1.0, 구글 시트는 0.6
-    const initialZoom = isNotionPage ? 1.0 : (zoomLevels[id] || 0.6);
+    // Android는 1.0, iOS는 0.6 기본 줌 (Notion 페이지는 1.0)
+    const defaultZoom = Platform.OS === 'android' ? 1.0 : 0.6;
+    const initialZoom = isNotionPage ? 1.0 : (zoomLevels[id] || defaultZoom);
 
     return (
       <WebView

@@ -12,6 +12,8 @@ import {
   Modal as RNModal,
   SafeAreaView,
   Share,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -474,6 +476,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0,
   },
   centerContainer: {
     flex: 1,
@@ -655,7 +658,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     padding: 16,
-    paddingBottom: 20,
+    paddingBottom: Platform.OS === 'android' ? 32 : 20,
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',

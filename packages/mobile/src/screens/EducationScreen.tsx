@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 10,
     backgroundColor: '#f1f5f9',
   },
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   toggleText: {
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: '600',
     color: '#64748b',
   },

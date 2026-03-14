@@ -96,21 +96,22 @@ const styles = StyleSheet.create({
   },
   tabBarContent: {
     flexDirection: 'row',
-    minHeight: 48,
+    minHeight: 42,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 48,
+    minHeight: 42,
   },
   tabActive: {
     // 활성 탭 추가 스타일
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: '600',
     color: '#64748b',
     textAlign: 'center',

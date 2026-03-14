@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
 import { useAuth } from '../context/AuthContext';
@@ -30,8 +30,10 @@ export function ScheduleScreen() {
   // 선택된 시간표가 구글 시트인지 확인
   const isSelectedScheduleGoogleSheet = selectedSchedule ? isGoogleSheet(selectedSchedule.url) : false;
   
-  // 구글 시트가 아닌 경우 기본 줌을 1.0(100%)로 설정
-  const defaultZoom = isSelectedScheduleGoogleSheet ? 0.6 : 1.0;
+  // 구글 시트가 아닌 경우 기본 줌을 1.0(100%)로 설정, 구글 시트는 플랫폼별로 설정
+  const defaultZoom = isSelectedScheduleGoogleSheet 
+    ? (Platform.OS === 'android' ? 1.0 : 0.6)
+    : 1.0;
   const currentZoom = selectedScheduleId ? (zoomLevels[selectedScheduleId] || defaultZoom) : defaultZoom;
   const isLoading = selectedScheduleId ? (loadingStates[selectedScheduleId] ?? true) : true;
 
@@ -488,7 +490,7 @@ const styles = StyleSheet.create({
   },
   button: {
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 10,
     backgroundColor: '#f1f5f9',
   },
@@ -502,7 +504,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   buttonText: {
-    fontSize: 13,
+    fontSize: 10,
     color: '#64748b',
     fontWeight: '600',
   },

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
 import { useAuth } from '../context/AuthContext';
@@ -21,7 +21,9 @@ export function GuideScreen() {
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
   const selectedGuide = guides.find(g => g.id === selectedGuideId) || guides[0];
-  const currentZoom = selectedGuideId ? (zoomLevels[selectedGuideId] || 0.6) : 0.6;
+  // Android는 1.0, iOS는 0.6 기본 줌
+  const defaultZoom = Platform.OS === 'android' ? 1.0 : 0.6;
+  const currentZoom = selectedGuideId ? (zoomLevels[selectedGuideId] || defaultZoom) : defaultZoom;
   const isLoading = selectedGuideId ? (loadingStates[selectedGuideId] ?? true) : true;
 
   const handleZoomIn = () => {
@@ -464,7 +466,7 @@ const styles = StyleSheet.create({
   },
   button: {
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 10,
     backgroundColor: '#f1f5f9',
   },
@@ -478,7 +480,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   buttonText: {
-    fontSize: 13,
+    fontSize: 10,
     color: '#64748b',
     fontWeight: '600',
   },
