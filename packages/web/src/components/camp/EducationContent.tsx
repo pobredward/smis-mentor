@@ -1,37 +1,34 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generationResourcesService, ResourceLink } from '@/lib/generationResourcesService';
+import { NotionPage } from '@/components/notion/NotionPage';
 
-// Notion URL을 임베드 가능한 URL로 변환
-const convertToEmbedUrl = (url: string): string => {
-  // 이미 임베드 URL인 경우
-  if (url.includes('/ebd//') || url.includes('embed.notion.site')) {
-    return url;
-  }
-  
-  // 일반 Notion URL을 임베드 URL로 변환
-  if (url.includes('notion.site/') || url.includes('notion.so/')) {
-    try {
-      const urlObj = new URL(url);
-      const pathname = urlObj.pathname;
-      const hash = urlObj.hash;
-      
-      // pathname에서 페이지 ID 추출
-      const pageIdMatch = pathname.match(/([a-zA-Z0-9]{32}|[a-zA-Z0-9]{8}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{12})/);
-      
-      if (pageIdMatch) {
-        const pageId = pageIdMatch[1];
-        // 임베드 URL 형식으로 변환
-        return `https://${urlObj.hostname}/ebd//${pageId}${hash}`;
-      }
-    } catch (e) {
-      console.error('URL 변환 오류:', e);
+// Notion URL에서 페이지 ID 추출
+const extractNotionPageId = (url: string): string | null => {
+  try {
+    // 이미 32자 ID인 경우
+    if (/^[a-f0-9]{32}$/.test(url)) {
+      return url;
     }
+    
+    // UUID 형식 (8-4-4-4-12)
+    if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(url)) {
+      return url.replace(/-/g, '');
+    }
+    
+    // Notion URL에서 ID 추출
+    const urlMatch = url.match(/([a-f0-9]{32})|([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
+    if (urlMatch) {
+      return urlMatch[0].replace(/-/g, '');
+    }
+    
+    return null;
+  } catch (e) {
+    console.error('Failed to extract Notion page ID:', e);
+    return null;
   }
-  
-  return url;
 };
 
 export default function EducationContent() {
@@ -39,7 +36,6 @@ export default function EducationContent() {
   const [educationLinks, setEducationLinks] = useState<ResourceLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
@@ -421,54 +417,37 @@ export default function EducationContent() {
       </div>
 
       {/* 선택된 링크 표시 */}
-      <div className="h-full bg-white relative">
+      <div className="h-full bg-white relative overflow-auto">
         {educationLinks.map((link) => {
           const isVisible = selectedLinkId === link.id;
           
           if (!isVisible) return null;
 
-          return (
-            <div
-              key={link.id}
-              className="w-full h-full"
-            >
-              {/* 새로고침 버튼 (우측 상단 고정) */}
-              <button
-                onClick={() => {
-                  const iframe = document.getElementById(`notion-iframe-${link.id}`) as HTMLIFrameElement;
-                  if (iframe) {
-                    setRefreshing(prev => ({ ...prev, [link.id]: true }));
-                    iframe.src = iframe.src;
-                    // 2초 후 새로고침 상태 해제 (iframe onLoad 이벤트가 신뢰할 수 없으므로)
-                    setTimeout(() => {
-                      setRefreshing(prev => ({ ...prev, [link.id]: false }));
-                    }, 2000);
-                  }
-                }}
-                disabled={refreshing[link.id]}
-                className="absolute top-2 right-2 z-10 p-2 bg-white/90 hover:bg-white border border-gray-300 rounded-lg transition-colors shadow-lg backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                title={refreshing[link.id] ? "새로고침 중..." : "페이지 새로고침"}
-              >
-                <svg 
-                  className={`w-4 h-4 text-gray-700 ${refreshing[link.id] ? 'animate-spin' : ''}`} 
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+          const pageId = extractNotionPageId(link.url);
 
-              {/* iframe 영역 */}
-              <iframe
-                id={`notion-iframe-${link.id}`}
-                src={convertToEmbedUrl(link.url)}
-                className="w-full h-full border-0"
-                title={link.title}
-                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox"
-                referrerPolicy="no-referrer"
-                allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"
-              />
+          // Notion 페이지가 아닌 경우 (예: 외부 링크)
+          if (!pageId) {
+            return (
+              <div key={link.id} className="flex flex-col items-center justify-center h-full p-8 text-center">
+                <svg className="w-12 h-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                <p className="text-gray-600 mb-4">이 링크는 Notion 페이지가 아닙니다</p>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  새 탭에서 열기
+                </a>
+              </div>
+            );
+          }
+
+          return (
+            <div key={link.id} className="w-full h-full">
+              <NotionPage pageId={pageId} />
             </div>
           );
         })}
