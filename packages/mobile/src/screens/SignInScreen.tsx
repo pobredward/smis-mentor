@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import Checkbox from 'expo-checkbox';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { signIn, resetPassword } from '../services/authService';
@@ -220,14 +221,27 @@ export function SignInScreen({
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>비밀번호 / Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="비밀번호를 입력해주세요"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={true}
-                editable={!isLoading}
-              />
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="비밀번호를 입력해주세요"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!isLoading}
+                />
+                <TouchableOpacity
+                  style={styles.passwordToggle}
+                  onPress={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color="#64748b"
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* 로그인 저장 체크박스 */}
@@ -373,6 +387,25 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: '#1e293b',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1e293b',
+  },
+  passwordToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   rememberMeContainer: {
     flexDirection: 'row',
