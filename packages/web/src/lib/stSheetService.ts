@@ -243,14 +243,14 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
   const maleMentors = ['김준호', '이민수', '박태현', '최동욱', '정현우', '강민석', '조성민', '윤재혁'];
   const femaleMentors = ['김서연', '이지은', '박수빈', '최예린', '정하늘', '강유나', '조민지', '윤채영'];
   
-  // 유닛 멘토 (남성 6명, 여성 6명)
-  const maleUnitMentors = ['박준영', '김성민', '이도훈', '최현우', '정우진', '강민호'];
-  const femaleUnitMentors = ['김민서', '이수빈', '박지은', '최서영', '정예나', '강채린'];
+  // 유닛 멘토 (남성 4명, 여성 4명으로 줄여서 각 8-10명 보장)
+  const maleUnitMentors = ['박준영', '김성민', '이도훈', '최현우'];
+  const femaleUnitMentors = ['김민서', '이수빈', '박지은', '최서영'];
   
   // 반 이름 풀 (영어로)
   const classNames = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa', 'Lambda', 'Omega'];
   
-  // 입소/퇴소 공항 (EJ 캠프용)
+  // 입소/퇴소 공항 (EJ 캠프용) - 90% 확률로 같은 공항
   const airports = ['김포공항', '청주공항', '김해공항', '직접입소'];
   
   // 지역
@@ -268,14 +268,23 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
   const students: STSheetStudent[] = [];
   const usedClassNames = new Set<string>();
   
-  // 8개 반, 각 반당 9-12명 (여자는 짝수)
+  // 유닛별 학생 배열 (각 유닛 멘토당 정확히 10명씩 배정)
+  const unitStudents: Record<string, STSheetStudent[]> = {};
+  [...maleUnitMentors, ...femaleUnitMentors].forEach(mentor => {
+    unitStudents[mentor] = [];
+  });
+  
+  // 8개 반, 각 반당 10명 (여자 짝수, 남자 짝수) = 총 80명
+  // 유닛 멘토 8명 × 10명 = 80명 (정확히 일치)
+  let currentMaleUnitIndex = 0;
+  let currentFemaleUnitIndex = 0;
+  
   for (let classIndex = 1; classIndex <= 8; classIndex++) {
     const classNum = classIndex.toString().padStart(2, '0');
     
-    // 반당 학생 수 결정 (9, 10, 11, 12명 중 랜덤, 여자는 짝수)
-    const totalStudents = [9, 10, 11, 12][Math.floor(Math.random() * 4)];
-    const femaleCount = totalStudents === 9 ? 4 : Math.floor(totalStudents / 2);
-    const maleCount = totalStudents - femaleCount;
+    // 반당 학생 수 10명 고정 (여자 4-6명, 남자 4-6명, 모두 짝수)
+    const femaleCount = [4, 6][Math.floor(Math.random() * 2)];
+    const maleCount = 10 - femaleCount;
     
     // 반 멘토 배정 (남학생 많으면 남자 멘토, 여학생 많거나 같으면 여자 멘토)
     const classMentor = femaleCount >= maleCount 
@@ -291,7 +300,7 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
     usedClassNames.add(className);
     
     // 여학생 먼저, 남학생 나중에 (1~6번 여자, 7~12번 남자)
-    for (let studentIndex = 1; studentIndex <= totalStudents; studentIndex++) {
+    for (let studentIndex = 1; studentIndex <= 10; studentIndex++) {
       const isFemale = studentIndex <= femaleCount;
       const studentNum = studentIndex.toString().padStart(2, '0');
       
@@ -310,18 +319,21 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
         ? femaleEnglishNames[nameIndex % femaleEnglishNames.length]
         : maleEnglishNames[nameIndex % maleEnglishNames.length];
       
-      // 유닛 멘토 배정 (여학생은 여성 유닛, 남학생은 남성 유닛)
-      const unitMentor = isFemale
-        ? femaleUnitMentors[Math.floor((classIndex - 1) / 2) % femaleUnitMentors.length]
-        : maleUnitMentors[Math.floor((classIndex - 1) / 2) % maleUnitMentors.length];
-      
-      // 호수 배정 (유닛별로 묶이도록)
-      const unitIndex = isFemale
-        ? Math.floor((classIndex - 1) / 2) % femaleUnitMentors.length
-        : Math.floor((classIndex - 1) / 2) % maleUnitMentors.length;
-      const roomBase = isFemale ? 400 + unitIndex * 10 : 100 + unitIndex * 10;
-      const roomInUnit = Math.floor((studentIndex - 1) / 2) + 1;
-      const roomNumber = (roomBase + roomInUnit).toString();
+      // 유닛 멘토 배정 (라운드 로빈 방식으로 정확히 10명씩)
+      let unitMentor: string;
+      if (isFemale) {
+        unitMentor = femaleUnitMentors[currentFemaleUnitIndex % femaleUnitMentors.length];
+        if (unitStudents[unitMentor].length >= 10) {
+          currentFemaleUnitIndex++;
+          unitMentor = femaleUnitMentors[currentFemaleUnitIndex % femaleUnitMentors.length];
+        }
+      } else {
+        unitMentor = maleUnitMentors[currentMaleUnitIndex % maleUnitMentors.length];
+        if (unitStudents[unitMentor].length >= 10) {
+          currentMaleUnitIndex++;
+          unitMentor = maleUnitMentors[currentMaleUnitIndex % maleUnitMentors.length];
+        }
+      }
       
       // 학년 랜덤 (G3~G8)
       const grade = grades[Math.floor(Math.random() * grades.length)];
@@ -373,12 +385,19 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
         classMentor,
         unitMentor,
         unit: unitMentor,
-        roomNumber,
+        roomNumber: '', // 나중에 배정
       };
       
       if (campType === 'EJ') {
-        student.departureRoute = airports[Math.floor(Math.random() * airports.length)];
-        student.arrivalRoute = airports[Math.floor(Math.random() * airports.length)];
+        // 입소 공항 선택
+        const departureAirport = airports[Math.floor(Math.random() * airports.length)];
+        // 90% 확률로 같은 공항, 10% 확률로 다른 공항
+        const arrivalAirport = Math.random() < 0.9 
+          ? departureAirport 
+          : airports[Math.floor(Math.random() * airports.length)];
+        
+        student.departureRoute = departureAirport;
+        student.arrivalRoute = arrivalAirport;
       } else {
         student.shirtSize = shirtSizes[Math.floor(Math.random() * shirtSizes.length)];
         student.passportName = englishName.toUpperCase();
@@ -389,9 +408,26 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
         student.passportExpiry = `${year}-${month}-${day}`;
       }
       
+      unitStudents[unitMentor].push(student);
       students.push(student);
     }
   }
+  
+  // 모든 학생 생성 후 호실 배정 (각 유닛별로 2명씩)
+  Object.entries(unitStudents).forEach(([unitMentor, unitStudentList]) => {
+    const unitIndex = maleUnitMentors.includes(unitMentor) 
+      ? maleUnitMentors.indexOf(unitMentor)
+      : femaleUnitMentors.indexOf(unitMentor);
+    const roomBase = maleUnitMentors.includes(unitMentor) 
+      ? 100 + unitIndex * 10 
+      : 400 + unitIndex * 10;
+    
+    // 2명씩 방 배정
+    unitStudentList.forEach((student, index) => {
+      const roomInUnit = Math.floor(index / 2) + 1;
+      student.roomNumber = (roomBase + roomInUnit).toString();
+    });
+  });
   
   return students;
 };

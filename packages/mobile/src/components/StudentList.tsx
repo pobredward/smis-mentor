@@ -36,8 +36,11 @@ export const StudentList: React.FC<StudentListProps> = ({
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-  const [campCode, setCampCode] = useState<CampCode>('E27');
+  const [campCode, setCampCode] = useState<CampCode | null>(null);
   const [campType, setCampType] = useState<CampType>('EJ');
+  const [isTemporaryData, setIsTemporaryData] = useState(false);
+  const [useTemporaryDataSetting, setUseTemporaryDataSetting] = useState(true);
+  const [hasRealData, setHasRealData] = useState(false);
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
   const isAdmin = userData?.role === 'admin';
@@ -76,10 +79,18 @@ export const StudentList: React.FC<StudentListProps> = ({
 
   // 전체 학생 데이터 로드
   const loadAllStudents = async () => {
+    if (!campCode) return; // campCode가 없으면 로드하지 않음
+    
     try {
       setLoading(true);
       const data = await stSheetService.getCachedData(campCode);
+      const isTemp = await stSheetService.isTemporaryData(campCode);
+      const useTempSetting = await stSheetService.getUseTemporaryDataSetting(campCode);
+      const hasReal = await stSheetService.hasRealData(campCode);
       setAllStudents(data);
+      setIsTemporaryData(isTemp);
+      setUseTemporaryDataSetting(useTempSetting);
+      setHasRealData(hasReal);
     } catch (error) {
       console.error('학생 목록 로드 실패:', error);
       Alert.alert('오류', '학생 목록을 불러오는데 실패했습니다.');
@@ -116,6 +127,11 @@ export const StudentList: React.FC<StudentListProps> = ({
       return;
     }
 
+    if (!campCode) {
+      Alert.alert('알림', '캠프 코드를 불러오는 중입니다.');
+      return;
+    }
+
     try {
       setSyncing(true);
       await stSheetService.syncSTSheet(campCode);
@@ -126,6 +142,29 @@ export const StudentList: React.FC<StudentListProps> = ({
       Alert.alert('오류', '동기화에 실패했습니다.');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleToggleTemporaryData = async () => {
+    if (!isAdmin) {
+      Alert.alert('권한 없음', '설정 변경은 관리자만 수행할 수 있습니다.');
+      return;
+    }
+
+    if (!campCode) {
+      Alert.alert('알림', '캠프 코드를 불러오는 중입니다.');
+      return;
+    }
+
+    try {
+      const newSetting = !useTemporaryDataSetting;
+      await stSheetService.setUseTemporaryDataSetting(campCode, newSetting);
+      setUseTemporaryDataSetting(newSetting);
+      await loadAllStudents();
+      Alert.alert('성공', `임시 데이터 표시가 ${newSetting ? '활성화' : '비활성화'}되었습니다.`);
+    } catch (error) {
+      console.error('설정 변경 실패:', error);
+      Alert.alert('오류', '설정 변경에 실패했습니다.');
     }
   };
 
@@ -256,18 +295,46 @@ export const StudentList: React.FC<StudentListProps> = ({
             </TouchableOpacity>
           )}
           {isAdmin && (
-            <TouchableOpacity
-              style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
-              onPress={handleSync}
-              disabled={syncing}
-            >
-              <Text style={styles.syncButtonText}>
-                {syncing ? '동기화 중...' : '동기화'}
-              </Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
+                onPress={handleSync}
+                disabled={syncing}
+              >
+                <Text style={styles.syncButtonText}>
+                  {syncing ? '동기화 중...' : '동기화'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.toggleButton,
+                  useTemporaryDataSetting ? styles.toggleButtonActive : styles.toggleButtonInactive
+                ]}
+                onPress={handleToggleTemporaryData}
+              >
+                <Text style={styles.toggleButtonText}>
+                  {useTemporaryDataSetting ? '임시OFF' : '임시ON'}
+                </Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       </View>
+
+      {/* 임시 데이터 안내 배너 */}
+      {isTemporaryData && (
+        <View style={styles.warningBanner}>
+          <Ionicons name="information-circle" size={16} color="#d97706" />
+          <Text style={styles.warningText}>
+            <Text style={styles.warningBold}>임시 데이터입니다. </Text>
+            {hasRealData 
+              ? '관리자가 임시 데이터 표시를 활성화했습니다.'
+              : filterType === 'class' 
+                ? '반 배정이 완료되면 실제 명단으로 표기됩니다.'
+                : '방 배정이 완료되면 실제 명단으로 표기됩니다.'}
+          </Text>
+        </View>
+      )}
 
       {/* 멘토/반 선택 - 검색 중일 때는 숨김 */}
       {!searchQuery.trim() && (
@@ -703,6 +770,46 @@ const styles = StyleSheet.create({
   syncButtonText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: '600' as '600',
+  },
+  toggleButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  toggleButtonActive: {
+    backgroundColor: '#f59e0b', // 주황색 (임시 데이터 표시 중)
+  },
+  toggleButtonInactive: {
+    backgroundColor: '#64748b', // 회색 (실제 데이터 표시 중)
+  },
+  toggleButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600' as '600',
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde047',
+    gap: 8,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#92400e',
+    lineHeight: 16,
+  },
+  warningBold: {
     fontWeight: '600' as '600',
   },
   filterContainer: {
