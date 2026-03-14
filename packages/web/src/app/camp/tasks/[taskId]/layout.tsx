@@ -40,10 +40,10 @@ export async function generateMetadata({
         type: 'article',
         images: [
           {
-            url: `https://www.smis-mentor.com/api/og/task/${taskId}`,
+            url: 'https://www.smis-mentor.com/logo-wide.jpg',
             width: 1200,
             height: 630,
-            alt: task.title,
+            alt: 'SMIS 멘토',
           }
         ],
       },
@@ -51,7 +51,7 @@ export async function generateMetadata({
         card: 'summary_large_image',
         title: task.title,
         description: description,
-        images: [`https://www.smis-mentor.com/api/og/task/${taskId}`],
+        images: ['https://www.smis-mentor.com/logo-wide.jpg'],
       },
     };
   } catch (error) {
