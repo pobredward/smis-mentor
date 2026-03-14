@@ -138,9 +138,9 @@ export default function TaskDetailScreen() {
     
     try {
       await Share.share({
-        title: task.title,
-        message: `${task.title}\n\n${task.description || '업무를 확인해주세요'}\n\n${url}`,
         url: url,
+      }, {
+        dialogTitle: task.title,
       });
     } catch (error) {
       console.error('공유 오류:', error);

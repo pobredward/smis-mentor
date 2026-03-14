@@ -261,7 +261,6 @@ export default function TaskContent() {
       return;
     }
 
-    // 복사 모달 열기
     const { id, createdAt, updatedAt, createdBy, completions, ...taskDataWithoutId } = task;
     setEditingTask({
       ...taskDataWithoutId,
@@ -270,6 +269,34 @@ export default function TaskContent() {
     setIsCopyMode(true);
     setShowTaskDetail(false);
     setShowTaskForm(true);
+  };
+
+  // 업무 공유
+  const handleShareTask = async (task: Task) => {
+    const url = `${window.location.origin}/camp/tasks/${task.id}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: task.title,
+          text: task.description || '업무를 확인해주세요',
+          url: url,
+        });
+        toast.success('공유되었습니다.');
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('공유 오류:', error);
+        }
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success('링크가 클립보드에 복사되었습니다.');
+      } catch (error) {
+        console.error('클립보드 복사 오류:', error);
+        toast.error('링크 복사에 실패했습니다.');
+      }
+    }
   };
 
   // 캘린더 렌더링
@@ -509,8 +536,8 @@ export default function TaskContent() {
           onCopy={() => {
             handleCopyTask(selectedTask);
           }}
-          onOpenFullPage={() => {
-            router.push(`/camp/tasks/${selectedTask.id}`);
+          onShare={() => {
+            handleShareTask(selectedTask);
           }}
         />
       )}
