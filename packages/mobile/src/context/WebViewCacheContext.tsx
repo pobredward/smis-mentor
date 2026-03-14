@@ -128,7 +128,11 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
     const sheet = allSheets.find(s => s.id === id);
     if (!sheet) return null;
 
-    const initialZoom = zoomLevels[id] || 0.6;
+    // Notion 페이지 확인
+    const isNotionPage = sheet.url.includes('notion.site') || sheet.url.includes('notion.so');
+    
+    // Notion 페이지는 zoom 1.0, 구글 시트는 0.6
+    const initialZoom = isNotionPage ? 1.0 : (zoomLevels[id] || 0.6);
 
     return (
       <WebView
@@ -138,24 +142,28 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         style={[styles.webView, !visible && styles.hiddenWebView]}
         onLoadEnd={() => {
           setLoadingState(id, false);
-          // 페이지 로드 완료 후 약간의 딜레이를 두고 zoom 적용
-          setTimeout(() => {
-            applyZoom(id, initialZoom);
-          }, 300);
+          // Notion 페이지가 아닌 경우에만 zoom 적용
+          if (!isNotionPage) {
+            setTimeout(() => {
+              applyZoom(id, initialZoom);
+            }, 300);
+          }
         }}
         onLoadStart={() => {
           setLoadingState(id, true);
         }}
-        scalesPageToFit={false}
+        scalesPageToFit={!isNotionPage}
         showsVerticalScrollIndicator={true}
         showsHorizontalScrollIndicator={true}
         scrollEnabled={true}
         bounces={true}
         cacheEnabled={true}
         cacheMode="LOAD_CACHE_ELSE_NETWORK"
-        injectedJavaScript={`
+        incognito={false}
+        androidLayerType="hardware"
+        injectedJavaScript={isNotionPage ? undefined : `
           (function() {
-            // 초기 zoom 적용
+            // 초기 zoom 적용 (구글 시트용)
             const initialZoom = ${initialZoom};
             
             const meta = document.createElement('meta');
