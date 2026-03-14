@@ -7,11 +7,11 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
   Linking,
   TextInput,
   Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { db, auth } from '../config/firebase';

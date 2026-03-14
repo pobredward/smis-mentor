@@ -10,11 +10,11 @@ import {
   Alert,
   Linking,
   Modal as RNModal,
-  SafeAreaView,
   Share,
   Platform,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';

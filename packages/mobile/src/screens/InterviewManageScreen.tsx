@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
   Modal,
@@ -13,6 +12,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { AdminStackScreenProps } from '../navigation/types';
