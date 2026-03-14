@@ -40,7 +40,7 @@ export async function generateMetadata({
         type: 'article',
         images: [
           {
-            url: `https://www.smis-mentor.com/camp/tasks/${taskId}/opengraph-image`,
+            url: `https://www.smis-mentor.com/api/og/task/${taskId}`,
             width: 1200,
             height: 630,
             alt: task.title,
@@ -51,7 +51,7 @@ export async function generateMetadata({
         card: 'summary_large_image',
         title: task.title,
         description: description,
-        images: [`https://www.smis-mentor.com/camp/tasks/${taskId}/opengraph-image`],
+        images: [`https://www.smis-mentor.com/api/og/task/${taskId}`],
       },
     };
   } catch (error) {

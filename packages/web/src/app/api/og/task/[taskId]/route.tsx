@@ -1,15 +1,13 @@
 import { ImageResponse } from 'next/og';
+import { NextRequest } from 'next/server';
 import { getTaskById } from '@/lib/taskService';
 
 export const runtime = 'edge';
-export const alt = 'SMIS 업무 상세';
-export const size = {
-  width: 1200,
-  height: 630,
-};
-export const contentType = 'image/png';
 
-export default async function Image({ params }: { params: Promise<{ taskId: string }> }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ taskId: string }> }
+) {
   try {
     const { taskId } = await params;
     const task = await getTaskById(taskId);
@@ -33,7 +31,10 @@ export default async function Image({ params }: { params: Promise<{ taskId: stri
             </div>
           </div>
         ),
-        { ...size }
+        {
+          width: 1200,
+          height: 630,
+        }
       );
     }
 
@@ -81,15 +82,16 @@ export default async function Image({ params }: { params: Promise<{ taskId: stri
           {/* 업무 제목 */}
           <div
             style={{
-              fontSize: 64,
+              fontSize: 56,
               fontWeight: 'bold',
               color: '#111827',
               marginBottom: '30px',
               lineHeight: 1.2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
             }}
           >
             {task.title}
@@ -108,22 +110,22 @@ export default async function Image({ params }: { params: Promise<{ taskId: stri
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                fontSize: 32,
+                fontSize: 28,
                 color: '#6b7280',
               }}
             >
-              📅 {dateStr}
+              {dateStr}
             </div>
             {timeStr && (
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  fontSize: 32,
+                  fontSize: 28,
                   color: '#6b7280',
                 }}
               >
-                🕐 {timeStr}
+                {timeStr}
               </div>
             )}
           </div>
@@ -141,7 +143,7 @@ export default async function Image({ params }: { params: Promise<{ taskId: stri
           >
             <div
               style={{
-                fontSize: 24,
+                fontSize: 20,
                 color: '#9ca3af',
               }}
             >
@@ -149,7 +151,7 @@ export default async function Image({ params }: { params: Promise<{ taskId: stri
             </div>
             <div
               style={{
-                fontSize: 20,
+                fontSize: 18,
                 color: '#9ca3af',
               }}
             >
@@ -158,7 +160,10 @@ export default async function Image({ params }: { params: Promise<{ taskId: stri
           </div>
         </div>
       ),
-      { ...size }
+      {
+        width: 1200,
+        height: 630,
+      }
     );
   } catch (error) {
     console.error('OG Image 생성 오류:', error);
@@ -176,11 +181,14 @@ export default async function Image({ params }: { params: Promise<{ taskId: stri
           }}
         >
           <div style={{ fontSize: 48, fontWeight: 'bold', color: '#374151' }}>
-            업무를 불러오는 중 오류가 발생했습니다
+            오류가 발생했습니다
           </div>
         </div>
       ),
-      { ...size }
+      {
+        width: 1200,
+        height: 630,
+      }
     );
   }
 }
