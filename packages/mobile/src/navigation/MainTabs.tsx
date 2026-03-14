@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { MainTabsParamList } from './types';
 import { RecruitmentNavigator } from './RecruitmentNavigator';
 import { AdminNavigator } from './AdminNavigator';
@@ -18,32 +19,63 @@ export function MainTabs() {
   const isAdmin = userData?.role === 'admin';
 
   return (
-    <Tab.Navigator>
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: '#3b82f6',
+        tabBarInactiveTintColor: '#94a3b8',
+      }}
+    >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ title: '홈' }}
+        options={{
+          title: '홈',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home" size={size} color={color} />
+          ),
+        }}
       />
       <Tab.Screen
         name="Recruitment"
         component={RecruitmentNavigator}
-        options={{ title: '채용' }}
+        options={{
+          title: '채용',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="briefcase" size={size} color={color} />
+          ),
+        }}
       />
       <Tab.Screen
         name="Camp"
         component={CampScreen}
-        options={{ title: '캠프' }}
+        options={{
+          title: '캠프',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="school" size={size} color={color} />
+          ),
+        }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ title: '마이페이지' }}
+        options={{
+          title: '마이페이지',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person" size={size} color={color} />
+          ),
+        }}
       />
       {isAdmin && (
         <Tab.Screen
           name="Admin"
           component={AdminNavigator}
-          options={{ title: '관리자', headerShown: false }}
+          options={{
+            title: '관리자',
+            headerShown: false,
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="settings" size={size} color={color} />
+            ),
+          }}
         />
       )}
     </Tab.Navigator>
