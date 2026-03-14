@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generationResourcesService, ResourceLink } from '@/lib/generationResourcesService';
 
@@ -34,20 +34,12 @@ const convertToEmbedUrl = (url: string): string => {
   return url;
 };
 
-// Notion 및 Google Sheets 임베드 가능 여부 확인
-const isEmbeddableUrl = (url: string): boolean => {
-  return url.includes('notion.site') || 
-         url.includes('notion.so') ||
-         url.includes('docs.google.com/spreadsheets');
-};
-
 export default function EducationContent() {
   const { userData } = useAuth();
   const [educationLinks, setEducationLinks] = useState<ResourceLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
-  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
-  const [iframeErrors, setIframeErrors] = useState<Record<string, boolean>>({});
+  const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
@@ -60,14 +52,6 @@ export default function EducationContent() {
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
-
-  const setLoadingState = (id: string, isLoading: boolean) => {
-    setLoadingStates(prev => ({ ...prev, [id]: isLoading }));
-  };
-
-  const setIframeError = (id: string, hasError: boolean) => {
-    setIframeErrors(prev => ({ ...prev, [id]: hasError }));
-  };
 
   const loadEducationLinks = useCallback(async () => {
     if (!activeJobCodeId) {
@@ -85,12 +69,6 @@ export default function EducationContent() {
       
       if (resources?.educationLinks) {
         setEducationLinks(resources.educationLinks);
-        
-        const initialStates = resources.educationLinks.reduce((acc, link) => {
-          acc[link.id] = true;
-          return acc;
-        }, {} as Record<string, boolean>);
-        setLoadingStates(initialStates);
         
         if (resources.educationLinks.length > 0) {
           setSelectedLinkId(resources.educationLinks[0].id);
@@ -399,7 +377,11 @@ export default function EducationContent() {
             )}
             
             <button
-              onClick={() => !editMode && setSelectedLinkId(link.id)}
+              onClick={() => {
+                if (!editMode) {
+                  setSelectedLinkId(link.id);
+                }
+              }}
               disabled={editMode}
               className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                 editMode
@@ -442,117 +424,51 @@ export default function EducationContent() {
       <div className="h-full bg-white relative">
         {educationLinks.map((link) => {
           const isVisible = selectedLinkId === link.id;
-          const isLoading = loadingStates[link.id] ?? true;
-          const canEmbed = isEmbeddableUrl(link.url);
-
-          if (!canEmbed) {
-            // 임베드 불가능한 URL - 선택된 경우만 표시
-            if (!isVisible) return null;
-            return (
-              <div 
-                key={link.id}
-                className="flex flex-col items-center justify-center h-full bg-gradient-to-br from-blue-50 to-indigo-50 p-8 w-full"
-              >
-                <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 text-center border border-gray-200">
-                  <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-3">{link.title}</h3>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                    <p className="text-sm text-yellow-800 mb-2">
-                      <strong>⚠️ 임베드 URL이 필요합니다</strong>
-                    </p>
-                    <p className="text-xs text-yellow-700 text-left">
-                      1. Notion 페이지에서 "공유" 클릭<br />
-                      2. "웹에 게시" 활성화<br />
-                      3. "이 페이지 임베드" 복사<br />
-                      4. iframe의 src URL만 사용
-                    </p>
-                  </div>
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                  >
-                    <span>새 탭에서 열기</span>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                </div>
-              </div>
-            );
-          }
-
-          // 임베드 가능한 URL - 모두 프리로드
-          const embedUrl = convertToEmbedUrl(link.url);
-          const hasIframeError = iframeErrors[link.id] || false;
           
+          if (!isVisible) return null;
+
           return (
             <div
               key={link.id}
-              className="w-full h-full absolute top-0 left-0 transition-opacity duration-200"
-              style={{
-                opacity: isVisible ? 1 : 0,
-                zIndex: isVisible ? 1 : 0,
-                pointerEvents: isVisible ? 'auto' : 'none',
-              }}
+              className="w-full h-full"
             >
-              {isLoading && isVisible && !hasIframeError && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
-                  <div className="flex flex-col items-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-                    <p className="mt-4 text-gray-600">노션 페이지 로딩 중...</p>
-                  </div>
-                </div>
-              )}
-              {hasIframeError && isVisible ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 p-8">
-                  <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 text-center border border-gray-200">
-                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-                      <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                      </svg>
-                    </div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-3">{link.title}</h3>
-                    <p className="text-sm text-gray-600 mb-6">
-                      임베드 표시에 문제가 있습니다. 새 탭에서 열어주세요.
-                    </p>
-                    <a
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                    >
-                      <span>새 탭에서 열기</span>
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
-                  </div>
-                </div>
-              ) : (
-                <iframe
-                  src={embedUrl}
-                  className="w-full h-full border-0"
-                  title={link.title}
-                  onLoad={() => {
-                    setLoadingState(link.id, false);
-                    setIframeError(link.id, false);
-                  }}
-                  onError={() => {
-                    console.error('iframe 로드 오류:', embedUrl);
-                    setLoadingState(link.id, false);
-                    setIframeError(link.id, true);
-                  }}
-                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                  referrerPolicy="no-referrer"
-                  loading="eager"
-                />
-              )}
+              {/* 새로고침 버튼 (우측 상단 고정) */}
+              <button
+                onClick={() => {
+                  const iframe = document.getElementById(`notion-iframe-${link.id}`) as HTMLIFrameElement;
+                  if (iframe) {
+                    setRefreshing(prev => ({ ...prev, [link.id]: true }));
+                    iframe.src = iframe.src;
+                    // 2초 후 새로고침 상태 해제 (iframe onLoad 이벤트가 신뢰할 수 없으므로)
+                    setTimeout(() => {
+                      setRefreshing(prev => ({ ...prev, [link.id]: false }));
+                    }, 2000);
+                  }
+                }}
+                disabled={refreshing[link.id]}
+                className="absolute top-2 right-2 z-10 p-2 bg-white/90 hover:bg-white border border-gray-300 rounded-lg transition-colors shadow-lg backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                title={refreshing[link.id] ? "새로고침 중..." : "페이지 새로고침"}
+              >
+                <svg 
+                  className={`w-4 h-4 text-gray-700 ${refreshing[link.id] ? 'animate-spin' : ''}`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+
+              {/* iframe 영역 */}
+              <iframe
+                id={`notion-iframe-${link.id}`}
+                src={convertToEmbedUrl(link.url)}
+                className="w-full h-full border-0"
+                title={link.title}
+                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox"
+                referrerPolicy="no-referrer"
+                allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"
+              />
             </div>
           );
         })}

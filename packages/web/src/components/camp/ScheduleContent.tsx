@@ -46,6 +46,7 @@ export default function ScheduleContent() {
   const { scheduleLinks, loading, loadingStates, setLoadingState, refreshResources } = useResourceCache();
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
   const [iframeErrors, setIframeErrors] = useState<Record<string, boolean>>({});
+  const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
@@ -316,7 +317,7 @@ export default function ScheduleContent() {
       </div>
 
       <div className="p-4 bg-gray-50 relative">
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden relative" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
           {scheduleLinks.map((link) => {
             const isVisible = selectedLinkId === link.id;
             const isLoading = loadingStates[link.id] ?? true;
@@ -354,6 +355,34 @@ export default function ScheduleContent() {
                   pointerEvents: isVisible ? 'auto' : 'none',
                 }}
               >
+                {/* 새로고침 버튼 (우측 상단 고정) */}
+                {isVisible && (
+                  <button
+                    onClick={() => {
+                      const iframe = document.getElementById(`schedule-iframe-${link.id}`) as HTMLIFrameElement;
+                      if (iframe) {
+                        setRefreshing(prev => ({ ...prev, [link.id]: true }));
+                        iframe.src = iframe.src;
+                        setTimeout(() => {
+                          setRefreshing(prev => ({ ...prev, [link.id]: false }));
+                        }, 2000);
+                      }
+                    }}
+                    disabled={refreshing[link.id]}
+                    className="absolute top-2 right-2 z-10 p-2 bg-white/90 hover:bg-white border border-gray-300 rounded-lg transition-colors shadow-lg backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={refreshing[link.id] ? "새로고침 중..." : "페이지 새로고침"}
+                  >
+                    <svg 
+                      className={`w-4 h-4 text-gray-700 ${refreshing[link.id] ? 'animate-spin' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                )}
+                
                 {isLoading && isVisible && !hasIframeError && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
                     <div className="text-center">
@@ -389,6 +418,7 @@ export default function ScheduleContent() {
                   </div>
                 ) : (
                   <iframe
+                    id={`schedule-iframe-${link.id}`}
                     src={embedUrl}
                     className="w-full h-full border-0"
                     title={link.title}
@@ -401,8 +431,9 @@ export default function ScheduleContent() {
                       setLoadingState(link.id, false);
                       setIframeError(link.id, true);
                     }}
-                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox"
                     referrerPolicy="no-referrer"
+                    allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"
                     loading="eager"
                   />
                 )}
