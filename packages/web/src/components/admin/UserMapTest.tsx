@@ -185,26 +185,43 @@ export default function UserMapTest({ users }: UserMapTestProps) {
     const processUsers = async () => {
       setIsGeocoding(true);
       const processed: UserWithCoords[] = [];
+      const usersNeedingGeocode: typeof users = [];
 
-      // 순차적으로 처리 (API Rate Limit 고려)
+      // 1단계: 캐시된 좌표가 있는 사용자는 바로 사용
       for (const user of users) {
-        if (user.address) {
-          const coords = await geocodeAddress(user.address);
-          
-          if (coords) {
-            processed.push({
-              ...user,
-              lat: coords.lat,
-              lng: coords.lng,
-            });
-          }
-          
-          // API Rate Limit 방지를 위한 짧은 대기
-          await new Promise(resolve => setTimeout(resolve, 100));
+        if (user.geocode && user.geocode.lat && user.geocode.lng) {
+          // 이미 좌표가 있으면 바로 사용
+          processed.push({
+            ...user,
+            lat: user.geocode.lat,
+            lng: user.geocode.lng,
+          });
+        } else if (user.address) {
+          // 좌표가 없으면 변환 필요
+          usersNeedingGeocode.push(user);
         }
       }
 
-      console.log(`✅ ${processed.length}명의 좌표 변환 완료`);
+      console.log(`✅ 캐시된 좌표: ${processed.length}명`);
+      console.log(`⏳ 변환 필요: ${usersNeedingGeocode.length}명`);
+
+      // 2단계: 좌표가 없는 사용자만 변환 (순차적으로 처리)
+      for (const user of usersNeedingGeocode) {
+        const coords = await geocodeAddress(user.address);
+        
+        if (coords) {
+          processed.push({
+            ...user,
+            lat: coords.lat,
+            lng: coords.lng,
+          });
+        }
+        
+        // API Rate Limit 방지를 위한 짧은 대기
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      console.log(`✅ ${processed.length}명의 좌표 데이터 준비 완료`);
       setUsersWithCoords(processed);
       setIsGeocoding(false);
     };

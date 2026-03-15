@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import DaumPostcode, { Address } from 'react-daum-postcode';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateUser, getUserByEmail, getUserByPhone, uploadProfileImage } from '@/lib/firebaseService';
+import { updateGeocodeIfAddressChanged } from '@/lib/geocoding';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -414,6 +415,15 @@ export default function EditProfilePage() {
         updateData.jobMotivation = data.jobMotivation || '';
         updateData.referralPath = data.referralPath || '';
         updateData.referrerName = data.referrerName || '';
+        
+        // 주소가 변경되었으면 자동으로 좌표 업데이트
+        if (data.address !== userData.address) {
+          const geocodeUpdate = await updateGeocodeIfAddressChanged(
+            userData.address,
+            data.address
+          );
+          Object.assign(updateData, geocodeUpdate);
+        }
         
         // 기타 경로 상세 정보 처리
         if (data.referralPath === '기타' && data.otherReferralDetail) {

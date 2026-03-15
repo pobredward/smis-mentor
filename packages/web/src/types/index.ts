@@ -19,6 +19,14 @@ export interface User {
   password: string;
   address: string;
   addressDetail: string;
+  
+  // 지오코딩 정보 (위치 기반 기능용)
+  geocode?: {
+    lat: number;
+    lng: number;
+    updatedAt: Timestamp;
+  };
+  
   role: 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp' | 'admin';
   jobExperiences?: Array<{
     id: string,
