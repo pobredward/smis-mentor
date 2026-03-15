@@ -18,7 +18,7 @@ import {
   formatDuration,
 } from '@/lib/taskService';
 import { getUserJobCodesInfo } from '@/lib/firebaseService';
-import type { Task, JobExperienceGroupRole } from '@smis-mentor/shared/types/camp';
+import type { Task, JobExperienceGroupRole } from '@smis-mentor/shared';
 import { JobCodeWithGroup } from '@/types';
 import TaskFormModal from './TaskFormModal';
 import TaskDetailModal from './TaskDetailModal';

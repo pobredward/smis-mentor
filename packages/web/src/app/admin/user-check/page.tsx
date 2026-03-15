@@ -346,7 +346,7 @@ export default function UserCheck() {
           
           // 기수 코드 추출 및 자동 선택
           if (materialsWithLinks.length > 0) {
-            const codes = getGenerationCodes(materialsWithLinks, templates);
+            const codes = getGenerationCodes(materialsWithLinks, templates as any);
             if (codes.length > 0) {
               setSelectedGeneration(codes[0]); // 가장 최근 기수 선택
             }
@@ -359,11 +359,11 @@ export default function UserCheck() {
     }, [userId]);
 
     // 기수 코드 목록 (내림차순)
-    const generationCodes = getGenerationCodes(materials, templates);
+    const generationCodes = getGenerationCodes(materials, templates as any);
     
     // 선택된 기수의 자료만 필터링
     const filteredMaterials = selectedGeneration 
-      ? filterMaterialsByGeneration(materials, templates, selectedGeneration)
+      ? filterMaterialsByGeneration(materials, templates as any, selectedGeneration)
       : [];
 
     if (isLoading) {

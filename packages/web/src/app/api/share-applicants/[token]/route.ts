@@ -56,7 +56,7 @@ export async function GET(
         { status: 404 }
       );
     }
-    const jobBoard = { id: jobBoardDoc.id, ...jobBoardDoc.data() } as JobBoard;
+    const jobBoard = { id: jobBoardDoc.id, ...jobBoardDoc.data() } as JobBoard & { id: string };
 
     // 지원서 정보 조회
     const applications = await Promise.all(

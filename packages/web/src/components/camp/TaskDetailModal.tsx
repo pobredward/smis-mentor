@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Task } from '@smis-mentor/shared/types/camp';
+import type { Task } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
 
 interface TaskDetailModalProps {
@@ -34,9 +34,9 @@ export default function TaskDetailModal({
   const durationStr = formatDuration(task.estimatedDuration);
 
   // 링크와 이미지 분리
-  const linkAttachments = task.attachments?.filter(a => a.type === 'link') || [];
-  const imageAttachments = task.attachments?.filter(a => a.type === 'image') || [];
-  const otherAttachments = task.attachments?.filter(a => a.type !== 'link' && a.type !== 'image') || [];
+  const linkAttachments = task.attachments?.filter((a: { type: string }) => a.type === 'link') || [];
+  const imageAttachments = task.attachments?.filter((a: { type: string }) => a.type === 'image') || [];
+  const otherAttachments = task.attachments?.filter((a: { type: string }) => a.type !== 'link' && a.type !== 'image') || [];
 
   return (
     <>
@@ -99,7 +99,7 @@ export default function TaskDetailModal({
             <div>
               <h5 className="text-xs font-semibold text-gray-600 mb-1.5">대상 역할</h5>
               <div className="flex flex-wrap gap-1.5">
-                {task.targetRoles.map(role => (
+                {task.targetRoles.map((role: string) => (
                   <span
                     key={role}
                     className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium"

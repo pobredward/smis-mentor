@@ -16,5 +16,5 @@ export interface SMSTemplate {
   refJobBoardId?: string;
   createdAt: any;
   updatedAt: any;
-  createdBy: string;
+  createdBy?: string;
 }

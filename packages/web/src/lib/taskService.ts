@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
-import type { Task, TaskAttachment, JobExperienceGroupRole } from '@smis-mentor/shared/types/camp';
+import type { Task, TaskAttachment, JobExperienceGroupRole, TaskCompletion } from '@smis-mentor/shared';
 
 const TASKS_COLLECTION = 'campTasks';
 
@@ -227,7 +227,7 @@ export const toggleTaskCompletion = async (
     if (isCompleted) {
       // 완료 취소
       await updateDoc(doc(db, TASKS_COLLECTION, taskId), {
-        completions: task.completions.filter(c => c.userId !== userId),
+        completions: task.completions.filter((c: TaskCompletion) => c.userId !== userId),
         updatedAt: serverTimestamp(),
       });
     } else {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getTaskById, toggleTaskCompletion, deleteTask } from '@/lib/taskService';
-import type { Task, JobExperienceGroupRole } from '@smis-mentor/shared/types/camp';
+import type { Task, JobExperienceGroupRole } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
@@ -179,7 +179,7 @@ export default function TaskDetailPage() {
     return null;
   }
 
-  const isCompleted = task.completions.some(c => c.userId === userData?.userId);
+  const isCompleted = task.completions.some((c: { userId: string }) => c.userId === userData?.userId);
   const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
@@ -189,9 +189,9 @@ export default function TaskDetailPage() {
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
 
-  const linkAttachments = task.attachments?.filter(a => a.type === 'link') || [];
-  const imageAttachments = task.attachments?.filter(a => a.type === 'image') || [];
-  const otherAttachments = task.attachments?.filter(a => a.type !== 'link' && a.type !== 'image') || [];
+  const linkAttachments = task.attachments?.filter((a: { type: string }) => a.type === 'link') || [];
+  const imageAttachments = task.attachments?.filter((a: { type: string }) => a.type === 'image') || [];
+  const otherAttachments = task.attachments?.filter((a: { type: string }) => a.type !== 'link' && a.type !== 'image') || [];
 
   const handleLoginPrompt = () => {
     toast.error('로그인이 필요한 기능입니다.');
@@ -349,7 +349,7 @@ export default function TaskDetailPage() {
           <div>
             <h2 className="text-xs font-semibold text-gray-600 mb-2">대상 역할</h2>
             <div className="flex flex-wrap gap-1.5">
-              {task.targetRoles.map(role => (
+              {task.targetRoles.map((role: JobExperienceGroupRole) => (
                 <span
                   key={role}
                   className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium"
@@ -365,7 +365,7 @@ export default function TaskDetailPage() {
             <div>
               <h2 className="text-xs font-semibold text-gray-600 mb-2">대상 그룹</h2>
               <div className="flex flex-wrap gap-1.5">
-                {task.targetGroups.map(group => (
+                {task.targetGroups.map((group: string, idx: number) => (
                   <span
                     key={group}
                     className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium"
@@ -392,7 +392,7 @@ export default function TaskDetailPage() {
             <div>
               <h2 className="text-xs font-semibold text-gray-600 mb-2">링크</h2>
               <div className="space-y-1.5">
-                {linkAttachments.map((attachment, idx) => (
+                {linkAttachments.map((attachment: { url: string; label: string }, idx: number) => (
                   <a
                     key={idx}
                     href={attachment.url}
@@ -418,7 +418,7 @@ export default function TaskDetailPage() {
             <div>
               <h2 className="text-xs font-semibold text-gray-600 mb-2">이미지</h2>
               <div className="space-y-3">
-                {imageAttachments.map((attachment, idx) => (
+                {imageAttachments.map((attachment: { url: string; label: string; thumbnail?: string }, idx: number) => (
                   <div key={idx}>
                     <button
                       type="button"

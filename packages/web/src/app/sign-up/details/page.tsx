@@ -133,13 +133,13 @@ export default function SignUpDetails() {
         let finalRole = role;
         if (!finalRole && existingUser.role) {
           // mentor_temp -> mentor, foreign_temp -> foreign 변환
-          if (existingUser.role === 'mentor_temp') {
-            finalRole = 'mentor';
-          } else if (existingUser.role === 'foreign_temp') {
-            finalRole = 'foreign';
-          } else {
-            finalRole = existingUser.role;
-          }
+        if (existingUser.role === 'mentor_temp') {
+          finalRole = 'mentor' as 'mentor' | 'foreign';
+        } else if (existingUser.role === 'foreign_temp') {
+          finalRole = 'foreign' as 'mentor' | 'foreign';
+        } else {
+          finalRole = existingUser.role as 'mentor' | 'foreign';
+        }
         }
         if (!finalRole) finalRole = 'mentor'; // 기본값
 

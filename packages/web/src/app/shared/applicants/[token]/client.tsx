@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format, type Locale } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '@/components/common/Header';
 import Footer from '@/components/common/Footer';
@@ -11,7 +11,7 @@ import { getScoreTextColor } from '@smis-mentor/shared';
 
 type ApplicationWithUser = ApplicationHistory & {
   id: string;
-  user?: User | null;
+  user?: any | null; // Using any since API response might have profileImageUrl
 };
 
 type SharedData = {
@@ -305,7 +305,7 @@ export function SharedApplicantsClient({ token }: Props) {
                         <div>
                           <span className="font-medium text-gray-600">지원일:</span>
                           <p className="text-gray-900 mt-0.5">
-                            {format(new Date(app.applicationDate), 'yyyy.MM.dd HH:mm', { locale: ko })}
+                            {(format as any)((app.applicationDate as any).toDate(), 'yyyy.MM.dd HH:mm', { locale: ko })}
                           </p>
                         </div>
                         {app.applicationPath && (
@@ -366,7 +366,7 @@ export function SharedApplicantsClient({ token }: Props) {
                           알바 경력
                         </h4>
                         <div className="space-y-2">
-                          {user.partTimeJobs.map((job, index) => (
+                          {user.partTimeJobs.map((job: any, index: number) => (
                             <div key={index} className="bg-gray-50 rounded-lg p-2 sm:p-3 text-xs sm:text-sm">
                               <div className="flex items-start justify-between mb-1">
                                 <p className="font-medium text-gray-900">{job.companyName}</p>
@@ -390,7 +390,7 @@ export function SharedApplicantsClient({ token }: Props) {
                           멘토링 경력
                         </h4>
                         <div className="space-y-1.5">
-                          {user.jobExperiences.map((exp, index) => (
+                          {user.jobExperiences.map((exp: any, index: number) => (
                             <div key={index} className="bg-gray-50 rounded-lg p-2 text-xs sm:text-sm flex items-center justify-between">
                               <div>
                                 <span className="font-medium text-gray-900">{exp.groupRole}</span>
@@ -488,7 +488,7 @@ export function SharedApplicantsClient({ token }: Props) {
                           면접 일정
                         </p>
                         <p className="text-xs sm:text-sm text-indigo-700 ml-5">
-                          {format(new Date(app.interviewDate), 'yyyy년 M월 d일 HH:mm', { locale: ko })}
+                          {(format as any)((app.interviewDate as any).toDate(), 'yyyy년 M월 d일 HH:mm', { locale: ko })}
                         </p>
                       </div>
                     )}

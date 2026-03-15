@@ -11,7 +11,7 @@ import Button from '@/components/common/Button';
 const templateSchema = z.object({
   title: z.string().min(1, '제목을 입력해주세요.'),
   content: z.string().min(1, '내용을 입력해주세요.'),
-  type: z.enum(['document', 'interview', 'final', 'etc']),
+  type: z.enum(['document_pass', 'document_fail', 'interview_scheduled', 'interview_pass', 'interview_fail', 'final_pass', 'final_fail']),
 });
 
 type TemplateFormValues = z.infer<typeof templateSchema>;
@@ -31,7 +31,7 @@ export default function SMSTemplateManager({ adminId }: SMSTemplateManagerProps)
     defaultValues: {
       title: '',
       content: '',
-      type: 'document',
+      type: 'document_pass' as const,
     }
   });
   
@@ -214,7 +214,7 @@ export default function SMSTemplateManager({ adminId }: SMSTemplateManagerProps)
               {selectedTemplate ? '템플릿 수정' : '새 템플릿 추가'}
             </h3>
             
-            <form onSubmit={handleSubmit(onSubmit)}>
+            <form onSubmit={handleSubmit(onSubmit as any)}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   제목

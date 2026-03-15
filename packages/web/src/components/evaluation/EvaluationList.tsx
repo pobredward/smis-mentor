@@ -152,9 +152,6 @@ export default function EvaluationList({
                           <span className={`text-sm font-medium ${getScoreColor(scoreData.score, scoreData.maxScore)}`}>
                             {scoreData.score}점 / {scoreData.maxScore}점
                           </span>
-                          <div className="text-xs text-gray-500">
-                            가중치: {(scoreData.weight * 100).toFixed(0)}%
-                          </div>
                         </div>
                       </div>
                     ))}

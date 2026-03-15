@@ -43,6 +43,7 @@ export default function EvaluationForm({
     refJobBoardId,
     scores: {},
     overallFeedback: '',
+    evaluatorName: '',
   });
 
   const [criteriaTemplates, setCriteriaTemplates] = useState<EvaluationCriteria[]>([]);

@@ -1433,7 +1433,14 @@ export default function UserManage() {
                       <div className="mt-4 border-t pt-4">
                         <h3 className="text-base font-semibold mb-2">평가 점수</h3>
                         {selectedUser.id || selectedUser.userId ? (
-                          <EvaluationStageCards userId={selectedUser.id || selectedUser.userId} />
+                          <EvaluationStageCards 
+                            userId={selectedUser.id || selectedUser.userId}
+                            targetUserName={selectedUser.name}
+                            evaluatorName={currentAdminName}
+                            onEvaluationSuccess={() => {
+                              loadUsers();
+                            }}
+                          />
                         ) : (
                           <p className="text-sm text-gray-500">사용자 ID가 없어 평가를 불러올 수 없습니다.</p>
                         )}

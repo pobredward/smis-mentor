@@ -1,7 +1,7 @@
 import { forwardRef, InputHTMLAttributes, useState } from 'react';
 
 interface FormInputProps extends InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
   error?: string;
   showPasswordToggle?: boolean;
 }
@@ -13,7 +13,7 @@ const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
 
     return (
       <div className="w-full mb-4">
-        <label className="block text-gray-700 text-sm font-medium mb-1">{label}</label>
+        {label && <label className="block text-gray-700 text-sm font-medium mb-1">{label}</label>}
         <div className="relative">
           <input
             ref={ref}

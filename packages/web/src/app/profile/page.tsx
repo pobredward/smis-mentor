@@ -46,7 +46,7 @@ export default function ProfilePage() {
     const fetchJobCodes = async () => {
       if (userData) {
         try {
-          let jobCodesInfo;
+          let jobCodesInfo: any[] = [];
           
           // 관리자는 모든 캠프 코드 조회
           if (userData.role === 'admin') {
@@ -56,8 +56,6 @@ export default function ProfilePage() {
           // 일반 사용자는 자신의 캠프 코드만 조회
           else if (userData.jobExperiences && userData.jobExperiences.length > 0) {
             jobCodesInfo = await getUserJobCodesInfo(userData.jobExperiences);
-          } else {
-            jobCodesInfo = [];
           }
           
           // generation 기준으로 정렬 (generation은 문자열이므로 숫자로 변환하여 정렬)

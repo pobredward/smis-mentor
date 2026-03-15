@@ -1,5 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
-import type { JobExperienceGroupRole } from '@smis-mentor/shared/types/camp';
+import type { JobExperienceGroupRole } from '@smis-mentor/shared';
 
 export interface PartTimeJob {
   period: string;

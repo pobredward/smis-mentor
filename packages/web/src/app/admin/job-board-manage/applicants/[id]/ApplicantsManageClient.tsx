@@ -1825,7 +1825,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             value={selectedApplication.finalStatus || ''}
                             onChange={(e) => handleFinalStatusChange(selectedApplication.id, e.target.value)}
                             className="w-full p-1 md:p-2 text-xs md:text-sm border border-gray-300 rounded-md disabled:bg-gray-100 disabled:cursor-not-allowed"
-                            disabled={isLoading || !canChangeFinalStatus(selectedApplication.interviewStatus || '')}
+                            disabled={isLoading || !canChangeFinalStatus(selectedApplication.interviewStatus as 'pending' | 'complete' | 'passed' | 'failed' || '')}
                           >
                             <option value="">선택</option>
                             <option value="finalAccepted">최종합격</option>
