@@ -8,7 +8,7 @@ import 'leaflet/dist/leaflet.css';
 
 interface UserWithCoords extends User {
   lat: number;
-  lng: number;
+  lng: number; 
 }
 
 interface UserMapTestProps {
