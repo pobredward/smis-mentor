@@ -7,6 +7,7 @@ import { getAllUsers } from '@/lib/firebaseService';
 import { User } from '@/types';
 import toast from 'react-hot-toast';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 
 // Mapbox를 dynamic import로 로드 (SSR 방지)
 const UserMapComponent = dynamic(
@@ -25,15 +26,31 @@ export default function UserMapTestPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState<string>('all');
+  const [mapHeight, setMapHeight] = useState<number>(600);
+  const router = useRouter();
 
   const roleFilters = [
     { value: 'all', label: '전체' },
     { value: 'mentor', label: '멘토' },
     { value: 'foreign', label: '원어민' },
     { value: 'admin', label: '관리자' },
-    { value: 'mentor_temp', label: '멘토(임시)' },
-    { value: 'foreign_temp', label: '원어민(임시)' },
   ];
+
+  // 동적으로 지도 높이 계산
+  useEffect(() => {
+    const calculateMapHeight = () => {
+      const headerHeight = 140; // 헤더 높이
+      const bottomNavHeight = window.innerWidth < 768 ? 80 : 0; // 모바일 bottom nav
+      const safeArea = 20; // 안전 여백
+      const availableHeight = window.innerHeight - headerHeight - bottomNavHeight - safeArea;
+      setMapHeight(Math.max(400, availableHeight)); // 최소 400px
+    };
+
+    calculateMapHeight();
+    window.addEventListener('resize', calculateMapHeight);
+    
+    return () => window.removeEventListener('resize', calculateMapHeight);
+  }, []);
 
   useEffect(() => {
     loadUsers();
@@ -67,33 +84,34 @@ export default function UserMapTestPage() {
 
   return (
     <Layout requireAuth requireAdmin>
-      <div className="h-screen flex flex-col">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4">
         {/* 헤더 */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3">
-          <div className="flex items-center justify-between">
+        <div className="mb-3">
+          <div className="flex items-center gap-2 mb-2">
+            <button
+              onClick={() => router.back()}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="뒤로가기"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">사용자 지도 (테스트)</h1>
-              <p className="text-sm text-gray-600">
-                주소 등록: {usersWithAddress.length}명 / 전체: {filteredUsers.length}명
+              <h1 className="text-lg md:text-2xl font-bold text-gray-900">사용자 지도</h1>
+              <p className="text-xs md:text-sm text-gray-600">
+                총 {usersWithAddress.length}명
               </p>
             </div>
-            
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => window.history.back()}
-            >
-              돌아가기
-            </Button>
           </div>
           
           {/* 역할 필터 */}
-          <div className="flex flex-wrap gap-2 mt-3">
+          <div className="flex flex-wrap gap-1">
             {roleFilters.map((filter) => (
               <button
                 key={filter.value}
                 onClick={() => setSelectedRole(filter.value)}
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                className={`px-2 py-0.5 text-xs rounded transition-colors ${
                   selectedRole === filter.value
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -106,7 +124,10 @@ export default function UserMapTestPage() {
         </div>
 
         {/* 지도 영역 */}
-        <div className="flex-1 relative">
+        <div 
+          className="relative bg-white rounded-lg shadow overflow-hidden" 
+          style={{ height: `${mapHeight}px` }}
+        >
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">

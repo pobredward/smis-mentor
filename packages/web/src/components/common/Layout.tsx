@@ -79,7 +79,11 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
         {noPadding ? (
           children
         ) : (
-          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <div className={`max-w-7xl mx-auto ${
+            pathname.startsWith('/admin') 
+              ? 'py-3 px-2 sm:py-4 sm:px-4 lg:px-8' 
+              : 'py-6 px-4 sm:px-6 lg:px-8'
+          }`}>
             {children}
           </div>
         )}

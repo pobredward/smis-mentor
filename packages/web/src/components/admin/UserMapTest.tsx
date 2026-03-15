@@ -15,8 +15,8 @@ interface UserMapTestProps {
   users: User[];
 }
 
-// 마커 아이콘 생성 함수 - 전체 이름 표시
-const createCustomIcon = (role: string, name: string) => {
+// 마커 아이콘 생성 함수 - 프로필 이미지 포함
+const createCustomIcon = (role: string, name: string, profileImage?: string) => {
   const color = 
     role === 'admin' ? '#9333ea' :
     role === 'mentor' ? '#3b82f6' :
@@ -25,8 +25,19 @@ const createCustomIcon = (role: string, name: string) => {
     role === 'foreign_temp' ? '#94a3b8' :
     '#6b7280';
 
-  // 이름이 길면 줄바꿈
-  const displayName = name.length > 3 ? name.substring(0, 3) + '...' : name;
+  // 프로필 이미지가 있으면 사용, 없으면 이니셜
+  const circleContent = profileImage
+    ? `<img 
+        src="${profileImage}" 
+        style="
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          border-radius: 50%;
+        "
+        onerror="this.style.display='none'; this.parentElement.innerHTML='${name.charAt(0)}';"
+      />`
+    : name.charAt(0);
 
   const html = `
     <div style="
@@ -35,7 +46,7 @@ const createCustomIcon = (role: string, name: string) => {
       align-items: center;
     ">
       <div style="
-        min-width: 32px;
+        width: 32px;
         height: 32px;
         border-radius: 50%;
         background-color: ${color};
@@ -47,8 +58,8 @@ const createCustomIcon = (role: string, name: string) => {
         color: white;
         font-size: 12px;
         font-weight: bold;
-        padding: 0 4px;
-      ">${name.charAt(0)}</div>
+        overflow: hidden;
+      ">${circleContent}</div>
       <div style="
         margin-top: 2px;
         padding: 2px 6px;
@@ -91,10 +102,15 @@ export default function UserMapTest({ users }: UserMapTestProps) {
   const [usersWithCoords, setUsersWithCoords] = useState<UserWithCoords[]>([]);
   const [isGeocoding, setIsGeocoding] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // 클라이언트 사이드에서만 렌더링
+  // 클라이언트 사이드에서만 렌더링 & 모바일 감지
   useEffect(() => {
     setIsMounted(true);
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   // Kakao Geocoding API를 사용한 주소 → 좌표 변환
@@ -289,7 +305,7 @@ export default function UserMapTest({ users }: UserMapTestProps) {
           <Marker
             key={user.userId || user.id}
             position={[user.lat, user.lng]}
-            icon={createCustomIcon(user.role, user.name)}
+            icon={createCustomIcon(user.role, user.name, user.profileImage)}
           >
             <Popup>
               <div className="p-2 min-w-[200px]">
@@ -334,29 +350,27 @@ export default function UserMapTest({ users }: UserMapTestProps) {
         ))}
       </MapContainer>
 
-      {/* 범례 */}
-      <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm z-[1000]">
-        <h4 className="font-semibold mb-2 text-gray-900">범례</h4>
-        <div className="space-y-1">
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full bg-blue-600 mr-2"></div>
-            <span className="text-gray-700">멘토</span>
+      {/* 범례 - 왼쪽 하단 고정 */}
+      <div 
+        className="absolute left-2 bg-white/95 backdrop-blur-sm rounded shadow-md p-2 text-xs z-[1000]" 
+        style={{ bottom: isMobile ? '90px' : '12px' }}
+      >
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>
+            <span className="text-gray-700 text-[10px]">멘토</span>
           </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full bg-green-600 mr-2"></div>
-            <span className="text-gray-700">원어민</span>
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-full bg-green-600"></div>
+            <span className="text-gray-700 text-[10px]">원어민</span>
           </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full bg-purple-600 mr-2"></div>
-            <span className="text-gray-700">관리자</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full bg-gray-400 mr-2"></div>
-            <span className="text-gray-700">임시 계정</span>
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-full bg-purple-600"></div>
+            <span className="text-gray-700 text-[10px]">관리자</span>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-2">
-          총 {usersWithCoords.length}명
+        <p className="text-[9px] text-gray-500 mt-1 pt-1 border-t border-gray-200">
+          {usersWithCoords.length}명
         </p>
       </div>
     </div>

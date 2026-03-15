@@ -68,8 +68,8 @@ export default function AdminDashboard() {
       icon: <FaCalendarPlus />,
     },
     {
-      title: '사용자 지도 (테스트)',
-      description: '사용자 주소를 지도에 시각화합니다. (테스트 기능)',
+      title: '사용자 지도',
+      description: '사용자 주소를 지도에 시각화합니다.',
       href: '/admin/user-map-test',
       iconClass: 'text-teal-600',
       icon: (
