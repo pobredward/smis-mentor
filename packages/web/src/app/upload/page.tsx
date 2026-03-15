@@ -248,7 +248,6 @@ export default function UploadPage() {
       const userCodesList = userCodes.map(uc => uc.code);
       const seenTemplateIds = new Set<string>();
       const materialsToKeep: string[] = [];
-      const materialsToRemove: string[] = [];
       const materialsToUpdate: { id: string; newTitle: string }[] = [];
       
       for (const mat of mats) {
@@ -260,20 +259,19 @@ export default function UploadPage() {
         
         const template = allTemplates.find(t => t.id === mat.templateId);
         if (!template) {
-          // 템플릿이 존재하지 않는 경우 제거
-          materialsToRemove.push(mat.id);
+          // 템플릿이 존재하지 않는 경우에도 유지 (사용자 데이터 보호)
+          // 단, 표시는 하지 않음
           continue;
         }
         
         if (!template.code || !userCodesList.includes(template.code)) {
-          // 사용자가 접근할 수 없는 템플릿인 경우 제거
-          materialsToRemove.push(mat.id);
+          // 사용자가 접근할 수 없는 템플릿인 경우에도 유지 (사용자 데이터 보호)
+          // 단, 표시는 하지 않음 (나중에 권한 복구 시 자동으로 다시 표시됨)
           continue;
         }
         
         if (seenTemplateIds.has(mat.templateId)) {
-          // 중복된 템플릿인 경우 제거
-          materialsToRemove.push(mat.id);
+          // 중복된 템플릿인 경우에도 유지 (첫 번째 것만 표시)
           continue;
         }
         
@@ -286,19 +284,13 @@ export default function UploadPage() {
         }
       }
       
-      // 6. 제거할 수업 자료 삭제
-      for (const matId of materialsToRemove) {
-        console.log('제거할 수업 자료:', matId);
-        await deleteLessonMaterial(matId);
-      }
-      
-      // 7. 제목 업데이트
+      // 6. 제목 업데이트
       for (const { id, newTitle } of materialsToUpdate) {
         console.log('제목 업데이트:', id, newTitle);
         await updateLessonMaterial(id, { title: newTitle });
       }
       
-      // 8. 새로운 템플릿 추가
+      // 7. 새로운 템플릿 추가
       for (const template of accessibleTemplates) {
         if (!seenTemplateIds.has(template.id)) {
           console.log('새 템플릿 추가:', template.title);
@@ -306,14 +298,23 @@ export default function UploadPage() {
         }
       }
       
-      // 9. 최종 수업 자료 가져오기
+      // 8. 최종 수업 자료 가져오기 (접근 권한이 있는 것만 표시)
       const finalMats = await getLessonMaterials(userData.userId);
-      console.log('최종 수업 자료:', finalMats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
-      setMaterials(finalMats);
       
-      // 10. 각 수업 자료의 소제목 가져오기
+      // 접근 권한이 있는 자료만 필터링하여 표시
+      const accessibleMats = finalMats.filter(mat => {
+        if (!mat.templateId) return true; // 사용자가 직접 추가한 자료는 항상 표시
+        const template = allTemplates.find(t => t.id === mat.templateId);
+        if (!template) return false;
+        return template.code && userCodesList.includes(template.code);
+      });
+      
+      console.log('최종 수업 자료:', accessibleMats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
+      setMaterials(accessibleMats);
+      
+      // 9. 각 수업 자료의 소제목 가져오기
       const allSections: Record<string, SectionDataWithLinks[]> = {};
-      for (const mat of finalMats) {
+      for (const mat of accessibleMats) {
         const matSections = await getSections(mat.id);
         
         // 템플릿 sections 가져오기

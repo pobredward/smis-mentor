@@ -323,7 +323,6 @@ export default function UserCheck() {
         getLessonMaterialTemplates()
       ])
         .then(async ([materials, templates]) => {
-          setMaterials(materials);
           setTemplates(templates);
           
           // 각 대제목별 소제목(섹션) 동시 조회하고 링크가 있는 것만 필터링
@@ -373,7 +372,7 @@ export default function UserCheck() {
       return <div className="py-4 text-center text-red-500">{error}</div>;
     }
     if (!materials.length) {
-      return <div className="py-4 text-center text-gray-400">등록된 수업 자료가 없습니다.</div>;
+      return <div className="py-4 text-center text-gray-400">링크가 업로드된 수업 자료가 없습니다.</div>;
     }
     
     return (
