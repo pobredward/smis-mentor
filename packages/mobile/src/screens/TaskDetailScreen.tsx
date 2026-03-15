@@ -137,13 +137,23 @@ export default function TaskDetailScreen() {
     const url = `https://smis-mentor.com/camp/tasks/${task.id}`;
     
     try {
-      await Share.share({
-        url: url,
-      }, {
-        dialogTitle: task.title,
-      });
-    } catch (error) {
-      console.error('공유 오류:', error);
+      await Share.share(
+        Platform.select({
+          ios: {
+            url: url,
+          },
+          android: {
+            message: url,
+          },
+        }) as any,
+        {
+          dialogTitle: task.title,
+        }
+      );
+    } catch (error: any) {
+      if (error?.message !== 'User did not share') {
+        console.error('공유 오류:', error);
+      }
     }
   };
 
