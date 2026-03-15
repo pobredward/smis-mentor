@@ -149,7 +149,6 @@ export function LessonScreen() {
       console.log('  📌 활성 코드 목록:', activeCodesList);
       
       const seenTemplateIds = new Set<string>();
-      const materialsToRemove: string[] = [];
       const materialsToUpdate: { id: string; newTitle: string }[] = [];
 
       for (const mat of mats) {
@@ -164,21 +163,18 @@ export function LessonScreen() {
 
         const template = allTemplates.find((t) => t.id === mat.templateId);
         if (!template) {
-          console.log('  ⚠️ 템플릿 없음 - 제거 대상:', mat.id);
-          materialsToRemove.push(mat.id);
+          console.log('  ⚠️ 템플릿 없음 - 유지 (사용자 데이터 보호):', mat.id);
           continue;
         }
 
         if (!template.code || !activeCodesList.includes(template.code)) {
-          // 활성화된 코드가 아닌 템플릿은 제거
-          console.log('  ⚠️ 비활성 코드 템플릿 - 제거 대상:', mat.id, template.code);
-          materialsToRemove.push(mat.id);
+          // 활성화된 코드가 아닌 템플릿도 유지 (사용자 데이터 보호)
+          console.log('  ⚠️ 비활성 코드 템플릿 - 유지 (사용자 데이터 보호):', mat.id, template.code);
           continue;
         }
 
         if (seenTemplateIds.has(mat.templateId)) {
-          console.log('  ⚠️ 중복 템플릿 - 제거 대상:', mat.id);
-          materialsToRemove.push(mat.id);
+          console.log('  ⚠️ 중복 템플릿 - 유지 (첫 번째만 표시):', mat.id);
           continue;
         }
 
@@ -187,11 +183,6 @@ export function LessonScreen() {
         if (mat.title !== template.title) {
           materialsToUpdate.push({ id: mat.id, newTitle: template.title });
         }
-      }
-
-      console.log('🔍 5. 제거할 자료:', materialsToRemove.length, '개');
-      for (const matId of materialsToRemove) {
-        await deleteLessonMaterial(matId);
       }
 
       console.log('🔍 6. 업데이트할 자료:', materialsToUpdate.length, '개');

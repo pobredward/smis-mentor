@@ -151,7 +151,6 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
 
       const activeCodesList = activeJobCode.map((uc) => uc.code);
       const seenTemplateIds = new Set<string>();
-      const materialsToRemove: string[] = [];
       const materialsToUpdate: { id: string; newTitle: string }[] = [];
 
       for (const mat of mats) {
@@ -164,17 +163,17 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
 
         const template = allTemplates.find((t) => t.id === mat.templateId);
         if (!template) {
-          materialsToRemove.push(mat.id);
+          // 템플릿이 존재하지 않는 경우에도 유지 (사용자 데이터 보호)
           continue;
         }
 
         if (!template.code || !activeCodesList.includes(template.code)) {
-          materialsToRemove.push(mat.id);
+          // 활성화된 코드가 아닌 템플릿도 유지 (사용자 데이터 보호)
           continue;
         }
 
         if (seenTemplateIds.has(mat.templateId)) {
-          materialsToRemove.push(mat.id);
+          // 중복된 템플릿도 유지 (첫 번째 것만 표시)
           continue;
         }
 
@@ -183,10 +182,6 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
         if (mat.title !== template.title) {
           materialsToUpdate.push({ id: mat.id, newTitle: template.title });
         }
-      }
-
-      for (const matId of materialsToRemove) {
-        await deleteLessonMaterial(matId);
       }
 
       for (const { id, newTitle } of materialsToUpdate) {
