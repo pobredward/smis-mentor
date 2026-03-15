@@ -70,6 +70,14 @@ const adminMenuItems: AdminMenuItem[] = [
   },
   {
     id: '7',
+    title: '사용자 지도',
+    description: '사용자 주소를 지도에 시각화합니다.',
+    icon: 'map',
+    iconColor: '#14b8a6',
+    screenName: 'UserMap',
+  },
+  {
+    id: '8',
     title: '수업자료 템플릿 관리',
     description: '수업자료 템플릿을 관리합니다.',
     icon: 'folder',

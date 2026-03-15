@@ -38,7 +38,9 @@ export type AdminStackParamList = {
   ApplicantDetail: { applicationId: string; jobBoardId: string };
   InterviewManage: undefined;
   UserManage: undefined;
+  UserManageDetail: { user: any };
   UserCheck: undefined;
+  UserMap: undefined;
   Upload: undefined;
 };
 

@@ -13,6 +13,21 @@ interface UserWithCoords extends User {
 
 interface UserMapTestProps {
   users: User[];
+  onUserClick?: (user: User) => void;
+}
+
+// 마커 호버 효과 CSS를 추가
+if (typeof window !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = `
+    .user-marker-clickable:hover .marker-circle {
+      transform: scale(1.1);
+    }
+    .user-marker-clickable:hover .marker-name {
+      transform: translateY(-2px);
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 // 마커 아이콘 생성 함수 - 프로필 이미지 포함
@@ -40,12 +55,13 @@ const createCustomIcon = (role: string, name: string, profileImage?: string) => 
     : name.charAt(0);
 
   const html = `
-    <div style="
+    <div class="user-marker-clickable" style="
       display: flex;
       flex-direction: column;
       align-items: center;
+      cursor: pointer;
     ">
-      <div style="
+      <div class="marker-circle" style="
         width: 32px;
         height: 32px;
         border-radius: 50%;
@@ -59,8 +75,9 @@ const createCustomIcon = (role: string, name: string, profileImage?: string) => 
         font-size: 12px;
         font-weight: bold;
         overflow: hidden;
+        transition: transform 0.2s;
       ">${circleContent}</div>
-      <div style="
+      <div class="marker-name" style="
         margin-top: 2px;
         padding: 2px 6px;
         background-color: white;
@@ -71,6 +88,7 @@ const createCustomIcon = (role: string, name: string, profileImage?: string) => 
         color: ${color};
         white-space: nowrap;
         box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        transition: transform 0.2s;
       ">${name}</div>
     </div>
   `;
@@ -98,7 +116,7 @@ function MapBounds({ users }: { users: UserWithCoords[] }) {
   return null;
 }
 
-export default function UserMapTest({ users }: UserMapTestProps) {
+export default function UserMapTest({ users, onUserClick }: UserMapTestProps) {
   const [usersWithCoords, setUsersWithCoords] = useState<UserWithCoords[]>([]);
   const [isGeocoding, setIsGeocoding] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
@@ -306,47 +324,16 @@ export default function UserMapTest({ users }: UserMapTestProps) {
             key={user.userId || user.id}
             position={[user.lat, user.lng]}
             icon={createCustomIcon(user.role, user.name, user.profileImage)}
-          >
-            <Popup>
-              <div className="p-2 min-w-[200px]">
-                <div className="flex items-center mb-2">
-                  {user.profileImage ? (
-                    <img
-                      src={user.profileImage}
-                      alt={user.name}
-                      className="w-10 h-10 rounded-full mr-2"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mr-2">
-                      <span className="text-gray-600">{user.name.charAt(0)}</span>
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{user.name}</h3>
-                    <span className="text-xs text-gray-500">
-                      {user.role === 'admin' ? '관리자' :
-                       user.role === 'mentor' ? '멘토' :
-                       user.role === 'foreign' ? '원어민' :
-                       user.role === 'mentor_temp' ? '멘토(임시)' :
-                       user.role === 'foreign_temp' ? '원어민(임시)' : '사용자'}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-sm space-y-1">
-                  <p className="text-gray-700">
-                    <span className="font-medium">📞</span> {user.phoneNumber}
-                  </p>
-                  <p className="text-gray-700">
-                    <span className="font-medium">📧</span> {user.email || '-'}
-                  </p>
-                  <p className="text-gray-700">
-                    <span className="font-medium">📍</span> {user.address}
-                    {user.addressDetail && ` ${user.addressDetail}`}
-                  </p>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
+            eventHandlers={{
+              click: (e) => {
+                // Popup 열리는 것을 방지
+                e.target.closePopup();
+                if (onUserClick) {
+                  onUserClick(user);
+                }
+              },
+            }}
+          />
         ))}
       </MapContainer>
 

@@ -13,6 +13,7 @@ import { JobBoardApplicantsScreen } from '../screens/JobBoardApplicantsScreen';
 import { ApplicantDetailScreen } from '../screens/ApplicantDetailScreen';
 import { InterviewManageScreen } from '../screens/InterviewManageScreen';
 import { UploadScreen } from '../screens/UploadScreen';
+import { UserMapScreen } from '../screens/UserMapScreen';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 
@@ -34,6 +35,7 @@ export function AdminNavigator() {
       <Stack.Screen name="UserManage" component={UserManageScreen} />
       <Stack.Screen name="UserManageDetail" component={UserManageDetailScreen} />
       <Stack.Screen name="UserCheck" component={UserCheckScreen} />
+      <Stack.Screen name="UserMap" component={UserMapScreen} />
       <Stack.Screen name="Upload" component={UploadScreen} />
     </Stack.Navigator>
   );
