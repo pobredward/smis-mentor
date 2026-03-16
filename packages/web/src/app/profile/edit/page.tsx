@@ -474,6 +474,8 @@ export default function EditProfilePage() {
     );
   }
 
+  const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
+
   return (
     <Layout requireAuth>
       <div className="max-w-2xl mx-auto">
@@ -490,10 +492,9 @@ export default function EditProfilePage() {
               </svg>
             </Button>
             <h1 className="text-2xl font-bold">
-              {section === 'personal' ? '상세 정보 수정' : 
-               section === 'experience' ? '알바 & 멘토링 경력 수정' : 
-               section === 'education' ? '학교 정보 수정' : 
-               '프로필 수정'}
+              {isForeign
+                ? (section === 'personal' ? 'Edit Profile' : section === 'experience' ? 'Edit Experience' : section === 'education' ? 'Edit Education' : 'Edit Profile')
+                : (section === 'personal' ? '상세 정보 수정' : section === 'experience' ? '알바 & 멘토링 경력 수정' : section === 'education' ? '학교 정보 수정' : '프로필 수정')}
             </h1>
           </div>
         </div>
@@ -511,7 +512,9 @@ export default function EditProfilePage() {
               {/* 프로필 이미지 업로드 섹션 */}
               {(section === 'all' || section === 'personal') && (
                 <div className="w-full mb-6 flex flex-col items-center">
-                  <label className="block text-gray-700 text-sm font-medium mb-3">프로필 이미지</label>
+                  <label className="block text-gray-700 text-sm font-medium mb-3">
+                    {isForeign ? 'Profile Image' : '프로필 이미지'}
+                  </label>
                   <div className="mb-3 relative">
                     {profileImageUrl ? (
                       <img 
@@ -552,7 +555,7 @@ export default function EditProfilePage() {
                       htmlFor="profile-image"
                       className="cursor-pointer px-4 py-2 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 transition"
                     >
-                      이미지 변경
+                      {isForeign ? 'Change Image' : '이미지 변경'}
                     </label>
                   </div>
                 </div>
@@ -562,48 +565,50 @@ export default function EditProfilePage() {
               {(section === 'all' || section === 'personal') && (
                 <>
                   <FormInput
-                    label="이름"
+                    label={isForeign ? 'Name' : '이름'}
                     type="text"
-                    placeholder="이름을 입력하세요"
+                    placeholder={isForeign ? 'Enter your name' : '이름을 입력하세요'}
                     error={errors.name?.message}
                     {...register('name')}
                   />
 
                   <FormInput
-                    label="나이"
+                    label={isForeign ? 'Age' : '나이'}
                     type="number"
-                    placeholder="나이를 입력하세요"
+                    placeholder={isForeign ? 'Enter your age' : '나이를 입력하세요'}
                     error={errors.age?.message}
                     {...register('age', { valueAsNumber: true })}
                   />
 
                   <FormInput
-                    label="이메일"
+                    label={isForeign ? 'Email' : '이메일'}
                     type="email"
-                    placeholder="이메일 주소를 입력하세요"
-                    error={emailExists ? '이미 사용 중인 이메일입니다.' : errors.email?.message}
+                    placeholder={isForeign ? 'Enter your email' : '이메일 주소를 입력하세요'}
+                    error={emailExists ? (isForeign ? 'This email is already in use.' : '이미 사용 중인 이메일입니다.') : errors.email?.message}
                     {...register('email', {
                       onBlur: handleEmailBlur
                     })}
                   />
 
                   <FormInput
-                    label="휴대폰 번호"
+                    label={isForeign ? 'Phone Number' : '휴대폰 번호'}
                     type="tel"
-                    placeholder="'-' 없이 입력하세요"
-                    error={phoneExists ? '이미 사용 중인 휴대폰 번호입니다.' : errors.phoneNumber?.message}
+                    placeholder={isForeign ? 'Enter without dashes' : '\'-\' 없이 입력하세요'}
+                    error={phoneExists ? (isForeign ? 'This phone number is already in use.' : '이미 사용 중인 휴대폰 번호입니다.') : errors.phoneNumber?.message}
                     {...register('phoneNumber', {
                       onBlur: handlePhoneBlur
                     })}
                   />
 
                   <div className="w-full mb-4">
-                    <label className="block text-gray-700 text-sm font-medium mb-1">주소</label>
+                    <label className="block text-gray-700 text-sm font-medium mb-1">
+                      {isForeign ? 'Address' : '주소'}
+                    </label>
                     <div className="flex mb-2">
                       <input
                         disabled
                         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="주소 검색을 클릭하세요"
+                        placeholder={isForeign ? 'Click search address' : '주소 검색을 클릭하세요'}
                         {...register('address')}
                       />
                       <Button
@@ -612,7 +617,7 @@ export default function EditProfilePage() {
                         variant="secondary"
                         onClick={() => setShowPostcode(!showPostcode)}
                       >
-                        주소 검색
+                        {isForeign ? 'Search' : '주소 검색'}
                       </Button>
                     </div>
                     {showPostcode && (
@@ -624,13 +629,15 @@ export default function EditProfilePage() {
                   </div>
 
                   <FormInput
-                    label="상세 주소"
+                    label={isForeign ? 'Detailed Address' : '상세 주소'}
                     type="text"
-                    placeholder="상세 주소를 입력하세요"
+                    placeholder={isForeign ? 'Enter detailed address' : '상세 주소를 입력하세요'}
                     error={errors.addressDetail?.message}
                     {...register('addressDetail')}
                   />
 
+                  {!isForeign && (
+                  <>
                   <div className="w-full mb-4">
                     <label className="block text-gray-700 text-sm font-medium mb-1">가입 경로</label>
                     <select
@@ -672,9 +679,13 @@ export default function EditProfilePage() {
                       />
                     </div>
                   )}
+                  </>
+                  )}
 
                   <div className="w-full mb-4">
-                    <label className="block text-gray-700 text-sm font-medium mb-1">성별</label>
+                    <label className="block text-gray-700 text-sm font-medium mb-1">
+                      {isForeign ? 'Gender' : '성별'}
+                    </label>
                     <div className="flex space-x-4">
                       <div className="flex items-center">
                         <input
@@ -685,7 +696,7 @@ export default function EditProfilePage() {
                           {...register('gender')}
                         />
                         <label htmlFor="gender-male" className="ml-2 block text-sm text-gray-700">
-                          남성
+                          {isForeign ? 'Male' : '남성'}
                         </label>
                       </div>
                       <div className="flex items-center">
@@ -697,13 +708,15 @@ export default function EditProfilePage() {
                           {...register('gender')}
                         />
                         <label htmlFor="gender-female" className="ml-2 block text-sm text-gray-700">
-                          여성
+                          {isForeign ? 'Female' : '여성'}
                         </label>
                       </div>
                     </div>
                     {errors.gender && <p className="mt-1 text-sm text-red-600">{errors.gender.message}</p>}
                   </div>
 
+                  {!isForeign && (
+                  <>
                   <div className="w-full mb-4">
                     <label className="block text-gray-700 text-sm font-medium mb-1">자기소개</label>
                     <div className="relative">
@@ -735,11 +748,13 @@ export default function EditProfilePage() {
                     </div>
                     <p className="text-xs text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요.</p>
                   </div>
+                  </>
+                  )}
                 </>
               )}
 
-              {/* 알바 & 멘토링 경력 */}
-              {(section === 'all' || section === 'experience') && (
+              {/* 알바 & 멘토링 경력 - 원어민은 숨기기 */}
+              {!isForeign && (section === 'all' || section === 'experience') && (
                 <div className="mb-6">
                   <div className="flex justify-between items-center mb-2">
                     <label className="block text-sm font-medium text-gray-700">
@@ -833,8 +848,8 @@ export default function EditProfilePage() {
                 </div>
               )}
 
-              {/* 학교 정보 섹션 */}
-              {(section === 'all' || section === 'education') && (
+              {/* 학교 정보 섹션 - 원어민은 숨기기 */}
+              {!isForeign && (section === 'all' || section === 'education') && (
                 <div className={`${section !== 'education' ? 'border-t border-gray-200 pt-4 mt-6' : ''} mb-4`}>
                   {section !== 'education' && <h3 className="text-lg font-medium text-gray-900 mb-4">학교 정보</h3>}
                   
@@ -921,7 +936,7 @@ export default function EditProfilePage() {
                   }
                 }}
               >
-                저장하기
+                {isForeign ? 'Save' : '저장하기'}
               </Button>
             </div>
           </form>

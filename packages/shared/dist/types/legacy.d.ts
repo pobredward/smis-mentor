@@ -17,7 +17,7 @@ export interface User {
     password: string;
     address: string;
     addressDetail: string;
-    role: 'user' | 'mentor' | 'admin';
+    role: 'user' | 'mentor' | 'admin' | 'foreign' | 'foreign_temp' | 'mentor_temp';
     jobExperiences?: Array<{
         id: string;
         group: JobGroup;
@@ -93,6 +93,17 @@ export interface User {
         totalEvaluations: number;
         lastUpdatedAt: Timestamp;
     };
+    foreignTeacher?: {
+        firstName: string;
+        lastName: string;
+        middleName?: string;
+        countryCode: string;
+        cvUrl?: string;
+        passportPhotoUrl?: string;
+        foreignIdCardUrl?: string;
+        applicationDate?: Timestamp;
+    };
+    activeJobExperienceId?: string;
 }
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager';
 export interface JobCode {

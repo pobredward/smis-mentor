@@ -65,6 +65,7 @@ interface ProfileEditScreenProps {
 
 export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
   const { userData, refreshUserData } = useAuth();
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const [isLoading, setIsLoading] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
@@ -339,7 +340,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>프로필 수정</Text>
+          <Text style={styles.title}>{isForeign ? 'Edit Profile' : '프로필 수정'}</Text>
         </View>
 
         <View style={styles.content}>
@@ -372,10 +373,10 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
 
           {/* 개인 정보 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>개인 정보</Text>
+            <Text style={styles.sectionTitle}>{isForeign ? 'Personal Information' : '개인 정보'}</Text>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>이름 *</Text>
+              <Text style={styles.label}>{isForeign ? 'Name *' : '이름 *'}</Text>
               <Controller
                 control={control}
                 name="name"
@@ -531,6 +532,8 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
               {errors.gender && <Text style={styles.errorMessage}>{errors.gender.message}</Text>}
             </View>
 
+            {!isForeign && (
+            <>
             <View style={styles.formGroup}>
               <View style={styles.labelWithCount}>
                 <Text style={styles.label}>자기소개</Text>
@@ -574,9 +577,12 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                 )}
               />
             </View>
+            </>
+            )}
           </View>
 
-          {/* 학교 정보 */}
+          {/* 학교 정보 - 원어민은 숨기기 */}
+          {!isForeign && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>학교 정보</Text>
 
@@ -683,8 +689,10 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
               />
             </View>
           </View>
+          )}
 
-          {/* 알바 & 멘토링 경력 */}
+          {/* 알바 & 멘토링 경력 - 원어민은 숨기기 */}
+          {!isForeign && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>알바 & 멘토링 경력</Text>
@@ -737,6 +745,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
               </View>
             )}
           </View>
+          )}
 
           {/* 저장 버튼 */}
           <TouchableOpacity
@@ -750,7 +759,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
             {isLoading ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
-              <Text style={styles.submitButtonText}>저장하기</Text>
+              <Text style={styles.submitButtonText}>{isForeign ? 'Save' : '저장하기'}</Text>
             )}
           </TouchableOpacity>
         </View>

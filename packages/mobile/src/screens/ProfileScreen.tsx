@@ -8,10 +8,11 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Linking,
 } from 'react-native';
 import { MainTabScreenProps } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
-import { signOut } from '../services/authService';
+import { signOut, getUserByPhone } from '../services/authService';
 import { jobCodesService, JobCode } from '../services';
 import { SignInScreen } from './SignInScreen';
 import { RoleSelectionScreen } from './RoleSelectionScreen';
@@ -21,6 +22,16 @@ import { SignUpStep3Screen } from './SignUpStep3Screen';
 import { ForeignSignUpStep1Screen } from './ForeignSignUpStep1Screen';
 import { ForeignSignUpStep2Screen } from './ForeignSignUpStep2Screen';
 import { ProfileEditScreen } from './ProfileEditScreen';
+import { signUp } from '../services/authService';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import {
+  uploadForeignProfileImage,
+  uploadCV,
+  uploadPassportPhoto,
+  uploadForeignIdCard,
+} from '../services/foreignSignUpService';
+import { formatPhoneNumber } from '../utils/phoneUtils';
 
 type Screen = 
   | 'profile' 
@@ -173,7 +184,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     setCurrentScreen('foreign-signup-step2');
   };
 
-  const handleForeignSignUpStep2Next = (data: {
+  const handleForeignSignUpStep2Next = async (data: {
     email: string;
     password: string;
     profileImage?: string;
@@ -182,20 +193,206 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     foreignIdCard?: string;
   }) => {
     setSignUpData({ ...signUpData, ...data });
+    
+    // 입력 데이터 검증
+    if (!signUpData.firstName || !signUpData.lastName || !signUpData.phone || !data.email || !data.password) {
+      Alert.alert('오류', '필수 정보가 누락되었습니다.');
+      return;
+    }
+
+    // 필수 파일 검증
+    if (!data.profileImage) {
+      Alert.alert('오류', '프로필 사진을 업로드해주세요.');
+      return;
+    }
+    if (!data.cvFile) {
+      Alert.alert('오류', 'CV (PDF)를 업로드해주세요.');
+      return;
+    }
+    if (!data.passportPhoto) {
+      Alert.alert('오류', '여권 사진을 업로드해주세요.');
+      return;
+    }
+
+    // 로딩 시작
     Alert.alert(
-      '회원가입 완료 안내',
-      '원어민 회원가입은 웹에서 최종 승인이 필요합니다.\n잠시 후 로그인 화면으로 이동합니다.',
-      [
-        {
-          text: '확인',
-          onPress: () => {
-            setCurrentScreen('signin');
-            setSelectedRole(null);
-            setSignUpData({});
-          },
-        },
-      ]
+      'Sign Up in Progress',
+      'Uploading files and creating your account.\nPlease wait...',
+      [],
+      { cancelable: false }
     );
+
+    try {
+      const fullPhone = `${signUpData.countryCode}${signUpData.phone}`;
+      const fullName = signUpData.middleName 
+        ? `${signUpData.firstName} ${signUpData.middleName} ${signUpData.lastName}`
+        : `${signUpData.firstName} ${signUpData.lastName}`;
+
+      // 전화번호로 기존 사용자 확인
+      const existingUserByPhone = await getUserByPhone(fullPhone);
+      
+      let userId: string;
+      let isUpdatingExistingUser = false;
+
+      // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
+      if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
+        console.log('📋 기존 foreign_temp 사용자 발견, 계정 업데이트 진행...');
+        
+        // 기존 계정의 userId 사용
+        userId = existingUserByPhone.userId;
+        isUpdatingExistingUser = true;
+        
+        // Firebase Authentication 계정이 이미 있을 수 있으므로 체크
+        console.log('🔐 Firebase Authentication 계정 생성/확인 시작:', data.email);
+        try {
+          const userCredential = await signUp(data.email, data.password);
+          console.log('✅ Firebase Authentication 계정 생성 완료');
+        } catch (authError: any) {
+          if (authError.code === 'auth/email-already-in-use') {
+            console.log('⚠️ Firebase Auth 이미 존재, Firestore만 업데이트');
+          } else {
+            throw authError;
+          }
+        }
+      }
+      // Case 2: 완전히 새로운 사용자
+      else {
+        console.log('🔐 Firebase Authentication 계정 생성 시작:', data.email);
+        const userCredential = await signUp(data.email, data.password);
+        userId = userCredential.user.uid;
+        console.log('✅ Firebase Authentication 계정 생성 완료, UID:', userId);
+      }
+
+      // 2. 파일 업로드
+      console.log('📤 파일 업로드 시작...');
+      let profileImageUrl = '';
+      let cvUrl = '';
+      let passportPhotoUrl = '';
+      let foreignIdCardUrl = '';
+
+      try {
+        // 프로필 이미지 업로드
+        console.log('  - 프로필 이미지 업로드 중...');
+        profileImageUrl = await uploadForeignProfileImage(userId, data.profileImage);
+        console.log('  ✅ 프로필 이미지 업로드 완료');
+
+        // CV 업로드
+        console.log('  - CV 업로드 중...');
+        cvUrl = await uploadCV(userId, data.cvFile.uri, data.cvFile.name);
+        console.log('  ✅ CV 업로드 완료');
+
+        // 여권 사진 업로드
+        console.log('  - 여권 사진 업로드 중...');
+        passportPhotoUrl = await uploadPassportPhoto(userId, data.passportPhoto);
+        console.log('  ✅ 여권 사진 업로드 완료');
+
+        // 외국인 등록증 업로드 (선택사항)
+        if (data.foreignIdCard) {
+          console.log('  - 외국인 등록증 업로드 중...');
+          foreignIdCardUrl = await uploadForeignIdCard(userId, data.foreignIdCard);
+          console.log('  ✅ 외국인 등록증 업로드 완료');
+        }
+
+        console.log('✅ 모든 파일 업로드 완료');
+      } catch (uploadError) {
+        console.error('❌ 파일 업로드 실패:', uploadError);
+        throw new Error('파일 업로드에 실패했습니다. 관리자에게 문의해주세요.');
+      }
+
+      // 3. Firestore에 사용자 문서 생성 또는 업데이트
+      const userData = {
+        userId: userId,
+        name: fullName,
+        email: data.email,
+        phone: fullPhone,
+        phoneNumber: fullPhone,
+        password: '', // 보안상 저장하지 않음
+        address: existingUserByPhone?.address || '',
+        addressDetail: existingUserByPhone?.addressDetail || '',
+        role: 'foreign', // 원어민은 바로 활성화
+        jobExperiences: existingUserByPhone?.jobExperiences || [],
+        partTimeJobs: existingUserByPhone?.partTimeJobs || [],
+        createdAt: existingUserByPhone?.createdAt || Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        agreedTerms: true,
+        agreedPersonal: true,
+        profileImage: profileImageUrl,
+        status: 'active' as const, // 원어민은 바로 활성 상태
+        isEmailVerified: false,
+        isPhoneVerified: false,
+        isProfileCompleted: true, // 모든 정보 입력 완료
+        isTermsAgreed: true,
+        isPersonalAgreed: true,
+        isAddressVerified: false,
+        isProfileImageUploaded: true,
+        jobMotivation: 'Foreign Teacher Application',
+        feedback: existingUserByPhone?.feedback || '',
+        // 원어민 특화 정보
+        foreignTeacher: {
+          firstName: signUpData.firstName,
+          lastName: signUpData.lastName,
+          middleName: signUpData.middleName || '',
+          countryCode: signUpData.countryCode,
+          cvUrl: cvUrl,
+          passportPhotoUrl: passportPhotoUrl,
+          foreignIdCardUrl: foreignIdCardUrl || '',
+          applicationDate: Timestamp.now(),
+        }
+      };
+
+      if (isUpdatingExistingUser) {
+        console.log('📝 Firestore 사용자 문서 업데이트 시작');
+        await setDoc(doc(db, 'users', userId), userData, { merge: true });
+        console.log('✅ Firestore 사용자 문서 업데이트 완료 (foreign_temp → foreign)');
+        
+        Alert.alert(
+          'Account Activated',
+          `Welcome, ${fullName}!\n\n✅ Your account has been activated.\n✅ All documents have been uploaded.\n\nYou can now log in to the platform.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setCurrentScreen('signin');
+                setSelectedRole(null);
+                setSignUpData({});
+              },
+            },
+          ]
+        );
+      } else {
+        console.log('📝 Firestore 사용자 문서 생성 시작');
+        await setDoc(doc(db, 'users', userId), userData);
+        console.log('✅ Firestore 사용자 문서 생성 완료');
+        
+        Alert.alert(
+          'Sign Up Complete',
+          `Welcome, ${fullName}!\n\n✅ Your account has been successfully created.\n✅ All documents have been uploaded.\n\nYou can now log in to the platform.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setCurrentScreen('signin');
+                setSelectedRole(null);
+                setSignUpData({});
+              },
+            },
+          ]
+        );
+      }
+    } catch (error: any) {
+      console.error('❌ 원어민 회원가입 오류:', error);
+      
+      let errorMessage = error.message || 'An error occurred during sign up.';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email is already in use.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak. Please use at least 8 characters.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email format.';
+      }
+
+      Alert.alert('Sign Up Error', errorMessage);
+    }
   };
 
   const handleLogout = async () => {
@@ -236,17 +433,19 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       return <ProfileEditScreen onBack={() => setCurrentScreen('profile')} />;
     }
 
+    const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
+
     return (
       <ScrollView style={styles.container}>
         <View style={styles.content}>
           {/* 헤더 */}
           <View style={styles.header}>
-            <Text style={styles.title}>내 프로필</Text>
+            <Text style={styles.title}>{isForeign ? 'My Profile' : '내 프로필'}</Text>
             <TouchableOpacity
               onPress={() => setCurrentScreen('profile-edit')}
               style={styles.editButton}
             >
-              <Text style={styles.editButtonText}>수정</Text>
+              <Text style={styles.editButtonText}>{isForeign ? 'Edit' : '수정'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -269,13 +468,99 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 <Text style={styles.profileName}>{userData.name}</Text>
                 <Text style={styles.profileEmail}>{userData.email}</Text>
                 {userData.phone && (
-                  <Text style={styles.profilePhone}>{userData.phone}</Text>
+                  <Text style={styles.profilePhone}>{formatPhoneNumber(userData.phone)}</Text>
                 )}
               </View>
             </View>
           </View>
 
-          {/* SMIS 캠프 참여 이력 - 기수 선택 */}
+          {/* 원어민 교사 정보 및 제출 서류 */}
+          {isForeign && userData.foreignTeacher && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Teacher Information & Submitted Documents</Text>
+              </View>
+              <View style={styles.infoGrid}>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>First Name</Text>
+                  <Text style={styles.infoValue}>{userData.foreignTeacher.firstName}</Text>
+                </View>
+                {userData.foreignTeacher.middleName && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Middle Name</Text>
+                    <Text style={styles.infoValue}>{userData.foreignTeacher.middleName}</Text>
+                  </View>
+                )}
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Last Name</Text>
+                  <Text style={styles.infoValue}>{userData.foreignTeacher.lastName}</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Country Code</Text>
+                  <Text style={styles.infoValue}>{userData.foreignTeacher.countryCode}</Text>
+                </View>
+                {userData.foreignTeacher.applicationDate && (
+                  <View style={[styles.infoItem, { flex: 1, width: '100%' }]}>
+                    <Text style={styles.infoLabel}>Application Date</Text>
+                    <Text style={styles.infoValue}>
+                      {userData.foreignTeacher.applicationDate.toDate
+                        ? userData.foreignTeacher.applicationDate.toDate().toLocaleDateString('en-US')
+                        : new Date((userData.foreignTeacher.applicationDate as any).seconds * 1000).toLocaleDateString('en-US')}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              
+              <View style={styles.divider} />
+              <Text style={styles.subsectionTitle}>Submitted Documents</Text>
+              
+              {userData.foreignTeacher.cvUrl && (
+                <TouchableOpacity
+                  style={[styles.fileLink, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' }]}
+                  onPress={() => userData.foreignTeacher?.cvUrl && Linking.openURL(userData.foreignTeacher.cvUrl)}
+                >
+                  <View style={styles.fileLinkContent}>
+                    <Text style={[styles.fileLinkTitle, { color: '#3730A3' }]}>CV (Curriculum Vitae)</Text>
+                    <Text style={[styles.fileLinkSubtitle, { color: '#4F46E5' }]}>Click to view</Text>
+                  </View>
+                  <Text style={{ color: '#4F46E5', fontSize: 18 }}>→</Text>
+                </TouchableOpacity>
+              )}
+              
+              {userData.foreignTeacher.passportPhotoUrl && (
+                <TouchableOpacity
+                  style={[styles.fileLink, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}
+                  onPress={() => userData.foreignTeacher?.passportPhotoUrl && Linking.openURL(userData.foreignTeacher.passportPhotoUrl)}
+                >
+                  <View style={styles.fileLinkContent}>
+                    <Text style={[styles.fileLinkTitle, { color: '#14532D' }]}>Passport Photo</Text>
+                    <Text style={[styles.fileLinkSubtitle, { color: '#16A34A' }]}>Click to view</Text>
+                  </View>
+                  <Text style={{ color: '#16A34A', fontSize: 18 }}>→</Text>
+                </TouchableOpacity>
+              )}
+              
+              {userData.foreignTeacher.foreignIdCardUrl && (
+                <TouchableOpacity
+                  style={[styles.fileLink, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}
+                  onPress={() => userData.foreignTeacher?.foreignIdCardUrl && Linking.openURL(userData.foreignTeacher.foreignIdCardUrl)}
+                >
+                  <View style={styles.fileLinkContent}>
+                    <Text style={[styles.fileLinkTitle, { color: '#78350F' }]}>Foreign Resident ID Card</Text>
+                    <Text style={[styles.fileLinkSubtitle, { color: '#D97706' }]}>Click to view</Text>
+                  </View>
+                  <Text style={{ color: '#D97706', fontSize: 18 }}>→</Text>
+                </TouchableOpacity>
+              )}
+              
+              {!userData.foreignTeacher.cvUrl && !userData.foreignTeacher.passportPhotoUrl && !userData.foreignTeacher.foreignIdCardUrl && (
+                <Text style={styles.emptyText}>No documents submitted.</Text>
+              )}
+            </View>
+          )}
+
+          {/* SMIS 캠프 참여 이력 - 기수 선택 - 원어민은 숨기기 */}
+          {!isForeign && (
           <View style={styles.sectionCard}>
             <TouchableOpacity 
               style={styles.sectionHeader}
@@ -365,34 +650,39 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               </>
             )}
           </View>
+          )}
 
           {/* 개인 정보 */}
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>개인 정보</Text>
+              <Text style={styles.sectionTitle}>{isForeign ? 'Personal Information' : '개인 정보'}</Text>
             </View>
             <View style={styles.infoGrid}>
               {userData.age && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>나이</Text>
-                  <Text style={styles.infoValue}>{userData.age}세</Text>
+                  <Text style={styles.infoLabel}>{isForeign ? 'Age' : '나이'}</Text>
+                  <Text style={styles.infoValue}>{userData.age}{isForeign ? ' years old' : '세'}</Text>
                 </View>
               )}
               {userData.gender && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>성별</Text>
-                  <Text style={styles.infoValue}>{userData.gender === 'M' ? '남성' : '여성'}</Text>
+                  <Text style={styles.infoLabel}>{isForeign ? 'Gender' : '성별'}</Text>
+                  <Text style={styles.infoValue}>
+                    {isForeign
+                      ? (userData.gender === 'M' ? 'Male' : 'Female')
+                      : (userData.gender === 'M' ? '남성' : '여성')}
+                  </Text>
                 </View>
               )}
               {userData.phoneNumber && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>연락처</Text>
-                  <Text style={styles.infoValue}>{userData.phoneNumber}</Text>
+                  <Text style={styles.infoLabel}>{isForeign ? 'Phone Number' : '연락처'}</Text>
+                  <Text style={styles.infoValue}>{formatPhoneNumber(userData.phoneNumber)}</Text>
                 </View>
               )}
               {userData.address && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>주소</Text>
+                  <Text style={styles.infoLabel}>{isForeign ? 'Address' : '주소'}</Text>
                   <Text style={styles.infoValue}>
                     {userData.address}
                     {userData.addressDetail ? ` ${userData.addressDetail}` : ''}
@@ -402,8 +692,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             </View>
           </View>
 
-          {/* 학교 정보 */}
-          {(userData.school || userData.university) && (
+          {/* 학교 정보 - 원어민은 숨기기 */}
+          {!isForeign && (userData.school || userData.university) && (
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>학교 정보</Text>
@@ -437,8 +727,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             </View>
           )}
 
-          {/* 알바 & 멘토링 경력 */}
-          {userData.partTimeJobs && userData.partTimeJobs.length > 0 && (
+          {/* 알바 & 멘토링 경력 - 원어민은 숨기기 */}
+          {!isForeign && userData.partTimeJobs && userData.partTimeJobs.length > 0 && (
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>알바 & 멘토링 경력</Text>
@@ -460,8 +750,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             </View>
           )}
 
-          {/* 자기소개 & 지원동기 */}
-          {(userData.selfIntroduction || userData.jobMotivation) && (
+          {/* 자기소개 & 지원동기 - 원어민은 숨기기 */}
+          {!isForeign && (userData.selfIntroduction || userData.jobMotivation) && (
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>자기소개 & 지원동기</Text>
@@ -489,7 +779,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             onPress={handleLogout}
             activeOpacity={0.7}
           >
-            <Text style={styles.logoutButtonText}>로그아웃</Text>
+            <Text style={styles.logoutButtonText}>{isForeign ? 'Logout' : '로그아웃'}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -877,6 +1167,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     lineHeight: 18,
+  },
+  
+  // 파일 링크 스타일
+  divider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginVertical: 16,
+  },
+  subsectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 12,
+  },
+  fileLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  fileLinkContent: {
+    flex: 1,
+  },
+  fileLinkTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  fileLinkSubtitle: {
+    fontSize: 12,
   },
   
   // 로그아웃 버튼

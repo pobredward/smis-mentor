@@ -10,6 +10,7 @@ import { JobCodeWithId } from '@/types';
 import toast from 'react-hot-toast';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { formatPhoneNumber } from '@/utils/phoneUtils';
 
 export default function ProfilePage() {
   const { userData, currentUser, waitForAuthReady, refreshUserData, updateActiveJobCode } = useAuth();
@@ -134,18 +135,20 @@ export default function ProfilePage() {
     );
   }
 
+  const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
+
   return (
     <>
       <Layout requireAuth>
       <div className="max-w-2xl mx-auto lg:px-4 px-0">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold">내 프로필</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">{isForeign ? 'My Profile' : '내 프로필'}</h1>
           <Button
             variant="primary"
             onClick={() => router.push('/profile/edit')}
             className="text-sm px-4 py-2"
           >
-            수정
+            {isForeign ? 'Edit' : '수정'}
           </Button>
         </div>
 
@@ -168,13 +171,121 @@ export default function ProfilePage() {
               <div className="text-center sm:text-left">
                 <h2 className="text-xl font-bold mb-1">{userData.name}</h2>
                 <p className="text-gray-600 mb-1">{userData.email}</p>
-                {userData.phoneNumber && <p className="text-gray-600">{userData.phoneNumber}</p>}
+                {userData.phoneNumber && <p className="text-gray-600">{formatPhoneNumber(userData.phoneNumber)}</p>}
               </div>
             </div>
           </div>
         </div>
 
-        {/* SMIS 캠프 참여 이력 */}
+        {/* 원어민 교사 정보 및 제출 서류 */}
+        {isForeign && userData.foreignTeacher && (
+          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+            <div className="border-b px-4 sm:px-6 py-3">
+              <h2 className="text-lg font-semibold">Teacher Information & Submitted Documents</h2>
+            </div>
+            <div className="px-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-500">First Name</p>
+                  <p>{userData.foreignTeacher.firstName}</p>
+                </div>
+                {userData.foreignTeacher.middleName && (
+                  <div>
+                    <p className="text-sm text-gray-500">Middle Name</p>
+                    <p>{userData.foreignTeacher.middleName}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-gray-500">Last Name</p>
+                  <p>{userData.foreignTeacher.lastName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Country Code</p>
+                  <p>{userData.foreignTeacher.countryCode}</p>
+                </div>
+                {userData.foreignTeacher.applicationDate && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-500">Application Date</p>
+                    <p>
+                      {userData.foreignTeacher.applicationDate.toDate
+                        ? userData.foreignTeacher.applicationDate.toDate().toLocaleDateString('en-US')
+                        : new Date((userData.foreignTeacher.applicationDate as any).seconds * 1000).toLocaleDateString('en-US')}
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold mb-3 text-gray-700">Submitted Documents</h3>
+                <div className="space-y-2">
+                  {userData.foreignTeacher.cvUrl && (
+                    <a
+                      href={userData.foreignTeacher.cvUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
+                    >
+                      <svg className="w-5 h-5 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <div className="flex-grow min-w-0">
+                        <p className="text-sm font-medium text-indigo-900">CV (Curriculum Vitae)</p>
+                        <p className="text-xs text-indigo-600">Click to view</p>
+                      </div>
+                      <svg className="w-4 h-4 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+                  {userData.foreignTeacher.passportPhotoUrl && (
+                    <a
+                      href={userData.foreignTeacher.passportPhotoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors border border-green-200"
+                    >
+                      <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <div className="flex-grow min-w-0">
+                        <p className="text-sm font-medium text-green-900">Passport Photo</p>
+                        <p className="text-xs text-green-600">Click to view</p>
+                      </div>
+                      <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+                  {userData.foreignTeacher.foreignIdCardUrl && (
+                    <a
+                      href={userData.foreignTeacher.foreignIdCardUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-200"
+                    >
+                      <svg className="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                      </svg>
+                      <div className="flex-grow min-w-0">
+                        <p className="text-sm font-medium text-amber-900">Foreign Resident ID Card</p>
+                        <p className="text-xs text-amber-600">Click to view</p>
+                      </div>
+                      <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+                  {!userData.foreignTeacher.cvUrl && !userData.foreignTeacher.passportPhotoUrl && !userData.foreignTeacher.foreignIdCardUrl && (
+                    <p className="text-sm text-gray-500 py-2">No documents submitted.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SMIS 캠프 참여 이력 - 원어민은 숨기기 */}
+        {!isForeign && (
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <button
             onClick={() => setJobCodesExpanded(!jobCodesExpanded)}
@@ -292,35 +403,36 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+        )}
 
         {/* 개인 정보 */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="border-b px-4 sm:px-6 py-3">
-            <h2 className="text-lg font-semibold">개인 정보</h2>
+            <h2 className="text-lg font-semibold">{isForeign ? 'Personal Information' : '개인 정보'}</h2>
           </div>
           <div className="px-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {userData.age && (
                 <div>
-                  <p className="text-sm text-gray-500">나이</p>
-                  <p>{userData.age}세</p>
+                  <p className="text-sm text-gray-500">{isForeign ? 'Age' : '나이'}</p>
+                  <p>{userData.age}{isForeign ? ' years old' : '세'}</p>
                 </div>
               )}
               {userData.gender && (
                 <div>
-                  <p className="text-sm text-gray-500">성별</p>
-                  <p>{userData.gender === 'M' ? '남성' : '여성'}</p>
+                  <p className="text-sm text-gray-500">{isForeign ? 'Gender' : '성별'}</p>
+                  <p>{isForeign ? (userData.gender === 'M' ? 'Male' : 'Female') : (userData.gender === 'M' ? '남성' : '여성')}</p>
                 </div>
               )}
               {userData.phoneNumber && (
                 <div>
-                  <p className="text-sm text-gray-500">연락처</p>
-                  <p>{userData.phoneNumber}</p>
+                  <p className="text-sm text-gray-500">{isForeign ? 'Phone Number' : '연락처'}</p>
+                  <p>{formatPhoneNumber(userData.phoneNumber)}</p>
                 </div>
               )}
               {userData.address && (
                 <div className="md:col-span-2">
-                  <p className="text-sm text-gray-500">주소</p>
+                  <p className="text-sm text-gray-500">{isForeign ? 'Address' : '주소'}</p>
                   <p>{userData.address} {userData.addressDetail}</p>
                 </div>
               )}
@@ -328,8 +440,8 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* 학교 정보 섹션 */}
-        {userData.university && (
+        {/* 학교 정보 섹션 - 원어민은 숨기기 */}
+        {!isForeign && userData.university && (
           <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
             <div className="border-b px-4 sm:px-6 py-3">
               <h2 className="text-lg font-semibold">학교 정보</h2>
@@ -363,8 +475,8 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* 알바 & 멘토링 경력 섹션 */}
-        {userData.partTimeJobs && userData.partTimeJobs.length > 0 && (
+        {/* 알바 & 멘토링 경력 섹션 - 원어민은 숨기기 */}
+        {!isForeign && userData.partTimeJobs && userData.partTimeJobs.length > 0 && (
           <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
             <div className="border-b px-4 sm:px-6 py-3">
               <h2 className="text-lg font-semibold">알바 & 멘토링 경력</h2>
@@ -392,8 +504,8 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* 자기소개 & 지원동기 */}
-        {(userData.selfIntroduction || userData.jobMotivation) && (
+        {/* 자기소개 & 지원동기 - 원어민은 숨기기 */}
+        {!isForeign && (userData.selfIntroduction || userData.jobMotivation) && (
           <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
             <div className="border-b px-4 sm:px-6 py-3">
               <h2 className="text-lg font-semibold">자기소개 & 지원동기</h2>
@@ -425,7 +537,7 @@ export default function ProfilePage() {
             onClick={() => setShowDeactivateModal(true)}
             className="text-red-500 text-sm underline hover:text-red-700"
           >
-            회원 탈퇴
+            {isForeign ? 'Delete Account' : '회원 탈퇴'}
           </button>
         </div>
         </div>
@@ -435,12 +547,18 @@ export default function ProfilePage() {
       {showDeactivateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">회원 탈퇴 확인</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              {isForeign ? 'Confirm Account Deletion' : '회원 탈퇴 확인'}
+            </h3>
             <p className="text-gray-700 mb-4">
-              정말로 회원 탈퇴를 진행하시겠습니까? 탈퇴 후에는 동일한 이메일로 다시 로그인할 수 없으며, 모든 계정 정보가 비활성화됩니다.
+              {isForeign
+                ? 'Are you sure you want to delete your account? After deletion, you will not be able to log in with the same email, and all account information will be deactivated.'
+                : '정말로 회원 탈퇴를 진행하시겠습니까? 탈퇴 후에는 동일한 이메일로 다시 로그인할 수 없으며, 모든 계정 정보가 비활성화됩니다.'}
             </p>
             <p className="text-gray-700 mb-6 text-sm">
-              필요한 경우 관리자를 통해 계정을 복구할 수 있습니다.
+              {isForeign
+                ? 'If necessary, you can recover your account through the administrator.'
+                : '필요한 경우 관리자를 통해 계정을 복구할 수 있습니다.'}
             </p>
             <div className="flex justify-end gap-3">
               <Button
@@ -448,14 +566,14 @@ export default function ProfilePage() {
                 onClick={() => setShowDeactivateModal(false)}
                 disabled={deactivating}
               >
-                취소
+                {isForeign ? 'Cancel' : '취소'}
               </Button>
               <Button
                 variant="danger"
                 onClick={handleDeactivateAccount}
                 isLoading={deactivating}
               >
-                탈퇴하기
+                {isForeign ? 'Delete' : '탈퇴하기'}
               </Button>
             </div>
           </div>

@@ -72,6 +72,18 @@ export interface User {
     description: string;
   }[];
   
+  // 원어민 교사 전용 정보
+  foreignTeacher?: {
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    countryCode: string;
+    cvUrl?: string;
+    passportPhotoUrl?: string;
+    foreignIdCardUrl?: string;
+    applicationDate?: Timestamp;
+  };
+  
   // 평가 요약 정보 추가
   evaluationSummary?: {
     documentReview?: {

@@ -16,6 +16,7 @@ import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { getInterviewLinks, InterviewLinks } from '@/lib/interviewLinksService';
 import { InterviewLinksManager } from '@/components/admin/InterviewLinksManager';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
+import { formatPhoneNumber } from '@/utils/phoneUtils';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -1051,21 +1052,6 @@ export function InterviewManageClient() {
 
   // 피드백 저장
   // 현재 사용자 정보 로드
-  // 전화번호에 하이픈 추가 함수
-  const formatPhoneNumber = (phoneNumber: string) => {
-    if (!phoneNumber) return '';
-    
-    // 전화번호가 10자리인 경우와 11자리인 경우를 구분
-    if (phoneNumber.length === 10) {
-      return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6)}`;
-    } else if (phoneNumber.length === 11) {
-      return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 7)}-${phoneNumber.slice(7)}`;
-    }
-    
-    // 그 외 경우는 원래 형식 반환
-    return phoneNumber;
-  };
-
   // 면접 날짜 미정으로 설정
   const handleSetUndefinedDate = async () => {
     if (!selectedApplication) return;

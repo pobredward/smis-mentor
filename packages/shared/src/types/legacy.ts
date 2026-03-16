@@ -19,7 +19,7 @@ export interface User {
   password: string;
   address: string;
   addressDetail: string;
-  role: 'user' | 'mentor' | 'admin';
+  role: 'user' | 'mentor' | 'admin' | 'foreign' | 'foreign_temp' | 'mentor_temp';
   jobExperiences?: Array<{
     id: string,
     group: JobGroup,
@@ -97,6 +97,21 @@ export interface User {
     totalEvaluations: number;    // 총 평가 횟수
     lastUpdatedAt: Timestamp;
   };
+
+  // 원어민 교사 전용 정보
+  foreignTeacher?: {
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    countryCode: string;
+    cvUrl?: string;
+    passportPhotoUrl?: string;
+    foreignIdCardUrl?: string;
+    applicationDate?: Timestamp;
+  };
+
+  // 활성화된 캠프 코드 (최근 추가)
+  activeJobExperienceId?: string;
 }
 
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager';

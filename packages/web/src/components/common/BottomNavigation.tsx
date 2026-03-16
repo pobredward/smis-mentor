@@ -40,7 +40,7 @@ const BottomNavigation = () => {
       )
     }] : []),
     {
-      name: '캠프',
+      name: isForeign ? 'Camp' : '캠프',
       path: '/camp',
       icon: (active: boolean) => (
         <svg className={`w-6 h-6 ${active ? 'text-blue-600' : 'text-gray-600'}`} fill={active ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
@@ -49,7 +49,7 @@ const BottomNavigation = () => {
       )
     },
     {
-      name: '마이페이지',
+      name: isForeign ? 'My Page' : '마이페이지',
       path: '/profile',
       icon: (active: boolean) => (
         <svg className={`w-6 h-6 ${active ? 'text-blue-600' : 'text-gray-600'}`} fill={active ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">

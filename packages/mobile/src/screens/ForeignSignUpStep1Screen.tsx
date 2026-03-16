@@ -67,27 +67,99 @@ export function ForeignSignUpStep1Screen({
       const userByPhone = await getUserByPhone(fullPhone);
 
       if (userByPhone) {
-        const { status } = userByPhone;
+        const { status, role, name: existingName, foreignTeacher } = userByPhone;
         
-        if (status === 'temp') {
-          Alert.alert(
-            'Welcome',
-            'Welcome back! Please continue with your registration.'
-          );
-          onNext({
-            firstName,
-            lastName,
-            middleName: middleName || undefined,
-            countryCode,
-            phone: phoneNumber,
-          });
-        } else if (status === 'active') {
+        // 입력된 이름 조합
+        const inputFullName = middleName 
+          ? `${firstName} ${middleName} ${lastName}`
+          : `${firstName} ${lastName}`;
+        
+        // 기존 사용자가 임시 원어민(foreign_temp)인 경우
+        if (role === 'foreign_temp' && status === 'temp') {
+          // 이름 비교 (DB에 저장된 name 또는 foreignTeacher 정보와 비교)
+          let namesMatch = false;
+          
+          // 1. 기본 name 필드와 비교
+          if (existingName === inputFullName) {
+            namesMatch = true;
+          }
+          
+          // 2. foreignTeacher 정보가 있으면 그것으로도 비교
+          if (foreignTeacher) {
+            const dbFullName = foreignTeacher.middleName
+              ? `${foreignTeacher.firstName} ${foreignTeacher.middleName} ${foreignTeacher.lastName}`
+              : `${foreignTeacher.firstName} ${foreignTeacher.lastName}`;
+            
+            if (dbFullName === inputFullName) {
+              namesMatch = true;
+            }
+          }
+          
+          if (namesMatch) {
+            // 이름이 일치하는 임시 원어민 → 기존 계정 활성화 안내
+            Alert.alert(
+              'Welcome',
+              `Welcome back, ${inputFullName}!\n\nPlease continue your registration to activate your account.`
+            );
+            onNext({
+              firstName,
+              lastName,
+              middleName: middleName || undefined,
+              countryCode,
+              phone: phoneNumber,
+            });
+            return;
+          } else {
+            // 이름이 불일치 → 관리자가 다른 사람을 등록해둔 것
+            Alert.alert(
+              'Account Error',
+              `The phone number is registered to a different person (${existingName || 'Unknown'}).\n\nPlease contact the administrator or use a different phone number.`
+            );
+            return;
+          }
+        }
+        
+        // 이미 활성화된 원어민(foreign)인 경우
+        if (role === 'foreign' && status === 'active') {
           Alert.alert(
             'Account Information',
             'This account already exists. Please return to the login page.'
           );
+          return;
         }
+        
+        // 임시 멘토인 경우
+        if (role === 'mentor_temp' && status === 'temp') {
+          Alert.alert(
+            'Wrong Sign-up Type',
+            'This phone number is registered as a mentor. Please use the mentor sign-up option.'
+          );
+          return;
+        }
+        
+        // 활성 멘토인 경우
+        if (role === 'mentor' && status === 'active') {
+          Alert.alert(
+            'Account Information',
+            'This account already exists. Please return to the login page.'
+          );
+          return;
+        }
+        
+        // 기타 상태 (일반 user 등) → 신규 가입 진행
+        Alert.alert(
+          'Welcome',
+          `Welcome ${firstName}! We're honored to have you with SMIS. Please complete the remaining information.`
+        );
+        onNext({
+          firstName,
+          lastName,
+          middleName: middleName || undefined,
+          countryCode,
+          phone: phoneNumber,
+        });
       } else {
+        // 전화번호로 사용자를 찾을 수 없는 경우 → 신규 가입
         Alert.alert(
           'Welcome',
           `Welcome ${firstName}! We're honored to have you with SMIS. Please complete the remaining information.`

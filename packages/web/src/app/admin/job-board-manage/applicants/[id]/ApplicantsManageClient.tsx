@@ -555,21 +555,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     }
   };
   
-  // 전화번호에 하이픈 추가 함수
-  const formatPhoneNumber = (phoneNumber: string) => {
-    if (!phoneNumber) return '';
-    
-    // 전화번호가 10자리인 경우와 11자리인 경우를 구분
-    if (phoneNumber.length === 10) {
-      return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6)}`;
-    } else if (phoneNumber.length === 11) {
-      return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 7)}-${phoneNumber.slice(7)}`;
-    }
-    
-    // 그 외 경우는 원래 형식 반환
-    return phoneNumber;
-  };
-
   const getStatusBadge = (status: string | undefined, statusType: 'application' | 'interview' | 'final') => {
     if (!status) return null;
 

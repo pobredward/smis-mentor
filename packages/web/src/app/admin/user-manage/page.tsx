@@ -7,7 +7,8 @@ import { format } from 'date-fns';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
-import PhoneInput, { formatPhoneNumber } from '@/components/common/PhoneInput';
+import PhoneInput from '@/components/common/PhoneInput';
+import { formatPhoneNumber } from '@/utils/phoneUtils';
 import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser } from '@/lib/firebaseService';
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { EvaluationSummaryCompact } from '@/components/evaluation/EvaluationSummary';
@@ -1221,75 +1222,165 @@ export default function UserManage() {
                         </div>
                       </div>
 
-                      {/* 학교 정보 */}
-                      <div className="mt-6 border-t pt-4">
-                        <h3 className="text-lg font-semibold mb-3">학교 정보</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <FormInput
-                            label="학교"
-                            name="university"
-                            type="text"
-                            value={editFormData.university || ''}
-                            onChange={handleEditFormChange}
-                          />
-
-                          <div>
-                            <label className="block text-gray-700 text-xs font-medium mb-1">학년</label>
-                            <select
-                              name="grade"
-                              value={editFormData.grade || ''}
+                      {/* 학교 정보 - 멘토만 */}
+                      {(selectedUser.role === 'mentor' || selectedUser.role === 'mentor_temp' || selectedUser.role === 'admin') && (
+                        <div className="mt-6 border-t pt-4">
+                          <h3 className="text-lg font-semibold mb-3">학교 정보</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormInput
+                              label="학교"
+                              name="university"
+                              type="text"
+                              value={editFormData.university || ''}
                               onChange={handleEditFormChange}
-                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">선택</option>
-                              <option value="1">1학년</option>
-                              <option value="2">2학년</option>
-                              <option value="3">3학년</option>
-                              <option value="4">4학년</option>
-                              <option value="5">5학년</option>
-                              <option value="6">졸업생</option>
-                            </select>
+                            />
+
+                            <div>
+                              <label className="block text-gray-700 text-xs font-medium mb-1">학년</label>
+                              <select
+                                name="grade"
+                                value={editFormData.grade || ''}
+                                onChange={handleEditFormChange}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="">선택</option>
+                                <option value="1">1학년</option>
+                                <option value="2">2학년</option>
+                                <option value="3">3학년</option>
+                                <option value="4">4학년</option>
+                                <option value="5">5학년</option>
+                                <option value="6">졸업생</option>
+                              </select>
+                            </div>
+
+                            <div className="mb-4">
+                              <label className="block text-gray-700 text-sm font-medium mb-2">휴학 상태</label>
+                              <select
+                                name="isOnLeave"
+                                value={editFormData.isOnLeave === null ? 'null' : editFormData.isOnLeave?.toString() || 'false'}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  handleEditFormChange({
+                                    target: {
+                                      name: 'isOnLeave',
+                                      value: value === 'null' ? null : value === 'true'
+                                    }
+                                  });
+                                }}
+                                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="false">재학 중</option>
+                                <option value="true">휴학 중</option>
+                                <option value="null">졸업생</option>
+                              </select>
+                            </div>
+
+                            <FormInput
+                              label="전공 (1전공)"
+                              name="major1"
+                              type="text"
+                              value={editFormData.major1 || ''}
+                              onChange={handleEditFormChange}
+                            />
+
+                            <FormInput
+                              label="전공 (2전공/부전공)"
+                              name="major2"
+                              type="text"
+                              value={editFormData.major2 || ''}
+                              onChange={handleEditFormChange}
+                            />
                           </div>
-
-                          <div className="mb-4">
-                            <label className="block text-gray-700 text-sm font-medium mb-2">휴학 상태</label>
-                            <select
-                              name="isOnLeave"
-                              value={editFormData.isOnLeave === null ? 'null' : editFormData.isOnLeave?.toString() || 'false'}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                handleEditFormChange({
-                                  target: {
-                                    name: 'isOnLeave',
-                                    value: value === 'null' ? null : value === 'true'
-                                  }
-                                });
-                              }}
-                              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="false">재학 중</option>
-                              <option value="true">휴학 중</option>
-                              <option value="null">졸업생</option>
-                            </select>
-                          </div>
-
-                          <FormInput
-                            label="전공 (1전공)"
-                            name="major1"
-                            type="text"
-                            value={editFormData.major1 || ''}
-                            onChange={handleEditFormChange}
-                          />
-
-                          <FormInput
-                            label="전공 (2전공/부전공)"
-                            name="major2"
-                            type="text"
-                            value={editFormData.major2 || ''}
-                            onChange={handleEditFormChange}
-                          />
                         </div>
-                      </div>
+                      )}
+
+                      {/* 원어민 교사 정보 - 읽기 전용 */}
+                      {(selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp') && selectedUser.foreignTeacher && (
+                        <div className="mt-6 border-t pt-4">
+                          <h3 className="text-lg font-semibold mb-3">원어민 교사 정보 및 제출 서류</h3>
+                          
+                          {/* 기본 정보 */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">이름 (Full Name)</p>
+                              <p className="text-gray-900 font-medium">
+                                {`${selectedUser.foreignTeacher.firstName} ${selectedUser.foreignTeacher.middleName ? selectedUser.foreignTeacher.middleName + ' ' : ''}${selectedUser.foreignTeacher.lastName}`}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">국가 코드</p>
+                              <p className="text-gray-900">{selectedUser.foreignTeacher.countryCode || '-'}</p>
+                            </div>
+                            {selectedUser.foreignTeacher.applicationDate && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-0.5">지원일</p>
+                                <p className="text-gray-900">{formatDate(selectedUser.foreignTeacher.applicationDate)}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 제출 서류 */}
+                          <div className="border-t pt-3">
+                            <h4 className="text-sm font-semibold mb-3 text-gray-700">제출 서류</h4>
+                            <div className="space-y-2">
+                              {selectedUser.foreignTeacher.cvUrl && (
+                                <a
+                                  href={selectedUser.foreignTeacher.cvUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-3 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors group"
+                                >
+                                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span className="flex-1 text-sm font-medium text-gray-700">CV (이력서)</span>
+                                  <svg className="w-4 h-4 text-indigo-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              )}
+
+                              {selectedUser.foreignTeacher.passportPhotoUrl && (
+                                <a
+                                  href={selectedUser.foreignTeacher.passportPhotoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-colors group"
+                                >
+                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                  </svg>
+                                  <span className="flex-1 text-sm font-medium text-gray-700">여권 사진</span>
+                                  <svg className="w-4 h-4 text-green-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              )}
+
+                              {selectedUser.foreignTeacher.foreignIdCardUrl && (
+                                <a
+                                  href={selectedUser.foreignTeacher.foreignIdCardUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-3 p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors group"
+                                >
+                                  <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                                  </svg>
+                                  <span className="flex-1 text-sm font-medium text-gray-700">외국인 등록증</span>
+                                  <svg className="w-4 h-4 text-amber-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              )}
+
+                              {!selectedUser.foreignTeacher.cvUrl && !selectedUser.foreignTeacher.passportPhotoUrl && !selectedUser.foreignTeacher.foreignIdCardUrl && (
+                                <p className="text-sm text-gray-500 py-2">제출된 서류가 없습니다.</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       </div>
                     // </div>
@@ -1492,32 +1583,122 @@ export default function UserManage() {
                         </div>
                       </div>
 
-                      {/* 학교 정보 섹션 */}
-                      <div className="mt-4 border-t pt-4">
-                        <h3 className="text-base font-semibold mb-2">학교 정보</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                          <div>
-                            <p className="text-xs text-gray-500 mb-0.5">학교</p>
-                            <p className="text-gray-900">{selectedUser.university || '-'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-0.5">학년</p>
-                            <p className="text-gray-900">{selectedUser.grade ? (selectedUser.grade === 6 ? '졸업생' : `${selectedUser.grade}학년`) : '-'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-0.5">휴학 상태</p>
-                            <p className="text-gray-900">{selectedUser.isOnLeave === null ? '졸업생' : selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-0.5">전공 (1전공)</p>
-                            <p className="text-gray-900">{selectedUser.major1 || '-'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-0.5">전공 (2전공/부전공)</p>
-                            <p className="text-gray-900">{selectedUser.major2 || '없음'}</p>
+                      {/* 학교 정보 섹션 - 멘토만 */}
+                      {(selectedUser.role === 'mentor' || selectedUser.role === 'mentor_temp' || selectedUser.role === 'admin') && (
+                        <div className="mt-4 border-t pt-4">
+                          <h3 className="text-base font-semibold mb-2">학교 정보</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">학교</p>
+                              <p className="text-gray-900">{selectedUser.university || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">학년</p>
+                              <p className="text-gray-900">{selectedUser.grade ? (selectedUser.grade === 6 ? '졸업생' : `${selectedUser.grade}학년`) : '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">휴학 상태</p>
+                              <p className="text-gray-900">{selectedUser.isOnLeave === null ? '졸업생' : selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">전공 (1전공)</p>
+                              <p className="text-gray-900">{selectedUser.major1 || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">전공 (2전공/부전공)</p>
+                              <p className="text-gray-900">{selectedUser.major2 || '없음'}</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
+
+                      {/* 원어민 교사 정보 및 제출 서류 섹션 */}
+                      {(selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp') && selectedUser.foreignTeacher && (
+                        <div className="mt-4 border-t pt-4">
+                          <h3 className="text-base font-semibold mb-3">원어민 교사 정보 및 제출 서류</h3>
+                          
+                          {/* 기본 정보 */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">이름 (Full Name)</p>
+                              <p className="text-gray-900 font-medium">
+                                {`${selectedUser.foreignTeacher.firstName} ${selectedUser.foreignTeacher.middleName ? selectedUser.foreignTeacher.middleName + ' ' : ''}${selectedUser.foreignTeacher.lastName}`}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">국가 코드</p>
+                              <p className="text-gray-900">{selectedUser.foreignTeacher.countryCode || '-'}</p>
+                            </div>
+                            {selectedUser.foreignTeacher.applicationDate && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-0.5">지원일</p>
+                                <p className="text-gray-900">{formatDate(selectedUser.foreignTeacher.applicationDate)}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 제출 서류 */}
+                          <div className="border-t pt-3">
+                            <h4 className="text-sm font-semibold mb-3 text-gray-700">제출 서류</h4>
+                            <div className="space-y-2">
+                              {selectedUser.foreignTeacher.cvUrl && (
+                                <a
+                                  href={selectedUser.foreignTeacher.cvUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-3 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors group"
+                                >
+                                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span className="flex-1 text-sm font-medium text-gray-700">CV (이력서)</span>
+                                  <svg className="w-4 h-4 text-indigo-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              )}
+
+                              {selectedUser.foreignTeacher.passportPhotoUrl && (
+                                <a
+                                  href={selectedUser.foreignTeacher.passportPhotoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-colors group"
+                                >
+                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                  </svg>
+                                  <span className="flex-1 text-sm font-medium text-gray-700">여권 사진</span>
+                                  <svg className="w-4 h-4 text-green-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              )}
+
+                              {selectedUser.foreignTeacher.foreignIdCardUrl && (
+                                <a
+                                  href={selectedUser.foreignTeacher.foreignIdCardUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-3 p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors group"
+                                >
+                                  <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                                  </svg>
+                                  <span className="flex-1 text-sm font-medium text-gray-700">외국인 등록증</span>
+                                  <svg className="w-4 h-4 text-amber-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              )}
+
+                              {!selectedUser.foreignTeacher.cvUrl && !selectedUser.foreignTeacher.passportPhotoUrl && !selectedUser.foreignTeacher.foreignIdCardUrl && (
+                                <p className="text-sm text-gray-500 py-2">제출된 서류가 없습니다.</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -69,7 +69,7 @@ export function ForeignSignUpStep2Screen({
         const existingUser = await getUserByEmail(email);
         setEmailExists(!!existingUser);
       } catch (error) {
-        console.error('이메일 중복 확인 오류:', error);
+        console.error('Email duplicate check error:', error);
       }
     }
   };

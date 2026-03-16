@@ -246,15 +246,6 @@ export function JobBoardApplicantsScreen({
     ]);
   };
 
-  const formatPhoneNumber = (phone?: string): string => {
-    if (!phone) return '-';
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-      return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 7)}-${cleaned.slice(7)}`;
-    }
-    return phone;
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       {/* 헤더 */}

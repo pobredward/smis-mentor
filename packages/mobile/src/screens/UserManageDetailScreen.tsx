@@ -9,6 +9,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -32,6 +33,7 @@ import {
 } from '../../../shared/src/types/camp';
 import EvaluationStageCards from '../components/EvaluationStageCards';
 import EvaluationForm from '../components/EvaluationForm';
+import { formatPhoneNumber } from '../utils/phoneUtils';
 
 type JobGroup =
   | 'junior'
@@ -358,15 +360,6 @@ export function UserManageDetailScreen({ route, navigation }: any) {
         },
       ]
     );
-  };
-
-  const formatPhoneNumber = (phoneNumber?: string): string => {
-    if (!phoneNumber) return '-';
-    const cleaned = phoneNumber.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-      return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 7)}-${cleaned.slice(7)}`;
-    }
-    return phoneNumber;
   };
 
   const formatDate = (timestamp: any) => {
