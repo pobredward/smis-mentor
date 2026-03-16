@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResourceCache } from '@/contexts/ResourceCacheContext';
-import { generationResourcesService, ResourceLink } from '@/lib/generationResourcesService';
+import { generationResourcesService, ResourceLink, ResourceLinkRole } from '@/lib/generationResourcesService';
 import { NotionPage } from '@/components/notion/NotionPage';
 
 // Notion URL에서 페이지 ID 추출
@@ -38,6 +38,42 @@ const isEmbeddableUrl = (url: string): boolean => {
          url.includes('docs.google.com/spreadsheets');
 };
 
+// 권한별 배경색 반환 함수
+const getRoleBgColor = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return 'bg-blue-100/50'; // 멘토 - 연한 파랑
+    case 'foreign':
+      return 'bg-purple-100/50'; // 원어민 - 연한 보라
+    default:
+      return 'bg-gray-100/50'; // 공통 - 연한 회색
+  }
+};
+
+// 선택된 상태의 배경색 (관리자가 권한별 토글을 선택했을 때)
+const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return 'bg-blue-500'; // 멘토 - 파랑
+    case 'foreign':
+      return 'bg-purple-500'; // 원어민 - 보라
+    default:
+      return 'bg-blue-600'; // 공통 - 파랑 (기본 선택 색상)
+  }
+};
+
+// 권한 라벨 반환 함수
+const getRoleLabel = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return '멘토';
+    case 'foreign':
+      return '원어민';
+    default:
+      return '공통';
+  }
+};
+
 export default function ScheduleContent() {
   const { userData } = useAuth();
   const { scheduleLinks, loading, refreshResources } = useResourceCache();
@@ -45,21 +81,32 @@ export default function ScheduleContent() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [newLinkTargetRole, setNewLinkTargetRole] = useState<ResourceLinkRole>('common');
   const [isAddingLink, setIsAddingLink] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingLink, setEditingLink] = useState<ResourceLink | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editUrl, setEditUrl] = useState('');
+  const [editTargetRole, setEditTargetRole] = useState<ResourceLinkRole>('common');
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
+  // 사용자 role에 따라 시간표 링크 필터링
+  const filteredScheduleLinks = scheduleLinks.filter(link => {
+    if (isAdmin) return true;
+    if (!link.targetRole || link.targetRole === 'common') return true;
+    if (userData?.role === 'mentor' && link.targetRole === 'mentor') return true;
+    if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
+    return false;
+  });
+
   useEffect(() => {
-    if (scheduleLinks.length > 0 && !selectedLinkId) {
-      setSelectedLinkId(scheduleLinks[0].id);
+    if (filteredScheduleLinks.length > 0 && !selectedLinkId) {
+      setSelectedLinkId(filteredScheduleLinks[0].id);
     }
-  }, [scheduleLinks, selectedLinkId]);
+  }, [filteredScheduleLinks, selectedLinkId]);
 
   const handleAddLink = async () => {
     if (!activeJobCodeId || !newLinkTitle.trim() || !newLinkUrl.trim()) {
@@ -74,12 +121,14 @@ export default function ScheduleContent() {
         'scheduleLinks',
         newLinkTitle.trim(),
         newLinkUrl.trim(),
-        userData?.userId || ''
+        userData?.userId || '',
+        newLinkTargetRole
       );
       await refreshResources();
       setShowAddModal(false);
       setNewLinkTitle('');
       setNewLinkUrl('');
+      setNewLinkTargetRole('common');
     } catch (error) {
       console.error('링크 추가 실패:', error);
       alert('링크 추가에 실패했습니다.');
@@ -124,6 +173,7 @@ export default function ScheduleContent() {
     setEditingLink(link);
     setEditTitle(link.title);
     setEditUrl(link.url);
+    setEditTargetRole(link.targetRole || 'common');
     setShowEditModal(true);
   };
 
@@ -136,7 +186,7 @@ export default function ScheduleContent() {
     try {
       const updatedLinks = scheduleLinks.map(link =>
         link.id === editingLink.id
-          ? { ...link, title: editTitle.trim(), url: editUrl.trim() }
+          ? { ...link, title: editTitle.trim(), url: editUrl.trim(), targetRole: editTargetRole }
           : link
       );
 
@@ -199,7 +249,7 @@ export default function ScheduleContent() {
     );
   }
 
-  if (scheduleLinks.length === 0) {
+  if (filteredScheduleLinks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
         <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -245,7 +295,9 @@ export default function ScheduleContent() {
           </>
         )}
         
-        {scheduleLinks.map((link, index) => (
+        {filteredScheduleLinks.map((link, index) => {
+          const actualIndex = scheduleLinks.findIndex(l => l.id === link.id);
+          return (
           <div key={link.id} className="relative" style={{ marginLeft: '3px', marginRight: '3px' }}>
             {editMode && (
               <div className="absolute -top-6 left-0 right-0 flex items-center justify-center gap-1 z-10">
@@ -272,10 +324,10 @@ export default function ScheduleContent() {
               disabled={editMode}
               className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                 editMode
-                  ? 'bg-white border-2 border-amber-500 border-dashed text-gray-700'
+                  ? `${getRoleBgColor(link.targetRole)} border-2 border-amber-500 border-dashed text-gray-700`
                   : selectedLinkId === link.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? `${isAdmin ? getRoleActiveBgColor(link.targetRole) : 'bg-blue-600'} text-white`
+                    : `${isAdmin ? getRoleBgColor(link.targetRole) : 'bg-gray-100'} text-gray-700 hover:bg-gray-200`
               } ${editMode ? 'cursor-default' : ''}`}
             >
               {link.title}
@@ -283,18 +335,18 @@ export default function ScheduleContent() {
             
             {editMode && (
               <div className="absolute -bottom-5 left-0 right-0 flex items-center justify-center gap-1 z-10">
-                {index > 0 && (
+                {actualIndex > 0 && (
                   <button
-                    onClick={() => handleMoveLink(index, 'left')}
+                    onClick={() => handleMoveLink(actualIndex, 'left')}
                     className="w-5 h-5 rounded bg-blue-600 hover:bg-blue-700 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-blue-600/30"
                     title="왼쪽으로"
                   >
                     ←
                   </button>
                 )}
-                {index < scheduleLinks.length - 1 && (
+                {actualIndex < scheduleLinks.length - 1 && (
                   <button
-                    onClick={() => handleMoveLink(index, 'right')}
+                    onClick={() => handleMoveLink(actualIndex, 'right')}
                     className="w-5 h-5 rounded bg-blue-600 hover:bg-blue-700 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-blue-600/30"
                     title="오른쪽으로"
                   >
@@ -304,12 +356,13 @@ export default function ScheduleContent() {
               </div>
             )}
           </div>
-        ))}
+        );
+        })}
       </div>
 
       <div className="p-4 bg-gray-50 relative">
         <div className="bg-white rounded-lg shadow-sm overflow-hidden relative" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
-          {scheduleLinks.map((link) => {
+          {filteredScheduleLinks.map((link) => {
             const isVisible = selectedLinkId === link.id;
             
             if (!isVisible) return null;
@@ -391,6 +444,24 @@ export default function ScheduleContent() {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  대상 권한
+                </label>
+                <select
+                  value={newLinkTargetRole}
+                  onChange={(e) => setNewLinkTargetRole(e.target.value as ResourceLinkRole)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="common">공통 (모든 사용자)</option>
+                  <option value="mentor">멘토 전용</option>
+                  <option value="foreign">원어민 전용</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  💡 권한별로 다른 배경색이 적용됩니다
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   URL
                 </label>
                 <input
@@ -450,6 +521,21 @@ export default function ScheduleContent() {
                   placeholder="예: 1주차 시간표"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  대상 권한
+                </label>
+                <select
+                  value={editTargetRole}
+                  onChange={(e) => setEditTargetRole(e.target.value as ResourceLinkRole)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="common">공통 (모든 사용자)</option>
+                  <option value="mentor">멘토 전용</option>
+                  <option value="foreign">원어민 전용</option>
+                </select>
               </div>
               
               <div>

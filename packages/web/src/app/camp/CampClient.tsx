@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Layout from '@/components/common/Layout';
+import { useAuth } from '@/contexts/AuthContext';
 import LessonContent from '@/components/camp/LessonContent';
 import EducationContent from '@/components/camp/EducationContent';
 import ScheduleContent from '@/components/camp/ScheduleContent';
@@ -13,16 +14,6 @@ import TaskContent from '@/components/camp/TaskContent';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
 
-const tabs: { id: TabName; title: string; path: string }[] = [
-  { id: 'education', title: '교육', path: '/camp/education' },
-  { id: 'lesson', title: '수업', path: '/camp/lesson' },
-  { id: 'tasks', title: '업무', path: '/camp/tasks' },
-  { id: 'schedule', title: '시간표', path: '/camp/schedule' },
-  { id: 'guide', title: '인솔표', path: '/camp/guide' },
-  { id: 'class', title: '반명단', path: '/camp/class' },
-  { id: 'room', title: '방명단', path: '/camp/room' },
-];
-
 interface CampClientProps {
   initialTab?: string;
   initialDate?: string;
@@ -31,6 +22,24 @@ interface CampClientProps {
 export default function CampClient({ initialTab, initialDate }: CampClientProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { userData } = useAuth();
+  
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  
+  // 원어민 유저는 '수업' 탭 제외
+  const allTabs: { id: TabName; title: string; path: string }[] = [
+    { id: 'education', title: '교육', path: '/camp/education' },
+    { id: 'lesson', title: '수업', path: '/camp/lesson' },
+    { id: 'tasks', title: '업무', path: '/camp/tasks' },
+    { id: 'schedule', title: '시간표', path: '/camp/schedule' },
+    { id: 'guide', title: '인솔표', path: '/camp/guide' },
+    { id: 'class', title: '반명단', path: '/camp/class' },
+    { id: 'room', title: '방명단', path: '/camp/room' },
+  ];
+  
+  const tabs = isForeign 
+    ? allTabs.filter(tab => tab.id !== 'lesson')
+    : allTabs;
   
   // URL 기반으로 현재 탭 결정
   const getCurrentTab = (): TabName => {

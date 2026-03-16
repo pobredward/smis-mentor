@@ -13,10 +13,13 @@ const generateId = (): string => {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 };
 
+export type ResourceLinkRole = 'common' | 'mentor' | 'foreign';
+
 export interface ResourceLink {
   id: string;
   title: string;
   url: string;
+  targetRole?: ResourceLinkRole;
   createdAt: Timestamp;
   createdBy: string;
 }
@@ -73,7 +76,8 @@ const generationResourcesService = {
     linkType: LinkType,
     title: string,
     url: string,
-    userId: string
+    userId: string,
+    targetRole: ResourceLinkRole = 'common'
   ): Promise<void> => {
     try {
       const docRef = doc(db, 'generationResources', jobCodeId);
@@ -83,6 +87,7 @@ const generationResourcesService = {
         id: generateId(),
         title,
         url,
+        targetRole,
         createdAt: Timestamp.now(),
         createdBy: userId,
       };

@@ -4,8 +4,32 @@ import { WebView } from 'react-native-webview';
 import type { WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { generationResourcesService, ResourceLink } from '../services';
+import { generationResourcesService, ResourceLink, ResourceLinkRole } from '../services';
 import { AddLinkModal } from '../components';
+
+// 권한별 배경색 반환 함수
+const getRoleBgColor = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return 'rgba(219, 234, 254, 0.5)'; // 멘토 - 연한 파랑 (Tailwind bg-blue-100/50)
+    case 'foreign':
+      return 'rgba(243, 232, 255, 0.5)'; // 원어민 - 연한 보라 (Tailwind bg-purple-100/50)
+    default:
+      return 'rgba(243, 244, 246, 0.5)'; // 공통 - 연한 회색 (Tailwind bg-gray-100/50)
+  }
+};
+
+// 선택된 상태의 배경색 (관리자가 권한별 토글을 선택했을 때)
+const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return 'rgb(59, 130, 246)'; // 멘토 - 파랑 (Tailwind bg-blue-500)
+    case 'foreign':
+      return 'rgb(168, 85, 247)'; // 원어민 - 보라 (Tailwind bg-purple-500)
+    default:
+      return 'rgb(59, 130, 246)'; // 공통 - 파랑 (기본 선택 색상)
+  }
+};
 
 export function EducationScreen() {
   const { userData } = useAuth();
@@ -18,6 +42,7 @@ export function EducationScreen() {
   const [editingLink, setEditingLink] = useState<ResourceLink | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editUrl, setEditUrl] = useState('');
+  const [editTargetRole, setEditTargetRole] = useState<ResourceLinkRole>('common');
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [actionSheetLink, setActionSheetLink] = useState<{ link: ResourceLink; index: number } | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -27,6 +52,15 @@ export function EducationScreen() {
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+
+  // 사용자 role에 따라 교육 링크 필터링
+  const filteredEducationLinks = educationLinks.filter(link => {
+    if (isAdmin) return true;
+    if (!link.targetRole || link.targetRole === 'common') return true;
+    if (userData?.role === 'mentor' && link.targetRole === 'mentor') return true;
+    if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
+    return false;
+  });
 
   const loadEducationLinks = useCallback(async () => {
     if (!activeJobCodeId) {
@@ -50,8 +84,18 @@ export function EducationScreen() {
       if (resources?.educationLinks) {
         console.log('✅ EducationScreen: 교육 링크 로드 성공 -', resources.educationLinks.length, '개');
         setEducationLinks(resources.educationLinks);
-        if (resources.educationLinks.length > 0) {
-          setSelectedLinkId(resources.educationLinks[0].id);
+        
+        // 필터링된 링크 중 첫 번째를 선택
+        const filtered = resources.educationLinks.filter((link: ResourceLink) => {
+          if (userData?.role === 'admin') return true;
+          if (!link.targetRole || link.targetRole === 'common') return true;
+          if (userData?.role === 'mentor' && link.targetRole === 'mentor') return true;
+          if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
+          return false;
+        });
+        
+        if (filtered.length > 0) {
+          setSelectedLinkId(filtered[0].id);
         }
       } else {
         console.log('⚠️ EducationScreen: 해당 기수의 교육 링크 없음');
@@ -128,7 +172,7 @@ export function EducationScreen() {
     try {
       const updatedLinks = educationLinks.map(link =>
         link.id === editingLink.id
-          ? { ...link, title: editTitle.trim(), url: editUrl.trim() }
+          ? { ...link, title: editTitle.trim(), url: editUrl.trim(), targetRole: editTargetRole }
           : link
       );
 
@@ -153,6 +197,7 @@ export function EducationScreen() {
     setEditingLink(link);
     setEditTitle(link.title);
     setEditUrl(link.url);
+    setEditTargetRole(link.targetRole || 'common');
     setShowEditModal(true);
   };
 
@@ -175,7 +220,7 @@ export function EducationScreen() {
     );
   }
 
-  if (educationLinks.length === 0) {
+  if (filteredEducationLinks.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.emptyText}>등록된 교육 링크가 없습니다.</Text>
@@ -231,7 +276,9 @@ export function EducationScreen() {
             </>
           )}
           
-          {educationLinks.map((link, index) => (
+          {filteredEducationLinks.map((link, index) => {
+            const actualIndex = educationLinks.findIndex(l => l.id === link.id);
+            return (
             <View key={link.id} style={styles.linkWrapper}>
               {editMode && (
                 <View style={styles.editActionsContainer}>
@@ -270,8 +317,15 @@ export function EducationScreen() {
               <TouchableOpacity
                 style={[
                   styles.toggleButton,
-                  selectedLinkId === link.id && !editMode && styles.toggleButtonActive,
                   editMode && styles.toggleButtonEdit,
+                  // 선택되지 않았을 때: 관리자는 권한별 배경색, 일반 유저는 기본 회색
+                  selectedLinkId !== link.id && !editMode && { 
+                    backgroundColor: isAdmin ? getRoleBgColor(link.targetRole) : '#f3f4f6'
+                  },
+                  // 선택된 상태: 권한별 활성 색상 적용
+                  selectedLinkId === link.id && !editMode && { 
+                    backgroundColor: isAdmin ? getRoleActiveBgColor(link.targetRole) : '#3b82f6'
+                  },
                 ]}
                 onPress={() => {
                   if (!editMode) {
@@ -280,7 +334,7 @@ export function EducationScreen() {
                 }}
                 onLongPress={() => {
                   if (!editMode) {
-                    openActionSheet(link, index);
+                    openActionSheet(link, actualIndex);
                   }
                 }}
                 delayLongPress={500}
@@ -299,19 +353,19 @@ export function EducationScreen() {
               {editMode && (
                 <View style={styles.editActionsBottom}>
                   {/* 아래쪽 버튼들: 화살표 */}
-                  {index > 0 && (
+                  {actualIndex > 0 && (
                     <TouchableOpacity
                       style={styles.moveButton}
-                      onPress={() => handleMoveLink(index, 'left')}
+                      onPress={() => handleMoveLink(actualIndex, 'left')}
                     >
                       <Text style={styles.moveButtonText}>←</Text>
                     </TouchableOpacity>
                   )}
                   
-                  {index < educationLinks.length - 1 && (
+                  {actualIndex < educationLinks.length - 1 && (
                     <TouchableOpacity
                       style={styles.moveButton}
-                      onPress={() => handleMoveLink(index, 'right')}
+                      onPress={() => handleMoveLink(actualIndex, 'right')}
                     >
                       <Text style={styles.moveButtonText}>→</Text>
                     </TouchableOpacity>
@@ -319,7 +373,8 @@ export function EducationScreen() {
                 </View>
               )}
             </View>
-          ))}
+          );
+          })}
         </ScrollView>
       </View>
 
@@ -335,7 +390,7 @@ export function EducationScreen() {
 
       {/* 모든 노션 페이지 웹뷰 프리로드 */}
       <View style={styles.webviewContainer}>
-        {educationLinks.map((link) => (
+        {filteredEducationLinks.map((link) => (
           <View
             key={link.id}
             style={[

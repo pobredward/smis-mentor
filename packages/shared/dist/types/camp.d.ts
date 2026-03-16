@@ -86,10 +86,12 @@ export interface PatientRecord {
     createdAt: Timestamp;
     updatedAt: Timestamp;
 }
+export type ResourceLinkRole = 'common' | 'mentor' | 'foreign';
 export interface ResourceLink {
     id: string;
     title: string;
     url: string;
+    targetRole?: ResourceLinkRole;
     createdAt: Timestamp;
     createdBy: string;
 }
@@ -135,7 +137,6 @@ export interface Task {
         unit: 'minutes' | 'hours';
     };
     attachments?: TaskAttachment[];
-    priority: 'low' | 'medium' | 'high';
     completions: TaskCompletion[];
     createdAt: Timestamp;
     updatedAt: Timestamp;

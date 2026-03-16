@@ -155,10 +155,13 @@ export interface PatientRecord {
   updatedAt: Timestamp;
 }
 
+export type ResourceLinkRole = 'common' | 'mentor' | 'foreign';
+
 export interface ResourceLink {
   id: string;
   title: string;
   url: string;
+  targetRole?: ResourceLinkRole; // 대상 권한: 공통(기본값), 멘토, 원어민
   createdAt: Timestamp;
   createdBy: string;
 }

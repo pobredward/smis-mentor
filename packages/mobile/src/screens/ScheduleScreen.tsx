@@ -4,7 +4,31 @@ import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
 import { useAuth } from '../context/AuthContext';
 import { AddLinkModal } from '../components';
-import { generationResourcesService, ResourceLink } from '../services';
+import { generationResourcesService, ResourceLink, ResourceLinkRole } from '../services';
+
+// 권한별 배경색 반환 함수
+const getRoleBgColor = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return 'rgba(219, 234, 254, 0.5)'; // 멘토 - 연한 파랑 (Tailwind bg-blue-100/50)
+    case 'foreign':
+      return 'rgba(243, 232, 255, 0.5)'; // 원어민 - 연한 보라 (Tailwind bg-purple-100/50)
+    default:
+      return 'rgba(243, 244, 246, 0.5)'; // 공통 - 연한 회색 (Tailwind bg-gray-100/50)
+  }
+};
+
+// 선택된 상태의 배경색 (관리자가 권한별 토글을 선택했을 때)
+const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return 'rgb(59, 130, 246)'; // 멘토 - 파랑 (Tailwind bg-blue-500)
+    case 'foreign':
+      return 'rgb(168, 85, 247)'; // 원어민 - 보라 (Tailwind bg-purple-500)
+    default:
+      return 'rgb(59, 130, 246)'; // 공통 - 파랑 (기본 선택 색상)
+  }
+};
 
 export function ScheduleScreen() {
   const { schedules, loadingStates, zoomLevels, setZoomLevel, applyZoom, renderWebView, refreshResources, loading } = useWebViewCache();
@@ -16,11 +40,21 @@ export function ScheduleScreen() {
   const [editingSchedule, setEditingSchedule] = useState<ResourceLink | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editUrl, setEditUrl] = useState('');
+  const [editTargetRole, setEditTargetRole] = useState<ResourceLinkRole>('common');
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
-  const selectedSchedule = schedules.find(s => s.id === selectedScheduleId) || schedules[0];
+  // 사용자 role에 따라 시간표 링크 필터링
+  const filteredSchedules = schedules.filter(link => {
+    if (isAdmin) return true;
+    if (!link.targetRole || link.targetRole === 'common') return true;
+    if (userData?.role === 'mentor' && link.targetRole === 'mentor') return true;
+    if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
+    return false;
+  });
+
+  const selectedSchedule = filteredSchedules.find(s => s.id === selectedScheduleId) || filteredSchedules[0];
   
   // 구글 시트인지 확인하는 함수
   const isGoogleSheet = (url: string) => {
@@ -120,6 +154,7 @@ export function ScheduleScreen() {
     setEditingSchedule(schedule);
     setEditTitle(schedule.title);
     setEditUrl(schedule.url);
+    setEditTargetRole(schedule.targetRole || 'common');
     setShowEditModal(true);
   };
 
@@ -132,7 +167,7 @@ export function ScheduleScreen() {
     try {
       const updatedSchedules = schedules.map(schedule =>
         schedule.id === editingSchedule.id
-          ? { ...schedule, title: editTitle.trim(), url: editUrl.trim() }
+          ? { ...schedule, title: editTitle.trim(), url: editUrl.trim(), targetRole: editTargetRole }
           : schedule
       );
 
@@ -165,7 +200,7 @@ export function ScheduleScreen() {
     );
   }
 
-  if (schedules.length === 0) {
+  if (filteredSchedules.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.emptyText}>등록된 시간표가 없습니다.</Text>
@@ -218,7 +253,9 @@ export function ScheduleScreen() {
             </>
           )}
 
-          {schedules.map((schedule, index) => (
+          {filteredSchedules.map((schedule, index) => {
+            const actualIndex = schedules.findIndex(s => s.id === schedule.id);
+            return (
             <View key={schedule.id} style={[styles.linkWrapper, { marginHorizontal: 3 }]}>
               {editMode && (
                 <View style={styles.editActionsContainer}>
@@ -243,8 +280,15 @@ export function ScheduleScreen() {
               <TouchableOpacity
                 style={[
                   styles.button,
-                  selectedScheduleId === schedule.id && !editMode && styles.buttonActive,
                   editMode && styles.buttonEdit,
+                  // 선택되지 않았을 때: 관리자는 권한별 배경색, 일반 유저는 기본 회색
+                  selectedScheduleId !== schedule.id && !editMode && { 
+                    backgroundColor: isAdmin ? getRoleBgColor(schedule.targetRole) : '#f3f4f6'
+                  },
+                  // 선택된 상태: 권한별 활성 색상 적용
+                  selectedScheduleId === schedule.id && !editMode && { 
+                    backgroundColor: isAdmin ? getRoleActiveBgColor(schedule.targetRole) : '#3b82f6'
+                  },
                 ]}
                 onPress={() => {
                   if (!editMode) {
@@ -263,18 +307,18 @@ export function ScheduleScreen() {
               
               {editMode && (
                 <View style={styles.editActionsBottom}>
-                  {index > 0 && (
+                  {actualIndex > 0 && (
                     <TouchableOpacity
                       style={styles.moveButton}
-                      onPress={() => handleMoveSchedule(index, 'left')}
+                      onPress={() => handleMoveSchedule(actualIndex, 'left')}
                     >
                       <Text style={styles.moveButtonText}>←</Text>
                     </TouchableOpacity>
                   )}
-                  {index < schedules.length - 1 && (
+                  {actualIndex < schedules.length - 1 && (
                     <TouchableOpacity
                       style={styles.moveButton}
-                      onPress={() => handleMoveSchedule(index, 'right')}
+                      onPress={() => handleMoveSchedule(actualIndex, 'right')}
                     >
                       <Text style={styles.moveButtonText}>→</Text>
                     </TouchableOpacity>
@@ -282,7 +326,8 @@ export function ScheduleScreen() {
                 </View>
               )}
             </View>
-          ))}
+          );
+          })}
         </ScrollView>
       </View>
 

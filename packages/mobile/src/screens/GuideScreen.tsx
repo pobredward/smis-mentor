@@ -4,7 +4,31 @@ import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
 import { useAuth } from '../context/AuthContext';
 import { AddLinkModal } from '../components';
-import { generationResourcesService, ResourceLink } from '../services';
+import { generationResourcesService, ResourceLink, ResourceLinkRole } from '../services';
+
+// 권한별 배경색 반환 함수
+const getRoleBgColor = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return 'rgba(219, 234, 254, 0.5)'; // 멘토 - 연한 파랑 (Tailwind bg-blue-100/50)
+    case 'foreign':
+      return 'rgba(243, 232, 255, 0.5)'; // 원어민 - 연한 보라 (Tailwind bg-purple-100/50)
+    default:
+      return 'rgba(243, 244, 246, 0.5)'; // 공통 - 연한 회색 (Tailwind bg-gray-100/50)
+  }
+};
+
+// 선택된 상태의 배경색 (관리자가 권한별 토글을 선택했을 때)
+const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
+  switch (targetRole) {
+    case 'mentor':
+      return 'rgb(59, 130, 246)'; // 멘토 - 파랑 (Tailwind bg-blue-500)
+    case 'foreign':
+      return 'rgb(168, 85, 247)'; // 원어민 - 보라 (Tailwind bg-purple-500)
+    default:
+      return 'rgb(59, 130, 246)'; // 공통 - 파랑 (기본 선택 색상)
+  }
+};
 
 export function GuideScreen() {
   const { guides, loadingStates, zoomLevels, setZoomLevel, applyZoom, renderWebView, refreshResources, loading } = useWebViewCache();
@@ -16,11 +40,21 @@ export function GuideScreen() {
   const [editingGuide, setEditingGuide] = useState<ResourceLink | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editUrl, setEditUrl] = useState('');
+  const [editTargetRole, setEditTargetRole] = useState<ResourceLinkRole>('common');
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
-  const selectedGuide = guides.find(g => g.id === selectedGuideId) || guides[0];
+  // 사용자 role에 따라 인솔표 링크 필터링
+  const filteredGuides = guides.filter(link => {
+    if (isAdmin) return true;
+    if (!link.targetRole || link.targetRole === 'common') return true;
+    if (userData?.role === 'mentor' && link.targetRole === 'mentor') return true;
+    if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
+    return false;
+  });
+
+  const selectedGuide = filteredGuides.find(g => g.id === selectedGuideId) || filteredGuides[0];
   // Android는 1.0, iOS는 0.6 기본 줌
   const defaultZoom = Platform.OS === 'android' ? 1.0 : 0.6;
   const currentZoom = selectedGuideId ? (zoomLevels[selectedGuideId] || defaultZoom) : defaultZoom;
@@ -98,6 +132,7 @@ export function GuideScreen() {
     setEditingGuide(guide);
     setEditTitle(guide.title);
     setEditUrl(guide.url);
+    setEditTargetRole(guide.targetRole || 'common');
     setShowEditModal(true);
   };
 
@@ -110,7 +145,7 @@ export function GuideScreen() {
     try {
       const updatedGuides = guides.map(guide =>
         guide.id === editingGuide.id
-          ? { ...guide, title: editTitle.trim(), url: editUrl.trim() }
+          ? { ...guide, title: editTitle.trim(), url: editUrl.trim(), targetRole: editTargetRole }
           : guide
       );
 
@@ -143,7 +178,7 @@ export function GuideScreen() {
     );
   }
 
-  if (guides.length === 0) {
+  if (filteredGuides.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.emptyText}>등록된 인솔표가 없습니다.</Text>
@@ -196,7 +231,9 @@ export function GuideScreen() {
             </>
           )}
 
-          {guides.map((guide, index) => (
+          {filteredGuides.map((guide, index) => {
+            const actualIndex = guides.findIndex(g => g.id === guide.id);
+            return (
             <View key={guide.id} style={[styles.linkWrapper, { marginHorizontal: 3 }]}>
               {editMode && (
                 <View style={styles.editActionsContainer}>
@@ -221,8 +258,15 @@ export function GuideScreen() {
               <TouchableOpacity
                 style={[
                   styles.button,
-                  selectedGuideId === guide.id && !editMode && styles.buttonActive,
                   editMode && styles.buttonEdit,
+                  // 선택되지 않았을 때: 관리자는 권한별 배경색, 일반 유저는 기본 회색
+                  selectedGuideId !== guide.id && !editMode && { 
+                    backgroundColor: isAdmin ? getRoleBgColor(guide.targetRole) : '#f3f4f6'
+                  },
+                  // 선택된 상태: 권한별 활성 색상 적용
+                  selectedGuideId === guide.id && !editMode && { 
+                    backgroundColor: isAdmin ? getRoleActiveBgColor(guide.targetRole) : '#3b82f6'
+                  },
                 ]}
                 onPress={() => {
                   if (!editMode) {
@@ -241,18 +285,18 @@ export function GuideScreen() {
               
               {editMode && (
                 <View style={styles.editActionsBottom}>
-                  {index > 0 && (
+                  {actualIndex > 0 && (
                     <TouchableOpacity
                       style={styles.moveButton}
-                      onPress={() => handleMoveGuide(index, 'left')}
+                      onPress={() => handleMoveGuide(actualIndex, 'left')}
                     >
                       <Text style={styles.moveButtonText}>←</Text>
                     </TouchableOpacity>
                   )}
-                  {index < guides.length - 1 && (
+                  {actualIndex < guides.length - 1 && (
                     <TouchableOpacity
                       style={styles.moveButton}
-                      onPress={() => handleMoveGuide(index, 'right')}
+                      onPress={() => handleMoveGuide(actualIndex, 'right')}
                     >
                       <Text style={styles.moveButtonText}>→</Text>
                     </TouchableOpacity>
@@ -260,7 +304,8 @@ export function GuideScreen() {
                 </View>
               )}
             </View>
-          ))}
+          );
+          })}
         </ScrollView>
       </View>
 

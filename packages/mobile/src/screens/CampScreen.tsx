@@ -7,21 +7,30 @@ import { ClassScreen } from './ClassScreen';
 import { RoomScreen } from './RoomScreen';
 import { ScheduleScreen } from './ScheduleScreen';
 import { GuideScreen } from './GuideScreen';
+import { useAuth } from '../context/AuthContext';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
 
-const tabs: { id: TabName; title: string }[] = [
-  { id: 'education', title: '교육' },
-  { id: 'lesson', title: '수업' },
-  { id: 'tasks', title: '업무' },
-  { id: 'schedule', title: '시간표' },
-  { id: 'guide', title: '인솔표' },
-  { id: 'class', title: '반명단' },
-  { id: 'room', title: '방명단' },
-];
-
 export function CampScreen() {
+  const { userData } = useAuth();
   const [activeTab, setActiveTab] = useState<TabName>('schedule');
+  
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  
+  // 원어민 유저는 '수업' 탭 제외
+  const allTabs: { id: TabName; title: string }[] = [
+    { id: 'education', title: '교육' },
+    { id: 'lesson', title: '수업' },
+    { id: 'tasks', title: '업무' },
+    { id: 'schedule', title: '시간표' },
+    { id: 'guide', title: '인솔표' },
+    { id: 'class', title: '반명단' },
+    { id: 'room', title: '방명단' },
+  ];
+  
+  const tabs = isForeign 
+    ? allTabs.filter(tab => tab.id !== 'lesson')
+    : allTabs;
 
   return (
     <View style={styles.container}>

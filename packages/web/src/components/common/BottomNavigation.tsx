@@ -9,6 +9,7 @@ const BottomNavigation = () => {
   const pathname = usePathname();
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
   const isActive = (path: string) => {
     if (path === '/') {
@@ -18,7 +19,8 @@ const BottomNavigation = () => {
   };
 
   const navItems = [
-    {
+    // 원어민이 아닌 경우에만 '홈' 탭 표시
+    ...(!isForeign ? [{
       name: '홈',
       path: '/',
       icon: (active: boolean) => (
@@ -26,8 +28,9 @@ const BottomNavigation = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 0 : 2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
       )
-    },
-    {
+    }] : []),
+    // 원어민이 아닌 경우에만 '채용' 탭 표시
+    ...(!isForeign ? [{
       name: '채용',
       path: '/recruitment',
       icon: (active: boolean) => (
@@ -35,7 +38,7 @@ const BottomNavigation = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 0 : 2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
       )
-    },
+    }] : []),
     {
       name: '캠프',
       path: '/camp',

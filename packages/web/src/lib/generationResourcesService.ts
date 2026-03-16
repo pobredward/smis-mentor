@@ -9,10 +9,13 @@ import {
 import { db } from '@/lib/firebase';
 import { v4 as uuidv4 } from 'uuid';
 
+export type ResourceLinkRole = 'common' | 'mentor' | 'foreign';
+
 export interface ResourceLink {
   id: string;
   title: string;
   url: string;
+  targetRole?: ResourceLinkRole; // 대상 권한: 공통(기본값), 멘토, 원어민
   createdAt: Timestamp;
   createdBy: string;
 }
@@ -61,7 +64,8 @@ export const generationResourcesService = {
     linkType: LinkType,
     title: string,
     url: string,
-    userId: string
+    userId: string,
+    targetRole: ResourceLinkRole = 'common' // 기본값은 공통
   ): Promise<void> => {
     try {
       const docRef = doc(db, 'generationResources', jobCodeId);
@@ -71,6 +75,7 @@ export const generationResourcesService = {
         id: uuidv4(),
         title,
         url,
+        targetRole,
         createdAt: Timestamp.now(),
         createdBy: userId,
       };

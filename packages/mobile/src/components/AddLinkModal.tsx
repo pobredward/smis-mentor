@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { generationResourcesService, LinkType } from '../services';
+import { generationResourcesService, LinkType, ResourceLinkRole } from '../services';
 
 interface AddLinkModalProps {
   visible: boolean;
@@ -31,6 +31,7 @@ export const AddLinkModal: React.FC<AddLinkModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
+  const [targetRole, setTargetRole] = useState<ResourceLinkRole>('common');
   const [loading, setLoading] = useState(false);
 
   const linkTypeLabels: Record<LinkType, string> = {
@@ -52,11 +53,13 @@ export const AddLinkModal: React.FC<AddLinkModalProps> = ({
         linkType,
         title.trim(),
         url.trim(),
-        userId
+        userId,
+        targetRole
       );
       Alert.alert('성공', '링크가 추가되었습니다.');
       setTitle('');
       setUrl('');
+      setTargetRole('common');
       onSuccess();
       onClose();
     } catch (error) {
@@ -70,6 +73,7 @@ export const AddLinkModal: React.FC<AddLinkModalProps> = ({
   const handleClose = () => {
     setTitle('');
     setUrl('');
+    setTargetRole('common');
     onClose();
   };
 
@@ -110,6 +114,39 @@ export const AddLinkModal: React.FC<AddLinkModalProps> = ({
                 onChangeText={setTitle}
                 autoFocus
               />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>대상 권한</Text>
+              <View style={styles.roleButtonGroup}>
+                <TouchableOpacity
+                  style={[styles.roleButton, targetRole === 'common' && styles.roleButtonActive]}
+                  onPress={() => setTargetRole('common')}
+                >
+                  <Text style={[styles.roleButtonText, targetRole === 'common' && styles.roleButtonTextActive]}>
+                    공통
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.roleButton, targetRole === 'mentor' && styles.roleButtonActive]}
+                  onPress={() => setTargetRole('mentor')}
+                >
+                  <Text style={[styles.roleButtonText, targetRole === 'mentor' && styles.roleButtonTextActive]}>
+                    멘토
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.roleButton, targetRole === 'foreign' && styles.roleButtonActive]}
+                  onPress={() => setTargetRole('foreign')}
+                >
+                  <Text style={[styles.roleButtonText, targetRole === 'foreign' && styles.roleButtonTextActive]}>
+                    원어민
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.roleHint}>
+                💡 권한별로 다른 배경색이 적용됩니다
+              </Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -225,6 +262,37 @@ const styles = StyleSheet.create({
   urlInput: {
     minHeight: 60,
     textAlignVertical: 'top',
+  },
+  roleButtonGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  roleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+  },
+  roleButtonActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  roleButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  roleButtonTextActive: {
+    color: '#ffffff',
+  },
+  roleHint: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 6,
   },
   modalFooter: {
     flexDirection: 'row',
