@@ -19,20 +19,29 @@ export function formatPhoneNumber(phoneNumber: string | undefined): string {
   if (cleaned.startsWith('+82')) {
     const number = cleaned.substring(3); // +82 제거
     
-    // 010-1234-5678 형식
+    // 잘못된 형식 처리: 0으로 시작하는 경우 (예: +8201012345678)
+    if (number.startsWith('0') && number.length === 11) {
+      // 0을 제거하고 다시 처리
+      const correctedNumber = number.substring(1);
+      if (correctedNumber.startsWith('10') && correctedNumber.length === 10) {
+        return `+82 0${correctedNumber.substring(0, 2)}-${correctedNumber.substring(2, 6)}-${correctedNumber.substring(6)}`;
+      }
+    }
+    
+    // 010-1234-5678 형식 (올바른 형식)
     if (number.startsWith('10') && number.length === 10) {
-      return `+82 ${number.substring(0, 2)}-${number.substring(2, 6)}-${number.substring(6)}`;
+      return `+82 0${number.substring(0, 2)}-${number.substring(2, 6)}-${number.substring(6)}`;
     }
     // 02-1234-5678 형식 (서울)
     if (number.startsWith('2') && number.length === 9) {
-      return `+82 ${number.substring(0, 1)}-${number.substring(1, 5)}-${number.substring(5)}`;
+      return `+82 0${number.substring(0, 1)}-${number.substring(1, 5)}-${number.substring(5)}`;
     }
     // 기타 지역번호 (031, 032 등)
     if (number.length === 10) {
-      return `+82 ${number.substring(0, 2)}-${number.substring(2, 6)}-${number.substring(6)}`;
+      return `+82 0${number.substring(0, 2)}-${number.substring(2, 6)}-${number.substring(6)}`;
     }
     if (number.length === 9) {
-      return `+82 ${number.substring(0, 2)}-${number.substring(2, 5)}-${number.substring(5)}`;
+      return `+82 0${number.substring(0, 2)}-${number.substring(2, 5)}-${number.substring(5)}`;
     }
   }
   
@@ -180,4 +189,23 @@ export function getCountryInfo(phoneNumber: string | undefined): { code: string;
   }
   
   return null;
+}
+
+/**
+ * 국가코드별 전화번호 placeholder 반환
+ * @param countryCode - 국가코드 (예: '+82', '+1')
+ * @returns placeholder 문자열
+ */
+export function getPhonePlaceholder(countryCode: string): string {
+  const placeholders: { [key: string]: string } = {
+    '+82': '01012345678',
+    '+1': '2025551234',
+    '+44': '7400123456',
+    '+353': '851234567',
+    '+61': '412345678',
+    '+64': '211234567',
+    '+27': '821234567',
+  };
+  
+  return placeholders[countryCode] || 'Enter phone number';
 }

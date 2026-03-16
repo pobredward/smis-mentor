@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import DaumPostcode, { Address } from 'react-daum-postcode';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateUser, getUserByEmail, getUserByPhone, uploadProfileImage } from '@/lib/firebaseService';
+import { updateUser, getUserByEmail, getUserByPhone, uploadProfileImage, uploadForeignCV, uploadForeignPassportPhoto, uploadForeignIdCard } from '@/lib/firebaseService';
 import { updateGeocodeIfAddressChanged } from '@/lib/geocoding';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
@@ -15,6 +15,17 @@ import Button from '@/components/common/Button';
 import ImageCropper from '@/components/common/ImageCropper';
 import toast from 'react-hot-toast';
 import { PartTimeJob, User } from '@/types';
+import { getPhonePlaceholder } from '@/utils/phoneUtils';
+
+const countryCodes = [
+  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
+  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
+  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
+  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
+  { code: '+61', country: 'Australia', flag: '🇦🇺' },
+  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
+  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
+];
 
 const partTimeJobSchema = z.object({
   period: z.string().min(1, '기간을 입력해주세요.'),
@@ -29,7 +40,7 @@ const profileSchema = z.object({
     required_error: '나이를 입력해주세요.',
     invalid_type_error: '유효한 숫자를 입력해주세요.',
   }).min(15, '최소 15세 이상이어야 합니다.').max(100, '유효한 나이를 입력해주세요.'),
-  phoneNumber: z.string().min(10, '유효한 휴대폰 번호를 입력해주세요.').max(11, '유효한 휴대폰 번호를 입력해주세요.'),
+  phoneNumber: z.string().min(8, '유효한 휴대폰 번호를 입력해주세요.'),
   email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
   address: z.string().min(1, '주소를 입력해주세요.'),
   addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
@@ -59,6 +70,7 @@ export default function EditProfilePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const section = searchParams.get('section') || 'all';
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const [isLoading, setIsLoading] = useState(false);
   const [showPostcode, setShowPostcode] = useState(false);
   const [emailExists, setEmailExists] = useState(false);
@@ -69,6 +81,13 @@ export default function EditProfilePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [partTimeJobs, setPartTimeJobs] = useState<PartTimeJob[]>([]);
+  const [countryCode, setCountryCode] = useState('+82');
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  
+  // 원어민 파일 관련 상태
+  const [cvUrl, setCvUrl] = useState<string>('');
+  const [passportPhotoUrl, setPassportPhotoUrl] = useState<string>('');
+  const [foreignIdCardUrl, setForeignIdCardUrl] = useState<string>('');
 
   const {
     register,
@@ -144,6 +163,26 @@ export default function EditProfilePage() {
   // 사용자 데이터로 폼 초기화
   useEffect(() => {
     if (userData) {
+      // 전화번호에서 국가코드 추출
+      let extractedCountryCode = '+82';
+      let phoneWithoutCode = userData.phoneNumber || '';
+      
+      if (userData.phoneNumber) {
+        // 국가코드 찾기
+        const foundCode = countryCodes.find(cc => userData.phoneNumber?.startsWith(cc.code));
+        if (foundCode) {
+          extractedCountryCode = foundCode.code;
+          phoneWithoutCode = userData.phoneNumber.substring(foundCode.code.length);
+          
+          // 한국 번호의 경우 0 추가 (10 -> 010)
+          if (extractedCountryCode === '+82' && phoneWithoutCode.length === 10 && !phoneWithoutCode.startsWith('0')) {
+            phoneWithoutCode = '0' + phoneWithoutCode;
+          }
+        }
+      }
+      
+      setCountryCode(extractedCountryCode);
+      
       // referralPath 값 처리
       let referralPathValue = userData.referralPath || '';
       let otherReferralDetail = '';
@@ -157,7 +196,7 @@ export default function EditProfilePage() {
       reset({
         name: userData.name,
         age: userData.age || undefined,
-        phoneNumber: userData.phoneNumber,
+        phoneNumber: phoneWithoutCode,
         email: userData.email,
         address: userData.address,
         addressDetail: userData.addressDetail,
@@ -181,6 +220,13 @@ export default function EditProfilePage() {
       
       // 알바 & 멘토링 경력 설정
       setPartTimeJobs(userData.partTimeJobs || []);
+      
+      // 원어민 파일 URL 초기화
+      if (userData.foreignTeacher) {
+        setCvUrl(userData.foreignTeacher.cvUrl || '');
+        setPassportPhotoUrl(userData.foreignTeacher.passportPhotoUrl || '');
+        setForeignIdCardUrl(userData.foreignTeacher.foreignIdCardUrl || '');
+      }
       
       // 중복 상태 초기화
       setEmailExists(false);
@@ -261,6 +307,129 @@ export default function EditProfilePage() {
       toast.success('프로필 이미지가 업로드되었습니다.');
     } catch {
       toast.error('이미지 업로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+  
+  // 원어민 CV 파일 업로드
+  const handleCvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!userData || !e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a PDF or Word document.');
+      return;
+    }
+    
+    try {
+      setIsUploading(true);
+      const downloadURL = await uploadForeignCV(userData.userId, file, (progress) => {
+        setUploadProgress(progress);
+      });
+      
+      await updateUser(userData.userId, {
+        foreignTeacher: {
+          ...(userData.foreignTeacher || {
+            firstName: '',
+            lastName: '',
+            countryCode: '',
+          }),
+          cvUrl: downloadURL,
+        },
+      });
+      
+      setCvUrl(downloadURL);
+      await refreshUserData();
+      toast.success('CV has been updated.');
+    } catch (error) {
+      console.error('CV 업로드 오류:', error);
+      toast.error('An error occurred while uploading CV.');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+  
+  // 원어민 여권 사진 업로드
+  const handlePassportPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!userData || !e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a JPEG or PNG image.');
+      return;
+    }
+    
+    try {
+      setIsUploading(true);
+      const downloadURL = await uploadForeignPassportPhoto(userData.userId, file, (progress) => {
+        setUploadProgress(progress);
+      });
+      
+      await updateUser(userData.userId, {
+        foreignTeacher: {
+          ...(userData.foreignTeacher || {
+            firstName: '',
+            lastName: '',
+            countryCode: '',
+          }),
+          passportPhotoUrl: downloadURL,
+        },
+      });
+      
+      setPassportPhotoUrl(downloadURL);
+      await refreshUserData();
+      toast.success('Passport photo has been updated.');
+    } catch (error) {
+      console.error('여권 사진 업로드 오류:', error);
+      toast.error('An error occurred while uploading passport photo.');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+  
+  // 원어민 ID 카드 업로드
+  const handleForeignIdCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!userData || !e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a JPEG or PNG image.');
+      return;
+    }
+    
+    try {
+      setIsUploading(true);
+      const downloadURL = await uploadForeignIdCard(userData.userId, file, (progress) => {
+        setUploadProgress(progress);
+      });
+      
+      await updateUser(userData.userId, {
+        foreignTeacher: {
+          ...(userData.foreignTeacher || {
+            firstName: '',
+            lastName: '',
+            countryCode: '',
+          }),
+          foreignIdCardUrl: downloadURL,
+        },
+      });
+      
+      setForeignIdCardUrl(downloadURL);
+      await refreshUserData();
+      toast.success('Foreign ID card has been updated.');
+    } catch (error) {
+      console.error('외국인 ID 카드 업로드 오류:', error);
+      toast.error('An error occurred while uploading foreign ID card.');
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -374,6 +543,16 @@ export default function EditProfilePage() {
     
     setIsLoading(true);
     try {
+      // 전화번호에 국가코드 추가
+      let phoneWithoutLeadingZero = data.phoneNumber;
+      
+      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+      if (countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
+        phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+      }
+      
+      const fullPhoneNumber = `${countryCode}${phoneWithoutLeadingZero}`;
+      
       // 이메일 또는 전화번호 중복 마지막 확인
       if (data.email !== userData.email) {
         const existingEmail = await getUserByEmail(data.email);
@@ -384,8 +563,8 @@ export default function EditProfilePage() {
         }
       }
 
-      if (data.phoneNumber !== userData.phoneNumber) {
-        const existingPhone = await getUserByPhone(data.phoneNumber);
+      if (fullPhoneNumber !== userData.phoneNumber) {
+        const existingPhone = await getUserByPhone(fullPhoneNumber);
         if (existingPhone && existingPhone.userId !== userData.userId) {
           setPhoneExists(true);
           setIsLoading(false);
@@ -406,7 +585,7 @@ export default function EditProfilePage() {
           updateData.age = parseInt(String(data.age), 10);
         }
         
-        updateData.phoneNumber = data.phoneNumber;
+        updateData.phoneNumber = fullPhoneNumber;
         updateData.email = data.email;
         updateData.address = data.address;
         updateData.addressDetail = data.addressDetail;
@@ -473,8 +652,6 @@ export default function EditProfilePage() {
       </Layout>
     );
   }
-
-  const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
 
   return (
     <Layout requireAuth>
@@ -561,6 +738,109 @@ export default function EditProfilePage() {
                 </div>
               )}
 
+              {/* 원어민 교사 제출 서류 */}
+              {isForeign && (section === 'all' || section === 'personal') && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold mb-4">Submitted Documents</h3>
+                  
+                  <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                      CV (Curriculum Vitae)
+                    </label>
+                    {cvUrl ? (
+                      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                        <span className="text-green-700 text-sm flex-1">✓ Uploaded</span>
+                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600">
+                          Change
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx"
+                            onChange={handleCvUpload}
+                            disabled={isUploading}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer block w-full p-3 bg-blue-50 border border-blue-500 text-blue-600 text-sm font-medium rounded-md text-center hover:bg-blue-100">
+                        Upload CV
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          onChange={handleCvUpload}
+                          disabled={isUploading}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                      Passport Photo
+                    </label>
+                    {passportPhotoUrl ? (
+                      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                        <span className="text-green-700 text-sm flex-1">✓ Uploaded</span>
+                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600">
+                          Change
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/jpg"
+                            onChange={handlePassportPhotoUpload}
+                            disabled={isUploading}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer block w-full p-3 bg-blue-50 border border-blue-500 text-blue-600 text-sm font-medium rounded-md text-center hover:bg-blue-100">
+                        Upload Photo
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/jpg"
+                          onChange={handlePassportPhotoUpload}
+                          disabled={isUploading}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                      Foreign ID Card
+                    </label>
+                    {foreignIdCardUrl ? (
+                      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                        <span className="text-green-700 text-sm flex-1">✓ Uploaded</span>
+                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600">
+                          Change
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/jpg"
+                            onChange={handleForeignIdCardUpload}
+                            disabled={isUploading}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer block w-full p-3 bg-blue-50 border border-blue-500 text-blue-600 text-sm font-medium rounded-md text-center hover:bg-blue-100">
+                        Upload ID Card
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/jpg"
+                          onChange={handleForeignIdCardUpload}
+                          disabled={isUploading}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* 개인 정보 섹션 */}
               {(section === 'all' || section === 'personal') && (
                 <>
@@ -590,15 +870,64 @@ export default function EditProfilePage() {
                     })}
                   />
 
-                  <FormInput
-                    label={isForeign ? 'Phone Number' : '휴대폰 번호'}
-                    type="tel"
-                    placeholder={isForeign ? 'Enter without dashes' : '\'-\' 없이 입력하세요'}
-                    error={phoneExists ? (isForeign ? 'This phone number is already in use.' : '이미 사용 중인 휴대폰 번호입니다.') : errors.phoneNumber?.message}
-                    {...register('phoneNumber', {
-                      onBlur: handlePhoneBlur
-                    })}
-                  />
+                  <div className="w-full mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-1">
+                      {isForeign ? 'Phone Number *' : '휴대폰 번호 *'}
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCountryPicker(!showCountryPicker)}
+                        className="relative flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-50 min-w-[120px]"
+                      >
+                        <span className="mr-1">
+                          {countryCodes.find(c => c.code === countryCode)?.flag}
+                        </span>
+                        <span className="mr-1">{countryCode}</span>
+                        <span className="text-gray-500 text-xs">▼</span>
+                        
+                        {showCountryPicker && (
+                          <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-300 rounded-md shadow-lg max-h-80 overflow-y-auto z-10">
+                            {countryCodes.map((country) => (
+                              <button
+                                key={country.code}
+                                type="button"
+                                onClick={() => {
+                                  setCountryCode(country.code);
+                                  setShowCountryPicker(false);
+                                }}
+                                className={`w-full flex items-center px-4 py-2 hover:bg-blue-50 text-left ${
+                                  countryCode === country.code ? 'bg-blue-50' : ''
+                                }`}
+                              >
+                                <span className="text-xl mr-3">{country.flag}</span>
+                                <span className="flex-1 text-sm">{country.country}</span>
+                                <span className="text-sm text-gray-600 font-medium">{country.code}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </button>
+                      <input
+                        type="tel"
+                        placeholder={isForeign ? getPhonePlaceholder(countryCode) : '\'-\' 없이 입력하세요'}
+                        className={`flex-1 px-3 py-2 border ${
+                          phoneExists || errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
+                        } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                        {...register('phoneNumber', {
+                          onBlur: handlePhoneBlur
+                        })}
+                      />
+                    </div>
+                    {(phoneExists || errors.phoneNumber) && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {phoneExists 
+                          ? (isForeign ? 'This phone number is already in use.' : '이미 사용 중인 휴대폰 번호입니다.') 
+                          : errors.phoneNumber?.message
+                        }
+                      </p>
+                    )}
+                  </div>
 
                   <div className="w-full mb-4">
                     <label className="block text-gray-700 text-sm font-medium mb-1">

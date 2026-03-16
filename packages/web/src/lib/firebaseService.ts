@@ -830,6 +830,112 @@ export const uploadProfileImage = async (
   }
 };
 
+// 원어민 파일 업로드 함수들
+export const uploadForeignCV = async (
+  userId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<string> => {
+  try {
+    const filePath = `foreignTeachers/${userId}/cv/${Date.now()}-${file.name}`;
+    const storageRef = ref(storage, filePath);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) {
+            onProgress(progress);
+          }
+        },
+        (error) => {
+          console.error('CV 업로드 오류:', error);
+          reject(error);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(storageRef);
+          resolve(downloadURL);
+        }
+      );
+    });
+  } catch (error) {
+    console.error('CV 업로드 실패:', error);
+    throw error;
+  }
+};
+
+export const uploadForeignPassportPhoto = async (
+  userId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<string> => {
+  try {
+    const filePath = `foreignTeachers/${userId}/passport/${Date.now()}-${file.name}`;
+    const storageRef = ref(storage, filePath);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) {
+            onProgress(progress);
+          }
+        },
+        (error) => {
+          console.error('여권 사진 업로드 오류:', error);
+          reject(error);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(storageRef);
+          resolve(downloadURL);
+        }
+      );
+    });
+  } catch (error) {
+    console.error('여권 사진 업로드 실패:', error);
+    throw error;
+  }
+};
+
+export const uploadForeignIdCard = async (
+  userId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<string> => {
+  try {
+    const filePath = `foreignTeachers/${userId}/idCard/${Date.now()}-${file.name}`;
+    const storageRef = ref(storage, filePath);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) {
+            onProgress(progress);
+          }
+        },
+        (error) => {
+          console.error('외국인 ID 카드 업로드 오류:', error);
+          reject(error);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(storageRef);
+          resolve(downloadURL);
+        }
+      );
+    });
+  } catch (error) {
+    console.error('외국인 ID 카드 업로드 실패:', error);
+    throw error;
+  }
+};
+
 // 임시 사용자 생성 함수
 export const createTempUser = async (
   name: string,

@@ -110,7 +110,15 @@ export default function ForeignSignUpStep2() {
 
     setIsLoading(true);
     try {
-      const fullPhone = `${countryCode}${phone}`;
+      // 전화번호에 국가코드 추가
+      let phoneWithoutLeadingZero = phone;
+      
+      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+      if (countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
+        phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+      }
+      
+      const fullPhone = `${countryCode}${phoneWithoutLeadingZero}`;
       const fullName = middleName 
         ? `${firstName} ${middleName} ${lastName}`
         : `${firstName} ${lastName}`;

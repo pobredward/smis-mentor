@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,6 +25,24 @@ import {
   checkPhoneExists,
 } from '../services/profileService';
 import { compressImage, uriToBlob } from '../utils';
+import { DaumPostcode } from '../components/DaumPostcode';
+import * as DocumentPicker from 'expo-document-picker';
+import {
+  uploadCV,
+  uploadPassportPhoto,
+  uploadForeignIdCard,
+} from '../services/foreignSignUpService';
+import { getPhonePlaceholder } from '../utils/phoneUtils';
+
+const countryCodes = [
+  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
+  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
+  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
+  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
+  { code: '+61', country: 'Australia', flag: '🇦🇺' },
+  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
+  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
+];
 
 const profileSchema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
@@ -31,7 +50,7 @@ const profileSchema = z.object({
     required_error: '나이를 입력해주세요.',
     invalid_type_error: '유효한 숫자를 입력해주세요.',
   }).min(15, '최소 15세 이상이어야 합니다.').max(100, '유효한 나이를 입력해주세요.'),
-  phoneNumber: z.string().min(10, '유효한 휴대폰 번호를 입력해주세요.').max(11, '유효한 휴대폰 번호를 입력해주세요.'),
+  phoneNumber: z.string().min(8, '유효한 휴대폰 번호를 입력해주세요.'),
   email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
   address: z.string().min(1, '주소를 입력해주세요.'),
   addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
@@ -73,6 +92,14 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
   const [emailExists, setEmailExists] = useState(false);
   const [phoneExists, setPhoneExists] = useState(false);
   const [partTimeJobs, setPartTimeJobs] = useState<PartTimeJob[]>([]);
+  const [showPostcode, setShowPostcode] = useState(false);
+  const [countryCode, setCountryCode] = useState('+82');
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  
+  // 원어민 파일 관련 상태
+  const [cvUrl, setCvUrl] = useState<string>('');
+  const [passportPhotoUrl, setPassportPhotoUrl] = useState<string>('');
+  const [foreignIdCardUrl, setForeignIdCardUrl] = useState<string>('');
 
   const {
     control,
@@ -109,10 +136,30 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
   // 사용자 데이터로 폼 초기화
   useEffect(() => {
     if (userData) {
+      // 전화번호에서 국가코드 추출
+      let extractedCountryCode = '+82';
+      let phoneWithoutCode = userData.phoneNumber || '';
+      
+      if (userData.phoneNumber) {
+        // 국가코드 찾기
+        const foundCode = countryCodes.find(cc => userData.phoneNumber?.startsWith(cc.code));
+        if (foundCode) {
+          extractedCountryCode = foundCode.code;
+          phoneWithoutCode = userData.phoneNumber.substring(foundCode.code.length);
+          
+          // 한국 번호의 경우 0 추가 (10 -> 010)
+          if (extractedCountryCode === '+82' && phoneWithoutCode.length === 10 && !phoneWithoutCode.startsWith('0')) {
+            phoneWithoutCode = '0' + phoneWithoutCode;
+          }
+        }
+      }
+      
+      setCountryCode(extractedCountryCode);
+      
       reset({
         name: userData.name,
         age: userData.age || undefined,
-        phoneNumber: userData.phoneNumber || '',
+        phoneNumber: phoneWithoutCode,
         email: userData.email,
         address: userData.address || '',
         addressDetail: userData.addressDetail || '',
@@ -128,6 +175,13 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
 
       if (userData.profileImage) {
         setProfileImageUrl(userData.profileImage);
+      }
+
+      // 원어민 파일 URL 초기화
+      if ((userData as any).foreignTeacher) {
+        setCvUrl((userData as any).foreignTeacher.cvUrl || '');
+        setPassportPhotoUrl((userData as any).foreignTeacher.passportPhotoUrl || '');
+        setForeignIdCardUrl((userData as any).foreignTeacher.foreignIdCardUrl || '');
       }
 
       setPartTimeJobs(userData.partTimeJobs || []);
@@ -190,13 +244,136 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
 
       setProfileImageUrl(downloadURL);
       await refreshUserData();
-      Alert.alert('성공', '프로필 이미지가 변경되었습니다.');
+      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Profile image has been updated.' : '프로필 이미지가 변경되었습니다.');
     } catch (error) {
       console.error('이미지 업로드 오류:', error);
-      Alert.alert('오류', '이미지 업로드 중 오류가 발생했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'An error occurred while uploading the image.' : '이미지 업로드 중 오류가 발생했습니다.');
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
+    }
+  };
+
+  // CV 파일 선택 및 업로드
+  const handleCvUpload = async () => {
+    if (!userData) return;
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      setIsUploading(true);
+      const file = result.assets[0];
+      const fileName = file.name || 'cv.pdf';
+      const downloadURL = await uploadCV(userData.userId, file.uri, fileName);
+
+      await updateUserProfile(userData.userId, {
+        foreignTeacher: {
+          ...((userData as any).foreignTeacher || {}),
+          cvUrl: downloadURL,
+        } as any,
+      });
+
+      setCvUrl(downloadURL);
+      await refreshUserData();
+      Alert.alert('Success', 'CV has been updated.');
+    } catch (error) {
+      console.error('CV 업로드 오류:', error);
+      Alert.alert('Error', 'An error occurred while uploading CV.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // 여권 사진 선택 및 업로드
+  const handlePassportPhotoUpload = async () => {
+    if (!userData) return;
+
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Photo library access permission is required.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      setIsUploading(true);
+      const uri = result.assets[0].uri;
+      const downloadURL = await uploadPassportPhoto(userData.userId, uri);
+
+      await updateUserProfile(userData.userId, {
+        foreignTeacher: {
+          ...((userData as any).foreignTeacher || {}),
+          passportPhotoUrl: downloadURL,
+        } as any,
+      });
+
+      setPassportPhotoUrl(downloadURL);
+      await refreshUserData();
+      Alert.alert('Success', 'Passport photo has been updated.');
+    } catch (error) {
+      console.error('여권 사진 업로드 오류:', error);
+      Alert.alert('Error', 'An error occurred while uploading passport photo.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // 외국인 ID 카드 선택 및 업로드
+  const handleForeignIdCardUpload = async () => {
+    if (!userData) return;
+
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Photo library access permission is required.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      setIsUploading(true);
+      const uri = result.assets[0].uri;
+      const downloadURL = await uploadForeignIdCard(userData.userId, uri);
+
+      await updateUserProfile(userData.userId, {
+        foreignTeacher: {
+          ...((userData as any).foreignTeacher || {}),
+          foreignIdCardUrl: downloadURL,
+        } as any,
+      });
+
+      setForeignIdCardUrl(downloadURL);
+      await refreshUserData();
+      Alert.alert('Success', 'Foreign ID card has been updated.');
+    } catch (error) {
+      console.error('외국인 ID 카드 업로드 오류:', error);
+      Alert.alert('Error', 'An error occurred while uploading foreign ID card.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -261,23 +438,33 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
 
     setIsLoading(true);
     try {
+      // 전화번호에 국가코드 추가
+      let phoneWithoutLeadingZero = data.phoneNumber;
+      
+      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+      if (countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
+        phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+      }
+      
+      const fullPhoneNumber = `${countryCode}${phoneWithoutLeadingZero}`;
+      
       // 이메일 중복 확인
       if (data.email !== userData.email) {
         const existsEmail = await checkEmailExists(data.email, userData.userId);
         if (existsEmail) {
           setEmailExists(true);
-          Alert.alert('오류', '이미 사용 중인 이메일입니다.');
+          Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'This email is already in use.' : '이미 사용 중인 이메일입니다.');
           setIsLoading(false);
           return;
         }
       }
 
       // 전화번호 중복 확인
-      if (data.phoneNumber !== userData.phoneNumber) {
-        const existsPhone = await checkPhoneExists(data.phoneNumber, userData.userId);
+      if (fullPhoneNumber !== userData.phoneNumber) {
+        const existsPhone = await checkPhoneExists(fullPhoneNumber, userData.userId);
         if (existsPhone) {
           setPhoneExists(true);
-          Alert.alert('오류', '이미 사용 중인 전화번호입니다.');
+          Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'This phone number is already in use.' : '이미 사용 중인 전화번호입니다.');
           setIsLoading(false);
           return;
         }
@@ -287,7 +474,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       const updateData: any = {
         name: data.name,
         age: parseInt(String(data.age), 10),
-        phoneNumber: data.phoneNumber,
+        phoneNumber: fullPhoneNumber,
         email: data.email,
         address: data.address,
         addressDetail: data.addressDetail,
@@ -371,6 +558,91 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
             </TouchableOpacity>
           </View>
 
+          {/* 원어민 교사 제출 서류 */}
+          {isForeign && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Submitted Documents</Text>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>CV (Curriculum Vitae)</Text>
+                {cvUrl ? (
+                  <View style={styles.filePreview}>
+                    <Text style={styles.filePreviewText} numberOfLines={1}>
+                      ✓ Uploaded
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.changeFileButton}
+                      onPress={handleCvUpload}
+                      disabled={isUploading}
+                    >
+                      <Text style={styles.changeFileButtonText}>Change</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={handleCvUpload}
+                    disabled={isUploading}
+                  >
+                    <Text style={styles.uploadButtonText}>Upload CV</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Passport Photo</Text>
+                {passportPhotoUrl ? (
+                  <View style={styles.filePreview}>
+                    <Text style={styles.filePreviewText} numberOfLines={1}>
+                      ✓ Uploaded
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.changeFileButton}
+                      onPress={handlePassportPhotoUpload}
+                      disabled={isUploading}
+                    >
+                      <Text style={styles.changeFileButtonText}>Change</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={handlePassportPhotoUpload}
+                    disabled={isUploading}
+                  >
+                    <Text style={styles.uploadButtonText}>Upload Photo</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Foreign ID Card</Text>
+                {foreignIdCardUrl ? (
+                  <View style={styles.filePreview}>
+                    <Text style={styles.filePreviewText} numberOfLines={1}>
+                      ✓ Uploaded
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.changeFileButton}
+                      onPress={handleForeignIdCardUpload}
+                      disabled={isUploading}
+                    >
+                      <Text style={styles.changeFileButtonText}>Change</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={handleForeignIdCardUpload}
+                    disabled={isUploading}
+                  >
+                    <Text style={styles.uploadButtonText}>Upload ID Card</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* 개인 정보 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{isForeign ? 'Personal Information' : '개인 정보'}</Text>
@@ -440,51 +712,69 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>휴대폰 번호 *</Text>
-              <Controller
-                control={control}
-                name="phoneNumber"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[
-                      styles.input,
-                      (errors.phoneNumber || phoneExists) && styles.inputError,
-                    ]}
-                    onBlur={() => {
-                      onBlur();
-                      handlePhoneBlur();
-                    }}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="'-' 없이 입력하세요"
-                    keyboardType="phone-pad"
-                  />
-                )}
-              />
+              <Text style={styles.label}>{isForeign ? 'Phone Number *' : '휴대폰 번호 *'}</Text>
+              <View style={styles.phoneRow}>
+                <TouchableOpacity
+                  style={styles.countryCodeButton}
+                  onPress={() => setShowCountryPicker(true)}
+                >
+                  <Text style={styles.countryCodeText}>
+                    {countryCodes.find(c => c.code === countryCode)?.flag} {countryCode}
+                  </Text>
+                  <Text style={styles.countryCodeArrow}>▼</Text>
+                </TouchableOpacity>
+                <Controller
+                  control={control}
+                  name="phoneNumber"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput
+                      style={[
+                        styles.phoneInput,
+                        (errors.phoneNumber || phoneExists) && styles.inputError,
+                      ]}
+                      onBlur={() => {
+                        onBlur();
+                        handlePhoneBlur();
+                      }}
+                      onChangeText={onChange}
+                      value={value}
+                      placeholder={isForeign ? getPhonePlaceholder(countryCode) : '\'-\' 없이 입력하세요'}
+                      keyboardType="phone-pad"
+                    />
+                  )}
+                />
+              </View>
               {phoneExists && <Text style={styles.errorMessage}>이미 사용 중인 휴대폰 번호입니다.</Text>}
               {errors.phoneNumber && <Text style={styles.errorMessage}>{errors.phoneNumber.message}</Text>}
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>주소 *</Text>
-              <Controller
-                control={control}
-                name="address"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.address && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="주소를 입력하세요"
-                  />
-                )}
-              />
+              <Text style={styles.label}>{isForeign ? 'Address *' : '주소 *'}</Text>
+              <View style={styles.addressRow}>
+                <Controller
+                  control={control}
+                  name="address"
+                  render={({ field: { value } }) => (
+                    <TextInput
+                      style={[styles.addressInput, errors.address && styles.inputError]}
+                      value={value}
+                      placeholder={isForeign ? 'Click search button' : '주소 검색 버튼을 클릭하세요'}
+                      editable={false}
+                    />
+                  )}
+                />
+                <TouchableOpacity
+                  style={styles.searchButton}
+                  onPress={() => setShowPostcode(true)}
+                >
+                  <Text style={styles.searchButtonText}>{isForeign ? 'Search' : '검색'}</Text>
+                </TouchableOpacity>
+              </View>
               {errors.address && <Text style={styles.errorMessage}>{errors.address.message}</Text>}
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>상세 주소 *</Text>
+              <Text style={styles.label}>{isForeign ? 'Detailed Address *' : '상세 주소 *'}</Text>
               <Controller
                 control={control}
                 name="addressDetail"
@@ -494,7 +784,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                     onBlur={onBlur}
                     onChangeText={onChange}
                     value={value}
-                    placeholder="상세 주소를 입력하세요"
+                    placeholder={isForeign ? 'Enter detailed address' : '상세 주소를 입력하세요'}
                   />
                 )}
               />
@@ -764,6 +1054,54 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      
+      {/* Daum Postcode Modal */}
+      <DaumPostcode
+        visible={showPostcode}
+        onComplete={(data) => {
+          setValue('address', data.address, { shouldValidate: true });
+          setShowPostcode(false);
+        }}
+        onClose={() => setShowPostcode(false)}
+      />
+
+      {/* Country Code Picker Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showCountryPicker}
+        onRequestClose={() => setShowCountryPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{isForeign ? 'Select Country Code' : '국가 코드 선택'}</Text>
+              <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                <Text style={styles.modalCloseButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.countryList}>
+              {countryCodes.map((country) => (
+                <TouchableOpacity
+                  key={country.code}
+                  style={[
+                    styles.countryItem,
+                    countryCode === country.code && styles.countryItemSelected
+                  ]}
+                  onPress={() => {
+                    setCountryCode(country.code);
+                    setShowCountryPicker(false);
+                  }}
+                >
+                  <Text style={styles.countryFlag}>{country.flag}</Text>
+                  <Text style={styles.countryName}>{country.country}</Text>
+                  <Text style={styles.countryCodeInList}>{country.code}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -919,6 +1257,34 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: '#ef4444',
+  },
+  addressRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  addressInput: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#1f2937',
+  },
+  searchButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   textarea: {
     backgroundColor: '#ffffff',
@@ -1105,5 +1471,142 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // 전화번호 관련
+  phoneRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  countryCodeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    minWidth: 100,
+  },
+  countryCodeText: {
+    fontSize: 14,
+    color: '#111827',
+    marginRight: 4,
+  },
+  countryCodeArrow: {
+    fontSize: 10,
+    color: '#6b7280',
+  },
+  phoneInput: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#111827',
+  },
+
+  // 국가코드 선택 모달
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalCloseButton: {
+    fontSize: 24,
+    color: '#6b7280',
+    fontWeight: '300',
+  },
+  countryList: {
+    maxHeight: 400,
+  },
+  countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  countryItemSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  countryFlag: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  countryName: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+  },
+  countryCodeInList: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+
+  // 파일 업로드 관련
+  filePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#86efac',
+    borderRadius: 8,
+  },
+  filePreviewText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#16a34a',
+    fontWeight: '500',
+  },
+  changeFileButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#3b82f6',
+    borderRadius: 6,
+  },
+  changeFileButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  uploadButton: {
+    padding: 12,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  uploadButtonText: {
+    color: '#3b82f6',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

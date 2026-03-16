@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { getUserByPhone } from '../services/authService';
+import { getPhonePlaceholder } from '../utils/phoneUtils';
 
 interface ForeignSignUpStep1ScreenProps {
   onNext: (data: {
@@ -63,7 +64,15 @@ export function ForeignSignUpStep1Screen({
 
     setIsLoading(true);
     try {
-      const fullPhone = `${countryCode}${phoneNumber}`;
+      // 전화번호에 국가코드 추가
+      let phoneWithoutLeadingZero = phoneNumber;
+      
+      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+      if (countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
+        phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+      }
+      
+      const fullPhone = `${countryCode}${phoneWithoutLeadingZero}`;
       const userByPhone = await getUserByPhone(fullPhone);
 
       if (userByPhone) {
@@ -258,7 +267,7 @@ export function ForeignSignUpStep1Screen({
                 </TouchableOpacity>
                 <TextInput
                   style={styles.phoneInput}
-                  placeholder="Phone Number"
+                  placeholder={getPhonePlaceholder(countryCode)}
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
                   keyboardType="phone-pad"

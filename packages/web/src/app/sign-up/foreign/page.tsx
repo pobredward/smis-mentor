@@ -11,6 +11,7 @@ import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import ProgressSteps from '@/components/common/ProgressSteps';
+import { getPhonePlaceholder } from '@/utils/phoneUtils';
 
 const countryCodes = [
   { code: '+82', country: 'South Korea', flag: '🇰🇷' },
@@ -39,6 +40,7 @@ export default function ForeignSignUpStep1() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<Step1FormValues>({
     resolver: zodResolver(step1Schema),
@@ -47,10 +49,20 @@ export default function ForeignSignUpStep1() {
     },
   });
   
+  const countryCode = watch('countryCode');
+  
   const onSubmit = async (data: Step1FormValues) => {
     setIsLoading(true);
     try {
-      const fullPhone = `${data.countryCode}${data.phoneNumber}`;
+      // 전화번호에 국가코드 추가
+      let phoneWithoutLeadingZero = data.phoneNumber;
+      
+      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+      if (data.countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
+        phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+      }
+      
+      const fullPhone = `${data.countryCode}${phoneWithoutLeadingZero}`;
       const userByPhone = await getUserByPhone(fullPhone);
 
       if (userByPhone) {
@@ -216,7 +228,7 @@ export default function ForeignSignUpStep1() {
                     className={`flex-1 px-4 py-3 border ${
                       errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
                     } rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent`}
-                    placeholder="Phone number"
+                    placeholder={getPhonePlaceholder(countryCode || '+82')}
                     {...register('phoneNumber')}
                   />
                 </div>

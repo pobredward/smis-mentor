@@ -223,7 +223,15 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     );
 
     try {
-      const fullPhone = `${signUpData.countryCode}${signUpData.phone}`;
+      // 전화번호에 국가코드 추가
+      let phoneWithoutLeadingZero = signUpData.phone || '';
+      
+      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+      if (signUpData.countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
+        phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+      }
+      
+      const fullPhone = `${signUpData.countryCode}${phoneWithoutLeadingZero}`;
       const fullName = signUpData.middleName 
         ? `${signUpData.firstName} ${signUpData.middleName} ${signUpData.lastName}`
         : `${signUpData.firstName} ${signUpData.lastName}`;
@@ -467,8 +475,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>{userData.name}</Text>
                 <Text style={styles.profileEmail}>{userData.email}</Text>
-                {userData.phone && (
-                  <Text style={styles.profilePhone}>{formatPhoneNumber(userData.phone)}</Text>
+                {(userData.phone || userData.phoneNumber) && (
+                  <Text style={styles.profilePhone}>
+                    {formatPhoneNumber(userData.phoneNumber || userData.phone || '')}
+                  </Text>
                 )}
               </View>
             </View>

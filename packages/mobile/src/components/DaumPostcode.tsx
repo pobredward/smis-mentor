@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 interface DaumPostcodeProps {
@@ -10,108 +11,175 @@ interface DaumPostcodeProps {
 
 export function DaumPostcode({ visible, onComplete, onClose }: DaumPostcodeProps) {
   const handleMessage = (event: any) => {
-    const data = JSON.parse(event.nativeEvent.data);
-    onComplete({
-      address: data.address,
-      zonecode: data.zonecode,
-    });
+    const messageData = event.nativeEvent.data;
+    console.log('📱 Message received from WebView:', messageData);
+    
+    try {
+      const data = JSON.parse(messageData);
+      console.log('📱 Parsed data:', data);
+      
+      if (data.type === 'complete') {
+        console.log('📱 Address complete! Calling onComplete with:', {
+          address: data.address,
+          zonecode: data.zonecode
+        });
+        
+        onComplete({
+          address: data.address,
+          zonecode: data.zonecode,
+        });
+        
+        // 잠시 후 모달 닫기 (사용자가 선택한 것을 볼 수 있도록)
+        setTimeout(() => {
+          console.log('📱 Closing modal');
+          onClose();
+        }, 300);
+        
+      } else if (data.type === 'close') {
+        console.log('📱 Postcode closed by user');
+        onClose();
+      } else if (data.type === 'error') {
+        console.error('📱 WebView error:', data.message);
+        onClose();
+      }
+    } catch (error) {
+      console.error('📱 DaumPostcode message parse error:', error);
+      console.error('📱 Raw message:', messageData);
+    }
   };
 
-  const jsCode = `
-    window.addEventListener('message', function(e) {
-      // Daum Postcode에서 메시지를 받을 준비
-    });
-    
-    true; // note: this is required, or you'll sometimes get silent failures
-  `;
-
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>Daum Postcode</title>
-        <style>
-          body {
-            margin: 0;
-            padding: 0;
-          }
-        </style>
-      </head>
-      <body>
-        <div id="layer" style="display:block;position:absolute;overflow:hidden;z-index:1;-webkit-overflow-scrolling:touch;">
-          <img src="//t1.daumcdn.net/postcode/resource/images/close.png" id="btnCloseLayer" style="cursor:pointer;position:absolute;right:0px;top:-1px;z-index:1" onclick="closeDaumPostcode()" alt="닫기 버튼">
-        </div>
-        <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
-        <script>
-          function closeDaumPostcode() {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'close' }));
-          }
-          
-          var element_layer = document.getElementById('layer');
-          
+  // URI 대신 직접 HTML 문자열 사용
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>주소검색</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+  <script>
+    (function() {
+      console.log('🌐 Script starting...');
+      
+      function sendToRN(data) {
+        var msg = JSON.stringify(data);
+        console.log('🌐 Sending:', msg);
+        try {
+          window.ReactNativeWebView.postMessage(msg);
+        } catch (e) {
+          console.error('🌐 Send error:', e);
+        }
+      }
+      
+      function init() {
+        console.log('🌐 Initializing Daum Postcode...');
+        try {
           new daum.Postcode({
             oncomplete: function(data) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
+              console.log('🌐 oncomplete fired!');
+              console.log('🌐 Data:', JSON.stringify(data));
+              
+              var addr = data.userSelectedType === 'R' ? data.roadAddress : data.jibunAddress;
+              if (!addr) addr = data.address;
+              
+              sendToRN({
                 type: 'complete',
-                address: data.address,
+                address: addr,
                 zonecode: data.zonecode
-              }));
+              });
+            },
+            onresize: function(size) {
+              console.log('🌐 onresize:', size);
             },
             width: '100%',
-            height: '100%',
-            maxSuggestItems: 5
-          }).embed(element_layer);
+            height: '100%'
+          }).embed(document.body, { autoClose: false });
           
-          // 모바일 환경에서 전체 화면으로
-          element_layer.style.width = '100%';
-          element_layer.style.height = '100%';
-          element_layer.style.border = 'none';
-        </script>
-      </body>
-    </html>
+          console.log('🌐 Embed complete!');
+        } catch (e) {
+          console.error('🌐 Init error:', e);
+          sendToRN({ type: 'error', message: e.toString() });
+        }
+      }
+      
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>
   `;
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={false}
+      presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>주소 검색</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
         </View>
         <WebView
-          source={{ html }}
-          injectedJavaScript={jsCode}
-          onMessage={(event) => {
-            try {
-              const data = JSON.parse(event.nativeEvent.data);
-              if (data.type === 'complete') {
-                onComplete({
-                  address: data.address,
-                  zonecode: data.zonecode,
-                });
-              } else if (data.type === 'close') {
-                onClose();
-              }
-            } catch (error) {
-              console.error('DaumPostcode message parse error:', error);
-            }
+          source={{ 
+            html: htmlContent,
+            baseUrl: 'https://t1.daumcdn.net'
           }}
+          onMessage={handleMessage}
           style={styles.webview}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           startInLoadingState={true}
-          scalesPageToFit={Platform.OS === 'android'}
+          scalesPageToFit={true}
+          mixedContentMode="always"
+          originWhitelist={['*']}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          cacheEnabled={false}
+          incognito={true}
+          injectedJavaScriptBeforeContentLoaded={`
+            console.log('📱 injectedJavaScriptBeforeContentLoaded');
+            window.isReactNativeWebView = true;
+            true;
+          `}
+          injectedJavaScript={`
+            console.log('📱 injectedJavaScript executed');
+            setTimeout(function() {
+              console.log('📱 Checking daum object:', typeof daum);
+            }, 2000);
+            true;
+          `}
+          onLoadStart={() => console.log('📱 WebView loading started')}
+          onLoadEnd={() => console.log('📱 WebView loading ended')}
+          onLoadProgress={({ nativeEvent }) => {
+            console.log('📱 Load progress:', nativeEvent.progress);
+          }}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('📱 WebView error: ', nativeEvent);
+          }}
+          onHttpError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('📱 WebView HTTP error: ', nativeEvent);
+          }}
+          onContentProcessDidTerminate={() => {
+            console.warn('📱 WebView content process terminated');
+          }}
         />
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -126,10 +194,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
+    zIndex: 10,
   },
   headerTitle: {
     fontSize: 18,
@@ -137,14 +206,17 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   closeButton: {
-    padding: 4,
+    padding: 8,
+    marginRight: -8,
   },
   closeButtonText: {
-    fontSize: 24,
+    fontSize: 28,
     color: '#64748b',
     fontWeight: '300',
+    lineHeight: 28,
   },
   webview: {
     flex: 1,
+    backgroundColor: '#ffffff',
   },
 });
