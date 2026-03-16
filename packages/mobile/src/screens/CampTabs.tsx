@@ -298,6 +298,13 @@ export function LessonScreen() {
     if (b === '개인 자료') return -1;
     return a.localeCompare(b);
   });
+  
+  console.log('📊 materialCodeMap:', materialCodeMap);
+  console.log('📊 userCodes:', userCodes);
+  console.log('📊 allMaterialCodes:', allMaterialCodes);
+  console.log('📊 sortedMaterialCodes:', sortedMaterialCodes);
+  console.log('📊 selectedMaterialCode:', selectedMaterialCode);
+  console.log('📊 대주제 추가 버튼 표시 조건:', selectedMaterialCode && selectedMaterialCode !== '개인 자료');
 
   const filteredMaterials = selectedMaterialCode
     ? materials.filter((m) => materialCodeMap[m.id] === selectedMaterialCode)
@@ -314,12 +321,26 @@ export function LessonScreen() {
 
   // 코드 필터 초기화
   useEffect(() => {
-    if (sortedMaterialCodes.length > 0 && !selectedMaterialCode) {
-      const hasPersonalMaterials = materials.some((m) => !m.templateId);
-      if (hasPersonalMaterials && sortedMaterialCodes.includes('개인 자료')) {
-        setSelectedMaterialCode('개인 자료');
+    console.log('📍 코드 필터 초기화 useEffect');
+    console.log('  - sortedMaterialCodes:', sortedMaterialCodes);
+    console.log('  - selectedMaterialCode:', selectedMaterialCode);
+    console.log('  - materials 개수:', materials.length);
+    
+    if (sortedMaterialCodes.length > 0) {
+      // selectedMaterialCode가 없거나, sortedMaterialCodes에 포함되지 않으면 업데이트
+      if (!selectedMaterialCode || !sortedMaterialCodes.includes(selectedMaterialCode)) {
+        const hasPersonalMaterials = materials.some((m) => !m.templateId);
+        console.log('  - hasPersonalMaterials:', hasPersonalMaterials);
+        
+        if (hasPersonalMaterials && sortedMaterialCodes.includes('개인 자료')) {
+          console.log('  ✅ selectedMaterialCode 설정: 개인 자료');
+          setSelectedMaterialCode('개인 자료');
+        } else {
+          console.log('  ✅ selectedMaterialCode 설정:', sortedMaterialCodes[0]);
+          setSelectedMaterialCode(sortedMaterialCodes[0]);
+        }
       } else {
-        setSelectedMaterialCode(sortedMaterialCodes[0]);
+        console.log('  ℹ️ selectedMaterialCode 유지:', selectedMaterialCode);
       }
     }
   }, [sortedMaterialCodes, selectedMaterialCode, materials]);
