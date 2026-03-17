@@ -14,6 +14,7 @@ import { getSMSTemplateByTypeAndJobBoard, saveSMSTemplate, updateSMSTemplate, ge
 import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { getInterviewLinks, InterviewLinks } from '@/lib/interviewLinksService';
 import { InterviewLinksManager } from '@/components/admin/InterviewLinksManager';
+import { formatPhoneNumber } from '@/utils/phoneUtils';
 
 type JobBoardWithId = JobBoard & { id: string };
 
