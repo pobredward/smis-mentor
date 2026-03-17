@@ -8,7 +8,7 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
 import PhoneInput from '@/components/common/PhoneInput';
-import { formatPhoneNumber } from '@/utils/phoneUtils';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
 import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser } from '@/lib/firebaseService';
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { EvaluationSummaryCompact } from '@/components/evaluation/EvaluationSummary';
@@ -910,7 +910,11 @@ export default function UserManage() {
                           )}
                           <div className="flex-grow min-w-0">
                             <h3 className="font-medium text-gray-900 truncate">{user.name}</h3>
-                            <p className="text-sm text-gray-500 truncate">{formatPhoneNumber(user.phoneNumber)}</p>
+                            <p className="text-sm text-gray-500 truncate">
+                              {user.role === 'foreign' || user.role === 'foreign_temp' 
+                                ? formatPhoneNumber(user.phoneNumber) 
+                                : formatPhoneNumberForMentor(user.phoneNumber)}
+                            </p>
                             
                             {/* 평가 점수 요약 */}
                             <div className="mt-2">
@@ -1458,7 +1462,11 @@ export default function UserManage() {
                         <div>
                           <p className="text-xs text-gray-500 mb-0.5">전화번호</p>
                           <p className="text-gray-900">
-                            {selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}
+                            {selectedUser.phoneNumber ? (
+                              selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp' 
+                                ? formatPhoneNumber(selectedUser.phoneNumber) 
+                                : formatPhoneNumberForMentor(selectedUser.phoneNumber)
+                            ) : '-'}
                           </p>
                         </div>
                         <div className="md:col-span-2">

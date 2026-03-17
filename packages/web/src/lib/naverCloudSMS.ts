@@ -21,6 +21,22 @@ export async function sendSMS({ to, content, from = '01076567933' }: SendSMSPara
       return false;
     }
     
+    // 전화번호 처리: 국가코드 제거 및 포맷팅
+    let phoneNumber = to.replace(/-/g, '').replace(/\s/g, ''); // 하이픈과 공백 제거
+    
+    // +82로 시작하는 경우 국가코드 제거
+    if (phoneNumber.startsWith('+82')) {
+      phoneNumber = '0' + phoneNumber.substring(3); // +82 제거하고 0 추가
+    } else if (phoneNumber.startsWith('82')) {
+      phoneNumber = '0' + phoneNumber.substring(2); // 82 제거하고 0 추가
+    }
+    
+    // 010으로 시작하지 않는 경우 (잘못된 형식)
+    if (!phoneNumber.startsWith('0')) {
+      console.error('유효하지 않은 전화번호 형식:', to);
+      return false;
+    }
+    
     // API URL 
     const url = `https://sens.apigw.ntruss.com/sms/v2/services/${serviceId}/messages`;
     
@@ -42,7 +58,7 @@ export async function sendSMS({ to, content, from = '01076567933' }: SendSMSPara
       from: from.replace(/-/g, ''),
       content,
       messages: [{ 
-        to: to.replace(/-/g, ''),
+        to: phoneNumber,
         subject: 'SMIS 알림'
       }]
     };

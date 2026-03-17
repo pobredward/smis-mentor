@@ -163,12 +163,14 @@ export default function EditProfilePage() {
   // 사용자 데이터로 폼 초기화
   useEffect(() => {
     if (userData) {
-      // 전화번호에서 국가코드 추출
+      const isForeignUser = userData.role === 'foreign' || userData.role === 'foreign_temp';
+      
+      // 전화번호 처리
       let extractedCountryCode = '+82';
       let phoneWithoutCode = userData.phoneNumber || '';
       
-      if (userData.phoneNumber) {
-        // 국가코드 찾기
+      if (isForeignUser && userData.phoneNumber) {
+        // 원어민: 국가코드에서 분리
         const foundCode = countryCodes.find(cc => userData.phoneNumber?.startsWith(cc.code));
         if (foundCode) {
           extractedCountryCode = foundCode.code;
@@ -179,6 +181,9 @@ export default function EditProfilePage() {
             phoneWithoutCode = '0' + phoneWithoutCode;
           }
         }
+      } else {
+        // 멘토: 국가코드 없이 그대로 사용
+        phoneWithoutCode = userData.phoneNumber || '';
       }
       
       setCountryCode(extractedCountryCode);
@@ -543,15 +548,23 @@ export default function EditProfilePage() {
     
     setIsLoading(true);
     try {
-      // 전화번호에 국가코드 추가
-      let phoneWithoutLeadingZero = data.phoneNumber;
+      // 전화번호 처리 - 원어민만 국가코드 적용
+      let finalPhoneNumber: string;
       
-      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
-      if (countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
-        phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+      if (isForeign) {
+        // 원어민: 국가코드 + 전화번호 (0 제거)
+        let phoneWithoutLeadingZero = data.phoneNumber;
+        
+        // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+        if (countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
+          phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+        }
+        
+        finalPhoneNumber = `${countryCode}${phoneWithoutLeadingZero}`;
+      } else {
+        // 멘토: 국가코드 없이 그대로 저장
+        finalPhoneNumber = data.phoneNumber;
       }
-      
-      const fullPhoneNumber = `${countryCode}${phoneWithoutLeadingZero}`;
       
       // 이메일 또는 전화번호 중복 마지막 확인
       if (data.email !== userData.email) {
@@ -563,8 +576,8 @@ export default function EditProfilePage() {
         }
       }
 
-      if (fullPhoneNumber !== userData.phoneNumber) {
-        const existingPhone = await getUserByPhone(fullPhoneNumber);
+      if (finalPhoneNumber !== userData.phoneNumber) {
+        const existingPhone = await getUserByPhone(finalPhoneNumber);
         if (existingPhone && existingPhone.userId !== userData.userId) {
           setPhoneExists(true);
           setIsLoading(false);
@@ -585,7 +598,7 @@ export default function EditProfilePage() {
           updateData.age = parseInt(String(data.age), 10);
         }
         
-        updateData.phoneNumber = fullPhoneNumber;
+        updateData.phoneNumber = finalPhoneNumber;
         updateData.email = data.email;
         updateData.address = data.address;
         updateData.addressDetail = data.addressDetail;
@@ -874,51 +887,66 @@ export default function EditProfilePage() {
                     <label className="block text-gray-700 text-sm font-medium mb-1">
                       {isForeign ? 'Phone Number *' : '휴대폰 번호 *'}
                     </label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowCountryPicker(!showCountryPicker)}
-                        className="relative flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-50 min-w-[120px]"
-                      >
-                        <span className="mr-1">
-                          {countryCodes.find(c => c.code === countryCode)?.flag}
-                        </span>
-                        <span className="mr-1">{countryCode}</span>
-                        <span className="text-gray-500 text-xs">▼</span>
-                        
-                        {showCountryPicker && (
-                          <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-300 rounded-md shadow-lg max-h-80 overflow-y-auto z-10">
-                            {countryCodes.map((country) => (
-                              <button
-                                key={country.code}
-                                type="button"
-                                onClick={() => {
-                                  setCountryCode(country.code);
-                                  setShowCountryPicker(false);
-                                }}
-                                className={`w-full flex items-center px-4 py-2 hover:bg-blue-50 text-left ${
-                                  countryCode === country.code ? 'bg-blue-50' : ''
-                                }`}
-                              >
-                                <span className="text-xl mr-3">{country.flag}</span>
-                                <span className="flex-1 text-sm">{country.country}</span>
-                                <span className="text-sm text-gray-600 font-medium">{country.code}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </button>
+                    {isForeign ? (
+                      // 원어민: 국가코드 선택 + 전화번호
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowCountryPicker(!showCountryPicker)}
+                          className="relative flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-50 min-w-[120px]"
+                        >
+                          <span className="mr-1">
+                            {countryCodes.find(c => c.code === countryCode)?.flag}
+                          </span>
+                          <span className="mr-1">{countryCode}</span>
+                          <span className="text-gray-500 text-xs">▼</span>
+
+                          {showCountryPicker && (
+                            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-300 rounded-md shadow-lg max-h-80 overflow-y-auto z-10">
+                              {countryCodes.map((country) => (
+                                <button
+                                  key={country.code}
+                                  type="button"
+                                  onClick={() => {
+                                    setCountryCode(country.code);
+                                    setShowCountryPicker(false);
+                                  }}
+                                  className={`w-full flex items-center px-4 py-2 hover:bg-blue-50 text-left ${
+                                    countryCode === country.code ? 'bg-blue-50' : ''
+                                  }`}
+                                >
+                                  <span className="text-xl mr-3">{country.flag}</span>
+                                  <span className="flex-1 text-sm">{country.country}</span>
+                                  <span className="text-sm text-gray-600 font-medium">{country.code}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                        <input
+                          type="tel"
+                          placeholder={getPhonePlaceholder(countryCode)}
+                          className={`flex-1 px-3 py-2 border ${
+                            phoneExists || errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
+                          } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                          {...register('phoneNumber', {
+                            onBlur: handlePhoneBlur
+                          })}
+                        />
+                      </div>
+                    ) : (
+                      // 멘토: 전화번호만
                       <input
                         type="tel"
-                        placeholder={isForeign ? getPhonePlaceholder(countryCode) : '\'-\' 없이 입력하세요'}
-                        className={`flex-1 px-3 py-2 border ${
+                        placeholder="-없이 입력하세요"
+                        className={`w-full px-3 py-2 border ${
                           phoneExists || errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
                         } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                         {...register('phoneNumber', {
                           onBlur: handlePhoneBlur
                         })}
                       />
-                    </div>
+                    )}
                     {(phoneExists || errors.phoneNumber) && (
                       <p className="mt-1 text-sm text-red-600">
                         {phoneExists 

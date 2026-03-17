@@ -1,5 +1,5 @@
 /**
- * 국가 코드별 전화번호 포맷팅 유틸리티
+ * 국가코드별 전화번호 포맷팅 유틸리티
  */
 
 /**
@@ -153,6 +153,50 @@ export function formatPhoneNumber(phoneNumber: string | undefined): string {
   
   // 국가코드가 없는 경우 (한국 번호로 가정)
   const onlyNumbers = cleaned.replace(/\D/g, '');
+  if (onlyNumbers.length === 11) {
+    return `${onlyNumbers.substring(0, 3)}-${onlyNumbers.substring(3, 7)}-${onlyNumbers.substring(7)}`;
+  } else if (onlyNumbers.length === 10) {
+    return `${onlyNumbers.substring(0, 3)}-${onlyNumbers.substring(3, 6)}-${onlyNumbers.substring(6)}`;
+  }
+  
+  return phoneNumber;
+}
+
+/**
+ * 멘토용 전화번호 포맷팅 (국가코드 제거)
+ * @param phoneNumber - 전화번호 (국가코드 포함 가능)
+ * @returns 국가코드 없는 포맷팅된 전화번호 (예: 010-1234-5678)
+ */
+export function formatPhoneNumberForMentor(phoneNumber: string | undefined): string {
+  if (!phoneNumber) return '-';
+  
+  // 공백 제거
+  const cleaned = phoneNumber.replace(/\s/g, '');
+  
+  // 한국 국가코드 제거
+  let phoneOnly = cleaned;
+  if (cleaned.startsWith('+82')) {
+    phoneOnly = cleaned.substring(3); // +82 제거
+    // 잘못된 형식 처리: 0으로 시작하는 경우 (예: +8201012345678)
+    if (phoneOnly.startsWith('0') && phoneOnly.length === 11) {
+      phoneOnly = phoneOnly.substring(1); // 0 제거
+    }
+    // 앞에 0이 없으면 추가 (10 -> 010)
+    if (!phoneOnly.startsWith('0') && phoneOnly.length === 10) {
+      phoneOnly = '0' + phoneOnly;
+    }
+  } else if (cleaned.startsWith('82')) {
+    phoneOnly = cleaned.substring(2); // 82 제거
+    // 앞에 0이 없으면 추가
+    if (!phoneOnly.startsWith('0') && phoneOnly.length === 10) {
+      phoneOnly = '0' + phoneOnly;
+    }
+  }
+  
+  // 숫자만 추출
+  const onlyNumbers = phoneOnly.replace(/\D/g, '');
+  
+  // 한국 전화번호 형식으로 포맷팅
   if (onlyNumbers.length === 11) {
     return `${onlyNumbers.substring(0, 3)}-${onlyNumbers.substring(3, 7)}-${onlyNumbers.substring(7)}`;
   } else if (onlyNumbers.length === 10) {

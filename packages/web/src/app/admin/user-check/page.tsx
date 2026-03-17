@@ -6,7 +6,7 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getAllJobCodes, getUsersByJobCode } from '@/lib/firebaseService';
 import { JobCodeWithId, User } from '@/types';
-import { formatPhoneNumber } from '@/utils/phoneUtils';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
 import { useRouter } from 'next/navigation';
 import { maskRRNLast } from '@/utils/userUtils';
 import { getLessonMaterials, getSections, LessonMaterialData, SectionData, getLessonMaterialTemplates, LessonMaterialTemplate } from '@/lib/lessonMaterialService';
@@ -629,7 +629,13 @@ export default function UserCheck() {
                     )}
                     <div>
                       <h2 className="text-xl font-bold text-gray-900">{selectedUser.name}</h2>
-                      <p className="text-gray-600 text-sm">{selectedUser.phoneNumber ? formatPhoneNumber(selectedUser.phoneNumber) : '-'}</p>
+                      <p className="text-gray-600 text-sm">
+                        {selectedUser.phoneNumber ? (
+                          selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp' 
+                            ? formatPhoneNumber(selectedUser.phoneNumber) 
+                            : formatPhoneNumberForMentor(selectedUser.phoneNumber)
+                        ) : '-'}
+                      </p>
                       <div className="flex items-center mt-1">
                         {selectedUser && 
                           'groupName' in selectedUser && 

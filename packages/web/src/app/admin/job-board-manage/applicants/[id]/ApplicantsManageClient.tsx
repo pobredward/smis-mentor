@@ -37,7 +37,7 @@ import {
   getGroupLabel,
   JobExperienceGroupRole,
 } from '@smis-mentor/shared';
-import { formatPhoneNumber } from '@/utils/phoneUtils';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -1542,7 +1542,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             {app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}
                             </h3>
                             <p className="text-xs text-gray-500 truncate">
-                              연락처: {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
+                              연락처: {app.user?.phoneNumber ? (
+                                app.user.role === 'foreign' || app.user.role === 'foreign_temp' 
+                                  ? formatPhoneNumber(app.user.phoneNumber) 
+                                  : formatPhoneNumberForMentor(app.user.phoneNumber)
+                              ) : ''}
                             </p>
                             <p className="text-xs text-gray-400 truncate">
                               {app.user?.university ? `${app.user.university} ${app.user.grade === 6 ? '졸업생' : `${app.user.grade}학년 ${app.user.isOnLeave === null ? '졸업생' : app.user.isOnLeave ? '휴학생' : '재학생'}`}` : ''}

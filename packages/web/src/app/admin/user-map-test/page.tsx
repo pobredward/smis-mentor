@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { Timestamp } from 'firebase/firestore';
 import { getGroupLabel } from '@smis-mentor/shared';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
 
 // Mapbox를 dynamic import로 로드 (SSR 방지)
 const UserMapComponent = dynamic(
@@ -92,17 +93,6 @@ export default function UserMapTestPage() {
   const formatDate = (timestamp: Timestamp | undefined) => {
     if (!timestamp) return '-';
     return format(new Date(timestamp.seconds * 1000), 'yyyy-MM-dd HH:mm');
-  };
-
-  // 전화번호 포맷팅
-  const formatPhoneNumber = (phoneNumber: string) => {
-    if (!phoneNumber) return '-';
-    const cleaned = phoneNumber.replace(/\D/g, '');
-    const match = cleaned.match(/^(\d{3})(\d{4})(\d{4})$/);
-    if (match) {
-      return `${match[1]}-${match[2]}-${match[3]}`;
-    }
-    return phoneNumber;
   };
 
   // 선택된 사용자가 변경될 때 직무 경험 로드
@@ -286,7 +276,11 @@ export default function UserMapTestPage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">전화번호</p>
-                    <p className="text-gray-900">{formatPhoneNumber(selectedUser.phoneNumber)}</p>
+                    <p className="text-gray-900">
+                      {selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp' 
+                        ? formatPhoneNumber(selectedUser.phoneNumber) 
+                        : formatPhoneNumberForMentor(selectedUser.phoneNumber)}
+                    </p>
                   </div>
                   <div className="md:col-span-2">
                     <p className="text-xs text-gray-500 mb-0.5">주소</p>

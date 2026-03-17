@@ -136,12 +136,14 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
   // 사용자 데이터로 폼 초기화
   useEffect(() => {
     if (userData) {
-      // 전화번호에서 국가코드 추출
+      const isForeignUser = userData.role === 'foreign' || userData.role === 'foreign_temp';
+      
+      // 전화번호 처리
       let extractedCountryCode = '+82';
       let phoneWithoutCode = userData.phoneNumber || '';
       
-      if (userData.phoneNumber) {
-        // 국가코드 찾기
+      if (isForeignUser && userData.phoneNumber) {
+        // 원어민: 국가코드에서 분리
         const foundCode = countryCodes.find(cc => userData.phoneNumber?.startsWith(cc.code));
         if (foundCode) {
           extractedCountryCode = foundCode.code;
@@ -152,6 +154,9 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
             phoneWithoutCode = '0' + phoneWithoutCode;
           }
         }
+      } else {
+        // 멘토: 국가코드 없이 그대로 사용
+        phoneWithoutCode = userData.phoneNumber || '';
       }
       
       setCountryCode(extractedCountryCode);
@@ -438,15 +443,23 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
 
     setIsLoading(true);
     try {
-      // 전화번호에 국가코드 추가
-      let phoneWithoutLeadingZero = data.phoneNumber;
+      // 전화번호 처리 - 원어민만 국가코드 적용
+      let finalPhoneNumber: string;
       
-      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
-      if (countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
-        phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+      if (isForeign) {
+        // 원어민: 국가코드 + 전화번호 (0 제거)
+        let phoneWithoutLeadingZero = data.phoneNumber;
+        
+        // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+        if (countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
+          phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
+        }
+        
+        finalPhoneNumber = `${countryCode}${phoneWithoutLeadingZero}`;
+      } else {
+        // 멘토: 국가코드 없이 그대로 저장
+        finalPhoneNumber = data.phoneNumber;
       }
-      
-      const fullPhoneNumber = `${countryCode}${phoneWithoutLeadingZero}`;
       
       // 이메일 중복 확인
       if (data.email !== userData.email) {
@@ -460,8 +473,8 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       }
 
       // 전화번호 중복 확인
-      if (fullPhoneNumber !== userData.phoneNumber) {
-        const existsPhone = await checkPhoneExists(fullPhoneNumber, userData.userId);
+      if (finalPhoneNumber !== userData.phoneNumber) {
+        const existsPhone = await checkPhoneExists(finalPhoneNumber, userData.userId);
         if (existsPhone) {
           setPhoneExists(true);
           Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'This phone number is already in use.' : '이미 사용 중인 전화번호입니다.');
@@ -474,7 +487,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       const updateData: any = {
         name: data.name,
         age: parseInt(String(data.age), 10),
-        phoneNumber: fullPhoneNumber,
+        phoneNumber: finalPhoneNumber,
         email: data.email,
         address: data.address,
         addressDetail: data.addressDetail,
@@ -713,23 +726,48 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>{isForeign ? 'Phone Number *' : '휴대폰 번호 *'}</Text>
-              <View style={styles.phoneRow}>
-                <TouchableOpacity
-                  style={styles.countryCodeButton}
-                  onPress={() => setShowCountryPicker(true)}
-                >
-                  <Text style={styles.countryCodeText}>
-                    {countryCodes.find(c => c.code === countryCode)?.flag} {countryCode}
-                  </Text>
-                  <Text style={styles.countryCodeArrow}>▼</Text>
-                </TouchableOpacity>
+              {isForeign ? (
+                // 원어민: 국가코드 선택 + 전화번호
+                <View style={styles.phoneRow}>
+                  <TouchableOpacity
+                    style={styles.countryCodeButton}
+                    onPress={() => setShowCountryPicker(true)}
+                  >
+                    <Text style={styles.countryCodeText}>
+                      {countryCodes.find(c => c.code === countryCode)?.flag} {countryCode}
+                    </Text>
+                    <Text style={styles.countryCodeArrow}>▼</Text>
+                  </TouchableOpacity>
+                  <Controller
+                    control={control}
+                    name="phoneNumber"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        style={[
+                          styles.phoneInput,
+                          (errors.phoneNumber || phoneExists) && styles.inputError,
+                        ]}
+                        onBlur={() => {
+                          onBlur();
+                          handlePhoneBlur();
+                        }}
+                        onChangeText={onChange}
+                        value={value}
+                        placeholder={getPhonePlaceholder(countryCode)}
+                        keyboardType="phone-pad"
+                      />
+                    )}
+                  />
+                </View>
+              ) : (
+                // 멘토: 전화번호만
                 <Controller
                   control={control}
                   name="phoneNumber"
                   render={({ field: { onChange, onBlur, value } }) => (
                     <TextInput
                       style={[
-                        styles.phoneInput,
+                        styles.input,
                         (errors.phoneNumber || phoneExists) && styles.inputError,
                       ]}
                       onBlur={() => {
@@ -738,12 +776,12 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                       }}
                       onChangeText={onChange}
                       value={value}
-                      placeholder={isForeign ? getPhonePlaceholder(countryCode) : '\'-\' 없이 입력하세요'}
+                      placeholder="-없이 입력하세요"
                       keyboardType="phone-pad"
                     />
                   )}
                 />
-              </View>
+              )}
               {phoneExists && <Text style={styles.errorMessage}>이미 사용 중인 휴대폰 번호입니다.</Text>}
               {errors.phoneNumber && <Text style={styles.errorMessage}>{errors.phoneNumber.message}</Text>}
             </View>

@@ -16,7 +16,7 @@ import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { getInterviewLinks, InterviewLinks } from '@/lib/interviewLinksService';
 import { InterviewLinksManager } from '@/components/admin/InterviewLinksManager';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
-import { formatPhoneNumber } from '@/utils/phoneUtils';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -1786,7 +1786,11 @@ export function InterviewManageClient() {
                             <div className="flex-1 min-w-0 mr-3">
                               <div className="font-medium truncate">{app.user?.name ? `${app.user.name} (${app.user.age})` : app.refUserId}</div>
                               <p className="text-xs text-gray-500 truncate">
-                                연락처: {app.user?.phoneNumber ? formatPhoneNumber(app.user.phoneNumber) : ''}
+                                연락처: {app.user?.phoneNumber ? (
+                                  app.user.role === 'foreign' || app.user.role === 'foreign_temp' 
+                                    ? formatPhoneNumber(app.user.phoneNumber) 
+                                    : formatPhoneNumberForMentor(app.user.phoneNumber)
+                                ) : ''}
                               </p>
                               
                               <p className="text-xs text-gray-400 truncate">
@@ -1899,7 +1903,11 @@ export function InterviewManageClient() {
                             {selectedApplication.user && (
                               <div className="mt-1 space-y-1 text-sm text-gray-600">
                                 <p>
-                                  <span className="font-medium">전화번호:</span> {selectedApplication.user?.phoneNumber ? formatPhoneNumber(selectedApplication.user?.phoneNumber) : ''}
+                                  <span className="font-medium">전화번호:</span> {selectedApplication.user?.phoneNumber ? (
+                                    selectedApplication.user.role === 'foreign' || selectedApplication.user.role === 'foreign_temp' 
+                                      ? formatPhoneNumber(selectedApplication.user.phoneNumber) 
+                                      : formatPhoneNumberForMentor(selectedApplication.user.phoneNumber)
+                                  ) : ''}
                                 </p>
                                 <p>
                                   <span className="font-medium">주소:</span> {selectedApplication.user?.address} {selectedApplication.user?.addressDetail}
