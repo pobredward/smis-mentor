@@ -37,6 +37,7 @@ import {
   getGroupLabel,
   JobExperienceGroupRole,
 } from '@smis-mentor/shared';
+import { formatPhoneNumber } from '@/utils/phoneUtils';
 
 type JobBoardWithId = JobBoard & { id: string };
 

@@ -25,6 +25,7 @@ import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { cancelApplication, getAllJobCodes, addUserJobCode, getUserJobCodesInfo, updateUser } from '@/lib/firebaseService';
 import { getScoreTextColor } from '@/utils/scoreColorUtils';
 import { JobExperienceGroupRole, JOB_EXPERIENCE_GROUP_ROLES } from '@smis-mentor/shared';
+import { formatPhoneNumber } from '@/utils/phoneUtils';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -512,21 +513,6 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     } catch (error) {
       console.error('지원 캠프 로드 오류:', error);
     }
-  };
-  
-  // 전화번호에 하이픈 추가 함수
-  const formatPhoneNumber = (phoneNumber: string) => {
-    if (!phoneNumber) return '';
-    
-    // 전화번호가 10자리인 경우와 11자리인 경우를 구분
-    if (phoneNumber.length === 10) {
-      return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6)}`;
-    } else if (phoneNumber.length === 11) {
-      return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 7)}-${phoneNumber.slice(7)}`;
-    }
-    
-    // 그 외 경우는 원래 형식 반환
-    return phoneNumber;
   };
 
   const getStatusBadge = (status: string | undefined, statusType: 'application' | 'interview' | 'final') => {
