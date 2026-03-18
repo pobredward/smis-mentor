@@ -93,6 +93,28 @@ const jobCodesService = {
   },
 
   /**
+   * 특정 jobCode ID로 조회
+   */
+  getJobCodeById: async (jobCodeId: string): Promise<JobCode | null> => {
+    try {
+      const jobCodeRef = doc(db, 'jobCodes', jobCodeId);
+      const jobCodeSnap = await getDoc(jobCodeRef);
+
+      if (!jobCodeSnap.exists()) {
+        return null;
+      }
+
+      return {
+        id: jobCodeSnap.id,
+        ...jobCodeSnap.data(),
+      } as JobCode;
+    } catch (error) {
+      console.error('JobCode 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  /**
    * 사용자의 activeJobExperienceId 업데이트
    */
   updateUserActiveJobCode: async (

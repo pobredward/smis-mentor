@@ -11,6 +11,7 @@ import {
   ProfileScreen,
 } from '../screens';
 import { useAuth } from '../context/AuthContext';
+import { CampTabProvider } from '../context/CampTabContext';
 
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 
@@ -20,71 +21,73 @@ export function MainTabs() {
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
   return (
-    <Tab.Navigator
-      screenOptions={{
-        tabBarActiveTintColor: '#3b82f6',
-        tabBarInactiveTintColor: '#94a3b8',
-      }}
-    >
-      {/* 원어민이 아닌 경우에만 '홈' 탭 표시 */}
-      {!isForeign && (
-        <Tab.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{
-            title: '홈',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home" size={size} color={color} />
-            ),
-          }}
-        />
-      )}
-      {/* 원어민이 아닌 경우에만 '채용' 탭 표시 */}
-      {!isForeign && (
-        <Tab.Screen
-          name="Recruitment"
-          component={RecruitmentNavigator}
-          options={{
-            title: '채용',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="briefcase" size={size} color={color} />
-            ),
-          }}
-        />
-      )}
-      <Tab.Screen
-        name="Camp"
-        component={CampScreen}
-        options={{
-          title: '캠프',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="school" size={size} color={color} />
-          ),
+    <CampTabProvider>
+      <Tab.Navigator
+        screenOptions={{
+          tabBarActiveTintColor: '#3b82f6',
+          tabBarInactiveTintColor: '#94a3b8',
         }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          title: '마이페이지',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
-      />
-      {isAdmin && (
+      >
+        {/* 원어민이 아닌 경우에만 '홈' 탭 표시 */}
+        {!isForeign && (
+          <Tab.Screen
+            name="Home"
+            component={HomeScreen}
+            options={{
+              title: '홈',
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="home" size={size} color={color} />
+              ),
+            }}
+          />
+        )}
+        {/* 원어민이 아닌 경우에만 '채용' 탭 표시 */}
+        {!isForeign && (
+          <Tab.Screen
+            name="Recruitment"
+            component={RecruitmentNavigator}
+            options={{
+              title: '채용',
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="briefcase" size={size} color={color} />
+              ),
+            }}
+          />
+        )}
         <Tab.Screen
-          name="Admin"
-          component={AdminNavigator}
+          name="Camp"
+          component={CampScreen}
           options={{
-            title: '관리자',
-            headerShown: false,
+            title: '캠프',
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="settings" size={size} color={color} />
+              <Ionicons name="school" size={size} color={color} />
             ),
           }}
         />
-      )}
-    </Tab.Navigator>
+        <Tab.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={{
+            title: '마이페이지',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="person" size={size} color={color} />
+            ),
+          }}
+        />
+        {isAdmin && (
+          <Tab.Screen
+            name="Admin"
+            component={AdminNavigator}
+            options={{
+              title: '관리자',
+              headerShown: false,
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="settings" size={size} color={color} />
+              ),
+            }}
+          />
+        )}
+      </Tab.Navigator>
+    </CampTabProvider>
   );
 }

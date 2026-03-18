@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { EducationScreen } from './EducationScreen';
 import { LessonScreen } from './CampTabs';
@@ -8,12 +8,13 @@ import { RoomScreen } from './RoomScreen';
 import { ScheduleScreen } from './ScheduleScreen';
 import { GuideScreen } from './GuideScreen';
 import { useAuth } from '../context/AuthContext';
+import { useCampTab } from '../context/CampTabContext';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
 
 export function CampScreen() {
   const { userData } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabName>('schedule');
+  const { activeTab, setActiveTab } = useCampTab();
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   
