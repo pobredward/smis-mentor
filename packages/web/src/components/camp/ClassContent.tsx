@@ -438,7 +438,7 @@ export default function ClassContent() {
                     <img 
                       src={profilePhotoUrl} 
                       alt={`${selectedStudent.name} 프로필`}
-                      className="w-36 h-36 rounded-full object-cover border-2 border-gray-200"
+                      className="w-48 h-48 rounded-full object-cover border-2 border-gray-200"
                       onLoad={(e) => {
                         console.log('✅ [ClassContent] 프로필사진 로드 성공:', selectedStudent.name, profilePhotoUrl);
                       }}

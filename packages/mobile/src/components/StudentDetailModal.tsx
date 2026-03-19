@@ -401,9 +401,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   profilePhoto: {
-    width: 144,
-    height: 144,
-    borderRadius: 72,
+    width: 192,
+    height: 192,
+    borderRadius: 96,
     borderWidth: 2,
     borderColor: '#e2e8f0',
   },
