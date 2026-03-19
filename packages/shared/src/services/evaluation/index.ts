@@ -23,6 +23,8 @@ import {
   EvaluationStage,
   EvaluationCriteriaItem
 } from '../../types/evaluation';
+import { logger } from '../../utils/logger';
+import { NotFoundError, DatabaseError } from '../../errors';
 
 // 평가 기준 템플릿 관리
 export class EvaluationCriteriaService {
@@ -202,10 +204,10 @@ export class EvaluationCriteriaService {
       }
       
       await batch.commit();
-      console.log('기본 평가 기준이 생성되었습니다.');
+      logger.info('기본 평가 기준이 생성되었습니다.');
     } catch (error) {
-      console.error('기본 평가 기준 생성 오류:', error);
-      throw error;
+      logger.error('기본 평가 기준 생성 오류:', error);
+      throw new DatabaseError('기본 평가 기준 생성에 실패했습니다', error);
     }
   }
 
@@ -225,8 +227,8 @@ export class EvaluationCriteriaService {
         ...doc.data()
       })) as EvaluationCriteria[];
     } catch (error) {
-      console.error('평가 기준 조회 오류:', error);
-      throw error;
+      logger.error('평가 기준 조회 오류:', error);
+      throw new DatabaseError('평가 기준 조회에 실패했습니다', error);
     }
   }
 

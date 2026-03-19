@@ -11,116 +11,131 @@ import {
   Timestamp,
   Firestore,
 } from 'firebase/firestore';
+import { User } from '../../types/legacy';
+import { logger } from '../../utils/logger';
+import { NotFoundError, DatabaseError } from '../../errors';
 
 // ==================== User 관련 서비스 ====================
 
-export const createUser = async (db: Firestore, userData: Record<string, any>) => {
-  const now = Timestamp.now();
-  const docRef = await addDoc(collection(db, 'users'), {
-    ...userData,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await updateDoc(doc(db, 'users', docRef.id), { userId: docRef.id, id: docRef.id });
-  return docRef.id;
+export const createUser = async (db: Firestore, userData: Omit<User, 'userId' | 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  try {
+    const now = Timestamp.now();
+    const docRef = await addDoc(collection(db, 'users'), {
+      ...userData,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await updateDoc(doc(db, 'users', docRef.id), { userId: docRef.id, id: docRef.id });
+    logger.info('사용자 생성 완료:', docRef.id);
+    return docRef.id;
+  } catch (error) {
+    logger.error('사용자 생성 실패:', error);
+    throw new DatabaseError('사용자 생성에 실패했습니다', error);
+  }
 };
 
-export const getUserById = async (db: Firestore, userId: string): Promise<any | null> => {
+export const getUserById = async (db: Firestore, userId: string): Promise<User | null> => {
   try {
     const userDoc = await getDoc(doc(db, 'users', userId));
     if (!userDoc.exists()) return null;
     
-    const userData = userDoc.data();
+    const userData = userDoc.data() as User;
     
     // id 필드가 없는 경우 자동으로 추가 (오래된 데이터 마이그레이션)
     if (!userData.id) {
-      console.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
+      logger.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
       await updateDoc(doc(db, 'users', userId), { id: userId });
       return { ...userData, id: userId };
     }
     
     return userData;
   } catch (error) {
-    console.error('사용자 정보 가져오기 실패:', error);
-    throw error;
+    logger.error('사용자 정보 가져오기 실패:', error);
+    throw new DatabaseError('사용자 정보를 가져올 수 없습니다', error);
   }
 };
 
-export const getUserByEmail = async (db: Firestore, email: string): Promise<any | null> => {
+export const getUserByEmail = async (db: Firestore, email: string): Promise<User | null> => {
   try {
     const q = query(collection(db, 'users'), where('email', '==', email));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
     const userDoc = querySnapshot.docs[0];
-    const userData = userDoc.data();
+    const userData = userDoc.data() as User;
     const userId = userDoc.id;
     
     // id 필드가 없는 경우 자동으로 추가
     if (!userData.id) {
-      console.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
+      logger.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
       await updateDoc(doc(db, 'users', userId), { id: userId });
       return { ...userData, id: userId };
     }
     
     return userData;
   } catch (error) {
-    console.error('이메일로 사용자 조회 실패:', error);
-    throw error;
+    logger.error('이메일로 사용자 조회 실패:', error);
+    throw new DatabaseError('사용자 조회에 실패했습니다', error);
   }
 };
 
 export const getUserByPhone = async (
   db: Firestore,
   phoneNumber: string
-): Promise<any | null> => {
+): Promise<User | null> => {
   try {
     const q = query(collection(db, 'users'), where('phoneNumber', '==', phoneNumber));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
     const userDoc = querySnapshot.docs[0];
-    const userData = userDoc.data();
+    const userData = userDoc.data() as User;
     const userId = userDoc.id;
     
     // id 필드가 없는 경우 자동으로 추가
     if (!userData.id) {
-      console.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
+      logger.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
       await updateDoc(doc(db, 'users', userId), { id: userId });
       return { ...userData, id: userId };
     }
     
     return userData;
   } catch (error) {
-    console.error('전화번호로 사용자 조회 실패:', error);
-    throw error;
+    logger.error('전화번호로 사용자 조회 실패:', error);
+    throw new DatabaseError('사용자 조회에 실패했습니다', error);
   }
 };
 
 export const updateUser = async (
   db: Firestore,
   userId: string,
-  updates: Record<string, any>
-) => {
-  const now = Timestamp.now();
-  const userRef = doc(db, 'users', userId);
+  updates: Partial<User>
+): Promise<void> => {
+  try {
+    const now = Timestamp.now();
+    const userRef = doc(db, 'users', userId);
 
-  await updateDoc(userRef, {
-    ...updates,
-    updatedAt: now,
-  });
+    await updateDoc(userRef, {
+      ...updates,
+      updatedAt: now,
+    });
+    logger.info('사용자 정보 업데이트 완료:', userId);
+  } catch (error) {
+    logger.error('사용자 업데이트 실패:', error);
+    throw new DatabaseError('사용자 정보 업데이트에 실패했습니다', error);
+  }
 };
 
-export const deactivateUser = async (db: Firestore, userId: string) => {
+export const deactivateUser = async (db: Firestore, userId: string): Promise<boolean> => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
 
     if (!userDoc.exists()) {
-      throw new Error('사용자를 찾을 수 없습니다.');
+      throw new NotFoundError('사용자', userId);
     }
 
-    const userData = userDoc.data();
+    const userData = userDoc.data() as User;
     const now = Timestamp.now();
 
     await updateDoc(userRef, {
@@ -130,45 +145,47 @@ export const deactivateUser = async (db: Firestore, userId: string) => {
       updatedAt: now,
     });
 
+    logger.info('사용자 비활성화 완료:', userId);
     return true;
   } catch (error) {
-    console.error('사용자 비활성화 실패:', error);
-    throw error;
+    logger.error('사용자 비활성화 실패:', error);
+    throw new DatabaseError('사용자 비활성화에 실패했습니다', error);
   }
 };
 
-export const deleteUser = async (db: Firestore, userId: string) => {
+export const deleteUser = async (db: Firestore, userId: string): Promise<boolean> => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
 
     if (!userDoc.exists()) {
-      throw new Error('사용자를 찾을 수 없습니다.');
+      throw new NotFoundError('사용자', userId);
     }
 
     await deleteDoc(userRef);
+    logger.info('사용자 삭제 완료:', userId);
     return true;
   } catch (error) {
-    console.error('사용자 삭제 실패:', error);
-    throw error;
+    logger.error('사용자 삭제 실패:', error);
+    throw new DatabaseError('사용자 삭제에 실패했습니다', error);
   }
 };
 
-export const getAllUsers = async (db: Firestore): Promise<any[]> => {
+export const getAllUsers = async (db: Firestore): Promise<User[]> => {
   try {
     const usersRef = collection(db, 'users');
     const querySnapshot = await getDocs(usersRef);
 
-    const users: any[] = [];
+    const users: User[] = [];
     const updatePromises: Promise<void>[] = [];
     
     querySnapshot.forEach((docSnapshot) => {
-      const userData = docSnapshot.data();
+      const userData = docSnapshot.data() as User;
       const userId = docSnapshot.id;
       
       // id 필드가 없는 경우 자동으로 추가
       if (!userData.id) {
-        console.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
+        logger.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
         updatePromises.push(updateDoc(doc(db, 'users', userId), { id: userId }));
         users.push({ ...userData, id: userId });
       } else {
@@ -181,20 +198,28 @@ export const getAllUsers = async (db: Firestore): Promise<any[]> => {
       await Promise.all(updatePromises);
     }
 
+    logger.info(`전체 사용자 조회 완료: ${users.length}명`);
     return users;
   } catch (error) {
-    console.error('모든 사용자 조회 실패:', error);
-    throw error;
+    logger.error('모든 사용자 조회 실패:', error);
+    throw new DatabaseError('사용자 목록 조회에 실패했습니다', error);
   }
 };
+
+interface JobExperience {
+  id: string;
+  group?: string;
+  groupRole?: string;
+  classCode?: string;
+}
 
 export const getUsersByJobCode = async (
   db: Firestore,
   generation: string,
   code: string
-): Promise<any[]> => {
+): Promise<User[]> => {
   try {
-    const users: any[] = [];
+    const users: User[] = [];
 
     // jobCodes 컬렉션에서 해당 코드와 세대에 맞는 문서 ID 찾기
     const jobCodesRef = collection(db, 'jobCodes');
@@ -219,16 +244,16 @@ export const getUsersByJobCode = async (
     const updatePromises: Promise<void>[] = [];
 
     userSnapshot.forEach((docSnapshot) => {
-      const userData = docSnapshot.data();
+      const userData = docSnapshot.data() as User;
       const userId = docSnapshot.id;
       
       if (
         userData.jobExperiences &&
-        userData.jobExperiences.some((exp: any) => exp.id === jobCodeId)
+        userData.jobExperiences.some((exp: JobExperience) => exp.id === jobCodeId)
       ) {
         // id 필드가 없는 경우 자동으로 추가
         if (!userData.id) {
-          console.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
+          logger.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
           updatePromises.push(updateDoc(doc(db, 'users', userId), { id: userId }));
           users.push({ ...userData, id: userId });
         } else {
@@ -242,9 +267,10 @@ export const getUsersByJobCode = async (
       await Promise.all(updatePromises);
     }
 
+    logger.info(`직무 코드별 사용자 조회 완료: ${users.length}명`);
     return users;
   } catch (error) {
-    console.error('직무 코드별 사용자 조회 실패:', error);
-    throw error;
+    logger.error('직무 코드별 사용자 조회 실패:', error);
+    throw new DatabaseError('사용자 조회에 실패했습니다', error);
   }
 };

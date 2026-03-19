@@ -1,4 +1,6 @@
 import { collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, query, where, orderBy, Timestamp, writeBatch, setDoc, deleteField } from 'firebase/firestore';
+import { logger } from '../../utils/logger';
+import { DatabaseError } from '../../errors';
 // 평가 기준 템플릿 관리
 export class EvaluationCriteriaService {
     // 기본 평가 기준 템플릿 생성
@@ -172,11 +174,11 @@ export class EvaluationCriteriaService {
                 batch.set(docRef, criteria);
             }
             await batch.commit();
-            console.log('기본 평가 기준이 생성되었습니다.');
+            logger.info('기본 평가 기준이 생성되었습니다.');
         }
         catch (error) {
-            console.error('기본 평가 기준 생성 오류:', error);
-            throw error;
+            logger.error('기본 평가 기준 생성 오류:', error);
+            throw new DatabaseError('기본 평가 기준 생성에 실패했습니다', error);
         }
     }
     // 평가 기준 조회 (단계별)
@@ -187,8 +189,8 @@ export class EvaluationCriteriaService {
             return snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
         }
         catch (error) {
-            console.error('평가 기준 조회 오류:', error);
-            throw error;
+            logger.error('평가 기준 조회 오류:', error);
+            throw new DatabaseError('평가 기준 조회에 실패했습니다', error);
         }
     }
     // 기본 평가 기준 조회
