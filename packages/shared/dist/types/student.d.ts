@@ -27,6 +27,7 @@ export declare const ST_SHEET_HEADER_MAPPING: {
     readonly 반멘토: "classMentor";
     readonly 유닛: "unit";
     readonly 호수: "roomNumber";
+    readonly 프로필사진: "profilePhoto";
 };
 export declare const ST_SHEET_COLUMNS: {
     readonly STUDENT_ID: "A";
@@ -122,6 +123,7 @@ export interface STSheetStudent {
     classMentor: string;
     unitMentor: string;
     roomNumber: string;
+    profilePhoto?: string;
     rowNumber: number;
     lastSyncedAt: Date;
     displayFields?: Record<string, any>;

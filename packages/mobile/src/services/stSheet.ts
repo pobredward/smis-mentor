@@ -130,6 +130,9 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
           classMentor: getValue('반멘토', ST_SHEET_COLUMNS.CLASS_MENTOR),
           unitMentor: getValue('유닛', ST_SHEET_COLUMNS.UNIT_MENTOR), // 모든 캠프에서 "유닛" 컬럼 사용
           roomNumber: getValue('호수', ST_SHEET_COLUMNS.ROOM_NUMBER),
+          
+          // 프로필
+          profilePhoto: getValue('프로필사진'),
 
           // 메타
           rowNumber: index + 2,

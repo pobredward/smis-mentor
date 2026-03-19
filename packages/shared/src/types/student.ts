@@ -41,6 +41,9 @@ export const ST_SHEET_HEADER_MAPPING = {
   '반멘토': 'classMentor',
   '유닛': 'unit', // 모든 캠프에서 "유닛" 컬럼을 unit과 unitMentor 둘 다에 사용
   '호수': 'roomNumber',
+  
+  // 프로필
+  '프로필사진': 'profilePhoto',
 } as const;
 
 // 레거시: 고정 컬럼 레터 매핑 (E27, J27용 - 기존 호환성)
@@ -192,6 +195,9 @@ export interface STSheetStudent {
   classMentor: string;
   unitMentor: string;
   roomNumber: string;
+  
+  // 프로필
+  profilePhoto?: string;
   
   // 메타 정보
   rowNumber: number;

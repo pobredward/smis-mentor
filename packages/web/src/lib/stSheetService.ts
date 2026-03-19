@@ -37,6 +37,7 @@ export interface STSheetStudent {
   phoneNumber?: string;
   parentPhoneNumber?: string;
   schoolName?: string;
+  profilePhoto?: string;
 }
 
 export type CampCode = 'E27' | 'J27' | 'S08' | string;
@@ -110,6 +111,7 @@ const ST_SHEET_HEADER_MAPPING: Record<string, string> = {
   '반멘토': 'classMentor',
   '유닛': 'unit',
   '호수': 'roomNumber',
+  '프로필사진': 'profilePhoto',
 };
 
 // Google Sheets에서 데이터 가져오기
@@ -140,6 +142,14 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
         const trimmedHeader = header.trim();
         headerIndexMap[trimmedHeader] = index;
       });
+      console.log(`📋 헤더 매핑:`, headerIndexMap);
+      
+      // 프로필사진 열이 있는지 확인
+      if (headerIndexMap['프로필사진'] !== undefined) {
+        console.log(`✅ "프로필사진" 열 발견! 인덱스: ${headerIndexMap['프로필사진']}`);
+      } else {
+        console.warn(`⚠️ "프로필사진" 열을 찾을 수 없습니다. 사용 가능한 헤더:`, Object.keys(headerIndexMap));
+      }
     }
     
     const rows = lines.slice(1).map((line: string) => line.split('\t'));
@@ -182,10 +192,20 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
           classMentor: getValue('반멘토'),
           unitMentor: getValue('유닛'),
           roomNumber: getValue('호수'),
+          profilePhoto: getValue('프로필사진'),
           rowNumber: index + 2,
           lastSyncedAt: new Date(),
           displayFields: {}
         };
+
+        // 프로필사진 디버깅 (첫 5명)
+        if (index < 5 && student.profilePhoto) {
+          console.log(`📸 [stSheetService] 학생 ${index + 1}:`, {
+            name: student.name,
+            profilePhoto: student.profilePhoto,
+            photoLength: student.profilePhoto.length
+          });
+        }
 
         if (config.type === 'EJ') {
           student.departureRoute = getValue('입소여정');
@@ -202,7 +222,8 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
         return student;
       });
 
-    console.log(`✅ ${students.length}명의 학생 데이터 변환 완료`);
+    const studentsWithPhotos = students.filter(s => s.profilePhoto);
+    console.log(`✅ ${students.length}명의 학생 데이터 변환 완료 (프로필사진: ${studentsWithPhotos.length}명)`);
     return students;
   } catch (error) {
     console.error('❌ Google Sheets 데이터 가져오기 실패:', error);

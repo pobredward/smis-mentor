@@ -9,6 +9,7 @@ import {
   Animated,
   Dimensions,
   PanResponder,
+  Image,
 } from 'react-native';
 import { STSheetStudent, CampType } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +31,36 @@ const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: s
   const back = parts[1];
   if (back.length === 0) return ssn;
   return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
+};
+
+// Google Drive 링크를 직접 이미지 URL로 변환
+const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
+  if (!url) return undefined;
+  
+  // 이미 변환된 URL이면 그대로 반환
+  if (url.includes('drive.google.com/uc?') || url.includes('drive.google.com/thumbnail?')) {
+    return url;
+  }
+  
+  // Google Drive 공유 링크 형식 체크
+  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+  if (driveMatch && driveMatch[1]) {
+    const fileId = driveMatch[1];
+    
+    // 썸네일 API 사용 (더 안정적, CORS 문제 없음)
+    const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+    
+    console.log('🔄 [convertGoogleDriveUrl] URL 변환:', {
+      original: url,
+      converted: thumbnailUrl,
+      fileId,
+      note: '썸네일 API 사용 (sz=w400)'
+    });
+    return thumbnailUrl;
+  }
+  
+  // Google Drive 링크가 아니면 원본 반환
+  return url;
 };
 
 interface StudentDetailModalProps {
@@ -253,6 +284,33 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         >
           {/* 헤더 */}
           <View style={styles.header}>
+            {/* 프로필 사진 */}
+            {(() => {
+              const profilePhotoUrl = convertGoogleDriveUrl(student.profilePhoto);
+              if (profilePhotoUrl) {
+                return (
+                  <View style={styles.profilePhotoContainer}>
+                    <Image
+                      source={{ uri: profilePhotoUrl }}
+                      style={styles.profilePhoto}
+                      onLoad={() => {
+                        console.log('✅ [StudentDetailModal] 프로필사진 로드 성공:', student.name, profilePhotoUrl);
+                      }}
+                      onError={(e) => {
+                        console.error('❌ [StudentDetailModal] 프로필사진 로드 실패:', {
+                          name: student.name,
+                          originalUrl: student.profilePhoto,
+                          convertedUrl: profilePhotoUrl,
+                          error: e.nativeEvent,
+                        });
+                      }}
+                    />
+                  </View>
+                );
+              }
+              return null;
+            })()}
+            
             {/* 학생 이름 - 완벽한 가운데 정렬 */}
             <View style={styles.headerCenter}>
               <Text style={styles.studentName}>{student.name}</Text>
@@ -332,12 +390,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
     backgroundColor: '#ffffff',
     position: 'relative',
-    height: 60,
+    minHeight: 80,
+  },
+  profilePhotoContainer: {
+    marginBottom: 12,
+  },
+  profilePhoto: {
+    width: 144,
+    height: 144,
+    borderRadius: 72,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
   },
   headerCenter: {
     alignItems: 'center',
@@ -356,6 +424,7 @@ const styles = StyleSheet.create({
   closeButton: {
     position: 'absolute',
     right: 16,
+    top: 16,
     width: 32,
     height: 32,
     justifyContent: 'center',

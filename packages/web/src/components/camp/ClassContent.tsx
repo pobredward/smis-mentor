@@ -18,6 +18,42 @@ const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: s
   return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
 };
 
+// Google Drive 링크를 직접 이미지 URL로 변환
+const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
+  if (!url) return undefined;
+  
+  // 이미 변환된 URL이면 그대로 반환
+  if (url.includes('drive.google.com/uc?') || url.includes('drive.google.com/thumbnail?')) {
+    return url;
+  }
+  
+  // Google Drive 공유 링크 형식 체크
+  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+  if (driveMatch && driveMatch[1]) {
+    const fileId = driveMatch[1];
+    
+    // 방법 1: 썸네일 API 사용 (더 안정적, CORS 문제 없음)
+    const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+    
+    // 방법 2: 직접 다운로드 (백업용)
+    // const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    
+    // 방법 3: 기존 방식
+    // const viewUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    
+    console.log('🔄 [convertGoogleDriveUrl] URL 변환:', {
+      original: url,
+      converted: thumbnailUrl,
+      fileId,
+      note: '썸네일 API 사용 (sz=w400)'
+    });
+    return thumbnailUrl;
+  }
+  
+  // Google Drive 링크가 아니면 원본 반환
+  return url;
+};
+
 export default function ClassContent() {
   const { userData } = useAuth();
   const [students, setStudents] = useState<STSheetStudent[]>([]);
@@ -68,7 +104,21 @@ export default function ClassContent() {
     
     try {
       setLoading(true);
+      console.log('📥 [ClassContent] 학생 데이터 로딩 시작...', { campCode });
       const data = await stSheetService.getCachedData(campCode);
+      console.log('📊 [ClassContent] 로드된 학생 수:', data.length);
+      
+      // 처음 몇 명의 프로필사진 정보 출력
+      const studentsWithPhotos = data.filter(s => s.profilePhoto);
+      console.log('📸 [ClassContent] 프로필사진 있는 학생:', studentsWithPhotos.length);
+      if (studentsWithPhotos.length > 0) {
+        console.log('📸 [ClassContent] 프로필사진 샘플:', studentsWithPhotos.slice(0, 3).map(s => ({
+          name: s.name,
+          profilePhoto: s.profilePhoto,
+          photoLength: s.profilePhoto?.length
+        })));
+      }
+      
       const isTemp = await stSheetService.isTemporaryData(campCode);
       const useTempSetting = await stSheetService.getUseTemporaryDataSetting(campCode);
       const hasReal = await stSheetService.hasRealData(campCode);
@@ -77,7 +127,7 @@ export default function ClassContent() {
       setUseTemporaryDataSetting(useTempSetting);
       setHasRealData(hasReal);
     } catch (error) {
-      console.error('학생 목록 로드 실패:', error);
+      console.error('❌ [ClassContent] 학생 목록 로드 실패:', error);
       alert('학생 목록을 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
@@ -371,10 +421,54 @@ export default function ClassContent() {
           <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* 헤더 */}
             <div className="flex flex-col items-center justify-center px-6 py-4 border-b border-gray-200 relative">
+              {/* 프로필 사진 */}
+              {(() => {
+                const profilePhotoUrl = convertGoogleDriveUrl(selectedStudent.profilePhoto);
+                console.log('🖼️ [ClassContent] 학생 정보:', {
+                  name: selectedStudent.name,
+                  studentId: selectedStudent.studentId,
+                  profilePhoto: selectedStudent.profilePhoto,
+                  convertedUrl: profilePhotoUrl,
+                  profilePhotoType: typeof selectedStudent.profilePhoto,
+                  profilePhotoLength: selectedStudent.profilePhoto?.length,
+                  hasProfilePhoto: !!selectedStudent.profilePhoto
+                });
+                return profilePhotoUrl ? (
+                  <div className="mb-3">
+                    <img 
+                      src={profilePhotoUrl} 
+                      alt={`${selectedStudent.name} 프로필`}
+                      className="w-36 h-36 rounded-full object-cover border-2 border-gray-200"
+                      onLoad={(e) => {
+                        console.log('✅ [ClassContent] 프로필사진 로드 성공:', selectedStudent.name, profilePhotoUrl);
+                      }}
+                      onError={(e) => {
+                        const imgElement = e.currentTarget as HTMLImageElement;
+                        console.error('❌ [ClassContent] 프로필사진 로드 실패:', {
+                          name: selectedStudent.name,
+                          originalUrl: selectedStudent.profilePhoto,
+                          convertedUrl: profilePhotoUrl,
+                          naturalWidth: imgElement.naturalWidth,
+                          naturalHeight: imgElement.naturalHeight,
+                          complete: imgElement.complete,
+                          error: e,
+                          troubleshooting: [
+                            '1. Google Drive 파일이 "링크가 있는 모든 사용자"로 공개 설정되어 있는지 확인',
+                            '2. 파일 형식이 이미지(jpg, png, gif 등)인지 확인',
+                            '3. 파일 ID가 올바른지 확인',
+                            '4. 대안: 이미지를 Imgur, Cloudinary 등 이미지 호스팅 서비스에 업로드'
+                          ]
+                        });
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                ) : null;
+              })()}
               <h3 className="text-xl font-bold text-gray-900">{selectedStudent.name}</h3>
               <button
                 onClick={() => setSelectedStudent(null)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center"
+                className="absolute right-4 top-4 text-gray-500 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center"
               >
                 ✕
               </button>
