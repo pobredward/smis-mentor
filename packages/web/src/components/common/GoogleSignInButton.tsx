@@ -22,29 +22,13 @@ export default function GoogleSignInButton({
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      console.log('🔵 Google 로그인 버튼 클릭');
-      console.log('User Agent:', navigator.userAgent);
-      
       const { signInWithGoogle } = await import('@/lib/googleAuthService');
-      console.log('⏳ signInWithGoogle 실행 중...');
-      
       const result = await signInWithGoogle();
-      console.log('📦 signInWithGoogle 결과:', result);
       
-      if (result === 'redirect') {
-        // 리다이렉트가 시작되었으므로 로딩 상태 유지
-        console.log('🔄 리다이렉트 모드 - Google 로그인 페이지로 이동 중...');
-        // 로딩 상태 유지하고 페이지가 이동될 때까지 대기
-        return;
-      }
-      
-      // 팝업 방식의 경우 즉시 결과 전달
-      console.log('✅ 팝업 모드 - 로그인 성공');
       setIsLoading(false);
       onSuccess(result);
-    } catch (error: any) {
-      console.error('❌ Google 로그인 오류:', error);
-      console.error('Error code:', error?.code);
+    } catch (error) {
+      console.error('Google 로그인 오류:', error);
       setIsLoading(false);
       onError(error);
     }

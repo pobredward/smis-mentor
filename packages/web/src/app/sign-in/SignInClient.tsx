@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -22,7 +22,7 @@ import {
   handleSocialAuthError,
   SocialUserData 
 } from '@smis-mentor/shared';
-import { getGoogleRedirectResult, handleGoogleAuthError } from '@/lib/googleAuthService';
+import { handleGoogleAuthError } from '@/lib/googleAuthService';
 import { auth } from '@/lib/firebase';
 
 const loginSchema = z.object({
@@ -52,35 +52,6 @@ export function SignInClient() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
   });
-  
-  // 페이지 로드 시 리다이렉트 결과 확인 (모바일 환경)
-  useEffect(() => {
-    console.log('🚀 SignInClient useEffect 실행');
-    console.log('현재 URL:', window.location.href);
-    console.log('현재 Auth 상태:', auth.currentUser ? '로그인됨' : '로그아웃됨');
-    
-    const checkRedirectResult = async () => {
-      try {
-        console.log('⏳ 리다이렉트 결과 확인 중...');
-        const result = await getGoogleRedirectResult();
-        console.log('📋 리다이렉트 결과:', result);
-        
-        if (result) {
-          console.log('🔄 모바일 리다이렉트 로그인 결과 처리 중...');
-          await handleGoogleSignInSuccessFromRedirect(result);
-        } else {
-          console.log('ℹ️ 리다이렉트 결과 없음 - 일반 페이지 로드');
-        }
-      } catch (error) {
-        console.error('❌ Redirect 결과 확인 오류:', error);
-        const errorMessage = handleGoogleAuthError(error);
-        toast.error(errorMessage);
-      }
-    };
-    
-    checkRedirectResult();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 페이지 로드 시 한 번만 실행
   
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
@@ -157,12 +128,10 @@ export function SignInClient() {
     }
   };
   
-  // Google 로그인 성공 핸들러 (팝업 방식용)
+  // Google 로그인 성공 핸들러
   const handleGoogleSignInSuccess = async (data: SocialUserData) => {
     try {
-      console.log('🔐 Google 로그인 데이터:', data);
       const result = await handleSocialLogin(data, getUserByEmail);
-      console.log('📊 소셜 로그인 결과:', result);
       
       if (result.action === 'LOGIN') {
         // 기존 소셜 계정으로 바로 로그인
@@ -174,15 +143,12 @@ export function SignInClient() {
         }, 1000);
       } else if (result.action === 'LINK_ACTIVE') {
         // 기존 이메일/비밀번호 계정이 있음 - 비밀번호 입력 필요
-        // Firebase Auth에서 새로 생성된 계정 삭제
         const currentUser = auth.currentUser;
         if (currentUser) {
           try {
-            console.log('🗑️ Firebase Auth에서 임시 계정 삭제 중...');
             await currentUser.delete();
-            console.log('✅ 임시 계정 삭제 완료');
           } catch (deleteError) {
-            console.error('⚠️ 계정 삭제 실패 (무시하고 진행):', deleteError);
+            console.error('계정 삭제 실패:', deleteError);
             await auth.signOut();
           }
         }
@@ -192,15 +158,12 @@ export function SignInClient() {
         setShowPasswordModal(true);
       } else if (result.action === 'NEED_PHONE') {
         // 이메일로 계정이 없음 - 전화번호 확인 필요
-        // Firebase Auth에서 새로 생성된 계정 삭제
         const currentUser = auth.currentUser;
         if (currentUser) {
           try {
-            console.log('🗑️ Firebase Auth에서 임시 계정 삭제 중...');
             await currentUser.delete();
-            console.log('✅ 임시 계정 삭제 완료');
           } catch (deleteError) {
-            console.error('⚠️ 계정 삭제 실패 (무시하고 진행):', deleteError);
+            console.error('계정 삭제 실패:', deleteError);
             await auth.signOut();
           }
         }
@@ -224,63 +187,6 @@ export function SignInClient() {
       }
     } catch (error) {
       console.error('Google 로그인 처리 오류:', error);
-      const errorMessage = handleSocialAuthError(error);
-      toast.error(errorMessage);
-    }
-  };
-  
-  // Google 로그인 성공 핸들러 (리다이렉트 방식용 - 모바일)
-  // 리다이렉트 후에는 Firebase Auth가 이미 로그인 상태이므로,
-  // 로그인 성공 케이스가 아닌 경우에만 로그아웃 처리
-  const handleGoogleSignInSuccessFromRedirect = async (data: SocialUserData) => {
-    try {
-      console.log('🔐 Google 리다이렉트 로그인 데이터:', data);
-      const result = await handleSocialLogin(data, getUserByEmail);
-      console.log('📊 소셜 로그인 결과:', result);
-      
-      if (result.action === 'LOGIN') {
-        // 기존 소셜 계정으로 바로 로그인 - Firebase Auth 상태 유지
-        console.log('✅ 로그인 성공 - Firebase Auth 상태 유지');
-        toast.success('로그인에 성공했습니다!');
-        setTimeout(() => {
-          const params = new URLSearchParams(window.location.search);
-          const redirectTo = params.get('redirect');
-          router.push(redirectTo || '/');
-        }, 1000);
-      } else if (result.action === 'LINK_ACTIVE') {
-        // 기존 이메일/비밀번호 계정이 있음 - 로그아웃 후 비밀번호 입력 필요
-        console.log('🔗 기존 계정과 연동 필요 - 로그아웃 처리');
-        await auth.signOut();
-        
-        setSocialData(data);
-        setExistingUserEmail(result.user?.email || data.email);
-        setShowPasswordModal(true);
-      } else if (result.action === 'NEED_PHONE') {
-        // 이메일로 계정이 없음 - 로그아웃 후 전화번호 확인 필요
-        console.log('📱 전화번호 확인 필요 - 로그아웃 처리');
-        await auth.signOut();
-        
-        setSocialData(data);
-        setShowPhoneModal(true);
-      } else if (result.action === 'LINK_TEMP') {
-        // temp 계정 활성화 필요 - 로그아웃 후 회원가입 페이지로
-        console.log('👤 임시 계정 활성화 필요 - 로그아웃 처리');
-        await auth.signOut();
-        
-        toast('임시 계정이 발견되었습니다. 회원가입을 완료해주세요.');
-        router.push(`/sign-up/account?tempUserId=${result.tempUserId}&socialSignUp=true&socialProvider=google`);
-      }
-    } catch (error) {
-      console.error('Google 리다이렉트 로그인 처리 오류:', error);
-      
-      // 에러 발생 시 로그아웃
-      try {
-        await auth.signOut();
-        console.log('⚠️ 에러로 인한 로그아웃 완료');
-      } catch (signOutError) {
-        console.error('로그아웃 실패:', signOutError);
-      }
-      
       const errorMessage = handleSocialAuthError(error);
       toast.error(errorMessage);
     }
