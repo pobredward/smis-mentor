@@ -67,7 +67,7 @@ export default function ForeignSignUpStep2() {
   if (!firstName || !lastName || !countryCode || !phone) {
     return (
       <Layout>
-        <div className="max-w-md mx-auto text-center">
+        <div className="max-w-md mx-auto text-center py-12">
           <h1 className="text-2xl font-bold mb-4">Error</h1>
           <p className="text-gray-600 mb-4">Required information is missing.</p>
           <Button variant="primary" onClick={() => router.push('/sign-up/foreign')}>
@@ -97,18 +97,35 @@ export default function ForeignSignUpStep2() {
   };
 
   const onSubmit = async (data: Step2FormValues) => {
-    // 필수 파일 확인
-    if (!profileImage) {
-      toast.error('Please upload a profile photo.');
-      return;
-    }
-    if (!cvFile) {
-      toast.error('Please upload your CV (PDF).');
-      return;
-    }
-    if (!passportPhoto) {
-      toast.error('Please upload your Passport Photo.');
-      return;
+    // 소셜 로그인인 경우 필수 파일만 확인
+    if (socialSignUp && socialProvider) {
+      // 소셜 로그인은 비밀번호 불필요
+      if (!profileImage) {
+        toast.error('Please upload a profile photo.');
+        return;
+      }
+      if (!cvFile) {
+        toast.error('Please upload your CV (PDF).');
+        return;
+      }
+      if (!passportPhoto) {
+        toast.error('Please upload your Passport Photo.');
+        return;
+      }
+    } else {
+      // 일반 가입은 모든 필드 필요
+      if (!profileImage) {
+        toast.error('Please upload a profile photo.');
+        return;
+      }
+      if (!cvFile) {
+        toast.error('Please upload your CV (PDF).');
+        return;
+      }
+      if (!passportPhoto) {
+        toast.error('Please upload your Passport Photo.');
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -135,32 +152,70 @@ export default function ForeignSignUpStep2() {
       let userId: string;
       let isUpdatingExistingUser = false;
 
-      // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
-      if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
-        console.log('📋 Found existing foreign_temp user, updating account...');
+      // 소셜 로그인 케이스
+      if (socialSignUp && socialProvider) {
+        console.log('🔗 Social sign-up flow for foreign teacher');
         
-        // 기존 계정의 userId 사용
-        userId = existingUserByPhone.userId;
-        isUpdatingExistingUser = true;
-        
-        // 이메일이 다른 계정에서 사용 중인지 확인
-        if (existingUserByEmail && existingUserByEmail.userId !== userId) {
-          toast.error('This email is already in use by another account.');
+        // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
+        if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
+          console.log('📋 Found existing foreign_temp user, updating account...');
+          userId = existingUserByPhone.userId;
+          isUpdatingExistingUser = true;
+          
+          // 이메일이 다른 계정에서 사용 중인지 확인
+          if (existingUserByEmail && existingUserByEmail.userId !== userId) {
+            toast.error('This email is already in use by another account.');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Firebase Auth: 소셜 로그인으로는 이미 생성되어 있음
+          console.log('✅ Using existing social auth credential');
+        }
+        // Case 2: 이메일로 계정이 존재하는 경우 (중복)
+        else if (existingUserByEmail) {
+          toast.error('This email is already in use.');
           setIsLoading(false);
           return;
         }
-        
-        // Firebase Authentication에 이메일/비밀번호 설정 (기존 계정에 credential 추가)
-        console.log('🔐 Linking email/password to existing Firebase user:', userId);
-        const { EmailAuthProvider, linkWithCredential } = await import('firebase/auth');
-        const { auth } = await import('@/lib/firebase');
-        
-        try {
-          // 현재 로그인 상태가 아니므로, 일단 신규 auth 계정을 생성하고 나중에 병합
-          // 실제로는 관리자가 미리 Firebase Auth도 생성해두었을 가능성이 있음
-          const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = await import('firebase/auth');
+        // Case 3: 완전히 새로운 사용자 (소셜 로그인)
+        else {
+          console.log('🆕 New foreign teacher with social login');
+          // Firebase Auth는 이미 Google 로그인으로 생성됨
+          const { auth } = await import('@/lib/firebase');
+          const currentUser = auth.currentUser;
           
-          // 기존 Auth 계정이 있는지 확인하고 없으면 생성
+          if (!currentUser) {
+            toast.error('Authentication error. Please try again.');
+            setIsLoading(false);
+            return;
+          }
+          
+          userId = currentUser.uid;
+          console.log('✅ Using social auth UID:', userId);
+        }
+      } else {
+        // 일반 가입 케이스 (기존 로직 유지)
+        // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
+        if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
+          console.log('📋 Found existing foreign_temp user, updating account...');
+          
+          // 기존 계정의 userId 사용
+          userId = existingUserByPhone.userId;
+          isUpdatingExistingUser = true;
+          
+          // 이메일이 다른 계정에서 사용 중인지 확인
+          if (existingUserByEmail && existingUserByEmail.userId !== userId) {
+            toast.error('This email is already in use by another account.');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Firebase Authentication에 이메일/비밀번호 설정
+          console.log('🔐 Linking email/password to existing Firebase user:', userId);
+          const { createUserWithEmailAndPassword } = await import('firebase/auth');
+          const { auth } = await import('@/lib/firebase');
+          
           try {
             await createUserWithEmailAndPassword(auth, data.email, data.password);
             console.log('✅ Created new Firebase Auth account for existing user');
@@ -171,25 +226,22 @@ export default function ForeignSignUpStep2() {
               throw authError;
             }
           }
-        } catch (authError: any) {
-          console.error('Auth setup error:', authError);
-          // Auth 오류는 무시하고 Firestore만 업데이트
         }
-      }
-      // Case 2: 이메일로 계정이 존재하는 경우 (중복)
-      else if (existingUserByEmail) {
-        toast.error('This email is already in use.');
-        setIsLoading(false);
-        return;
-      }
-      // Case 3: 완전히 새로운 사용자
-      else {
-        console.log('🔐 Creating new Firebase Authentication account:', data.email);
-        const { createUserWithEmailAndPassword } = await import('firebase/auth');
-        const { auth } = await import('@/lib/firebase');
-        const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-        userId = userCredential.user.uid;
-        console.log('✅ Firebase Authentication account created, UID:', userId);
+        // Case 2: 이메일로 계정이 존재하는 경우 (중복)
+        else if (existingUserByEmail) {
+          toast.error('This email is already in use.');
+          setIsLoading(false);
+          return;
+        }
+        // Case 3: 완전히 새로운 사용자
+        else {
+          console.log('🔐 Creating new Firebase Authentication account:', data.email);
+          const { createUserWithEmailAndPassword } = await import('firebase/auth');
+          const { auth } = await import('@/lib/firebase');
+          const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+          userId = userCredential.user.uid;
+          console.log('✅ Firebase Authentication account created, UID:', userId);
+        }
       }
 
       // 2. 파일 업로드
@@ -272,7 +324,17 @@ export default function ForeignSignUpStep2() {
           passportPhotoUrl: passportPhotoUrl,
           foreignIdCardUrl: foreignIdCardUrl,
           applicationDate: Timestamp.now(),
-        }
+        },
+        // 소셜 로그인 정보 추가
+        ...(socialSignUp && socialProvider && {
+          authProviders: [{
+            providerId: `${socialProvider}.com`,
+            uid: userId,
+            email: data.email,
+            linkedAt: Timestamp.now(),
+          }],
+          primaryAuthMethod: 'social',
+        }),
       };
 
       if (isUpdatingExistingUser) {
@@ -341,51 +403,64 @@ export default function ForeignSignUpStep2() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {/* Email */}
-              <div className="relative">
-                <div className="absolute left-3 top-[38px] text-gray-400">
-                  <FaEnvelope className="w-5 h-5" />
-                </div>
-                <FormInput
-                  label="Email"
-                  type="email"
-                  placeholder="example@email.com"
-                  error={errors.email?.message}
-                  className="pl-12"
-                  {...register('email')}
-                />
-              </div>
+              {!socialSignUp && (
+                <>
+                  <div className="relative">
+                    <div className="absolute left-3 top-[38px] text-gray-400">
+                      <FaEnvelope className="w-5 h-5" />
+                    </div>
+                    <FormInput
+                      label="Email"
+                      type="email"
+                      placeholder="example@email.com"
+                      error={errors.email?.message}
+                      className="pl-12"
+                      {...register('email')}
+                    />
+                  </div>
 
-              {/* Password */}
-              <div className="relative">
-                <div className="absolute left-3 top-[38px] text-gray-400">
-                  <FaLock className="w-5 h-5" />
-                </div>
-                <FormInput
-                  label="Password"
-                  type="password"
-                  placeholder="8+ characters with letters, numbers & symbols"
-                  error={errors.password?.message}
-                  showPasswordToggle={true}
-                  className="pl-12"
-                  {...register('password')}
-                />
-              </div>
+                  {/* Password */}
+                  <div className="relative">
+                    <div className="absolute left-3 top-[38px] text-gray-400">
+                      <FaLock className="w-5 h-5" />
+                    </div>
+                    <FormInput
+                      label="Password"
+                      type="password"
+                      placeholder="8+ characters with letters, numbers & symbols"
+                      error={errors.password?.message}
+                      showPasswordToggle={true}
+                      className="pl-12"
+                      {...register('password')}
+                    />
+                  </div>
 
-              {/* Confirm Password */}
-              <div className="relative">
-                <div className="absolute left-3 top-[38px] text-gray-400">
-                  <FaLock className="w-5 h-5" />
+                  {/* Confirm Password */}
+                  <div className="relative">
+                    <div className="absolute left-3 top-[38px] text-gray-400">
+                      <FaLock className="w-5 h-5" />
+                    </div>
+                    <FormInput
+                      label="Confirm Password"
+                      type="password"
+                      placeholder="Re-enter your password"
+                      error={errors.confirmPassword?.message}
+                      showPasswordToggle={true}
+                      className="pl-12"
+                      {...register('confirmPassword')}
+                    />
+                  </div>
+                </>
+              )}
+
+              {socialSignUp && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm text-green-800 flex items-center">
+                    <span className="mr-2">✓</span>
+                    <span>You are signing up with Google. No password required.</span>
+                  </p>
                 </div>
-                <FormInput
-                  label="Confirm Password"
-                  type="password"
-                  placeholder="Re-enter your password"
-                  error={errors.confirmPassword?.message}
-                  showPasswordToggle={true}
-                  className="pl-12"
-                  {...register('confirmPassword')}
-                />
-              </div>
+              )}
 
               <div className="border-t border-gray-200 my-8"></div>
 

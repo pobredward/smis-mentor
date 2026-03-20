@@ -7,12 +7,14 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { signIn, resetPassword, getUserByEmail, getUserByPhone, updateUser, getUserById } from '@/lib/firebaseService';
+import { signIn, resetPassword, getUserByEmail, getUserByPhone, getUserByForeignName, updateUser, getUserById } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import GoogleSignInButton from '@/components/common/GoogleSignInButton';
 import PhoneInputModal from '@/components/common/PhoneInputModal';
+import ForeignPhoneInputModal from '@/components/common/ForeignPhoneInputModal';
+import RoleSelectionModal from '@/components/common/RoleSelectionModal';
 import PasswordInputModal from '@/components/common/PasswordInputModal';
 import { FirebaseError } from 'firebase/app';
 import { 
@@ -39,7 +41,10 @@ export function SignInClient() {
   const [showResetForm, setShowResetForm] = useState(false);
   
   // 소셜 로그인 관련 상태
+  const [showRoleSelectionModal, setShowRoleSelectionModal] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'mentor' | 'foreign' | null>(null);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [showForeignPhoneModal, setShowForeignPhoneModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [socialData, setSocialData] = useState<SocialUserData | null>(null);
   const [existingUserEmail, setExistingUserEmail] = useState<string | null>(null);
@@ -157,7 +162,7 @@ export function SignInClient() {
         setExistingUserEmail(result.user?.email || data.email);
         setShowPasswordModal(true);
       } else if (result.action === 'NEED_PHONE') {
-        // 이메일로 계정이 없음 - 이름과 전화번호 확인 필요
+        // 이메일로 계정이 없음 - 역할 선택 필요
         const currentUser = auth.currentUser;
         if (currentUser) {
           try {
@@ -169,7 +174,7 @@ export function SignInClient() {
         }
         
         setSocialData(data);
-        setShowPhoneModal(true);
+        setShowRoleSelectionModal(true);
       } else if (result.action === 'LINK_TEMP') {
         // temp 계정 활성화 필요
         const currentUser = auth.currentUser;
@@ -192,13 +197,150 @@ export function SignInClient() {
     }
   };
   
+  // 역할 선택 핸들러
+  const handleRoleSelection = (role: 'mentor' | 'foreign') => {
+    setSelectedRole(role);
+    setShowRoleSelectionModal(false);
+    
+    if (role === 'foreign') {
+      setShowForeignPhoneModal(true);
+    } else {
+      setShowPhoneModal(true);
+    }
+  };
+  
   // Google 로그인 에러 핸들러
   const handleGoogleSignInError = (error: any) => {
     const errorMessage = handleGoogleAuthError(error);
     toast.error(errorMessage);
   };
   
-  // 이름과 전화번호 입력 핸들러
+  // 원어민 전화번호 입력 핸들러
+  const handleForeignPhoneSubmit = async (data: {
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    countryCode: string;
+    phoneNumber: string;
+  }) => {
+    if (!socialData) return;
+    
+    setIsLoading(true);
+    try {
+      const fullName = data.middleName
+        ? `${data.firstName} ${data.middleName} ${data.lastName}`
+        : `${data.firstName} ${data.lastName}`;
+      
+      // 전화번호 정규화
+      let cleanPhone = data.phoneNumber;
+      if (data.countryCode === '+82' && cleanPhone.startsWith('0')) {
+        cleanPhone = cleanPhone.substring(1);
+      }
+      const fullPhone = `${data.countryCode}${cleanPhone}`;
+      
+      // ✅ 원어민은 First Name + Last Name으로만 검색
+      console.log('🔍 원어민 계정 검색:', { firstName: data.firstName, lastName: data.lastName });
+      const existingUser = await getUserByForeignName(data.firstName, data.lastName);
+      
+      if (existingUser) {
+        setShowForeignPhoneModal(false);
+        
+        const role = existingUser.role;
+        
+        console.log('👤 원어민 계정 발견:', {
+          role,
+          status: existingUser.status,
+          name: existingUser.name,
+        });
+        
+        // active 원어민 계정이면서 이메일이 다른 경우
+        if (role === 'foreign' && existingUser.status === 'active') {
+          if (existingUser.email !== socialData.email) {
+            // 이메일이 다르면 비밀번호 입력으로 계정 연동
+            toast(
+              `Existing account found with name "${existingUser.name}". Please enter your password to link accounts.`,
+              {
+                duration: 5000,
+                icon: '⚠️',
+              }
+            );
+            setSocialData({ ...socialData, name: fullName });
+            setExistingUserEmail(existingUser.email);
+            setShowPasswordModal(true);
+            setIsLoading(false);
+            return;
+          } else {
+            // 이메일이 같으면 바로 로그인
+            toast.success('Welcome back! Logging you in...');
+            setTimeout(() => {
+              const params = new URLSearchParams(window.location.search);
+              const redirectTo = params.get('redirect');
+              router.push(redirectTo || '/');
+            }, 1000);
+            return;
+          }
+        }
+        
+        // foreign_temp 계정 발견
+        if (role === 'foreign_temp' && existingUser.status === 'temp') {
+          console.log('✅ foreign_temp 계정 발견 - 활성화 진행');
+          toast.success('Temporary account found. Please complete your registration.');
+          router.push(
+            `/sign-up/foreign/account?` +
+            `firstName=${encodeURIComponent(data.firstName)}&` +
+            `lastName=${encodeURIComponent(data.lastName)}&` +
+            `middleName=${encodeURIComponent(data.middleName || '')}&` +
+            `countryCode=${encodeURIComponent(data.countryCode)}&` +
+            `phone=${encodeURIComponent(data.phoneNumber)}&` +
+            `socialSignUp=true&` +
+            `tempUserId=${existingUser.userId}&` +
+            `socialProvider=google`
+          );
+          return;
+        }
+        
+        // mentor_temp 또는 mentor인 경우
+        if (role === 'mentor_temp' || role === 'mentor') {
+          toast.error(
+            'This name is registered as a mentor account. Please contact the administrator if this is incorrect.\nAdministrator: 010-7656-7933 (Shin Sunwoong)',
+            { duration: 8000 }
+          );
+          setIsLoading(false);
+          return;
+        }
+        
+        // 기타 케이스
+        toast.error(
+          `This name is already registered with a different role. Please contact the administrator.\nAdministrator: 010-7656-7933 (Shin Sunwoong)`,
+          { duration: 8000 }
+        );
+        setIsLoading(false);
+        return;
+      } else {
+        // ✅ 신규 원어민 가입
+        console.log('🆕 신규 원어민 가입 진행');
+        toast.success(`Welcome ${data.firstName}! Please complete your registration.`);
+        setShowForeignPhoneModal(false);
+        router.push(
+          `/sign-up/foreign/account?` +
+          `firstName=${encodeURIComponent(data.firstName)}&` +
+          `lastName=${encodeURIComponent(data.lastName)}&` +
+          `middleName=${encodeURIComponent(data.middleName || '')}&` +
+          `countryCode=${encodeURIComponent(data.countryCode)}&` +
+          `phone=${encodeURIComponent(data.phoneNumber)}&` +
+          `socialSignUp=true&` +
+          `socialProvider=google`
+        );
+      }
+    } catch (error: any) {
+      console.error('Foreign name verification error:', error);
+      toast.error('An error occurred while verifying your account.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // 이름과 전화번호 입력 핸들러 (멘토용)
   const handlePhoneSubmit = async (data: { name: string; phoneNumber: string }) => {
     if (!socialData) return;
     
@@ -305,6 +447,22 @@ export function SignInClient() {
   };
   
   // 모달 닫기 핸들러 (Firebase Auth 정리)
+  const handleRoleModalClose = async () => {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      try {
+        console.log('소셜 로그인 역할 선택 중단 - Firebase Auth 계정 삭제');
+        await currentUser.delete();
+      } catch (error) {
+        console.error('계정 삭제 실패, 로그아웃 시도:', error);
+        await auth.signOut();
+      }
+    }
+    setShowRoleSelectionModal(false);
+    setSocialData(null);
+    setSelectedRole(null);
+  };
+  
   const handlePhoneModalClose = async () => {
     const currentUser = auth.currentUser;
     if (currentUser) {
@@ -317,6 +475,21 @@ export function SignInClient() {
       }
     }
     setShowPhoneModal(false);
+    setSocialData(null);
+  };
+  
+  const handleForeignPhoneModalClose = async () => {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      try {
+        console.log('원어민 소셜 로그인 중단 - Firebase Auth 계정 삭제');
+        await currentUser.delete();
+      } catch (error) {
+        console.error('계정 삭제 실패, 로그아웃 시도:', error);
+        await auth.signOut();
+      }
+    }
+    setShowForeignPhoneModal(false);
     setSocialData(null);
   };
   
@@ -507,13 +680,31 @@ export function SignInClient() {
         </div>
       </div>
       
-      {/* 이름 및 전화번호 입력 모달 */}
+      {/* 역할 선택 모달 */}
+      <RoleSelectionModal
+        isOpen={showRoleSelectionModal}
+        onClose={handleRoleModalClose}
+        onSelectRole={handleRoleSelection}
+      />
+      
+      {/* 멘토 이름 및 전화번호 입력 모달 */}
       <PhoneInputModal
         isOpen={showPhoneModal}
         onClose={handlePhoneModalClose}
         onSubmit={handlePhoneSubmit}
         title="본인 확인"
         description="계정 확인을 위해 이름과 전화번호를 입력해주세요."
+        isLoading={isLoading}
+        defaultName={socialData?.name || ''}
+      />
+      
+      {/* 원어민 전화번호 입력 모달 */}
+      <ForeignPhoneInputModal
+        isOpen={showForeignPhoneModal}
+        onClose={handleForeignPhoneModalClose}
+        onSubmit={handleForeignPhoneSubmit}
+        title="Identity Verification"
+        description="Please enter your name and phone number to verify your account."
         isLoading={isLoading}
         defaultName={socialData?.name || ''}
       />

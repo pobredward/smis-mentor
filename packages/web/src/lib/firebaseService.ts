@@ -117,6 +117,33 @@ export const getUserByPhone = async (phoneNumber: string) => {
   }
 };
 
+// 원어민 이름으로 사용자 조회 (First Name + Last Name)
+export const getUserByForeignName = async (firstName: string, lastName: string) => {
+  try {
+    // 이름 유효성 검사
+    if (!firstName || !lastName || typeof firstName !== 'string' || typeof lastName !== 'string') {
+      console.error('유효하지 않은 이름:', { firstName, lastName });
+      return null;
+    }
+
+    // foreignTeacher.firstName과 foreignTeacher.lastName으로 검색
+    const q = query(
+      collection(db, 'users'),
+      where('foreignTeacher.firstName', '==', firstName),
+      where('foreignTeacher.lastName', '==', lastName)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+    
+    // 여러 명이 있을 수 있으므로 첫 번째 결과 반환
+    return querySnapshot.docs[0].data() as User;
+  } catch (error) {
+    console.error('원어민 이름으로 사용자 조회 실패:', error);
+    throw error;
+  }
+};
+
 export const updateUser = async (userId: string, updates: Partial<User>) => {
   const now = Timestamp.now();
   const userRef = doc(db, 'users', userId);
