@@ -238,17 +238,22 @@ export function SignInClient() {
         
         // temp 계정 발견
         if (result.nameMatches === false) {
-          console.warn('⚠️ temp 계정 이름 불일치:', {
+          console.error('⚠️ temp 계정 이름 불일치 - 다른 사람이 잘못 등록한 가능성:', {
             registered: result.user.name,
             input: data.name,
           });
-          toast(`등록된 이름(${result.user.name})과 다르지만 진행합니다. 올바른 정보인지 확인해주세요.`, {
-            duration: 4000,
-            icon: '⚠️',
-          });
-        } else {
-          toast.success('임시 계정이 발견되었습니다. 회원가입을 완료해주세요.');
+          
+          // temp 계정인데 이름이 다른 경우: 관리자 문의 필요
+          toast.error(
+            `이 전화번호는 "${result.user.name}"님 이름으로 등록되어 있습니다. 본인이 아니라면 관리자에게 문의해주세요.\n관리자: 010-7656-7933 (신선웅)`,
+            { duration: 8000 }
+          );
+          setIsLoading(false);
+          return;
         }
+        
+        // 이름 일치 - 정상 진행
+        toast.success('임시 계정이 발견되었습니다. 회원가입을 완료해주세요.');
         
         // 역할에 따라 적절한 회원가입 페이지로 이동
         const role = result.user.role;
