@@ -4,6 +4,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import { MainTabs } from './MainTabs';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { NotificationTestScreen } from '../screens/NotificationTestScreen';
+import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
+import { TermsOfServiceScreen } from '../screens/TermsOfServiceScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -58,6 +62,46 @@ export function RootNavigator() {
           name="TaskDetail" 
           component={TaskDetailScreen}
           options={{
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="Settings" 
+          component={SettingsScreen}
+          options={{
+            headerShown: true,
+            title: '설정',
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="NotificationTest" 
+          component={NotificationTestScreen}
+          options={{
+            headerShown: true,
+            title: '푸시 알림 테스트',
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="PrivacyPolicy" 
+          component={PrivacyPolicyScreen}
+          options={{
+            headerShown: true,
+            title: '개인정보처리방침',
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="TermsOfService" 
+          component={TermsOfServiceScreen}
+          options={{
+            headerShown: true,
+            title: '서비스 이용약관',
             presentation: 'card',
             animation: 'slide_from_right',
           }}

@@ -4,7 +4,7 @@ export default function Footer() {
   return (
     <footer className="mt-30 bg-gray-50 border-t border-gray-200">
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* 회사 정보 */}
           <div>
             <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4">회사 정보</h3>
@@ -17,11 +17,28 @@ export default function Footer() {
             </ul>
           </div>
           
-          {/* 연락처 및 주소 */}
-          {/* <div>
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4">주소</h3>
-            <p className="text-sm text-gray-500 mb-2">경기 성남시 분당구 장미로 78 SMIS 라운지&교육센터 3층 312호</p>
-          </div> */}
+          {/* 법률 문서 */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4">법률 문서</h3>
+            <ul className="space-y-2">
+              <li>
+                <a 
+                  href="/privacy-policy" 
+                  className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
+                >
+                  개인정보처리방침
+                </a>
+              </li>
+              <li>
+                <a 
+                  href="/terms-of-service" 
+                  className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
+                >
+                  서비스 이용약관
+                </a>
+              </li>
+            </ul>
+          </div>
           
           {/* 소셜 링크 */}
           <div>
