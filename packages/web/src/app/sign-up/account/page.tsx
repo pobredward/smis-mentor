@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
 import { getUserByEmail } from '@/lib/firebaseService';
+import { signupStorage } from '@/utils/signupStorage';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -32,15 +33,25 @@ type AccountFormValues = z.infer<typeof accountSchema>;
 
 export default function SignUpAccount() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [emailExists, setEmailExists] = useState(false);
+  const [signupData, setSignupData] = useState(signupStorage.get());
 
-  const name = searchParams.get('name');
-  const phoneNumber = searchParams.get('phone');
-  const socialSignUp = searchParams.get('socialSignUp') === 'true';
-  const tempUserId = searchParams.get('tempUserId');
-  const socialProvider = searchParams.get('socialProvider');
+  // 소셜 로그인인 경우 education 페이지로 자동 이동
+  useEffect(() => {
+    const data = signupStorage.get();
+    setSignupData(data);
+    
+    if (data?.socialSignUp) {
+      // 소셜 로그인은 이메일/비밀번호 불필요 - 건너뛰기
+      console.log('소셜 로그인 감지 - education 페이지로 이동');
+      router.push('/sign-up/education');
+    } else if (!data?.name || !data?.phoneNumber) {
+      // 필수 정보 없으면 처음부터 시작
+      toast.error('필수 정보가 누락되었습니다.');
+      router.push('/sign-up');
+    }
+  }, [router]);
 
   const {
     register,
@@ -96,21 +107,14 @@ export default function SignUpAccount() {
         return;
       }
 
+      // SessionStorage에 저장
+      signupStorage.save({
+        email: data.email,
+        password: data.password,
+      });
+      
       // 다음 단계로 이동
-      let nextUrl = `/sign-up/education?name=${encodeURIComponent(name || '')}&phone=${encodeURIComponent(phoneNumber || '')}&email=${encodeURIComponent(data.email)}&password=${encodeURIComponent(data.password)}`;
-      
-      // 소셜 로그인 정보 전달
-      if (socialSignUp) {
-        nextUrl += `&socialSignUp=true`;
-      }
-      if (tempUserId) {
-        nextUrl += `&tempUserId=${encodeURIComponent(tempUserId)}`;
-      }
-      if (socialProvider) {
-        nextUrl += `&socialProvider=${encodeURIComponent(socialProvider)}`;
-      }
-      
-      router.push(nextUrl);
+      router.push('/sign-up/education');
     } catch (error) {
       console.error('계정 정보 확인 오류:', error);
       toast.error('계정 정보 확인 중 오류가 발생했습니다.');
@@ -119,21 +123,8 @@ export default function SignUpAccount() {
     }
   };
 
-  if (!name || !phoneNumber) {
-    return (
-      <Layout>
-        <div className="max-w-md mx-auto text-center">
-          <h1 className="text-2xl font-bold mb-4">오류</h1>
-          <p className="text-gray-600 mb-4">필수 정보가 누락되었습니다.</p>
-          <Button
-            variant="primary"
-            onClick={() => router.push('/sign-up')}
-          >
-            회원가입으로 돌아가기
-          </Button>
-        </div>
-      </Layout>
-    );
+  if (!signupData || signupData.socialSignUp) {
+    return null; // useEffect에서 리다이렉트 처리
   }
 
   return (

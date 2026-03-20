@@ -157,7 +157,7 @@ export function SignInClient() {
         setExistingUserEmail(result.user?.email || data.email);
         setShowPasswordModal(true);
       } else if (result.action === 'NEED_PHONE') {
-        // 이메일로 계정이 없음 - 전화번호 확인 필요
+        // 이메일로 계정이 없음 - 이름과 전화번호 확인 필요
         const currentUser = auth.currentUser;
         if (currentUser) {
           try {
@@ -198,42 +198,101 @@ export function SignInClient() {
     toast.error(errorMessage);
   };
   
-  // 전화번호 입력 핸들러
-  const handlePhoneSubmit = async (phoneNumber: string) => {
+  // 이름과 전화번호 입력 핸들러
+  const handlePhoneSubmit = async (data: { name: string; phoneNumber: string }) => {
     if (!socialData) return;
     
     setIsLoading(true);
     try {
       const result = await checkTempAccountByPhone(
-        phoneNumber, 
-        socialData, 
+        data.phoneNumber, 
+        { ...socialData, name: data.name }, // 사용자가 입력한 이름으로 업데이트
         getUserByPhone
       );
       
       if (result.found && result.user) {
-        // temp 계정 발견 - 회원가입 페이지로 이동하여 활성화
-        toast.success('임시 계정이 발견되었습니다. 회원가입을 완료해주세요.');
         setShowPhoneModal(false);
+        
+        // active 계정이면서 연동이 필요한 경우
+        if (result.isActive && result.needsLink) {
+          // 이름이 일치하지 않는 경우 이메일+비밀번호로 검증
+          if (result.nameMatches === false) {
+            console.warn('⚠️ 이름 불일치 - 이메일+비밀번호 검증 필요:', {
+              registered: result.user.name,
+              input: data.name,
+            });
+            toast(`등록된 이름(${result.user.name})과 다릅니다. 본인 확인을 위해 기존 계정의 이메일과 비밀번호를 입력해주세요.`, {
+              duration: 5000,
+              icon: '⚠️',
+            });
+          } else {
+            toast('기존 계정이 발견되었습니다. 계정 연동을 위해 비밀번호를 입력해주세요.');
+          }
+          
+          setSocialData({ ...socialData, name: data.name });
+          setExistingUserEmail(result.user.email);
+          setShowPasswordModal(true);
+          setIsLoading(false);
+          return;
+        }
+        
+        // temp 계정 발견
+        if (result.nameMatches === false) {
+          console.warn('⚠️ temp 계정 이름 불일치:', {
+            registered: result.user.name,
+            input: data.name,
+          });
+          toast(`등록된 이름(${result.user.name})과 다르지만 진행합니다. 올바른 정보인지 확인해주세요.`, {
+            duration: 4000,
+            icon: '⚠️',
+          });
+        } else {
+          toast.success('임시 계정이 발견되었습니다. 회원가입을 완료해주세요.');
+        }
         
         // 역할에 따라 적절한 회원가입 페이지로 이동
         const role = result.user.role;
         if (role === 'foreign_temp') {
+          // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
           router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=google`);
         } else {
-          router.push(`/sign-up/account?name=${encodeURIComponent(socialData.name)}&phone=${phoneNumber}&socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=google`);
+          // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
+          // SessionStorage에 저장
+          const { signupStorage } = await import('@/utils/signupStorage');
+          signupStorage.save({
+            name: data.name,
+            phoneNumber: data.phoneNumber,
+            email: socialData.email,
+            socialSignUp: true,
+            tempUserId: result.user.userId,
+            socialProvider: 'google',
+            socialEmail: socialData.email,
+          });
+          router.push('/sign-up/education');
         }
       } else {
-        // temp 계정 없음 - 신규 가입 페이지로 이동
+        // temp 계정 없음 - 신규 가입
+        // SessionStorage에 저장하고 education으로 이동
+        const { signupStorage } = await import('@/utils/signupStorage');
+        signupStorage.save({
+          name: data.name,
+          phoneNumber: data.phoneNumber,
+          email: socialData.email,
+          socialSignUp: true,
+          socialProvider: 'google',
+          socialEmail: socialData.email,
+        });
+        
         toast.success('신규 가입을 진행합니다.');
         setShowPhoneModal(false);
-        router.push(`/sign-up?socialSignUp=true&socialProvider=google&name=${encodeURIComponent(socialData.name)}&email=${encodeURIComponent(socialData.email)}&phone=${phoneNumber}`);
+        router.push('/sign-up/education');
       }
     } catch (error: any) {
-      console.error('전화번호 확인 오류:', error);
+      console.error('이름/전화번호 확인 오류:', error);
       if (error.message === 'ALREADY_REGISTERED') {
-        toast.error('이미 가입된 계정입니다. 로그인 페이지에서 소셜 로그인을 시도하세요.');
+        toast.error('이 전화번호로 이미 등록된 계정이 있습니다. 해당 이메일로 로그인해주세요.');
       } else {
-        toast.error('전화번호 확인 중 오류가 발생했습니다.');
+        toast.error('계정 확인 중 오류가 발생했습니다.');
       }
     } finally {
       setIsLoading(false);
@@ -407,14 +466,15 @@ export function SignInClient() {
         </div>
       </div>
       
-      {/* 전화번호 입력 모달 */}
+      {/* 이름 및 전화번호 입력 모달 */}
       <PhoneInputModal
         isOpen={showPhoneModal}
         onClose={() => setShowPhoneModal(false)}
         onSubmit={handlePhoneSubmit}
-        title="전화번호 입력"
-        description="계정 확인을 위해 전화번호를 입력해주세요."
+        title="본인 확인"
+        description="계정 확인을 위해 이름과 전화번호를 입력해주세요."
         isLoading={isLoading}
+        defaultName={socialData?.name || ''}
       />
       
       {/* 비밀번호 입력 모달 */}

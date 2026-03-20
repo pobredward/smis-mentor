@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,6 +9,7 @@ import DaumPostcode, { Address } from 'react-daum-postcode';
 import toast from 'react-hot-toast';
 import { getUserByPhone, updateUser, createUser, signUp } from '@/lib/firebaseService';
 import { getUserInfoFromRRN } from '@/utils/userUtils';
+import { signupStorage } from '@/utils/signupStorage';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -36,21 +37,24 @@ type DetailsFormValues = z.infer<typeof detailsSchema>;
 
 export default function SignUpDetails() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [showPostcode, setShowPostcode] = useState(false);
+  const [signupData, setSignupData] = useState(signupStorage.get());
 
-  // URL 파라미터 디코딩
-  const name = searchParams.get('name') ? decodeURIComponent(searchParams.get('name') as string) : null;
-  const phoneNumber = searchParams.get('phone') ? decodeURIComponent(searchParams.get('phone') as string) : null;
-  const email = searchParams.get('email') ? decodeURIComponent(searchParams.get('email') as string) : null;
-  const password = searchParams.get('password');
-  const university = searchParams.get('university') ? decodeURIComponent(searchParams.get('university') as string) : null;
-  const grade = searchParams.get('grade');
-  const isOnLeave = searchParams.get('isOnLeave');
-  const major1 = searchParams.get('major1') ? decodeURIComponent(searchParams.get('major1') as string) : null;
-  const major2 = searchParams.get('major2') ? decodeURIComponent(searchParams.get('major2') as string) : null;
-  const role = searchParams.get('role') as 'mentor' | 'foreign' | null;
+  // 필수 정보 확인
+  useEffect(() => {
+    const data = signupStorage.get();
+    setSignupData(data);
+    
+    const requiredFields: (keyof typeof data)[] = data?.socialSignUp
+      ? ['name', 'phoneNumber', 'email', 'university', 'grade', 'major1']
+      : ['name', 'phoneNumber', 'email', 'password', 'university', 'grade', 'major1'];
+    
+    if (!signupStorage.validate(requiredFields)) {
+      toast.error('필수 정보가 누락되었습니다.');
+      router.push('/sign-up');
+    }
+  }, [router]);
 
   const {
     register,
@@ -87,26 +91,30 @@ export default function SignUpDetails() {
     setShowPostcode(false);
   };
 
-  if (!name || !phoneNumber || !email || !password || !university || !grade || !major1) {
-    return (
-      <Layout>
-        <div className="max-w-md mx-auto text-center">
-          <h1 className="text-2xl font-bold mb-4">오류</h1>
-          <p className="text-gray-600 mb-4">필수 정보가 누락되었습니다.</p>
-          <Button
-            variant="primary"
-            onClick={() => router.push('/sign-up')}
-          >
-            회원가입으로 돌아가기
-          </Button>
-        </div>
-      </Layout>
-    );
-  }
-
   const onSubmit = async (data: DetailsFormValues) => {
+    if (!signupData) {
+      toast.error('필수 정보가 누락되었습니다.');
+      router.push('/sign-up');
+      return;
+    }
+
     setIsLoading(true);
     try {
+      const { name, phoneNumber, email, password, university, grade, isOnLeave, major1, major2, socialSignUp, tempUserId } = signupData;
+
+      if (!name || !phoneNumber || !email || !university || !grade || !major1) {
+        toast.error('필수 정보가 누락되었습니다.');
+        router.push('/sign-up');
+        return;
+      }
+
+      // 소셜 로그인이 아닌 경우 비밀번호 필수
+      if (!socialSignUp && !password) {
+        toast.error('비밀번호가 누락되었습니다.');
+        router.push('/sign-up/account');
+        return;
+      }
+
       // 주민번호를 통해 나이 계산
       const { age } = getUserInfoFromRRN(data.rrnFront, data.rrnLast);
 
@@ -119,29 +127,25 @@ export default function SignUpDetails() {
         referralPathValue = `기타: ${data.otherReferralDetail}`;
       }
       
+      const gradeNum = typeof grade === 'number' ? grade : parseInt(grade as string, 10);
+      // isOnLeave 처리: null, true, false 모두 지원
+      const isOnLeaveVal = isOnLeave === null ? null : Boolean(isOnLeave);
+      
       if (existingUser && existingUser.status === 'temp') {
         // Firebase Auth에 사용자 등록
-        const userCredential = await signUp(email, decodeURIComponent(password));
+        const userCredential = await signUp(email, password || '');
         
         const now = Timestamp.now();
-        
-        // 교육 정보 추가
-        const gradeNum = parseInt(grade, 10);
-        const isOnLeaveVal = isOnLeave === 'true';
 
-        // role 결정 로직: 회원가입 시 선택한 role이 있으면 사용, 없으면 임시 사용자의 role을 정식 role로 변환
-        let finalRole = role;
-        if (!finalRole && existingUser.role) {
-          // mentor_temp -> mentor, foreign_temp -> foreign 변환
+        // role 결정 로직
+        let finalRole: 'mentor' | 'foreign' = 'mentor';
         if (existingUser.role === 'mentor_temp') {
-          finalRole = 'mentor' as 'mentor' | 'foreign';
+          finalRole = 'mentor';
         } else if (existingUser.role === 'foreign_temp') {
-          finalRole = 'foreign' as 'mentor' | 'foreign';
-        } else {
-          finalRole = existingUser.role as 'mentor' | 'foreign';
+          finalRole = 'foreign';
+        } else if (existingUser.role === 'mentor' || existingUser.role === 'foreign') {
+          finalRole = existingUser.role;
         }
-        }
-        if (!finalRole) finalRole = 'mentor'; // 기본값
 
         // 기존 임시 사용자 문서 업데이트
         await updateUser(existingUser.userId, {
@@ -166,8 +170,20 @@ export default function SignUpDetails() {
           grade: gradeNum,
           isOnLeave: isOnLeaveVal,
           major1,
-          major2: major2 || ''
+          major2: major2 || '',
+          ...(socialSignUp && {
+            authProviders: [{
+              providerId: 'google.com',
+              uid: userCredential.user.uid,
+              email,
+              linkedAt: now,
+            }],
+            primaryAuthMethod: 'social',
+          }),
         });
+        
+        // SessionStorage 정리
+        signupStorage.clear();
         
         toast.success('회원가입이 완료되었습니다!');
         
@@ -182,13 +198,9 @@ export default function SignUpDetails() {
         }
       } else {
         // Firebase Auth에 사용자 등록
-        const userCredential = await signUp(email, decodeURIComponent(password));
+        const userCredential = await signUp(email, password || '');
 
         const now = Timestamp.now();
-
-        // 교육 정보 추가
-        const gradeNum = parseInt(grade, 10);
-        const isOnLeaveVal = isOnLeave === 'true';
 
         // Firestore에 사용자 정보 저장
         await createUser({
@@ -206,7 +218,7 @@ export default function SignUpDetails() {
           referralPath: referralPathValue,
           referrerName: data.referrerName,
           profileImage: '',
-          role: role || 'mentor',
+          role: 'mentor',
           status: 'active',
           isEmailVerified: false,
           jobExperiences: [],
@@ -227,20 +239,28 @@ export default function SignUpDetails() {
           isAddressVerified: true,
           isProfileImageUploaded: false,
           createdAt: now,
-          updatedAt: now
+          updatedAt: now,
+          ...(socialSignUp && {
+            authProviders: [{
+              providerId: 'google.com',
+              uid: userCredential.user.uid,
+              email,
+              linkedAt: now,
+            }],
+            primaryAuthMethod: 'social',
+          }),
         });
+
+        // SessionStorage 정리
+        signupStorage.clear();
 
         toast.success('회원가입이 완료되었습니다!');
         
         // 멘토인 경우 프로필 작성 유도
-        if (role === 'mentor') {
-          setTimeout(() => {
-            toast.success('프로필 사진과 자기소개서 & 지원동기를 작성해주세요!', { duration: 5000 });
-          }, 500);
-          router.push('/profile/edit');
-        } else {
-          router.push('/');
-        }
+        setTimeout(() => {
+          toast.success('프로필 사진과 자기소개서 & 지원동기를 작성해주세요!', { duration: 5000 });
+        }, 500);
+        router.push('/profile/edit');
       }
     } catch (error) {
       console.error('회원가입 오류:', error);
@@ -249,6 +269,10 @@ export default function SignUpDetails() {
       setIsLoading(false);
     }
   };
+
+  if (!signupData) {
+    return null; // useEffect에서 리다이렉트 처리
+  }
 
   return (
     <Layout noPadding>

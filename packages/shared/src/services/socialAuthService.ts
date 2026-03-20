@@ -12,7 +12,7 @@ import type {
   TempAccountMatchResult,
   AuthProvider,
   SocialProvider,
-} from '@smis-mentor/shared';
+} from '../types/auth';
 
 /**
  * 소셜 로그인 메인 플로우
@@ -108,12 +108,37 @@ export async function checkTempAccountByPhone(
 
     console.log('👤 사용자 발견:', {
       name: user.name,
+      email: user.email,
       status: user.status,
       role: user.role,
     });
 
     if (user.status === 'active') {
-      console.error('⚠️ 이미 활성화된 계정입니다');
+      // active 계정 발견
+      // 이메일이 다른 경우: 소셜 계정 연동이 필요함
+      if (user.email && user.email !== socialData.email) {
+        console.log('🔗 다른 이메일의 active 계정 - 연동 필요');
+        
+        // 이름도 확인하여 본인 계정인지 검증
+        const nameMatches = user.name === socialData.name;
+        if (!nameMatches) {
+          console.warn('⚠️ 이름이 일치하지 않음:', {
+            dbName: user.name,
+            inputName: socialData.name,
+          });
+        }
+        
+        return {
+          found: true,
+          user,
+          isActive: true,
+          needsLink: true,
+          nameMatches,
+        };
+      }
+      
+      // 이메일이 같은 경우: 이미 등록된 계정
+      console.error('⚠️ 동일한 이메일로 이미 활성화된 계정입니다');
       throw new Error('ALREADY_REGISTERED');
     }
 

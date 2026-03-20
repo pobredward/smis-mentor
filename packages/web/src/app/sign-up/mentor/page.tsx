@@ -43,6 +43,13 @@ export default function MentorSignUpStep1() {
   const onSubmit = async (data: Step1FormValues) => {
     setIsLoading(true);
     try {
+      // SessionStorage에 저장
+      const { signupStorage } = await import('@/utils/signupStorage');
+      signupStorage.save({
+        name: data.name,
+        phoneNumber: data.phoneNumber,
+      });
+      
       // 임시 사용자로 등록되어 있는지 확인
       const userByPhone = await getUserByPhone(data.phoneNumber);
       setFormData(data);
@@ -79,17 +86,20 @@ export default function MentorSignUpStep1() {
           } else {
             // temp 상태이지만 jobExperiences가 없는 경우 또는 기타 상태
             toast.success(`환영합니다 ${data.name}님, SMIS와 함께 하게 되어 영광입니다. 나머지 정보를 채워주세요.`, { duration: 3000 });
-            router.push(`/sign-up/account?name=${data.name}&phone=${data.phoneNumber}`);
+            router.push('/sign-up/account');
           }
         } else {
-          // Case 3: 이름이 일치하지 않는 경우
-          toast.success(`환영합니다 ${data.name}님, SMIS와 함께 하게 되어 영광입니다. 나머지 정보를 채워주세요.`, { duration: 3000 });
-          router.push(`/sign-up/account?name=${data.name}&phone=${data.phoneNumber}`);
+          // Case 3: 이름이 일치하지 않는 경우 - 경고만 표시
+          toast(`등록된 이름(${name})과 다르지만 진행합니다.`, {
+            duration: 4000,
+            icon: '⚠️',
+          });
+          router.push('/sign-up/account');
         }
       } else {
-        // Case 3: 전화번호로 사용자를 찾을 수 없는 경우
+        // Case 4: 전화번호로 사용자를 찾을 수 없는 경우
         toast.success(`환영합니다 ${data.name}님, SMIS와 함께 하게 되어 영광입니다. 나머지 정보를 채워주세요.`, { duration: 3000 });
-        router.push(`/sign-up/account?name=${data.name}&phone=${data.phoneNumber}`);
+        router.push('/sign-up/account');
       }
     } catch (error) {
       console.error('사용자 정보 확인 오류:', error);
@@ -101,9 +111,7 @@ export default function MentorSignUpStep1() {
 
   const handleConfirmYes = () => {
     toast.success('다시 돌아온 것을 환영합니다. 회원가입을 이어서 진행 바랍니다', { duration: 3000 });
-    if (formData) {
-      router.push(`/sign-up/account?name=${formData.name}&phone=${formData.phoneNumber}`);
-    }
+    router.push('/sign-up/account');
     setShowConfirmModal(false);
   };
 
@@ -114,9 +122,7 @@ export default function MentorSignUpStep1() {
 
   const handleWrongInfoOk = () => {
     setShowWrongInfoModal(false);
-    if (formData) {
-      router.push(`/sign-up/account?name=${formData.name}&phone=${formData.phoneNumber}`);
-    }
+    router.push('/sign-up/account');
   };
 
   const handleAlreadyRegisteredOk = () => {

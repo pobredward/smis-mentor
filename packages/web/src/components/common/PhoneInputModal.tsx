@@ -8,46 +8,65 @@ import FormInput from './FormInput';
 interface PhoneInputModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (phoneNumber: string) => void;
+  onSubmit: (data: { name: string; phoneNumber: string }) => void;
   title?: string;
   description?: string;
   isLoading?: boolean;
+  defaultName?: string; // Google에서 받아온 이름
 }
 
 export default function PhoneInputModal({
   isOpen,
   onClose,
   onSubmit,
-  title = '전화번호 입력',
-  description = 'Google 계정에 연결된 전화번호를 입력해주세요.',
+  title = '본인 확인',
+  description = '계정 확인을 위해 이름과 전화번호를 입력해주세요.',
   isLoading = false,
+  defaultName = '',
 }: PhoneInputModalProps) {
+  const [name, setName] = useState(defaultName);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({ name: '', phone: '' });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    const newErrors = { name: '', phone: '' };
+    
+    // 이름 검증
+    if (!name.trim()) {
+      newErrors.name = '이름을 입력해주세요.';
+    } else if (name.trim().length < 2) {
+      newErrors.name = '이름은 최소 2자 이상이어야 합니다.';
+    }
+    
     // 전화번호 검증
     if (!phoneNumber) {
-      setError('전화번호를 입력해주세요.');
+      newErrors.phone = '전화번호를 입력해주세요.';
+    } else if (phoneNumber.length < 10 || phoneNumber.length > 11) {
+      newErrors.phone = '유효한 전화번호를 입력해주세요.';
+    }
+    
+    if (newErrors.name || newErrors.phone) {
+      setErrors(newErrors);
       return;
     }
     
-    if (phoneNumber.length < 10 || phoneNumber.length > 11) {
-      setError('유효한 전화번호를 입력해주세요.');
-      return;
-    }
-    
-    setError('');
-    onSubmit(phoneNumber);
+    setErrors({ name: '', phone: '' });
+    onSubmit({ name: name.trim(), phoneNumber });
   };
 
   const handleClose = () => {
+    setName(defaultName);
     setPhoneNumber('');
-    setError('');
+    setErrors({ name: '', phone: '' });
     onClose();
   };
+
+  // defaultName이 변경되면 name 업데이트
+  useState(() => {
+    setName(defaultName);
+  });
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={title}>
@@ -55,13 +74,22 @@ export default function PhoneInputModal({
         <p className="text-gray-600 text-sm mb-4">{description}</p>
         
         <FormInput
+          label="이름"
+          type="text"
+          placeholder="이름을 입력하세요"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          error={errors.name}
+          autoFocus
+        />
+        
+        <FormInput
           label="전화번호"
           type="tel"
           placeholder="'-' 없이 숫자만 입력하세요"
           value={phoneNumber}
           onChange={(e) => setPhoneNumber(e.target.value)}
-          error={error}
-          autoFocus
+          error={errors.phone}
         />
         
         <div className="flex justify-end gap-3 pt-4">

@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
+import { signupStorage } from '@/utils/signupStorage';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -27,14 +28,23 @@ type EducationFormValues = z.infer<typeof educationSchema>;
 
 export default function SignUpEducation() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
+  const [signupData, setSignupData] = useState(signupStorage.get());
 
-  // URL 파라미터 디코딩
-  const name = searchParams.get('name') ? decodeURIComponent(searchParams.get('name') as string) : null;
-  const phoneNumber = searchParams.get('phone') ? decodeURIComponent(searchParams.get('phone') as string) : null;
-  const email = searchParams.get('email') ? decodeURIComponent(searchParams.get('email') as string) : null;
-  const password = searchParams.get('password');
+  // 필수 정보 확인
+  useEffect(() => {
+    const data = signupStorage.get();
+    setSignupData(data);
+    
+    const requiredFields: (keyof typeof data)[] = data?.socialSignUp 
+      ? ['name', 'phoneNumber', 'email'] // 소셜 로그인
+      : ['name', 'phoneNumber', 'email', 'password']; // 일반 가입
+    
+    if (!signupStorage.validate(requiredFields)) {
+      toast.error('필수 정보가 누락되었습니다.');
+      router.push('/sign-up');
+    }
+  }, [router]);
 
   const {
     register,
@@ -69,33 +79,23 @@ export default function SignUpEducation() {
     }
   }, [grade, setValue]);
 
-  if (!name || !phoneNumber || !email || !password) {
-    return (
-      <Layout>
-        <div className="max-w-md mx-auto text-center">
-          <h1 className="text-2xl font-bold mb-4">오류</h1>
-          <p className="text-gray-600 mb-4">필수 정보가 누락되었습니다.</p>
-          <Button
-            variant="primary"
-            onClick={() => router.push('/sign-up')}
-          >
-            회원가입으로 돌아가기
-          </Button>
-        </div>
-      </Layout>
-    );
-  }
-
   const onSubmit = async (data: EducationFormValues) => {
     setIsLoading(true);
     try {
       // 졸업생인 경우 isOnLeave를 null로 설정
-      if (data.grade === 6) {
-        data.isOnLeave = null;
-      }
+      const isOnLeaveValue = data.grade === 6 ? null : data.isOnLeave;
+      
+      // SessionStorage에 저장
+      signupStorage.save({
+        university: data.university,
+        grade: data.grade,
+        isOnLeave: isOnLeaveValue,
+        major1: data.major1,
+        major2: data.major2 || '',
+      });
       
       // 다음 단계로 이동
-      router.push(`/sign-up/details?name=${encodeURIComponent(name || '')}&phone=${encodeURIComponent(phoneNumber || '')}&email=${encodeURIComponent(email || '')}&password=${encodeURIComponent(password || '')}&university=${encodeURIComponent(data.university)}&grade=${data.grade}&isOnLeave=${data.isOnLeave}&major1=${encodeURIComponent(data.major1)}&major2=${encodeURIComponent(data.major2 || '')}`);
+      router.push('/sign-up/details');
     } catch (error) {
       console.error('교육 정보 확인 오류:', error);
       toast.error('교육 정보 확인 중 오류가 발생했습니다.');
@@ -103,6 +103,10 @@ export default function SignUpEducation() {
       setIsLoading(false);
     }
   };
+
+  if (!signupData) {
+    return null; // useEffect에서 리다이렉트 처리
+  }
 
   return (
     <Layout noPadding>

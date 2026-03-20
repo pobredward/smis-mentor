@@ -119,4 +119,6 @@ export interface TempAccountMatchResult {
     code: string;
     name: string;
   }>;
+  isActive?: boolean;      // active 계정인지 여부
+  needsLink?: boolean;     // 계정 연동이 필요한지 여부
 }
