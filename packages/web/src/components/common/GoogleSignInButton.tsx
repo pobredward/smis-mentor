@@ -34,16 +34,19 @@ export default function GoogleSignInButton({
       if (result === 'redirect') {
         // 리다이렉트가 시작되었으므로 로딩 상태 유지
         console.log('🔄 리다이렉트 모드 - Google 로그인 페이지로 이동 중...');
+        // 로딩 상태 유지하고 페이지가 이동될 때까지 대기
         return;
       }
       
       // 팝업 방식의 경우 즉시 결과 전달
       console.log('✅ 팝업 모드 - 로그인 성공');
-      onSuccess(result);
-    } catch (error) {
-      console.error('❌ Google 로그인 오류:', error);
-      onError(error);
       setIsLoading(false);
+      onSuccess(result);
+    } catch (error: any) {
+      console.error('❌ Google 로그인 오류:', error);
+      console.error('Error code:', error?.code);
+      setIsLoading(false);
+      onError(error);
     }
   };
 

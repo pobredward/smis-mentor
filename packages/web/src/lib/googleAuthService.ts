@@ -19,12 +19,15 @@ googleProvider.addScope('email');
  */
 export async function signInWithGooglePopup(): Promise<SocialUserData> {
   try {
+    console.log('🪟 팝업 로그인 시도 중...');
     const result = await signInWithPopup(auth, googleProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     
+    console.log('✅ 팝업 로그인 성공');
     return extractSocialUserData(result.user, credential);
   } catch (error: any) {
-    console.error('Google Popup 로그인 오류:', error);
+    console.error('❌ Google Popup 로그인 오류:', error);
+    console.error('Error code:', error?.code);
     throw error;
   }
 }
@@ -47,6 +50,9 @@ export async function signInWithGoogleRedirect(): Promise<void> {
  * 중요: 리다이렉트 후 Firebase Auth는 이미 로그인 상태입니다.
  * 이 함수는 단순히 사용자 데이터를 추출하여 반환하며,
  * Firebase Auth 로그인 상태를 변경하지 않습니다.
+ * 
+ * 참고: getRedirectResult()는 페이지 로드 시 한 번만 결과를 반환하고,
+ * 이후에는 항상 null을 반환합니다.
  */
 export async function getGoogleRedirectResult(): Promise<SocialUserData | null> {
   try {
@@ -56,10 +62,10 @@ export async function getGoogleRedirectResult(): Promise<SocialUserData | null> 
     
     const result = await getRedirectResult(auth);
     
-    console.log('📦 getRedirectResult 반환값:', result);
+    console.log('📦 getRedirectResult 반환값:', result ? '사용자 정보 있음' : 'null');
     
     if (!result) {
-      console.log('ℹ️ 리다이렉트 결과 없음 (null)');
+      console.log('ℹ️ 리다이렉트 결과 없음 - 일반 페이지 로드 또는 이미 처리됨');
       return null;
     }
     
@@ -160,24 +166,40 @@ export function isMobileDevice(): boolean {
 
 /**
  * Google 로그인 메인 함수
- * 모바일은 redirect, 데스크톱은 popup 사용
+ * 팝업을 먼저 시도하고, 실패하면 모바일에서 리다이렉트 사용
  */
 export async function signInWithGoogle(): Promise<SocialUserData | 'redirect'> {
-  const isMobile = isMobileDevice();
-  
   console.log('🔐 Google 로그인 시작');
-  console.log('📱 모바일 감지:', isMobile);
   console.log('🌐 User Agent:', navigator.userAgent);
   
-  if (isMobile) {
-    // 모바일에서는 redirect 방식 사용
-    console.log('🔄 Redirect 방식 사용 (모바일)');
-    await signInWithGoogleRedirect();
-    console.log('✅ Redirect 시작됨 - Google 로그인 페이지로 이동');
-    return 'redirect'; // redirect 시작을 알림
-  } else {
-    // 데스크톱에서는 popup 방식 사용
-    console.log('🪟 Popup 방식 사용 (데스크톱)');
+  try {
+    // 먼저 팝업 방식 시도 (데스크톱과 최신 모바일 브라우저 모두 지원)
+    console.log('🪟 팝업 방식 시도...');
     return await signInWithGooglePopup();
+  } catch (error: any) {
+    const errorCode = error?.code;
+    console.log('⚠️ 팝업 로그인 실패:', errorCode);
+    
+    // 팝업이 차단되거나 지원되지 않는 경우에만 리다이렉트 사용
+    if (
+      errorCode === 'auth/popup-blocked' ||
+      errorCode === 'auth/popup-closed-by-user' ||
+      errorCode === 'auth/cancelled-popup-request'
+    ) {
+      console.log('🔄 리다이렉트 방식으로 전환...');
+      const isMobile = isMobileDevice();
+      
+      if (isMobile) {
+        // 모바일에서만 리다이렉트 사용
+        await signInWithGoogleRedirect();
+        return 'redirect';
+      } else {
+        // 데스크톱에서는 팝업 차단 에러를 그대로 throw
+        throw error;
+      }
+    }
+    
+    // 다른 에러는 그대로 throw
+    throw error;
   }
 }
