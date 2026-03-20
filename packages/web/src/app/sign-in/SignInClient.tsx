@@ -55,22 +55,32 @@ export function SignInClient() {
   
   // 페이지 로드 시 리다이렉트 결과 확인 (모바일 환경)
   useEffect(() => {
+    console.log('🚀 SignInClient useEffect 실행');
+    console.log('현재 URL:', window.location.href);
+    console.log('현재 Auth 상태:', auth.currentUser ? '로그인됨' : '로그아웃됨');
+    
     const checkRedirectResult = async () => {
       try {
+        console.log('⏳ 리다이렉트 결과 확인 중...');
         const result = await getGoogleRedirectResult();
+        console.log('📋 리다이렉트 결과:', result);
+        
         if (result) {
           console.log('🔄 모바일 리다이렉트 로그인 결과 처리 중...');
           await handleGoogleSignInSuccessFromRedirect(result);
+        } else {
+          console.log('ℹ️ 리다이렉트 결과 없음 - 일반 페이지 로드');
         }
       } catch (error) {
-        console.error('Redirect 결과 확인 오류:', error);
+        console.error('❌ Redirect 결과 확인 오류:', error);
         const errorMessage = handleGoogleAuthError(error);
         toast.error(errorMessage);
       }
     };
     
     checkRedirectResult();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 페이지 로드 시 한 번만 실행
   
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);

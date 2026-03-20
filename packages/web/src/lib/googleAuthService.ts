@@ -50,8 +50,24 @@ export async function signInWithGoogleRedirect(): Promise<void> {
  */
 export async function getGoogleRedirectResult(): Promise<SocialUserData | null> {
   try {
+    console.log('🔍 리다이렉트 결과 확인 시작...');
+    console.log('Current URL:', window.location.href);
+    console.log('Current Auth State:', auth.currentUser ? 'Logged In' : 'Logged Out');
+    
     const result = await getRedirectResult(auth);
-    if (!result) return null;
+    
+    console.log('📦 getRedirectResult 반환값:', result);
+    
+    if (!result) {
+      console.log('ℹ️ 리다이렉트 결과 없음 (null)');
+      return null;
+    }
+    
+    console.log('👤 리다이렉트 사용자 정보:', {
+      uid: result.user.uid,
+      email: result.user.email,
+      displayName: result.user.displayName,
+    });
     
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const socialData = extractSocialUserData(result.user, credential);
@@ -59,7 +75,9 @@ export async function getGoogleRedirectResult(): Promise<SocialUserData | null> 
     console.log('✅ Redirect 결과 처리 완료 - Firebase Auth 로그인 상태 유지');
     return socialData;
   } catch (error: any) {
-    console.error('Google Redirect 결과 확인 오류:', error);
+    console.error('❌ Google Redirect 결과 확인 오류:', error);
+    console.error('Error code:', error?.code);
+    console.error('Error message:', error?.message);
     throw error;
   }
 }
@@ -147,12 +165,19 @@ export function isMobileDevice(): boolean {
 export async function signInWithGoogle(): Promise<SocialUserData | 'redirect'> {
   const isMobile = isMobileDevice();
   
+  console.log('🔐 Google 로그인 시작');
+  console.log('📱 모바일 감지:', isMobile);
+  console.log('🌐 User Agent:', navigator.userAgent);
+  
   if (isMobile) {
     // 모바일에서는 redirect 방식 사용
+    console.log('🔄 Redirect 방식 사용 (모바일)');
     await signInWithGoogleRedirect();
+    console.log('✅ Redirect 시작됨 - Google 로그인 페이지로 이동');
     return 'redirect'; // redirect 시작을 알림
   } else {
     // 데스크톱에서는 popup 방식 사용
+    console.log('🪟 Popup 방식 사용 (데스크톱)');
     return await signInWithGooglePopup();
   }
 }
