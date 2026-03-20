@@ -6,12 +6,21 @@ import React, {
   ReactNode,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { getUserByEmail } from '../services/authService';
 import { jobCodesService } from '../services';
 import { User, AuthContextType } from '../types';
+import {
+  registerForPushNotificationsAsync,
+  savePushToken,
+  addNotificationReceivedListener,
+  addNotificationResponseReceivedListener,
+} from '../services/notificationService';
+import * as Notifications from 'expo-notifications';
+import { useNavigation } from '@react-navigation/native';
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
@@ -34,6 +43,50 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
+  const notificationListener = useRef<any>();
+  const responseListener = useRef<any>();
+
+  // 푸시 알림 등록 및 토큰 저장
+  useEffect(() => {
+    if (userData?.userId) {
+      registerForPushNotificationsAsync()
+        .then(token => {
+          if (token) {
+            savePushToken(userData.userId, token).catch(error => {
+              console.error('푸시 토큰 저장 실패:', error);
+            });
+          }
+        })
+        .catch(error => {
+          console.error('푸시 알림 등록 실패:', error);
+        });
+    }
+  }, [userData?.userId]);
+
+  // 알림 리스너 설정
+  useEffect(() => {
+    notificationListener.current = addNotificationReceivedListener(notification => {
+      console.log('알림 수신:', notification);
+    });
+
+    responseListener.current = addNotificationResponseReceivedListener(response => {
+      console.log('알림 응답:', response);
+      const data = response.notification.request.content.data;
+      
+      if (data.type === 'task-reminder' && data.taskId) {
+        // TasksScreen으로 이동하는 로직은 RootNavigator에서 처리
+      }
+    });
+
+    return () => {
+      if (notificationListener.current) {
+        notificationListener.current.remove();
+      }
+      if (responseListener.current) {
+        responseListener.current.remove();
+      }
+    };
+  }, []);
 
   // 인증 준비 상태를 기다리는 함수
   const waitForAuthReady = useCallback(async (): Promise<void> => {

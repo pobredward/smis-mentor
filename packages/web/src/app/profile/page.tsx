@@ -3,10 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getUserJobCodesInfo, deactivateUser } from '@/lib/firebaseService';
+import { getUserJobCodesInfo, deactivateUser, getUserById, updateUser } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
+import LinkedAccountsDisplay from '@/components/settings/LinkedAccountsDisplay';
 import { JobCodeWithId } from '@/types';
+import { SocialProvider } from '@smis-mentor/shared';
+import { unlinkSocialProvider, getSocialProviderName } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -22,6 +25,7 @@ export default function ProfilePage() {
   const [authChecking, setAuthChecking] = useState(true);
   const [jobCodesExpanded, setJobCodesExpanded] = useState(true);
   const [changingJobCode, setChangingJobCode] = useState(false);
+  const [isUnlinking, setIsUnlinking] = useState(false);
 
   useEffect(() => {
     const checkAuthAndLoadData = async () => {
@@ -121,6 +125,35 @@ export default function ProfilePage() {
     } finally {
       setDeactivating(false);
       setShowDeactivateModal(false);
+    }
+  };
+
+  // 소셜 계정 연동 해제 핸들러
+  const handleUnlink = async (providerId: SocialProvider) => {
+    const providerName = getSocialProviderName(providerId);
+    
+    if (!confirm(`${providerName} 계정 연동을 해제하시겠습니까?`)) {
+      return;
+    }
+
+    setIsUnlinking(true);
+    try {
+      await unlinkSocialProvider(
+        auth,
+        providerId,
+        getUserById,
+        updateUser
+      );
+      
+      toast.success(`${providerName} 계정 연동이 해제되었습니다.`);
+      
+      // 사용자 데이터 새로고침
+      await refreshUserData();
+    } catch (error: any) {
+      console.error('연동 해제 오류:', error);
+      toast.error(error.message || '연동 해제 중 오류가 발생했습니다.');
+    } finally {
+      setIsUnlinking(false);
     }
   };
 
@@ -527,6 +560,19 @@ export default function ProfilePage() {
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* 소셜 계정 연동 관리 */}
+        {userData.authProviders && userData.authProviders.length > 0 && (
+          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+            <div className="px-4 sm:px-6 py-4">
+              <LinkedAccountsDisplay
+                authProviders={userData.authProviders}
+                onUnlink={handleUnlink}
+                isUnlinking={isUnlinking}
+              />
             </div>
           </div>
         )}

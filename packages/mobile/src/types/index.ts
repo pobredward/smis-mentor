@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import type { AuthProvider, AuthMethod } from '@smis-mentor/shared';
 
 export type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp';
 export type UserStatus = 'active' | 'deactivated' | 'temp';
@@ -47,6 +48,10 @@ export interface User {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lastLoginAt?: Timestamp;
+  
+  // 소셜 로그인 관련 필드
+  authProviders?: AuthProvider[];
+  primaryAuthMethod?: AuthMethod;
 }
 
 export interface AuthContextType {

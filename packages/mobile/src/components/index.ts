@@ -5,3 +5,6 @@ export { SMSMessageBox } from './SMSMessageBox';
 export { StudentDetailModal } from './StudentDetailModal';
 export { StudentList } from './StudentList';
 export { TemplateSelector } from './TemplateSelector';
+export { GoogleSignInButton } from './GoogleSignInButton';
+export { PhoneInputModal } from './PhoneInputModal';
+export { PasswordInputModal } from './PasswordInputModal';

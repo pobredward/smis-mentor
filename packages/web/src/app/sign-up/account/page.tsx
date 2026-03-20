@@ -38,6 +38,9 @@ export default function SignUpAccount() {
 
   const name = searchParams.get('name');
   const phoneNumber = searchParams.get('phone');
+  const socialSignUp = searchParams.get('socialSignUp') === 'true';
+  const tempUserId = searchParams.get('tempUserId');
+  const socialProvider = searchParams.get('socialProvider');
 
   const {
     register,
@@ -94,7 +97,20 @@ export default function SignUpAccount() {
       }
 
       // 다음 단계로 이동
-      router.push(`/sign-up/education?name=${encodeURIComponent(name || '')}&phone=${encodeURIComponent(phoneNumber || '')}&email=${encodeURIComponent(data.email)}&password=${encodeURIComponent(data.password)}`);
+      let nextUrl = `/sign-up/education?name=${encodeURIComponent(name || '')}&phone=${encodeURIComponent(phoneNumber || '')}&email=${encodeURIComponent(data.email)}&password=${encodeURIComponent(data.password)}`;
+      
+      // 소셜 로그인 정보 전달
+      if (socialSignUp) {
+        nextUrl += `&socialSignUp=true`;
+      }
+      if (tempUserId) {
+        nextUrl += `&tempUserId=${encodeURIComponent(tempUserId)}`;
+      }
+      if (socialProvider) {
+        nextUrl += `&socialProvider=${encodeURIComponent(socialProvider)}`;
+      }
+      
+      router.push(nextUrl);
     } catch (error) {
       console.error('계정 정보 확인 오류:', error);
       toast.error('계정 정보 확인 중 오류가 발생했습니다.');

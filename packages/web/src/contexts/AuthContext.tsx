@@ -89,13 +89,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setCurrentUser(user);
       
       if (user) {
+        // 이메일이 없는 경우 (비정상 상태)
+        if (!user.email) {
+          console.warn('Firebase Auth 사용자에 이메일이 없습니다. 로그아웃 처리합니다.');
+          setUserData(null);
+          setLoading(false);
+          setAuthReady(true);
+          return;
+        }
+        
         try {
-          const userRecord = await getUserByEmail(user.email || '');
+          const userRecord = await getUserByEmail(user.email);
           if (userRecord) {
             setUserData(userRecord as unknown as User);
             console.log('사용자 데이터 로드 성공:', userRecord.name);
           } else {
             console.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
+            console.log('회원가입 진행 중이거나 Firestore 데이터가 없는 상태일 수 있습니다.');
             // 3초 후 한 번 더 시도
             setTimeout(async () => {
               try {

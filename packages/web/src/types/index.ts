@@ -118,6 +118,10 @@ export interface User {
     totalEvaluations: number;    // 총 평가 횟수
     lastUpdatedAt: Timestamp;
   };
+  
+  // 소셜 로그인 관련 필드
+  authProviders?: AuthProvider[];
+  primaryAuthMethod?: AuthMethod;
 }
 
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager';

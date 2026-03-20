@@ -10,6 +10,7 @@ import {
   Image,
   Linking,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { MainTabScreenProps } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { signOut, getUserByPhone } from '../services/authService';
@@ -19,6 +20,7 @@ import { RoleSelectionScreen } from './RoleSelectionScreen';
 import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
+import { SignUpFlow } from './SignUpFlow';
 import { ForeignSignUpStep1Screen } from './ForeignSignUpStep1Screen';
 import { ForeignSignUpStep2Screen } from './ForeignSignUpStep2Screen';
 import { ProfileEditScreen } from './ProfileEditScreen';
@@ -42,6 +44,7 @@ type Screen =
   | 'mentor-signup-step3'
   | 'foreign-signup-step1'
   | 'foreign-signup-step2'
+  | 'social-signup'
   | 'profile-edit';
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
@@ -66,6 +69,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     cvFile?: any;
     passportPhoto?: string;
     foreignIdCard?: string;
+    socialData?: any;
+    tempUserId?: string;
   }>({});
   const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
   const [loadingJobCodes, setLoadingJobCodes] = useState(false);
@@ -182,6 +187,22 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   }) => {
     setSignUpData({ ...signUpData, ...data });
     setCurrentScreen('foreign-signup-step2');
+  };
+
+  /**
+   * 소셜 회원가입 핸들러
+   */
+  const handleSocialSignUp = (socialData: any, tempUserId?: string) => {
+    setSignUpData({
+      ...signUpData,
+      socialData,
+      tempUserId,
+      name: socialData.name,
+      phone: socialData.phone,
+      email: socialData.email,
+    });
+    setSelectedRole('mentor'); // 기본적으로 멘토로 설정
+    setCurrentScreen('social-signup');
   };
 
   const handleForeignSignUpStep2Next = async (data: {
@@ -783,6 +804,32 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             </View>
           )}
 
+          {/* 설정 버튼 */}
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => navigation.navigate('Settings' as any)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingsButtonContent}>
+              <Ionicons name="settings-outline" size={20} color="#3b82f6" />
+              <Text style={styles.settingsButtonText}>알림 설정</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+
+          {/* 알림 테스트 버튼 */}
+          <TouchableOpacity
+            style={styles.testButton}
+            onPress={() => navigation.navigate('NotificationTest' as any)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingsButtonContent}>
+              <Ionicons name="notifications-outline" size={20} color="#10b981" />
+              <Text style={styles.testButtonText}>푸시 알림 테스트</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+
           {/* 로그아웃 버튼 */}
           <TouchableOpacity
             style={styles.logoutButton}
@@ -851,12 +898,29 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           onBack={() => setCurrentScreen('foreign-signup-step1')}
         />
       );
+    case 'social-signup':
+      return (
+        <SignUpFlow
+          role={selectedRole || 'mentor'}
+          initialSocialData={signUpData.socialData}
+          initialTempUserId={signUpData.tempUserId}
+          onComplete={() => {
+            Alert.alert(
+              '회원가입 완료',
+              '환영합니다! 로그인해주세요.',
+              [{ text: '확인', onPress: () => setCurrentScreen('signin') }]
+            );
+          }}
+          onCancel={() => setCurrentScreen('signin')}
+        />
+      );
     case 'signin':
     default:
       return (
         <SignInScreen
           onSignUpPress={() => setCurrentScreen('role-selection')}
           onSignInSuccess={() => setCurrentScreen('profile')}
+          onSocialSignUp={handleSocialSignUp}
         />
       );
   }
@@ -1213,6 +1277,47 @@ const styles = StyleSheet.create({
   },
   
   // 로그아웃 버튼
+  settingsButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  settingsButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingsButtonText: {
+    color: '#3b82f6',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  testButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+    backgroundColor: '#f0fdf4',
+  },
+  testButtonText: {
+    color: '#10b981',
+    fontSize: 15,
+    fontWeight: '600',
+  },
   logoutButton: {
     backgroundColor: '#ef4444',
     borderRadius: 8,

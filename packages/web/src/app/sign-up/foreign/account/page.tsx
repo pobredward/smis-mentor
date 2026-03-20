@@ -52,6 +52,9 @@ export default function ForeignSignUpStep2() {
   const middleName = searchParams.get('middleName') ? decodeURIComponent(searchParams.get('middleName') as string) : null;
   const countryCode = searchParams.get('countryCode') ? decodeURIComponent(searchParams.get('countryCode') as string) : null;
   const phone = searchParams.get('phone') ? decodeURIComponent(searchParams.get('phone') as string) : null;
+  const socialSignUp = searchParams.get('socialSignUp') === 'true';
+  const tempUserId = searchParams.get('tempUserId');
+  const socialProvider = searchParams.get('socialProvider');
 
   const {
     register,

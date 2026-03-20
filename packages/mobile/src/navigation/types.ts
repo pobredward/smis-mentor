@@ -8,6 +8,10 @@ export type RootStackParamList = {
   MainTabs: undefined;
   StudentDetail: { studentId: string };
   TaskDetail: { taskId: string; taskDate?: string };
+  Settings: undefined;
+  NotificationTest: undefined;
+  PrivacyPolicy: undefined;
+  TermsOfService: undefined;
 };
 
 // Bottom Tabs (메인 하단 탭)

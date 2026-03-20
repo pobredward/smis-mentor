@@ -11,7 +11,9 @@ export default function SettingsPage() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
         <h3 className="text-lg font-semibold text-gray-900 mb-2">설정</h3>
-        <p className="text-gray-600">설정 페이지는 추후 구현 예정입니다.</p>
+        <p className="text-gray-600">
+          소셜 계정 관리는 프로필 페이지에서 확인하세요.
+        </p>
       </div>
     </Layout>
   );

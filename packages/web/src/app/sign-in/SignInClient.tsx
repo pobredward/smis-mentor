@@ -1,17 +1,29 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { signIn, resetPassword, getUserByEmail } from '@/lib/firebaseService';
+import { signIn, resetPassword, getUserByEmail, getUserByPhone, updateUser, getUserById } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
+import GoogleSignInButton from '@/components/common/GoogleSignInButton';
+import PhoneInputModal from '@/components/common/PhoneInputModal';
+import PasswordInputModal from '@/components/common/PasswordInputModal';
 import { FirebaseError } from 'firebase/app';
+import { 
+  handleSocialLogin, 
+  checkTempAccountByPhone, 
+  linkSocialToExistingAccount,
+  handleSocialAuthError,
+  SocialUserData 
+} from '@smis-mentor/shared';
+import { getGoogleRedirectResult, handleGoogleAuthError } from '@/lib/googleAuthService';
+import { auth } from '@/lib/firebase';
 
 const loginSchema = z.object({
   email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
@@ -26,6 +38,12 @@ export function SignInClient() {
   const [resetEmail, setResetEmail] = useState('');
   const [showResetForm, setShowResetForm] = useState(false);
   
+  // 소셜 로그인 관련 상태
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [socialData, setSocialData] = useState<SocialUserData | null>(null);
+  const [existingUserEmail, setExistingUserEmail] = useState<string | null>(null);
+  
   const {
     register,
     handleSubmit,
@@ -34,6 +52,24 @@ export function SignInClient() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
   });
+  
+  // 페이지 로드 시 리다이렉트 결과 확인 (모바일 환경)
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getGoogleRedirectResult();
+        if (result) {
+          await handleGoogleSignInSuccess(result);
+        }
+      } catch (error) {
+        console.error('Redirect 결과 확인 오류:', error);
+        const errorMessage = handleGoogleAuthError(error);
+        toast.error(errorMessage);
+      }
+    };
+    
+    checkRedirectResult();
+  }, []);
   
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
@@ -110,6 +146,175 @@ export function SignInClient() {
     }
   };
   
+  // Google 로그인 성공 핸들러
+  const handleGoogleSignInSuccess = async (data: SocialUserData) => {
+    try {
+      console.log('🔐 Google 로그인 데이터:', data);
+      const result = await handleSocialLogin(data, getUserByEmail);
+      console.log('📊 소셜 로그인 결과:', result);
+      
+      if (result.action === 'LOGIN') {
+        // 기존 소셜 계정으로 바로 로그인
+        toast.success('로그인에 성공했습니다!');
+        setTimeout(() => {
+          const params = new URLSearchParams(window.location.search);
+          const redirectTo = params.get('redirect');
+          router.push(redirectTo || '/');
+        }, 1000);
+      } else if (result.action === 'LINK_ACTIVE') {
+        // 기존 이메일/비밀번호 계정이 있음 - 비밀번호 입력 필요
+        // Firebase Auth에서 새로 생성된 계정 삭제
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          try {
+            console.log('🗑️ Firebase Auth에서 임시 계정 삭제 중...');
+            await currentUser.delete();
+            console.log('✅ 임시 계정 삭제 완료');
+          } catch (deleteError) {
+            console.error('⚠️ 계정 삭제 실패 (무시하고 진행):', deleteError);
+            await auth.signOut();
+          }
+        }
+        
+        setSocialData(data);
+        setExistingUserEmail(result.user?.email || data.email);
+        setShowPasswordModal(true);
+      } else if (result.action === 'NEED_PHONE') {
+        // 이메일로 계정이 없음 - 전화번호 확인 필요
+        // Firebase Auth에서 새로 생성된 계정 삭제
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          try {
+            console.log('🗑️ Firebase Auth에서 임시 계정 삭제 중...');
+            await currentUser.delete();
+            console.log('✅ 임시 계정 삭제 완료');
+          } catch (deleteError) {
+            console.error('⚠️ 계정 삭제 실패 (무시하고 진행):', deleteError);
+            await auth.signOut();
+          }
+        }
+        
+        setSocialData(data);
+        setShowPhoneModal(true);
+      } else if (result.action === 'LINK_TEMP') {
+        // temp 계정 활성화 필요
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          try {
+            await currentUser.delete();
+          } catch (deleteError) {
+            console.error('계정 삭제 실패:', deleteError);
+            await auth.signOut();
+          }
+        }
+        
+        toast.info('임시 계정이 발견되었습니다. 회원가입을 완료해주세요.');
+        router.push(`/sign-up/account?tempUserId=${result.tempUserId}&socialSignUp=true&socialProvider=google`);
+      }
+    } catch (error) {
+      console.error('Google 로그인 처리 오류:', error);
+      const errorMessage = handleSocialAuthError(error);
+      toast.error(errorMessage);
+    }
+  };
+  
+  // Google 로그인 에러 핸들러
+  const handleGoogleSignInError = (error: any) => {
+    const errorMessage = handleGoogleAuthError(error);
+    toast.error(errorMessage);
+  };
+  
+  // 전화번호 입력 핸들러
+  const handlePhoneSubmit = async (phoneNumber: string) => {
+    if (!socialData) return;
+    
+    setIsLoading(true);
+    try {
+      const result = await checkTempAccountByPhone(
+        phoneNumber, 
+        socialData, 
+        getUserByPhone
+      );
+      
+      if (result.found && result.user) {
+        // temp 계정 발견 - 회원가입 페이지로 이동하여 활성화
+        toast.success('임시 계정이 발견되었습니다. 회원가입을 완료해주세요.');
+        setShowPhoneModal(false);
+        
+        // 역할에 따라 적절한 회원가입 페이지로 이동
+        const role = result.user.role;
+        if (role === 'foreign_temp') {
+          router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=google`);
+        } else {
+          router.push(`/sign-up/account?name=${encodeURIComponent(socialData.name)}&phone=${phoneNumber}&socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=google`);
+        }
+      } else {
+        // temp 계정 없음 - 신규 가입 페이지로 이동
+        toast.success('신규 가입을 진행합니다.');
+        setShowPhoneModal(false);
+        router.push(`/sign-up?socialSignUp=true&socialProvider=google&name=${encodeURIComponent(socialData.name)}&email=${encodeURIComponent(socialData.email)}&phone=${phoneNumber}`);
+      }
+    } catch (error: any) {
+      console.error('전화번호 확인 오류:', error);
+      if (error.message === 'ALREADY_REGISTERED') {
+        toast.error('이미 가입된 계정입니다. 로그인 페이지에서 소셜 로그인을 시도하세요.');
+      } else {
+        toast.error('전화번호 확인 중 오류가 발생했습니다.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // 비밀번호 입력 핸들러 (계정 연동)
+  const handlePasswordSubmit = async (password: string) => {
+    if (!socialData || !existingUserEmail) return;
+    
+    setIsLoading(true);
+    try {
+      await linkSocialToExistingAccount(
+        auth,
+        existingUserEmail,
+        password,
+        socialData,
+        signIn,
+        getUserByEmail,
+        getUserById,
+        updateUser
+      );
+      
+      toast.success('Google 계정이 연동되었습니다!');
+      setShowPasswordModal(false);
+      
+      setTimeout(() => {
+        const params = new URLSearchParams(window.location.search);
+        const redirectTo = params.get('redirect');
+        router.push(redirectTo || '/');
+      }, 1000);
+    } catch (error) {
+      console.error('계정 연동 오류:', error);
+      const firebaseError = error as FirebaseError;
+      if (firebaseError.code === 'auth/wrong-password') {
+        toast.error('비밀번호가 올바르지 않습니다.');
+      } else if (firebaseError.code === 'auth/too-many-requests') {
+        toast.error('너무 많은 시도가 있었습니다. 나중에 다시 시도해주세요.');
+      } else {
+        toast.error('계정 연동 중 오류가 발생했습니다.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // 비밀번호 찾기 (모달에서)
+  const handleForgotPasswordFromModal = () => {
+    setShowPasswordModal(false);
+    setShowResetForm(true);
+    if (existingUserEmail) {
+      setResetEmail(existingUserEmail);
+    }
+  };
+  
   return (
     <Layout noPadding>
       <div className="min-h-[80vh] flex items-center justify-center py-12 px-2 sm:px-6">
@@ -168,6 +373,22 @@ export function SignInClient() {
               로그인
             </Button>
             
+            {/* 구분선 */}
+            <div className="relative flex items-center justify-center py-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative bg-white px-4 text-sm text-gray-500">
+                또는
+              </div>
+            </div>
+            
+            {/* Google 로그인 버튼 */}
+            <GoogleSignInButton
+              onSuccess={handleGoogleSignInSuccess}
+              onError={handleGoogleSignInError}
+            />
+            
             {/* 비밀번호 찾기 / 회원가입 버튼 */}
             <div className="flex items-center justify-between pt-4">
               <button
@@ -211,6 +432,28 @@ export function SignInClient() {
           </form>
         </div>
       </div>
+      
+      {/* 전화번호 입력 모달 */}
+      <PhoneInputModal
+        isOpen={showPhoneModal}
+        onClose={() => setShowPhoneModal(false)}
+        onSubmit={handlePhoneSubmit}
+        title="전화번호 입력"
+        description="계정 확인을 위해 전화번호를 입력해주세요."
+        isLoading={isLoading}
+      />
+      
+      {/* 비밀번호 입력 모달 */}
+      <PasswordInputModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+        onSubmit={handlePasswordSubmit}
+        onForgotPassword={handleForgotPasswordFromModal}
+        email={existingUserEmail || undefined}
+        title="계정 연동"
+        description="이미 등록된 계정입니다. Google 계정과 연동하려면 기존 비밀번호를 입력해주세요."
+        isLoading={isLoading}
+      />
     </Layout>
   );
 } 
