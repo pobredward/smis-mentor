@@ -304,6 +304,39 @@ export function SignInClient() {
     }
   };
   
+  // 모달 닫기 핸들러 (Firebase Auth 정리)
+  const handlePhoneModalClose = async () => {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      try {
+        console.log('소셜 로그인 중단 - Firebase Auth 계정 삭제');
+        await currentUser.delete();
+      } catch (error) {
+        console.error('계정 삭제 실패, 로그아웃 시도:', error);
+        await auth.signOut();
+      }
+    }
+    setShowPhoneModal(false);
+    setSocialData(null);
+  };
+  
+  // 비밀번호 모달 닫기 핸들러
+  const handlePasswordModalClose = async () => {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      try {
+        console.log('계정 연동 중단 - Firebase Auth 계정 삭제');
+        await currentUser.delete();
+      } catch (error) {
+        console.error('계정 삭제 실패, 로그아웃 시도:', error);
+        await auth.signOut();
+      }
+    }
+    setShowPasswordModal(false);
+    setSocialData(null);
+    setExistingUserEmail(null);
+  };
+  
   // 비밀번호 입력 핸들러 (계정 연동)
   const handlePasswordSubmit = async (password: string) => {
     if (!socialData || !existingUserEmail) return;
@@ -333,7 +366,10 @@ export function SignInClient() {
       console.error('계정 연동 오류:', error);
       const firebaseError = error as FirebaseError;
       if (firebaseError.code === 'auth/wrong-password') {
-        toast.error('비밀번호가 올바르지 않습니다.');
+        toast.error(
+          '비밀번호가 올바르지 않습니다. 본인의 계정이 아니라면 관리자에게 문의하세요.\n관리자: 010-7656-7933 (신선웅)',
+          { duration: 8000 }
+        );
       } else if (firebaseError.code === 'auth/too-many-requests') {
         toast.error('너무 많은 시도가 있었습니다. 나중에 다시 시도해주세요.');
       } else {
@@ -474,7 +510,7 @@ export function SignInClient() {
       {/* 이름 및 전화번호 입력 모달 */}
       <PhoneInputModal
         isOpen={showPhoneModal}
-        onClose={() => setShowPhoneModal(false)}
+        onClose={handlePhoneModalClose}
         onSubmit={handlePhoneSubmit}
         title="본인 확인"
         description="계정 확인을 위해 이름과 전화번호를 입력해주세요."
@@ -485,7 +521,7 @@ export function SignInClient() {
       {/* 비밀번호 입력 모달 */}
       <PasswordInputModal
         isOpen={showPasswordModal}
-        onClose={() => setShowPasswordModal(false)}
+        onClose={handlePasswordModalClose}
         onSubmit={handlePasswordSubmit}
         onForgotPassword={handleForgotPasswordFromModal}
         email={existingUserEmail || undefined}

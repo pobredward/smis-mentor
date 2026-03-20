@@ -89,12 +89,32 @@ export default function MentorSignUpStep1() {
             router.push('/sign-up/account');
           }
         } else {
-          // Case 3: 이름이 일치하지 않는 경우 - 경고만 표시
-          toast(`등록된 이름(${name})과 다르지만 진행합니다.`, {
-            duration: 4000,
-            icon: '⚠️',
-          });
-          router.push('/sign-up/account');
+          // 이름이 일치하지 않는 경우
+          if (status === 'active') {
+            // Active 계정이면서 이름 불일치 → 차단
+            console.error('⚠️ Active 계정 이름 불일치 - 다른 사람 계정 가능성:', {
+              registered: name,
+              input: data.name,
+            });
+            toast.error(
+              `이 전화번호는 "${name}"님 이름으로 이미 가입되어 있습니다. 본인이 아니라면 관리자에게 문의해주세요.\n관리자: 010-7656-7933 (신선웅)`,
+              { duration: 8000 }
+            );
+            setIsLoading(false);
+            return;
+          } else {
+            // Temp 계정이면서 이름 불일치 → 차단
+            console.error('⚠️ Temp 계정 이름 불일치 - 다른 사람이 잘못 등록한 가능성:', {
+              registered: name,
+              input: data.name,
+            });
+            toast.error(
+              `이 전화번호는 "${name}"님 이름으로 등록되어 있습니다. 본인이 아니라면 관리자에게 문의해주세요.\n관리자: 010-7656-7933 (신선웅)`,
+              { duration: 8000 }
+            );
+            setIsLoading(false);
+            return;
+          }
         }
       } else {
         // Case 4: 전화번호로 사용자를 찾을 수 없는 경우

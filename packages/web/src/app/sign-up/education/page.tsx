@@ -34,16 +34,18 @@ export default function SignUpEducation() {
   // 필수 정보 확인
   useEffect(() => {
     const data = signupStorage.get();
-    setSignupData(data);
     
     const requiredFields: (keyof typeof data)[] = data?.socialSignUp 
       ? ['name', 'phoneNumber', 'email'] // 소셜 로그인
       : ['name', 'phoneNumber', 'email', 'password']; // 일반 가입
     
-    if (!signupStorage.validate(requiredFields)) {
-      toast.error('필수 정보가 누락되었습니다.');
-      router.push('/sign-up');
+    if (!data || !signupStorage.validate(requiredFields)) {
+      toast.error('세션이 만료되었습니다. 처음부터 다시 시작해주세요.');
+      router.replace('/sign-up');
+      return;
     }
+    
+    setSignupData(data);
   }, [router]);
 
   const {
@@ -105,7 +107,17 @@ export default function SignUpEducation() {
   };
 
   if (!signupData) {
-    return null; // useEffect에서 리다이렉트 처리
+    // 로딩 스피너 표시
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">로딩 중...</p>
+          </div>
+        </div>
+      </Layout>
+    );
   }
 
   return (

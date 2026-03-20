@@ -44,16 +44,18 @@ export default function SignUpDetails() {
   // 필수 정보 확인
   useEffect(() => {
     const data = signupStorage.get();
-    setSignupData(data);
     
     const requiredFields: (keyof typeof data)[] = data?.socialSignUp
       ? ['name', 'phoneNumber', 'email', 'university', 'grade', 'major1']
       : ['name', 'phoneNumber', 'email', 'password', 'university', 'grade', 'major1'];
     
-    if (!signupStorage.validate(requiredFields)) {
-      toast.error('필수 정보가 누락되었습니다.');
-      router.push('/sign-up');
+    if (!data || !signupStorage.validate(requiredFields)) {
+      toast.error('세션이 만료되었습니다. 처음부터 다시 시작해주세요.');
+      router.replace('/sign-up');
+      return;
     }
+    
+    setSignupData(data);
   }, [router]);
 
   const {
@@ -118,8 +120,31 @@ export default function SignUpDetails() {
       // 주민번호를 통해 나이 계산
       const { age } = getUserInfoFromRRN(data.rrnFront, data.rrnLast);
 
-      // 전화번호로 기존 임시 사용자 조회
+      // 전화번호로 기존 임시 사용자 조회 (최종 확인)
       const existingUser = await getUserByPhone(phoneNumber);
+      
+      // 동시 가입 시도 방지: 다른 사용자가 이미 active 상태로 가입했는지 확인
+      if (existingUser && existingUser.status === 'active') {
+        // tempUserId가 있고, 기존 유저의 userId와 다르면 중복 가입 시도
+        if (tempUserId && existingUser.userId !== tempUserId) {
+          console.error('⚠️ 동시 가입 시도 감지:', {
+            tempUserId,
+            existingUserId: existingUser.userId,
+          });
+          toast.error('이 전화번호는 이미 다른 계정으로 가입되었습니다. 잠시 후 다시 시도해주세요.');
+          signupStorage.clear();
+          router.push('/sign-in');
+          return;
+        }
+        // tempUserId가 없는데 active 유저가 있으면 중복
+        if (!tempUserId) {
+          console.error('⚠️ 이미 가입된 전화번호:', phoneNumber);
+          toast.error('이 전화번호는 이미 가입되어 있습니다.');
+          signupStorage.clear();
+          router.push('/sign-in');
+          return;
+        }
+      }
       
       // 기타 경로 상세 정보 처리
       let referralPathValue = data.referralPath;
@@ -271,7 +296,17 @@ export default function SignUpDetails() {
   };
 
   if (!signupData) {
-    return null; // useEffect에서 리다이렉트 처리
+    // 로딩 스피너 표시
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">로딩 중...</p>
+          </div>
+        </div>
+      </Layout>
+    );
   }
 
   return (
