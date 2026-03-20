@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "382190683951",
+    "project_id": "smis-mentor",
+    "storage_bucket": "smis-mentor.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:382190683951:android:9b9a55f950eb588364c3da",
+        "android_client_info": {
+          "package_name": "com.smis.smismentor"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "382190683951-cs53mija3pru3p0na3t8tqmqgqej8okn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.smis.smismentor",
+            "certificate_hash": "9396e1d0a0a835a3bacedb193037cd0e7bd9adde"
+          }
+        },
+        {
+          "client_id": "382190683951-d213f6sqm30lokbddeth6g2gucava2en.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-hp4zrNMkoYEW17OXEK552TT9BbP0evc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "382190683951-d213f6sqm30lokbddeth6g2gucava2en.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.smis.smismentor"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

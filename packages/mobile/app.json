@@ -18,7 +18,10 @@
       "bundleIdentifier": "com.smis.smismentor",
       "googleServicesFile": "./GoogleService-Info.plist",
       "buildNumber": "1",
-      "associatedDomains": ["applinks:smis-mentor.com", "applinks:www.smis-mentor.com"],
+      "associatedDomains": [
+        "applinks:smis-mentor.com",
+        "applinks:www.smis-mentor.com"
+      ],
       "config": {
         "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY_FOR_IOS"
       },
@@ -60,7 +63,10 @@
               "pathPrefix": "/camp/tasks"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "permissions": [
@@ -69,8 +75,10 @@
         "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
-      ]
+        "ACCESS_COARSE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -83,12 +91,26 @@
           "cameraPermission": "이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다."
         }
       ],
-      "@react-native-google-signin/google-signin"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#3b82f6",
+          "sounds": [],
+          "mode": "production",
+          "androidMode": "default",
+          "androidCollapsedTitle": "SMIS Mentor"
+        }
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {
         "projectId": "684d0445-c299-4e77-a362-42efa9c671ac"
-      }
+      },
+      "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "382190683951-d213f6sqm30lokbddeth6g2gucava2en.apps.googleusercontent.com",
+      "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me.apps.googleusercontent.com",
+      "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "382190683951-cs53mija3pru3p0na3t8tqmqgqej8okn.apps.googleusercontent.com"
     },
     "owner": "pobredward02"
   }
