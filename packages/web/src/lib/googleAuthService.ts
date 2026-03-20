@@ -43,6 +43,10 @@ export async function signInWithGoogleRedirect(): Promise<void> {
 
 /**
  * 리다이렉트 결과 확인
+ * 
+ * 중요: 리다이렉트 후 Firebase Auth는 이미 로그인 상태입니다.
+ * 이 함수는 단순히 사용자 데이터를 추출하여 반환하며,
+ * Firebase Auth 로그인 상태를 변경하지 않습니다.
  */
 export async function getGoogleRedirectResult(): Promise<SocialUserData | null> {
   try {
@@ -50,7 +54,10 @@ export async function getGoogleRedirectResult(): Promise<SocialUserData | null> 
     if (!result) return null;
     
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    return extractSocialUserData(result.user, credential);
+    const socialData = extractSocialUserData(result.user, credential);
+    
+    console.log('✅ Redirect 결과 처리 완료 - Firebase Auth 로그인 상태 유지');
+    return socialData;
   } catch (error: any) {
     console.error('Google Redirect 결과 확인 오류:', error);
     throw error;
