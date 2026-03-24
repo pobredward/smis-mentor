@@ -55,6 +55,9 @@ export default function ForeignSignUpStep2() {
   const socialSignUp = searchParams.get('socialSignUp') === 'true';
   const tempUserId = searchParams.get('tempUserId');
   const socialProvider = searchParams.get('socialProvider');
+  const socialProviderUid = searchParams.get('socialProviderUid') ? decodeURIComponent(searchParams.get('socialProviderUid') as string) : null;
+  const socialDisplayName = searchParams.get('socialDisplayName') ? decodeURIComponent(searchParams.get('socialDisplayName') as string) : null;
+  const socialPhotoURL = searchParams.get('socialPhotoURL') ? decodeURIComponent(searchParams.get('socialPhotoURL') as string) : null;
 
   const {
     register,
@@ -317,15 +320,30 @@ export default function ForeignSignUpStep2() {
           foreignIdCardUrl: foreignIdCardUrl,
           applicationDate: Timestamp.now(),
         },
-        // 소셜 로그인 정보 추가
+        // 소셜 로그인 정보 추가 (소셜 가입인 경우)
         ...(socialSignUp && socialProvider && {
           authProviders: [{
-            providerId: `${socialProvider}.com`,
+            // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
+            providerId: socialProvider === 'naver' || socialProvider === 'kakao' 
+              ? socialProvider 
+              : `${socialProvider}.com`,
+            uid: socialProviderUid || userId, // 소셜 제공자 고유 ID 우선
+            email: data.email,
+            linkedAt: Timestamp.now(),
+            displayName: socialDisplayName,
+            photoURL: socialPhotoURL,
+          }],
+          primaryAuthMethod: 'social',
+        }),
+        // 일반 가입인 경우 password provider 추가
+        ...(!socialSignUp && {
+          authProviders: [{
+            providerId: 'password',
             uid: userId,
             email: data.email,
             linkedAt: Timestamp.now(),
           }],
-          primaryAuthMethod: 'social',
+          primaryAuthMethod: 'password',
         }),
       };
 

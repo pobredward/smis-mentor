@@ -624,10 +624,13 @@ export function handleSocialAuthError(error: any): string {
  * 소셜 제공자 이름 가져오기
  */
 export function getSocialProviderName(providerId: string): string {
-  switch (providerId) {
-    case 'google.com':
+  // 정규화: .com 제거
+  const normalized = providerId.replace('.com', '');
+  
+  switch (normalized) {
+    case 'google':
       return 'Google';
-    case 'apple.com':
+    case 'apple':
       return 'Apple';
     case 'naver':
       return '네이버';
@@ -644,10 +647,13 @@ export function getSocialProviderName(providerId: string): string {
  * 소셜 제공자 아이콘 이름 가져오기
  */
 export function getSocialProviderIcon(providerId: string): string {
-  switch (providerId) {
-    case 'google.com':
+  // 정규화: .com 제거
+  const normalized = providerId.replace('.com', '');
+  
+  switch (normalized) {
+    case 'google':
       return '🔵';
-    case 'apple.com':
+    case 'apple':
       return '🍎';
     case 'naver':
       return '🟢';

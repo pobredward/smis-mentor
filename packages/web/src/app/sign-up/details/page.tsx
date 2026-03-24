@@ -103,7 +103,7 @@ export default function SignUpDetails() {
 
     setIsLoading(true);
     try {
-      const { name, phoneNumber, email, password, university, grade, isOnLeave, major1, major2, socialSignUp, tempUserId, socialProvider, firebaseAuthUid } = signupData;
+      const { name, phoneNumber, email, password, university, grade, isOnLeave, major1, major2, socialSignUp, tempUserId, socialProvider, firebaseAuthUid, socialProviderUid, socialDisplayName, socialPhotoURL } = signupData;
 
       console.log('🔍 회원가입 데이터 확인:', {
         socialSignUp,
@@ -111,6 +111,8 @@ export default function SignUpDetails() {
         email,
         tempUserId,
         firebaseAuthUid,
+        socialProviderUid,
+        socialDisplayName,
       });
 
       if (!name || !phoneNumber || !email || !university || !grade || !major1) {
@@ -223,15 +225,22 @@ export default function SignUpDetails() {
           newUserId = currentUser.uid;
           console.log('✅ 소셜 가입 - Auth UID 사용:', newUserId);
           
-          // socialProvider 동적 처리
+          // socialProvider 동적 처리 및 정규화
+          // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
           const provider = socialProvider || 'google';
+          const normalizedProviderId = provider === 'naver' || provider === 'kakao' 
+            ? provider 
+            : `${provider}.com`;
+            
           userCredential = {
             user: currentUser,
             authProviders: [{
-              providerId: `${provider}.com`,
-              uid: currentUser.uid,
+              providerId: normalizedProviderId,
+              uid: socialProviderUid || currentUser.uid, // 소셜 제공자 고유 ID 우선
               email,
               linkedAt: now,
+              displayName: socialDisplayName || name,
+              photoURL: socialPhotoURL,
             }],
             primaryAuthMethod: 'social',
           };
@@ -245,6 +254,15 @@ export default function SignUpDetails() {
           userCredential = await signUp(email, password);
           newUserId = userCredential.user.uid;
           console.log('✅ 일반 가입 - 새 Auth 계정 생성:', newUserId);
+          
+          // 일반 가입도 authProviders 정보 설정
+          userCredential.authProviders = [{
+            providerId: 'password',
+            uid: newUserId,
+            email,
+            linkedAt: now,
+          }];
+          userCredential.primaryAuthMethod = 'password';
         }
 
         // ✅ 기존 temp 문서 데이터 복사 (jobExperiences 등)
@@ -334,14 +352,21 @@ export default function SignUpDetails() {
           
           console.log('✅ Firebase Auth 계정 생성 완료, UID:', newUserId);
           
-          // socialProvider 동적 처리
+          // socialProvider 동적 처리 및 정규화
+          // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
           const provider = socialProvider || 'google';
+          const normalizedProviderId = provider === 'naver' || provider === 'kakao' 
+            ? provider 
+            : `${provider}.com`;
+            
           authProvidersData = {
             authProviders: [{
-              providerId: `${provider}.com`,
-              uid: newUserId,
+              providerId: normalizedProviderId,
+              uid: socialProviderUid || newUserId, // 소셜 제공자 고유 ID 우선
               email,
               linkedAt: now,
+              displayName: socialDisplayName || name,
+              photoURL: socialPhotoURL,
             }],
             primaryAuthMethod: 'social',
           };
@@ -355,6 +380,17 @@ export default function SignUpDetails() {
           const userCredential = await signUp(email, password);
           newUserId = userCredential.user.uid;
           console.log('✅ 일반 신규 가입 - 새 Auth 계정 생성:', newUserId);
+          
+          // 일반 가입도 authProviders에 password provider 추가
+          authProvidersData = {
+            authProviders: [{
+              providerId: 'password',
+              uid: newUserId,
+              email,
+              linkedAt: now,
+            }],
+            primaryAuthMethod: 'password',
+          };
         }
 
         // Firestore에 사용자 정보 저장 (Auth UID를 Document ID로 사용)

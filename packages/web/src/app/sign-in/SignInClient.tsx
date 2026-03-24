@@ -232,14 +232,25 @@ export function SignInClient() {
         if (!hasPassword) {
           // 소셜로만 가입한 경우
           const existingProviders = result.user?.authProviders
-            ?.map((p: any) => getSocialProviderName(p.providerId))
-            .join(', ') || '소셜 계정';
+            ?.filter((p: any) => p.providerId !== 'password') // password 제외
+            .map((p: any) => getSocialProviderName(p.providerId))
+            .join(', ');
           
-          toast.error(
-            `이 이메일은 이미 ${existingProviders}으로 가입되어 있습니다.\n` +
-            `${existingProviders}로 로그인한 후 마이페이지에서 ${getSocialProviderName(data.providerId)}를 연동해주세요.`,
-            { duration: 6000 }
-          );
+          if (!existingProviders || existingProviders.trim() === '') {
+            // authProviders가 비어있는 경우 (구 버전 사용자)
+            toast.error(
+              `이 이메일은 이미 이메일/비밀번호 방식으로 가입되어 있습니다.\n` +
+              `이메일/비밀번호로 로그인한 후 마이페이지에서 ${getSocialProviderName(data.providerId)}를 연동해주세요.`,
+              { duration: 6000 }
+            );
+          } else {
+            // 다른 소셜 계정으로 가입된 경우
+            toast.error(
+              `이 이메일은 이미 ${existingProviders}으로 가입되어 있습니다.\n` +
+              `${existingProviders}로 로그인한 후 마이페이지에서 ${getSocialProviderName(data.providerId)}를 연동해주세요.`,
+              { duration: 6000 }
+            );
+          }
           return;
         }
         
@@ -415,7 +426,10 @@ export function SignInClient() {
               `phone=${encodeURIComponent(data.phoneNumber)}&` +
               `socialSignUp=true&` +
               `tempUserId=${existingUser.userId}&` +
-              `socialProvider=${provider}` // ✅ 동적 처리
+              `socialProvider=${provider}&` +
+              `socialProviderUid=${encodeURIComponent(socialData.providerUid || '')}&` +
+              `socialDisplayName=${encodeURIComponent(socialData.name || '')}&` +
+              `socialPhotoURL=${encodeURIComponent(socialData.photoURL || '')}`
             );
             return;
           }
@@ -451,7 +465,10 @@ export function SignInClient() {
             `countryCode=${encodeURIComponent(data.countryCode)}&` +
             `phone=${encodeURIComponent(data.phoneNumber)}&` +
             `socialSignUp=true&` +
-            `socialProvider=${provider}` // ✅ 동적 처리
+            `socialProvider=${provider}&` +
+            `socialProviderUid=${encodeURIComponent(socialData.providerUid || '')}&` +
+            `socialDisplayName=${encodeURIComponent(socialData.name || '')}&` +
+            `socialPhotoURL=${encodeURIComponent(socialData.photoURL || '')}`
           );
         }
     } catch (error: any) {
@@ -533,22 +550,26 @@ export function SignInClient() {
         
         if (role === 'foreign_temp') {
           // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
-          router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=${provider}`);
+          router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=${provider}&socialProviderUid=${encodeURIComponent(socialData.providerUid || '')}&socialDisplayName=${encodeURIComponent(socialData.name || '')}&socialPhotoURL=${encodeURIComponent(socialData.photoURL || '')}`);
         } else {
           // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
           // SessionStorage에 저장
           const { signupStorage } = await import('@/utils/signupStorage');
           
-          signupStorage.save({
-            name: data.name,
-            phoneNumber: data.phoneNumber,
-            email: socialData.email,
-            socialSignUp: true,
-            tempUserId: result.user.userId,
-            socialProvider: provider, // ✅ 동적 처리
-            socialEmail: socialData.email,
-            firebaseAuthUid: socialData.firebaseAuthUid, // ✅ Firebase Auth UID 저장
-          });
+        signupStorage.save({
+          name: data.name,
+          phoneNumber: data.phoneNumber,
+          email: socialData.email,
+          socialSignUp: true,
+          tempUserId: result.user.userId,
+          socialProvider: provider,
+          socialEmail: socialData.email,
+          firebaseAuthUid: socialData.firebaseAuthUid,
+          // 소셜 제공자 정보 추가
+          socialProviderUid: socialData.providerUid,
+          socialDisplayName: socialData.name,
+          socialPhotoURL: socialData.photoURL,
+        });
           router.push('/sign-up/education');
         }
       } else {
@@ -559,15 +580,19 @@ export function SignInClient() {
         
         console.log('💾 SessionStorage 저장 (신규) - firebaseAuthUid:', socialData.firebaseAuthUid);
         
-        signupStorage.save({
-          name: data.name,
-          phoneNumber: data.phoneNumber,
-          email: socialData.email,
-          socialSignUp: true,
-          socialProvider: provider, // ✅ 동적 처리
-          socialEmail: socialData.email,
-          firebaseAuthUid: socialData.firebaseAuthUid, // ✅ Firebase Auth UID 저장
-        });
+          signupStorage.save({
+            name: data.name,
+            phoneNumber: data.phoneNumber,
+            email: socialData.email,
+            socialSignUp: true,
+            socialProvider: provider,
+            socialEmail: socialData.email,
+            firebaseAuthUid: socialData.firebaseAuthUid,
+            // 소셜 제공자 정보 추가
+            socialProviderUid: socialData.providerUid, // 네이버 고유 ID
+            socialDisplayName: socialData.name,
+            socialPhotoURL: socialData.photoURL,
+          });
         
         toast.success('신규 가입을 진행합니다.');
         setShowPhoneModal(false);
