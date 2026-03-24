@@ -354,7 +354,8 @@ export default function ForeignSignUpStep2() {
             photoURL: socialPhotoURL,
           }],
           primaryAuthMethod: 'social',
-          ...(tempPasswordForSocial && { _tempPassword: tempPasswordForSocial }), // 🔑 재로그인용 임시 비밀번호
+          // 🔑 소셜 전용 계정의 Firebase Auth 로그인용 비밀번호
+          ...(tempPasswordForSocial && { _firebaseAuthPassword: tempPasswordForSocial }),
         }),
         // 일반 가입인 경우 password provider 추가
         ...(!socialSignUp && {

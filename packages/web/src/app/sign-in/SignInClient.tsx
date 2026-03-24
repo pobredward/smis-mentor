@@ -173,13 +173,13 @@ export function SignInClient() {
           }
           
           try {
-            // 🔑 Firestore에서 임시 비밀번호 가져오기
-            const tempPassword = (result.user as any)._tempPassword;
+            // 🔑 Firestore에서 Firebase Auth 로그인 비밀번호 가져오기
+            const firebaseAuthPassword = (result.user as any)._firebaseAuthPassword;
             
-            if (!tempPassword) {
-              console.error('❌ 임시 비밀번호가 없습니다. Custom Token 방식 시도...');
+            if (!firebaseAuthPassword) {
+              console.error('❌ Firebase Auth 비밀번호가 없습니다. Custom Token 방식 시도...');
               
-              // Fallback: Custom Token 방식
+              // Fallback: Custom Token 방식 (기존 사용자 지원)
               const existingFirebaseUid = result.user.userId;
               await signInWithCustomTokenFromFunction(
                 result.user.userId,
@@ -187,9 +187,9 @@ export function SignInClient() {
                 existingFirebaseUid
               );
             } else {
-              // 임시 비밀번호로 로그인
-              console.log('🔑 임시 비밀번호로 로그인 시도');
-              await signIn(result.user.email, tempPassword);
+              // Firebase Auth 비밀번호로 로그인
+              console.log('🔑 Firebase Auth 비밀번호로 로그인 시도');
+              await signIn(result.user.email, firebaseAuthPassword);
             }
             
             console.log('✅ Firebase Auth 로그인 완료');

@@ -380,7 +380,10 @@ export default function SignUpDetails() {
               photoURL: socialPhotoURL,
             }],
             primaryAuthMethod: 'social',
-            _tempPassword: tempPasswordForSocial, // 🔑 재로그인용 임시 비밀번호 저장
+            // 🔑 소셜 전용 계정의 Firebase Auth 로그인용 비밀번호
+            // - 사용자가 모르는 시스템 생성 비밀번호
+            // - 모든 연동된 소셜 계정(네이버, 카카오 등)이 이 비밀번호로 로그인
+            _firebaseAuthPassword: tempPasswordForSocial,
           };
         } else {
           // 일반 가입: 새 Firebase Auth 계정 생성
