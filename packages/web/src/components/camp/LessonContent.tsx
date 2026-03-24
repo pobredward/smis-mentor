@@ -128,7 +128,7 @@ function SectionForm({
             aria-label="원본 링크"
           />
           <p className="text-xs text-red-600 font-medium mt-1">
-            ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭
+            ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭 
           </p>
         </div>
 
