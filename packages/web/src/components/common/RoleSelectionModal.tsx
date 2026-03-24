@@ -7,18 +7,29 @@ interface RoleSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectRole: (role: 'mentor' | 'foreign') => void;
+  provider?: 'google' | 'kakao' | 'naver';
 }
 
 export default function RoleSelectionModal({
   isOpen,
   onClose,
   onSelectRole,
+  provider = 'google',
 }: RoleSelectionModalProps) {
+  // 제공자별 표시 이름
+  const providerNames = {
+    google: 'Google',
+    kakao: '카카오',
+    naver: '네이버',
+  };
+
+  const providerName = providerNames[provider];
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Select Your Role">
       <div className="p-6">
         <p className="text-gray-600 text-center mb-6">
-          Please select your role to continue with Google Sign In
+          Please select your role to continue with {providerName} Sign In
         </p>
         
         <div className="flex flex-col gap-4">

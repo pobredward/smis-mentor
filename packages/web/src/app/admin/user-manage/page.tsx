@@ -66,7 +66,6 @@ export default function UserManage() {
   const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
-  const [viewMode, setViewMode] = useState<'active' | 'deleted'>('active'); // 활성/삭제된 사용자 탭
   const router = useRouter();
 
   // 현재 관리자 이름 로드 (이메일 기준으로 찾기)
@@ -153,17 +152,12 @@ export default function UserManage() {
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      // viewMode에 따라 다르게 로드
-      const includeDeleted = viewMode === 'deleted';
+      // 탈퇴 버튼 선택 시에만 삭제된 사용자 포함
+      const includeDeleted = selectedRole === 'deleted';
       const fetchedUsers = await getAllUsers(includeDeleted);
       
-      // viewMode에 따라 필터링
-      const filteredByMode = viewMode === 'deleted' 
-        ? fetchedUsers.filter(user => (user.status as any) === 'deleted')
-        : fetchedUsers.filter(user => (user.status as any) !== 'deleted');
-      
-      // 가입일시를 기준으로 오름차순 정렬 (가장 오래된 순)
-      const sortedUsers = [...filteredByMode].sort((a, b) => {
+      // 가입일시를 기준으로 내림차순 정렬 (최신순)
+      const sortedUsers = [...fetchedUsers].sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(0);
         const dateB = b.createdAt?.toDate?.() || new Date(0);
         return dateB.getTime() - dateA.getTime();
@@ -177,7 +171,7 @@ export default function UserManage() {
     } finally {
       setIsLoading(false);
     }
-  }, [viewMode]);
+  }, [selectedRole]);
 
   const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
     value,
@@ -190,6 +184,7 @@ export default function UserManage() {
     { value: 'admin', label: '관리자' },
     { value: 'mentor_temp', label: '멘토(임시)' },
     { value: 'foreign_temp', label: '원어민(임시)' },
+    { value: 'deleted', label: '탈퇴' },
   ];
 
   // groupRole 옵션 - 선택된 user의 role에 따라 다르게 표시
@@ -257,8 +252,16 @@ export default function UserManage() {
   useEffect(() => {
     let filtered = [...users];
 
-    // 역할 필터링 (항상 적용)
-    filtered = filtered.filter(user => user.role === selectedRole);
+    // 역할 필터링
+    if (selectedRole === 'deleted') {
+      // 탈퇴 버튼 선택 시: 삭제된 사용자만 표시
+      filtered = filtered.filter(user => (user.status as any) === 'deleted');
+    } else {
+      // 일반 역할 선택 시: 해당 역할이면서 삭제되지 않은 사용자만 표시
+      filtered = filtered.filter(user => 
+        user.role === selectedRole && (user.status as any) !== 'deleted'
+      );
+    }
 
     // 검색어 필터링
     if (searchTerm.trim()) {
@@ -798,6 +801,7 @@ export default function UserManage() {
   // 역할 필터 변경 핸들러
   const handleRoleFilterChange = (role: string) => {
     setSelectedRole(role);
+    setSelectedUser(null); // 역할 변경 시 선택된 사용자 초기화
   };
 
   // 계정 복구 핸들러 추가
@@ -861,30 +865,6 @@ export default function UserManage() {
               </svg>
             </Button>
             <h1 className="text-xl md:text-2xl font-bold">사용자 관리</h1>
-          </div>
-          
-          {/* 활성/삭제된 사용자 탭 */}
-          <div className="flex gap-2 mt-4">
-            <button
-              onClick={() => setViewMode('active')}
-              className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                viewMode === 'active'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              활성 사용자
-            </button>
-            <button
-              onClick={() => setViewMode('deleted')}
-              className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                viewMode === 'deleted'
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              삭제된 사용자
-            </button>
           </div>
         </div>
 
@@ -1493,7 +1473,7 @@ export default function UserManage() {
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          {viewMode === 'active' && (
+                          {selectedRole !== 'deleted' && (
                             <>
                               <Button
                                 variant="secondary"
@@ -1511,7 +1491,7 @@ export default function UserManage() {
                               </Button>
                             </>
                           )}
-                          {viewMode === 'deleted' && (
+                          {selectedRole === 'deleted' && (
                             <Button
                               variant="success"
                               size="sm"

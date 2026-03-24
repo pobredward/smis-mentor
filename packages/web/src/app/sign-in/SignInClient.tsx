@@ -823,6 +823,12 @@ export function SignInClient() {
         isOpen={showRoleSelectionModal}
         onClose={handleRoleModalClose}
         onSelectRole={handleRoleSelection}
+        provider={
+          socialData?.providerId === 'google.com' ? 'google' :
+          socialData?.providerId === 'kakao' ? 'kakao' :
+          socialData?.providerId === 'naver' ? 'naver' :
+          'google'
+        }
       />
       
       {/* 멘토 이름 및 전화번호 입력 모달 */}
