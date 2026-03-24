@@ -1,26 +1,12 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-
-// Firebase Admin 초기화
-if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: privateKey,
-    }),
-  });
-}
-
-const db = getFirestore();
+import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
 
 /**
  * evaluations 컬렉션의 refUserId, evaluatorId를 구 Document ID → 새 Auth UID로 마이그레이션
  */
 export async function POST(request: Request) {
   try {
+    const db = getAdminFirestore();
     const { dryRun = true } = await request.json();
     
     console.log(`🔄 evaluations 참조 필드 마이그레이션 시작 (dryRun: ${dryRun})...`);
@@ -152,11 +138,11 @@ export async function POST(request: Request) {
           try {
             // 업데이트할 필드 준비
             const updateData: any = {
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: adminFieldValue.serverTimestamp(),
             };
             
             const migratedData: any = {
-              date: admin.firestore.FieldValue.serverTimestamp(),
+              date: adminFieldValue.serverTimestamp(),
             };
             
             // refUserId 업데이트

@@ -1,24 +1,9 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-
-if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: privateKey,
-    }),
-  });
-}
-
-const db = getFirestore();
-const auth = getAuth();
+import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
 
 export async function POST(request: Request) {
   try {
+    const db = getAdminFirestore();
     const { searchParams} = new URL(request.url);
     const dryRun = searchParams.get('dryRun') === 'true';
     
@@ -86,7 +71,7 @@ export async function POST(request: Request) {
             ...userData,
             userId: newDocId,
             id: newDocId,
-            migratedAt: admin.firestore.FieldValue.serverTimestamp(),
+            migratedAt: adminFieldValue.serverTimestamp(),
             oldUserId: oldDocId,  // 백업용
           });
           

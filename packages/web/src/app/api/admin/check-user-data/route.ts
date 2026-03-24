@@ -1,41 +1,5 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-
-// 환경 변수 검증
-const requiredEnvVars = [
-  'FIREBASE_PROJECT_ID',
-  'FIREBASE_CLIENT_EMAIL',
-  'FIREBASE_PRIVATE_KEY',
-];
-
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingVars.length > 0) {
-  console.error('❌ 필수 환경 변수 누락:', missingVars);
-  throw new Error(`Missing environment variables: ${missingVars.join(', ')}`);
-}
-
-if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: privateKey,
-      }),
-    });
-    console.log('✅ Firebase Admin SDK 초기화 성공');
-  } catch (error: any) {
-    console.error('❌ Firebase Admin SDK 초기화 실패:', error);
-    throw new Error(`Firebase Admin SDK initialization failed: ${error.message}`);
-  }
-}
-
-const db = getFirestore();
+import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
 
 /**
  * 사용자 삭제 전 관련 데이터 확인
@@ -43,6 +7,7 @@ const db = getFirestore();
  */
 export async function GET(request: Request) {
   try {
+    const db = getAdminFirestore();
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const adminUserId = searchParams.get('adminUserId');

@@ -1,26 +1,9 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-
-// Firebase Admin 초기화 (singleton)
-if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: privateKey,
-    }),
-  });
-}
-
-const db = getFirestore();
-const auth = getAuth();
+import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
 
 export async function GET() {
   try {
+    const db = getAdminFirestore();
     console.log('🔍 Firebase Auth ↔ Firestore 일관성 검증 시작...');
 
     // 1. 모든 Firestore 사용자 조회

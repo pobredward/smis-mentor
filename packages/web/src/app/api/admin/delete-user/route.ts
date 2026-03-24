@@ -1,45 +1,9 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-
-// 환경 변수 검증
-const requiredEnvVars = [
-  'FIREBASE_PROJECT_ID',
-  'FIREBASE_CLIENT_EMAIL',
-  'FIREBASE_PRIVATE_KEY',
-];
-
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingVars.length > 0) {
-  console.error('❌ 필수 환경 변수 누락:', missingVars);
-  throw new Error(`Missing environment variables: ${missingVars.join(', ')}`);
-}
-
-if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: privateKey,
-      }),
-    });
-    console.log('✅ Firebase Admin SDK 초기화 성공');
-  } catch (error: any) {
-    console.error('❌ Firebase Admin SDK 초기화 실패:', error);
-    throw new Error(`Firebase Admin SDK initialization failed: ${error.message}`);
-  }
-}
-
-const db = getFirestore();
-const auth = getAuth();
+import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
 
 export async function POST(request: Request) {
   try {
+    const db = getAdminFirestore();
     const body = await request.json();
     const { userId, adminUserId, deleteType = 'soft' } = body;
 
@@ -179,7 +143,7 @@ export async function POST(request: Request) {
       }
 
       // Firestore: status만 변경하고 문서는 유지 (평가/지원서 이력 보존)
-      const now = admin.firestore.FieldValue.serverTimestamp();
+      const now = adminFieldValue.serverTimestamp();
       const deletedEmail = `deleted_${Date.now()}_${userData?.email}`;
       const deletedName = `(삭제됨) ${userData?.name}`;
       
@@ -212,7 +176,7 @@ export async function POST(request: Request) {
           name: adminData?.name,
           email: adminData?.email,
         },
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        timestamp: adminFieldValue.serverTimestamp(),
         metadata: {
           authDeleted,
           authError,

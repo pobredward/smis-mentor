@@ -1,21 +1,5 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-
-// Firebase Admin SDK 초기화 (중복 방지)
-if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID!,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
-      privateKey: privateKey!,
-    }),
-  });
-}
-
-const db = getFirestore();
+import { getAdminFirestore, adminFieldValue } from '@/lib/firebase-admin';
 
 /**
  * 소셜 로그인 감사 로그 기록
@@ -42,6 +26,8 @@ export async function POST(request: Request) {
 
     console.log(`📝 소셜 로그인 감사 로그 기록: ${action} - ${email || userId}`);
 
+    const db = getAdminFirestore();
+
     // 감사 로그 기록
     await db.collection('auditLogs').add({
       action, // 'SOCIAL_LOGIN', 'SOCIAL_SIGNUP', 'SOCIAL_LINK', 'SOCIAL_UNLINK', 'SOCIAL_LOGIN_FAILED'
@@ -55,8 +41,8 @@ export async function POST(request: Request) {
         userAgent: request.headers.get('user-agent'),
         ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
       },
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: adminFieldValue.serverTimestamp(),
+      createdAt: adminFieldValue.serverTimestamp(),
     });
 
     console.log('✅ 감사 로그 기록 완료');

@@ -1,24 +1,12 @@
 import { NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-
-// Firebase Admin 초기화
-if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: privateKey,
-    }),
-  });
-}
-
-const db = getFirestore();
+import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
 
 export async function POST() {
   try {
     console.log('🔄 사용자 ID 매핑 백업 시작...');
+    
+    const db = getAdminFirestore();
+    const auth = getAdminAuth();
     
     const usersSnapshot = await db.collection('users').get();
     const backupCollectionRef = db.collection('user_id_mappings_backup');
@@ -41,7 +29,7 @@ export async function POST() {
         
         if (userData.email) {
           try {
-            const authUser = await admin.auth().getUserByEmail(userData.email);
+            const authUser = await auth.getUserByEmail(userData.email);
             authUid = authUser.uid;
             authEmail = authUser.email;
           } catch (authError: any) {
@@ -66,7 +54,7 @@ export async function POST() {
           role: userData.role || null,
           
           // Metadata
-          backupDate: admin.firestore.FieldValue.serverTimestamp(),
+          backupDate: adminFieldValue.serverTimestamp(),
           isConsistent: firestoreDocId === userData.userId && 
                         firestoreDocId === userData.id && 
                         firestoreDocId === authUid,
@@ -124,7 +112,7 @@ export async function POST() {
     
     // 백업 메타데이터 저장
     await db.collection('user_id_mappings_backup_metadata').doc('latest').set({
-      backupDate: admin.firestore.FieldValue.serverTimestamp(),
+      backupDate: adminFieldValue.serverTimestamp(),
       totalUsers: usersSnapshot.size,
       successCount,
       errorCount,
@@ -171,6 +159,8 @@ export async function POST() {
 // GET으로 백업 상태 조회
 export async function GET() {
   try {
+    const db = getAdminFirestore();
+    
     const metadataDoc = await db.collection('user_id_mappings_backup_metadata').doc('latest').get();
     
     if (!metadataDoc.exists) {
