@@ -613,7 +613,15 @@ export function SignInClient() {
         updateUser
       );
       
-      toast.success('Google 계정이 연동되었습니다!');
+      // provider에 따라 메시지 구별
+      const providerName = socialData.provider === 'google.com' 
+        ? 'Google' 
+        : socialData.provider === 'naver.com' 
+        ? 'Naver' 
+        : socialData.provider === 'kakao.com'
+        ? 'Kakao'
+        : '소셜';
+      toast.success(`${providerName} 계정이 연동되었습니다!`);
       setShowPasswordModal(false);
       
       setTimeout(() => {
