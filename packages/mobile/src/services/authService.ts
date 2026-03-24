@@ -188,12 +188,8 @@ export const sendVerificationEmail = async (user: FirebaseUser) => {
 
 export const resetPassword = async (email: string) => {
   try {
-    const actionCodeSettings = {
-      url: 'https://smis-mentor.com/sign-in', // 실제 앱 URL로 변경 필요
-      handleCodeInApp: false,
-    };
-    
-    await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    // actionCodeSettings 없이 기본 Firebase 설정 사용
+    await sendPasswordResetEmail(auth, email);
     console.log('비밀번호 재설정 메일 발송 성공:', email);
     return true;
   } catch (error) {
