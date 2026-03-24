@@ -22,6 +22,7 @@ export interface SocialUserData {
   idToken?: string;
   accessToken?: string;
   phone?: string;
+  firebaseAuthUid?: string;  // Firebase Auth UID (네이버/카카오 Custom Token용)
 }
 
 /**
@@ -43,8 +44,8 @@ export type SocialLoginAction =
   | 'LOGIN'              // 기존 계정으로 즉시 로그인
   | 'SIGNUP'             // 신규 회원가입 필요
   | 'LINK_ACTIVE'        // 기존 active 계정 연동 필요
-  | 'LINK_TEMP'          // temp 계정 활성화 필요
-  | 'NEED_PHONE';        // 전화번호 입력 필요
+  | 'LINK_TEMP'          // @deprecated temp 계정은 이메일이 없으므로 이 액션은 실제로 발생하지 않음
+  | 'NEED_PHONE';        // 전화번호 입력 필요 (temp 계정 확인용)
 
 export interface SocialLoginResult {
   action: SocialLoginAction;

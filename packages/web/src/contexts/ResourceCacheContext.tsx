@@ -188,18 +188,31 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
         await updateLessonMaterial(id, { title: newTitle });
       }
 
-      for (const template of accessibleTemplates) {
+      for (let i = 0; i < accessibleTemplates.length; i++) {
+        const template = accessibleTemplates[i];
         if (!seenTemplateIds.has(template.id)) {
-          await addLessonMaterial(userData.userId, template.title, 0, template.id);
+          await addLessonMaterial(userData.userId, template.title, i, template.id);
         }
       }
 
       const finalMats = await getLessonMaterials(userData.userId);
       
+      // 활성화된 코드에 해당하는 자료만 필터링 + 중복 제거
+      const seenTemplateIdsInFinal = new Set<string>();
       const filteredMats = finalMats.filter((mat) => {
         if (mat.templateId) {
           const template = allTemplates.find((t) => t.id === mat.templateId);
-          return template?.code && activeCodesList.includes(template.code);
+          if (!template?.code || !activeCodesList.includes(template.code)) {
+            return false;
+          }
+          
+          // 중복 templateId 체크 (첫 번째만 표시)
+          if (seenTemplateIdsInFinal.has(mat.templateId)) {
+            console.log('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
+            return false;
+          }
+          seenTemplateIdsInFinal.add(mat.templateId);
+          return true;
         } else {
           return mat.userCode && activeCodesList.includes(mat.userCode);
         }
@@ -216,7 +229,15 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
         const processedUserSectionIds = new Set<string>();
 
         if (template?.sections) {
+          // 삭제된 섹션 ID 목록
+          const deletedSectionIds = new Set(template.deletedSectionIds || []);
+          
           for (const templateSection of template.sections) {
+            // 삭제된 섹션은 건너뛰기
+            if (deletedSectionIds.has(templateSection.id)) {
+              continue;
+            }
+            
             const userSection = matSections.find((s) => s.templateSectionId === templateSection.id);
 
             if (userSection) {

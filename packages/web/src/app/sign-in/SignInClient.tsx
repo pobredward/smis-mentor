@@ -7,11 +7,12 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { signIn, resetPassword, getUserByEmail, getUserByPhone, getUserByForeignName, updateUser, getUserById } from '@/lib/firebaseService';
+import { signIn, resetPassword, getUserByEmail, getUserByPhone, getUserByForeignName, updateUser, getUserById, signInWithCustomTokenFromFunction } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import GoogleSignInButton from '@/components/common/GoogleSignInButton';
+import NaverSignInButton from '@/components/common/NaverSignInButton';
 import PhoneInputModal from '@/components/common/PhoneInputModal';
 import ForeignPhoneInputModal from '@/components/common/ForeignPhoneInputModal';
 import RoleSelectionModal from '@/components/common/RoleSelectionModal';
@@ -25,6 +26,7 @@ import {
   SocialUserData 
 } from '@smis-mentor/shared';
 import { handleGoogleAuthError } from '@/lib/googleAuthService';
+import { handleNaverAuthError } from '@/lib/naverAuthService';
 import { auth } from '@/lib/firebase';
 
 const loginSchema = z.object({
@@ -140,6 +142,37 @@ export function SignInClient() {
       
       if (result.action === 'LOGIN') {
         // 기존 소셜 계정으로 바로 로그인
+        console.log('✅ 로그인 성공:', {
+          provider: data.providerId,
+          email: data.email,
+          userId: result.user?.userId,
+        });
+        
+        // 네이버/카카오는 세션 스토리지에 사용자 정보 저장 (Firebase Auth 미사용)
+        if (data.providerId === 'naver' || data.providerId === 'kakao') {
+          if (!result.user?.userId || !result.user?.email) {
+            toast.error('사용자 정보를 찾을 수 없습니다.');
+            return;
+          }
+          
+          // 세션 스토리지에 사용자 정보 저장
+          sessionStorage.setItem('social_user', JSON.stringify({
+            userId: result.user.userId,
+            email: result.user.email,
+            providerId: data.providerId,
+          }));
+          
+          // AuthContext에 로그인 이벤트 전달
+          window.dispatchEvent(new CustomEvent('social-login-success', {
+            detail: {
+              userId: result.user.userId,
+              email: result.user.email,
+              providerId: data.providerId,
+            }
+          }));
+        }
+        // Google은 이미 Firebase Auth에 로그인되어 있으므로 추가 작업 불필요
+        
         toast.success('로그인에 성공했습니다!');
         setTimeout(() => {
           const params = new URLSearchParams(window.location.search);
@@ -164,16 +197,34 @@ export function SignInClient() {
       } else if (result.action === 'NEED_PHONE') {
         // 이메일로 계정이 없음 - 역할 선택 필요
         const currentUser = auth.currentUser;
+        
+        console.log('🔑 NEED_PHONE - Firebase Auth UID:', currentUser?.uid);
+        console.log('🔑 Provider UID (네이버 ID):', data.providerUid);
+        console.log('🔑 Provider:', data.providerId);
+        
+        // ✅ Firebase Auth UID 또는 Provider UID를 socialData에 저장
+        // 네이버/카카오 신규 가입의 경우 currentUser가 없으므로 email을 키로 사용
+        const updatedSocialData = {
+          ...data,
+          firebaseAuthUid: currentUser?.uid || `${data.providerId}_${data.email}`, // 임시 키 생성
+        };
+        
+        console.log('💾 updatedSocialData:', {
+          email: updatedSocialData.email,
+          firebaseAuthUid: updatedSocialData.firebaseAuthUid,
+        });
+        
         if (currentUser) {
           try {
             await currentUser.delete();
+            console.log('🗑️ Firebase Auth 임시 계정 삭제 완료');
           } catch (deleteError) {
             console.error('계정 삭제 실패:', deleteError);
             await auth.signOut();
           }
         }
         
-        setSocialData(data);
+        setSocialData(updatedSocialData);
         setShowRoleSelectionModal(true);
       } else if (result.action === 'LINK_TEMP') {
         // temp 계정 활성화 필요
@@ -191,8 +242,18 @@ export function SignInClient() {
         router.push(`/sign-up/account?tempUserId=${result.tempUserId}&socialSignUp=true&socialProvider=google`);
       }
     } catch (error) {
-      console.error('Google 로그인 처리 오류:', error);
-      const errorMessage = handleSocialAuthError(error);
+      console.error('소셜 로그인 처리 오류:', error);
+      
+      // 소셜 제공자에 따라 적절한 에러 메시지 표시
+      let errorMessage: string;
+      if (data.providerId === 'naver') {
+        errorMessage = handleNaverAuthError(error);
+      } else if (data.providerId === 'google.com') {
+        errorMessage = handleGoogleAuthError(error);
+      } else {
+        errorMessage = handleSocialAuthError(error);
+      }
+      
       toast.error(errorMessage);
     }
   };
@@ -212,6 +273,12 @@ export function SignInClient() {
   // Google 로그인 에러 핸들러
   const handleGoogleSignInError = (error: any) => {
     const errorMessage = handleGoogleAuthError(error);
+    toast.error(errorMessage);
+  };
+  
+  // 네이버 로그인 에러 핸들러
+  const handleNaverSignInError = (error: any) => {
+    const errorMessage = handleNaverAuthError(error);
     toast.error(errorMessage);
   };
   
@@ -238,53 +305,91 @@ export function SignInClient() {
       }
       const fullPhone = `${data.countryCode}${cleanPhone}`;
       
-      // ✅ 원어민은 First Name + Last Name으로만 검색
-      console.log('🔍 원어민 계정 검색:', { firstName: data.firstName, lastName: data.lastName });
-      const existingUser = await getUserByForeignName(data.firstName, data.lastName);
-      
-      if (existingUser) {
-        setShowForeignPhoneModal(false);
+        // ✅ 원어민은 First Name + Last Name으로만 검색
+        console.log('🔍 원어민 계정 검색:', { firstName: data.firstName, lastName: data.lastName });
+        const existingUser = await getUserByForeignName(data.firstName, data.lastName);
         
-        const role = existingUser.role;
-        
-        console.log('👤 원어민 계정 발견:', {
-          role,
-          status: existingUser.status,
-          name: existingUser.name,
-        });
-        
-        // active 원어민 계정이면서 이메일이 다른 경우
-        if (role === 'foreign' && existingUser.status === 'active') {
-          if (existingUser.email !== socialData.email) {
-            // 이메일이 다르면 비밀번호 입력으로 계정 연동
-            toast(
-              `Existing account found with name "${existingUser.name}". Please enter your password to link accounts.`,
-              {
-                duration: 5000,
-                icon: '⚠️',
-              }
+        if (existingUser) {
+          setShowForeignPhoneModal(false);
+          
+          const role = existingUser.role;
+          
+          console.log('👤 원어민 계정 발견:', {
+            role,
+            status: existingUser.status,
+            name: existingUser.name,
+          });
+          
+          // active 원어민 계정이면서 이메일이 다른 경우
+          if (role === 'foreign' && existingUser.status === 'active') {
+            if (existingUser.email !== socialData.email) {
+              // 이메일이 다르면 비밀번호 입력으로 계정 연동
+              toast(
+                `Existing account found with name "${existingUser.name}". Please enter your password to link accounts.`,
+                {
+                  duration: 5000,
+                  icon: '⚠️',
+                }
+              );
+              setSocialData({ ...socialData, name: fullName });
+              setExistingUserEmail(existingUser.email);
+              setShowPasswordModal(true);
+              setIsLoading(false);
+              return;
+            } else {
+              // 이메일이 같으면 바로 로그인
+              toast.success('Welcome back! Logging you in...');
+              setTimeout(() => {
+                const params = new URLSearchParams(window.location.search);
+                const redirectTo = params.get('redirect');
+                router.push(redirectTo || '/');
+              }, 1000);
+              return;
+            }
+          }
+          
+          // foreign_temp 계정 발견
+          if (role === 'foreign_temp' && existingUser.status === 'temp') {
+            console.log('✅ foreign_temp 계정 발견 - 활성화 진행');
+            toast.success('Temporary account found. Please complete your registration.');
+            const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
+            router.push(
+              `/sign-up/foreign/account?` +
+              `firstName=${encodeURIComponent(data.firstName)}&` +
+              `lastName=${encodeURIComponent(data.lastName)}&` +
+              `middleName=${encodeURIComponent(data.middleName || '')}&` +
+              `countryCode=${encodeURIComponent(data.countryCode)}&` +
+              `phone=${encodeURIComponent(data.phoneNumber)}&` +
+              `socialSignUp=true&` +
+              `tempUserId=${existingUser.userId}&` +
+              `socialProvider=${provider}` // ✅ 동적 처리
             );
-            setSocialData({ ...socialData, name: fullName });
-            setExistingUserEmail(existingUser.email);
-            setShowPasswordModal(true);
-            setIsLoading(false);
-            return;
-          } else {
-            // 이메일이 같으면 바로 로그인
-            toast.success('Welcome back! Logging you in...');
-            setTimeout(() => {
-              const params = new URLSearchParams(window.location.search);
-              const redirectTo = params.get('redirect');
-              router.push(redirectTo || '/');
-            }, 1000);
             return;
           }
-        }
-        
-        // foreign_temp 계정 발견
-        if (role === 'foreign_temp' && existingUser.status === 'temp') {
-          console.log('✅ foreign_temp 계정 발견 - 활성화 진행');
-          toast.success('Temporary account found. Please complete your registration.');
+          
+          // mentor_temp 또는 mentor인 경우
+          if (role === 'mentor_temp' || role === 'mentor') {
+            toast.error(
+              'This name is registered as a mentor account. Please contact the administrator if this is incorrect.\nAdministrator: 010-7656-7933 (Shin Sunwoong)',
+              { duration: 8000 }
+            );
+            setIsLoading(false);
+            return;
+          }
+          
+          // 기타 케이스
+          toast.error(
+            `This name is already registered with a different role. Please contact the administrator.\nAdministrator: 010-7656-7933 (Shin Sunwoong)`,
+            { duration: 8000 }
+          );
+          setIsLoading(false);
+          return;
+        } else {
+          // ✅ 신규 원어민 가입
+          console.log('🆕 신규 원어민 가입 진행');
+          toast.success(`Welcome ${data.firstName}! Please complete your registration.`);
+          setShowForeignPhoneModal(false);
+          const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
           router.push(
             `/sign-up/foreign/account?` +
             `firstName=${encodeURIComponent(data.firstName)}&` +
@@ -293,45 +398,9 @@ export function SignInClient() {
             `countryCode=${encodeURIComponent(data.countryCode)}&` +
             `phone=${encodeURIComponent(data.phoneNumber)}&` +
             `socialSignUp=true&` +
-            `tempUserId=${existingUser.userId}&` +
-            `socialProvider=google`
+            `socialProvider=${provider}` // ✅ 동적 처리
           );
-          return;
         }
-        
-        // mentor_temp 또는 mentor인 경우
-        if (role === 'mentor_temp' || role === 'mentor') {
-          toast.error(
-            'This name is registered as a mentor account. Please contact the administrator if this is incorrect.\nAdministrator: 010-7656-7933 (Shin Sunwoong)',
-            { duration: 8000 }
-          );
-          setIsLoading(false);
-          return;
-        }
-        
-        // 기타 케이스
-        toast.error(
-          `This name is already registered with a different role. Please contact the administrator.\nAdministrator: 010-7656-7933 (Shin Sunwoong)`,
-          { duration: 8000 }
-        );
-        setIsLoading(false);
-        return;
-      } else {
-        // ✅ 신규 원어민 가입
-        console.log('🆕 신규 원어민 가입 진행');
-        toast.success(`Welcome ${data.firstName}! Please complete your registration.`);
-        setShowForeignPhoneModal(false);
-        router.push(
-          `/sign-up/foreign/account?` +
-          `firstName=${encodeURIComponent(data.firstName)}&` +
-          `lastName=${encodeURIComponent(data.lastName)}&` +
-          `middleName=${encodeURIComponent(data.middleName || '')}&` +
-          `countryCode=${encodeURIComponent(data.countryCode)}&` +
-          `phone=${encodeURIComponent(data.phoneNumber)}&` +
-          `socialSignUp=true&` +
-          `socialProvider=google`
-        );
-      }
     } catch (error: any) {
       console.error('Foreign name verification error:', error);
       toast.error('An error occurred while verifying your account.');
@@ -343,6 +412,12 @@ export function SignInClient() {
   // 이름과 전화번호 입력 핸들러 (멘토용)
   const handlePhoneSubmit = async (data: { name: string; phoneNumber: string }) => {
     if (!socialData) return;
+    
+    console.log('📝 handlePhoneSubmit - socialData:', {
+      email: socialData.email,
+      providerId: socialData.providerId,
+      firebaseAuthUid: socialData.firebaseAuthUid,
+    });
     
     setIsLoading(true);
     try {
@@ -399,21 +474,27 @@ export function SignInClient() {
         
         // 역할에 따라 적절한 회원가입 페이지로 이동
         const role = result.user.role;
+        const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
+        
+        console.log('💾 SessionStorage 저장 - firebaseAuthUid:', socialData.firebaseAuthUid);
+        
         if (role === 'foreign_temp') {
           // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
-          router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=google`);
+          router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=${provider}`);
         } else {
           // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
           // SessionStorage에 저장
           const { signupStorage } = await import('@/utils/signupStorage');
+          
           signupStorage.save({
             name: data.name,
             phoneNumber: data.phoneNumber,
             email: socialData.email,
             socialSignUp: true,
             tempUserId: result.user.userId,
-            socialProvider: 'google',
+            socialProvider: provider, // ✅ 동적 처리
             socialEmail: socialData.email,
+            firebaseAuthUid: socialData.firebaseAuthUid, // ✅ Firebase Auth UID 저장
           });
           router.push('/sign-up/education');
         }
@@ -421,13 +502,18 @@ export function SignInClient() {
         // temp 계정 없음 - 신규 가입
         // SessionStorage에 저장하고 education으로 이동
         const { signupStorage } = await import('@/utils/signupStorage');
+        const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
+        
+        console.log('💾 SessionStorage 저장 (신규) - firebaseAuthUid:', socialData.firebaseAuthUid);
+        
         signupStorage.save({
           name: data.name,
           phoneNumber: data.phoneNumber,
           email: socialData.email,
           socialSignUp: true,
-          socialProvider: 'google',
+          socialProvider: provider, // ✅ 동적 처리
           socialEmail: socialData.email,
+          firebaseAuthUid: socialData.firebaseAuthUid, // ✅ Firebase Auth UID 저장
         });
         
         toast.success('신규 가입을 진행합니다.');
@@ -630,11 +716,18 @@ export function SignInClient() {
               </div>
             </div>
             
-            {/* Google 로그인 버튼 */}
-            <GoogleSignInButton
-              onSuccess={handleGoogleSignInSuccess}
-              onError={handleGoogleSignInError}
-            />
+            {/* 소셜 로그인 버튼들 */}
+            <div className="space-y-3">
+              <GoogleSignInButton
+                onSuccess={handleGoogleSignInSuccess}
+                onError={handleGoogleSignInError}
+              />
+              
+              <NaverSignInButton
+                onSuccess={handleGoogleSignInSuccess}
+                onError={handleNaverSignInError}
+              />
+            </div>
             
             {/* 비밀번호 찾기 / 회원가입 버튼 */}
             <div className="flex items-center justify-between pt-4">

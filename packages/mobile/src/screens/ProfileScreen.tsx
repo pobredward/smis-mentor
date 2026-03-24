@@ -48,7 +48,7 @@ type Screen =
   | 'profile-edit';
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
-  const { currentUser, userData, loading, updateActiveJobCode } = useAuth();
+  const { isAuthenticated, userData, loading, updateActiveJobCode } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('signin');
   const [selectedRole, setSelectedRole] = useState<'mentor' | 'foreign' | null>(null);
   const [signUpData, setSignUpData] = useState<{
@@ -456,7 +456,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   }
 
   // 로그인된 상태
-  if (currentUser && userData) {
+  if (isAuthenticated && userData) {
     // 프로필 수정 화면
     if (currentScreen === 'profile-edit') {
       return <ProfileEditScreen onBack={() => setCurrentScreen('profile')} />;

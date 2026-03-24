@@ -8,4 +8,5 @@ export * from './review';
 export * from './evaluation';
 export * from './sms';
 export * from './smsTemplate';
+export * from './socialAuthService';
 //# sourceMappingURL=index.d.ts.map

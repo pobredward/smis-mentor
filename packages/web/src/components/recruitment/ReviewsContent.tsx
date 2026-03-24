@@ -192,7 +192,7 @@ export default function ReviewsContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingReview, setEditingReview] = useState<ReviewWithId | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const { currentUser, userData } = useAuth();
+  const { userData } = useAuth();
 
   const isAdmin = userData?.role === 'admin';
 

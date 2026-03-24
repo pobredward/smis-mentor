@@ -9,7 +9,7 @@ import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
 import PhoneInput from '@/components/common/PhoneInput';
 import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
-import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser } from '@/lib/firebaseService';
+import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser, checkUserData } from '@/lib/firebaseService';
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { EvaluationSummaryCompact } from '@/components/evaluation/EvaluationSummary';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
@@ -66,6 +66,7 @@ export default function UserManage() {
   const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
+  const [viewMode, setViewMode] = useState<'active' | 'deleted'>('active'); // 활성/삭제된 사용자 탭
   const router = useRouter();
 
   // 현재 관리자 이름 로드 (이메일 기준으로 찾기)
@@ -152,10 +153,17 @@ export default function UserManage() {
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const fetchedUsers = await getAllUsers();
+      // viewMode에 따라 다르게 로드
+      const includeDeleted = viewMode === 'deleted';
+      const fetchedUsers = await getAllUsers(includeDeleted);
+      
+      // viewMode에 따라 필터링
+      const filteredByMode = viewMode === 'deleted' 
+        ? fetchedUsers.filter(user => (user.status as any) === 'deleted')
+        : fetchedUsers.filter(user => (user.status as any) !== 'deleted');
       
       // 가입일시를 기준으로 오름차순 정렬 (가장 오래된 순)
-      const sortedUsers = [...fetchedUsers].sort((a, b) => {
+      const sortedUsers = [...filteredByMode].sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(0);
         const dateB = b.createdAt?.toDate?.() || new Date(0);
         return dateB.getTime() - dateA.getTime();
@@ -169,7 +177,7 @@ export default function UserManage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [viewMode]);
 
   const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
     value,
@@ -424,23 +432,49 @@ export default function UserManage() {
     }
   };
 
-  // 사용자 삭제 핸들러
+  // 사용자 삭제 핸들러 (Soft Delete with Data Check)
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
     
-    if (!window.confirm(`정말로 ${selectedUser.name} 사용자를 삭제하시겠습니까?\n\n※ 사용자의 Firebase Authentication 계정 정보도 함께 삭제될 수 있으며, 이 경우 동일한 이메일로 재가입이 가능해집니다.`)) {
-      return;
-    }
-    
     try {
-      await deleteUser(selectedUser.userId);
+      // 1. 먼저 사용자 데이터 확인
+      toast.info('사용자 데이터 확인 중...');
+      const dataCheck = await checkUserData(selectedUser.userId);
       
-      // 상태 업데이트
+      // 2. 확인 메시지 구성
+      let confirmMessage = `${selectedUser.name} 사용자를 삭제하시겠습니까?\n\n`;
+      
+      if (dataCheck.hasData) {
+        confirmMessage += `⚠️ 주의: 이 사용자가 작성한 데이터가 있습니다.\n\n`;
+        confirmMessage += `• 평가 기록: ${dataCheck.data.evaluations}개\n`;
+        confirmMessage += `• 지원서: ${dataCheck.data.applications}개\n`;
+        confirmMessage += `• 업무: ${dataCheck.data.tasks}개\n`;
+        confirmMessage += `• SMS 템플릿: ${dataCheck.data.smsTemplates}개\n\n`;
+        confirmMessage += `✅ 일반 삭제 시 이 데이터들은 보존됩니다.\n\n`;
+      }
+      
+      confirmMessage += `[확인] = 일반 삭제 (데이터 보존, 복구 가능)\n`;
+      confirmMessage += `[취소] = 취소\n\n`;
+      confirmMessage += `※ Firebase Auth만 삭제되고 평가/지원서 이력은 보존됩니다.`;
+      
+      // 3. 사용자 확인
+      const deleteConfirmed = window.confirm(confirmMessage);
+      
+      if (!deleteConfirmed) {
+        return; // 사용자가 취소 선택
+      }
+      
+      // 4. Soft Delete 실행
+      toast.info('사용자 삭제 중...');
+      await deleteUser(selectedUser.userId, 'soft');
+      
+      // 5. 상태 업데이트
       const updatedUsers = users.filter(user => user.userId !== selectedUser.userId);
       setUsers(updatedUsers);
       setSelectedUser(null);
       
-      toast.success('사용자가 삭제되었습니다.');
+      toast.success(`사용자가 삭제되었습니다. ${dataCheck.hasData ? '(작성한 데이터는 보존됨)' : ''}`);
+      
     } catch (error) {
       console.error('사용자 삭제 오류:', error);
       toast.error('사용자 삭제 중 오류가 발생했습니다.');
@@ -828,6 +862,30 @@ export default function UserManage() {
             </Button>
             <h1 className="text-xl md:text-2xl font-bold">사용자 관리</h1>
           </div>
+          
+          {/* 활성/삭제된 사용자 탭 */}
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={() => setViewMode('active')}
+              className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                viewMode === 'active'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              활성 사용자
+            </button>
+            <button
+              onClick={() => setViewMode('deleted')}
+              className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                viewMode === 'deleted'
+                  ? 'bg-gray-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              삭제된 사용자
+            </button>
+          </div>
         </div>
 
         <div className={`${showUserList ? 'block' : 'hidden md:block'} mb-6`}>
@@ -936,14 +994,14 @@ export default function UserManage() {
                   <div className="p-4 border-b sm:px-6 sm:py-5 flex items-center justify-between">
                     <h3 className="text-lg font-medium">사용자 정보</h3>
                     <div className="flex space-x-2">
-                      {selectedUser.status === 'inactive' && (
+                      {(selectedUser.status === 'inactive' || selectedUser.status === 'deleted') && (
                         <Button
                           variant="success"
                           size="sm"
                           onClick={handleReactivateUser}
                           className="text-xs px-2 py-1"
                         >
-                          계정 복구
+                          {selectedUser.status === 'deleted' ? '사용자 복구' : '계정 복구'}
                         </Button>
                       )}
                       <Button
@@ -1424,29 +1482,44 @@ export default function UserManage() {
                               <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${
                                 selectedUser.status === 'active' ? 'bg-green-100 text-green-800' :
                                 selectedUser.status === 'inactive' ? 'bg-red-100 text-red-800' :
+                                selectedUser.status === 'deleted' ? 'bg-gray-100 text-gray-800' :
                                 'bg-yellow-100 text-yellow-800'
                               }`}>
                                 {selectedUser.status === 'active' ? '활성' : 
-                                 selectedUser.status === 'inactive' ? '비활성' : '임시'}
+                                 selectedUser.status === 'inactive' ? '비활성' : 
+                                 selectedUser.status === 'deleted' ? '삭제됨' : '임시'}
                               </span>
                             </div>
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={handleStartEdit}
-                          >
-                            수정
-                          </Button>
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={handleDeleteUser}
-                          >
-                            삭제
-                          </Button>
+                          {viewMode === 'active' && (
+                            <>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={handleStartEdit}
+                              >
+                                수정
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={handleDeleteUser}
+                              >
+                                삭제
+                              </Button>
+                            </>
+                          )}
+                          {viewMode === 'deleted' && (
+                            <Button
+                              variant="success"
+                              size="sm"
+                              onClick={handleReactivateUser}
+                            >
+                              사용자 복구
+                            </Button>
+                          )}
                         </div>
                       </div>
 

@@ -1,0 +1,1260 @@
+[debug] [2026-03-21T11:57:19.264Z] ----------------------------------------------------------------------
+[debug] [2026-03-21T11:57:19.266Z] Command:       /opt/homebrew/Cellar/node/24.4.0/bin/node /opt/homebrew/bin/firebase emulators:start --only functions
+[debug] [2026-03-21T11:57:19.266Z] CLI Version:   15.7.0
+[debug] [2026-03-21T11:57:19.266Z] Platform:      darwin
+[debug] [2026-03-21T11:57:19.266Z] Node Version:  v24.4.0
+[debug] [2026-03-21T11:57:19.266Z] Time:          Sat Mar 21 2026 20:57:19 GMT+0900 (Korean Standard Time)
+[debug] [2026-03-21T11:57:19.266Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-21T11:57:19.853Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-21T11:57:19.853Z] > authorizing via signed-in user (pobredward@gmail.com)
+[info] i  emulators: Starting emulators: functions {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions"}}
+[debug] [2026-03-21T11:57:20.007Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-21T11:57:20.007Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2026-03-21T11:57:20.009Z] Write emulator hub locator at /var/folders/j7/gcvn0l9578n9qzw04r8r7s140000gn/T/hub-smis-mentor.json
+[debug] [2026-03-21T11:57:20.150Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-21T11:57:20.150Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-21T11:57:20.150Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-21T11:57:20.150Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"functions":[{"address":"127.0.0.1","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+[warn] ⚠  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect"}}
+[debug] [2026-03-21T11:57:20.163Z] defaultcredentials: writing to file /Users/sunwoongshin/.config/firebase/pobredward_gmail_com_application_default_credentials.json
+[debug] [2026-03-21T11:57:20.164Z] Setting GAC to /Users/sunwoongshin/.config/firebase/pobredward_gmail_com_application_default_credentials.json {"metadata":{"emulator":{"name":"functions"},"message":"Setting GAC to /Users/sunwoongshin/.config/firebase/pobredward_gmail_com_application_default_credentials.json"}}
+[debug] [2026-03-21T11:57:20.164Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:57:20.164Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:57:20.164Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig [none]
+[debug] [2026-03-21T11:57:20.983Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig 200
+[debug] [2026-03-21T11:57:20.983Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig {"projectId":"smis-mentor","storageBucket":"smis-mentor.firebasestorage.app"}
+[info] i  ui: downloading ui-v1.15.0.zip... {"metadata":{"emulator":{"name":"ui"},"message":"downloading ui-v1.15.0.zip..."}}
+[debug] [2026-03-21T11:57:21.002Z] >>> [apiv2][query] GET https://storage.googleapis.com/firebase-preview-drop/emulator/ui-v1.15.0.zip 
+[debug] [2026-03-21T11:57:21.062Z] <<< [apiv2][status] GET https://storage.googleapis.com/firebase-preview-drop/emulator/ui-v1.15.0.zip 200
+[debug] [2026-03-21T11:57:21.063Z] <<< [apiv2][body] GET https://storage.googleapis.com/firebase-preview-drop/emulator/ui-v1.15.0.zip [stream]
+[debug] [2026-03-21T11:57:21.364Z] Data is 3538469
+[debug] [2026-03-21T11:57:21.364Z] [unzip] Entry: client/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-03-21T11:57:21.365Z] [unzip] Processing entry: client/
+[debug] [2026-03-21T11:57:21.365Z] [unzip] mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/
+[debug] [2026-03-21T11:57:21.365Z] [unzip] Entry: client/favicon-16x16.png (compressed_size=293 bytes, uncompressed_size=293 bytes)
+[debug] [2026-03-21T11:57:21.365Z] [unzip] Processing entry: client/favicon-16x16.png
+[debug] [2026-03-21T11:57:21.365Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.365Z] [unzip] Writing file: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/favicon-16x16.png
+[debug] [2026-03-21T11:57:21.365Z] [unzip] Entry: client/safari-pinned-tab.svg (compressed_size=1433 bytes, uncompressed_size=2611 bytes)
+[debug] [2026-03-21T11:57:21.366Z] [unzip] Processing entry: client/safari-pinned-tab.svg
+[debug] [2026-03-21T11:57:21.366Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.366Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/safari-pinned-tab.svg
+[debug] [2026-03-21T11:57:21.367Z] [unzip] Entry: client/favicon.ico (compressed_size=2933 bytes, uncompressed_size=13294 bytes)
+[debug] [2026-03-21T11:57:21.367Z] [unzip] Processing entry: client/favicon.ico
+[debug] [2026-03-21T11:57:21.367Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.367Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/favicon.ico
+[debug] [2026-03-21T11:57:21.368Z] [unzip] Entry: client/index.html (compressed_size=1364 bytes, uncompressed_size=3071 bytes)
+[debug] [2026-03-21T11:57:21.368Z] [unzip] Processing entry: client/index.html
+[debug] [2026-03-21T11:57:21.368Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.368Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/index.html
+[debug] [2026-03-21T11:57:21.369Z] [unzip] Entry: client/android-chrome-192x192.png (compressed_size=2684 bytes, uncompressed_size=2684 bytes)
+[debug] [2026-03-21T11:57:21.369Z] [unzip] Processing entry: client/android-chrome-192x192.png
+[debug] [2026-03-21T11:57:21.369Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.369Z] [unzip] Writing file: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/android-chrome-192x192.png
+[debug] [2026-03-21T11:57:21.369Z] [unzip] Entry: client/apple-touch-icon.png (compressed_size=2123 bytes, uncompressed_size=2152 bytes)
+[debug] [2026-03-21T11:57:21.369Z] [unzip] Processing entry: client/apple-touch-icon.png
+[debug] [2026-03-21T11:57:21.369Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.369Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/apple-touch-icon.png
+[debug] [2026-03-21T11:57:21.370Z] [unzip] Entry: client/android-chrome-512x512.png (compressed_size=5369 bytes, uncompressed_size=5411 bytes)
+[debug] [2026-03-21T11:57:21.370Z] [unzip] Processing entry: client/android-chrome-512x512.png
+[debug] [2026-03-21T11:57:21.370Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.370Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/android-chrome-512x512.png
+[debug] [2026-03-21T11:57:21.371Z] [unzip] Entry: client/manifest.json (compressed_size=245 bytes, uncompressed_size=551 bytes)
+[debug] [2026-03-21T11:57:21.371Z] [unzip] Processing entry: client/manifest.json
+[debug] [2026-03-21T11:57:21.371Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.371Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/manifest.json
+[debug] [2026-03-21T11:57:21.371Z] [unzip] Entry: client/robots.txt (compressed_size=26 bytes, uncompressed_size=26 bytes)
+[debug] [2026-03-21T11:57:21.371Z] [unzip] Processing entry: client/robots.txt
+[debug] [2026-03-21T11:57:21.371Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.371Z] [unzip] Writing file: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/robots.txt
+[debug] [2026-03-21T11:57:21.372Z] [unzip] Entry: client/mstile-150x150.png (compressed_size=2034 bytes, uncompressed_size=2034 bytes)
+[debug] [2026-03-21T11:57:21.372Z] [unzip] Processing entry: client/mstile-150x150.png
+[debug] [2026-03-21T11:57:21.372Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.372Z] [unzip] Writing file: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/mstile-150x150.png
+[debug] [2026-03-21T11:57:21.372Z] [unzip] Entry: client/assets/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-03-21T11:57:21.372Z] [unzip] Processing entry: client/assets/
+[debug] [2026-03-21T11:57:21.372Z] [unzip] mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/
+[debug] [2026-03-21T11:57:21.372Z] [unzip] Entry: client/assets/index-BX-A56oj.js (compressed_size=582089 bytes, uncompressed_size=2092775 bytes)
+[debug] [2026-03-21T11:57:21.372Z] [unzip] Processing entry: client/assets/index-BX-A56oj.js
+[debug] [2026-03-21T11:57:21.372Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets
+[debug] [2026-03-21T11:57:21.372Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/index-BX-A56oj.js
+[debug] [2026-03-21T11:57:21.377Z] [unzip] Entry: client/assets/index-CjB9C900.css (compressed_size=35979 bytes, uncompressed_size=298654 bytes)
+[debug] [2026-03-21T11:57:21.377Z] [unzip] Processing entry: client/assets/index-CjB9C900.css
+[debug] [2026-03-21T11:57:21.377Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets
+[debug] [2026-03-21T11:57:21.377Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/index-CjB9C900.css
+[debug] [2026-03-21T11:57:21.379Z] [unzip] Entry: client/assets/index-BX-A56oj.js.map (compressed_size=2362482 bytes, uncompressed_size=10036679 bytes)
+[debug] [2026-03-21T11:57:21.380Z] [unzip] Processing entry: client/assets/index-BX-A56oj.js.map
+[debug] [2026-03-21T11:57:21.380Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets
+[debug] [2026-03-21T11:57:21.380Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/index-BX-A56oj.js.map
+[debug] [2026-03-21T11:57:21.400Z] [unzip] Entry: client/assets/extensions/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-03-21T11:57:21.400Z] [unzip] Processing entry: client/assets/extensions/
+[debug] [2026-03-21T11:57:21.400Z] [unzip] mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/extensions/
+[debug] [2026-03-21T11:57:21.400Z] [unzip] Entry: client/assets/extensions/default-extension.png (compressed_size=1646 bytes, uncompressed_size=1657 bytes)
+[debug] [2026-03-21T11:57:21.400Z] [unzip] Processing entry: client/assets/extensions/default-extension.png
+[debug] [2026-03-21T11:57:21.400Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/extensions
+[debug] [2026-03-21T11:57:21.401Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/extensions/default-extension.png
+[debug] [2026-03-21T11:57:21.401Z] [unzip] Entry: client/assets/img/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-03-21T11:57:21.401Z] [unzip] Processing entry: client/assets/img/
+[debug] [2026-03-21T11:57:21.401Z] [unzip] mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/img/
+[debug] [2026-03-21T11:57:21.401Z] [unzip] Entry: client/assets/img/database.png (compressed_size=29449 bytes, uncompressed_size=29988 bytes)
+[debug] [2026-03-21T11:57:21.401Z] [unzip] Processing entry: client/assets/img/database.png
+[debug] [2026-03-21T11:57:21.401Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/img
+[debug] [2026-03-21T11:57:21.401Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/img/database.png
+[debug] [2026-03-21T11:57:21.402Z] [unzip] Entry: client/assets/provider-icons/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-03-21T11:57:21.402Z] [unzip] Processing entry: client/assets/provider-icons/
+[debug] [2026-03-21T11:57:21.402Z] [unzip] mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/
+[debug] [2026-03-21T11:57:21.402Z] [unzip] Entry: client/assets/provider-icons/auth_service_saml.svg (compressed_size=575 bytes, uncompressed_size=1226 bytes)
+[debug] [2026-03-21T11:57:21.402Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_saml.svg
+[debug] [2026-03-21T11:57:21.402Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.402Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_saml.svg
+[debug] [2026-03-21T11:57:21.402Z] [unzip] Entry: client/assets/provider-icons/auth_service_phone.svg (compressed_size=261 bytes, uncompressed_size=414 bytes)
+[debug] [2026-03-21T11:57:21.402Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_phone.svg
+[debug] [2026-03-21T11:57:21.402Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.402Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_phone.svg
+[debug] [2026-03-21T11:57:21.402Z] [unzip] Entry: client/assets/provider-icons/auth_service_facebook.svg (compressed_size=289 bytes, uncompressed_size=457 bytes)
+[debug] [2026-03-21T11:57:21.402Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_facebook.svg
+[debug] [2026-03-21T11:57:21.402Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.402Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_facebook.svg
+[debug] [2026-03-21T11:57:21.403Z] [unzip] Entry: client/assets/provider-icons/auth_service_game_center.svg (compressed_size=991 bytes, uncompressed_size=3921 bytes)
+[debug] [2026-03-21T11:57:21.403Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_game_center.svg
+[debug] [2026-03-21T11:57:21.403Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.403Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_game_center.svg
+[debug] [2026-03-21T11:57:21.404Z] [unzip] Entry: client/assets/provider-icons/auth_service_apple.svg (compressed_size=230 bytes, uncompressed_size=334 bytes)
+[debug] [2026-03-21T11:57:21.404Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_apple.svg
+[debug] [2026-03-21T11:57:21.404Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.404Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_apple.svg
+[debug] [2026-03-21T11:57:21.405Z] [unzip] Entry: client/assets/provider-icons/auth_service_github.svg (compressed_size=466 bytes, uncompressed_size=838 bytes)
+[debug] [2026-03-21T11:57:21.405Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_github.svg
+[debug] [2026-03-21T11:57:21.405Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.405Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_github.svg
+[debug] [2026-03-21T11:57:21.406Z] [unzip] Entry: client/assets/provider-icons/auth_service_mslive.svg (compressed_size=203 bytes, uncompressed_size=378 bytes)
+[debug] [2026-03-21T11:57:21.406Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_mslive.svg
+[debug] [2026-03-21T11:57:21.406Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.406Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_mslive.svg
+[debug] [2026-03-21T11:57:21.406Z] [unzip] Entry: client/assets/provider-icons/auth_service_yahoo.svg (compressed_size=577 bytes, uncompressed_size=1182 bytes)
+[debug] [2026-03-21T11:57:21.406Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_yahoo.svg
+[debug] [2026-03-21T11:57:21.406Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.406Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_yahoo.svg
+[debug] [2026-03-21T11:57:21.406Z] [unzip] Entry: client/assets/provider-icons/auth_service_twitter.svg (compressed_size=444 bytes, uncompressed_size=751 bytes)
+[debug] [2026-03-21T11:57:21.406Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_twitter.svg
+[debug] [2026-03-21T11:57:21.406Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.407Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_twitter.svg
+[debug] [2026-03-21T11:57:21.407Z] [unzip] Entry: client/assets/provider-icons/auth_service_play_games.svg (compressed_size=565 bytes, uncompressed_size=1173 bytes)
+[debug] [2026-03-21T11:57:21.407Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_play_games.svg
+[debug] [2026-03-21T11:57:21.407Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.407Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_play_games.svg
+[debug] [2026-03-21T11:57:21.407Z] [unzip] Entry: client/assets/provider-icons/auth_service_email.svg (compressed_size=228 bytes, uncompressed_size=326 bytes)
+[debug] [2026-03-21T11:57:21.407Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_email.svg
+[debug] [2026-03-21T11:57:21.407Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.407Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_email.svg
+[debug] [2026-03-21T11:57:21.407Z] [unzip] Entry: client/assets/provider-icons/auth_service_google.svg (compressed_size=409 bytes, uncompressed_size=720 bytes)
+[debug] [2026-03-21T11:57:21.407Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_google.svg
+[debug] [2026-03-21T11:57:21.407Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.407Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_google.svg
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Entry: client/assets/provider-icons/auth_service_oidc.svg (compressed_size=414 bytes, uncompressed_size=858 bytes)
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Processing entry: client/assets/provider-icons/auth_service_oidc.svg
+[debug] [2026-03-21T11:57:21.408Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons
+[debug] [2026-03-21T11:57:21.408Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/assets/provider-icons/auth_service_oidc.svg
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Entry: client/browserconfig.xml (compressed_size=491 bytes, uncompressed_size=822 bytes)
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Processing entry: client/browserconfig.xml
+[debug] [2026-03-21T11:57:21.408Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.408Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/browserconfig.xml
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Entry: client/favicon-32x32.png (compressed_size=475 bytes, uncompressed_size=475 bytes)
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Processing entry: client/favicon-32x32.png
+[debug] [2026-03-21T11:57:21.408Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Writing file: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/client/favicon-32x32.png
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Entry: server/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Processing entry: server/
+[debug] [2026-03-21T11:57:21.408Z] [unzip] mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/server/
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Entry: server/server.mjs.map (compressed_size=217845 bytes, uncompressed_size=944978 bytes)
+[debug] [2026-03-21T11:57:21.408Z] [unzip] Processing entry: server/server.mjs.map
+[debug] [2026-03-21T11:57:21.408Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/server
+[debug] [2026-03-21T11:57:21.408Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/server/server.mjs.map
+[debug] [2026-03-21T11:57:21.410Z] [unzip] Entry: server/server.mjs (compressed_size=276407 bytes, uncompressed_size=933701 bytes)
+[debug] [2026-03-21T11:57:21.410Z] [unzip] Processing entry: server/server.mjs
+[debug] [2026-03-21T11:57:21.410Z] [unzip] else mkdir: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/server
+[debug] [2026-03-21T11:57:21.410Z] [unzip] deflating: /Users/sunwoongshin/.cache/firebase/emulators/ui-v1.15.0/server/server.mjs
+[info] i  functions: Watching "/Users/sunwoongshin/Desktop/dev/smis-mentor/functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"/Users/sunwoongshin/Desktop/dev/smis-mentor/functions\" for Cloud Functions..."}}
+[debug] [2026-03-21T11:57:21.415Z] Validating nodejs source
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-03-21T11:57:21.779Z] > [functions] package.json contents: {
+  "name": "functions",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@smis-mentor/shared": "file:../packages/shared",
+    "expo-server-sdk": "^6.1.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.6.0",
+    "googleapis": "^126.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.3.3"
+  }
+}
+[debug] [2026-03-21T11:57:21.779Z] Building nodejs source
+[debug] [2026-03-21T11:57:21.779Z] Failed to find version of module node: reached end of search path /Users/sunwoongshin/Desktop/dev/smis-mentor/functions/node_modules
+[warn] ⚠  functions: Your requested "node" version "20" doesn't match your global version "24". Using node@24 from host. 
+[info] i  functions: You are using a version of firebase-functions SDK (4.9.0) that does not have support for the newest Firebase Extensions features. Please update firebase-functions SDK to >=5.1.0 to use them correctly 
+[debug] [2026-03-21T11:57:21.780Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-03-21T11:57:21.781Z] Found firebase-functions binary at '/Users/sunwoongshin/Desktop/dev/smis-mentor/node_modules/.bin/firebase-functions'
+[info] Serving at port 8828
+
+[debug] [2026-03-21T11:57:22.129Z] Got response from /__/functions.yaml {"endpoints":{"checkOverdueTasks":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"scheduleTrigger":{"schedule":"every 30 minutes","retryConfig":{"retryCount":null,"maxDoublings":null,"maxRetryDuration":null,"maxBackoffDuration":null,"minBackoffDuration":null},"timeZone":"Asia/Seoul"},"labels":{},"entryPoint":"checkOverdueTasks"},"sendTestNotification":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"sendTestNotification"},"createCustomToken":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"createCustomToken"}},"specVersion":"v1alpha1","requiredAPIs":[{"api":"cloudscheduler.googleapis.com","reason":"Needed for scheduled functions."}]}
+[info] ✔  functions: Loaded functions definitions from source: checkOverdueTasks, sendTestNotification, createCustomToken. {"metadata":{"emulator":{"name":"functions"},"message":"Loaded functions definitions from source: checkOverdueTasks, sendTestNotification, createCustomToken."}}
+[info] i  functions[asia-northeast3-checkOverdueTasks]: function ignored because the pubsub emulator does not exist or is not running. {"metadata":{"emulator":{"name":"functions"},"message":"function ignored because the pubsub emulator does not exist or is not running."}}
+[info] ✔  functions[asia-northeast3-sendTestNotification]: http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/sendTestNotification). {"metadata":{"emulator":{"name":"functions"},"message":"http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/sendTestNotification)."}}
+[info] ✔  functions[asia-northeast3-createCustomToken]: http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/createCustomToken). {"metadata":{"emulator":{"name":"functions"},"message":"http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/createCustomToken)."}}
+[debug] [2026-03-21T11:57:26.157Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌───────────┬────────────────┬─────────────────────────────────┐
+│ Emulator  │ Host:Port      │ View in Emulator UI             │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Functions │ 127.0.0.1:5001 │ http://127.0.0.1:4000/functions │
+└───────────┴────────────────┴─────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
+[debug] [2026-03-21T11:57:54.416Z] ----------------------------------------------------------------------
+[debug] [2026-03-21T11:57:54.417Z] Command:       /opt/homebrew/Cellar/node/24.4.0/bin/node /opt/homebrew/bin/firebase emulators:start --only functions
+[debug] [2026-03-21T11:57:54.417Z] CLI Version:   15.7.0
+[debug] [2026-03-21T11:57:54.417Z] Platform:      darwin
+[debug] [2026-03-21T11:57:54.417Z] Node Version:  v24.4.0
+[debug] [2026-03-21T11:57:54.417Z] Time:          Sat Mar 21 2026 20:57:54 GMT+0900 (Korean Standard Time)
+[debug] [2026-03-21T11:57:54.417Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-21T11:57:54.886Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-21T11:57:54.886Z] > authorizing via signed-in user (pobredward@gmail.com)
+[info] i  emulators: Starting emulators: functions {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions"}}
+[debug] [2026-03-21T11:57:55.025Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-21T11:57:55.025Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2026-03-21T11:57:55.028Z] Found emulator hub locator: {"version":"15.7.0","origins":["http://127.0.0.1:4400","http://[::1]:4400"],"pid":30005}
+[debug] [2026-03-21T11:57:55.028Z] Write emulator hub locator at /var/folders/j7/gcvn0l9578n9qzw04r8r7s140000gn/T/hub-smis-mentor.json
+[debug] [2026-03-21T11:57:55.163Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-21T11:57:55.163Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-21T11:57:55.163Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-21T11:57:55.163Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"functions":[{"address":"127.0.0.1","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+[warn] ⚠  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect"}}
+[debug] [2026-03-21T11:57:55.167Z] defaultcredentials: writing to file /Users/sunwoongshin/.config/firebase/pobredward_gmail_com_application_default_credentials.json
+[debug] [2026-03-21T11:57:55.167Z] Setting GAC to /Users/sunwoongshin/.config/firebase/pobredward_gmail_com_application_default_credentials.json {"metadata":{"emulator":{"name":"functions"},"message":"Setting GAC to /Users/sunwoongshin/.config/firebase/pobredward_gmail_com_application_default_credentials.json"}}
+[debug] [2026-03-21T11:57:55.168Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:57:55.168Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:57:55.168Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig [none]
+[debug] [2026-03-21T11:57:56.152Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig 200
+[debug] [2026-03-21T11:57:56.152Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig {"projectId":"smis-mentor","storageBucket":"smis-mentor.firebasestorage.app"}
+[info] i  functions: Watching "/Users/sunwoongshin/Desktop/dev/smis-mentor/functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"/Users/sunwoongshin/Desktop/dev/smis-mentor/functions\" for Cloud Functions..."}}
+[debug] [2026-03-21T11:57:56.179Z] Validating nodejs source
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-03-21T11:57:56.457Z] > [functions] package.json contents: {
+  "name": "functions",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@smis-mentor/shared": "file:../packages/shared",
+    "expo-server-sdk": "^6.1.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.6.0",
+    "googleapis": "^126.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.3.3"
+  }
+}
+[debug] [2026-03-21T11:57:56.457Z] Building nodejs source
+[debug] [2026-03-21T11:57:56.457Z] Failed to find version of module node: reached end of search path /Users/sunwoongshin/Desktop/dev/smis-mentor/functions/node_modules
+[warn] ⚠  functions: Your requested "node" version "20" doesn't match your global version "24". Using node@24 from host. 
+[info] i  functions: You are using a version of firebase-functions SDK (4.9.0) that does not have support for the newest Firebase Extensions features. Please update firebase-functions SDK to >=5.1.0 to use them correctly 
+[debug] [2026-03-21T11:57:56.458Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-03-21T11:57:56.460Z] Found firebase-functions binary at '/Users/sunwoongshin/Desktop/dev/smis-mentor/node_modules/.bin/firebase-functions'
+[info] Serving at port 8096
+
+[debug] [2026-03-21T11:57:56.735Z] Got response from /__/functions.yaml {"endpoints":{"checkOverdueTasks":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"scheduleTrigger":{"schedule":"every 30 minutes","retryConfig":{"retryCount":null,"maxDoublings":null,"maxRetryDuration":null,"maxBackoffDuration":null,"minBackoffDuration":null},"timeZone":"Asia/Seoul"},"labels":{},"entryPoint":"checkOverdueTasks"},"sendTestNotification":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"sendTestNotification"},"createCustomToken":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"createCustomToken"},"verifyAuthFirestoreConsistency":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"verifyAuthFirestoreConsistency"}},"specVersion":"v1alpha1","requiredAPIs":[{"api":"cloudscheduler.googleapis.com","reason":"Needed for scheduled functions."}]}
+[info] ✔  functions: Loaded functions definitions from source: checkOverdueTasks, sendTestNotification, createCustomToken, verifyAuthFirestoreConsistency. {"metadata":{"emulator":{"name":"functions"},"message":"Loaded functions definitions from source: checkOverdueTasks, sendTestNotification, createCustomToken, verifyAuthFirestoreConsistency."}}
+[info] i  functions[asia-northeast3-checkOverdueTasks]: function ignored because the pubsub emulator does not exist or is not running. {"metadata":{"emulator":{"name":"functions"},"message":"function ignored because the pubsub emulator does not exist or is not running."}}
+[info] ✔  functions[asia-northeast3-sendTestNotification]: http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/sendTestNotification). {"metadata":{"emulator":{"name":"functions"},"message":"http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/sendTestNotification)."}}
+[info] ✔  functions[asia-northeast3-createCustomToken]: http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/createCustomToken). {"metadata":{"emulator":{"name":"functions"},"message":"http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/createCustomToken)."}}
+[info] ✔  functions[asia-northeast3-verifyAuthFirestoreConsistency]: http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/verifyAuthFirestoreConsistency). {"metadata":{"emulator":{"name":"functions"},"message":"http function initialized (http://127.0.0.1:5001/smis-mentor/asia-northeast3/verifyAuthFirestoreConsistency)."}}
+[debug] [2026-03-21T11:58:00.762Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌───────────┬────────────────┬─────────────────────────────────┐
+│ Emulator  │ Host:Port      │ View in Emulator UI             │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Functions │ 127.0.0.1:5001 │ http://127.0.0.1:4000/functions │
+└───────────┴────────────────┴─────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
+[debug] [2026-03-21T11:58:25.220Z] ----------------------------------------------------------------------
+[debug] [2026-03-21T11:58:25.221Z] Command:       /opt/homebrew/Cellar/node/24.4.0/bin/node /opt/homebrew/bin/firebase deploy --only functions:verifyAuthFirestoreConsistency --force
+[debug] [2026-03-21T11:58:25.221Z] CLI Version:   15.7.0
+[debug] [2026-03-21T11:58:25.221Z] Platform:      darwin
+[debug] [2026-03-21T11:58:25.221Z] Node Version:  v24.4.0
+[debug] [2026-03-21T11:58:25.221Z] Time:          Sat Mar 21 2026 20:58:25 GMT+0900 (Korean Standard Time)
+[debug] [2026-03-21T11:58:25.221Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-21T11:58:25.790Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-21T11:58:25.790Z] > authorizing via signed-in user (pobredward@gmail.com)
+[debug] [2026-03-21T11:58:25.790Z] [iam] checking project smis-mentor for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-03-21T11:58:25.790Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:25.790Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:25.790Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions [none]
+[debug] [2026-03-21T11:58:25.790Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions  x-goog-user-project=smis-mentor
+[debug] [2026-03-21T11:58:25.790Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-21T11:58:26.119Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions 200
+[debug] [2026-03-21T11:58:26.119Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-21T11:58:26.119Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:26.119Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:26.119Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-03-21T11:58:26.119Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-03-21T11:58:27.178Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-03-21T11:58:27.178Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'smis-mentor'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-03-21T11:58:27.181Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:27.182Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:27.182Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor [none]
+[debug] [2026-03-21T11:58:27.398Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor 200
+[debug] [2026-03-21T11:58:27.398Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor {"projectNumber":"382190683951","projectId":"smis-mentor","lifecycleState":"ACTIVE","name":"smis-mentor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-22T06:04:26.709683Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-03-21T11:58:27.400Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:27.400Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:27.400Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig [none]
+[debug] [2026-03-21T11:58:28.294Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig 200
+[debug] [2026-03-21T11:58:28.294Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig {"projectId":"smis-mentor","storageBucket":"smis-mentor.firebasestorage.app"}
+[debug] [2026-03-21T11:58:28.295Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:28.295Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:28.295Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs [none]
+[debug] [2026-03-21T11:58:29.456Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs 200
+[debug] [2026-03-21T11:58:29.456Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs {}
+[debug] [2026-03-21T11:58:29.458Z] Validating nodejs source
+[warn] ⚠  functions: Runtime Node.js 20 will be deprecated on 2026-04-30 and will be decommissioned on 2026-10-30, after which you will not be able to deploy without upgrading. Consider upgrading now to avoid disruption. See https://cloud.google.com/functions/docs/runtime-support for full details on the lifecycle policy 
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-03-21T11:58:29.755Z] > [functions] package.json contents: {
+  "name": "functions",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@smis-mentor/shared": "file:../packages/shared",
+    "expo-server-sdk": "^6.1.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.6.0",
+    "googleapis": "^126.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.3.3"
+  }
+}
+[debug] [2026-03-21T11:58:29.755Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[info] i  functions: You are using a version of firebase-functions SDK (4.9.0) that does not have support for the newest Firebase Extensions features. Please update firebase-functions SDK to >=5.1.0 to use them correctly 
+[debug] [2026-03-21T11:58:29.755Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-03-21T11:58:29.758Z] Found firebase-functions binary at '/Users/sunwoongshin/Desktop/dev/smis-mentor/node_modules/.bin/firebase-functions'
+[info] Serving at port 8839
+
+[debug] [2026-03-21T11:58:30.031Z] Got response from /__/functions.yaml {"endpoints":{"checkOverdueTasks":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"scheduleTrigger":{"schedule":"every 30 minutes","retryConfig":{"retryCount":null,"maxDoublings":null,"maxRetryDuration":null,"maxBackoffDuration":null,"minBackoffDuration":null},"timeZone":"Asia/Seoul"},"labels":{},"entryPoint":"checkOverdueTasks"},"sendTestNotification":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"sendTestNotification"},"createCustomToken":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"createCustomToken"},"verifyAuthFirestoreConsistency":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"verifyAuthFirestoreConsistency"}},"specVersion":"v1alpha1","requiredAPIs":[{"api":"cloudscheduler.googleapis.com","reason":"Needed for scheduled functions."}]}
+[info] i  functions: preparing functions directory for uploading... 
+[info] i  functions: packaged /Users/sunwoongshin/Desktop/dev/smis-mentor/functions (63.37 KB) for uploading 
+[debug] [2026-03-21T11:58:34.081Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:34.081Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:34.081Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions [none]
+[debug] [2026-03-21T11:58:34.858Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions 200
+[debug] [2026-03-21T11:58:34.858Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions {"functions":[{"name":"projects/smis-mentor/locations/asia-northeast3/functions/createCustomToken","httpsTrigger":{"url":"https://asia-northeast3-smis-mentor.cloudfunctions.net/createCustomToken","securityLevel":"SECURE_ALWAYS"},"status":"ACTIVE","entryPoint":"createCustomToken","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:58:17.279Z","versionId":"3","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"a7034951140be3901eb5889acfe7c534dbe98965"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/59812ee4-8f80-4da8-93d6-bf58c657edac.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/createCustomToken"},"runtime":"nodejs20","ingressSettings":"ALLOW_ALL","buildId":"ba7df669-29dd-4c2b-89e8-c728e675159f","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/ba7df669-29dd-4c2b-89e8-c728e675159f","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true},{"name":"projects/smis-mentor/locations/asia-northeast3/functions/checkOverdueTasks","eventTrigger":{"eventType":"google.pubsub.topic.publish","resource":"projects/smis-mentor/topics/firebase-schedule-checkOverdueTasks-asia-northeast3","service":"pubsub.googleapis.com","failurePolicy":{}},"status":"ACTIVE","entryPoint":"checkOverdueTasks","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:49:02.130791872Z","versionId":"1","labels":{"firebase-functions-hash":"478cd6376f3b35c5a759a2b5367ed3ca98b3900a","deployment-tool":"cli-firebase","deployment-scheduled":"true"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/e0bacaa0-b2b4-4004-8c77-95bc7a05f5ba.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/checkOverdueTasks"},"runtime":"nodejs20","maxInstances":3000,"ingressSettings":"ALLOW_ALL","buildId":"6753266c-53d5-4dd6-8a44-4491d24c597e","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/6753266c-53d5-4dd6-8a44-4491d24c597e","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true},{"name":"projects/smis-mentor/locations/asia-northeast3/functions/sendTestNotification","httpsTrigger":{"url":"https://asia-northeast3-smis-mentor.cloudfunctions.net/sendTestNotification","securityLevel":"SECURE_ALWAYS"},"status":"ACTIVE","entryPoint":"sendTestNotification","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:48:49.739426785Z","versionId":"1","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"478cd6376f3b35c5a759a2b5367ed3ca98b3900a"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/e0bacaa0-b2b4-4004-8c77-95bc7a05f5ba.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/sendTestNotification"},"runtime":"nodejs20","ingressSettings":"ALLOW_ALL","buildId":"6753266c-53d5-4dd6-8a44-4491d24c597e","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/6753266c-53d5-4dd6-8a44-4491d24c597e","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true}]}
+[debug] [2026-03-21T11:58:34.859Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:34.859Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:34.860Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2026-03-21T11:58:36.273Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions 200
+[debug] [2026-03-21T11:58:36.273Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions {}
+[info] i  functions: ensuring required API cloudscheduler.googleapis.com is enabled... 
+[debug] [2026-03-21T11:58:36.279Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:36.279Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:36.279Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor [none]
+[debug] [2026-03-21T11:58:36.543Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor 200
+[debug] [2026-03-21T11:58:36.543Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor {"projectNumber":"382190683951","projectId":"smis-mentor","lifecycleState":"ACTIVE","name":"smis-mentor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-22T06:04:26.709683Z"}
+[debug] [2026-03-21T11:58:36.544Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:36.544Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:36.544Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl [none]
+[debug] [2026-03-21T11:58:36.544Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {}
+[debug] [2026-03-21T11:58:37.870Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl 200
+[debug] [2026-03-21T11:58:37.870Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {"uploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/3019caec-e996-4374-91d6-105a9cd8d8e8.zip?GoogleAccessId=service-382190683951@gcf-admin-robot.iam.gserviceaccount.com&Expires=1774096117&Signature=CNmJtHuyE6%2BngkhvH3TirFyKZ3KM6j8LKzeBaVT%2FBVDdExzd6u52hlvToJtPvfObjjCwtyWPD8XxLZJRHITr1Z%2FZ342HQyq%2BM%2BoGSOLUbKm9EuWJkfAyf3xe5GucAaN02uywuYb70VPlUwaQJT29sJzr%2BamabWjziWE6vo%2BAakhUvOsNC%2FhGo87B2N1jq9fX%2FAhFsF1HidNKHgDkdSGGBzh2JVBRw8NH%2FDtOYOhV3SZigzmsYy5DKIoxphOtn2S4uNQa6FtNAcrJI80MAvATg6ygcRJ79pP0gxYEjt9IOnadkqDc%2F8H0MNe2RYWq%2FcW3di%2B3HNlWkcgmPooYAbWFpw%3D%3D"}
+[debug] [2026-03-21T11:58:37.871Z] >>> [apiv2][query] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/3019caec-e996-4374-91d6-105a9cd8d8e8.zip GoogleAccessId=service-382190683951%40gcf-admin-robot.iam.gserviceaccount.com&Expires=1774096117&Signature=CNmJtHuyE6%2BngkhvH3TirFyKZ3KM6j8LKzeBaVT%2FBVDdExzd6u52hlvToJtPvfObjjCwtyWPD8XxLZJRHITr1Z%2FZ342HQyq%2BM%2BoGSOLUbKm9EuWJkfAyf3xe5GucAaN02uywuYb70VPlUwaQJT29sJzr%2BamabWjziWE6vo%2BAakhUvOsNC%2FhGo87B2N1jq9fX%2FAhFsF1HidNKHgDkdSGGBzh2JVBRw8NH%2FDtOYOhV3SZigzmsYy5DKIoxphOtn2S4uNQa6FtNAcrJI80MAvATg6ygcRJ79pP0gxYEjt9IOnadkqDc%2F8H0MNe2RYWq%2FcW3di%2B3HNlWkcgmPooYAbWFpw%3D%3D
+[debug] [2026-03-21T11:58:37.871Z] >>> [apiv2][body] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/3019caec-e996-4374-91d6-105a9cd8d8e8.zip [stream]
+[debug] [2026-03-21T11:58:38.022Z] <<< [apiv2][status] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/3019caec-e996-4374-91d6-105a9cd8d8e8.zip 200
+[debug] [2026-03-21T11:58:38.022Z] <<< [apiv2][body] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/3019caec-e996-4374-91d6-105a9cd8d8e8.zip [omitted]
+[info] ✔  functions: functions source uploaded successfully 
+[info] i  functions: creating Node.js 20 (1st Gen) function verifyAuthFirestoreConsistency(asia-northeast3)... 
+[debug] [2026-03-21T11:58:38.028Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:38.028Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:38.029Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions [none]
+[debug] [2026-03-21T11:58:38.029Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions {"name":"projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency","sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/3019caec-e996-4374-91d6-105a9cd8d8e8.zip?GoogleAccessId=service-382190683951@gcf-admin-robot.iam.gserviceaccount.com&Expires=1774096117&Signature=CNmJtHuyE6%2BngkhvH3TirFyKZ3KM6j8LKzeBaVT%2FBVDdExzd6u52hlvToJtPvfObjjCwtyWPD8XxLZJRHITr1Z%2FZ342HQyq%2BM%2BoGSOLUbKm9EuWJkfAyf3xe5GucAaN02uywuYb70VPlUwaQJT29sJzr%2BamabWjziWE6vo%2BAakhUvOsNC%2FhGo87B2N1jq9fX%2FAhFsF1HidNKHgDkdSGGBzh2JVBRw8NH%2FDtOYOhV3SZigzmsYy5DKIoxphOtn2S4uNQa6FtNAcrJI80MAvATg6ygcRJ79pP0gxYEjt9IOnadkqDc%2F8H0MNe2RYWq%2FcW3di%2B3HNlWkcgmPooYAbWFpw%3D%3D","entryPoint":"verifyAuthFirestoreConsistency","runtime":"nodejs20","dockerRegistry":"ARTIFACT_REGISTRY","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"944c10faba1a6672bee43cb010f5b2f16e0d6856"},"httpsTrigger":{"securityLevel":"SECURE_ALWAYS"},"minInstances":null,"maxInstances":null,"ingressSettings":null,"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency"},"serviceAccountEmail":null,"availableMemoryMb":null,"timeout":null,"vpcConnector":null,"vpcConnectorEgressSettings":null,"buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}}
+[debug] [2026-03-21T11:58:39.524Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions 400
+[debug] [2026-03-21T11:58:39.525Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions {"error":{"code":400,"message":"Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.","status":"FAILED_PRECONDITION"}}
+[warn] ⚠  functions: failed to create function projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency 
+[error] Failed to create function projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency
+[debug] [2026-03-21T11:58:39.532Z] Total Function Deployment time: 1502
+[debug] [2026-03-21T11:58:39.532Z] 1 Functions Deployed
+[debug] [2026-03-21T11:58:39.533Z] 1 Functions Errored
+[debug] [2026-03-21T11:58:39.533Z] 0 Function Deployments Aborted
+[debug] [2026-03-21T11:58:39.533Z] Average Function Deployment time: 1500
+[info] 
+[info] Functions deploy had errors with the following functions:
+	verifyAuthFirestoreConsistency(asia-northeast3)
+[debug] [2026-03-21T11:58:39.706Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:39.706Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:39.706Z] >>> [apiv2][query] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts [none]
+[debug] [2026-03-21T11:58:39.935Z] <<< [apiv2][status] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts 200
+[debug] [2026-03-21T11:58:39.935Z] <<< [apiv2][body] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts {"name":"projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts","format":"DOCKER","description":"This repository is created and used by Cloud Functions for storing function docker images.","labels":{"goog-managed-by":"cloudfunctions"},"createTime":"2026-02-24T17:33:09.769659Z","updateTime":"2026-03-21T11:56:10.894729Z","mode":"STANDARD_REPOSITORY","sizeBytes":"981394665","satisfiesPzs":true,"vulnerabilityScanningConfig":{"lastEnableTime":"2026-02-24T17:32:55.884536784Z","enablementState":"SCANNING_DISABLED","enablementStateReason":"API containerscanning.googleapis.com is not enabled."},"satisfiesPzi":true,"registryUri":"asia-northeast3-docker.pkg.dev/smis-mentor/gcf-artifacts"}
+[warn] ⚠  functions: No cleanup policy detected for repositories in asia-northeast3. This may result in a small monthly bill as container images accumulate over time. 
+[info] i  functions: Configuring cleanup policy for repository in asia-northeast3. Images older than 1 days will be automatically deleted. 
+[debug] [2026-03-21T11:58:39.936Z] Setting up artifact cleanup policy for region asia-northeast3
+[debug] [2026-03-21T11:58:39.937Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:39.937Z] Checked if tokens are valid: true, expires at: 1774097738031
+[debug] [2026-03-21T11:58:39.937Z] >>> [apiv2][query] PATCH https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts updateMask=name%2CcleanupPolicies%2CcleanupPolicyDryRun%2Clabels
+[debug] [2026-03-21T11:58:39.937Z] >>> [apiv2][body] PATCH https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts {"name":"projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts","cleanupPolicies":{"firebase-functions-cleanup":{"id":"firebase-functions-cleanup","condition":{"tagState":"ANY","olderThan":"86400s"},"action":"DELETE"}},"cleanupPolicyDryRun":false,"labels":{"goog-managed-by":"cloudfunctions"}}
+[debug] [2026-03-21T11:58:40.340Z] <<< [apiv2][status] PATCH https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts 200
+[debug] [2026-03-21T11:58:40.340Z] <<< [apiv2][body] PATCH https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts {"name":"projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts","format":"DOCKER","description":"This repository is created and used by Cloud Functions for storing function docker images.","labels":{"goog-managed-by":"cloudfunctions"},"createTime":"2026-02-24T17:33:09.769659Z","updateTime":"2026-03-21T11:58:40.244190Z","mode":"STANDARD_REPOSITORY","cleanupPolicies":{"firebase-functions-cleanup":{"id":"firebase-functions-cleanup","action":"DELETE","condition":{"tagState":"ANY","olderThan":"86400s"}}},"satisfiesPzs":true,"vulnerabilityScanningConfig":{"lastEnableTime":"2026-02-24T17:32:55.884536784Z","enablementState":"SCANNING_DISABLED","enablementStateReason":"API containerscanning.googleapis.com is not enabled."},"satisfiesPzi":true}
+[info] i  functions: Configured cleanup policy for repository in asia-northeast3. 
+[debug] [2026-03-21T11:58:40.341Z] Functions deploy failed.
+[debug] [2026-03-21T11:58:40.341Z] {
+  "endpoint": {
+    "id": "verifyAuthFirestoreConsistency",
+    "project": "smis-mentor",
+    "region": "asia-northeast3",
+    "entryPoint": "verifyAuthFirestoreConsistency",
+    "platform": "gcfv1",
+    "runtime": "nodejs20",
+    "callableTrigger": {},
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "smis-mentor",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency"
+    },
+    "codebase": "default",
+    "targetedByOnly": true,
+    "hash": "944c10faba1a6672bee43cb010f5b2f16e0d6856"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.",
+            "status": "FAILED_PRECONDITION"
+          }
+        },
+        "response": {
+          "statusCode": 400
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions had HTTP Error: 400, Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/verifyAuthFirestoreConsistency: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.",
+      "status": 400
+    },
+    "status": 400,
+    "code": 400
+  }
+}
+[debug] [2026-03-21T11:58:40.421Z] Error: Failed to create function verifyAuthFirestoreConsistency in region asia-northeast3
+    at /opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:54:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Fabricator.createV1Function (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:193:32)
+    at async Fabricator.createEndpoint (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:136:13)
+    at async handle (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:91:17)
+[error] 
+[error] Error: There was an error deploying functions
+[debug] [2026-03-23T08:19:34.007Z] ----------------------------------------------------------------------
+[debug] [2026-03-23T08:19:34.008Z] Command:       /opt/homebrew/Cellar/node/24.4.0/bin/node /opt/homebrew/bin/firebase deploy --only functions:adminDeleteUser
+[debug] [2026-03-23T08:19:34.008Z] CLI Version:   15.7.0
+[debug] [2026-03-23T08:19:34.008Z] Platform:      darwin
+[debug] [2026-03-23T08:19:34.008Z] Node Version:  v24.4.0
+[debug] [2026-03-23T08:19:34.008Z] Time:          Mon Mar 23 2026 17:19:34 GMT+0900 (Korean Standard Time)
+[debug] [2026-03-23T08:19:34.008Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-23T08:19:34.009Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-23T08:19:34.770Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-23T08:19:34.770Z] > authorizing via signed-in user (pobredward@gmail.com)
+[debug] [2026-03-23T08:19:34.770Z] [iam] checking project smis-mentor for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-03-23T08:19:34.770Z] Checked if tokens are valid: false, expires at: 1774108378029
+[debug] [2026-03-23T08:19:34.770Z] Checked if tokens are valid: false, expires at: 1774108378029
+[debug] [2026-03-23T08:19:34.771Z] > refreshing access token with scopes: []
+[debug] [2026-03-23T08:19:34.771Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-23T08:19:34.771Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-23T08:19:35.067Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-03-23T08:19:35.067Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-23T08:19:35.081Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions [none]
+[debug] [2026-03-23T08:19:35.082Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions  x-goog-user-project=smis-mentor
+[debug] [2026-03-23T08:19:35.082Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-23T08:19:35.284Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-23T08:19:35.284Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-03-23T08:19:35.308Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions 200
+[debug] [2026-03-23T08:19:35.308Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-23T08:19:35.309Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:35.309Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:35.309Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-03-23T08:19:35.309Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-03-23T08:19:36.284Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-03-23T08:19:36.284Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'smis-mentor'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-03-23T08:19:36.288Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:36.288Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:36.289Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor [none]
+[debug] [2026-03-23T08:19:36.567Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor 200
+[debug] [2026-03-23T08:19:36.568Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor {"projectNumber":"382190683951","projectId":"smis-mentor","lifecycleState":"ACTIVE","name":"smis-mentor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-22T06:04:26.709683Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-03-23T08:19:36.570Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:36.571Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:36.571Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig [none]
+[debug] [2026-03-23T08:19:37.606Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig 200
+[debug] [2026-03-23T08:19:37.606Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig {"projectId":"smis-mentor","storageBucket":"smis-mentor.firebasestorage.app"}
+[debug] [2026-03-23T08:19:37.607Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:37.607Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:37.607Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs [none]
+[debug] [2026-03-23T08:19:38.106Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs 200
+[debug] [2026-03-23T08:19:38.106Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs {}
+[debug] [2026-03-23T08:19:38.107Z] Validating nodejs source
+[warn] ⚠  functions: Runtime Node.js 20 will be deprecated on 2026-04-30 and will be decommissioned on 2026-10-30, after which you will not be able to deploy without upgrading. Consider upgrading now to avoid disruption. See https://cloud.google.com/functions/docs/runtime-support for full details on the lifecycle policy 
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-03-23T08:19:38.570Z] > [functions] package.json contents: {
+  "name": "functions",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@smis-mentor/shared": "file:../packages/shared",
+    "expo-server-sdk": "^6.1.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.6.0",
+    "googleapis": "^126.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.3.3"
+  }
+}
+[debug] [2026-03-23T08:19:38.570Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[info] i  functions: You are using a version of firebase-functions SDK (4.9.0) that does not have support for the newest Firebase Extensions features. Please update firebase-functions SDK to >=5.1.0 to use them correctly 
+[debug] [2026-03-23T08:19:38.572Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-03-23T08:19:38.582Z] Found firebase-functions binary at '/Users/sunwoongshin/Desktop/dev/smis-mentor/node_modules/.bin/firebase-functions'
+[info] Serving at port 8269
+
+[debug] [2026-03-23T08:19:38.970Z] Got response from /__/functions.yaml {"endpoints":{"checkOverdueTasks":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"scheduleTrigger":{"schedule":"every 30 minutes","retryConfig":{"retryCount":null,"maxDoublings":null,"maxRetryDuration":null,"maxBackoffDuration":null,"minBackoffDuration":null},"timeZone":"Asia/Seoul"},"labels":{},"entryPoint":"checkOverdueTasks"},"sendTestNotification":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"sendTestNotification"},"createCustomToken":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"createCustomToken"},"adminDeleteUser":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"adminDeleteUser"},"verifyAuthFirestoreConsistency":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"verifyAuthFirestoreConsistency"}},"specVersion":"v1alpha1","requiredAPIs":[{"api":"cloudscheduler.googleapis.com","reason":"Needed for scheduled functions."}]}
+[info] i  functions: preparing functions directory for uploading... 
+[info] i  functions: packaged /Users/sunwoongshin/Desktop/dev/smis-mentor/functions (64.72 KB) for uploading 
+[debug] [2026-03-23T08:19:43.025Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:43.025Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:43.025Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions [none]
+[debug] [2026-03-23T08:19:43.899Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions 200
+[debug] [2026-03-23T08:19:43.899Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions {"functions":[{"name":"projects/smis-mentor/locations/asia-northeast3/functions/createCustomToken","httpsTrigger":{"url":"https://asia-northeast3-smis-mentor.cloudfunctions.net/createCustomToken","securityLevel":"SECURE_ALWAYS"},"status":"ACTIVE","entryPoint":"createCustomToken","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:58:17.279Z","versionId":"3","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"a7034951140be3901eb5889acfe7c534dbe98965"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/59812ee4-8f80-4da8-93d6-bf58c657edac.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/createCustomToken"},"runtime":"nodejs20","ingressSettings":"ALLOW_ALL","buildId":"ba7df669-29dd-4c2b-89e8-c728e675159f","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/ba7df669-29dd-4c2b-89e8-c728e675159f","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true},{"name":"projects/smis-mentor/locations/asia-northeast3/functions/checkOverdueTasks","eventTrigger":{"eventType":"google.pubsub.topic.publish","resource":"projects/smis-mentor/topics/firebase-schedule-checkOverdueTasks-asia-northeast3","service":"pubsub.googleapis.com","failurePolicy":{}},"status":"ACTIVE","entryPoint":"checkOverdueTasks","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:49:02.130791872Z","versionId":"1","labels":{"deployment-tool":"cli-firebase","deployment-scheduled":"true","firebase-functions-hash":"478cd6376f3b35c5a759a2b5367ed3ca98b3900a"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/e0bacaa0-b2b4-4004-8c77-95bc7a05f5ba.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/checkOverdueTasks"},"runtime":"nodejs20","maxInstances":3000,"ingressSettings":"ALLOW_ALL","buildId":"6753266c-53d5-4dd6-8a44-4491d24c597e","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/6753266c-53d5-4dd6-8a44-4491d24c597e","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true},{"name":"projects/smis-mentor/locations/asia-northeast3/functions/sendTestNotification","httpsTrigger":{"url":"https://asia-northeast3-smis-mentor.cloudfunctions.net/sendTestNotification","securityLevel":"SECURE_ALWAYS"},"status":"ACTIVE","entryPoint":"sendTestNotification","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:48:49.739426785Z","versionId":"1","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"478cd6376f3b35c5a759a2b5367ed3ca98b3900a"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/e0bacaa0-b2b4-4004-8c77-95bc7a05f5ba.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/sendTestNotification"},"runtime":"nodejs20","ingressSettings":"ALLOW_ALL","buildId":"6753266c-53d5-4dd6-8a44-4491d24c597e","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/6753266c-53d5-4dd6-8a44-4491d24c597e","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true}]}
+[debug] [2026-03-23T08:19:43.905Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:43.905Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:43.905Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2026-03-23T08:19:44.666Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions 200
+[debug] [2026-03-23T08:19:44.666Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions {}
+[info] i  functions: ensuring required API cloudscheduler.googleapis.com is enabled... 
+[debug] [2026-03-23T08:19:44.669Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:44.669Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:44.669Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor [none]
+[debug] [2026-03-23T08:19:44.991Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor 200
+[debug] [2026-03-23T08:19:44.991Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor {"projectNumber":"382190683951","projectId":"smis-mentor","lifecycleState":"ACTIVE","name":"smis-mentor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-22T06:04:26.709683Z"}
+[debug] [2026-03-23T08:19:44.993Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:44.993Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:44.993Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl [none]
+[debug] [2026-03-23T08:19:44.993Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {}
+[debug] [2026-03-23T08:19:46.272Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl 200
+[debug] [2026-03-23T08:19:46.272Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {"uploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/9012b653-03da-487f-8674-e8fa54d0383f.zip?GoogleAccessId=service-382190683951@gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255786&Signature=QazON6eljfZHxX6Zq%2FLI6zghuOuBf6z18SbiqrqMTkqqkcOmW47N3qB3mCHam72SRWoQoIt2ePFos17cLGPsjVsA8MX%2BXqtEwDNvW8TEQntitbLIaaMWnqRjPY2Pu3eJbs6tQQaz7ZrFeZYJF%2FP4q%2F42HhiSDWw3%2FxzN9OwEA8vk%2Bw90nOWFIB5qqZnO0dEcrjxzDEiudTqpq8KtaEEdsRbcn2zJ0pKYWr%2FVwO5WOOQz%2Fb5xvFN%2BzuIUBYmlNzDw5IR5%2FIPjxZxsUCQmXnNxS%2BfSMxihMxp2xT4WY7b49UAk5kaSjLZ2idQth932cqQtO9KjgjxuV%2Fh3rJbDNsNHvA%3D%3D"}
+[debug] [2026-03-23T08:19:46.273Z] >>> [apiv2][query] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/9012b653-03da-487f-8674-e8fa54d0383f.zip GoogleAccessId=service-382190683951%40gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255786&Signature=QazON6eljfZHxX6Zq%2FLI6zghuOuBf6z18SbiqrqMTkqqkcOmW47N3qB3mCHam72SRWoQoIt2ePFos17cLGPsjVsA8MX%2BXqtEwDNvW8TEQntitbLIaaMWnqRjPY2Pu3eJbs6tQQaz7ZrFeZYJF%2FP4q%2F42HhiSDWw3%2FxzN9OwEA8vk%2Bw90nOWFIB5qqZnO0dEcrjxzDEiudTqpq8KtaEEdsRbcn2zJ0pKYWr%2FVwO5WOOQz%2Fb5xvFN%2BzuIUBYmlNzDw5IR5%2FIPjxZxsUCQmXnNxS%2BfSMxihMxp2xT4WY7b49UAk5kaSjLZ2idQth932cqQtO9KjgjxuV%2Fh3rJbDNsNHvA%3D%3D
+[debug] [2026-03-23T08:19:46.273Z] >>> [apiv2][body] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/9012b653-03da-487f-8674-e8fa54d0383f.zip [stream]
+[debug] [2026-03-23T08:19:46.474Z] <<< [apiv2][status] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/9012b653-03da-487f-8674-e8fa54d0383f.zip 200
+[debug] [2026-03-23T08:19:46.474Z] <<< [apiv2][body] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/9012b653-03da-487f-8674-e8fa54d0383f.zip [omitted]
+[info] ✔  functions: functions source uploaded successfully 
+[info] i  functions: creating Node.js 20 (1st Gen) function adminDeleteUser(asia-northeast3)... 
+[debug] [2026-03-23T08:19:46.477Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:46.477Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:46.477Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions [none]
+[debug] [2026-03-23T08:19:46.478Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions {"name":"projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser","sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/9012b653-03da-487f-8674-e8fa54d0383f.zip?GoogleAccessId=service-382190683951@gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255786&Signature=QazON6eljfZHxX6Zq%2FLI6zghuOuBf6z18SbiqrqMTkqqkcOmW47N3qB3mCHam72SRWoQoIt2ePFos17cLGPsjVsA8MX%2BXqtEwDNvW8TEQntitbLIaaMWnqRjPY2Pu3eJbs6tQQaz7ZrFeZYJF%2FP4q%2F42HhiSDWw3%2FxzN9OwEA8vk%2Bw90nOWFIB5qqZnO0dEcrjxzDEiudTqpq8KtaEEdsRbcn2zJ0pKYWr%2FVwO5WOOQz%2Fb5xvFN%2BzuIUBYmlNzDw5IR5%2FIPjxZxsUCQmXnNxS%2BfSMxihMxp2xT4WY7b49UAk5kaSjLZ2idQth932cqQtO9KjgjxuV%2Fh3rJbDNsNHvA%3D%3D","entryPoint":"adminDeleteUser","runtime":"nodejs20","dockerRegistry":"ARTIFACT_REGISTRY","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"04bf1781a9c355d3593b4b8daf80fecd002d1c9d"},"httpsTrigger":{"securityLevel":"SECURE_ALWAYS"},"minInstances":null,"maxInstances":null,"ingressSettings":null,"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser"},"serviceAccountEmail":null,"availableMemoryMb":null,"timeout":null,"vpcConnector":null,"vpcConnectorEgressSettings":null,"buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}}
+[debug] [2026-03-23T08:19:48.082Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions 400
+[debug] [2026-03-23T08:19:48.082Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions {"error":{"code":400,"message":"Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.","status":"FAILED_PRECONDITION"}}
+[warn] ⚠  functions: failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser 
+[error] Failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser
+[debug] [2026-03-23T08:19:48.088Z] Total Function Deployment time: 1608
+[debug] [2026-03-23T08:19:48.088Z] 1 Functions Deployed
+[debug] [2026-03-23T08:19:48.088Z] 1 Functions Errored
+[debug] [2026-03-23T08:19:48.088Z] 0 Function Deployments Aborted
+[debug] [2026-03-23T08:19:48.089Z] Average Function Deployment time: 1607
+[info] 
+[info] Functions deploy had errors with the following functions:
+	adminDeleteUser(asia-northeast3)
+[debug] [2026-03-23T08:19:48.285Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:48.285Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:48.285Z] >>> [apiv2][query] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts [none]
+[debug] [2026-03-23T08:19:48.548Z] <<< [apiv2][status] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts 200
+[debug] [2026-03-23T08:19:48.549Z] <<< [apiv2][body] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts {"name":"projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts","format":"DOCKER","description":"This repository is created and used by Cloud Functions for storing function docker images.","labels":{"goog-managed-by":"cloudfunctions"},"createTime":"2026-02-24T17:33:09.769659Z","updateTime":"2026-03-22T07:43:59.674306Z","mode":"STANDARD_REPOSITORY","cleanupPolicies":{"firebase-functions-cleanup":{"id":"firebase-functions-cleanup","action":"DELETE","condition":{"tagState":"ANY","olderThan":"86400s"}}},"satisfiesPzs":true,"vulnerabilityScanningConfig":{"lastEnableTime":"2026-02-24T17:32:55.884536784Z","enablementState":"SCANNING_DISABLED","enablementStateReason":"API containerscanning.googleapis.com is not enabled."},"satisfiesPzi":true,"registryUri":"asia-northeast3-docker.pkg.dev/smis-mentor/gcf-artifacts"}
+[debug] [2026-03-23T08:19:48.549Z] Functions deploy failed.
+[debug] [2026-03-23T08:19:48.549Z] {
+  "endpoint": {
+    "id": "adminDeleteUser",
+    "project": "smis-mentor",
+    "region": "asia-northeast3",
+    "entryPoint": "adminDeleteUser",
+    "platform": "gcfv1",
+    "runtime": "nodejs20",
+    "callableTrigger": {},
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "smis-mentor",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser"
+    },
+    "codebase": "default",
+    "targetedByOnly": true,
+    "hash": "04bf1781a9c355d3593b4b8daf80fecd002d1c9d"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.",
+            "status": "FAILED_PRECONDITION"
+          }
+        },
+        "response": {
+          "statusCode": 400
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions had HTTP Error: 400, Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.",
+      "status": 400
+    },
+    "status": 400,
+    "code": 400
+  }
+}
+[debug] [2026-03-23T08:19:48.625Z] Error: Failed to create function adminDeleteUser in region asia-northeast3
+    at /opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:54:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Fabricator.createV1Function (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:193:32)
+    at async Fabricator.createEndpoint (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:136:13)
+    at async handle (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:91:17)
+[error] 
+[error] Error: There was an error deploying functions
+[debug] [2026-03-23T08:19:54.240Z] ----------------------------------------------------------------------
+[debug] [2026-03-23T08:19:54.241Z] Command:       /opt/homebrew/Cellar/node/24.4.0/bin/node /opt/homebrew/bin/firebase deploy --only functions:adminDeleteUser --debug
+[debug] [2026-03-23T08:19:54.241Z] CLI Version:   15.7.0
+[debug] [2026-03-23T08:19:54.241Z] Platform:      darwin
+[debug] [2026-03-23T08:19:54.241Z] Node Version:  v24.4.0
+[debug] [2026-03-23T08:19:54.241Z] Time:          Mon Mar 23 2026 17:19:54 GMT+0900 (Korean Standard Time)
+[debug] [2026-03-23T08:19:54.241Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-23T08:19:54.854Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-23T08:19:54.855Z] > authorizing via signed-in user (pobredward@gmail.com)
+[debug] [2026-03-23T08:19:54.855Z] [iam] checking project smis-mentor for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-03-23T08:19:54.855Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:54.855Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:54.855Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions [none]
+[debug] [2026-03-23T08:19:54.855Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions  x-goog-user-project=smis-mentor
+[debug] [2026-03-23T08:19:54.855Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-23T08:19:55.157Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions 200
+[debug] [2026-03-23T08:19:55.157Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-23T08:19:55.159Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:55.159Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:55.159Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-03-23T08:19:55.159Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-03-23T08:19:56.322Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-03-23T08:19:56.322Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'smis-mentor'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-03-23T08:19:56.325Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:56.325Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:56.325Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor [none]
+[debug] [2026-03-23T08:19:56.503Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor 200
+[debug] [2026-03-23T08:19:56.504Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor {"projectNumber":"382190683951","projectId":"smis-mentor","lifecycleState":"ACTIVE","name":"smis-mentor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-22T06:04:26.709683Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-03-23T08:19:56.505Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:56.505Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:56.505Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig [none]
+[debug] [2026-03-23T08:19:56.921Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig 200
+[debug] [2026-03-23T08:19:56.922Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig {"projectId":"smis-mentor","storageBucket":"smis-mentor.firebasestorage.app"}
+[debug] [2026-03-23T08:19:56.922Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:56.922Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:19:56.922Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs [none]
+[debug] [2026-03-23T08:19:57.895Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs 200
+[debug] [2026-03-23T08:19:57.896Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs {}
+[debug] [2026-03-23T08:19:57.897Z] Validating nodejs source
+[warn] ⚠  functions: Runtime Node.js 20 will be deprecated on 2026-04-30 and will be decommissioned on 2026-10-30, after which you will not be able to deploy without upgrading. Consider upgrading now to avoid disruption. See https://cloud.google.com/functions/docs/runtime-support for full details on the lifecycle policy 
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-03-23T08:19:58.350Z] > [functions] package.json contents: {
+  "name": "functions",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@smis-mentor/shared": "file:../packages/shared",
+    "expo-server-sdk": "^6.1.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.6.0",
+    "googleapis": "^126.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.3.3"
+  }
+}
+[debug] [2026-03-23T08:19:58.350Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[info] i  functions: You are using a version of firebase-functions SDK (4.9.0) that does not have support for the newest Firebase Extensions features. Please update firebase-functions SDK to >=5.1.0 to use them correctly 
+[debug] [2026-03-23T08:19:58.350Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-03-23T08:19:58.354Z] Found firebase-functions binary at '/Users/sunwoongshin/Desktop/dev/smis-mentor/node_modules/.bin/firebase-functions'
+[info] Serving at port 8803
+
+[debug] [2026-03-23T08:19:58.705Z] Got response from /__/functions.yaml {"endpoints":{"checkOverdueTasks":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"scheduleTrigger":{"schedule":"every 30 minutes","retryConfig":{"retryCount":null,"maxDoublings":null,"maxRetryDuration":null,"maxBackoffDuration":null,"minBackoffDuration":null},"timeZone":"Asia/Seoul"},"labels":{},"entryPoint":"checkOverdueTasks"},"sendTestNotification":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"sendTestNotification"},"createCustomToken":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"createCustomToken"},"adminDeleteUser":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"adminDeleteUser"},"verifyAuthFirestoreConsistency":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"verifyAuthFirestoreConsistency"}},"specVersion":"v1alpha1","requiredAPIs":[{"api":"cloudscheduler.googleapis.com","reason":"Needed for scheduled functions."}]}
+[info] i  functions: preparing functions directory for uploading... 
+[info] i  functions: packaged /Users/sunwoongshin/Desktop/dev/smis-mentor/functions (64.72 KB) for uploading 
+[debug] [2026-03-23T08:20:02.748Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:02.748Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:02.748Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions [none]
+[debug] [2026-03-23T08:20:03.627Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions 200
+[debug] [2026-03-23T08:20:03.627Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions {"functions":[{"name":"projects/smis-mentor/locations/asia-northeast3/functions/createCustomToken","httpsTrigger":{"url":"https://asia-northeast3-smis-mentor.cloudfunctions.net/createCustomToken","securityLevel":"SECURE_ALWAYS"},"status":"ACTIVE","entryPoint":"createCustomToken","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:58:17.279Z","versionId":"3","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"a7034951140be3901eb5889acfe7c534dbe98965"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/59812ee4-8f80-4da8-93d6-bf58c657edac.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/createCustomToken"},"runtime":"nodejs20","ingressSettings":"ALLOW_ALL","buildId":"ba7df669-29dd-4c2b-89e8-c728e675159f","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/ba7df669-29dd-4c2b-89e8-c728e675159f","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true},{"name":"projects/smis-mentor/locations/asia-northeast3/functions/checkOverdueTasks","eventTrigger":{"eventType":"google.pubsub.topic.publish","resource":"projects/smis-mentor/topics/firebase-schedule-checkOverdueTasks-asia-northeast3","service":"pubsub.googleapis.com","failurePolicy":{}},"status":"ACTIVE","entryPoint":"checkOverdueTasks","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:49:02.130791872Z","versionId":"1","labels":{"deployment-tool":"cli-firebase","deployment-scheduled":"true","firebase-functions-hash":"478cd6376f3b35c5a759a2b5367ed3ca98b3900a"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/e0bacaa0-b2b4-4004-8c77-95bc7a05f5ba.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/checkOverdueTasks"},"runtime":"nodejs20","maxInstances":3000,"ingressSettings":"ALLOW_ALL","buildId":"6753266c-53d5-4dd6-8a44-4491d24c597e","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/6753266c-53d5-4dd6-8a44-4491d24c597e","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true},{"name":"projects/smis-mentor/locations/asia-northeast3/functions/sendTestNotification","httpsTrigger":{"url":"https://asia-northeast3-smis-mentor.cloudfunctions.net/sendTestNotification","securityLevel":"SECURE_ALWAYS"},"status":"ACTIVE","entryPoint":"sendTestNotification","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:48:49.739426785Z","versionId":"1","labels":{"firebase-functions-hash":"478cd6376f3b35c5a759a2b5367ed3ca98b3900a","deployment-tool":"cli-firebase","deployment-callable":"true"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/e0bacaa0-b2b4-4004-8c77-95bc7a05f5ba.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/sendTestNotification"},"runtime":"nodejs20","ingressSettings":"ALLOW_ALL","buildId":"6753266c-53d5-4dd6-8a44-4491d24c597e","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/6753266c-53d5-4dd6-8a44-4491d24c597e","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true}]}
+[debug] [2026-03-23T08:20:03.628Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:03.628Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:03.628Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2026-03-23T08:20:05.035Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions 200
+[debug] [2026-03-23T08:20:05.036Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions {}
+[info] i  functions: ensuring required API cloudscheduler.googleapis.com is enabled... 
+[debug] [2026-03-23T08:20:05.039Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:05.039Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:05.039Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor [none]
+[debug] [2026-03-23T08:20:05.314Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor 200
+[debug] [2026-03-23T08:20:05.314Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor {"projectNumber":"382190683951","projectId":"smis-mentor","lifecycleState":"ACTIVE","name":"smis-mentor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-22T06:04:26.709683Z"}
+[debug] [2026-03-23T08:20:05.316Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:05.316Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:05.316Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl [none]
+[debug] [2026-03-23T08:20:05.316Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {}
+[debug] [2026-03-23T08:20:06.648Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl 200
+[debug] [2026-03-23T08:20:06.649Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {"uploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/4eaac9ef-0572-4004-800c-ea2e1cbbce65.zip?GoogleAccessId=service-382190683951@gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255806&Signature=GK3NeA1bQIpPjF3St%2B5c2aaLesC%2FbYQqe4ZJgNnlKB6JFF51GtTqHGke132RiR%2B%2BJRrVKwd8E83sPUr0EMDgZWpWLeQBN1qVxMRJYcWUxDIHBrW1%2Fjr0M4E9TkjLZwbt7hqDEELOR1kQ2QPVD82AdhpD247I4x7s%2FGr%2FPxCFvBT1oiR4cC95JMkuNcR%2BzCOzd%2BtMEe%2FyWqMpbi2k0sZguqR3jrvN2hraSy%2Fb5FzEY9%2FYCc%2Ffx7ER9s%2FadT28UShMwazAk%2BCz%2B1yafneE8hBYOP9T5HgfyJIKo%2BvhHsbAK%2BclTW3D6IpKbBPfDU3H4Qo%2BAEc8H0b7FdKnUkKuR9PLIQ%3D%3D"}
+[debug] [2026-03-23T08:20:06.650Z] >>> [apiv2][query] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/4eaac9ef-0572-4004-800c-ea2e1cbbce65.zip GoogleAccessId=service-382190683951%40gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255806&Signature=GK3NeA1bQIpPjF3St%2B5c2aaLesC%2FbYQqe4ZJgNnlKB6JFF51GtTqHGke132RiR%2B%2BJRrVKwd8E83sPUr0EMDgZWpWLeQBN1qVxMRJYcWUxDIHBrW1%2Fjr0M4E9TkjLZwbt7hqDEELOR1kQ2QPVD82AdhpD247I4x7s%2FGr%2FPxCFvBT1oiR4cC95JMkuNcR%2BzCOzd%2BtMEe%2FyWqMpbi2k0sZguqR3jrvN2hraSy%2Fb5FzEY9%2FYCc%2Ffx7ER9s%2FadT28UShMwazAk%2BCz%2B1yafneE8hBYOP9T5HgfyJIKo%2BvhHsbAK%2BclTW3D6IpKbBPfDU3H4Qo%2BAEc8H0b7FdKnUkKuR9PLIQ%3D%3D
+[debug] [2026-03-23T08:20:06.650Z] >>> [apiv2][body] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/4eaac9ef-0572-4004-800c-ea2e1cbbce65.zip [stream]
+[debug] [2026-03-23T08:20:06.853Z] <<< [apiv2][status] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/4eaac9ef-0572-4004-800c-ea2e1cbbce65.zip 200
+[debug] [2026-03-23T08:20:06.853Z] <<< [apiv2][body] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/4eaac9ef-0572-4004-800c-ea2e1cbbce65.zip [omitted]
+[info] ✔  functions: functions source uploaded successfully 
+[info] i  functions: creating Node.js 20 (1st Gen) function adminDeleteUser(asia-northeast3)... 
+[debug] [2026-03-23T08:20:06.857Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:06.857Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:06.857Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions [none]
+[debug] [2026-03-23T08:20:06.857Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions {"name":"projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser","sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/4eaac9ef-0572-4004-800c-ea2e1cbbce65.zip?GoogleAccessId=service-382190683951@gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255806&Signature=GK3NeA1bQIpPjF3St%2B5c2aaLesC%2FbYQqe4ZJgNnlKB6JFF51GtTqHGke132RiR%2B%2BJRrVKwd8E83sPUr0EMDgZWpWLeQBN1qVxMRJYcWUxDIHBrW1%2Fjr0M4E9TkjLZwbt7hqDEELOR1kQ2QPVD82AdhpD247I4x7s%2FGr%2FPxCFvBT1oiR4cC95JMkuNcR%2BzCOzd%2BtMEe%2FyWqMpbi2k0sZguqR3jrvN2hraSy%2Fb5FzEY9%2FYCc%2Ffx7ER9s%2FadT28UShMwazAk%2BCz%2B1yafneE8hBYOP9T5HgfyJIKo%2BvhHsbAK%2BclTW3D6IpKbBPfDU3H4Qo%2BAEc8H0b7FdKnUkKuR9PLIQ%3D%3D","entryPoint":"adminDeleteUser","runtime":"nodejs20","dockerRegistry":"ARTIFACT_REGISTRY","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"04bf1781a9c355d3593b4b8daf80fecd002d1c9d"},"httpsTrigger":{"securityLevel":"SECURE_ALWAYS"},"minInstances":null,"maxInstances":null,"ingressSettings":null,"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser"},"serviceAccountEmail":null,"availableMemoryMb":null,"timeout":null,"vpcConnector":null,"vpcConnectorEgressSettings":null,"buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}}
+[debug] [2026-03-23T08:20:07.954Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions 400
+[debug] [2026-03-23T08:20:07.954Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions {"error":{"code":400,"message":"Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.","status":"FAILED_PRECONDITION"}}
+[warn] ⚠  functions: failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser 
+[error] Failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser
+[debug] [2026-03-23T08:20:07.960Z] Total Function Deployment time: 1100
+[debug] [2026-03-23T08:20:07.960Z] 1 Functions Deployed
+[debug] [2026-03-23T08:20:07.960Z] 1 Functions Errored
+[debug] [2026-03-23T08:20:07.960Z] 0 Function Deployments Aborted
+[debug] [2026-03-23T08:20:07.960Z] Average Function Deployment time: 1099
+[info] 
+[info] Functions deploy had errors with the following functions:
+	adminDeleteUser(asia-northeast3)
+[debug] [2026-03-23T08:20:08.149Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:08.149Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:08.149Z] >>> [apiv2][query] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts [none]
+[debug] [2026-03-23T08:20:08.553Z] <<< [apiv2][status] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts 200
+[debug] [2026-03-23T08:20:08.553Z] <<< [apiv2][body] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts {"name":"projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts","format":"DOCKER","description":"This repository is created and used by Cloud Functions for storing function docker images.","labels":{"goog-managed-by":"cloudfunctions"},"createTime":"2026-02-24T17:33:09.769659Z","updateTime":"2026-03-22T07:43:59.674306Z","mode":"STANDARD_REPOSITORY","cleanupPolicies":{"firebase-functions-cleanup":{"id":"firebase-functions-cleanup","action":"DELETE","condition":{"tagState":"ANY","olderThan":"86400s"}}},"satisfiesPzs":true,"vulnerabilityScanningConfig":{"lastEnableTime":"2026-02-24T17:32:55.884536784Z","enablementState":"SCANNING_DISABLED","enablementStateReason":"API containerscanning.googleapis.com is not enabled."},"satisfiesPzi":true,"registryUri":"asia-northeast3-docker.pkg.dev/smis-mentor/gcf-artifacts"}
+[debug] [2026-03-23T08:20:08.553Z] Functions deploy failed.
+[debug] [2026-03-23T08:20:08.553Z] {
+  "endpoint": {
+    "id": "adminDeleteUser",
+    "project": "smis-mentor",
+    "region": "asia-northeast3",
+    "entryPoint": "adminDeleteUser",
+    "platform": "gcfv1",
+    "runtime": "nodejs20",
+    "callableTrigger": {},
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "smis-mentor",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser"
+    },
+    "codebase": "default",
+    "targetedByOnly": true,
+    "hash": "04bf1781a9c355d3593b4b8daf80fecd002d1c9d"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.",
+            "status": "FAILED_PRECONDITION"
+          }
+        },
+        "response": {
+          "statusCode": 400
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions had HTTP Error: 400, Failed to create 1st Gen function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser: Default service account '382190683951-compute@developer.gserviceaccount.com' doesn't exist. Please recreate this account or specify a different account. Please visit https://cloud.google.com/functions/docs/troubleshooting for in-depth troubleshooting documentation.",
+      "status": 400
+    },
+    "status": 400,
+    "code": 400
+  }
+}
+[debug] [2026-03-23T08:20:08.656Z] Error: Failed to create function adminDeleteUser in region asia-northeast3
+    at /opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:54:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Fabricator.createV1Function (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:193:32)
+    at async Fabricator.createEndpoint (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:136:13)
+    at async handle (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:91:17)
+[error] 
+[error] Error: There was an error deploying functions
+[debug] [2026-03-23T08:20:54.524Z] ----------------------------------------------------------------------
+[debug] [2026-03-23T08:20:54.525Z] Command:       /opt/homebrew/Cellar/node/24.4.0/bin/node /opt/homebrew/bin/firebase deploy --only functions:adminDeleteUser
+[debug] [2026-03-23T08:20:54.525Z] CLI Version:   15.7.0
+[debug] [2026-03-23T08:20:54.525Z] Platform:      darwin
+[debug] [2026-03-23T08:20:54.525Z] Node Version:  v24.4.0
+[debug] [2026-03-23T08:20:54.525Z] Time:          Mon Mar 23 2026 17:20:54 GMT+0900 (Korean Standard Time)
+[debug] [2026-03-23T08:20:54.525Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-23T08:20:55.081Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-23T08:20:55.081Z] > authorizing via signed-in user (pobredward@gmail.com)
+[debug] [2026-03-23T08:20:55.081Z] [iam] checking project smis-mentor for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-03-23T08:20:55.082Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:55.082Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:55.082Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions [none]
+[debug] [2026-03-23T08:20:55.082Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions  x-goog-user-project=smis-mentor
+[debug] [2026-03-23T08:20:55.082Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-23T08:20:55.411Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions 200
+[debug] [2026-03-23T08:20:55.411Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-23T08:20:55.411Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:55.412Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:55.412Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-03-23T08:20:55.412Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-03-23T08:20:56.440Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-03-23T08:20:56.440Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/smis-mentor/serviceAccounts/smis-mentor@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'smis-mentor'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-03-23T08:20:56.444Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:56.444Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:56.444Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor [none]
+[debug] [2026-03-23T08:20:56.635Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor 200
+[debug] [2026-03-23T08:20:56.635Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor {"projectNumber":"382190683951","projectId":"smis-mentor","lifecycleState":"ACTIVE","name":"smis-mentor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-22T06:04:26.709683Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-03-23T08:20:56.638Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:56.638Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:56.638Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig [none]
+[debug] [2026-03-23T08:20:57.510Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig 200
+[debug] [2026-03-23T08:20:57.510Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/smis-mentor/adminSdkConfig {"projectId":"smis-mentor","storageBucket":"smis-mentor.firebasestorage.app"}
+[debug] [2026-03-23T08:20:57.511Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:57.511Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:20:57.511Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs [none]
+[debug] [2026-03-23T08:20:57.936Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs 200
+[debug] [2026-03-23T08:20:57.937Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/smis-mentor/configs {}
+[debug] [2026-03-23T08:20:57.938Z] Validating nodejs source
+[warn] ⚠  functions: Runtime Node.js 20 will be deprecated on 2026-04-30 and will be decommissioned on 2026-10-30, after which you will not be able to deploy without upgrading. Consider upgrading now to avoid disruption. See https://cloud.google.com/functions/docs/runtime-support for full details on the lifecycle policy 
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-03-23T08:20:58.435Z] > [functions] package.json contents: {
+  "name": "functions",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@smis-mentor/shared": "file:../packages/shared",
+    "expo-server-sdk": "^6.1.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.6.0",
+    "googleapis": "^126.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.3.3"
+  }
+}
+[debug] [2026-03-23T08:20:58.435Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[info] i  functions: You are using a version of firebase-functions SDK (4.9.0) that does not have support for the newest Firebase Extensions features. Please update firebase-functions SDK to >=5.1.0 to use them correctly 
+[debug] [2026-03-23T08:20:58.436Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-03-23T08:20:58.441Z] Found firebase-functions binary at '/Users/sunwoongshin/Desktop/dev/smis-mentor/node_modules/.bin/firebase-functions'
+[info] Serving at port 8640
+
+[debug] [2026-03-23T08:20:58.743Z] Got response from /__/functions.yaml {"endpoints":{"checkOverdueTasks":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"scheduleTrigger":{"schedule":"every 30 minutes","retryConfig":{"retryCount":null,"maxDoublings":null,"maxRetryDuration":null,"maxBackoffDuration":null,"minBackoffDuration":null},"timeZone":"Asia/Seoul"},"labels":{},"entryPoint":"checkOverdueTasks"},"sendTestNotification":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"sendTestNotification"},"createCustomToken":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"createCustomToken"},"adminDeleteUser":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["asia-northeast3"],"labels":{},"callableTrigger":{},"entryPoint":"adminDeleteUser"},"verifyAuthFirestoreConsistency":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"region":["asia-northeast3"],"callableTrigger":{},"entryPoint":"verifyAuthFirestoreConsistency"}},"specVersion":"v1alpha1","requiredAPIs":[{"api":"cloudscheduler.googleapis.com","reason":"Needed for scheduled functions."}]}
+[info] i  functions: preparing functions directory for uploading... 
+[info] i  functions: packaged /Users/sunwoongshin/Desktop/dev/smis-mentor/functions (64.69 KB) for uploading 
+[info] i  functions: packaged /Users/sunwoongshin/Desktop/dev/smis-mentor/functions (64.89 KB) for uploading 
+[debug] [2026-03-23T08:21:02.821Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:02.821Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:02.821Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions [none]
+[debug] [2026-03-23T08:21:03.503Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions 200
+[debug] [2026-03-23T08:21:03.503Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/-/functions {"functions":[{"name":"projects/smis-mentor/locations/asia-northeast3/functions/createCustomToken","httpsTrigger":{"url":"https://asia-northeast3-smis-mentor.cloudfunctions.net/createCustomToken","securityLevel":"SECURE_ALWAYS"},"status":"ACTIVE","entryPoint":"createCustomToken","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:58:17.279Z","versionId":"3","labels":{"firebase-functions-hash":"a7034951140be3901eb5889acfe7c534dbe98965","deployment-tool":"cli-firebase","deployment-callable":"true"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/59812ee4-8f80-4da8-93d6-bf58c657edac.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/createCustomToken"},"runtime":"nodejs20","ingressSettings":"ALLOW_ALL","buildId":"ba7df669-29dd-4c2b-89e8-c728e675159f","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/ba7df669-29dd-4c2b-89e8-c728e675159f","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true},{"name":"projects/smis-mentor/locations/asia-northeast3/functions/checkOverdueTasks","eventTrigger":{"eventType":"google.pubsub.topic.publish","resource":"projects/smis-mentor/topics/firebase-schedule-checkOverdueTasks-asia-northeast3","service":"pubsub.googleapis.com","failurePolicy":{}},"status":"ACTIVE","entryPoint":"checkOverdueTasks","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:49:02.130791872Z","versionId":"1","labels":{"deployment-scheduled":"true","firebase-functions-hash":"478cd6376f3b35c5a759a2b5367ed3ca98b3900a","deployment-tool":"cli-firebase"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/e0bacaa0-b2b4-4004-8c77-95bc7a05f5ba.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/checkOverdueTasks"},"runtime":"nodejs20","maxInstances":3000,"ingressSettings":"ALLOW_ALL","buildId":"6753266c-53d5-4dd6-8a44-4491d24c597e","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/6753266c-53d5-4dd6-8a44-4491d24c597e","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true},{"name":"projects/smis-mentor/locations/asia-northeast3/functions/sendTestNotification","httpsTrigger":{"url":"https://asia-northeast3-smis-mentor.cloudfunctions.net/sendTestNotification","securityLevel":"SECURE_ALWAYS"},"status":"ACTIVE","entryPoint":"sendTestNotification","timeout":"60s","availableMemoryMb":256,"serviceAccountEmail":"smis-mentor@appspot.gserviceaccount.com","updateTime":"2026-03-21T06:48:49.739426785Z","versionId":"1","labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"478cd6376f3b35c5a759a2b5367ed3ca98b3900a"},"sourceUploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/e0bacaa0-b2b4-4004-8c77-95bc7a05f5ba.zip","environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/functions/sendTestNotification"},"runtime":"nodejs20","ingressSettings":"ALLOW_ALL","buildId":"6753266c-53d5-4dd6-8a44-4491d24c597e","buildEnvironmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""},"buildName":"projects/382190683951/locations/asia-northeast3/builds/6753266c-53d5-4dd6-8a44-4491d24c597e","dockerRegistry":"ARTIFACT_REGISTRY","automaticUpdatePolicy":{},"buildServiceAccount":"projects/smis-mentor/serviceAccounts/382190683951-compute@developer.gserviceaccount.com","satisfiesPzs":true,"satisfiesPzi":true}]}
+[debug] [2026-03-23T08:21:03.504Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:03.504Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:03.504Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2026-03-23T08:21:04.957Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions 200
+[debug] [2026-03-23T08:21:04.957Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/-/functions {}
+[info] i  functions: ensuring required API cloudscheduler.googleapis.com is enabled... 
+[info] i  functions: ensuring required API run.googleapis.com is enabled... 
+[debug] [2026-03-23T08:21:04.961Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:04.961Z] Checked if tokens are valid: true, expires at: 1774257574067
+[info] i  functions: ensuring required API eventarc.googleapis.com is enabled... 
+[debug] [2026-03-23T08:21:04.962Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:04.963Z] Checked if tokens are valid: true, expires at: 1774257574067
+[info] i  functions: ensuring required API pubsub.googleapis.com is enabled... 
+[debug] [2026-03-23T08:21:04.963Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:04.963Z] Checked if tokens are valid: true, expires at: 1774257574067
+[info] i  functions: ensuring required API storage.googleapis.com is enabled... 
+[debug] [2026-03-23T08:21:04.964Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:04.964Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:04.964Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/run.googleapis.com [none]
+[debug] [2026-03-23T08:21:04.965Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/run.googleapis.com  x-goog-user-project=382190683951
+[debug] [2026-03-23T08:21:04.966Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/eventarc.googleapis.com [none]
+[debug] [2026-03-23T08:21:04.966Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/eventarc.googleapis.com  x-goog-user-project=382190683951
+[debug] [2026-03-23T08:21:04.968Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/pubsub.googleapis.com [none]
+[debug] [2026-03-23T08:21:04.968Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/pubsub.googleapis.com  x-goog-user-project=382190683951
+[debug] [2026-03-23T08:21:04.970Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/storage.googleapis.com [none]
+[debug] [2026-03-23T08:21:04.970Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/storage.googleapis.com  x-goog-user-project=382190683951
+[debug] [2026-03-23T08:21:06.189Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/eventarc.googleapis.com 200
+[debug] [2026-03-23T08:21:06.189Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/eventarc.googleapis.com [omitted]
+[warn] ⚠  functions: missing required API eventarc.googleapis.com. Enabling now... 
+[debug] [2026-03-23T08:21:06.190Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:06.190Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:06.190Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/382190683951/services/eventarc.googleapis.com:enable [none]
+[debug] [2026-03-23T08:21:06.190Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/382190683951/services/eventarc.googleapis.com:enable  x-goog-user-project=382190683951
+[debug] [2026-03-23T08:21:06.196Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/run.googleapis.com 200
+[debug] [2026-03-23T08:21:06.196Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/run.googleapis.com [omitted]
+[warn] ⚠  functions: missing required API run.googleapis.com. Enabling now... 
+[debug] [2026-03-23T08:21:06.196Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:06.196Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:06.196Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/382190683951/services/run.googleapis.com:enable [none]
+[debug] [2026-03-23T08:21:06.196Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/382190683951/services/run.googleapis.com:enable  x-goog-user-project=382190683951
+[debug] [2026-03-23T08:21:06.198Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/pubsub.googleapis.com 200
+[debug] [2026-03-23T08:21:06.198Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/pubsub.googleapis.com [omitted]
+[info] ✔  functions: required API pubsub.googleapis.com is enabled 
+[debug] [2026-03-23T08:21:06.221Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/storage.googleapis.com 200
+[debug] [2026-03-23T08:21:06.221Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/382190683951/services/storage.googleapis.com [omitted]
+[info] ✔  functions: required API storage.googleapis.com is enabled 
+[debug] [2026-03-23T08:21:06.645Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/382190683951/services/run.googleapis.com:enable 200
+[debug] [2026-03-23T08:21:06.645Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/382190683951/services/run.googleapis.com:enable [omitted]
+[debug] [2026-03-23T08:21:07.315Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/382190683951/services/eventarc.googleapis.com:enable 200
+[debug] [2026-03-23T08:21:07.315Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/382190683951/services/eventarc.googleapis.com:enable [omitted]
+[info] i  functions: generating the service identity for pubsub.googleapis.com... 
+[debug] [2026-03-23T08:21:17.329Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:17.329Z] Checked if tokens are valid: true, expires at: 1774257574067
+[info] i  functions: generating the service identity for eventarc.googleapis.com... 
+[debug] [2026-03-23T08:21:17.329Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:17.329Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:17.329Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/pubsub.googleapis.com:generateServiceIdentity [none]
+[debug] [2026-03-23T08:21:17.329Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/pubsub.googleapis.com:generateServiceIdentity  x-goog-user-project=382190683951
+[debug] [2026-03-23T08:21:17.329Z] >>> [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/pubsub.googleapis.com:generateServiceIdentity {}
+[debug] [2026-03-23T08:21:17.331Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/eventarc.googleapis.com:generateServiceIdentity [none]
+[debug] [2026-03-23T08:21:17.331Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/eventarc.googleapis.com:generateServiceIdentity  x-goog-user-project=382190683951
+[debug] [2026-03-23T08:21:17.331Z] >>> [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/eventarc.googleapis.com:generateServiceIdentity {}
+[debug] [2026-03-23T08:21:18.944Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/pubsub.googleapis.com:generateServiceIdentity 200
+[debug] [2026-03-23T08:21:18.944Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/pubsub.googleapis.com:generateServiceIdentity {"name":"operations/finished.DONE_OPERATION","done":true,"response":{"@type":"type.googleapis.com/google.api.serviceusage.v1beta1.ServiceIdentity","email":"service-382190683951@gcp-sa-pubsub.iam.gserviceaccount.com","uniqueId":"110725720028921100722"}}
+[debug] [2026-03-23T08:21:19.171Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/eventarc.googleapis.com:generateServiceIdentity 200
+[debug] [2026-03-23T08:21:19.171Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1beta1/projects/382190683951/services/eventarc.googleapis.com:generateServiceIdentity {"name":"operations/finished.DONE_OPERATION","done":true,"response":{"@type":"type.googleapis.com/google.api.serviceusage.v1beta1.ServiceIdentity","email":"service-382190683951@gcp-sa-eventarc.iam.gserviceaccount.com","uniqueId":"100239934033271597205"}}
+[debug] [2026-03-23T08:21:19.173Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:19.174Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:19.174Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor [none]
+[debug] [2026-03-23T08:21:19.446Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor 200
+[debug] [2026-03-23T08:21:19.446Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/smis-mentor {"projectNumber":"382190683951","projectId":"smis-mentor","lifecycleState":"ACTIVE","name":"smis-mentor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-03-22T06:04:26.709683Z"}
+[debug] [2026-03-23T08:21:19.447Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:19.447Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:19.447Z] >>> [apiv2][query] GET https://compute.googleapis.com/compute/v1/projects/382190683951 [none]
+[debug] [2026-03-23T08:21:19.831Z] <<< [apiv2][status] GET https://compute.googleapis.com/compute/v1/projects/382190683951 403
+[debug] [2026-03-23T08:21:19.832Z] <<< [apiv2][body] GET https://compute.googleapis.com/compute/v1/projects/382190683951 {"error":{"code":403,"message":"Compute Engine API has not been used in project 382190683951 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.","errors":[{"message":"Compute Engine API has not been used in project 382190683951 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.","domain":"usageLimits","reason":"accessNotConfigured","extendedHelp":"https://console.developers.google.com"}],"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"SERVICE_DISABLED","domain":"googleapis.com","metadata":{"serviceTitle":"Compute Engine API","containerInfo":"382190683951","service":"compute.googleapis.com","consumer":"projects/382190683951","activationUrl":"https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951"}},{"@type":"type.googleapis.com/google.rpc.LocalizedMessage","locale":"en-US","message":"Compute Engine API has not been used in project 382190683951 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry."},{"@type":"type.googleapis.com/google.rpc.Help","links":[{"description":"Google developers console API activation","url":"https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951"}]}]}}
+[debug] [2026-03-23T08:21:19.832Z] unable to look up default compute service account. Falling back to 382190683951-compute@developer.gserviceaccount.com. Error: {"name":"FirebaseError","children":[],"context":{"body":{"error":{"code":403,"message":"Compute Engine API has not been used in project 382190683951 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.","errors":[{"message":"Compute Engine API has not been used in project 382190683951 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.","domain":"usageLimits","reason":"accessNotConfigured","extendedHelp":"https://console.developers.google.com"}],"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"SERVICE_DISABLED","domain":"googleapis.com","metadata":{"serviceTitle":"Compute Engine API","containerInfo":"382190683951","service":"compute.googleapis.com","consumer":"projects/382190683951","activationUrl":"https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951"}},{"@type":"type.googleapis.com/google.rpc.LocalizedMessage","locale":"en-US","message":"Compute Engine API has not been used in project 382190683951 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry."},{"@type":"type.googleapis.com/google.rpc.Help","links":[{"description":"Google developers console API activation","url":"https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951"}]}]}},"response":{"statusCode":403}},"exit":1,"message":"Request to https://compute.googleapis.com/compute/v1/projects/382190683951 had HTTP Error: 403, Compute Engine API has not been used in project 382190683951 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project=382190683951 then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.","status":403}
+[debug] [2026-03-23T08:21:19.833Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:19.833Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:19.834Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:19.834Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:19.834Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl [none]
+[debug] [2026-03-23T08:21:19.834Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {}
+[debug] [2026-03-23T08:21:19.835Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl [none]
+[debug] [2026-03-23T08:21:21.257Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl 200
+[debug] [2026-03-23T08:21:21.258Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {"uploadUrl":"https://storage.googleapis.com/gcf-v2-uploads-382190683951.asia-northeast3.cloudfunctions.appspot.com/b8ddee11-4d0f-4abf-9fdc-d98f4d2c0c7c.zip?GoogleAccessId=service-382190683951@gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255881&Signature=gYGcQFeSmslB2QEz4n0R9DLxkISBd71uEUuIs2Fj69OLRgUu2Ykku5ghPoutYXsJA3z1Cb5CF2Y3SrxigVMha2lZ55Obd1ByHiSNm8CudLmc83RMqWzTUoXF4J1qaOparOLIdN%2FUspDFOKLEzjnjpYGwiHcC5R6zhh9EkrUwMsK5DJ%2BBR0QrPMgHRIByeumxkZ2lS7bGFWQm%2F7xVv2LrTERw4UygR9tvC9SB8bDmLhJ2dfXXGUj0tqlH3QMQMv7A45zvSQsf9Ye0%2Frtq6dr%2FZ2eLLqhClhGvTvOk3xmYLW3LsVeFJ8XH0c6UgF%2Fi%2BZWDvQip6h7QLgL7eVgyMMgLyg%3D%3D","storageSource":{"bucket":"gcf-v2-uploads-382190683951.asia-northeast3.cloudfunctions.appspot.com","object":"b8ddee11-4d0f-4abf-9fdc-d98f4d2c0c7c.zip"}}
+[debug] [2026-03-23T08:21:21.258Z] >>> [apiv2][query] PUT https://storage.googleapis.com/gcf-v2-uploads-382190683951.asia-northeast3.cloudfunctions.appspot.com/b8ddee11-4d0f-4abf-9fdc-d98f4d2c0c7c.zip GoogleAccessId=service-382190683951%40gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255881&Signature=gYGcQFeSmslB2QEz4n0R9DLxkISBd71uEUuIs2Fj69OLRgUu2Ykku5ghPoutYXsJA3z1Cb5CF2Y3SrxigVMha2lZ55Obd1ByHiSNm8CudLmc83RMqWzTUoXF4J1qaOparOLIdN%2FUspDFOKLEzjnjpYGwiHcC5R6zhh9EkrUwMsK5DJ%2BBR0QrPMgHRIByeumxkZ2lS7bGFWQm%2F7xVv2LrTERw4UygR9tvC9SB8bDmLhJ2dfXXGUj0tqlH3QMQMv7A45zvSQsf9Ye0%2Frtq6dr%2FZ2eLLqhClhGvTvOk3xmYLW3LsVeFJ8XH0c6UgF%2Fi%2BZWDvQip6h7QLgL7eVgyMMgLyg%3D%3D
+[debug] [2026-03-23T08:21:21.258Z] >>> [apiv2][body] PUT https://storage.googleapis.com/gcf-v2-uploads-382190683951.asia-northeast3.cloudfunctions.appspot.com/b8ddee11-4d0f-4abf-9fdc-d98f4d2c0c7c.zip [stream]
+[debug] [2026-03-23T08:21:21.367Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl 200
+[debug] [2026-03-23T08:21:21.367Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/functions:generateUploadUrl {"uploadUrl":"https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/acc88460-1136-4dc9-bd23-eed75d11591d.zip?GoogleAccessId=service-382190683951@gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255881&Signature=G3kOHLWRUhhw7k9kUoxKQS74X6Id5u3VO1AVUK2xIGhcTg%2Bmf9RXPs7ICDFCtEecjZQurUTxxIw59ZW4UdPS6fvx9oTYGSWTlhTAf1i1A9eB5y3Mb10JC3jSpV6prvXhQKKnYWCCw68D3aknTAWvZmsr%2Fe94BhVLWwebqCre4BqGZbEYAGSvFEoOkbIMVTFdaF0yMjUjHGBvcsbXJ5HbaehKyeo%2FnrVrO7GhUxhYHlB0ANHSgEsdR65ABhZMidcRoc8k9NAAlfDyYh0sqZ%2FH8GhD88eoXi%2B%2BTg3%2B08V84RVCyJGKr5Zh8qZJCt3xc0dx3MYdDWD8P4A1wFFoTRxWcg%3D%3D"}
+[debug] [2026-03-23T08:21:21.368Z] >>> [apiv2][query] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/acc88460-1136-4dc9-bd23-eed75d11591d.zip GoogleAccessId=service-382190683951%40gcf-admin-robot.iam.gserviceaccount.com&Expires=1774255881&Signature=G3kOHLWRUhhw7k9kUoxKQS74X6Id5u3VO1AVUK2xIGhcTg%2Bmf9RXPs7ICDFCtEecjZQurUTxxIw59ZW4UdPS6fvx9oTYGSWTlhTAf1i1A9eB5y3Mb10JC3jSpV6prvXhQKKnYWCCw68D3aknTAWvZmsr%2Fe94BhVLWwebqCre4BqGZbEYAGSvFEoOkbIMVTFdaF0yMjUjHGBvcsbXJ5HbaehKyeo%2FnrVrO7GhUxhYHlB0ANHSgEsdR65ABhZMidcRoc8k9NAAlfDyYh0sqZ%2FH8GhD88eoXi%2B%2BTg3%2B08V84RVCyJGKr5Zh8qZJCt3xc0dx3MYdDWD8P4A1wFFoTRxWcg%3D%3D
+[debug] [2026-03-23T08:21:21.368Z] >>> [apiv2][body] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/acc88460-1136-4dc9-bd23-eed75d11591d.zip [stream]
+[debug] [2026-03-23T08:21:21.442Z] <<< [apiv2][status] PUT https://storage.googleapis.com/gcf-v2-uploads-382190683951.asia-northeast3.cloudfunctions.appspot.com/b8ddee11-4d0f-4abf-9fdc-d98f4d2c0c7c.zip 200
+[debug] [2026-03-23T08:21:21.443Z] <<< [apiv2][body] PUT https://storage.googleapis.com/gcf-v2-uploads-382190683951.asia-northeast3.cloudfunctions.appspot.com/b8ddee11-4d0f-4abf-9fdc-d98f4d2c0c7c.zip [omitted]
+[debug] [2026-03-23T08:21:21.572Z] <<< [apiv2][status] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/acc88460-1136-4dc9-bd23-eed75d11591d.zip 200
+[debug] [2026-03-23T08:21:21.572Z] <<< [apiv2][body] PUT https://storage.googleapis.com/uploads-771477438626.asia-northeast3.cloudfunctions.appspot.com/acc88460-1136-4dc9-bd23-eed75d11591d.zip [omitted]
+[info] ✔  functions: functions source uploaded successfully 
+[info] i  functions: creating Node.js 20 (2nd Gen) function adminDeleteUser(asia-northeast3)... 
+[debug] [2026-03-23T08:21:21.575Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:21.576Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:21.576Z] >>> [apiv2][query] POST https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions functionId=adminDeleteUser
+[debug] [2026-03-23T08:21:21.576Z] >>> [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions {"name":"projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser","buildConfig":{"runtime":"nodejs20","entryPoint":"adminDeleteUser","source":{"storageSource":{"bucket":"gcf-v2-uploads-382190683951.asia-northeast3.cloudfunctions.appspot.com","object":"b8ddee11-4d0f-4abf-9fdc-d98f4d2c0c7c.zip"}},"environmentVariables":{"GOOGLE_NODE_RUN_SCRIPTS":""}},"serviceConfig":{"environmentVariables":{"FIREBASE_CONFIG":"{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}","GCLOUD_PROJECT":"smis-mentor","EVENTARC_CLOUD_EVENT_SOURCE":"projects/smis-mentor/locations/asia-northeast3/services/adminDeleteUser","FUNCTION_TARGET":"adminDeleteUser","LOG_EXECUTION_ID":"true"},"ingressSettings":null,"timeoutSeconds":null,"serviceAccountEmail":null,"availableMemory":"256Mi","minInstanceCount":null,"maxInstanceCount":null,"maxInstanceRequestConcurrency":80,"availableCpu":"1","vpcConnector":null,"vpcConnectorEgressSettings":null},"labels":{"deployment-tool":"cli-firebase","deployment-callable":"true","firebase-functions-hash":"0681a5e11b524f4d165d60d958428c0c962210c2"}}
+[debug] [2026-03-23T08:21:24.122Z] <<< [apiv2][status] POST https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions 404
+[debug] [2026-03-23T08:21:24.122Z] <<< [apiv2][body] POST https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions {"error":{"code":404,"message":"Service account projects/-/serviceAccounts/382190683951-compute@developer.gserviceaccount.com was not found.","status":"NOT_FOUND"}}
+[warn] ⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions?functionId=adminDeleteUser had HTTP Error: 404, Service account projects/-/serviceAccounts/382190683951-compute@developer.gserviceaccount.com was not found. 
+[warn] ⚠  functions:  failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser 
+[error] Failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser
+[debug] [2026-03-23T08:21:24.130Z] Total Function Deployment time: 2549
+[debug] [2026-03-23T08:21:24.130Z] 1 Functions Deployed
+[debug] [2026-03-23T08:21:24.130Z] 1 Functions Errored
+[debug] [2026-03-23T08:21:24.130Z] 0 Function Deployments Aborted
+[debug] [2026-03-23T08:21:24.130Z] Average Function Deployment time: 2549
+[info] 
+[info] Functions deploy had errors with the following functions:
+	adminDeleteUser(asia-northeast3)
+[debug] [2026-03-23T08:21:24.330Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:24.330Z] Checked if tokens are valid: true, expires at: 1774257574067
+[debug] [2026-03-23T08:21:24.330Z] >>> [apiv2][query] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts [none]
+[debug] [2026-03-23T08:21:24.740Z] <<< [apiv2][status] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts 200
+[debug] [2026-03-23T08:21:24.740Z] <<< [apiv2][body] GET https://artifactregistry.googleapis.com/v1/projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts {"name":"projects/smis-mentor/locations/asia-northeast3/repositories/gcf-artifacts","format":"DOCKER","description":"This repository is created and used by Cloud Functions for storing function docker images.","labels":{"goog-managed-by":"cloudfunctions"},"createTime":"2026-02-24T17:33:09.769659Z","updateTime":"2026-03-22T07:43:59.674306Z","mode":"STANDARD_REPOSITORY","cleanupPolicies":{"firebase-functions-cleanup":{"id":"firebase-functions-cleanup","action":"DELETE","condition":{"tagState":"ANY","olderThan":"86400s"}}},"satisfiesPzs":true,"vulnerabilityScanningConfig":{"lastEnableTime":"2026-02-24T17:32:55.884536784Z","enablementState":"SCANNING_DISABLED","enablementStateReason":"API containerscanning.googleapis.com is not enabled."},"satisfiesPzi":true,"registryUri":"asia-northeast3-docker.pkg.dev/smis-mentor/gcf-artifacts"}
+[debug] [2026-03-23T08:21:24.741Z] Functions deploy failed.
+[debug] [2026-03-23T08:21:24.741Z] {
+  "endpoint": {
+    "id": "adminDeleteUser",
+    "project": "smis-mentor",
+    "region": "asia-northeast3",
+    "entryPoint": "adminDeleteUser",
+    "platform": "gcfv2",
+    "runtime": "nodejs20",
+    "callableTrigger": {},
+    "labels": {
+      "deployment-tool": "cli-firebase"
+    },
+    "serviceAccount": null,
+    "ingressSettings": null,
+    "availableMemoryMb": null,
+    "timeoutSeconds": null,
+    "maxInstances": null,
+    "minInstances": null,
+    "concurrency": 80,
+    "vpc": null,
+    "environmentVariables": {
+      "FIREBASE_CONFIG": "{\"projectId\":\"smis-mentor\",\"storageBucket\":\"smis-mentor.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "smis-mentor",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/smis-mentor/locations/asia-northeast3/services/adminDeleteUser"
+    },
+    "codebase": "default",
+    "cpu": 1,
+    "targetedByOnly": true,
+    "hash": "0681a5e11b524f4d165d60d958428c0c962210c2"
+  },
+  "op": "create",
+  "original": {
+    "name": "FirebaseError",
+    "children": [],
+    "context": {
+      "function": "projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser"
+    },
+    "exit": 1,
+    "message": "Failed to create function projects/smis-mentor/locations/asia-northeast3/functions/adminDeleteUser",
+    "original": {
+      "name": "FirebaseError",
+      "children": [],
+      "context": {
+        "body": {
+          "error": {
+            "code": 404,
+            "message": "Service account projects/-/serviceAccounts/382190683951-compute@developer.gserviceaccount.com was not found.",
+            "status": "NOT_FOUND"
+          }
+        },
+        "response": {
+          "statusCode": 404
+        }
+      },
+      "exit": 1,
+      "message": "Request to https://cloudfunctions.googleapis.com/v2/projects/smis-mentor/locations/asia-northeast3/functions?functionId=adminDeleteUser had HTTP Error: 404, Service account projects/-/serviceAccounts/382190683951-compute@developer.gserviceaccount.com was not found.",
+      "status": 404
+    },
+    "status": 404,
+    "code": 404
+  }
+}
+[debug] [2026-03-23T08:21:24.822Z] Error: Failed to create function adminDeleteUser in region asia-northeast3
+    at /opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:318:27
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Fabricator.createV2Function (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:297:30)
+    at async Fabricator.createEndpoint (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:139:13)
+    at async handle (/opt/homebrew/lib/node_modules/firebase-tools/lib/deploy/functions/release/fabricator.js:91:17)
+[error] 
+[error] Error: There was an error deploying functions

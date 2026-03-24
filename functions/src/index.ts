@@ -1,4 +1,5 @@
 import * as functions from 'firebase-functions';
+import * as functionsV2 from 'firebase-functions/v2';
 import * as admin from 'firebase-admin';
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
 
@@ -262,5 +263,316 @@ export const sendTestNotification = functions
     } catch (error) {
       console.error('테스트 알림 전송 실패:', error);
       throw new functions.https.HttpsError('internal', '알림 전송에 실패했습니다.');
+    }
+  });
+
+// Custom Token 생성 함수 (소셜 로그인용)
+export const createCustomToken = functions
+  .region('asia-northeast3')
+  .https.onCall(async (data: { userId: string; email: string }, context) => {
+    try {
+      console.log('🔑 Custom Token 생성 요청:', data);
+
+      // userId와 email 검증
+      if (!data.userId || !data.email) {
+        throw new functions.https.HttpsError('invalid-argument', 'userId와 email이 필요합니다.');
+      }
+
+      // userId로 Firestore에서 사용자 확인
+      const userDoc = await db.collection('users').doc(data.userId).get();
+      
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError('not-found', '사용자를 찾을 수 없습니다.');
+      }
+
+      const userData = userDoc.data() as UserData;
+      
+      // 이메일 검증
+      if (userData.email !== data.email) {
+        throw new functions.https.HttpsError('permission-denied', '이메일이 일치하지 않습니다.');
+      }
+
+      // Firebase Auth에 사용자가 있는지 확인
+      let firebaseUser;
+      try {
+        firebaseUser = await admin.auth().getUserByEmail(data.email);
+        console.log('✅ 기존 Firebase Auth 사용자 발견:', firebaseUser.uid);
+      } catch (error: any) {
+        if (error.code === 'auth/user-not-found') {
+          // Firebase Auth에 사용자가 없으면 생성
+          console.log('🆕 Firebase Auth 사용자 생성:', data.email);
+          firebaseUser = await admin.auth().createUser({
+            uid: data.userId,
+            email: data.email,
+            displayName: userData.name,
+            emailVerified: true,
+          });
+        } else {
+          console.error('❌ Firebase Auth 사용자 조회 실패:', error);
+          throw error;
+        }
+      }
+
+      // Custom Token 생성
+      const customToken = await admin.auth().createCustomToken(firebaseUser.uid, undefined);
+      
+      console.log('✅ Custom Token 생성 완료:', firebaseUser.uid);
+      
+      return { 
+        customToken,
+        uid: firebaseUser.uid 
+      };
+    } catch (error) {
+      console.error('❌ Custom Token 생성 실패:', error);
+      
+      // 에러 타입에 따라 적절한 HttpsError 반환
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      
+      throw new functions.https.HttpsError('internal', 'Custom Token 생성에 실패했습니다.');
+    }
+  });
+
+// 관리자 권한으로 사용자 삭제 (Firebase Auth + Firestore) - v2
+export const adminDeleteUser = functionsV2.https.onCall(
+  {
+    region: 'asia-northeast3',
+  },
+  async (request) => {
+    try {
+      const { userId } = request.data;
+
+      // 1. 인증 체크
+      if (!request.auth) {
+        throw new functionsV2.https.HttpsError('unauthenticated', '인증이 필요합니다.');
+      }
+
+      // 2. 관리자 권한 체크
+      const adminDoc = await db.collection('users').doc(request.auth.uid).get();
+      const adminData = adminDoc.data();
+      
+      if (!adminData || adminData.role !== 'admin') {
+        throw new functionsV2.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
+      }
+
+      if (!userId) {
+        throw new functionsV2.https.HttpsError('invalid-argument', 'userId가 필요합니다.');
+      }
+
+      console.log(`🗑️ 사용자 삭제 시작: ${userId}`);
+
+      // 3. Firestore에서 사용자 정보 조회
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (!userDoc.exists) {
+        throw new functionsV2.https.HttpsError('not-found', '사용자를 찾을 수 없습니다.');
+      }
+
+      const userData = userDoc.data();
+      console.log(`📋 사용자 정보: ${userData?.name} (${userData?.email})`);
+
+      // 4. Firebase Auth에서 사용자 삭제 시도
+      let authDeleted = false;
+      try {
+        await admin.auth().deleteUser(userId);
+        console.log('✅ Firebase Auth 사용자 삭제 완료');
+        authDeleted = true;
+      } catch (authError: any) {
+        if (authError.code === 'auth/user-not-found') {
+          console.log('⚠️ Firebase Auth에 사용자가 없음 (이미 삭제됨 또는 존재하지 않음)');
+        } else {
+          console.error('❌ Firebase Auth 삭제 실패:', authError);
+        }
+      }
+
+      // 5. Firestore에서 사용자 문서 삭제
+      await db.collection('users').doc(userId).delete();
+      console.log('✅ Firestore 사용자 문서 삭제 완료');
+
+      return {
+        success: true,
+        authDeleted,
+        message: authDeleted 
+          ? '사용자가 Firebase Auth 및 Firestore에서 삭제되었습니다.'
+          : '사용자가 Firestore에서 삭제되었습니다. (Firebase Auth에는 존재하지 않았습니다.)',
+      };
+    } catch (error) {
+      console.error('❌ 사용자 삭제 실패:', error);
+      
+      if (error instanceof functionsV2.https.HttpsError) {
+        throw error;
+      }
+      
+      throw new functionsV2.https.HttpsError('internal', '사용자 삭제에 실패했습니다.');
+    }
+  }
+);
+
+// Firebase Auth와 Firestore 일관성 검증 함수 (Admin SDK 사용)
+export const verifyAuthFirestoreConsistency = functions
+  .region('asia-northeast3')
+  .https.onCall(async (data, context) => {
+    try {
+      console.log('🔍 Firebase Auth ↔ Firestore 일관성 검증 시작...');
+
+      // 1. 모든 Firestore 사용자 조회
+      const usersSnapshot = await db.collection('users').get();
+      const firestoreUsers = new Map<string, any>();
+      
+      usersSnapshot.forEach((doc) => {
+        const userData = doc.data();
+        firestoreUsers.set(doc.id, {
+          documentId: doc.id,
+          userId: userData.userId,
+          id: userData.id,
+          email: userData.email,
+          name: userData.name,
+          status: userData.status,
+          role: userData.role,
+          authProviders: userData.authProviders || [],
+        });
+      });
+
+      console.log(`📊 Firestore 사용자 수: ${firestoreUsers.size}`);
+
+      // 2. 모든 Firebase Auth 사용자 조회 (페이징)
+      const authUsers = new Map<string, any>();
+      let nextPageToken: string | undefined;
+
+      do {
+        const listUsersResult = await admin.auth().listUsers(1000, nextPageToken);
+        
+        listUsersResult.users.forEach((userRecord) => {
+          authUsers.set(userRecord.uid, {
+            uid: userRecord.uid,
+            email: userRecord.email,
+            displayName: userRecord.displayName,
+            emailVerified: userRecord.emailVerified,
+            disabled: userRecord.disabled,
+            providerData: userRecord.providerData,
+          });
+        });
+
+        nextPageToken = listUsersResult.pageToken;
+      } while (nextPageToken);
+
+      console.log(`📊 Firebase Auth 사용자 수: ${authUsers.size}`);
+
+      // 3. 불일치 분석
+      const inconsistencies: any[] = [];
+      const orphanedFirestoreUsers: any[] = [];
+      const orphanedAuthUsers: any[] = [];
+
+      // Firestore 사용자 기준으로 검증
+      for (const [docId, firestoreUser] of firestoreUsers) {
+        // Firestore 내부 일관성 체크
+        const internalConsistent = 
+          docId === firestoreUser.userId && 
+          docId === firestoreUser.id;
+
+        // Firebase Auth UID와 비교
+        const authUserByDocId = authUsers.get(docId);
+        const authUserByUserId = authUsers.get(firestoreUser.userId);
+        const authUserByEmail = firestoreUser.email 
+          ? Array.from(authUsers.values()).find(u => u.email === firestoreUser.email)
+          : null;
+
+        const issue: any = {
+          firestoreDocId: docId,
+          firestoreUserId: firestoreUser.userId,
+          firestoreId: firestoreUser.id,
+          email: firestoreUser.email,
+          name: firestoreUser.name,
+          status: firestoreUser.status,
+          role: firestoreUser.role,
+          internalConsistent,
+          issues: [],
+        };
+
+        // 불일치 타입 분류
+        if (!internalConsistent) {
+          if (docId !== firestoreUser.userId) {
+            issue.issues.push('documentId ≠ userId');
+          }
+          if (docId !== firestoreUser.id) {
+            issue.issues.push('documentId ≠ id');
+          }
+        }
+
+        // Firebase Auth 검증
+        if (!authUserByDocId && !authUserByUserId && !authUserByEmail) {
+          issue.issues.push('Firebase Auth에 존재하지 않음');
+          orphanedFirestoreUsers.push(issue);
+        } else {
+          let authUid = null;
+
+          if (authUserByDocId) {
+            authUid = authUserByDocId.uid;
+          } else if (authUserByUserId) {
+            authUid = authUserByUserId.uid;
+            issue.issues.push(`Auth UID는 userId(${firestoreUser.userId})와 일치하나 documentId와 불일치`);
+          } else if (authUserByEmail) {
+            authUid = authUserByEmail.uid;
+            issue.issues.push(`Auth UID(${authUserByEmail.uid})가 documentId, userId 모두와 불일치 (이메일로만 찾음)`);
+          }
+
+          issue.authUid = authUid;
+
+          if (authUid !== docId) {
+            issue.issues.push(`Firebase Auth UID(${authUid}) ≠ Firestore documentId(${docId})`);
+          }
+        }
+
+        if (issue.issues.length > 0) {
+          inconsistencies.push(issue);
+        }
+      }
+
+      // Firebase Auth에만 있는 사용자 (Firestore에 없음)
+      for (const [authUid, authUser] of authUsers) {
+        const hasFirestoreDoc = firestoreUsers.has(authUid);
+        const hasUserIdMatch = Array.from(firestoreUsers.values()).some(
+          u => u.userId === authUid
+        );
+        const hasEmailMatch = authUser.email 
+          ? Array.from(firestoreUsers.values()).some(u => u.email === authUser.email)
+          : false;
+
+        if (!hasFirestoreDoc && !hasUserIdMatch && !hasEmailMatch) {
+          orphanedAuthUsers.push({
+            authUid,
+            email: authUser.email,
+            displayName: authUser.displayName,
+            issue: 'Firestore에 존재하지 않음',
+          });
+        }
+      }
+
+      // 결과 정리
+      const result = {
+        summary: {
+          totalFirestoreUsers: firestoreUsers.size,
+          totalAuthUsers: authUsers.size,
+          inconsistentUsers: inconsistencies.length,
+          orphanedFirestoreUsers: orphanedFirestoreUsers.length,
+          orphanedAuthUsers: orphanedAuthUsers.length,
+        },
+        inconsistencies: inconsistencies.sort((a, b) => {
+          // active 먼저, 그 다음 이슈 개수 많은 순
+          if (a.status === 'active' && b.status !== 'active') return -1;
+          if (a.status !== 'active' && b.status === 'active') return 1;
+          return b.issues.length - a.issues.length;
+        }),
+        orphanedFirestoreUsers,
+        orphanedAuthUsers,
+      };
+
+      console.log('✅ 검증 완료:', result.summary);
+
+      return result;
+    } catch (error) {
+      console.error('❌ 검증 실패:', error);
+      throw new functions.https.HttpsError('internal', '검증에 실패했습니다.');
     }
   });

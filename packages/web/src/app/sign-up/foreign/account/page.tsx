@@ -156,10 +156,20 @@ export default function ForeignSignUpStep2() {
       if (socialSignUp && socialProvider) {
         console.log('🔗 Social sign-up flow for foreign teacher');
         
+        // Firebase Auth 계정은 이미 존재
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          toast.error('Authentication error. Please try again.');
+          setIsLoading(false);
+          return;
+        }
+        
+        userId = currentUser.uid;
+        console.log('✅ Using social auth UID:', userId);
+        
         // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
         if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
-          console.log('📋 Found existing foreign_temp user, updating account...');
-          userId = existingUserByPhone.userId;
+          console.log('📋 Found existing foreign_temp user, will migrate to new UID');
           isUpdatingExistingUser = true;
           
           // 이메일이 다른 계정에서 사용 중인지 확인
@@ -168,9 +178,6 @@ export default function ForeignSignUpStep2() {
             setIsLoading(false);
             return;
           }
-          
-          // Firebase Auth: 소셜 로그인으로는 이미 생성되어 있음
-          console.log('✅ Using existing social auth credential');
         }
         // Case 2: 이메일로 계정이 존재하는 경우 (중복)
         else if (existingUserByEmail) {
@@ -178,53 +185,37 @@ export default function ForeignSignUpStep2() {
           setIsLoading(false);
           return;
         }
-        // Case 3: 완전히 새로운 사용자 (소셜 로그인)
-        else {
-          console.log('🆕 New foreign teacher with social login');
-          // Firebase Auth는 이미 Google 로그인으로 생성됨
-          const { auth } = await import('@/lib/firebase');
-          const currentUser = auth.currentUser;
-          
-          if (!currentUser) {
-            toast.error('Authentication error. Please try again.');
-            setIsLoading(false);
-            return;
-          }
-          
-          userId = currentUser.uid;
-          console.log('✅ Using social auth UID:', userId);
-        }
       } else {
-        // 일반 가입 케이스 (기존 로직 유지)
+        // 일반 가입 케이스
         // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
         if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
           console.log('📋 Found existing foreign_temp user, updating account...');
           
-          // 기존 계정의 userId 사용
-          userId = existingUserByPhone.userId;
-          isUpdatingExistingUser = true;
-          
           // 이메일이 다른 계정에서 사용 중인지 확인
-          if (existingUserByEmail && existingUserByEmail.userId !== userId) {
+          if (existingUserByEmail && existingUserByEmail.userId !== existingUserByPhone.userId) {
             toast.error('This email is already in use by another account.');
             setIsLoading(false);
             return;
           }
           
           // Firebase Authentication에 이메일/비밀번호 설정
-          console.log('🔐 Linking email/password to existing Firebase user:', userId);
+          console.log('🔐 Creating new Firebase Auth account for temp user');
           const { createUserWithEmailAndPassword } = await import('firebase/auth');
           const { auth } = await import('@/lib/firebase');
           
           try {
-            await createUserWithEmailAndPassword(auth, data.email, data.password);
-            console.log('✅ Created new Firebase Auth account for existing user');
+            const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+            userId = userCredential.user.uid;
+            isUpdatingExistingUser = true;
+            console.log('✅ Created new Firebase Auth account, will migrate temp data to UID:', userId);
           } catch (authError: any) {
             if (authError.code === 'auth/email-already-in-use') {
-              console.log('⚠️ Firebase Auth already exists, will update Firestore only');
+              toast.error('This email is already in use.');
             } else {
               throw authError;
             }
+            setIsLoading(false);
+            return;
           }
         }
         // Case 2: 이메일로 계정이 존재하는 경우 (중복)
@@ -289,6 +280,7 @@ export default function ForeignSignUpStep2() {
 
       const userData = {
         userId: userId,
+        id: userId,  // ✅ id 필드 추가
         name: fullName,
         email: data.email,
         phone: fullPhone,
@@ -337,10 +329,20 @@ export default function ForeignSignUpStep2() {
         }),
       };
 
-      if (isUpdatingExistingUser) {
-        console.log('📝 Updating existing Firestore user document');
-        await setDoc(doc(db, 'users', userId), userData, { merge: true });
-        console.log('✅ Firestore user document updated (foreign_temp → foreign)');
+      if (isUpdatingExistingUser && existingUserByPhone) {
+        const oldTempUserId = existingUserByPhone.userId;
+        
+        console.log('📝 Creating new Firestore document with Auth UID:', userId);
+        await setDoc(doc(db, 'users', userId), userData);
+        console.log('✅ New Firestore document created');
+        
+        // ✅ 기존 temp 문서 삭제 (userId가 다른 경우에만)
+        if (oldTempUserId !== userId) {
+          console.log('🗑️ Deleting old temp document:', oldTempUserId);
+          const { deleteDoc } = await import('firebase/firestore');
+          await deleteDoc(doc(db, 'users', oldTempUserId));
+          console.log('✅ Old temp document deleted');
+        }
         
         toast.success(
           `Welcome back, ${fullName}!\n\nYour account has been activated.\nYou can now log in and start using the platform.`, 

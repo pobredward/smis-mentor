@@ -4,3 +4,4 @@ export * from './camp';
 export * from './permission';
 export * from './evaluation';
 export * from './sms';
+export * from './auth';

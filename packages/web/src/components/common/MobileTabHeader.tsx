@@ -11,7 +11,7 @@ interface MobileTabHeaderProps {
 }
 
 const MobileTabHeader = ({ title, showBackButton = false, rightButton }: MobileTabHeaderProps) => {
-  const { currentUser, userData } = useAuth();
+  const { isAuthenticated, userData } = useAuth();
   const router = useRouter();
 
   return (
@@ -33,7 +33,7 @@ const MobileTabHeader = ({ title, showBackButton = false, rightButton }: MobileT
               onClick={() => router.push('/profile')}
               className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-200"
             >
-              {currentUser && userData?.profileImage ? (
+              {isAuthenticated && userData?.profileImage ? (
                 <img 
                   src={userData.profileImage} 
                   alt="프로필" 

@@ -15,6 +15,7 @@ import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import ProgressSteps from '@/components/common/ProgressSteps';
 import { Timestamp } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 import { FaMapMarkerAlt, FaIdCard, FaUsers, FaCheckCircle } from 'react-icons/fa';
 
 const detailsSchema = z.object({
@@ -102,7 +103,15 @@ export default function SignUpDetails() {
 
     setIsLoading(true);
     try {
-      const { name, phoneNumber, email, password, university, grade, isOnLeave, major1, major2, socialSignUp, tempUserId } = signupData;
+      const { name, phoneNumber, email, password, university, grade, isOnLeave, major1, major2, socialSignUp, tempUserId, socialProvider, firebaseAuthUid } = signupData;
+
+      console.log('🔍 회원가입 데이터 확인:', {
+        socialSignUp,
+        socialProvider,
+        email,
+        tempUserId,
+        firebaseAuthUid,
+      });
 
       if (!name || !phoneNumber || !email || !university || !grade || !major1) {
         toast.error('필수 정보가 누락되었습니다.');
@@ -157,11 +166,8 @@ export default function SignUpDetails() {
       const isOnLeaveVal = isOnLeave === null ? null : Boolean(isOnLeave);
       
       if (existingUser && existingUser.status === 'temp') {
-        // Firebase Auth에 사용자 등록
-        const userCredential = await signUp(email, password || '');
-        
         const now = Timestamp.now();
-
+        
         // role 결정 로직
         let finalRole: 'mentor' | 'foreign' = 'mentor';
         if (existingUser.role === 'mentor_temp') {
@@ -172,9 +178,85 @@ export default function SignUpDetails() {
           finalRole = existingUser.role;
         }
 
-        // 기존 임시 사용자 문서 업데이트
-        await updateUser(existingUser.userId, {
+        let newUserId: string;
+        let userCredential: any;
+        
+        // 🔥 소셜 가입과 일반 가입 분기 처리
+        if (socialSignUp) {
+          // 소셜 가입: Firebase Auth 계정이 이미 존재
+          let currentUser = auth.currentUser;
+          
+          // 네이버/카카오의 경우 Custom Token으로 재로그인 시도
+          if (!currentUser && (socialProvider === 'naver' || socialProvider === 'kakao')) {
+            console.log('🔄 Custom Token 재로그인 시도...', { firebaseAuthUid, tempUserId, email });
+            try {
+              const { signInWithCustomTokenFromFunction } = await import('@/lib/firebaseService');
+              // firebaseAuthUid 또는 tempUserId 사용
+              const uidToUse = firebaseAuthUid || tempUserId;
+              
+              if (uidToUse) {
+                await signInWithCustomTokenFromFunction(uidToUse, email);
+                currentUser = auth.currentUser;
+                console.log('✅ Custom Token 재로그인 성공:', currentUser?.uid);
+              } else {
+                console.error('❌ UID 정보 없음');
+              }
+            } catch (error) {
+              console.error('❌ Custom Token 재로그인 실패:', error);
+            }
+          }
+          
+          if (!currentUser) {
+            console.error('❌ Auth 상태 확인 실패:', {
+              socialProvider,
+              email,
+              tempUserId,
+              firebaseAuthUid,
+            });
+            toast.error('인증 상태가 올바르지 않습니다. 다시 로그인해주세요.');
+            signupStorage.clear();
+            router.push('/sign-in');
+            setIsLoading(false);
+            return;
+          }
+          
+          newUserId = currentUser.uid;
+          console.log('✅ 소셜 가입 - Auth UID 사용:', newUserId);
+          
+          // socialProvider 동적 처리
+          const provider = socialProvider || 'google';
+          userCredential = {
+            user: currentUser,
+            authProviders: [{
+              providerId: `${provider}.com`,
+              uid: currentUser.uid,
+              email,
+              linkedAt: now,
+            }],
+            primaryAuthMethod: 'social',
+          };
+        } else {
+          // 일반 가입: 새 Firebase Auth 계정 생성
+          if (!password) {
+            toast.error('비밀번호가 누락되었습니다.');
+            router.push('/sign-up/account');
+            return;
+          }
+          userCredential = await signUp(email, password);
+          newUserId = userCredential.user.uid;
+          console.log('✅ 일반 가입 - 새 Auth 계정 생성:', newUserId);
+        }
+
+        // ✅ 기존 temp 문서 데이터 복사 (jobExperiences 등)
+        const tempData = { ...existingUser };
+        const oldTempUserId = existingUser.userId;
+
+        // ✅ 새 Auth UID로 Firestore 문서 생성
+        await createUser({
+          name,
+          phoneNumber,
           email,
+          password: '',
           address: data.address,
           addressDetail: data.addressDetail,
           rrnFront: data.rrnFront,
@@ -184,28 +266,40 @@ export default function SignUpDetails() {
           agreedPersonal: data.agreedPersonal,
           referralPath: referralPathValue,
           referrerName: data.referrerName,
-          selfIntroduction: '',
-          jobMotivation: '',
+          selfIntroduction: tempData.selfIntroduction || '',
+          jobMotivation: tempData.jobMotivation || '',
+          feedback: tempData.feedback || '',
+          profileImage: tempData.profileImage || '',
           status: 'active',
           role: finalRole,
           isEmailVerified: false,
-          updatedAt: now,
+          jobExperiences: tempData.jobExperiences || [],
           lastLoginAt: now,
           university,
           grade: gradeNum,
           isOnLeave: isOnLeaveVal,
           major1,
           major2: major2 || '',
+          agreedTerms: true,
+          isPhoneVerified: true,
+          isProfileCompleted: false,
+          isTermsAgreed: true,
+          isPersonalAgreed: true,
+          isAddressVerified: true,
+          isProfileImageUploaded: false,
+          createdAt: tempData.createdAt || now,
+          updatedAt: now,
           ...(socialSignUp && {
-            authProviders: [{
-              providerId: 'google.com',
-              uid: userCredential.user.uid,
-              email,
-              linkedAt: now,
-            }],
-            primaryAuthMethod: 'social',
+            authProviders: userCredential.authProviders,
+            primaryAuthMethod: userCredential.primaryAuthMethod,
           }),
-        });
+        }, newUserId);
+
+        // ✅ 기존 temp 문서 삭제
+        console.log('🗑️ 기존 temp 문서 삭제:', oldTempUserId);
+        const { deleteDoc, doc } = await import('firebase/firestore');
+        const { db } = await import('@/lib/firebase');
+        await deleteDoc(doc(db, 'users', oldTempUserId));
         
         // SessionStorage 정리
         signupStorage.clear();
@@ -222,12 +316,48 @@ export default function SignUpDetails() {
           router.push('/');
         }
       } else {
-        // Firebase Auth에 사용자 등록
-        const userCredential = await signUp(email, password || '');
-
+        // 신규 가입
         const now = Timestamp.now();
+        let newUserId: string;
+        let authProvidersData: any = undefined;
 
-        // Firestore에 사용자 정보 저장
+        // 🔥 소셜 가입과 일반 가입 분기 처리
+        if (socialSignUp) {
+          // 소셜 가입: 일반 가입처럼 이메일/비밀번호로 Firebase Auth 계정 생성
+          // (네이버 신규 가입은 Custom Token을 생성할 Firestore 사용자가 없으므로)
+          console.log('✅ 소셜 신규 가입 - Firebase Auth 계정 생성');
+          
+          // 임시 비밀번호 생성 (사용자는 모르는 비밀번호)
+          const tempPassword = `${email}_${Date.now()}_${Math.random().toString(36)}`;
+          const userCredential = await signUp(email, tempPassword);
+          newUserId = userCredential.user.uid;
+          
+          console.log('✅ Firebase Auth 계정 생성 완료, UID:', newUserId);
+          
+          // socialProvider 동적 처리
+          const provider = socialProvider || 'google';
+          authProvidersData = {
+            authProviders: [{
+              providerId: `${provider}.com`,
+              uid: newUserId,
+              email,
+              linkedAt: now,
+            }],
+            primaryAuthMethod: 'social',
+          };
+        } else {
+          // 일반 가입: 새 Firebase Auth 계정 생성
+          if (!password) {
+            toast.error('비밀번호가 누락되었습니다.');
+            router.push('/sign-up/account');
+            return;
+          }
+          const userCredential = await signUp(email, password);
+          newUserId = userCredential.user.uid;
+          console.log('✅ 일반 신규 가입 - 새 Auth 계정 생성:', newUserId);
+        }
+
+        // Firestore에 사용자 정보 저장 (Auth UID를 Document ID로 사용)
         await createUser({
           name,
           phoneNumber,
@@ -265,16 +395,8 @@ export default function SignUpDetails() {
           isProfileImageUploaded: false,
           createdAt: now,
           updatedAt: now,
-          ...(socialSignUp && {
-            authProviders: [{
-              providerId: 'google.com',
-              uid: userCredential.user.uid,
-              email,
-              linkedAt: now,
-            }],
-            primaryAuthMethod: 'social',
-          }),
-        });
+          ...authProvidersData,
+        }, newUserId);  // ✅ Auth UID 전달
 
         // SessionStorage 정리
         signupStorage.clear();

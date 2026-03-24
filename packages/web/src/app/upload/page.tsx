@@ -90,6 +90,33 @@ function SectionForm({
         className="space-y-3"
         onSubmit={event => {
           event.preventDefault();
+          
+          // URL 형식 검증
+          const isValidUrl = (url: string) => {
+            if (!url.trim()) return true;
+            try {
+              const urlObj = new URL(url);
+              return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+            } catch {
+              return false;
+            }
+          };
+          
+          if (viewUrl && !isValidUrl(viewUrl)) {
+            alert('공개보기 링크의 URL 형식이 올바르지 않습니다.\n예: https://docs.google.com/...');
+            return;
+          }
+          if (originalUrl && !isValidUrl(originalUrl)) {
+            alert('원본 링크의 URL 형식이 올바르지 않습니다.\n예: https://docs.google.com/...');
+            return;
+          }
+          
+          // 최소 하나의 URL 필수
+          if (!viewUrl.trim() && !originalUrl.trim()) {
+            alert('공개보기 링크 또는 원본 링크 중 최소 하나는 입력해주세요.');
+            return;
+          }
+          
           onSave({
             title,
             viewUrl,
@@ -130,8 +157,11 @@ function SectionForm({
             onChange={e => setViewUrl(e.target.value)}
             aria-label="공개보기 링크"
           />
+          <p className="text-xs text-red-600 font-medium mt-1">
+            ⚠️ 필수: Canva에서 '공유' → '공개 보기 링크' → '공개 보기 링크 만들기' → '복사' 클릭
+          </p>
         </div>
-        
+
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">
             원본 링크
@@ -143,6 +173,9 @@ function SectionForm({
             onChange={e => setOriginalUrl(e.target.value)}
             aria-label="원본 링크"
           />
+          <p className="text-xs text-red-600 font-medium mt-1">
+            ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭
+          </p>
         </div>
         
         <div className="flex gap-2 justify-end pt-1">
@@ -291,22 +324,33 @@ export default function UploadPage() {
       }
       
       // 7. 새로운 템플릿 추가
-      for (const template of accessibleTemplates) {
+      for (let i = 0; i < accessibleTemplates.length; i++) {
+        const template = accessibleTemplates[i];
         if (!seenTemplateIds.has(template.id)) {
-          console.log('새 템플릿 추가:', template.title);
-          await addLessonMaterial(userData.userId, template.title, 0, template.id);
+          console.log('새 템플릿 추가:', template.title, `(order: ${i})`);
+          await addLessonMaterial(userData.userId, template.title, i, template.id);
         }
       }
       
       // 8. 최종 수업 자료 가져오기 (접근 권한이 있는 것만 표시)
       const finalMats = await getLessonMaterials(userData.userId);
       
-      // 접근 권한이 있는 자료만 필터링하여 표시
+      // 접근 권한이 있는 자료만 필터링 + 중복 제거
+      const seenTemplateIdsInFinal = new Set<string>();
       const accessibleMats = finalMats.filter(mat => {
         if (!mat.templateId) return true; // 사용자가 직접 추가한 자료는 항상 표시
+        
         const template = allTemplates.find(t => t.id === mat.templateId);
         if (!template) return false;
-        return template.code && userCodesList.includes(template.code);
+        if (!template.code || !userCodesList.includes(template.code)) return false;
+        
+        // 중복 templateId 체크 (첫 번째만 표시)
+        if (seenTemplateIdsInFinal.has(mat.templateId)) {
+          console.log('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
+          return false;
+        }
+        seenTemplateIdsInFinal.add(mat.templateId);
+        return true;
       });
       
       console.log('최종 수업 자료:', accessibleMats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
@@ -327,10 +371,18 @@ export default function UploadPage() {
         
         // 먼저 템플릿 sections를 기반으로 유저 sections와 매칭
         if (template?.sections) {
+          // 삭제된 섹션 ID 목록
+          const deletedSectionIds = new Set(template.deletedSectionIds || []);
+          
           for (const templateSection of template.sections) {
+            // 삭제된 섹션은 건너뛰기
+            if (deletedSectionIds.has(templateSection.id)) {
+              continue;
+            }
+            
             // templateSectionId로 유저 section 찾기 (order 대신)
             const userSection = matSections.find(s => s.templateSectionId === templateSection.id);
-            
+
             if (userSection) {
               // 유저 section이 있으면 템플릿 정보와 병합
               mergedSections.push({

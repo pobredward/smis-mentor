@@ -14,7 +14,7 @@ type ApplicationWithJobDetails = ApplicationHistory & {
 };
 
 export default function ApplicationSection() {
-  const { currentUser, userData } = useAuth();
+  const { isAuthenticated, userData } = useAuth();
   const [applications, setApplications] = useState<ApplicationWithJobDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -151,7 +151,7 @@ export default function ApplicationSection() {
           <p className="mt-1 text-sm text-gray-600">내가 지원한 공고와 현재 상태를 확인할 수 있습니다.</p>
         </div>
         
-        {!currentUser ? (
+        {!isAuthenticated ? (
           <div className="bg-white rounded-lg shadow-md p-8 text-center max-w-2xl mx-auto">
             <div className="mb-6">
               <svg className="mx-auto h-16 w-16 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">

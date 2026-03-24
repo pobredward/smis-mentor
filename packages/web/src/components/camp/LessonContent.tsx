@@ -42,19 +42,48 @@ function SectionForm({
   const [viewUrl, setViewUrl] = useState(initial?.viewUrl || '');
   const [originalUrl, setOriginalUrl] = useState(initial?.originalUrl || '');
 
+  const isValidUrl = (url: string) => {
+    if (!url.trim()) return true; // 빈 값은 허용
+    try {
+      const urlObj = new URL(url);
+      return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    
+    // URL 형식 검증
+    if (viewUrl && !isValidUrl(viewUrl)) {
+      alert('공개보기 링크의 URL 형식이 올바르지 않습니다.\n예: https://docs.google.com/...');
+      return;
+    }
+    if (originalUrl && !isValidUrl(originalUrl)) {
+      alert('원본 링크의 URL 형식이 올바르지 않습니다.\n예: https://docs.google.com/...');
+      return;
+    }
+    
+    // 최소 하나의 URL 필수
+    if (!viewUrl.trim() && !originalUrl.trim()) {
+      alert('공개보기 링크 또는 원본 링크 중 최소 하나는 입력해주세요.');
+      return;
+    }
+    
+    onSave({
+      title,
+      viewUrl,
+      originalUrl,
+      order: initial?.order ?? 0,
+    });
+  };
+
   return (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-3">
       <form
         className="space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave({
-            title,
-            viewUrl,
-            originalUrl,
-            order: initial?.order ?? 0,
-          });
-        }}
+        onSubmit={handleSubmit}
       >
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">소제목 이름</label>
@@ -84,6 +113,9 @@ function SectionForm({
             onChange={(e) => setViewUrl(e.target.value)}
             aria-label="공개보기 링크"
           />
+          <p className="text-xs text-red-600 font-medium mt-1">
+            ⚠️ 필수: Canva에서 '공유' → '공개 보기 링크' → '공개 보기 링크 만들기' → '복사' 클릭
+          </p>
         </div>
 
         <div>
@@ -95,6 +127,9 @@ function SectionForm({
             onChange={(e) => setOriginalUrl(e.target.value)}
             aria-label="원본 링크"
           />
+          <p className="text-xs text-red-600 font-medium mt-1">
+            ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭
+          </p>
         </div>
 
         <div className="flex gap-2 justify-end pt-1">
@@ -229,21 +264,34 @@ export default function LessonContent() {
         await updateLessonMaterial(id, { title: newTitle });
       }
 
-      for (const template of accessibleTemplates) {
+      for (let i = 0; i < accessibleTemplates.length; i++) {
+        const template = accessibleTemplates[i];
         if (!seenTemplateIds.has(template.id)) {
-          await addLessonMaterial(userData.userId, template.title, 0, template.id);
+          await addLessonMaterial(userData.userId, template.title, i, template.id);
         }
       }
 
       const finalMats = await getLessonMaterials(userData.userId);
       
-      // 활성화된 코드에 해당하는 자료만 필터링
+      // 활성화된 코드에 해당하는 자료만 필터링 + 중복 제거
+      const seenTemplateIdsInFinal = new Set<string>();
       const filteredMats = finalMats.filter((mat) => {
+        // 활성 코드 체크
         if (mat.templateId) {
           const template = allTemplates.find((t) => t.id === mat.templateId);
-          return template?.code && activeCodesList.includes(template.code);
+          if (!template?.code || !activeCodesList.includes(template.code)) {
+            return false;
+          }
+          
+          // 중복 templateId 체크 (첫 번째만 표시)
+          if (seenTemplateIdsInFinal.has(mat.templateId)) {
+            console.log('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
+            return false;
+          }
+          seenTemplateIdsInFinal.add(mat.templateId);
+          return true;
         } else {
-          // 사용자가 추가한 대주제는 userCode로 필터링
+          // 사용자가 추가한 대주제는 userCode로 필터링 (중복 없음)
           return mat.userCode && activeCodesList.includes(mat.userCode);
         }
       });
@@ -259,7 +307,15 @@ export default function LessonContent() {
         const processedUserSectionIds = new Set<string>();
 
         if (template?.sections) {
+          // 삭제된 섹션 ID 목록
+          const deletedSectionIds = new Set(template.deletedSectionIds || []);
+          
           for (const templateSection of template.sections) {
+            // 삭제된 섹션은 건너뛰기
+            if (deletedSectionIds.has(templateSection.id)) {
+              continue;
+            }
+            
             // templateSectionId로 유저 section 찾기 (order 대신)
             const userSection = matSections.find((s) => s.templateSectionId === templateSection.id);
 
@@ -648,9 +704,9 @@ export default function LessonContent() {
   if (!userData.activeJobExperienceId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
-        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-3">
+        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4">
           <svg
-            className="w-6 h-6 text-blue-500"
+            className="w-8 h-8 text-amber-600"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -659,23 +715,20 @@ export default function LessonContent() {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
             />
           </svg>
         </div>
-        <p className="text-center font-medium mb-1">캠프를 선택해주세요</p>
-        <p className="text-center text-sm text-gray-500">
-          마이페이지에서 활성화할 캠프를 선택하면
+        <p className="text-lg font-semibold text-gray-700 mb-2">활성화된 캠프가 없습니다</p>
+        <p className="text-center text-sm text-gray-500 mb-4">
+          프로필 페이지에서 참여 중인 캠프를 활성화해주세요.
         </p>
-        <p className="text-center text-sm text-gray-500">
-          해당 캠프의 수업 자료를 확인할 수 있습니다.
-        </p>
+        <a
+          href="/profile"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium"
+        >
+          프로필 페이지로 이동
+        </a>
       </div>
     );
   }

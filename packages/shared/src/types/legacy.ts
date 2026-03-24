@@ -13,7 +13,8 @@ export interface User {
   userId: string;
   name: string;
   email: string;
-  originalEmail?: string;
+  originalEmail?: string; // Soft Delete 시 원본 이메일 백업
+  originalName?: string; // Soft Delete 시 원본 이름 백업
   phone?: string;
   phoneNumber: string;
   password: string;
@@ -30,11 +31,13 @@ export interface User {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lastLoginAt?: Timestamp;
+  deletedAt?: Timestamp | null; // Soft Delete 시간
+  deletedBy?: string | null; // Soft Delete 실행한 관리자 ID
   age?: number;
   agreedTerms: boolean;
   agreedPersonal: boolean;
   profileImage: string;
-  status: 'temp' | 'active' | 'inactive';
+  status: 'temp' | 'active' | 'inactive' | 'deleted';
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
   isProfileCompleted: boolean;

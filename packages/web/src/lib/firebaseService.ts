@@ -6,7 +6,8 @@ import {
   getDocs, 
   getDoc, 
   addDoc, 
-  updateDoc, 
+  updateDoc,
+  setDoc,
   deleteDoc, 
   Timestamp,
   orderBy,
@@ -37,14 +38,27 @@ import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWit
 import { getCache, setCache, CACHE_STORE, CACHE_TTL, getCacheCollection, setCacheCollection, removeCache, clearCacheCollection } from './cacheUtils';
 
 // User 관련 함수
-export const createUser = async (userData: Omit<User, 'userId' | 'id'>) => {
+export const createUser = async (userData: Omit<User, 'userId' | 'id'>, userId?: string) => {
   const now = Timestamp.now();
-  const docRef = await addDoc(collection(db, 'users'), {
-    ...userData,
-    createdAt: now,
-    updatedAt: now
-  });
-  return await updateDoc(doc(db, 'users', docRef.id), { userId: docRef.id, id: docRef.id });
+  
+  if (userId) {
+    // Firebase Auth UID를 Document ID로 사용 (마이그레이션 후 방식)
+    await setDoc(doc(db, 'users', userId), {
+      ...userData,
+      userId,
+      id: userId,
+      createdAt: now,
+      updatedAt: now
+    });
+  } else {
+    // 기존 방식 (하위 호환성 - 사용하지 않음)
+    const docRef = await addDoc(collection(db, 'users'), {
+      ...userData,
+      createdAt: now,
+      updatedAt: now
+    });
+    await updateDoc(doc(db, 'users', docRef.id), { userId: docRef.id, id: docRef.id });
+  }
 };
 
 export const getUserById = async (userId: string) => {
@@ -110,6 +124,38 @@ export const getUserByPhone = async (phoneNumber: string) => {
     const q = query(collection(db, 'users'), where('phoneNumber', '==', phoneNumber));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
+    
+    // 여러 사용자가 있는 경우 (데이터 무결성 문제)
+    if (querySnapshot.docs.length > 1) {
+      console.warn('⚠️ 동일한 전화번호로 여러 사용자 발견:', {
+        phoneNumber,
+        count: querySnapshot.docs.length,
+        users: querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name,
+          status: doc.data().status,
+        })),
+      });
+      
+      // active 사용자 우선 반환
+      const activeUser = querySnapshot.docs.find(doc => doc.data().status === 'active');
+      if (activeUser) {
+        console.log('✅ active 사용자 반환');
+        return activeUser.data() as User;
+      }
+      
+      // temp 사용자 우선 반환
+      const tempUser = querySnapshot.docs.find(doc => doc.data().status === 'temp');
+      if (tempUser) {
+        console.log('✅ temp 사용자 반환');
+        return tempUser.data() as User;
+      }
+      
+      // 그 외 첫 번째 사용자 반환
+      console.log('⚠️ inactive/deleted 사용자 반환');
+      return querySnapshot.docs[0].data() as User;
+    }
+    
     return querySnapshot.docs[0].data() as User;
   } catch (error) {
     console.error('전화번호로 사용자 조회 실패:', error);
@@ -241,6 +287,51 @@ export const deactivateUser = async (userId: string) => {
   }
 };
 
+// 삭제된 사용자만 조회
+export const getDeletedUsers = async () => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('status', '==', 'deleted'));
+    const querySnapshot = await getDocs(q);
+    
+    const users: User[] = [];
+    querySnapshot.forEach((doc) => {
+      users.push(doc.data() as User);
+    });
+    
+    console.log(`✅ 삭제된 사용자 조회 완료: ${users.length}명`);
+    
+    return users;
+  } catch (error) {
+    console.error('삭제된 사용자 조회 실패:', error);
+    throw error;
+  }
+};
+
+// 사용자 삭제 전 관련 데이터 확인
+export const checkUserData = async (userId: string) => {
+  try {
+    if (!auth.currentUser) {
+      throw new Error('인증이 필요합니다.');
+    }
+
+    const response = await fetch(`/api/admin/check-user-data?userId=${userId}&adminUserId=${auth.currentUser.uid}`);
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || '데이터 확인에 실패했습니다.');
+    }
+
+    const result = await response.json();
+    console.log('✅ 사용자 데이터 확인:', result);
+    
+    return result;
+  } catch (error) {
+    console.error('사용자 데이터 확인 실패:', error);
+    throw error;
+  }
+};
+
 export const reactivateUser = async (userId: string) => {
   try {
     // 1. Firestore에서 사용자 정보 조회
@@ -252,121 +343,112 @@ export const reactivateUser = async (userId: string) => {
     }
     
     const userData = userDoc.data() as User;
-    const now = Timestamp.now();
-    const originalName = userData.name.replace(/^\(탈퇴\)/, '');
     
-    // 저장된 원본 이메일이 있는지 확인
-    const email = userData.originalEmail || userData.email;
-    
-    if (!email) {
-      throw new Error('사용자의 이메일 정보를 찾을 수 없습니다.');
+    // 1.1 삭제된 사용자인지 확인
+    if ((userData.status as any) !== 'deleted' && userData.status !== 'inactive') {
+      throw new Error('이미 활성화된 사용자입니다.');
     }
     
-    // 임시 비밀번호 생성 (랜덤 문자열)
+    const now = Timestamp.now();
+    
+    // 2. 원본 정보 복원
+    const originalName = (userData as any).originalName || userData.name.replace(/^\(삭제됨\)\s*|\(탈퇴\)\s*/g, '');
+    const originalEmail = (userData as any).originalEmail || userData.email.replace(/^deleted_\d+_/g, '');
+    
+    if (!originalEmail || originalEmail.includes('deleted_')) {
+      throw new Error('복구할 이메일 정보를 찾을 수 없습니다.');
+    }
+    
+    console.log(`✅ 사용자 복구 시작: ${originalName} (${originalEmail})`);
+    
+    // 3. Firebase Auth 계정 재생성 (삭제된 경우)
     const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-2).toUpperCase() + '!';
     
-    // 2. 기존 로그인 상태 백업
+    // 백업 현재 사용자
     const currentUserBackup = auth.currentUser;
     
-    console.log(`계정 복구 시작: ${email}`);
-    
     try {
-      // 3. 임시 로그아웃 (현재 사용자가 있는 경우)
+      // 임시 로그아웃
       if (currentUserBackup) {
-        console.log('기존 로그인 상태 백업 및 로그아웃');
+        console.log('기존 로그인 상태 백업');
         await firebaseSignOut(auth);
       }
       
-      // 4. Authentication 계정 생성 시도
+      // Auth 계정 생성 시도
       try {
-        console.log(`새 Authentication 계정 생성 시도: ${email}`);
-        await createUserWithEmailAndPassword(auth, email, tempPassword);
-        console.log('새 Authentication 계정 생성 성공');
+        console.log(`Firebase Auth 계정 재생성 시도: ${originalEmail}`);
+        await createUserWithEmailAndPassword(auth, originalEmail, tempPassword);
+        console.log('✅ Firebase Auth 계정 생성 완료');
+        
+        // 비밀번호 재설정 이메일 전송
+        await sendPasswordResetEmail(auth, originalEmail);
+        console.log('✅ 비밀번호 재설정 이메일 전송 완료');
+        
       } catch (createError) {
-        // 이미 계정이 존재하는 경우 (auth/email-already-in-use)
         if (createError instanceof FirebaseError && createError.code === 'auth/email-already-in-use') {
-          console.log('이미 해당 이메일로 계정이 존재합니다.');
+          console.log('⚠️ 이미 Firebase Auth 계정이 존재합니다 (정상 복구 가능)');
+          // 비밀번호 재설정 이메일만 전송
+          await sendPasswordResetEmail(auth, originalEmail);
         } else {
-          console.error('Authentication 계정 생성 오류:', createError);
-          throw createError; // 다른 오류는 상위로 전파
+          console.warn('⚠️ Firebase Auth 계정 생성 실패 (Firestore는 복구됨):', createError);
         }
       }
       
-      // 5. 비밀번호 재설정 이메일 전송
-      console.log(`비밀번호 재설정 이메일 전송 시도: ${email}`);
-      await sendPasswordResetEmail(auth, email);
-      console.log('비밀번호 재설정 이메일 전송 성공');
+      // 로그아웃
+      await firebaseSignOut(auth);
       
-      // 6. 원래 사용자로 다시 로그인 (필요한 경우)
-      if (currentUserBackup) {
-        // 현재는 간단히 로그아웃만 수행 (세션 유지는 복잡할 수 있음)
-        console.log('로그아웃 상태 유지 (관리자는 새로 로그인 필요)');
-        await firebaseSignOut(auth);
-      }
     } catch (authError) {
-      console.error('Authentication 계정 복구 오류:', authError);
-      
-      // 오류 발생 시 원래 사용자로 복원 시도
-      if (currentUserBackup) {
-        try {
-          // 이 부분은 실제로는 작동하지 않을 수 있음 (세션 토큰을 저장할 수 없음)
-          // 관리자에게 다시 로그인하라는 메시지를 표시하는 것이 더 적절함
-          console.log('인증 오류 발생, 관리자는 다시 로그인해야 합니다.');
-          await firebaseSignOut(auth);
-        } catch (reloginError) {
-          console.error('원래 사용자로 복원 실패:', reloginError);
-        }
-      }
-      
-      // 인증 오류가 있더라도 Firestore 업데이트는 계속 진행
+      console.warn('⚠️ Firebase Auth 복구 중 오류 (Firestore는 복구 진행):', authError);
     }
     
-    // 7. Firestore 사용자 문서 업데이트
+    // 4. Firestore 사용자 문서 복원
     await updateDoc(userRef, {
       status: 'active',
       name: originalName,
-      email: email, // 원본 이메일 복원
-      updatedAt: now
+      email: originalEmail,
+      updatedAt: now,
+      // 삭제 관련 필드 제거
+      deletedAt: null,
+      deletedBy: null,
     });
+    
+    console.log('✅ 사용자 복구 완료');
     
     return true;
   } catch (error) {
-    console.error('사용자 재활성화 실패:', error);
+    console.error('❌ 사용자 재활성화 실패:', error);
     throw error;
   }
 };
 
-export const deleteUser = async (userId: string) => {
+export const deleteUser = async (userId: string, deleteType: 'soft' | 'hard' = 'soft') => {
   try {
-    // 사용자 정보 가져오기
-    const userRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userRef);
-    
-    if (!userDoc.exists()) {
-      throw new Error('사용자를 찾을 수 없습니다.');
+    // 현재 로그인한 관리자 확인
+    if (!auth.currentUser) {
+      throw new Error('인증이 필요합니다.');
     }
-    
-    const userData = userDoc.data() as User;
-    
-    // 현재 인증된 사용자와 삭제하려는 사용자가 같은 경우
-    // (사용자 자신이 탈퇴하는 경우)
-    if (auth.currentUser && auth.currentUser.email === userData.email) {
-      try {
-        await deleteAuthUser(auth.currentUser);
-        console.log('Firebase Authentication 계정이 삭제되었습니다.');
-      } catch (authError) {
-        console.error('Firebase Authentication 계정 삭제 실패:', authError);
-        // Authentication 오류는 무시하고 Firestore 삭제는 진행
-      }
-    } else {
-      // 관리자가 다른 사용자를 삭제하는 경우
-      // 여기서는 관리자 권한으로 해당 사용자의 Authentication 계정을 직접 삭제할 수 없음
-      // Firebase Admin SDK가 필요한 부분이므로 별도의 백엔드 API 구현이 필요
-      console.log('관리자가 사용자를 삭제하는 경우, Authentication 계정은 삭제할 수 없습니다.');
+
+    // Admin API Route 호출
+    const response = await fetch('/api/admin/delete-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId,
+        adminUserId: auth.currentUser.uid,
+        deleteType,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || '사용자 삭제에 실패했습니다.');
     }
+
+    const result = await response.json();
+    console.log(`✅ 사용자 ${deleteType === 'hard' ? '영구' : '일반'} 삭제 성공:`, result);
     
-    // Firestore에서 사용자 문서 삭제
-    await deleteDoc(userRef);
     return true;
   } catch (error) {
     console.error('사용자 삭제 실패:', error);
@@ -783,9 +865,44 @@ export const updateUserProfile = async (user: FirebaseUser, displayName?: string
   }
 };
 
+export const signInWithCustomTokenFromFunction = async (userId: string, email: string) => {
+  try {
+    // Firebase Functions를 통해 Custom Token 생성
+    const functionsModule = await import('firebase/functions');
+    const functions = functionsModule.getFunctions();
+    
+    // 개발 환경에서는 emulator 사용
+    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_USE_EMULATOR === 'true') {
+      functionsModule.connectFunctionsEmulator(functions, 'localhost', 5001);
+    }
+    
+    const createCustomToken = functionsModule.httpsCallable(functions, 'createCustomToken');
+    const result = await createCustomToken({ userId, email });
+    const { customToken } = result.data as { customToken: string };
+    
+    // Custom Token으로 Firebase Auth 로그인
+    const authModule = await import('firebase/auth');
+    const userCredential = await authModule.signInWithCustomToken(auth, customToken);
+    
+    console.log('✅ Custom Token 로그인 성공:', userCredential.user.uid);
+    return userCredential;
+  } catch (error) {
+    console.error('Custom Token 로그인 실패:', error);
+    throw error;
+  }
+};
+
 export const signOut = async () => {
   try {
+    // 세션 스토리지 소셜 로그인 정보 삭제
+    sessionStorage.removeItem('social_user');
+    
+    // Firebase Auth 로그아웃
     await firebaseSignOut(auth);
+    
+    // AuthContext에 로그아웃 이벤트 전달
+    window.dispatchEvent(new CustomEvent('user-logout'));
+    
     return true;
   } catch (error) {
     console.error('로그아웃 실패:', error);
@@ -1035,15 +1152,24 @@ export const createTempUser = async (
 };
 
 // 모든 사용자 조회
-export const getAllUsers = async () => {
+export const getAllUsers = async (includeDeleted: boolean = false) => {
   try {
     const usersRef = collection(db, 'users');
-    const querySnapshot = await getDocs(usersRef);
+    
+    // 삭제된 사용자 제외 옵션
+    let q = query(usersRef);
+    if (!includeDeleted) {
+      q = query(usersRef, where('status', '!=', 'deleted'));
+    }
+    
+    const querySnapshot = await getDocs(q);
     
     const users: User[] = [];
     querySnapshot.forEach((doc) => {
       users.push(doc.data() as User);
     });
+    
+    console.log(`✅ 사용자 조회 완료: ${users.length}명 (삭제된 사용자 ${includeDeleted ? '포함' : '제외'})`);
     
     return users;
   } catch (error) {
@@ -1442,4 +1568,25 @@ export const refreshCacheAfterUpdate = async (collection: string, id: string) =>
     default:
       break;
   }
-}; 
+};
+
+// Firebase Functions의 verifyAuthFirestoreConsistency 호출
+export const verifyAuthFirestoreConsistency = async () => {
+  try {
+    const functionsModule = await import('firebase/functions');
+    const functions = functionsModule.getFunctions(undefined, 'asia-northeast3');
+    
+    // 개발 환경에서는 emulator 사용
+    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
+      functionsModule.connectFunctionsEmulator(functions, 'localhost', 5001);
+    }
+    
+    const verifyConsistency = functionsModule.httpsCallable(functions, 'verifyAuthFirestoreConsistency');
+    const result = await verifyConsistency({});
+    
+    return result.data;
+  } catch (error) {
+    console.error('❌ 일관성 검증 실패:', error);
+    throw error;
+  }
+};

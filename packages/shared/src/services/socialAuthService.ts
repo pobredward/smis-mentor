@@ -35,23 +35,34 @@ export async function handleSocialLogin(
         authProviders: existingUser.authProviders,
       });
       
+      // 탈퇴/삭제된 계정 처리
+      if (existingUser.status === 'inactive' || existingUser.status === 'deleted') {
+        console.log('⚠️ 탈퇴/삭제된 계정:', existingUser.status);
+        throw new Error(`ACCOUNT_${existingUser.status.toUpperCase()}`);
+      }
+      
       if (existingUser.status === 'active') {
-        // authProviders 확인
-        const hasGoogleLinked = existingUser.authProviders?.some(
-          (p: AuthProvider) => p.providerId === 'google.com'
+        // authProviders 확인 - 이미 해당 소셜 계정이 연동되어 있는지 체크
+        const hasProviderLinked = existingUser.authProviders?.some(
+          (p: AuthProvider) => {
+            // providerId 정규화 비교 (naver.com과 naver 모두 허용)
+            const normalizedStoredId = p.providerId.replace('.com', '');
+            const normalizedSocialId = socialData.providerId.replace('.com', '');
+            return normalizedStoredId === normalizedSocialId;
+          }
         );
         
-        if (hasGoogleLinked) {
-          // 이미 Google 연동됨 → 바로 로그인
-          console.log('✅ 이미 Google 계정이 연동된 사용자');
+        if (hasProviderLinked) {
+          // 이미 해당 소셜 계정이 연동됨 → 바로 로그인
+          console.log(`✅ 이미 ${socialData.providerId} 계정이 연동된 사용자`);
           return {
             action: 'LOGIN',
             user: existingUser,
             socialData,
           };
         } else {
-          // Google 연동 안됨 → 비밀번호 입력 필요
-          console.log('🔗 Google 연동이 필요한 기존 계정');
+          // 해당 소셜 계정이 연동 안됨 → 비밀번호 입력 필요
+          console.log(`🔗 ${socialData.providerId} 연동이 필요한 기존 계정`);
           return {
             action: 'LINK_ACTIVE',
             user: existingUser,
@@ -60,15 +71,11 @@ export async function handleSocialLogin(
         }
       }
       
-      // temp 계정은 이메일이 없으므로 여기 올 수 없음
-      // 혹시 있다면 연동 처리
-      console.log('⚠️ Temp 계정에 이메일이 있음 (비정상)');
-      return {
-        action: 'LINK_TEMP',
-        tempUserId: existingUser.userId || existingUser.id,
-        user: existingUser,
-        socialData,
-      };
+      // temp 계정은 이메일이 없으므로 이 함수에서 절대 발견될 수 없음
+      // temp 계정은 전화번호 입력 후 checkTempAccountByPhone에서 처리됨
+      // 만약 temp 계정에 이메일이 있다면 데이터 무결성 문제임
+      console.error('⚠️ [데이터 무결성 오류] Temp 계정에 이메일이 있음:', existingUser);
+      throw new Error('계정 상태가 비정상적입니다. 관리자에게 문의하세요.');
     }
 
     // 2. 이메일로 계정 없음 → 전화번호 입력 필요
@@ -112,6 +119,12 @@ export async function checkTempAccountByPhone(
       status: user.status,
       role: user.role,
     });
+    
+    // inactive/deleted 계정 처리
+    if (user.status === 'inactive' || user.status === 'deleted') {
+      console.log('⚠️ 탈퇴/삭제된 계정:', user.status);
+      throw new Error(`ACCOUNT_${user.status.toUpperCase()}`);
+    }
 
     if (user.status === 'active') {
       // active 계정 발견
@@ -167,7 +180,9 @@ export async function checkTempAccountByPhone(
       jobCodes,
     };
   } catch (error) {
-    if ((error as Error).message === 'ALREADY_REGISTERED') {
+    if ((error as Error).message === 'ALREADY_REGISTERED' || 
+        (error as Error).message === 'ACCOUNT_INACTIVE' || 
+        (error as Error).message === 'ACCOUNT_DELETED') {
       throw error;
     }
     console.error('전화번호로 계정 확인 중 오류:', error);
@@ -324,6 +339,7 @@ export async function linkSocialToExistingAccount(
 export async function unlinkSocialProvider(
   auth: any,
   providerId: SocialProvider,
+  firestoreUserId: string, // Firestore userId 직접 전달
   getUserById: (userId: string) => Promise<any | null>,
   updateUser: (userId: string, data: any) => Promise<void>
 ): Promise<void> {
@@ -333,32 +349,81 @@ export async function unlinkSocialProvider(
       throw new Error('로그인이 필요합니다');
     }
 
-    console.log('🔓 소셜 제공자 연동 해제:', providerId);
+    console.log('🔓 소셜 제공자 연동 해제 시작:', {
+      providerId,
+      firestoreUserId,
+      firebaseAuthUid: currentUser.uid,
+      email: currentUser.email,
+    });
 
-    // 1. 연동 해제 가능한지 확인
-    const user = await getUserById(currentUser.uid);
+    // 1. 사용자 정보 조회 (Firestore userId 사용)
+    console.log('📥 사용자 정보 조회 시도 #1 (userId):', firestoreUserId);
+    let user = await getUserById(firestoreUserId);
+    
+    // 만약 userId로 찾지 못하면, Firebase Auth UID로 재시도
+    if (!user && firestoreUserId !== currentUser.uid) {
+      console.log('⚠️ userId로 찾지 못함, Firebase Auth UID로 재시도:', currentUser.uid);
+      user = await getUserById(currentUser.uid);
+    }
+    
+    console.log('📊 조회된 사용자 정보:', {
+      found: !!user,
+      userId: user?.userId,
+      documentId: user ? firestoreUserId : 'N/A',
+      authProviders: user?.authProviders?.length,
+    });
+    
+    if (!user) {
+      throw new Error('사용자 정보를 찾을 수 없습니다. 페이지를 새로고침해주세요.');
+    }
+
+    // 실제 문서 ID 결정 (userId 필드가 다를 수 있음)
+    const actualDocumentId = user.userId || firestoreUserId;
+    console.log('📄 실제 문서 ID:', actualDocumentId);
+    
+    // 2. 연동 해제 가능한지 확인
     const canUnlinkResult = canUnlinkProvider(user, providerId);
     
     if (!canUnlinkResult.canUnlink) {
       throw new Error(canUnlinkResult.reason || '연동 해제할 수 없습니다');
     }
 
-    // 2. Firebase Auth에서 연동 해제
-    await unlink(currentUser, providerId);
-    console.log('✅ Firebase Auth 연동 해제 완료');
+    // 3. Firebase Auth에서 연동 해제 (공식 지원 제공업체만)
+    // 네이버, 카카오는 Custom Token으로 생성했으므로 Firebase Auth에서 unlink 불필요
+    const firebaseNativeProviders = ['google.com', 'apple.com', 'facebook.com', 'twitter.com', 'github.com'];
+    
+    if (firebaseNativeProviders.includes(providerId)) {
+      try {
+        console.log('🔗 Firebase Auth 연동 해제 시도:', providerId);
+        await unlink(currentUser, providerId);
+        console.log('✅ Firebase Auth 연동 해제 완료:', providerId);
+      } catch (error: any) {
+        // Firebase Auth에서 연동 해제 실패해도 Firestore는 업데이트
+        console.warn('⚠️ Firebase Auth 연동 해제 실패 (무시):', error.message);
+      }
+    } else {
+      console.log('ℹ️ Custom Token 제공업체 - Firebase Auth 연동 해제 생략:', providerId);
+    }
 
-    // 3. Firestore 업데이트
+    // 4. Firestore 업데이트 (실제 문서 ID 사용)
     const updatedProviders = (user.authProviders || []).filter(
       (p: AuthProvider) => p.providerId !== providerId
     );
 
-    await updateUser(currentUser.uid, {
+    console.log('💾 Firestore 업데이트 시작:', {
+      documentId: actualDocumentId,
+      before: user.authProviders?.length,
+      after: updatedProviders.length,
+    });
+
+    await updateUser(actualDocumentId, {
       authProviders: updatedProviders,
       updatedAt: Timestamp.now(),
     });
-    console.log('✅ Firestore 업데이트 완료');
-  } catch (error) {
-    console.error('소셜 제공자 연동 해제 중 오류:', error);
+    
+    console.log('✅ 연동 해제 완료');
+  } catch (error: any) {
+    console.error('❌ 소셜 제공자 연동 해제 중 오류:', error);
     throw error;
   }
 }
@@ -490,6 +555,10 @@ export function handleSocialAuthError(error: any): string {
     return '팝업이 차단되었습니다. 브라우저 설정을 확인해주세요.';
   } else if (error.message === 'ALREADY_REGISTERED') {
     return '이미 가입된 계정입니다. 로그인 화면에서 소셜 로그인을 시도하세요.';
+  } else if (error.message === 'ACCOUNT_INACTIVE') {
+    return '탈퇴한 계정입니다. 계정 복구를 원하시면 관리자에게 문의하세요.';
+  } else if (error.message === 'ACCOUNT_DELETED') {
+    return '삭제된 계정입니다. 계정 복구를 원하시면 관리자에게 문의하세요.';
   } else if (error.code === 'auth/wrong-password') {
     return '비밀번호가 일치하지 않습니다.';
   } else if (error.code === 'auth/user-not-found') {
@@ -507,10 +576,10 @@ export function getSocialProviderName(providerId: string): string {
       return 'Google';
     case 'apple.com':
       return 'Apple';
-    case 'kakao':
-      return '카카오';
     case 'naver':
       return '네이버';
+    case 'kakao':
+      return '카카오';
     case 'password':
       return '이메일/비밀번호';
     default:
@@ -527,10 +596,10 @@ export function getSocialProviderIcon(providerId: string): string {
       return '🔵';
     case 'apple.com':
       return '🍎';
-    case 'kakao':
-      return '💬';
     case 'naver':
       return '🟢';
+    case 'kakao':
+      return '💬';
     case 'password':
       return '📧';
     default:

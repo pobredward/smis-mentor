@@ -16,7 +16,7 @@ type LayoutProps = {
 };
 
 export default function Layout({ children, requireAuth, requireAdmin, noPadding }: LayoutProps) {
-  const { currentUser, userData, loading } = useAuth();
+  const { isAuthenticated, userData, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -34,7 +34,7 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
     );
   }
 
-  if (requireAuth && !currentUser) {
+  if (requireAuth && !isAuthenticated) {
     return (
       <div className="min-h-screen">
         <Header />

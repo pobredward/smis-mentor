@@ -12,6 +12,7 @@ export interface User {
     name: string;
     email: string;
     originalEmail?: string;
+    originalName?: string;
     phone?: string;
     phoneNumber: string;
     password: string;
@@ -28,11 +29,13 @@ export interface User {
     createdAt: Timestamp;
     updatedAt: Timestamp;
     lastLoginAt?: Timestamp;
+    deletedAt?: Timestamp | null;
+    deletedBy?: string | null;
     age?: number;
     agreedTerms: boolean;
     agreedPersonal: boolean;
     profileImage: string;
-    status: 'temp' | 'active' | 'inactive';
+    status: 'temp' | 'active' | 'inactive' | 'deleted';
     isEmailVerified: boolean;
     isPhoneVerified: boolean;
     isProfileCompleted: boolean;

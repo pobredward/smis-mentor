@@ -166,8 +166,23 @@ export const useSMSTemplates = ({
     try {
       setIsSaving(true);
 
+      // Firebase Auth 또는 세션 스토리지에서 사용자 ID 가져오기
+      let createdBy = 'system';
       const currentUser = auth.currentUser;
-      const createdBy = currentUser?.uid || 'system';
+      if (currentUser) {
+        createdBy = currentUser.uid;
+      } else {
+        // 네이버/카카오 소셜 로그인 사용자
+        const socialUserStr = sessionStorage.getItem('social_user');
+        if (socialUserStr) {
+          try {
+            const socialUser = JSON.parse(socialUserStr);
+            createdBy = socialUser.userId;
+          } catch (error) {
+            console.error('소셜 로그인 사용자 ID 파싱 실패:', error);
+          }
+        }
+      }
 
       // 기존 템플릿 확인
       const existingTemplate = await getSMSTemplateByTypeAndJobBoard(type, jobBoardId);

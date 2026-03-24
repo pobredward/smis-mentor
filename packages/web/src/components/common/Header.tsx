@@ -6,7 +6,6 @@ import { signOut } from '@/lib/firebaseService';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { User } from '@/types';
-import { User as FirebaseUser } from 'firebase/auth';
 
 interface NavItem {
   name: string;
@@ -17,13 +16,13 @@ interface NavItem {
 const ProfileDropdown = memo(({ 
   isOpen, 
   onClose,
-  currentUser, 
+  isAuthenticated,
   userData, 
   onSignOut 
 }: { 
   isOpen: boolean;
   onClose: () => void;
-  currentUser: FirebaseUser | null; 
+  isAuthenticated: boolean;
   userData: User | null; 
   onSignOut: () => void;
 }) => {
@@ -31,7 +30,7 @@ const ProfileDropdown = memo(({
   
   return (
     <div className="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-10 animate-in fade-in slide-in-from-top-2 duration-200">
-      {currentUser ? (
+      {isAuthenticated ? (
         <>
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-sm font-semibold text-gray-900 truncate">
@@ -96,7 +95,7 @@ const ProfileDropdown = memo(({
 ProfileDropdown.displayName = 'ProfileDropdown';
 
 const Header = () => {
-  const { currentUser, userData } = useAuth();
+  const { isAuthenticated, userData } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -237,7 +236,7 @@ const Header = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {currentUser ? (
+            {isAuthenticated ? (
               <div className="relative ml-4" ref={dropdownRef}>
                 <button
                   onClick={toggleProfileDropdown}
@@ -265,7 +264,7 @@ const Header = () => {
                 <ProfileDropdown 
                   isOpen={isProfileDropdownOpen} 
                   onClose={closeProfileDropdown}
-                  currentUser={currentUser}
+                  isAuthenticated={isAuthenticated}
                   userData={userData}
                   onSignOut={handleSignOut}
                 />

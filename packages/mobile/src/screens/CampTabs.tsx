@@ -191,10 +191,11 @@ export function LessonScreen() {
       }
 
       console.log('🔍 7. 새로운 템플릿 추가 확인...');
-      for (const template of accessibleTemplates) {
+      for (let i = 0; i < accessibleTemplates.length; i++) {
+        const template = accessibleTemplates[i];
         if (!seenTemplateIds.has(template.id)) {
-          console.log('  ➕ 새 템플릿 추가:', template.title);
-          await addLessonMaterial(userData.userId, template.title, 0, template.id);
+          console.log('  ➕ 새 템플릿 추가:', template.title, `(order: ${i})`);
+          await addLessonMaterial(userData.userId, template.title, i, template.id);
         }
       }
 
@@ -202,19 +203,31 @@ export function LessonScreen() {
       const finalMats = await getLessonMaterials(userData.userId);
       console.log('  ✅ 최종 수업 자료 개수:', finalMats.length);
       
-      // 활성화된 코드에 해당하는 자료만 필터링
+      // 활성화된 코드에 해당하는 자료만 필터링 + 중복 제거
+      const seenTemplateIdsInFinal = new Set<string>();
       const filteredMats = finalMats.filter((mat) => {
+        // 활성 코드 체크
         if (mat.templateId) {
           const template = allTemplates.find((t) => t.id === mat.templateId);
-          return template?.code && activeCodesList.includes(template.code);
+          if (!template?.code || !activeCodesList.includes(template.code)) {
+            return false;
+          }
+          
+          // 중복 templateId 체크 (첫 번째만 표시)
+          if (seenTemplateIdsInFinal.has(mat.templateId)) {
+            console.log('  🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
+            return false;
+          }
+          seenTemplateIdsInFinal.add(mat.templateId);
+          return true;
         } else {
-          // 사용자가 추가한 대주제는 userCode로 필터링
+          // 사용자가 추가한 대주제는 userCode로 필터링 (중복 없음)
           return mat.userCode && activeCodesList.includes(mat.userCode);
         }
       });
       
       console.log('  ✅ 필터링된 자료 개수:', filteredMats.length);
-      console.log('  📋 필터링된 자료:', filteredMats.map(m => ({ id: m.id, title: m.title })));
+      console.log('  📋 필터링된 자료:', filteredMats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
       
       setMaterials(filteredMats);
 
@@ -227,7 +240,15 @@ export function LessonScreen() {
         const processedUserSectionIds = new Set<string>();
 
         if (template?.sections) {
+          // 삭제된 섹션 ID 목록
+          const deletedSectionIds = new Set(template.deletedSectionIds || []);
+          
           for (const templateSection of template.sections) {
+            // 삭제된 섹션은 건너뛰기
+            if (deletedSectionIds.has(templateSection.id)) {
+              continue;
+            }
+            
             // templateSectionId로 유저 section 찾기 (order 대신)
             const userSection = matSections.find((s) => s.templateSectionId === templateSection.id);
 
@@ -838,6 +859,9 @@ export function LessonScreen() {
                                   onChangeText={setSectionViewUrl}
                                   autoCapitalize="none"
                                 />
+                                <Text style={[styles.helperText, { color: '#dc2626', fontWeight: '600', marginBottom: 8 }]}>
+                                  ⚠️ 필수: Canva에서 '공유' → '공개 보기 링크' → '공개 보기 링크 만들기' → '복사' 클릭
+                                </Text>
                                 <TextInput
                                   style={styles.input}
                                   placeholder="원본 링크"
@@ -845,6 +869,9 @@ export function LessonScreen() {
                                   onChangeText={setSectionOriginalUrl}
                                   autoCapitalize="none"
                                 />
+                                <Text style={[styles.helperText, { color: '#dc2626', fontWeight: '600', marginBottom: 8 }]}>
+                                  ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭
+                                </Text>
                                 <View style={styles.formActions}>
                                   <TouchableOpacity
                                     style={styles.cancelButton}
@@ -991,6 +1018,9 @@ export function LessonScreen() {
                             onChangeText={setSectionViewUrl}
                             autoCapitalize="none"
                           />
+                          <Text style={[styles.helperText, { color: '#dc2626', fontWeight: '600', marginBottom: 8 }]}>
+                            ⚠️ 필수: Canva에서 '공유' → '공개 보기 링크' → '공개 보기 링크 만들기' → '복사' 클릭
+                          </Text>
                           <TextInput
                             style={styles.input}
                             placeholder="원본 링크"
@@ -998,6 +1028,9 @@ export function LessonScreen() {
                             onChangeText={setSectionOriginalUrl}
                             autoCapitalize="none"
                           />
+                          <Text style={[styles.helperText, { color: '#dc2626', fontWeight: '600', marginBottom: 8 }]}>
+                            ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭
+                          </Text>
                           <View style={styles.formActions}>
                             <TouchableOpacity
                               style={styles.cancelButton}

@@ -51,6 +51,9 @@ export interface LessonMaterialTemplate {
   links?: { label: string; url: string }[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  deleted?: boolean;
+  deletedAt?: Timestamp;
+  deletedSectionIds?: string[];
 }
 
 const LESSON_MATERIALS = 'lessonMaterials';
@@ -131,7 +134,15 @@ export async function deleteSection(lessonMaterialId: string, sectionId: string)
 
 // 템플릿(lessonMaterialTemplates) CRUD
 export async function getLessonMaterialTemplates() {
-  const q = query(collection(db, LESSON_MATERIAL_TEMPLATES), orderBy('title', 'asc'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as LessonMaterialTemplate[];
+  const snapshot = await getDocs(collection(db, LESSON_MATERIAL_TEMPLATES));
+  const templates = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as LessonMaterialTemplate[];
+  
+  // 클라이언트에서 필터링 및 정렬
+  return templates
+    .filter(t => !t.deleted)
+    .sort((a, b) => {
+      const timeA = a.createdAt?.toMillis?.() || 0;
+      const timeB = b.createdAt?.toMillis?.() || 0;
+      return timeA - timeB;
+    });
 }

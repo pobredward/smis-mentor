@@ -52,6 +52,9 @@ export interface LessonMaterialTemplate {
   links?: { label: string; url: string }[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  deleted?: boolean;
+  deletedAt?: Timestamp;
+  deletedSectionIds?: string[]; // 삭제된 섹션 ID 추적
 }
 
 const LESSON_MATERIALS = 'lessonMaterials';
@@ -150,9 +153,17 @@ export async function reorderSections(lessonMaterialId: string, orderedIds: stri
 
 // 템플릿(lessonMaterialTemplates) CRUD
 export async function getLessonMaterialTemplates() {
-  const q = query(collection(db, LESSON_MATERIAL_TEMPLATES), orderBy('title', 'asc'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as LessonMaterialTemplate[];
+  const snapshot = await getDocs(collection(db, LESSON_MATERIAL_TEMPLATES));
+  const templates = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as LessonMaterialTemplate[];
+  
+  // 클라이언트에서 필터링 및 정렬
+  return templates
+    .filter(t => !t.deleted)
+    .sort((a, b) => {
+      const timeA = a.createdAt?.toMillis?.() || 0;
+      const timeB = b.createdAt?.toMillis?.() || 0;
+      return timeA - timeB;
+    });
 }
 
 export async function addLessonMaterialTemplate(title: string, sections: Omit<LessonMaterialTemplateSection, 'id'>[], code?: string, links?: { label: string; url: string }[]) {
@@ -179,5 +190,10 @@ export async function updateLessonMaterialTemplate(id: string, updates: Partial<
 }
 
 export async function deleteLessonMaterialTemplate(id: string) {
-  await deleteDoc(doc(db, LESSON_MATERIAL_TEMPLATES, id));
+  // Soft delete: deleted 플래그만 설정
+  await updateDoc(doc(db, LESSON_MATERIAL_TEMPLATES, id), {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 } 

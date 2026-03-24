@@ -14,19 +14,35 @@ interface LinkedAccount {
 interface LinkedAccountsDisplayProps {
   authProviders: AuthProvider[];
   onUnlink: (providerId: SocialProvider) => void;
+  onLink?: (providerId: SocialProvider) => void; // 추가
   isUnlinking?: boolean;
+  isLinking?: boolean; // 추가
 }
 
 export default function LinkedAccountsDisplay({
   authProviders,
   onUnlink,
+  onLink,
   isUnlinking = false,
+  isLinking = false,
 }: LinkedAccountsDisplayProps) {
+  // authProviders null/undefined 체크
+  if (!authProviders || !Array.isArray(authProviders)) {
+    console.error('❌ authProviders가 유효하지 않습니다:', authProviders);
+    return (
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-sm text-amber-800">
+          계정 정보를 불러올 수 없습니다. 페이지를 새로고침해주세요.
+        </p>
+      </div>
+    );
+  }
+
   // authProviders를 LinkedAccount 형식으로 변환
   const accounts: LinkedAccount[] = authProviders.map((provider) => ({
     providerId: provider.providerId,
     email: provider.email,
-    linkedAt: provider.linkedAt.toDate(),
+    linkedAt: provider.linkedAt?.toDate ? provider.linkedAt.toDate() : new Date(),
     displayName: provider.displayName,
     photoURL: provider.photoURL,
   }));
@@ -51,10 +67,14 @@ export default function LinkedAccountsDisplay({
     { id: 'naver', name: '네이버', icon: '🟢' },
   ];
 
-  // 연동된 제공자 ID 목록
+  // 연동된 제공자 ID 목록 (naver.com도 naver로 정규화)
   const linkedProviderIds = accounts
     .filter((acc) => acc.providerId !== 'password')
-    .map((acc) => acc.providerId);
+    .map((acc) => {
+      // naver.com -> naver로 정규화
+      if (acc.providerId === 'naver.com') return 'naver';
+      return acc.providerId;
+    });
 
   return (
     <div className="space-y-6">
@@ -139,10 +159,11 @@ export default function LinkedAccountsDisplay({
                 </div>
 
                 <button
-                  disabled
-                  className="px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-100 rounded-md cursor-not-allowed whitespace-nowrap"
+                  onClick={() => onLink?.(provider.id)}
+                  disabled={isLinked || !onLink || isLinking}
+                  className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-300 whitespace-nowrap"
                 >
-                  {isLinked ? '연동됨' : '연동하기'}
+                  {isLinked ? '연동됨' : isLinking ? '연동 중...' : '연동하기'}
                 </button>
               </div>
             );

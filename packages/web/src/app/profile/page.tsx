@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getUserJobCodesInfo, deactivateUser, getUserById, updateUser } from '@/lib/firebaseService';
+import { getUserJobCodesInfo, deactivateUser, getUserById, getUserByEmail, updateUser } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import LinkedAccountsDisplay from '@/components/settings/LinkedAccountsDisplay';
@@ -16,7 +16,7 @@ import { auth } from '@/lib/firebase';
 import { formatPhoneNumber } from '@/utils/phoneUtils';
 
 export default function ProfilePage() {
-  const { userData, currentUser, waitForAuthReady, refreshUserData, updateActiveJobCode } = useAuth();
+  const { userData, waitForAuthReady, refreshUserData, updateActiveJobCode } = useAuth();
   const router = useRouter();
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +26,7 @@ export default function ProfilePage() {
   const [jobCodesExpanded, setJobCodesExpanded] = useState(true);
   const [changingJobCode, setChangingJobCode] = useState(false);
   const [isUnlinking, setIsUnlinking] = useState(false);
+  const [isLinking, setIsLinking] = useState(false);
 
   useEffect(() => {
     const checkAuthAndLoadData = async () => {
@@ -33,7 +34,8 @@ export default function ProfilePage() {
         setAuthChecking(true);
         await waitForAuthReady();
         
-        if (currentUser && !userData) {
+        // userData가 없으면 새로고침 시도 (네이버/카카오 포함)
+        if (!userData) {
           await refreshUserData();
         }
 
@@ -45,7 +47,7 @@ export default function ProfilePage() {
     };
 
     checkAuthAndLoadData();
-  }, [waitForAuthReady, currentUser, userData, refreshUserData]);
+  }, [waitForAuthReady, userData, refreshUserData]);
 
   useEffect(() => {
     const fetchJobCodes = async () => {
@@ -128,8 +130,34 @@ export default function ProfilePage() {
     }
   };
 
+  // 소셜 계정 연동 핸들러
+  const handleLink = async (providerId: SocialProvider) => {
+    toast.error('소셜 계정 연동 기능은 준비 중입니다.');
+    
+    // TODO: 소셜 로그인 팝업 열기
+    // if (providerId === 'google.com') {
+    //   // Google 로그인
+    // } else if (providerId === 'naver') {
+    //   // 네이버 로그인
+    // }
+  };
+
   // 소셜 계정 연동 해제 핸들러
   const handleUnlink = async (providerId: SocialProvider) => {
+    console.log('🔓 연동 해제 시작:', {
+      providerId,
+      userData: userData ? {
+        userId: userData.userId,
+        email: userData.email,
+        authProviders: userData.authProviders?.map(p => p.providerId),
+      } : null,
+    });
+
+    if (!userData?.userId || !userData?.email) {
+      toast.error('사용자 정보를 찾을 수 없습니다. 페이지를 새로고침해주세요.');
+      return;
+    }
+
     const providerName = getSocialProviderName(providerId);
     
     if (!confirm(`${providerName} 계정 연동을 해제하시겠습니까?`)) {
@@ -138,9 +166,31 @@ export default function ProfilePage() {
 
     setIsUnlinking(true);
     try {
+      // 이메일로 사용자 재조회
+      console.log('📧 이메일로 사용자 재조회:', userData.email);
+      const userByEmail = await getUserByEmail(userData.email);
+      
+      if (!userByEmail) {
+        throw new Error('사용자 정보를 찾을 수 없습니다.');
+      }
+      
+      console.log('✅ 이메일로 사용자 발견:', {
+        userId: userByEmail.userId,
+        authProviders: userByEmail.authProviders?.map((p: any) => p.providerId),
+      });
+
+      // 실제 Firestore 문서 ID 사용
+      const actualUserId = userByEmail.userId || userByEmail.id;
+      
+      console.log('📤 unlinkSocialProvider 호출:', {
+        actualUserId,
+        providerId,
+      });
+
       await unlinkSocialProvider(
         auth,
         providerId,
+        actualUserId, // 실제 Firestore 문서 ID 전달
         getUserById,
         updateUser
       );
@@ -565,14 +615,23 @@ export default function ProfilePage() {
         )}
 
         {/* 소셜 계정 연동 관리 */}
-        {userData.authProviders && userData.authProviders.length > 0 && (
+        {userData.authProviders && userData.authProviders.length > 0 ? (
           <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
             <div className="px-4 sm:px-6 py-4">
               <LinkedAccountsDisplay
                 authProviders={userData.authProviders}
                 onUnlink={handleUnlink}
+                onLink={handleLink}
                 isUnlinking={isUnlinking}
+                isLinking={isLinking}
               />
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+            <div className="px-4 sm:px-6 py-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">현재 연동된 계정</h3>
+              <p className="text-sm text-gray-500">연동된 소셜 계정이 없습니다.</p>
             </div>
           </div>
         )}

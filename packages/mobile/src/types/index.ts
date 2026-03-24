@@ -59,6 +59,7 @@ export interface AuthContextType {
   userData: User | null;
   loading: boolean;
   authReady: boolean;
+  isAuthenticated: boolean;
   refreshUserData: () => Promise<void>;
   waitForAuthReady: () => Promise<void>;
   updateActiveJobCode: (jobCodeId: string) => Promise<void>;

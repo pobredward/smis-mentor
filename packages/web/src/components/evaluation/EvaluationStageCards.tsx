@@ -48,10 +48,22 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
   useEffect(() => {
     loadEvaluations();
     loadAvailableCriteria();
+    
     // 현재 로그인한 사용자 ID 가져오기
     const currentUser = auth.currentUser;
     if (currentUser) {
       setCurrentUserId(currentUser.uid);
+    } else {
+      // 네이버/카카오 소셜 로그인 사용자의 경우 세션 스토리지에서 가져오기
+      const socialUserStr = sessionStorage.getItem('social_user');
+      if (socialUserStr) {
+        try {
+          const socialUser = JSON.parse(socialUserStr);
+          setCurrentUserId(socialUser.userId);
+        } catch (error) {
+          console.error('소셜 로그인 사용자 ID 파싱 실패:', error);
+        }
+      }
     }
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 

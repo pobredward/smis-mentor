@@ -467,14 +467,41 @@ export default function AdminUploadTemplatePage() {
     setEditing(null);
     setTitle(template.title);
     setSections(template.sections || []);
-    setSelectedCode(''); // 코드는 비워서 새로 선택하게
+    setSelectedCode(selectedCodeFilter); // 현재 선택된 코드 필터로 자동 설정
     setLinks(template.links || []);
     setReferenceTemplateId(template.id);
   };
 
   // 템플릿 추가/수정
   const handleSave = async () => {
-    if (!title.trim()) return;
+    // Validation
+    if (!title.trim()) {
+      alert('템플릿 이름을 입력해주세요.');
+      return;
+    }
+    if (!selectedCode) {
+      alert('코드를 선택해주세요.');
+      return;
+    }
+    
+    // 동일 제목 체크 (같은 코드 내에서)
+    const duplicateTitle = templates.find(t => 
+      t.title.trim() === title.trim() && 
+      t.code === selectedCode &&
+      t.id !== editing?.id // 수정 중인 경우 자기 자신은 제외
+    );
+    if (duplicateTitle) {
+      alert(`"${title}" 템플릿이 이미 ${selectedCode}에 존재합니다.\n다른 이름을 사용해주세요.`);
+      return;
+    }
+    
+    // 링크 validation: label과 url 둘 다 있거나 둘 다 없어야 함
+    const invalidLinks = links.filter(l => (l.label && !l.url) || (!l.label && l.url));
+    if (invalidLinks.length > 0) {
+      alert('링크 제목과 URL을 모두 입력하거나, 둘 다 비워주세요.');
+      return;
+    }
+    
     if (editing) {
       await updateLessonMaterialTemplate(editing.id, { title, sections, code: selectedCode, links });
       setEditing(null);
@@ -492,8 +519,8 @@ export default function AdminUploadTemplatePage() {
   };
 
   // 템플릿 삭제
-  const handleDelete = async (id: string) => {
-    if (!confirm('정말 삭제하시겠습니까?')) return;
+  const handleDelete = async (id: string, title: string) => {
+    if (!confirm(`"${title}" 템플릿을 삭제하시겠습니까?\n\n⚠️ 사용자가 입력한 URL은 유지되지만, 이 템플릿은 더 이상 표시되지 않습니다.`)) return;
     await deleteLessonMaterialTemplate(id);
     fetchTemplates();
   };
@@ -721,7 +748,7 @@ export default function AdminUploadTemplatePage() {
                   setEditing(null); 
                   setTitle(''); 
                   setSections([]); 
-                  setSelectedCode(''); 
+                  setSelectedCode(selectedCodeFilter); // 현재 선택된 코드 필터로 자동 설정
                   setLinks([]); 
                   setReferenceTemplateId('');
                 }}
@@ -774,6 +801,7 @@ export default function AdminUploadTemplatePage() {
                               setTitle(refTemplate.title);
                               setSections(refTemplate.sections || []);
                               setLinks(refTemplate.links || []);
+                              setSelectedCode(selectedCodeFilter); // 현재 선택된 코드 필터로 자동 설정
                               setReferenceTemplateId(e.target.value);
                             }
                           }
@@ -782,17 +810,10 @@ export default function AdminUploadTemplatePage() {
                         <option value="">💡 기존 템플릿 복사하기 (선택)</option>
                         {templates
                           .sort((a, b) => {
-                            const codeA = a.code || '미지정';
-                            const codeB = b.code || '미지정';
-                            const getNumericPart = (code: string) => {
-                              const match = code.match(/\d+/);
-                              return match ? parseInt(match[0], 10) : 0;
-                            };
-                            const numA = getNumericPart(codeA);
-                            const numB = getNumericPart(codeB);
-                            if (numA !== numB) return numB - numA;
-                            if (codeA !== codeB) return codeA.localeCompare(codeB);
-                            return a.title.localeCompare(b.title);
+                            // createdAt 기준 오름차순 (추가한 순서대로)
+                            const timeA = a.createdAt?.toMillis?.() || 0;
+                            const timeB = b.createdAt?.toMillis?.() || 0;
+                            return timeA - timeB;
                           })
                           .map(tpl => (
                             <option key={tpl.id} value={tpl.id}>
@@ -986,7 +1007,7 @@ export default function AdminUploadTemplatePage() {
                               </svg>
                             </button>
                             <button
-                              onClick={() => handleDelete(tpl.id)}
+                              onClick={() => handleDelete(tpl.id, tpl.title)}
                               className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
                               title="삭제"
                             >
@@ -1034,9 +1055,12 @@ export default function AdminUploadTemplatePage() {
                                       placeholder="템플릿명"
                                     />
                                     <select
-                                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                                      className={`w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                        editing ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                      }`}
                                       value={selectedCode}
                                       onChange={e => setSelectedCode(e.target.value)}
+                                      disabled={!!editing}
                                     >
                                       <option value="">코드 선택</option>
                                       {availableCodes.map(code => (
@@ -1044,6 +1068,13 @@ export default function AdminUploadTemplatePage() {
                                       ))}
                                     </select>
                                   </div>
+                                  
+                                  {/* 코드 변경 불가 안내 */}
+                                  {editing && (
+                                    <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                      ⚠️ 템플릿 코드는 생성 후 변경할 수 없습니다. (사용자 데이터 보호)
+                                    </p>
+                                  )}
 
                                   {/* 대주제 링크들 */}
                                   <div>
