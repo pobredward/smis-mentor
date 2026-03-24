@@ -847,12 +847,24 @@ export const sendVerificationEmail = async (user: FirebaseUser) => {
 
 export const resetPassword = async (email: string) => {
   try {
-    // actionCodeSettings 없이 기본 Firebase 설정 사용
+    // 1. Firestore에서 사용자 확인
+    const user = await getUserByEmail(email);
+    if (!user) {
+      throw new Error('등록되지 않은 이메일입니다. 회원가입을 진행해주세요.');
+    }
+
+    // 2. 비밀번호 재설정 메일 발송
     await sendPasswordResetEmail(auth, email);
     console.log('비밀번호 재설정 이메일 발송 성공:', email);
     return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error('비밀번호 재설정 이메일 발송 실패:', error);
+    
+    // Firebase Auth 에러 코드 처리
+    if (error?.code === 'auth/user-not-found') {
+      throw new Error('등록되지 않은 이메일입니다. 회원가입을 진행해주세요.');
+    }
+    
     throw error;
   }
 };

@@ -672,46 +672,23 @@ export const sendVerificationEmail = async (user: FirebaseUser) => {
 export const resetPassword = async (email: string) => {
   try {
     // 1. Firestore에서 사용자 확인
-    const userRecord = await getUserByEmail(email);
-    if (!userRecord) {
-      throw new Error('등록되지 않은 이메일입니다.');
+    const user = await getUserByEmail(email);
+    if (!user) {
+      throw new Error('등록되지 않은 이메일입니다. 회원가입을 진행해주세요.');
+    }
+
+    // 2. 비밀번호 재설정 메일 발송
+    await sendPasswordResetEmail(auth, email);
+    console.log('비밀번호 재설정 이메일 발송 성공:', email);
+    return true;
+  } catch (error: any) {
+    console.error('비밀번호 재설정 이메일 발송 실패:', error);
+    
+    // Firebase Auth 에러 코드 처리
+    if (error?.code === 'auth/user-not-found') {
+      throw new Error('등록되지 않은 이메일입니다. 회원가입을 진행해주세요.');
     }
     
-    // 2. Firebase Auth에 계정이 없는 경우 생성 시도
-    try {
-      // 먼저 비밀번호 재설정 이메일 전송 시도
-      await sendPasswordResetEmail(auth, email);
-      console.log('비밀번호 재설정 이메일 발송 성공:', email);
-      return true;
-    } catch (sendError) {
-      // auth/user-not-found 에러인 경우 계정 생성 후 재시도
-      if (sendError instanceof FirebaseError && sendError.code === 'auth/user-not-found') {
-        console.log('Firebase Auth에 사용자가 없습니다. 계정을 생성합니다:', email);
-        
-        // 임시 비밀번호 생성
-        const tempPassword = Math.random().toString(36).slice(-10) + 
-                            Math.random().toString(36).slice(-2).toUpperCase() + '!';
-        
-        try {
-          // Firebase Auth 계정 생성
-          await createUserWithEmailAndPassword(auth, email, tempPassword);
-          console.log('Firebase Auth 계정 생성 성공:', email);
-          
-          // 계정 생성 후 비밀번호 재설정 이메일 전송
-          await sendPasswordResetEmail(auth, email);
-          console.log('비밀번호 재설정 이메일 발송 성공:', email);
-          return true;
-        } catch (createError) {
-          console.error('Firebase Auth 계정 생성 실패:', createError);
-          throw createError;
-        }
-      } else {
-        // 다른 에러인 경우 그대로 throw
-        throw sendError;
-      }
-    }
-  } catch (error) {
-    console.error('비밀번호 재설정 이메일 발송 실패:', error);
     throw error;
   }
 };
