@@ -329,9 +329,9 @@ export default function SignUpDetails() {
           setTimeout(() => {
             toast.success('프로필 사진과 자기소개서 & 지원동기를 작성해주세요!', { duration: 5000 });
           }, 500);
-          router.push('/profile/edit');
+          router.replace('/profile/edit');
         } else {
-          router.push('/');
+          router.replace('/');
         }
       } else {
         // 신규 가입
@@ -458,7 +458,7 @@ export default function SignUpDetails() {
         setTimeout(() => {
           toast.success('프로필 사진과 자기소개서 & 지원동기를 작성해주세요!', { duration: 5000 });
         }, 500);
-        router.push('/profile/edit');
+        router.replace('/profile/edit');
       }
     } catch (error) {
       console.error('회원가입 오류:', error);
