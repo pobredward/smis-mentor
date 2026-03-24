@@ -327,9 +327,9 @@ export default function SignUpDetails() {
         // 멘토인 경우 프로필 작성 유도
         if (finalRole === 'mentor') {
           setTimeout(() => {
-            toast.success('프로필 사진과 자기소개서 & 지원동기를 작성해주세요!', { duration: 5000 });
+            toast.success('마이페이지에서 "수정" 버튼을 눌러 프로필 사진, 자기소개서 & 지원동기를 작성해주세요!', { duration: 6000 });
           }, 500);
-          router.replace('/profile/edit');
+          router.replace('/profile');
         } else {
           router.replace('/');
         }
@@ -456,9 +456,9 @@ export default function SignUpDetails() {
         
         // 멘토인 경우 프로필 작성 유도
         setTimeout(() => {
-          toast.success('프로필 사진과 자기소개서 & 지원동기를 작성해주세요!', { duration: 5000 });
+          toast.success('마이페이지에서 "수정" 버튼을 눌러 프로필 사진, 자기소개서 & 지원동기를 작성해주세요!', { duration: 6000 });
         }, 500);
-        router.replace('/profile/edit');
+        router.replace('/profile');
       }
     } catch (error) {
       console.error('회원가입 오류:', error);
