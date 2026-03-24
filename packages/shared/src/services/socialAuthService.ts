@@ -480,22 +480,6 @@ export async function unlinkSocialProvider(
     throw error;
   }
 }
-      documentId: actualDocumentId,
-      before: user.authProviders?.length,
-      after: updatedProviders.length,
-    });
-
-    await updateUser(actualDocumentId, {
-      authProviders: updatedProviders,
-      updatedAt: Timestamp.now(),
-    });
-    
-    console.log('✅ 연동 해제 완료');
-  } catch (error: any) {
-    console.error('❌ 소셜 제공자 연동 해제 중 오류:', error);
-    throw error;
-  }
-}
 
 /**
  * 연동 해제 가능 여부 확인
