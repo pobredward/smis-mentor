@@ -226,12 +226,14 @@ export async function activateTempAccountWithSocial(
 
 /**
  * 기존 active 계정에 소셜 제공자 연동
+ * FieldValue.arrayUnion 사용으로 동시성 문제 방지
  */
 export async function linkSocialProvider(
   userId: string,
   socialData: SocialUserData,
   getUserById: (userId: string) => Promise<any | null>,
-  updateUser: (userId: string, data: any) => Promise<void>
+  updateUser: (userId: string, data: any) => Promise<void>,
+  arrayUnion?: (elements: any[]) => any // Firestore FieldValue.arrayUnion
 ): Promise<void> {
   try {
     const user = await getUserById(userId);
@@ -242,23 +244,43 @@ export async function linkSocialProvider(
 
     const existingProviders = user.authProviders || [];
 
-    // 이미 연동된 제공자인지 확인
+    // 이미 연동된 제공자인지 확인 (providerId 정규화 비교)
+    const normalizedSocialId = socialData.providerId.replace('.com', '');
     const alreadyLinked = existingProviders.some(
-      (p: AuthProvider) => p.providerId === socialData.providerId
+      (p: AuthProvider) => {
+        const normalizedStoredId = p.providerId.replace('.com', '');
+        return normalizedStoredId === normalizedSocialId;
+      }
     );
 
-    if (!alreadyLinked) {
+    if (alreadyLinked) {
+      console.log('⚠️ 이미 연동된 제공자:', socialData.providerId);
+      return;
+    }
+
+    const newProvider: AuthProvider = {
+      providerId: socialData.providerId,
+      uid: socialData.providerUid,
+      email: socialData.email,
+      linkedAt: Timestamp.now(),
+      displayName: socialData.name,
+      photoURL: socialData.photoURL,
+    };
+
+    // ✅ arrayUnion을 사용하면 동시성 문제 해결 (Firestore 서버에서 원자적 연산)
+    if (arrayUnion) {
+      console.log('✅ arrayUnion 사용 (동시성 안전)');
+      await updateUser(userId, {
+        authProviders: arrayUnion([newProvider]),
+        updatedAt: Timestamp.now(),
+      });
+    } else {
+      // arrayUnion 없으면 기존 방식 (GET → UPDATE)
+      console.log('⚠️ 기존 방식 사용 (동시성 취약)');
       await updateUser(userId, {
         authProviders: [
           ...existingProviders,
-          {
-            providerId: socialData.providerId,
-            uid: socialData.providerUid,
-            email: socialData.email,
-            linkedAt: Timestamp.now(),
-            displayName: socialData.name,
-            photoURL: socialData.photoURL,
-          },
+          newProvider,
         ],
         updatedAt: Timestamp.now(),
       });
@@ -335,13 +357,15 @@ export async function linkSocialToExistingAccount(
 
 /**
  * 소셜 제공자 연동 해제
+ * Transaction 또는 일반 업데이트 지원
  */
 export async function unlinkSocialProvider(
   auth: any,
   providerId: SocialProvider,
   firestoreUserId: string, // Firestore userId 직접 전달
   getUserById: (userId: string) => Promise<any | null>,
-  updateUser: (userId: string, data: any) => Promise<void>
+  updateUser: (userId: string, data: any) => Promise<void>,
+  runTransaction?: (updateFn: (user: any) => any) => Promise<void> // Transaction 함수 (선택)
 ): Promise<void> {
   try {
     const currentUser = auth.currentUser;
@@ -405,12 +429,57 @@ export async function unlinkSocialProvider(
       console.log('ℹ️ Custom Token 제공업체 - Firebase Auth 연동 해제 생략:', providerId);
     }
 
-    // 4. Firestore 업데이트 (실제 문서 ID 사용)
-    const updatedProviders = (user.authProviders || []).filter(
-      (p: AuthProvider) => p.providerId !== providerId
-    );
+    // 4. Firestore 업데이트 (Transaction 또는 일반 업데이트)
+    if (runTransaction) {
+      // ✅ Transaction 사용 (동시성 안전)
+      console.log('✅ Transaction 사용 (동시성 안전)');
+      await runTransaction(async (latestUser: any) => {
+        // Transaction 내부에서 최신 데이터로 필터링
+        const latestProviders = latestUser.authProviders || [];
+        const updatedProviders = latestProviders.filter(
+          (p: AuthProvider) => {
+            // providerId 정규화 비교
+            const normalizedStoredId = p.providerId.replace('.com', '');
+            const normalizedTargetId = providerId.replace('.com', '');
+            return normalizedStoredId !== normalizedTargetId;
+          }
+        );
+        
+        return {
+          authProviders: updatedProviders,
+          updatedAt: Timestamp.now(),
+        };
+      });
+    } else {
+      // ⚠️ 일반 업데이트 (동시성 취약)
+      console.log('⚠️ 기존 방식 사용 (동시성 취약)');
+      const updatedProviders = (user.authProviders || []).filter(
+        (p: AuthProvider) => {
+          // providerId 정규화 비교
+          const normalizedStoredId = p.providerId.replace('.com', '');
+          const normalizedTargetId = providerId.replace('.com', '');
+          return normalizedStoredId !== normalizedTargetId;
+        }
+      );
 
-    console.log('💾 Firestore 업데이트 시작:', {
+      console.log('💾 Firestore 업데이트 시작:', {
+        documentId: actualDocumentId,
+        before: user.authProviders?.length,
+        after: updatedProviders.length,
+      });
+
+      await updateUser(actualDocumentId, {
+        authProviders: updatedProviders,
+        updatedAt: Timestamp.now(),
+      });
+    }
+    
+    console.log('✅ 연동 해제 완료');
+  } catch (error: any) {
+    console.error('❌ 소셜 제공자 연동 해제 중 오류:', error);
+    throw error;
+  }
+}
       documentId: actualDocumentId,
       before: user.authProviders?.length,
       after: updatedProviders.length,
@@ -544,27 +613,27 @@ export async function linkAdditionalProvider(
  */
 export function handleSocialAuthError(error: any): string {
   if (error.code === 'auth/account-exists-with-different-credential') {
-    return '이 이메일은 다른 방법으로 가입되어 있습니다.';
+    return '이 이메일은 다른 로그인 방법으로 가입되어 있습니다. 해당 방법으로 로그인해주세요.';
   } else if (error.code === 'auth/credential-already-in-use') {
     return '이 소셜 계정은 이미 다른 계정에 연결되어 있습니다.';
   } else if (error.code === 'auth/cancelled-popup-request') {
     return '로그인이 취소되었습니다.';
   } else if (error.code === 'auth/popup-closed-by-user') {
-    return '로그인 창이 닫혔습니다.';
+    return '로그인 창이 닫혔습니다. 다시 시도해주세요.';
   } else if (error.code === 'auth/popup-blocked') {
-    return '팝업이 차단되었습니다. 브라우저 설정을 확인해주세요.';
+    return '팝업이 차단되었습니다. 브라우저 설정에서 팝업을 허용한 후 다시 시도해주세요.';
   } else if (error.message === 'ALREADY_REGISTERED') {
-    return '이미 가입된 계정입니다. 로그인 화면에서 소셜 로그인을 시도하세요.';
+    return '이미 가입된 계정입니다. 로그인 화면에서 해당 방법으로 로그인을 시도해주세요.';
   } else if (error.message === 'ACCOUNT_INACTIVE') {
-    return '탈퇴한 계정입니다. 계정 복구를 원하시면 관리자에게 문의하세요.';
+    return '탈퇴한 계정입니다. 계정 복구를 원하시면 관리자에게 문의하세요.\n\n관리자: 010-7656-7933 (신선웅)';
   } else if (error.message === 'ACCOUNT_DELETED') {
-    return '삭제된 계정입니다. 계정 복구를 원하시면 관리자에게 문의하세요.';
+    return '삭제된 계정입니다. 계정 복구를 원하시면 관리자에게 문의하세요.\n\n관리자: 010-7656-7933 (신선웅)';
   } else if (error.code === 'auth/wrong-password') {
     return '비밀번호가 일치하지 않습니다.';
   } else if (error.code === 'auth/user-not-found') {
     return '사용자를 찾을 수 없습니다.';
   }
-  return '로그인 중 오류가 발생했습니다.';
+  return '로그인 중 오류가 발생했습니다. 다시 시도해주세요.';
 }
 
 /**

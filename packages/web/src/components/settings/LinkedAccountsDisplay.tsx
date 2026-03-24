@@ -150,10 +150,8 @@ export default function LinkedAccountsDisplay({
                   <span className="text-2xl">{provider.icon}</span>
                   <div>
                     <p className="font-medium text-gray-900">{provider.name}</p>
-                    {isLinked ? (
+                    {isLinked && (
                       <p className="text-xs text-gray-500">이미 연동됨</p>
-                    ) : (
-                      <p className="text-xs text-gray-500">구현 전</p>
                     )}
                   </div>
                 </div>

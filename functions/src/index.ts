@@ -269,9 +269,13 @@ export const sendTestNotification = functions
 // Custom Token 생성 함수 (소셜 로그인용)
 export const createCustomToken = functions
   .region('asia-northeast3')
-  .https.onCall(async (data: { userId: string; email: string }, context) => {
+  .https.onCall(async (data: { userId: string; email: string; existingUid?: string }, context) => {
     try {
-      console.log('🔑 Custom Token 생성 요청:', data);
+      console.log('🔑 Custom Token 생성 요청:', {
+        userId: data.userId,
+        email: data.email,
+        existingUid: data.existingUid ? `${data.existingUid.substring(0, 8)}...` : undefined,
+      });
 
       // userId와 email 검증
       if (!data.userId || !data.email) {
@@ -292,17 +296,25 @@ export const createCustomToken = functions
         throw new functions.https.HttpsError('permission-denied', '이메일이 일치하지 않습니다.');
       }
 
+      // ✅ existingUid가 있으면 기존 UID 사용, 없으면 새로 생성
+      const targetUid = data.existingUid || data.userId;
+      console.log(`🎯 사용할 UID: ${targetUid} (${data.existingUid ? '기존 UID 재사용' : '신규 생성'})`);
+
       // Firebase Auth에 사용자가 있는지 확인
       let firebaseUser;
       try {
-        firebaseUser = await admin.auth().getUserByEmail(data.email);
+        firebaseUser = await admin.auth().getUser(targetUid);
         console.log('✅ 기존 Firebase Auth 사용자 발견:', firebaseUser.uid);
       } catch (error: any) {
         if (error.code === 'auth/user-not-found') {
           // Firebase Auth에 사용자가 없으면 생성
-          console.log('🆕 Firebase Auth 사용자 생성:', data.email);
+          console.log('🆕 Firebase Auth 사용자 생성:', {
+            uid: targetUid,
+            email: data.email,
+          });
+          
           firebaseUser = await admin.auth().createUser({
-            uid: data.userId,
+            uid: targetUid,
             email: data.email,
             displayName: userData.name,
             emailVerified: true,
@@ -314,9 +326,15 @@ export const createCustomToken = functions
       }
 
       // Custom Token 생성
-      const customToken = await admin.auth().createCustomToken(firebaseUser.uid, undefined);
+      const customToken = await admin.auth().createCustomToken(firebaseUser.uid, {
+        email: data.email,
+        provider: 'custom',
+      });
       
-      console.log('✅ Custom Token 생성 완료:', firebaseUser.uid);
+      console.log('✅ Custom Token 생성 완료:', {
+        uid: firebaseUser.uid,
+        uidMatch: firebaseUser.uid === targetUid,
+      });
       
       return { 
         customToken,

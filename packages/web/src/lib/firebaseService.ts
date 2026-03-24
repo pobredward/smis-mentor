@@ -865,8 +865,18 @@ export const updateUserProfile = async (user: FirebaseUser, displayName?: string
   }
 };
 
-export const signInWithCustomTokenFromFunction = async (userId: string, email: string) => {
+export const signInWithCustomTokenFromFunction = async (
+  userId: string,
+  email: string,
+  existingUid?: string // 기존 Firebase Auth UID (있으면 재사용)
+) => {
   try {
+    console.log('🔑 Custom Token 생성 요청:', {
+      userId,
+      email,
+      existingUid: existingUid ? `${existingUid.substring(0, 8)}...` : 'none',
+    });
+    
     // Firebase Functions를 통해 Custom Token 생성
     const functionsModule = await import('firebase/functions');
     const functions = functionsModule.getFunctions();
@@ -877,14 +887,22 @@ export const signInWithCustomTokenFromFunction = async (userId: string, email: s
     }
     
     const createCustomToken = functionsModule.httpsCallable(functions, 'createCustomToken');
-    const result = await createCustomToken({ userId, email });
+    const result = await createCustomToken({ 
+      userId, 
+      email,
+      existingUid, // 기존 UID 전달
+    });
     const { customToken } = result.data as { customToken: string };
     
     // Custom Token으로 Firebase Auth 로그인
     const authModule = await import('firebase/auth');
     const userCredential = await authModule.signInWithCustomToken(auth, customToken);
     
-    console.log('✅ Custom Token 로그인 성공:', userCredential.user.uid);
+    console.log('✅ Custom Token 로그인 성공:', {
+      uid: userCredential.user.uid,
+      uidMatch: existingUid ? userCredential.user.uid === existingUid : 'N/A',
+    });
+    
     return userCredential;
   } catch (error) {
     console.error('Custom Token 로그인 실패:', error);

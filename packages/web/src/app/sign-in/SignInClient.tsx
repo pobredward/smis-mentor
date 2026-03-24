@@ -23,6 +23,7 @@ import {
   checkTempAccountByPhone, 
   linkSocialToExistingAccount,
   handleSocialAuthError,
+  getSocialProviderName,
   SocialUserData 
 } from '@smis-mentor/shared';
 import { handleGoogleAuthError } from '@/lib/googleAuthService';
@@ -148,39 +149,55 @@ export function SignInClient() {
           userId: result.user?.userId,
         });
         
-        // 네이버/카카오는 세션 스토리지에 사용자 정보 저장 (Firebase Auth 미사용)
+        // 네이버/카카오는 Custom Token으로 Firebase Auth 로그인
         if (data.providerId === 'naver' || data.providerId === 'kakao') {
           if (!result.user?.userId || !result.user?.email) {
             toast.error('사용자 정보를 찾을 수 없습니다.');
             return;
           }
           
-          // 세션 스토리지에 사용자 정보 저장
-          sessionStorage.setItem('social_user', JSON.stringify({
-            userId: result.user.userId,
-            email: result.user.email,
-            providerId: data.providerId,
-          }));
+          // ✅ 기존 계정의 Firebase Auth UID 조회 (있으면 재사용)
+          let existingFirebaseUid: string | undefined;
           
-          // AuthContext에 로그인 이벤트 전달
-          window.dispatchEvent(new CustomEvent('social-login-success', {
-            detail: {
-              userId: result.user.userId,
-              email: result.user.email,
-              providerId: data.providerId,
-            }
-          }));
+          // Google 연동이 있으면 Firebase Auth UID 가져오기
+          const googleProvider = result.user.authProviders?.find(
+            (p: any) => p.providerId === 'google.com'
+          );
+          if (googleProvider) {
+            existingFirebaseUid = googleProvider.uid;
+            console.log('🔍 Google Provider UID 발견:', existingFirebaseUid);
+          }
+          
+          // Firebase Auth UID가 없으면 Firestore userId 사용
+          if (!existingFirebaseUid) {
+            existingFirebaseUid = result.user.userId;
+            console.log('🔍 Firestore userId 사용:', existingFirebaseUid);
+          }
+          
+          try {
+            // Custom Token으로 로그인 (기존 UID 전달)
+            await signInWithCustomTokenFromFunction(
+              result.user.userId,
+              result.user.email,
+              existingFirebaseUid // 기존 UID 재사용
+            );
+            console.log('✅ Custom Token 로그인 완료');
+          } catch (error) {
+            console.error('❌ Custom Token 로그인 실패:', error);
+        toast.error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.', { duration: 4000 });
+            return;
+          }
         }
         // Google은 이미 Firebase Auth에 로그인되어 있으므로 추가 작업 불필요
         
-        toast.success('로그인에 성공했습니다!');
+        toast.success('로그인에 성공했습니다!', { duration: 2000 });
         setTimeout(() => {
           const params = new URLSearchParams(window.location.search);
           const redirectTo = params.get('redirect');
           router.push(redirectTo || '/');
         }, 1000);
       } else if (result.action === 'LINK_ACTIVE') {
-        // 기존 이메일/비밀번호 계정이 있음 - 비밀번호 입력 필요
+        // 기존 계정이 있음 - 비밀번호 입력 필요 (소셜 가입인지 확인)
         const currentUser = auth.currentUser;
         if (currentUser) {
           try {
@@ -191,6 +208,26 @@ export function SignInClient() {
           }
         }
         
+        // ⚠️ 비밀번호 없는 계정(소셜 가입)인지 확인
+        const hasPassword = result.user?.authProviders?.some(
+          (p: any) => p.providerId === 'password'
+        );
+        
+        if (!hasPassword) {
+          // 소셜로만 가입한 경우
+          const existingProviders = result.user?.authProviders
+            ?.map((p: any) => getSocialProviderName(p.providerId))
+            .join(', ') || '소셜 계정';
+          
+          toast.error(
+            `이 이메일은 이미 ${existingProviders}으로 가입되어 있습니다.\n` +
+            `${existingProviders}로 로그인한 후 마이페이지에서 ${getSocialProviderName(data.providerId)}를 연동해주세요.`,
+            { duration: 6000 }
+          );
+          return;
+        }
+        
+        // 비밀번호 있으면 입력 모달 표시
         setSocialData(data);
         setExistingUserEmail(result.user?.email || data.email);
         setShowPasswordModal(true);
@@ -370,7 +407,7 @@ export function SignInClient() {
           // mentor_temp 또는 mentor인 경우
           if (role === 'mentor_temp' || role === 'mentor') {
             toast.error(
-              'This name is registered as a mentor account. Please contact the administrator if this is incorrect.\nAdministrator: 010-7656-7933 (Shin Sunwoong)',
+              'This name is registered as a mentor account. Please contact the administrator if this is incorrect.\n\nAdministrator: 010-7656-7933 (Shin Sunwoong)',
               { duration: 8000 }
             );
             setIsLoading(false);
@@ -379,7 +416,7 @@ export function SignInClient() {
           
           // 기타 케이스
           toast.error(
-            `This name is already registered with a different role. Please contact the administrator.\nAdministrator: 010-7656-7933 (Shin Sunwoong)`,
+            `This name is already registered with a different role. Please contact the administrator.\n\nAdministrator: 010-7656-7933 (Shin Sunwoong)`,
             { duration: 8000 }
           );
           setIsLoading(false);
@@ -462,7 +499,7 @@ export function SignInClient() {
           
           // temp 계정인데 이름이 다른 경우: 관리자 문의 필요
           toast.error(
-            `이 전화번호는 "${result.user.name}"님 이름으로 등록되어 있습니다. 본인이 아니라면 관리자에게 문의해주세요.\n관리자: 010-7656-7933 (신선웅)`,
+            `이 전화번호는 "${result.user.name}"님 이름으로 등록되어 있습니다.\n본인이 아니라면 관리자에게 문의해주세요.\n\n관리자: 010-7656-7933 (신선웅)`,
             { duration: 8000 }
           );
           setIsLoading(false);
@@ -613,12 +650,12 @@ export function SignInClient() {
         updateUser
       );
       
-      // provider에 따라 메시지 구별
-      const providerName = socialData.provider === 'google.com' 
+      // providerId에 따라 메시지 구별
+      const providerName = socialData.providerId === 'google.com' 
         ? 'Google' 
-        : socialData.provider === 'naver.com' 
+        : socialData.providerId === 'naver' 
         ? 'Naver' 
-        : socialData.provider === 'kakao.com'
+        : socialData.providerId === 'kakao'
         ? 'Kakao'
         : '소셜';
       toast.success(`${providerName} 계정이 연동되었습니다!`);
@@ -634,13 +671,13 @@ export function SignInClient() {
       const firebaseError = error as FirebaseError;
       if (firebaseError.code === 'auth/wrong-password') {
         toast.error(
-          '비밀번호가 올바르지 않습니다. 본인의 계정이 아니라면 관리자에게 문의하세요.\n관리자: 010-7656-7933 (신선웅)',
+          '비밀번호가 올바르지 않습니다.\n본인의 계정이 아니라면 관리자에게 문의하세요.\n\n관리자: 010-7656-7933 (신선웅)',
           { duration: 8000 }
         );
       } else if (firebaseError.code === 'auth/too-many-requests') {
-        toast.error('너무 많은 시도가 있었습니다. 나중에 다시 시도해주세요.');
+        toast.error('너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.', { duration: 5000 });
       } else {
-        toast.error('계정 연동 중 오류가 발생했습니다.');
+        toast.error('계정 연동 중 오류가 발생했습니다. 다시 시도해주세요.', { duration: 5000 });
       }
     } finally {
       setIsLoading(false);

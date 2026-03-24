@@ -804,6 +804,56 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             </View>
           )}
 
+          {/* 소셜 계정 연동 관리 */}
+          {userData.authProviders && userData.authProviders.length > 0 && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>계정 연동 관리</Text>
+              </View>
+              <View style={styles.socialAccountsContainer}>
+                <Text style={styles.socialSectionLabel}>현재 연동된 계정</Text>
+                {userData.authProviders.map((provider: any) => {
+                  const isPassword = provider.providerId === 'password';
+                  const canUnlink = userData.authProviders.length > 1 && !isPassword;
+                  
+                  return (
+                    <View key={provider.providerId} style={styles.socialAccountItem}>
+                      <View style={styles.socialAccountInfo}>
+                        <Text style={styles.socialAccountIcon}>
+                          {provider.providerId === 'google.com' ? '🔵' :
+                           provider.providerId === 'naver' || provider.providerId === 'naver.com' ? '🟢' :
+                           provider.providerId === 'kakao' ? '💬' :
+                           provider.providerId === 'apple.com' ? '🍎' : '🔐'}
+                        </Text>
+                        <View style={styles.socialAccountDetails}>
+                          <Text style={styles.socialAccountName}>
+                            {provider.providerId === 'google.com' ? 'Google' :
+                             provider.providerId === 'naver' || provider.providerId === 'naver.com' ? '네이버' :
+                             provider.providerId === 'kakao' ? '카카오' :
+                             provider.providerId === 'apple.com' ? 'Apple' : '이메일/비밀번호'}
+                          </Text>
+                          {provider.email && (
+                            <Text style={styles.socialAccountEmail}>{provider.email}</Text>
+                          )}
+                        </View>
+                      </View>
+                      {canUnlink ? (
+                        <Text style={styles.socialAccountUnlinkText}>웹에서 해제</Text>
+                      ) : (
+                        <Text style={styles.socialAccountRequiredText}>기본</Text>
+                      )}
+                    </View>
+                  );
+                })}
+                
+                <Text style={[styles.socialSectionLabel, { marginTop: 16 }]}>추가 연동 가능</Text>
+                <Text style={styles.socialAccountHint}>
+                  추가 소셜 계정 연동은 웹에서 진행해주세요.
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* 설정 버튼 */}
           <TouchableOpacity
             style={styles.settingsButton}
@@ -1274,6 +1324,71 @@ const styles = StyleSheet.create({
   },
   fileLinkSubtitle: {
     fontSize: 12,
+  },
+  
+  // 소셜 계정 연동
+  socialAccountsContainer: {
+    padding: 20,
+  },
+  socialSectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 12,
+  },
+  socialAccountItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  socialAccountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  socialAccountIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  socialAccountDetails: {
+    flex: 1,
+  },
+  socialAccountName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 2,
+  },
+  socialAccountEmail: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  socialAccountUnlinkText: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  socialAccountRequiredText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#3b82f6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+  },
+  socialAccountHint: {
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
   },
   
   // 로그아웃 버튼

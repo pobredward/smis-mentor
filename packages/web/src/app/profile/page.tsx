@@ -132,14 +132,129 @@ export default function ProfilePage() {
 
   // 소셜 계정 연동 핸들러
   const handleLink = async (providerId: SocialProvider) => {
-    toast.error('소셜 계정 연동 기능은 준비 중입니다.');
-    
-    // TODO: 소셜 로그인 팝업 열기
-    // if (providerId === 'google.com') {
-    //   // Google 로그인
-    // } else if (providerId === 'naver') {
-    //   // 네이버 로그인
-    // }
+    if (!userData?.userId) {
+      toast.error('사용자 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    // 현재 로그인된 Firebase Auth 사용자 확인
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      // ✅ 세션 만료 - 명확한 안내 및 리다이렉트
+      toast.error('로그인 세션이 만료되었습니다. 다시 로그인해주세요.', { duration: 4000 });
+      setTimeout(() => {
+        router.push('/sign-in?redirect=/profile');
+      }, 2000);
+      return;
+    }
+
+    setIsLinking(true);
+    try {
+      let socialData;
+      let credential;
+      
+      // 1. 소셜 로그인 팝업 열기
+      if (providerId === 'google.com') {
+        const { signInWithGoogle } = await import('@/lib/googleAuthService');
+        const { GoogleAuthProvider } = await import('firebase/auth');
+        
+        socialData = await signInWithGoogle();
+        
+        // Google credential 생성
+        credential = GoogleAuthProvider.credential(
+          socialData.idToken,
+          socialData.accessToken
+        );
+      } else if (providerId === 'naver') {
+        // 네이버는 Firebase Auth 연동 불가 (커스텀 OAuth)
+        const { signInWithNaver } = await import('@/lib/naverAuthService');
+        socialData = await signInWithNaver();
+        
+        // 네이버는 Firestore에만 저장 (arrayUnion 사용)
+        const { linkSocialProvider } = await import('@smis-mentor/shared');
+        const { arrayUnion } = await import('firebase/firestore');
+        
+        await linkSocialProvider(
+          userData.userId,
+          socialData,
+          getUserById,
+          updateUser,
+          arrayUnion // ✅ 동시성 안전
+        );
+
+        toast.success('네이버 계정이 성공적으로 연동되었습니다.');
+        await refreshUserData();
+        return;
+      } else if (providerId === 'kakao') {
+        toast.error('카카오 연동은 준비 중입니다.');
+        return;
+      } else if (providerId === 'apple.com') {
+        toast.error('애플 연동은 준비 중입니다.');
+        return;
+      } else {
+        toast.error('지원하지 않는 소셜 제공자입니다.');
+        return;
+      }
+
+      // 2. Firebase Auth에 소셜 계정 연동 (Google만)
+      if (credential) {
+        const { linkWithCredential } = await import('firebase/auth');
+        
+        try {
+          await linkWithCredential(currentUser, credential);
+          console.log('✅ Firebase Auth 소셜 계정 연동 완료');
+        } catch (authError: any) {
+          console.error('❌ Firebase Auth 연동 실패:', authError);
+          
+          if (authError.code === 'auth/credential-already-in-use') {
+            throw new Error('이 소셜 계정은 이미 다른 계정에 연결되어 있습니다.');
+          } else if (authError.code === 'auth/provider-already-linked') {
+            throw new Error('이미 이 제공자가 연결되어 있습니다.');
+          } else if (authError.code === 'auth/email-already-in-use') {
+            throw new Error('이 이메일은 이미 다른 계정에서 사용 중입니다.');
+          }
+          
+          throw authError;
+        }
+      }
+
+      // 3. Firestore에 연동 정보 추가 (arrayUnion 사용)
+      const { linkSocialProvider } = await import('@smis-mentor/shared');
+      const { arrayUnion } = await import('firebase/firestore');
+      
+      await linkSocialProvider(
+        userData.userId,
+        socialData,
+        getUserById,
+        updateUser,
+        arrayUnion // ✅ Firestore arrayUnion 전달 (동시성 안전)
+      );
+
+      toast.success('소셜 계정이 성공적으로 연동되었습니다.', { duration: 3000 });
+      
+      // 4. 사용자 데이터 새로고침
+      await refreshUserData();
+    } catch (error: any) {
+      console.error('소셜 계정 연동 오류:', error);
+      
+      let errorMessage = '소셜 계정 연동 중 오류가 발생했습니다. 다시 시도해주세요.';
+      
+      if (error.message === 'POPUP_BLOCKED') {
+        errorMessage = '팝업이 차단되었습니다. 브라우저 설정에서 팝업을 허용한 후 다시 시도해주세요.';
+      } else if (error.message === 'POPUP_CLOSED') {
+        errorMessage = '로그인 창이 닫혔습니다. 다시 시도해주세요.';
+      } else if (error.message?.includes('이미')) {
+        errorMessage = error.message;
+      } else if (error.code === 'auth/requires-recent-login') {
+        errorMessage = '보안을 위해 다시 로그인한 후 연동을 시도해주세요.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage, { duration: 5000 });
+    } finally {
+      setIsLinking(false);
+    }
   };
 
   // 소셜 계정 연동 해제 핸들러
@@ -187,21 +302,42 @@ export default function ProfilePage() {
         providerId,
       });
 
+      // ✅ Transaction 함수 생성
+      const { doc, runTransaction } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      
+      const runTransactionWrapper = async (updateFn: (user: any) => any) => {
+        await runTransaction(db, async (transaction) => {
+          const userRef = doc(db, 'users', actualUserId);
+          const userDoc = await transaction.get(userRef);
+          
+          if (!userDoc.exists()) {
+            throw new Error('사용자 문서를 찾을 수 없습니다.');
+          }
+          
+          const latestUserData = userDoc.data();
+          const updates = await updateFn(latestUserData);
+          
+          transaction.update(userRef, updates);
+        });
+      };
+
       await unlinkSocialProvider(
         auth,
         providerId,
         actualUserId, // 실제 Firestore 문서 ID 전달
         getUserById,
-        updateUser
+        updateUser,
+        runTransactionWrapper // ✅ Transaction 함수 전달 (동시성 안전)
       );
       
-      toast.success(`${providerName} 계정 연동이 해제되었습니다.`);
+      toast.success(`${providerName} 계정 연동이 해제되었습니다.`, { duration: 3000 });
       
       // 사용자 데이터 새로고침
       await refreshUserData();
     } catch (error: any) {
       console.error('연동 해제 오류:', error);
-      toast.error(error.message || '연동 해제 중 오류가 발생했습니다.');
+      toast.error(error.message || '연동 해제 중 오류가 발생했습니다. 다시 시도해주세요.', { duration: 5000 });
     } finally {
       setIsUnlinking(false);
     }
