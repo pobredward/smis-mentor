@@ -200,13 +200,20 @@ export async function activateTempAccountWithSocial(
   updateUser: (userId: string, data: any) => Promise<void>
 ): Promise<void> {
   try {
+    // providerId 정규화: 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
+    const normalizedProviderId = socialData.providerId === 'naver' || socialData.providerId === 'kakao'
+      ? socialData.providerId
+      : socialData.providerId.includes('.com') 
+        ? socialData.providerId 
+        : `${socialData.providerId}.com`;
+    
     await updateUser(tempUserId, {
       email: socialData.email,
       profileImage: socialData.photoURL,
       status: 'active',
       authProviders: [
         {
-          providerId: socialData.providerId,
+          providerId: normalizedProviderId,
           uid: socialData.providerUid,
           email: socialData.email,
           linkedAt: Timestamp.now(),
@@ -258,8 +265,15 @@ export async function linkSocialProvider(
       return;
     }
 
+    // providerId 정규화: 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
+    const normalizedProviderId = socialData.providerId === 'naver' || socialData.providerId === 'kakao'
+      ? socialData.providerId
+      : socialData.providerId.includes('.com') 
+        ? socialData.providerId 
+        : `${socialData.providerId}.com`;
+
     const newProvider: AuthProvider = {
-      providerId: socialData.providerId,
+      providerId: normalizedProviderId,
       uid: socialData.providerUid,
       email: socialData.email,
       linkedAt: Timestamp.now(),

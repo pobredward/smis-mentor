@@ -156,19 +156,39 @@ export default function ForeignSignUpStep2() {
       let isUpdatingExistingUser = false;
 
       // 소셜 로그인 케이스
+      let tempPasswordForSocial: string | undefined;
       if (socialSignUp && socialProvider) {
         console.log('🔗 Social sign-up flow for foreign teacher');
         
-        // Firebase Auth 계정은 이미 존재
+        // Firebase Auth 계정 확인 및 생성
         const currentUser = auth.currentUser;
         if (!currentUser) {
-          toast.error('Authentication error. Please try again.');
-          setIsLoading(false);
-          return;
+          // 네이버/카카오는 Firebase Auth 계정이 없으므로 생성
+          console.log('🔐 Creating Firebase Auth account for social sign-up (Naver/Kakao)');
+          const { createUserWithEmailAndPassword } = await import('firebase/auth');
+          
+          // 임시 비밀번호 생성
+          tempPasswordForSocial = `${data.email}_${Date.now()}_${Math.random().toString(36)}`;
+          
+          try {
+            const userCredential = await createUserWithEmailAndPassword(auth, data.email, tempPasswordForSocial);
+            userId = userCredential.user.uid;
+            console.log('✅ Firebase Auth account created, UID:', userId);
+          } catch (authError: any) {
+            if (authError.code === 'auth/email-already-in-use') {
+              // 이미 계정이 있으면 로그인 시도
+              console.log('⚠️ Email already exists, trying to sign in...');
+              toast.error('This email is already in use. Please sign in instead.');
+              setIsLoading(false);
+              return;
+            } else {
+              throw authError;
+            }
+          }
+        } else {
+          userId = currentUser.uid;
+          console.log('✅ Using existing social auth UID:', userId);
         }
-        
-        userId = currentUser.uid;
-        console.log('✅ Using social auth UID:', userId);
         
         // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
         if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
@@ -334,6 +354,7 @@ export default function ForeignSignUpStep2() {
             photoURL: socialPhotoURL,
           }],
           primaryAuthMethod: 'social',
+          ...(tempPasswordForSocial && { _tempPassword: tempPasswordForSocial }), // 🔑 재로그인용 임시 비밀번호
         }),
         // 일반 가입인 경우 password provider 추가
         ...(!socialSignUp && {

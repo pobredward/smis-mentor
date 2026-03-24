@@ -165,42 +165,37 @@ export function SignInClient() {
           userId: result.user?.userId,
         });
         
-        // 네이버/카카오는 Custom Token으로 Firebase Auth 로그인
+        // 네이버/카카오는 임시 비밀번호로 Firebase Auth 로그인
         if (data.providerId === 'naver' || data.providerId === 'kakao') {
           if (!result.user?.userId || !result.user?.email) {
             toast.error('사용자 정보를 찾을 수 없습니다.');
             return;
           }
           
-          // ✅ 기존 계정의 Firebase Auth UID 조회 (있으면 재사용)
-          let existingFirebaseUid: string | undefined;
-          
-          // Google 연동이 있으면 Firebase Auth UID 가져오기
-          const googleProvider = result.user.authProviders?.find(
-            (p: any) => p.providerId === 'google.com'
-          );
-          if (googleProvider) {
-            existingFirebaseUid = googleProvider.uid;
-            console.log('🔍 Google Provider UID 발견:', existingFirebaseUid);
-          }
-          
-          // Firebase Auth UID가 없으면 Firestore userId 사용
-          if (!existingFirebaseUid) {
-            existingFirebaseUid = result.user.userId;
-            console.log('🔍 Firestore userId 사용:', existingFirebaseUid);
-          }
-          
           try {
-            // Custom Token으로 로그인 (기존 UID 전달)
-            await signInWithCustomTokenFromFunction(
-              result.user.userId,
-              result.user.email,
-              existingFirebaseUid // 기존 UID 재사용
-            );
-            console.log('✅ Custom Token 로그인 완료');
+            // 🔑 Firestore에서 임시 비밀번호 가져오기
+            const tempPassword = (result.user as any)._tempPassword;
+            
+            if (!tempPassword) {
+              console.error('❌ 임시 비밀번호가 없습니다. Custom Token 방식 시도...');
+              
+              // Fallback: Custom Token 방식
+              const existingFirebaseUid = result.user.userId;
+              await signInWithCustomTokenFromFunction(
+                result.user.userId,
+                result.user.email,
+                existingFirebaseUid
+              );
+            } else {
+              // 임시 비밀번호로 로그인
+              console.log('🔑 임시 비밀번호로 로그인 시도');
+              await signIn(result.user.email, tempPassword);
+            }
+            
+            console.log('✅ Firebase Auth 로그인 완료');
           } catch (error) {
-            console.error('❌ Custom Token 로그인 실패:', error);
-        toast.error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.', { duration: 4000 });
+            console.error('❌ Firebase Auth 로그인 실패:', error);
+            toast.error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.', { duration: 4000 });
             return;
           }
         }

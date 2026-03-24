@@ -340,17 +340,28 @@ export default function SignUpDetails() {
         let authProvidersData: any = undefined;
 
         // 🔥 소셜 가입과 일반 가입 분기 처리
+        let tempPasswordForSocial: string | undefined;
         if (socialSignUp) {
           // 소셜 가입: 일반 가입처럼 이메일/비밀번호로 Firebase Auth 계정 생성
           // (네이버 신규 가입은 Custom Token을 생성할 Firestore 사용자가 없으므로)
           console.log('✅ 소셜 신규 가입 - Firebase Auth 계정 생성');
           
           // 임시 비밀번호 생성 (사용자는 모르는 비밀번호)
-          const tempPassword = `${email}_${Date.now()}_${Math.random().toString(36)}`;
-          const userCredential = await signUp(email, tempPassword);
-          newUserId = userCredential.user.uid;
+          tempPasswordForSocial = `${email}_${Date.now()}_${Math.random().toString(36)}`;
           
-          console.log('✅ Firebase Auth 계정 생성 완료, UID:', newUserId);
+          try {
+            const userCredential = await signUp(email, tempPasswordForSocial);
+            newUserId = userCredential.user.uid;
+            console.log('✅ Firebase Auth 계정 생성 완료, UID:', newUserId);
+          } catch (authError: any) {
+            if (authError.code === 'auth/email-already-in-use') {
+              // 이미 계정이 존재하면 로그인으로 안내
+              toast.error('이 이메일은 이미 사용 중입니다. 로그인 페이지로 이동합니다.');
+              router.push('/sign-in');
+              return;
+            }
+            throw authError;
+          }
           
           // socialProvider 동적 처리 및 정규화
           // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
@@ -369,6 +380,7 @@ export default function SignUpDetails() {
               photoURL: socialPhotoURL,
             }],
             primaryAuthMethod: 'social',
+            _tempPassword: tempPasswordForSocial, // 🔑 재로그인용 임시 비밀번호 저장
           };
         } else {
           // 일반 가입: 새 Firebase Auth 계정 생성

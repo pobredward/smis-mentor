@@ -150,6 +150,13 @@ export function SignUpFlow({
       
       const userId = doc(db, 'users').id;
       
+      // providerId 정규화: 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
+      const normalizedProviderId = socialData.providerId === 'naver' || socialData.providerId === 'kakao'
+        ? socialData.providerId
+        : socialData.providerId.includes('.com') 
+          ? socialData.providerId 
+          : `${socialData.providerId}.com`;
+      
       await setDoc(doc(db, 'users', userId), {
         userId,
         email: socialData.email,
@@ -165,7 +172,7 @@ export function SignUpFlow({
         profileImage: socialData.photoURL || '',
         authProviders: [
           {
-            providerId: socialData.providerId,
+            providerId: normalizedProviderId,
             uid: socialData.providerUid,
             email: socialData.email,
             linkedAt: Timestamp.now(),
