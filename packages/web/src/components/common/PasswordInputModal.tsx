@@ -78,6 +78,7 @@ export default function PasswordInputModal({
           onChange={(e) => setPassword(e.target.value)}
           error={error}
           autoFocus
+          showPasswordToggle
         />
         
         {onForgotPassword && (

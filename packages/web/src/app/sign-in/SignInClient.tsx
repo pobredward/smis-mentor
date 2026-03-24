@@ -700,7 +700,13 @@ export function SignInClient() {
       setTimeout(() => {
         const params = new URLSearchParams(window.location.search);
         const redirectTo = params.get('redirect');
-        router.push(redirectTo || '/');
+        // ✅ 계정 연동 후 마이페이지로 이동하면 즉시 반영되도록 플래그 추가
+        const targetPath = redirectTo || '/';
+        if (targetPath === '/profile' || targetPath.startsWith('/profile')) {
+          router.push(`${targetPath}?refresh=true`);
+        } else {
+          router.push(targetPath);
+        }
       }, 1000);
     } catch (error) {
       console.error('계정 연동 오류:', error);
