@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
 }
 
 function createErrorResponse(errorMessage: string) {
-  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'; 
   
   return new NextResponse(
     `
