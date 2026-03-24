@@ -40,15 +40,6 @@ export default function ProfilePage() {
         }
 
         setAuthChecking(false);
-        
-        // ✅ URL 파라미터로 refresh=true가 있으면 즉시 새로고침
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('refresh') === 'true') {
-          console.log('🔄 계정 연동 완료 - 사용자 데이터 새로고침');
-          await refreshUserData();
-          // URL에서 refresh 파라미터 제거
-          window.history.replaceState({}, '', '/profile');
-        }
       } catch (error) {
         console.error('인증 상태 확인 오류:', error);
         setAuthChecking(false);

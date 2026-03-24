@@ -700,10 +700,11 @@ export function SignInClient() {
       setTimeout(() => {
         const params = new URLSearchParams(window.location.search);
         const redirectTo = params.get('redirect');
-        // ✅ 계정 연동 후 마이페이지로 이동하면 즉시 반영되도록 플래그 추가
         const targetPath = redirectTo || '/';
+        
+        // ✅ 마이페이지로 이동하는 경우 완전히 새로고침하여 최신 데이터 반영
         if (targetPath === '/profile' || targetPath.startsWith('/profile')) {
-          router.push(`${targetPath}?refresh=true`);
+          window.location.href = '/profile';
         } else {
           router.push(targetPath);
         }
@@ -903,7 +904,15 @@ export function SignInClient() {
         onForgotPassword={handleForgotPasswordFromModal}
         email={existingUserEmail || undefined}
         title="계정 연동"
-        description="이미 등록된 계정입니다. Google 계정과 연동하려면 기존 비밀번호를 입력해주세요."
+        description={`이미 등록된 계정입니다. ${
+          socialData?.providerId === 'google.com' 
+            ? 'Google' 
+            : socialData?.providerId === 'naver' 
+            ? 'Naver' 
+            : socialData?.providerId === 'kakao'
+            ? 'Kakao'
+            : '소셜'
+        } 계정과 연동하려면 기존 비밀번호를 입력해주세요.`}
         isLoading={isLoading}
       />
     </Layout>
