@@ -119,17 +119,33 @@ export function SignInClient() {
         toast.error('이메일 주소를 입력해주세요.');
         return;
       }
+      
+      // 이메일 형식 검증
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        toast.error('올바른 이메일 형식을 입력해주세요.');
+        return;
+      }
+      
       setIsLoading(true);
       await resetPassword(email);
-      toast.success('비밀번호 재설정 이메일이 발송되었습니다.');
+      toast.success(
+        '비밀번호 재설정 이메일이 발송되었습니다. 메일함(스팸함 포함)을 확인해주세요.',
+        { duration: 5000 }
+      );
       setShowResetForm(false);
     } catch (error) {
       console.error('비밀번호 재설정 오류:', error);
       const firebaseError = error as FirebaseError;
+      
       if (firebaseError.code === 'auth/user-not-found') {
         toast.error('해당 이메일로 등록된 계정이 없습니다.');
+      } else if (firebaseError.code === 'auth/invalid-email') {
+        toast.error('유효하지 않은 이메일 주소입니다.');
+      } else if (firebaseError.code === 'auth/too-many-requests') {
+        toast.error('너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.');
       } else {
-        toast.error('비밀번호 재설정 이메일 발송 중 오류가 발생했습니다.');
+        toast.error('비밀번호 재설정 이메일 발송 중 오류가 발생했습니다. 나중에 다시 시도해주세요.');
       }
     } finally {
       setIsLoading(false);

@@ -847,7 +847,13 @@ export const sendVerificationEmail = async (user: FirebaseUser) => {
 
 export const resetPassword = async (email: string) => {
   try {
-    await sendPasswordResetEmail(auth, email);
+    const actionCodeSettings = {
+      url: `${window.location.origin}/sign-in`,
+      handleCodeInApp: false,
+    };
+    
+    await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    console.log('비밀번호 재설정 이메일 발송 성공:', email);
     return true;
   } catch (error) {
     console.error('비밀번호 재설정 이메일 발송 실패:', error);

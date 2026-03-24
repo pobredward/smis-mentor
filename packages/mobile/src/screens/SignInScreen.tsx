@@ -191,16 +191,21 @@ export function SignInScreen({
       await resetPassword(emailToReset);
       Alert.alert(
         '이메일 전송 완료',
-        '비밀번호 재설정 이메일이 발송되었습니다.'
+        '비밀번호 재설정 이메일이 발송되었습니다. 메일함(스팸함 포함)을 확인해주세요.'
       );
       setShowResetForm(false);
       setResetEmail('');
     } catch (error: any) {
       console.error('비밀번호 재설정 오류:', error);
+      
       if (error.code === 'auth/user-not-found') {
         Alert.alert('오류', '해당 이메일로 등록된 계정이 없습니다.');
+      } else if (error.code === 'auth/invalid-email') {
+        Alert.alert('오류', '유효하지 않은 이메일 주소입니다.');
+      } else if (error.code === 'auth/too-many-requests') {
+        Alert.alert('오류', '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.');
       } else {
-        Alert.alert('오류', '비밀번호 재설정 이메일 발송 중 오류가 발생했습니다.');
+        Alert.alert('오류', '비밀번호 재설정 이메일 발송 중 오류가 발생했습니다. 나중에 다시 시도해주세요.');
       }
     } finally {
       setIsLoading(false);
