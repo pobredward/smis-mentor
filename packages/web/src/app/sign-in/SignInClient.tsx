@@ -697,17 +697,9 @@ export function SignInClient() {
       toast.success(`${providerName} 계정이 연동되었습니다!`);
       setShowPasswordModal(false);
       
+      // ✅ 계정 연동 성공 시 항상 마이페이지로 이동하여 연동된 계정 확인
       setTimeout(() => {
-        const params = new URLSearchParams(window.location.search);
-        const redirectTo = params.get('redirect');
-        const targetPath = redirectTo || '/';
-        
-        // ✅ 마이페이지로 이동하는 경우 완전히 새로고침하여 최신 데이터 반영
-        if (targetPath === '/profile' || targetPath.startsWith('/profile')) {
-          window.location.href = '/profile';
-        } else {
-          router.push(targetPath);
-        }
+        window.location.href = '/profile';
       }, 1000);
     } catch (error) {
       console.error('계정 연동 오류:', error);
