@@ -154,6 +154,7 @@ export function SignInClient() {
   
   // Google 로그인 성공 핸들러
   const handleGoogleSignInSuccess = async (data: SocialUserData) => {
+    setIsLoading(true); // ✅ 로딩 시작
     try {
       const result = await handleSocialLogin(data, getUserByEmail);
       
@@ -169,6 +170,7 @@ export function SignInClient() {
         if (data.providerId === 'naver' || data.providerId === 'kakao') {
           if (!result.user?.userId || !result.user?.email) {
             toast.error('사용자 정보를 찾을 수 없습니다.');
+            setIsLoading(false);
             return;
           }
           
@@ -178,6 +180,9 @@ export function SignInClient() {
             
             if (!firebaseAuthPassword) {
               console.log('ℹ️ _firebaseAuthPassword 없음 → Custom Token 방식 사용');
+              
+              // ⏳ Custom Token 생성 중 안내
+              toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
               
               // Fallback: Custom Token 방식 (기존 사용자 또는 비밀번호 있는 사용자)
               try {
@@ -194,14 +199,17 @@ export function SignInClient() {
                 );
                 
                 console.log('✅ Custom Token 로그인 완료');
+                toast.dismiss('custom-token-loading'); // ✅ 로딩 토스트 제거
               } catch (customTokenError) {
                 console.error('❌ Custom Token 로그인 실패:', customTokenError);
+                toast.dismiss('custom-token-loading'); // ❌ 로딩 토스트 제거
                 toast.error(
                   '로그인에 실패했습니다.\n' +
                   'Custom Token 생성 오류가 발생했습니다.\n' +
                   '관리자에게 문의하세요.',
                   { duration: 6000 }
                 );
+                setIsLoading(false);
                 return;
               }
             } else {
@@ -213,6 +221,7 @@ export function SignInClient() {
           } catch (error) {
             console.error('❌ Firebase Auth 로그인 실패:', error);
             toast.error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.', { duration: 4000 });
+            setIsLoading(false);
             return;
           }
         }
@@ -331,6 +340,8 @@ export function SignInClient() {
       }
       
       toast.error(errorMessage);
+    } finally {
+      setIsLoading(false); // ✅ 로딩 종료
     }
   };
   
@@ -818,11 +829,13 @@ export function SignInClient() {
               <GoogleSignInButton
                 onSuccess={handleGoogleSignInSuccess}
                 onError={handleGoogleSignInError}
+                disabled={isLoading}
               />
               
               <NaverSignInButton
                 onSuccess={handleGoogleSignInSuccess}
                 onError={handleNaverSignInError}
+                disabled={isLoading}
               />
             </div>
             
