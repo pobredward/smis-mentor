@@ -170,9 +170,20 @@ export default function ProfilePage() {
         const { signInWithNaver } = await import('@/lib/naverAuthService');
         socialData = await signInWithNaver();
         
+        // 🔑 비밀번호 provider가 있는지 확인
+        const hasPasswordProvider = userData.authProviders?.some(
+          (p: any) => p.providerId === 'password'
+        );
+        
+        console.log('🔍 비밀번호 provider 확인:', {
+          hasPasswordProvider,
+          authProviders: userData.authProviders?.map((p: any) => p.providerId),
+        });
+        
         // 네이버는 Firestore에만 저장 (arrayUnion 사용)
         const { linkSocialProvider } = await import('@smis-mentor/shared');
-        const { arrayUnion } = await import('firebase/firestore');
+        const { arrayUnion, updateDoc, doc } = await import('firebase/firestore');
+        const { db } = await import('@/lib/firebase');
         
         await linkSocialProvider(
           userData.userId,
@@ -181,6 +192,37 @@ export default function ProfilePage() {
           updateUser,
           arrayUnion // ✅ 동시성 안전
         );
+        
+        // 🔥 비밀번호 provider가 없으면 _firebaseAuthPassword 생성
+        if (!hasPasswordProvider) {
+          console.log('💡 비밀번호 없는 사용자 → _firebaseAuthPassword 생성');
+          
+          // 임시 비밀번호 생성
+          const tempPassword = `${userData.email}_${Date.now()}_${Math.random().toString(36)}`;
+          
+          try {
+            // Firebase Auth에 임시 비밀번호 설정
+            const { updatePassword } = await import('firebase/auth');
+            await updatePassword(currentUser, tempPassword);
+            
+            // Firestore에 _firebaseAuthPassword 저장
+            const userRef = doc(db, 'users', userData.userId);
+            await updateDoc(userRef, {
+              _firebaseAuthPassword: tempPassword,
+            });
+            
+            console.log('✅ _firebaseAuthPassword 생성 완료');
+          } catch (passwordError) {
+            console.error('⚠️ _firebaseAuthPassword 생성 실패:', passwordError);
+            // 연동은 성공했으므로 경고만 표시
+            toast('네이버 연동은 완료되었으나, 자동 로그인 설정에 실패했습니다.\n재로그인이 필요할 수 있습니다.', { 
+              icon: '⚠️',
+              duration: 5000 
+            });
+          }
+        } else {
+          console.log('ℹ️ 비밀번호 있는 사용자 → Custom Token 방식 사용');
+        }
 
         toast.success('네이버 계정이 성공적으로 연동되었습니다.');
         await refreshUserData();
