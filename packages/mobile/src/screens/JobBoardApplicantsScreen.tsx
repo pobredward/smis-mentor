@@ -217,6 +217,34 @@ export function JobBoardApplicantsScreen({
     setFilteredApplications(filtered);
   }, [applications, filterStatus, searchQuery]);
 
+  // 전화번호 포맷팅
+  const formatPhoneNumber = (phoneNumber?: string): string => {
+    if (!phoneNumber) return '-';
+    
+    // 공백 제거
+    const cleaned = phoneNumber.replace(/\s/g, '');
+    
+    // 한국 번호 (+82 또는 010으로 시작)
+    if (cleaned.startsWith('+82')) {
+      const number = cleaned.substring(3);
+      
+      // 010-1234-5678 형식
+      if (number.startsWith('10') && number.length === 10) {
+        return `+82 0${number.substring(0, 2)}-${number.substring(2, 6)}-${number.substring(6)}`;
+      }
+    }
+    
+    // 국가코드가 없는 경우 (한국 번호로 가정)
+    const onlyNumbers = cleaned.replace(/\D/g, '');
+    if (onlyNumbers.length === 11) {
+      return `${onlyNumbers.substring(0, 3)}-${onlyNumbers.substring(3, 7)}-${onlyNumbers.substring(7)}`;
+    } else if (onlyNumbers.length === 10) {
+      return `${onlyNumbers.substring(0, 3)}-${onlyNumbers.substring(3, 6)}-${onlyNumbers.substring(6)}`;
+    }
+    
+    return phoneNumber;
+  };
+
   // 공고 상태 토글
   const toggleJobBoardStatus = async () => {
     if (!jobBoard) return;
