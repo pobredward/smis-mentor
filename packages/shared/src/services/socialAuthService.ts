@@ -240,7 +240,7 @@ export async function linkSocialProvider(
   socialData: SocialUserData,
   getUserById: (userId: string) => Promise<any | null>,
   updateUser: (userId: string, data: any) => Promise<void>,
-  arrayUnion?: (elements: any[]) => any // Firestore FieldValue.arrayUnion
+  arrayUnion?: (...elements: any[]) => any // Firestore FieldValue.arrayUnion (가변 인자)
 ): Promise<void> {
   try {
     const user = await getUserById(userId);
@@ -266,11 +266,11 @@ export async function linkSocialProvider(
     }
 
     // providerId 정규화: 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
-    const normalizedProviderId = socialData.providerId === 'naver' || socialData.providerId === 'kakao'
+    const normalizedProviderId = (socialData.providerId === 'naver' || socialData.providerId === 'kakao'
       ? socialData.providerId
       : socialData.providerId.includes('.com') 
         ? socialData.providerId 
-        : `${socialData.providerId}.com`;
+        : `${socialData.providerId}.com`) as AuthProvider['providerId'];
 
     const newProvider: AuthProvider = {
       providerId: normalizedProviderId,
@@ -285,7 +285,7 @@ export async function linkSocialProvider(
     if (arrayUnion) {
       console.log('✅ arrayUnion 사용 (동시성 안전)');
       await updateUser(userId, {
-        authProviders: arrayUnion([newProvider]),
+        authProviders: arrayUnion(newProvider), // ✅ 배열이 아닌 요소 자체를 전달
         updatedAt: Timestamp.now(),
       });
     } else {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle, XCircle, Search, Download } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle, XCircle, Search, Download, Edit2, Save, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
@@ -42,6 +42,9 @@ export default function UserConsistencyPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'consistent' | 'inconsistent' | 'internal' | 'auth' | 'orphaned'>('all');
   const [filteredData, setFilteredData] = useState<ConsistencyIssue[]>([]);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [newIdValue, setNewIdValue] = useState('');
+  const [updating, setUpdating] = useState(false);
 
   const loadReport = async () => {
     setLoading(true);
@@ -128,6 +131,59 @@ export default function UserConsistencyPage() {
     if (issues.some(i => i.includes('Auth UID') && i.includes('불일치'))) return '🔴 심각';
     if (issues.some(i => i.includes('documentId ≠'))) return '🟠 경고';
     return '🟡 주의';
+  };
+
+  const handleStartEdit = (user: ConsistencyIssue) => {
+    setEditingUserId(user.firestoreDocId);
+    setNewIdValue(user.authUid || user.firestoreDocId);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingUserId(null);
+    setNewIdValue('');
+  };
+
+  const handleUpdateIds = async (currentDocId: string) => {
+    if (!newIdValue || newIdValue === currentDocId) {
+      toast.error('새로운 ID를 입력하거나 다른 값을 사용하세요.');
+      return;
+    }
+
+    if (!confirm(`정말로 사용자 ID를 변경하시겠습니까?\n\n현재 ID: ${currentDocId}\n새로운 ID: ${newIdValue}\n\n⚠️ 이 작업은 되돌릴 수 없으며, 관련된 모든 데이터가 업데이트됩니다.`)) {
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      const response = await fetch('/api/admin/user-consistency/update-ids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentDocId,
+          newId: newIdValue,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(`사용자 ID가 성공적으로 변경되었습니다: ${currentDocId} → ${newIdValue}`);
+        if (result.authNote) {
+          toast.success(result.authNote, { duration: 5000 });
+        }
+        setEditingUserId(null);
+        setNewIdValue('');
+        // 리포트 재로드
+        await loadReport();
+      } else {
+        toast.error(`ID 변경 실패: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error('ID 변경 오류:', error);
+      toast.error('ID 변경 중 오류가 발생했습니다.');
+    } finally {
+      setUpdating(false);
+    }
   };
 
   if (loading && !report) {
@@ -383,6 +439,9 @@ export default function UserConsistencyPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     문제점
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    작업
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -461,6 +520,47 @@ export default function UserConsistencyPage() {
                         </div>
                       )}
                     </td>
+                    <td className="px-6 py-4">
+                      {editingUserId === user.firestoreDocId ? (
+                        <div className="flex flex-col gap-2 min-w-[200px]">
+                          <input
+                            type="text"
+                            value={newIdValue}
+                            onChange={(e) => setNewIdValue(e.target.value)}
+                            placeholder="새로운 ID 입력"
+                            className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={updating}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleUpdateIds(user.firestoreDocId)}
+                              disabled={updating || !newIdValue}
+                              className="flex-1 flex items-center justify-center px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Save className="w-3 h-3 mr-1" />
+                              {updating ? '저장 중...' : '저장'}
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              disabled={updating}
+                              className="flex-1 flex items-center justify-center px-2 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50"
+                            >
+                              <X className="w-3 h-3 mr-1" />
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleStartEdit(user)}
+                          disabled={updating || editingUserId !== null}
+                          className="flex items-center px-3 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Edit2 className="w-3 h-3 mr-1" />
+                          ID 변경
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -486,6 +586,19 @@ export default function UserConsistencyPage() {
             <li><strong>🔴 심각:</strong> Firebase Auth UID와 Firestore Document ID가 불일치 (직접 조회 실패)</li>
             <li><strong>🟠 경고:</strong> Firestore 내부 필드 불일치 (userId ≠ id 또는 ≠ Document ID)</li>
             <li><strong>🟡 주의:</strong> 기타 일관성 문제</li>
+          </ul>
+        </div>
+
+        {/* ID 변경 기능 설명 */}
+        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-6">
+          <h3 className="text-sm font-semibold text-amber-900 mb-2">⚠️ ID 변경 기능 안내</h3>
+          <ul className="text-sm text-amber-800 space-y-1">
+            <li><strong>ID 변경 버튼:</strong> 각 사용자 행의 오른쪽 "작업" 열에서 ID 변경 가능</li>
+            <li><strong>변경 범위:</strong> Firestore Document ID, userId, id 필드 일괄 변경</li>
+            <li><strong>관련 데이터:</strong> evaluations, applicationHistories, reviews, tasks 등의 refUserId도 자동 업데이트</li>
+            <li><strong>Firebase Auth UID:</strong> Firebase의 제약으로 Auth UID는 변경 불가 (수동 작업 필요)</li>
+            <li><strong>권장 사항:</strong> 가능하면 Firebase Auth UID와 일치하도록 변경하는 것을 권장</li>
+            <li><strong>주의:</strong> 이 작업은 되돌릴 수 없으므로 신중하게 진행하세요</li>
           </ul>
         </div>
       </div>

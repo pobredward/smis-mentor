@@ -4,6 +4,7 @@ import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase
 export async function GET() {
   try {
     const db = getAdminFirestore();
+    const auth = getAdminAuth();
     console.log('🔍 Firebase Auth ↔ Firestore 일관성 검증 시작...');
 
     // 1. 모든 Firestore 사용자 조회
