@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabsParamList } from './types';
@@ -26,6 +26,13 @@ export function MainTabs() {
         screenOptions={{
           tabBarActiveTintColor: '#3b82f6',
           tabBarInactiveTintColor: '#94a3b8',
+          headerTitleStyle: {
+            fontSize: 20,
+            fontWeight: '600',
+          },
+          headerStyle: {
+            height: Platform.OS === 'android' ? 80 : undefined,
+          },
         }}
       >
         {/* 원어민이 아닌 경우에만 '홈' 탭 표시 */}
@@ -48,6 +55,7 @@ export function MainTabs() {
             component={RecruitmentNavigator}
             options={{
               title: '채용',
+              headerShown: true,
               tabBarIcon: ({ color, size }) => (
                 <Ionicons name="briefcase" size={size} color={color} />
               ),

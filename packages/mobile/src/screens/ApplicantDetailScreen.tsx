@@ -717,7 +717,7 @@ export function ApplicantDetailScreen({
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#f59e0b" />
           <Text style={styles.loadingText}>정보를 불러오는 중...</Text>
@@ -728,7 +728,7 @@ export function ApplicantDetailScreen({
 
   if (!application) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingContainer}>
           <Text style={styles.emptyText}>지원자를 찾을 수 없습니다.</Text>
         </View>
@@ -737,7 +737,7 @@ export function ApplicantDetailScreen({
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -1354,8 +1354,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingTop: 8,
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },

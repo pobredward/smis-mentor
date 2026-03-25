@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -44,6 +44,19 @@ export function JobBoardDetailScreen({
     loadData();
   }, [jobBoardId]);
 
+  // 헤더 제목을 동적으로 설정
+  useLayoutEffect(() => {
+    if (jobCode?.name && jobBoard?.generation) {
+      navigation.setOptions({
+        title: `${jobBoard.generation} ${jobCode.name}`,
+      });
+    } else if (jobCode?.name) {
+      navigation.setOptions({
+        title: jobCode.name,
+      });
+    }
+  }, [navigation, jobCode, jobBoard]);
+
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -83,7 +96,7 @@ export function JobBoardDetailScreen({
     const day = String(date.getDate()).padStart(2, '0');
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     const dayOfWeek = days[date.getDay()];
-    return `${year}년 ${month}월 ${day}일 (${dayOfWeek})`;
+    return `${year}.${month}.${day}(${dayOfWeek})`;
   };
 
   const formatDateTime = (timestamp: Timestamp) => {
@@ -296,51 +309,30 @@ export function JobBoardDetailScreen({
           </View>
         </View>
 
-        {/* 제목 */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>{jobBoard.title}</Text>
+        {/* 제목 및 업무 정보 */}
+        <View style={styles.titleAndInfoContainer}>
+          {/* <Text style={styles.title}>{jobBoard.title}</Text> */}
+          
+          {/* 업무 정보 - 간단하게 */}
+          {jobCode && (
+            <View style={styles.jobInfoCompact}>
+              <View style={styles.jobInfoRow}>
+                <Text style={styles.jobInfoLabel}>업무명</Text>
+                <Text style={styles.jobInfoValue}>{jobBoard.generation} {jobCode.name}</Text>
+              </View>
+              <View style={styles.jobInfoRow}>
+                <Text style={styles.jobInfoLabel}>캠프 기간</Text>
+                <Text style={styles.jobInfoValue} numberOfLines={1}>
+                  {formatDate(jobCode.startDate)} ~ {formatDate(jobCode.endDate)}
+                </Text>
+              </View>
+              <View style={styles.jobInfoRow}>
+                <Text style={styles.jobInfoLabel}>위치</Text>
+                <Text style={styles.jobInfoValue}>{jobCode.location}</Text>
+              </View>
+            </View>
+          )}
         </View>
-
-        {/* 업무 정보 카드 */}
-        {jobCode && (
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.iconCircle}>
-                <Text style={styles.iconText}>💼</Text>
-              </View>
-              <Text style={styles.cardTitle}>업무 정보</Text>
-            </View>
-            <View style={styles.cardContent}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>업무 코드</Text>
-                <Text style={styles.infoValue}>{jobCode.code}</Text>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>업무명</Text>
-                <Text style={styles.infoValue}>{jobCode.name}</Text>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>캠프 기간</Text>
-                <View style={styles.infoValueContainer}>
-                  <Text style={styles.infoValue}>
-                    {formatDate(jobCode.startDate)}
-                  </Text>
-                  <Text style={styles.infoValueSub}>~</Text>
-                  <Text style={styles.infoValue}>
-                    {formatDate(jobCode.endDate)}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>위치</Text>
-                <Text style={styles.infoValue}>{jobCode.location}</Text>
-              </View>
-            </View>
-          </View>
-        )}
 
         {/* 공고 내용 카드 */}
         <View style={styles.card}>
@@ -555,7 +547,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingTop: 8,
   },
   statusBar: {
     backgroundColor: '#ffffff',
@@ -570,9 +561,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   badge: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
     backgroundColor: '#dbeafe',
   },
   badgeGreen: {
@@ -588,7 +579,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   badgeText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#1e40af',
   },
@@ -604,22 +595,45 @@ const styles = StyleSheet.create({
   badgeTextGray: {
     color: '#6b7280',
   },
-  titleContainer: {
+  titleAndInfoContainer: {
     backgroundColor: '#ffffff',
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingTop: 10,
+    paddingBottom: 16,
     marginBottom: 8,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#111827',
-    lineHeight: 32,
+    lineHeight: 30,
+    marginBottom: 16,
+  },
+  jobInfoCompact: {
+    gap: 10,
+  },
+  jobInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  jobInfoLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  jobInfoValue: {
+    fontSize: 13,
+    color: '#111827',
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1,
+    marginLeft: 12,
   },
   card: {
     backgroundColor: '#ffffff',
     marginBottom: 8,
-    paddingVertical: 20,
+    paddingVertical: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -633,27 +647,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#f3f4f6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   iconText: {
-    fontSize: 20,
+    fontSize: 18,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#111827',
   },
   cardSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6b7280',
     paddingHorizontal: 20,
     marginBottom: 12,
@@ -672,12 +686,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   infoLabel: {
-    fontSize: 15,
+    fontSize: 13,
     color: '#6b7280',
     fontWeight: '500',
   },
   infoValue: {
-    fontSize: 15,
+    fontSize: 13,
     color: '#111827',
     fontWeight: '600',
     textAlign: 'right',
@@ -690,7 +704,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   infoValueSub: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#9ca3af',
   },
   interviewDateButton: {
@@ -717,7 +731,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   interviewDateText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#374151',
     marginBottom: 4,
   },
@@ -792,35 +806,35 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     backgroundColor: '#ffffff',
-    padding: 20,
+    padding: 12,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: -4,
+      height: -2,
     },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 10,
   },
   applyButton: {
     backgroundColor: '#3b82f6',
-    paddingVertical: 18,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: 'center',
     shadowColor: '#3b82f6',
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 3,
     },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   applyButtonText: {
     color: '#ffffff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   bottomPadding: {

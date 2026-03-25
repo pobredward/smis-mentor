@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AdminStackParamList } from './types';
 import { AdminScreen } from '../screens/AdminScreen';
@@ -22,6 +23,14 @@ export function AdminNavigator() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
+        headerTitleStyle: {
+          fontSize: 16,
+          fontWeight: '600',
+        },
+        // Android 최적화
+        ...(Platform.OS === 'android' && {
+          headerStatusBarHeight: 0,
+        }),
       }}
     >
       <Stack.Screen name="AdminDashboard" component={AdminScreen} />
