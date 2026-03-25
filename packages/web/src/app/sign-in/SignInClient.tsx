@@ -177,22 +177,39 @@ export function SignInClient() {
             const firebaseAuthPassword = (result.user as any)._firebaseAuthPassword;
             
             if (!firebaseAuthPassword) {
-              console.error('❌ Firebase Auth 비밀번호가 없습니다. Custom Token 방식 시도...');
+              console.log('ℹ️ _firebaseAuthPassword 없음 → Custom Token 방식 사용');
               
-              // Fallback: Custom Token 방식 (기존 사용자 지원)
-              const existingFirebaseUid = result.user.userId;
-              await signInWithCustomTokenFromFunction(
-                result.user.userId,
-                result.user.email,
-                existingFirebaseUid
-              );
+              // Fallback: Custom Token 방식 (기존 사용자 또는 비밀번호 있는 사용자)
+              try {
+                const existingFirebaseUid = result.user.userId;
+                console.log('🔑 Custom Token 생성 시작:', {
+                  userId: existingFirebaseUid,
+                  email: result.user.email,
+                });
+                
+                await signInWithCustomTokenFromFunction(
+                  result.user.userId,
+                  result.user.email,
+                  existingFirebaseUid
+                );
+                
+                console.log('✅ Custom Token 로그인 완료');
+              } catch (customTokenError) {
+                console.error('❌ Custom Token 로그인 실패:', customTokenError);
+                toast.error(
+                  '로그인에 실패했습니다.\n' +
+                  'Custom Token 생성 오류가 발생했습니다.\n' +
+                  '관리자에게 문의하세요.',
+                  { duration: 6000 }
+                );
+                return;
+              }
             } else {
-              // Firebase Auth 비밀번호로 로그인
-              console.log('🔑 Firebase Auth 비밀번호로 로그인 시도');
+              // Firebase Auth 비밀번호로 로그인 (소셜 전용 계정)
+              console.log('🔑 _firebaseAuthPassword로 로그인 시도');
               await signIn(result.user.email, firebaseAuthPassword);
+              console.log('✅ _firebaseAuthPassword 로그인 완료');
             }
-            
-            console.log('✅ Firebase Auth 로그인 완료');
           } catch (error) {
             console.error('❌ Firebase Auth 로그인 실패:', error);
             toast.error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.', { duration: 4000 });
