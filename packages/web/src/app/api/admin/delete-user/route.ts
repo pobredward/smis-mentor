@@ -4,6 +4,7 @@ import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase
 export async function POST(request: Request) {
   try {
     const db = getAdminFirestore();
+    const auth = getAdminAuth();
     const body = await request.json();
     const { userId, adminUserId, deleteType = 'soft' } = body;
 
