@@ -895,12 +895,15 @@ export const signInWithCustomTokenFromFunction = async (
     const functionsModule = await import('firebase/functions');
     const functions = functionsModule.getFunctions();
     
+      // 🔥 리전 설정: Cloud Function이 배포된 리전과 일치해야 함
+    const functionsRegion = functionsModule.getFunctions(undefined, 'asia-northeast3');
+    
     // 개발 환경에서는 emulator 사용
     if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_USE_EMULATOR === 'true') {
-      functionsModule.connectFunctionsEmulator(functions, 'localhost', 5001);
+      functionsModule.connectFunctionsEmulator(functionsRegion, 'localhost', 5001);
     }
     
-    const createCustomToken = functionsModule.httpsCallable(functions, 'createCustomToken');
+    const createCustomToken = functionsModule.httpsCallable(functionsRegion, 'createCustomToken');
     const result = await createCustomToken({ 
       userId, 
       email,

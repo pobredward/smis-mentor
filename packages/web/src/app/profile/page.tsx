@@ -195,13 +195,14 @@ export default function ProfilePage() {
         
         // 🔥 비밀번호 provider가 없으면 _firebaseAuthPassword 생성
         if (!hasPasswordProvider) {
-          console.log('💡 비밀번호 없는 사용자 → _firebaseAuthPassword 생성');
+          console.log('💡 비밀번호 없는 사용자 → _firebaseAuthPassword 생성 시도');
           
           // 임시 비밀번호 생성
           const tempPassword = `${userData.email}_${Date.now()}_${Math.random().toString(36)}`;
           
           try {
             // Firebase Auth에 임시 비밀번호 설정
+            // ℹ️ 최근 로그인했다면 재인증 불필요 (Firebase 자동 판단)
             const { updatePassword } = await import('firebase/auth');
             await updatePassword(currentUser, tempPassword);
             
@@ -212,13 +213,33 @@ export default function ProfilePage() {
             });
             
             console.log('✅ _firebaseAuthPassword 생성 완료');
-          } catch (passwordError) {
+          } catch (passwordError: any) {
             console.error('⚠️ _firebaseAuthPassword 생성 실패:', passwordError);
-            // 연동은 성공했으므로 경고만 표시
-            toast('네이버 연동은 완료되었으나, 자동 로그인 설정에 실패했습니다.\n재로그인이 필요할 수 있습니다.', { 
-              icon: '⚠️',
-              duration: 5000 
-            });
+            
+            // 재인증이 필요한 경우
+            if (passwordError?.code === 'auth/requires-recent-login') {
+              console.log('🔄 재인증 필요 - Custom Token Fallback 사용');
+              toast(
+                '네이버 연동이 완료되었습니다.\n' +
+                '보안을 위해 다음 로그인부터 네이버를 사용할 수 있습니다.',
+                { 
+                  icon: 'ℹ️',
+                  duration: 5000 
+                }
+              );
+              // authProvider는 이미 저장됨 → 재로그인 시 Custom Token 사용 ✅
+            } else {
+              // 기타 에러
+              console.error('예상치 못한 에러:', passwordError);
+              toast(
+                '네이버 연동은 완료되었으나, 자동 로그인 설정에 실패했습니다.\n' +
+                '재로그인 시 Custom Token이 사용됩니다.', 
+                { 
+                  icon: '⚠️',
+                  duration: 5000 
+                }
+              );
+            }
           }
         } else {
           console.log('ℹ️ 비밀번호 있는 사용자 → Custom Token 방식 사용');
