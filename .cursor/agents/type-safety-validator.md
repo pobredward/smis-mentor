@@ -60,8 +60,8 @@ interface Evaluation {
 
 **캠프 그룹**:
 ```typescript
-const MENTOR_GROUP_ROLES = ['담임', '수업', '매니저'] as const;
-const FOREIGN_GROUP_ROLES = ['Speaking', 'Reading', 'Writing', 'Mix', 'Manager'] as const;
+const MENTOR_GROUP_ROLES = ['담임', '수업', '매니저', '부매니저'] as const;
+const FOREIGN_GROUP_ROLES = ['Speaking', 'Reading', 'Writing', 'Mix', 'Manager', 'Sub Manager'] as const;
 
 type MentorGroupRole = typeof MENTOR_GROUP_ROLES[number];
 type ForeignGroupRole = typeof FOREIGN_GROUP_ROLES[number];

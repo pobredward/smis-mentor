@@ -220,7 +220,15 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
               );
 
               if (relevantExperience) {
-                if ('group' in relevantExperience) {
+                // groupRole이 '매니저', '부매니저' 또는 'Manager', 'Sub Manager'인 경우 manager 그룹으로 분류
+                if (
+                  relevantExperience.groupRole === '매니저' || 
+                  relevantExperience.groupRole === '부매니저' ||
+                  relevantExperience.groupRole === 'Manager' || 
+                  relevantExperience.groupRole === 'Sub Manager'
+                ) {
+                  jobGroup = 'manager';
+                } else if ('group' in relevantExperience) {
                   jobGroup = relevantExperience.group;
                 }
                 if ('groupRole' in relevantExperience) {
@@ -249,10 +257,11 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
         });
 
         // role 필터링 적용
-        // mentor 선택 시 mentor_temp도 포함, foreign 선택 시 foreign_temp도 포함
+        // mentor 선택 시 mentor_temp, admin도 포함
+        // foreign 선택 시 foreign_temp도 포함
         const filteredUsers = enrichedUsers.filter((user: UserWithGroupInfo) => {
           if (selectedRole === 'mentor') {
-            return user.role === 'mentor' || user.role === 'mentor_temp';
+            return user.role === 'mentor' || user.role === 'mentor_temp' || user.role === 'admin';
           } else if (selectedRole === 'foreign') {
             return user.role === 'foreign' || user.role === 'foreign_temp';
           }
@@ -451,8 +460,29 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
   const renderGroupSection = ({ item: group }: { item: string }) => {
     let usersInGroup = groupedUsers[group] || [];
     
-    // 정렬: classCode 오름차순, 없으면 맨 뒤, 이름순 2차
+    // 정렬 로직
     usersInGroup = [...usersInGroup].sort((a, b) => {
+      // manager 그룹인 경우: groupRole 순서 우선 (매니저 -> 부매니저 -> Manager -> Sub Manager)
+      if (group === 'manager') {
+        const roleOrder: Record<string, number> = {
+          '매니저': 1,
+          '부매니저': 2,
+          'Manager': 3,
+          'Sub Manager': 4,
+        };
+        const roleA = a.groupRole || '';
+        const roleB = b.groupRole || '';
+        const orderA = roleOrder[roleA] || 999;
+        const orderB = roleOrder[roleB] || 999;
+        
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        // 같은 역할이면 이름순
+        return (a.name || '').localeCompare(b.name || '');
+      }
+      
+      // 다른 그룹: classCode 오름차순, 없으면 맨 뒤, 이름순 2차
       const classCodeA = a.classCode;
       const classCodeB = b.classCode;
       if (classCodeA && classCodeB) {

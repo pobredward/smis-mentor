@@ -21,6 +21,7 @@ export const MENTOR_GROUP_ROLES = [
   '담임',
   '수업',
   '매니저',
+  '부매니저',
 ] as const;
 
 // 그룹 역할 선택지 - 원어민용
@@ -30,6 +31,7 @@ export const FOREIGN_GROUP_ROLES = [
   'Writing',
   'Mix',
   'Manager',
+  'Sub Manager',
 ] as const;
 
 // 전체 그룹 역할 (호환성 유지)

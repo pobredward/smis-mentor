@@ -35,6 +35,7 @@
     "migrate:normalize-provider-ids:dry-run": "ts-node --esm scripts/migrate-normalize-provider-ids.ts --dry-run",
     "check:user": "ts-node --esm scripts/check-user-auth-providers.ts",
     "fix:user-provider": "ts-node --esm scripts/fix-user-provider-id.ts",
+    "compare:users": "ts-node --esm scripts/compare-users.ts",
     "lint": "npm run lint --workspaces",
     "clean": "rm -rf node_modules packages/*/node_modules functions/node_modules"
   },
