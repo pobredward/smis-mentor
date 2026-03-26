@@ -486,6 +486,68 @@ export default function UserManage() {
     }
   };
 
+  // 사용자 완전 삭제 핸들러 (Hard Delete)
+  const handlePermanentDeleteUser = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      // 1. 먼저 사용자 데이터 확인
+      const loadingToast = toast.loading('사용자 데이터 확인 중...');
+      const dataCheck = await checkUserData(selectedUser.userId);
+      toast.dismiss(loadingToast);
+      
+      // 2. 확인 메시지 구성
+      let confirmMessage = `⚠️ 경고: ${selectedUser.name} 사용자를 Firestore에서 완전히 삭제하시겠습니까?\n\n`;
+      confirmMessage += `🚨 이 작업은 되돌릴 수 없습니다! 🚨\n\n`;
+      
+      if (dataCheck.hasData) {
+        confirmMessage += `이 사용자가 작성한 데이터:\n`;
+        confirmMessage += `• 평가 기록: ${dataCheck.data.evaluations}개\n`;
+        confirmMessage += `• 지원서: ${dataCheck.data.applications}개\n`;
+        confirmMessage += `• 업무: ${dataCheck.data.tasks}개\n`;
+        confirmMessage += `• SMS 템플릿: ${dataCheck.data.smsTemplates}개\n\n`;
+        confirmMessage += `❌ 완전 삭제 시 Firestore 문서도 함께 삭제되며,\n`;
+        confirmMessage += `   위 데이터들의 참조가 깨질 수 있습니다!\n\n`;
+      }
+      
+      confirmMessage += `정말로 완전히 삭제하시겠습니까?\n`;
+      confirmMessage += `(Firebase Auth + Firestore 문서 모두 삭제)\n\n`;
+      confirmMessage += `※ 이 작업은 복구할 수 없습니다.`;
+      
+      // 3. 사용자 확인
+      const deleteConfirmed = window.confirm(confirmMessage);
+      
+      if (!deleteConfirmed) {
+        return;
+      }
+      
+      // 4. 한 번 더 확인 (안전장치)
+      const finalConfirm = window.confirm(
+        `⚠️ 최종 확인 ⚠️\n\n정말로 "${selectedUser.name}" 사용자를 Firestore에서 영구적으로 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!`
+      );
+      
+      if (!finalConfirm) {
+        return;
+      }
+      
+      // 5. Hard Delete 실행
+      const deletingToast = toast.loading('사용자 완전 삭제 중...');
+      await deleteUser(selectedUser.userId, 'hard');
+      toast.dismiss(deletingToast);
+      
+      // 6. 상태 업데이트
+      const updatedUsers = users.filter(user => user.userId !== selectedUser.userId);
+      setUsers(updatedUsers);
+      setSelectedUser(null);
+      
+      toast.success('사용자가 Firestore에서 완전히 삭제되었습니다.');
+      
+    } catch (error) {
+      console.error('사용자 완전 삭제 오류:', error);
+      toast.error('사용자 완전 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   // 모든 직무 코드 로드 (수정)
   useEffect(() => {
     const loadAllJobCodes = async () => {
@@ -1474,7 +1536,7 @@ export default function UserManage() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
+                        <div className="flex gap-2 flex-shrink-0 flex-wrap">
                           {selectedRole !== 'deleted' && (
                             <>
                               <Button
@@ -1488,19 +1550,38 @@ export default function UserManage() {
                                 variant="danger"
                                 size="sm"
                                 onClick={handleDeleteUser}
+                                className="whitespace-nowrap"
                               >
-                                삭제
+                                임시삭제
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={handlePermanentDeleteUser}
+                                className="whitespace-nowrap bg-red-700 hover:bg-red-800"
+                              >
+                                완전삭제
                               </Button>
                             </>
                           )}
                           {selectedRole === 'deleted' && (
-                            <Button
-                              variant="success"
-                              size="sm"
-                              onClick={handleReactivateUser}
-                            >
-                              사용자 복구
-                            </Button>
+                            <>
+                              <Button
+                                variant="success"
+                                size="sm"
+                                onClick={handleReactivateUser}
+                              >
+                                사용자 복구
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={handlePermanentDeleteUser}
+                                className="whitespace-nowrap bg-red-700 hover:bg-red-800"
+                              >
+                                완전삭제
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>

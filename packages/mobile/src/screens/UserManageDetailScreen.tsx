@@ -361,6 +361,128 @@ export function UserManageDetailScreen({ route, navigation }: any) {
     );
   };
 
+  const handleDeleteUser = async (deleteType: 'soft' | 'hard') => {
+    try {
+      const WEB_API_URL = process.env.EXPO_PUBLIC_WEB_API_URL || 'http://localhost:3000';
+      const userId = user.id || user.userId;
+
+      if (!auth.currentUser) {
+        Alert.alert('오류', '인증이 필요합니다.');
+        return;
+      }
+
+      const response = await fetch(`${WEB_API_URL}/api/admin/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          adminUserId: auth.currentUser.uid,
+          deleteType,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '사용자 삭제에 실패했습니다.');
+      }
+
+      const result = await response.json();
+      console.log(`✅ 사용자 ${deleteType === 'hard' ? '영구' : '일반'} 삭제 성공:`, result);
+
+      return true;
+    } catch (error: any) {
+      console.error('사용자 삭제 실패:', error);
+      throw error;
+    }
+  };
+
+  const handleSoftDelete = () => {
+    Alert.alert(
+      '사용자 임시삭제',
+      `${user.name} 사용자를 임시삭제 하시겠습니까?\n\n• Firebase Auth만 삭제됩니다.\n• 작성한 데이터는 보존됩니다.\n• 복구가 가능합니다.`,
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '임시삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsUpdating(true);
+              await handleDeleteUser('soft');
+              Alert.alert('성공', '사용자가 임시삭제 되었습니다.', [
+                {
+                  text: '확인',
+                  onPress: () => navigation.goBack(),
+                },
+              ]);
+            } catch (error: any) {
+              console.error('사용자 임시삭제 오류:', error);
+              Alert.alert('오류', error.message || '사용자 임시삭제 중 오류가 발생했습니다.');
+            } finally {
+              setIsUpdating(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePermanentDelete = () => {
+    Alert.alert(
+      '⚠️ 경고: 완전 삭제',
+      `${user.name} 사용자를 Firestore에서 완전히 삭제하시겠습니까?\n\n🚨 이 작업은 되돌릴 수 없습니다! 🚨\n\n• Firebase Auth + Firestore 문서 모두 삭제\n• 작성한 데이터의 참조가 깨질 수 있습니다\n• 복구가 불가능합니다`,
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '완전삭제',
+          style: 'destructive',
+          onPress: () => {
+            // 2차 확인
+            Alert.alert(
+              '⚠️ 최종 확인',
+              `정말로 "${user.name}" 사용자를 Firestore에서 영구적으로 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!`,
+              [
+                {
+                  text: '취소',
+                  style: 'cancel',
+                },
+                {
+                  text: '완전삭제',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setIsUpdating(true);
+                      await handleDeleteUser('hard');
+                      Alert.alert('성공', '사용자가 Firestore에서 완전히 삭제되었습니다.', [
+                        {
+                          text: '확인',
+                          onPress: () => navigation.goBack(),
+                        },
+                      ]);
+                    } catch (error: any) {
+                      console.error('사용자 완전삭제 오류:', error);
+                      Alert.alert('오류', error.message || '사용자 완전삭제 중 오류가 발생했습니다.');
+                    } finally {
+                      setIsUpdating(false);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const formatDate = (timestamp: any) => {
     if (!timestamp) return '-';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp.seconds * 1000);
@@ -395,13 +517,31 @@ export function UserManageDetailScreen({ route, navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>사용자 상세</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={handleSoftDelete}
+            style={[styles.headerActionButton, styles.deleteButton]}
+            disabled={isUpdating}
+          >
+            <Ionicons name="trash-outline" size={20} color="#EF4444" />
+            <Text style={styles.deleteButtonText}>임시삭제</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handlePermanentDelete}
+            style={[styles.headerActionButton, styles.permanentDeleteButton]}
+            disabled={isUpdating}
+          >
+            <Ionicons name="warning-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.permanentDeleteButtonText}>완전삭제</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -908,9 +1048,38 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: 'bold',
     color: '#111827',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 4,
+  },
+  deleteButton: {
+    backgroundColor: '#FEE2E2',
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  permanentDeleteButton: {
+    backgroundColor: '#B91C1C',
+  },
+  permanentDeleteButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   scrollView: {
     flex: 1,
