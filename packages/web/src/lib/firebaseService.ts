@@ -106,9 +106,81 @@ export const getUserByEmail = async (email: string) => {
     const q = query(collection(db, 'users'), where('email', '==', email));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
-    return querySnapshot.docs[0].data() as User;
+    
+    // deleted 상태가 아닌 사용자만 필터링
+    const activeUsers = querySnapshot.docs.filter(doc => {
+      const status = doc.data().status;
+      return status !== 'deleted';
+    });
+    
+    // deleted만 있거나 사용자가 없는 경우
+    if (activeUsers.length === 0) {
+      console.log('📍 삭제된 사용자만 존재 - null 반환');
+      return null;
+    }
+    
+    // 여러 사용자가 있는 경우 우선순위: active > temp > inactive
+    if (activeUsers.length > 1) {
+      console.warn('⚠️ 동일한 이메일로 여러 사용자 발견 (deleted 제외):', {
+        email,
+        count: activeUsers.length,
+      });
+      
+      const activeUser = activeUsers.find(doc => doc.data().status === 'active');
+      if (activeUser) return activeUser.data() as User;
+      
+      const tempUser = activeUsers.find(doc => doc.data().status === 'temp');
+      if (tempUser) return tempUser.data() as User;
+    }
+    
+    return activeUsers[0].data() as User;
   } catch (error) {
     console.error('이메일로 사용자 조회 실패:', error);
+    throw error;
+  }
+};
+
+// 삭제된 사용자 포함 전화번호 조회
+export const getUserByPhoneIncludeDeleted = async (phoneNumber: string) => {
+  try {
+    // phoneNumber 유효성 검사
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
+      console.error('유효하지 않은 phoneNumber:', phoneNumber);
+      return null;
+    }
+
+    const q = query(collection(db, 'users'), where('phoneNumber', '==', phoneNumber));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+    
+    // 우선순위: active > temp > inactive > deleted
+    const statusPriority = { active: 1, temp: 2, inactive: 3, deleted: 4 };
+    
+    if (querySnapshot.docs.length > 1) {
+      console.warn('⚠️ 동일한 전화번호로 여러 사용자 발견:', {
+        phoneNumber,
+        count: querySnapshot.docs.length,
+        users: querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name,
+          status: doc.data().status,
+        })),
+      });
+      
+      // 상태별 우선순위로 정렬
+      const sortedDocs = [...querySnapshot.docs].sort((a, b) => {
+        const statusA = a.data().status as string;
+        const statusB = b.data().status as string;
+        return (statusPriority[statusA as keyof typeof statusPriority] || 999) - 
+               (statusPriority[statusB as keyof typeof statusPriority] || 999);
+      });
+      
+      return sortedDocs[0].data() as User;
+    }
+    
+    return querySnapshot.docs[0].data() as User;
+  } catch (error) {
+    console.error('전화번호로 사용자 조회 실패 (deleted 포함):', error);
     throw error;
   }
 };
@@ -125,12 +197,24 @@ export const getUserByPhone = async (phoneNumber: string) => {
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
+    // deleted 상태가 아닌 사용자만 필터링
+    const activeUsers = querySnapshot.docs.filter(doc => {
+      const status = doc.data().status;
+      return status !== 'deleted';
+    });
+    
+    // deleted만 있거나 사용자가 없는 경우
+    if (activeUsers.length === 0) {
+      console.log('📍 삭제된 사용자만 존재 - null 반환');
+      return null;
+    }
+    
     // 여러 사용자가 있는 경우 (데이터 무결성 문제)
-    if (querySnapshot.docs.length > 1) {
-      console.warn('⚠️ 동일한 전화번호로 여러 사용자 발견:', {
+    if (activeUsers.length > 1) {
+      console.warn('⚠️ 동일한 전화번호로 여러 사용자 발견 (deleted 제외):', {
         phoneNumber,
-        count: querySnapshot.docs.length,
-        users: querySnapshot.docs.map(doc => ({
+        count: activeUsers.length,
+        users: activeUsers.map(doc => ({
           id: doc.id,
           name: doc.data().name,
           status: doc.data().status,
@@ -138,25 +222,25 @@ export const getUserByPhone = async (phoneNumber: string) => {
       });
       
       // active 사용자 우선 반환
-      const activeUser = querySnapshot.docs.find(doc => doc.data().status === 'active');
+      const activeUser = activeUsers.find(doc => doc.data().status === 'active');
       if (activeUser) {
         console.log('✅ active 사용자 반환');
         return activeUser.data() as User;
       }
       
       // temp 사용자 우선 반환
-      const tempUser = querySnapshot.docs.find(doc => doc.data().status === 'temp');
+      const tempUser = activeUsers.find(doc => doc.data().status === 'temp');
       if (tempUser) {
         console.log('✅ temp 사용자 반환');
         return tempUser.data() as User;
       }
       
-      // 그 외 첫 번째 사용자 반환
-      console.log('⚠️ inactive/deleted 사용자 반환');
-      return querySnapshot.docs[0].data() as User;
+      // 그 외 첫 번째 사용자 반환 (inactive 등)
+      console.log('⚠️ inactive 사용자 반환');
+      return activeUsers[0].data() as User;
     }
     
-    return querySnapshot.docs[0].data() as User;
+    return activeUsers[0].data() as User;
   } catch (error) {
     console.error('전화번호로 사용자 조회 실패:', error);
     throw error;
@@ -182,8 +266,34 @@ export const getUserByForeignName = async (firstName: string, lastName: string) 
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
-    // 여러 명이 있을 수 있으므로 첫 번째 결과 반환
-    return querySnapshot.docs[0].data() as User;
+    // deleted 상태가 아닌 사용자만 필터링
+    const activeUsers = querySnapshot.docs.filter(doc => {
+      const status = doc.data().status;
+      return status !== 'deleted';
+    });
+    
+    // deleted만 있거나 사용자가 없는 경우
+    if (activeUsers.length === 0) {
+      console.log('📍 삭제된 사용자만 존재 - null 반환');
+      return null;
+    }
+    
+    // 여러 사용자가 있는 경우 우선순위: active > temp > inactive
+    if (activeUsers.length > 1) {
+      console.warn('⚠️ 동일한 이름으로 여러 원어민 사용자 발견 (deleted 제외):', {
+        firstName,
+        lastName,
+        count: activeUsers.length,
+      });
+      
+      const activeUser = activeUsers.find(doc => doc.data().status === 'active');
+      if (activeUser) return activeUser.data() as User;
+      
+      const tempUser = activeUsers.find(doc => doc.data().status === 'temp');
+      if (tempUser) return tempUser.data() as User;
+    }
+    
+    return activeUsers[0].data() as User;
   } catch (error) {
     console.error('원어민 이름으로 사용자 조회 실패:', error);
     throw error;

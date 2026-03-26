@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { getUserByPhone, getUserJobCodesInfo } from '@/lib/firebaseService';
+import { getUserByPhone, getUserByPhoneIncludeDeleted, getUserJobCodesInfo, reactivateUser } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -29,6 +29,8 @@ export default function MentorSignUpStep1() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showAlreadyRegisteredModal, setShowAlreadyRegisteredModal] = useState(false);
   const [showWrongInfoModal, setShowWrongInfoModal] = useState(false);
+  const [showDeletedAccountModal, setShowDeletedAccountModal] = useState(false);
+  const [deletedUserId, setDeletedUserId] = useState<string>('');
   const [jobCodesInfo, setJobCodesInfo] = useState<{generation: string, code: string, name: string}[]>([]);
   const [userName, setUserName] = useState('');
   
@@ -50,7 +52,44 @@ export default function MentorSignUpStep1() {
         phoneNumber: data.phoneNumber,
       });
       
-      // 임시 사용자로 등록되어 있는지 확인
+      // 먼저 deleted 포함해서 조회
+      const userByPhoneWithDeleted = await getUserByPhoneIncludeDeleted(data.phoneNumber);
+      
+      // 삭제된 계정이 있는지 체크
+      if (userByPhoneWithDeleted && (userByPhoneWithDeleted.status as any) === 'deleted') {
+        const originalName = (userByPhoneWithDeleted as any).originalName || userByPhoneWithDeleted.name.replace(/^\(삭제됨\)\s*/g, '');
+        
+        // 본인 확인 (이름 매칭)
+        if (data.name === originalName) {
+          console.log('🔄 삭제된 계정 발견 - 자동 복구 프로세스 시작:', {
+            userId: userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId,
+            name: originalName,
+            phone: data.phoneNumber,
+          });
+          
+          // 삭제된 계정 복구 모달 표시
+          setDeletedUserId(userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId || '');
+          setUserName(originalName);
+          setFormData(data);
+          setShowDeletedAccountModal(true);
+          setIsLoading(false);
+          return;
+        } else {
+          // 이름이 다른 경우 - 다른 사람의 삭제된 계정
+          console.warn('⚠️ 삭제된 계정이지만 이름 불일치:', {
+            inputName: data.name,
+            originalName,
+          });
+          toast.error(
+            `이 전화번호는 "${originalName}"님 이름으로 등록된 적이 있습니다. 본인이 아니라면 관리자에게 문의해주세요.\n관리자: 010-7656-7933 (신선웅)`,
+            { duration: 8000 }
+          );
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // 일반 사용자 조회 (deleted 제외)
       const userByPhone = await getUserByPhone(data.phoneNumber);
       setFormData(data);
       
@@ -148,6 +187,44 @@ export default function MentorSignUpStep1() {
   const handleAlreadyRegisteredOk = () => {
     setShowAlreadyRegisteredModal(false);
     router.push('/sign-in');
+  };
+
+  // 삭제된 계정 복구 핸들러
+  const handleRestoreDeletedAccount = async () => {
+    setShowDeletedAccountModal(false);
+    const loadingToast = toast.loading('계정을 복구하는 중입니다...');
+    
+    try {
+      await reactivateUser(deletedUserId);
+      toast.dismiss(loadingToast);
+      toast.success(
+        `계정이 복구되었습니다! 비밀번호 재설정 이메일을 확인해주세요.\n로그인 페이지로 이동합니다.`,
+        { duration: 5000 }
+      );
+      
+      // 3초 후 로그인 페이지로 이동
+      setTimeout(() => {
+        router.push('/sign-in');
+      }, 3000);
+    } catch (error: any) {
+      toast.dismiss(loadingToast);
+      console.error('계정 복구 실패:', error);
+      
+      if (error.message?.includes('이미 활성화된')) {
+        toast.error('이미 활성화된 계정입니다. 로그인 페이지로 이동합니다.');
+        setTimeout(() => router.push('/sign-in'), 2000);
+      } else {
+        toast.error(
+          `계정 복구 중 오류가 발생했습니다.\n관리자에게 문의해주세요.\n관리자: 010-7656-7933 (신선웅)`,
+          { duration: 8000 }
+        );
+      }
+    }
+  };
+
+  const handleCancelRestoreAccount = () => {
+    setShowDeletedAccountModal(false);
+    toast.error('계정 복구가 취소되었습니다.');
   };
   
   return (
@@ -286,6 +363,58 @@ export default function MentorSignUpStep1() {
             <div className="flex justify-end">
               <Button variant="primary" onClick={handleAlreadyRegisteredOk}>
                 예
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Case 3: 삭제된 계정 복구 모달 */}
+      {showDeletedAccountModal && (
+        <Modal
+          isOpen={showDeletedAccountModal}
+          onClose={() => {}}
+          title="계정 복구"
+        >
+          <div className="p-4">
+            <div className="mb-6">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-gray-700 text-center mb-4">
+                <strong className="text-lg">{userName}</strong>님의 이전 계정을 발견했습니다.
+              </p>
+              <p className="text-gray-600 text-sm text-center mb-4">
+                이전에 삭제된 계정입니다. 계정을 복구하시겠습니까?
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
+                <p className="text-blue-800 font-semibold mb-2">✅ 계정 복구 시:</p>
+                <ul className="text-blue-700 space-y-1 ml-4">
+                  <li>• 이전 평가 점수 및 이력이 복원됩니다</li>
+                  <li>• 지원서 및 업무 기록이 복원됩니다</li>
+                  <li>• 비밀번호 재설정 이메일이 전송됩니다</li>
+                  <li>• 복구 후 로그인하여 사용 가능합니다</li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button 
+                variant="secondary" 
+                onClick={handleCancelRestoreAccount}
+                className="flex-1"
+              >
+                취소
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={handleRestoreDeletedAccount}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700"
+              >
+                계정 복구하기
               </Button>
             </div>
           </div>

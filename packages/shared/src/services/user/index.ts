@@ -61,7 +61,49 @@ export const getUserByEmail = async (db: Firestore, email: string): Promise<User
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
-    const userDoc = querySnapshot.docs[0];
+    // deleted 상태가 아닌 사용자만 필터링
+    const activeUsers = querySnapshot.docs.filter(doc => {
+      const status = (doc.data() as User).status;
+      return status !== 'deleted';
+    });
+    
+    // deleted만 있거나 사용자가 없는 경우
+    if (activeUsers.length === 0) {
+      logger.info('삭제된 사용자만 존재 - null 반환', { email });
+      return null;
+    }
+    
+    // 여러 사용자가 있는 경우 우선순위: active > temp > inactive
+    if (activeUsers.length > 1) {
+      logger.warn('동일한 이메일로 여러 사용자 발견 (deleted 제외)', {
+        email,
+        count: activeUsers.length,
+      });
+      
+      const activeUser = activeUsers.find(doc => (doc.data() as User).status === 'active');
+      if (activeUser) {
+        const userData = activeUser.data() as User;
+        const userId = activeUser.id;
+        if (!userData.id) {
+          await updateDoc(doc(db, 'users', userId), { id: userId });
+          return { ...userData, id: userId };
+        }
+        return userData;
+      }
+      
+      const tempUser = activeUsers.find(doc => (doc.data() as User).status === 'temp');
+      if (tempUser) {
+        const userData = tempUser.data() as User;
+        const userId = tempUser.id;
+        if (!userData.id) {
+          await updateDoc(doc(db, 'users', userId), { id: userId });
+          return { ...userData, id: userId };
+        }
+        return userData;
+      }
+    }
+    
+    const userDoc = activeUsers[0];
     const userData = userDoc.data() as User;
     const userId = userDoc.id;
     
@@ -88,7 +130,49 @@ export const getUserByPhone = async (
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
-    const userDoc = querySnapshot.docs[0];
+    // deleted 상태가 아닌 사용자만 필터링
+    const activeUsers = querySnapshot.docs.filter(doc => {
+      const status = (doc.data() as User).status;
+      return status !== 'deleted';
+    });
+    
+    // deleted만 있거나 사용자가 없는 경우
+    if (activeUsers.length === 0) {
+      logger.info('삭제된 사용자만 존재 - null 반환', { phoneNumber });
+      return null;
+    }
+    
+    // 여러 사용자가 있는 경우 우선순위: active > temp > inactive
+    if (activeUsers.length > 1) {
+      logger.warn('동일한 전화번호로 여러 사용자 발견 (deleted 제외)', {
+        phoneNumber,
+        count: activeUsers.length,
+      });
+      
+      const activeUser = activeUsers.find(doc => (doc.data() as User).status === 'active');
+      if (activeUser) {
+        const userData = activeUser.data() as User;
+        const userId = activeUser.id;
+        if (!userData.id) {
+          await updateDoc(doc(db, 'users', userId), { id: userId });
+          return { ...userData, id: userId };
+        }
+        return userData;
+      }
+      
+      const tempUser = activeUsers.find(doc => (doc.data() as User).status === 'temp');
+      if (tempUser) {
+        const userData = tempUser.data() as User;
+        const userId = tempUser.id;
+        if (!userData.id) {
+          await updateDoc(doc(db, 'users', userId), { id: userId });
+          return { ...userData, id: userId };
+        }
+        return userData;
+      }
+    }
+    
+    const userDoc = activeUsers[0];
     const userData = userDoc.data() as User;
     const userId = userDoc.id;
     

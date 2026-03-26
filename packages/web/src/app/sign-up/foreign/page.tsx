@@ -6,10 +6,11 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { getUserByPhone } from '@/lib/firebaseService';
+import { getUserByPhone, getUserByPhoneIncludeDeleted, reactivateUser } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
+import Modal from '@/components/common/Modal';
 import ProgressSteps from '@/components/common/ProgressSteps';
 import { getPhonePlaceholder } from '@/utils/phoneUtils';
 
@@ -36,6 +37,9 @@ type Step1FormValues = z.infer<typeof step1Schema>;
 export default function ForeignSignUpStep1() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [showDeletedAccountModal, setShowDeletedAccountModal] = useState(false);
+  const [deletedUserId, setDeletedUserId] = useState<string>('');
+  const [deletedUserName, setDeletedUserName] = useState<string>('');
   
   const {
     register,
@@ -51,6 +55,43 @@ export default function ForeignSignUpStep1() {
   
   const countryCode = watch('countryCode');
   
+  // 삭제된 계정 복구 핸들러
+  const handleRestoreDeletedAccount = async () => {
+    setShowDeletedAccountModal(false);
+    const loadingToast = toast.loading('Restoring your account...');
+    
+    try {
+      await reactivateUser(deletedUserId);
+      toast.dismiss(loadingToast);
+      toast.success(
+        `Your account has been restored! Please check your email for password reset instructions.\nRedirecting to login page...`,
+        { duration: 5000 }
+      );
+      
+      setTimeout(() => {
+        router.push('/sign-in');
+      }, 3000);
+    } catch (error: any) {
+      toast.dismiss(loadingToast);
+      console.error('Account restoration failed:', error);
+      
+      if (error.message?.includes('이미 활성화된')) {
+        toast.error('Account is already active. Redirecting to login page...');
+        setTimeout(() => router.push('/sign-in'), 2000);
+      } else {
+        toast.error(
+          `Failed to restore account.\nPlease contact the administrator.\nAdmin: 010-7656-7933 (Shin Sunwoong)`,
+          { duration: 8000 }
+        );
+      }
+    }
+  };
+
+  const handleCancelRestoreAccount = () => {
+    setShowDeletedAccountModal(false);
+    toast.error('Account restoration cancelled.');
+  };
+  
   const onSubmit = async (data: Step1FormValues) => {
     setIsLoading(true);
     try {
@@ -63,6 +104,65 @@ export default function ForeignSignUpStep1() {
       }
       
       const fullPhone = `${data.countryCode}${phoneWithoutLeadingZero}`;
+      
+      // 입력된 이름 조합
+      const inputFullName = data.middleName 
+        ? `${data.firstName} ${data.middleName} ${data.lastName}`
+        : `${data.firstName} ${data.lastName}`;
+      
+      // 먼저 deleted 포함해서 조회
+      const userByPhoneWithDeleted = await getUserByPhoneIncludeDeleted(fullPhone);
+      
+      // 삭제된 계정이 있는지 체크
+      if (userByPhoneWithDeleted && (userByPhoneWithDeleted.status as any) === 'deleted') {
+        const originalName = (userByPhoneWithDeleted as any).originalName || 
+                            userByPhoneWithDeleted.name.replace(/^\(삭제됨\)\s*/g, '');
+        
+        // foreignTeacher 정보로도 확인
+        let namesMatch = false;
+        
+        if (originalName === inputFullName) {
+          namesMatch = true;
+        }
+        
+        if ((userByPhoneWithDeleted as any).foreignTeacher) {
+          const ft = (userByPhoneWithDeleted as any).foreignTeacher;
+          const dbFullName = ft.middleName
+            ? `${ft.firstName} ${ft.middleName} ${ft.lastName}`
+            : `${ft.firstName} ${ft.lastName}`;
+          
+          if (dbFullName === inputFullName) {
+            namesMatch = true;
+          }
+        }
+        
+        if (namesMatch) {
+          console.log('🔄 Deleted account found - starting auto-restore process:', {
+            userId: userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId,
+            name: originalName,
+            phone: fullPhone,
+          });
+          
+          setDeletedUserId(userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId || '');
+          setDeletedUserName(inputFullName);
+          setShowDeletedAccountModal(true);
+          setIsLoading(false);
+          return;
+        } else {
+          console.warn('⚠️ Deleted account but name mismatch:', {
+            inputName: inputFullName,
+            originalName,
+          });
+          toast.error(
+            `The phone number is registered to a different person (${originalName}).\nPlease contact the administrator if this is your account.\nAdmin: 010-7656-7933 (Shin Sunwoong)`,
+            { duration: 8000 }
+          );
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // 일반 사용자 조회 (deleted 제외)
       const userByPhone = await getUserByPhone(fullPhone);
 
       if (userByPhone) {
@@ -273,6 +373,58 @@ export default function ForeignSignUpStep1() {
           </div>
         </div>
       </div>
+
+      {/* Deleted Account Restore Modal */}
+      {showDeletedAccountModal && (
+        <Modal
+          isOpen={showDeletedAccountModal}
+          onClose={() => {}}
+          title="Account Recovery"
+        >
+          <div className="p-4">
+            <div className="mb-6">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-gray-700 text-center mb-4">
+                We found your previous account for <strong className="text-lg">{deletedUserName}</strong>.
+              </p>
+              <p className="text-gray-600 text-sm text-center mb-4">
+                This account was previously deleted. Would you like to restore it?
+              </p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm">
+                <p className="text-green-800 font-semibold mb-2">✅ When you restore your account:</p>
+                <ul className="text-green-700 space-y-1 ml-4">
+                  <li>• Your previous evaluation scores and history will be restored</li>
+                  <li>• Your application and work records will be restored</li>
+                  <li>• A password reset email will be sent to you</li>
+                  <li>• You can log in and use your account after restoration</li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button 
+                variant="secondary" 
+                onClick={handleCancelRestoreAccount}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={handleRestoreDeletedAccount}
+                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-700"
+              >
+                Restore Account
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Layout>
   );
 }

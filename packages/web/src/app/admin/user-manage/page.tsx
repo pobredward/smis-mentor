@@ -441,8 +441,9 @@ export default function UserManage() {
     
     try {
       // 1. 먼저 사용자 데이터 확인
-      toast.info('사용자 데이터 확인 중...');
+      const loadingToast = toast.loading('사용자 데이터 확인 중...');
       const dataCheck = await checkUserData(selectedUser.userId);
+      toast.dismiss(loadingToast);
       
       // 2. 확인 메시지 구성
       let confirmMessage = `${selectedUser.name} 사용자를 삭제하시겠습니까?\n\n`;
@@ -468,8 +469,9 @@ export default function UserManage() {
       }
       
       // 4. Soft Delete 실행
-      toast.info('사용자 삭제 중...');
+      const deletingToast = toast.loading('사용자 삭제 중...');
       await deleteUser(selectedUser.userId, 'soft');
+      toast.dismiss(deletingToast);
       
       // 5. 상태 업데이트
       const updatedUsers = users.filter(user => user.userId !== selectedUser.userId);
