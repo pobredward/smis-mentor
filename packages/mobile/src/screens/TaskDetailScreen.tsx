@@ -223,7 +223,7 @@ export default function TaskDetailScreen() {
   const otherAttachments = task.attachments?.filter(a => a.type !== 'link' && a.type !== 'image') || [];
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>

@@ -293,7 +293,7 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView style={styles.scrollView}>
         {/* 헤더 */}
         <View style={styles.header}>

@@ -55,6 +55,11 @@ interface User {
   referrerName?: string;
   selfIntroduction?: string;
   jobMotivation?: string;
+  address?: string;
+  addressDetail?: string;
+  major1?: string;
+  major2?: string;
+  feedback?: string;
   partTimeJobs?: Array<{
     companyName: string;
     period: string;
@@ -270,13 +275,6 @@ export function ApplicantDetailScreen({
     loadCurrentUser();
   }, [loadData]);
 
-  // jobBoardId가 변경되면 템플릿 로드
-  useEffect(() => {
-    if (jobBoardId) {
-      loadTemplates();
-    }
-  }, [jobBoardId, loadTemplates]);
-
   // 템플릿 로드 함수 (웹과 동일한 로직)
   const loadTemplates = useCallback(async () => {
     if (!jobBoardId) return;
@@ -346,6 +344,13 @@ export function ApplicantDetailScreen({
       setIsLoadingTemplates(false);
     }
   }, [jobBoardId]);
+
+  // jobBoardId가 변경되면 템플릿 로드
+  useEffect(() => {
+    if (jobBoardId) {
+      loadTemplates();
+    }
+  }, [jobBoardId, loadTemplates]);
 
   // 현재 로그인한 사용자 정보 로드
   const loadCurrentUser = async () => {
@@ -717,7 +722,7 @@ export function ApplicantDetailScreen({
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#f59e0b" />
           <Text style={styles.loadingText}>정보를 불러오는 중...</Text>
@@ -728,7 +733,7 @@ export function ApplicantDetailScreen({
 
   if (!application) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <Text style={styles.emptyText}>지원자를 찾을 수 없습니다.</Text>
         </View>
@@ -737,7 +742,7 @@ export function ApplicantDetailScreen({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
