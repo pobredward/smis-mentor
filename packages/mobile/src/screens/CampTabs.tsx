@@ -1377,28 +1377,6 @@ const styles = StyleSheet.create({
   },
   sectionLinks: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 8,
-  },
-  linkChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-  },
-  linkChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#065f46',
-  },
-  sectionLinks: {
-    flexDirection: 'row',
     gap: 8,
   },
   sectionLinkButton: {

@@ -1,14 +1,8 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFunctions } from 'firebase/functions';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { 
-  initializeAuth, 
-  getAuth,
-  getReactNativePersistence,
-  type Auth
-} from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA-WkaKCq_XWSuNyzoZkx__9S02WS4RIWQ',
@@ -20,32 +14,17 @@ const firebaseConfig = {
 };
 
 // Firebase 앱 초기화 (중복 초기화 방지)
-let app;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
-}
+const app: FirebaseApp = getApps().length === 0 
+  ? initializeApp(firebaseConfig) 
+  : getApp();
 
 // Functions, Firestore, Storage 초기화
 const functions = getFunctions(app, 'asia-northeast3');
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Auth 초기화 (React Native용 AsyncStorage persistence 사용)
-// 중복 초기화 방지를 위해 try-catch 사용
-const initAuth = (): Auth => {
-  try {
-    return getAuth(app);
-  } catch (error) {
-    // Auth가 아직 초기화되지 않은 경우에만 initializeAuth 호출
-    return initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage),
-    });
-  }
-};
-
-const auth = initAuth();
+// Auth 초기화 (Firebase 11+는 React Native에서 자동으로 AsyncStorage 사용)
+const auth: Auth = getAuth(app);
 
 export { app, functions, db, storage, auth };
 

@@ -27,6 +27,7 @@ interface SMSMessageBoxProps {
   backgroundColor?: string;
   borderColor?: string;
   sendButtonColor?: string;
+  buttonColor?: string;
 }
 
 export const SMSMessageBox: React.FC<SMSMessageBoxProps> = ({

@@ -44,8 +44,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
-  const notificationListener = useRef<any>();
-  const responseListener = useRef<any>();
+  const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
+  const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
 
   // 푸시 알림 등록 및 토큰 저장
   useEffect(() => {
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.log('알림 응답:', response);
       const data = response.notification.request.content.data;
       
-      if (data.type === 'task-reminder' && data.taskId) {
+      if (data?.type === 'task-reminder' && data?.taskId) {
         // TasksScreen으로 이동하는 로직은 RootNavigator에서 처리
       }
     });

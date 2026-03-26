@@ -49,6 +49,18 @@ export interface User {
   updatedAt: Timestamp;
   lastLoginAt?: Timestamp;
   
+  // 원어민 교사 전용 정보
+  foreignTeacher?: {
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    countryCode: string;
+    cvUrl?: string;
+    passportPhotoUrl?: string;
+    foreignIdCardUrl?: string;
+    applicationDate?: Timestamp;
+  };
+  
   // 소셜 로그인 관련 필드
   authProviders?: AuthProvider[];
   primaryAuthMethod?: AuthMethod;

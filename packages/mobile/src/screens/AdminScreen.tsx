@@ -86,9 +86,11 @@ const adminMenuItems: AdminMenuItem[] = [
   },
 ];
 
+import { AdminStackParamList } from '../navigation/types';
+
 export function AdminScreen({ navigation }: AdminStackScreenProps<'AdminDashboard'>) {
-  const handleMenuPress = (screenName: keyof import('../navigation/types').AdminStackParamList) => {
-    navigation.navigate(screenName);
+  const handleMenuPress = (screenName: keyof AdminStackParamList) => {
+    navigation.navigate(screenName as any);
   };
 
   return (

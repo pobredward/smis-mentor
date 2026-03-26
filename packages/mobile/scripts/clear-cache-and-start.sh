@@ -22,5 +22,8 @@ echo ""
 echo "Now starting Expo with clear cache..."
 echo ""
 
+# CI 변수 명시적으로 제거 (Cursor IDE에서 설정된 경우가 있음)
+unset CI
+
 # Expo 시작
 npx expo start -c
