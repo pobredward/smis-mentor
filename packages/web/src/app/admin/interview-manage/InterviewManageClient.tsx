@@ -1561,12 +1561,19 @@ export function InterviewManageClient() {
     // 5개월 전 날짜 계산
     const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, now.getDate());
     
-    const futureDates = interviewDates.filter(dateInfo => {
-      // '날짜 미정'은 항상 표시
-      if (dateInfo.formattedDate === '날짜 미정') return true;
-      // 오늘 이후 날짜만 필터링
-      return dateInfo.date.getTime() >= today.getTime();
-    });
+    const futureDates = interviewDates
+      .filter(dateInfo => {
+        // '날짜 미정'은 항상 표시
+        if (dateInfo.formattedDate === '날짜 미정') return true;
+        // 오늘 이후 날짜만 필터링
+        return dateInfo.date.getTime() >= today.getTime();
+      })
+      .sort((a, b) => {
+        // 미래 날짜는 오름차순 정렬 (가까운 미래부터)
+        if (a.formattedDate === '날짜 미정') return 1;
+        if (b.formattedDate === '날짜 미정') return -1;
+        return a.date.getTime() - b.date.getTime();
+      });
     
     const pastDates = interviewDates.filter(dateInfo => {
       // '날짜 미정'은 제외
