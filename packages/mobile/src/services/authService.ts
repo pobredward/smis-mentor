@@ -20,6 +20,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../config/firebase';
 import { User } from '../types';
+import { getCache, setCache, CACHE_STORE, CACHE_TTL, removeCache } from './cacheUtils';
 
 const STORAGE_KEYS = {
   REMEMBER_ME: '@smis_remember_me',
@@ -66,14 +67,35 @@ export const getUserByPhone = async (phone: string): Promise<User | null> => {
 
 export const getUserById = async (userId: string): Promise<User | null> => {
   try {
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    if (!userDoc.exists()) {
+    // userId 유효성 검사
+    if (!userId || typeof userId !== 'string') {
+      console.error('유효하지 않은 userId:', userId);
       return null;
     }
-    return { ...userDoc.data(), userId: userDoc.id } as User;
+
+    // 캐시에서 데이터 확인
+    const cachedUser = await getCache<User>(CACHE_STORE.USERS, userId);
+    if (cachedUser) {
+      console.log('캐시에서 사용자 정보 로드:', userId);
+      return cachedUser;
+    }
+
+    // 캐시에 없는 경우 Firestore에서 조회
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (!userDoc.exists()) {
+      console.warn('사용자를 찾을 수 없음:', userId);
+      return null;
+    }
+    
+    const userData = { ...userDoc.data(), userId: userDoc.id } as User;
+    
+    // 캐시에 저장 (1시간 유효)
+    await setCache(CACHE_STORE.USERS, userData, CACHE_TTL.MEDIUM);
+    
+    return userData;
   } catch (error) {
     console.error('사용자 조회 실패:', error);
-    throw error;
+    return null; // throw 대신 null 반환
   }
 };
 
@@ -116,6 +138,10 @@ export const updateUser = async (
       ...data,
       updatedAt: Timestamp.now(),
     });
+    
+    // 캐시 무효화
+    await removeCache(CACHE_STORE.USERS, userId);
+    console.log('✅ 사용자 정보 업데이트 완료 (캐시 무효화):', userId);
   } catch (error) {
     console.error('사용자 업데이트 실패:', error);
     throw error;
@@ -223,3 +249,4 @@ export const signOut = async () => {
     throw error;
   }
 };
+

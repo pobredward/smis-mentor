@@ -110,7 +110,9 @@
       },
       "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "382190683951-d213f6sqm30lokbddeth6g2gucava2en.apps.googleusercontent.com",
       "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me.apps.googleusercontent.com",
-      "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "382190683951-cs53mija3pru3p0na3t8tqmqgqej8okn.apps.googleusercontent.com"
+      "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "382190683951-cs53mija3pru3p0na3t8tqmqgqej8okn.apps.googleusercontent.com",
+      "EXPO_PUBLIC_NAVER_CLIENT_ID": "XgK86FxXznee_HFfBeH3",
+      "EXPO_PUBLIC_NAVER_CLIENT_SECRET": "GcoXVzqEZs"
     },
     "owner": "pobredward02"
   }

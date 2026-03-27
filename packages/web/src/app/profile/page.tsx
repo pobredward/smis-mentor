@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getUserJobCodesInfo, deactivateUser, getUserById, getUserByEmail, updateUser } from '@/lib/firebaseService';
+import { getUserJobCodesInfo, deactivateUser, getUserById, getUserByEmail, updateUser, signIn, signInWithCustomTokenFromFunction } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import LinkedAccountsDisplay from '@/components/settings/LinkedAccountsDisplay';
@@ -147,6 +147,10 @@ export default function ProfilePage() {
       }, 2000);
       return;
     }
+    
+    // ✅ 원래 사용자 정보 저장 (구글 팝업으로 세션 변경될 수 있음)
+    const originalUserEmail = currentUser.email;
+    const originalUserUid = currentUser.uid;
 
     setIsLinking(true);
     try {
@@ -155,18 +159,61 @@ export default function ProfilePage() {
       
       // 1. 소셜 로그인 팝업 열기
       if (providerId === 'google.com') {
-        const { signInWithGoogle } = await import('@/lib/googleAuthService');
-        const { GoogleAuthProvider } = await import('firebase/auth');
+        // ✅ 계정 연동용: credential만 가져오기 (새 계정 생성 방지)
+        const { getGoogleCredential } = await import('@/lib/googleAuthService');
         
-        socialData = await signInWithGoogle();
+        const result = await getGoogleCredential();
+        socialData = result.socialData;
+        credential = result.credential;
         
-        // Google credential 생성
-        credential = GoogleAuthProvider.credential(
-          socialData.idToken,
-          socialData.accessToken
-        );
+        // ✅ Multiple Email Policy: 다른 이메일도 연동 가능
+        console.log('🔗 구글 계정 연동:', {
+          currentEmail: userData.email,
+          googleEmail: socialData.email,
+          allowDifferentEmail: true, // ✅ 다른 이메일 허용
+        });
+        
+        // ✅ 구글 팝업 후 원래 계정으로 복원
+        const currentUserAfterPopup = auth.currentUser;
+        if (currentUserAfterPopup?.uid !== originalUserUid) {
+          console.log('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원 필요');
+          
+          // 원래 계정 정보로 다시 로그인
+          const hasPasswordProvider = userData.authProviders?.some(
+            (p: any) => p.providerId === 'password'
+          );
+          
+          const firebaseAuthPassword = (userData as any)._firebaseAuthPassword;
+          
+          try {
+            if (hasPasswordProvider && firebaseAuthPassword) {
+              // 비밀번호가 있으면 로그인
+              console.log('🔑 원래 계정으로 재로그인 시도');
+              await signIn(userData.email, firebaseAuthPassword);
+              console.log('✅ 원래 계정으로 복원 완료');
+            } else {
+              // 비밀번호가 없으면 Custom Token 사용
+              console.log('🔑 Custom Token으로 재로그인 시도');
+              await signInWithCustomTokenFromFunction(
+                userData.userId,
+                userData.email,
+                originalUserUid
+              );
+              console.log('✅ 원래 계정으로 복원 완료');
+            }
+          } catch (restoreError) {
+            // ⚠️ 세션 복원 실패해도 Firestore에는 저장
+            console.error('⚠️ 원래 계정 복원 실패 (무시하고 계속):', restoreError);
+            console.log('ℹ️ Firestore에만 연동 정보를 저장합니다');
+          }
+        }
       } else if (providerId === 'naver') {
-        // 네이버는 Firebase Auth 연동 불가 (커스텀 OAuth)
+        // 1. 캐시 무효화 (최신 데이터 보장)
+        console.log('🗑️ 사용자 캐시 무효화 (네이버):', userData.userId);
+        const { removeCache, CACHE_STORE } = await import('@/lib/cacheUtils');
+        await removeCache(CACHE_STORE.USERS, userData.userId);
+        
+        // 2. 네이버는 Firebase Auth 연동 불가 (커스텀 OAuth)
         const { signInWithNaver } = await import('@/lib/naverAuthService');
         socialData = await signInWithNaver();
         
@@ -180,7 +227,7 @@ export default function ProfilePage() {
           authProviders: userData.authProviders?.map((p: any) => p.providerId),
         });
         
-        // 네이버는 Firestore에만 저장 (arrayUnion 사용)
+        // 3. 네이버는 Firestore에만 저장 (arrayUnion 사용)
         const { linkSocialProvider } = await import('@smis-mentor/shared');
         const { arrayUnion, updateDoc, doc } = await import('firebase/firestore');
         const { db } = await import('@/lib/firebase');
@@ -261,27 +308,65 @@ export default function ProfilePage() {
 
       // 2. Firebase Auth에 소셜 계정 연동 (Google만)
       if (credential) {
-        const { linkWithCredential } = await import('firebase/auth');
+        const { linkWithCredential, signOut } = await import('firebase/auth');
         
-        try {
-          await linkWithCredential(currentUser, credential);
-          console.log('✅ Firebase Auth 소셜 계정 연동 완료');
-        } catch (authError: any) {
-          console.error('❌ Firebase Auth 연동 실패:', authError);
+        // 🔒 현재 사용자 재확인
+        let freshCurrentUser = auth.currentUser;
+        
+        console.log('🔗 Firebase Auth 연동 시도:', {
+          currentUser: freshCurrentUser ? {
+            uid: freshCurrentUser.uid,
+            email: freshCurrentUser.email,
+          } : null,
+          socialEmail: socialData.email,
+          providerId,
+        });
+        
+        // ✅ getGoogleCredential에서 구글 팝업으로 로그인했으므로
+        // 현재 사용자가 구글 계정으로 변경되어 있을 수 있음
+        if (!freshCurrentUser || freshCurrentUser.email === socialData.email) {
+          // 구글 계정으로 로그인된 상태 → 원래 계정으로 복원 필요
+          console.log('⚠️ 현재 사용자가 구글 계정으로 변경됨 → Firebase Auth 연동 불가');
+          console.log('✅ Firestore에만 저장합니다');
           
-          if (authError.code === 'auth/credential-already-in-use') {
-            throw new Error('이 소셜 계정은 이미 다른 계정에 연결되어 있습니다.');
-          } else if (authError.code === 'auth/provider-already-linked') {
-            throw new Error('이미 이 제공자가 연결되어 있습니다.');
-          } else if (authError.code === 'auth/email-already-in-use') {
-            throw new Error('이 이메일은 이미 다른 계정에서 사용 중입니다.');
+          // Firebase Auth 연동 건너뛰고 Firestore에만 저장
+        } else {
+          // 원래 계정으로 로그인된 상태 → linkWithCredential 시도
+          try {
+            await linkWithCredential(freshCurrentUser, credential);
+            console.log('✅ Firebase Auth 소셜 계정 연동 완료');
+          } catch (authError: any) {
+            console.error('❌ Firebase Auth 연동 실패:', authError);
+            
+            if (authError.code === 'auth/credential-already-in-use') {
+              // ✅ credential-already-in-use: 해당 구글 계정이 Firebase Auth에 별도로 존재
+              // → Firestore에만 저장하고 계속 진행
+              console.log('⚠️ 구글 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
+              toast(
+                '구글 계정 연동이 완료되었습니다.\n' +
+                '(Firebase Auth는 별도로 유지됩니다)',
+                { 
+                  icon: 'ℹ️',
+                  duration: 4000 
+                }
+              );
+            } else if (authError.code === 'auth/provider-already-linked') {
+              throw new Error('이미 이 제공자가 연결되어 있습니다.');
+            } else if (authError.code === 'auth/email-already-in-use') {
+              throw new Error('이 이메일은 이미 다른 계정에서 사용 중입니다.');
+            } else {
+              throw authError;
+            }
           }
-          
-          throw authError;
         }
       }
 
-      // 3. Firestore에 연동 정보 추가 (arrayUnion 사용)
+      // 3. 캐시 무효화 (최신 데이터 보장)
+      console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
+      const { removeCache, CACHE_STORE } = await import('@/lib/cacheUtils');
+      await removeCache(CACHE_STORE.USERS, userData.userId);
+      
+      // 4. Firestore에 연동 정보 추가 (arrayUnion 사용)
       const { linkSocialProvider } = await import('@smis-mentor/shared');
       const { arrayUnion } = await import('firebase/firestore');
       
@@ -295,7 +380,7 @@ export default function ProfilePage() {
 
       toast.success('소셜 계정이 성공적으로 연동되었습니다.', { duration: 3000 });
       
-      // 4. 사용자 데이터 새로고침
+      // 5. 사용자 데이터 새로고침
       await refreshUserData();
     } catch (error: any) {
       console.error('소셜 계정 연동 오류:', error);
@@ -344,7 +429,12 @@ export default function ProfilePage() {
 
     setIsUnlinking(true);
     try {
-      // 이메일로 사용자 재조회
+      // 1. 캐시 무효화 (최신 데이터 보장)
+      console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
+      const { removeCache, CACHE_STORE } = await import('@/lib/cacheUtils');
+      await removeCache(CACHE_STORE.USERS, userData.userId);
+      
+      // 2. 이메일로 사용자 재조회
       console.log('📧 이메일로 사용자 재조회:', userData.email);
       const userByEmail = await getUserByEmail(userData.email);
       
@@ -394,7 +484,91 @@ export default function ProfilePage() {
         runTransactionWrapper // ✅ Transaction 함수 전달 (동시성 안전)
       );
       
-      toast.success(`${providerName} 계정 연동이 해제되었습니다.`, { duration: 3000 });
+      // ✅ 구글 연동 해제 시 Firebase Auth에서 고아 계정 즉시 삭제
+      let showSuccessToast = true;
+      
+      if (providerId === 'google.com') {
+        const googleProviderBeforeUnlink = userByEmail.authProviders?.find(
+          (p: any) => p.providerId === 'google.com'
+        );
+        
+        if (googleProviderBeforeUnlink?.email && googleProviderBeforeUnlink.email !== userData.email) {
+          console.log('🗑️ Firebase Auth 고아 계정 삭제 시도:', googleProviderBeforeUnlink.email);
+          
+          try {
+            // ⏳ 로딩 토스트
+            toast.loading('Firebase Auth 계정 정리 중...', { id: 'delete-orphan' });
+            
+            // 1. 현재 사용자 정보 저장
+            const originalUser = auth.currentUser;
+            if (!originalUser) throw new Error('현재 사용자 없음');
+            
+            // 2. Google 계정으로 임시 로그인
+            const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+            const googleProvider = new GoogleAuthProvider();
+            googleProvider.setCustomParameters({ login_hint: googleProviderBeforeUnlink.email });
+            
+            const tempResult = await signInWithPopup(auth, googleProvider);
+            const tempUser = tempResult.user;
+            
+            console.log('✅ Google 계정 임시 로그인:', {
+              uid: tempUser.uid,
+              email: tempUser.email,
+            });
+            
+            // 3. 임시 로그인된 계정 삭제
+            await tempUser.delete();
+            console.log('✅ Firebase Auth 고아 계정 삭제 완료:', tempUser.email);
+            
+            // 4. 원래 사용자로 다시 로그인
+            const firebaseAuthPassword = (userData as any)._firebaseAuthPassword;
+            if (firebaseAuthPassword) {
+              await signIn(userData.email, firebaseAuthPassword);
+            } else {
+              await signInWithCustomTokenFromFunction(userData.userId, userData.email, userData.userId);
+            }
+            console.log('✅ 원래 계정 복원:', userData.email);
+            
+            toast.dismiss('delete-orphan');
+            toast.success(
+              'Google 계정 연동이 완전히 해제되었습니다.\n' +
+              'Firebase Auth에서도 삭제되었습니다.',
+              { duration: 4000 }
+            );
+            showSuccessToast = false;
+          } catch (deleteError: any) {
+            toast.dismiss('delete-orphan');
+            console.error('⚠️ Firebase Auth 고아 계정 삭제 실패:', deleteError);
+            
+            // 실패 시 원래 계정 복원 시도
+            try {
+              const firebaseAuthPassword = (userData as any)._firebaseAuthPassword;
+              if (firebaseAuthPassword) {
+                await signIn(userData.email, firebaseAuthPassword);
+              } else {
+                await signInWithCustomTokenFromFunction(userData.userId, userData.email, userData.userId);
+              }
+            } catch (restoreError) {
+              console.error('⚠️ 원래 계정 복원 실패:', restoreError);
+            }
+            
+            toast(
+              'Google 계정 연동이 해제되었습니다.\n\n' +
+              `Firebase Auth의 ${googleProviderBeforeUnlink.email}은\n` +
+              '매일 자동으로 정리됩니다.',
+              { 
+                icon: 'ℹ️',
+                duration: 5000 
+              }
+            );
+            showSuccessToast = false;
+          }
+        }
+      }
+      
+      if (showSuccessToast) {
+        toast.success(`${providerName} 계정 연동이 해제되었습니다.`, { duration: 3000 });
+      }
       
       // 사용자 데이터 새로고침
       await refreshUserData();

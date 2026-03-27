@@ -140,6 +140,49 @@ export const getUserByEmail = async (email: string) => {
   }
 };
 
+// authProviders에서 소셜 제공자로 사용자 조회
+export const getUserBySocialProvider = async (providerId: string, providerUid: string) => {
+  try {
+    console.log('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
+    
+    // Firestore에서 authProviders 배열을 검색할 수 없으므로
+    // 모든 active 사용자를 가져와서 클라이언트에서 필터링
+    const q = query(
+      collection(db, 'users'),
+      where('status', '==', 'active')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    for (const doc of querySnapshot.docs) {
+      const userData = doc.data() as User;
+      const authProviders = userData.authProviders || [];
+      
+      // providerId 정규화 비교
+      const normalizedSearchId = providerId.replace('.com', '');
+      const matchedProvider = authProviders.find((p: any) => {
+        const normalizedStoredId = p.providerId.replace('.com', '');
+        return normalizedStoredId === normalizedSearchId && p.uid === providerUid;
+      });
+      
+      if (matchedProvider) {
+        console.log('✅ 소셜 제공자로 사용자 발견:', {
+          userId: userData.userId,
+          email: userData.email,
+          providerId: matchedProvider.providerId,
+        });
+        return userData;
+      }
+    }
+    
+    console.log('❌ 소셜 제공자로 사용자를 찾을 수 없음');
+    return null;
+  } catch (error) {
+    console.error('소셜 제공자로 사용자 조회 실패:', error);
+    return null;
+  }
+};
+
 // 삭제된 사용자 포함 전화번호 조회
 export const getUserByPhoneIncludeDeleted = async (phoneNumber: string) => {
   try {

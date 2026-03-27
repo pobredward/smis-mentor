@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabScreenProps } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
-import { signOut, getUserByPhone } from '../services/authService';
+import { signOut, getUserByPhone, signIn } from '../services/authService';
 import { jobCodesService, JobCode } from '../services';
 import { SignInScreen } from './SignInScreen';
 import { RoleSelectionScreen } from './RoleSelectionScreen';
@@ -26,7 +26,7 @@ import { ForeignSignUpStep2Screen } from './ForeignSignUpStep2Screen';
 import { ProfileEditScreen } from './ProfileEditScreen';
 import { signUp } from '../services/authService';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import {
   uploadForeignProfileImage,
   uploadCV,
@@ -473,6 +473,177 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     ]);
   };
 
+  /**
+   * 소셜 계정 연동
+   */
+  const handleSocialLink = async (providerId: string) => {
+    if (!userData) return;
+
+    try {
+      // 1. 캐시 무효화
+      console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
+      const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
+      await removeCache(CACHE_STORE.USERS, userData.userId);
+
+      let socialData;
+      let credential;
+
+      if (providerId === 'google.com') {
+        const { useGoogleAuth, getGoogleCredential } = await import('../services/googleAuthService');
+        const { promptAsync } = useGoogleAuth();
+        
+        const result = await getGoogleCredential(promptAsync);
+        socialData = result.socialData;
+        credential = result.credential;
+
+        console.log('🔗 구글 계정 연동:', {
+          currentEmail: userData.email,
+          googleEmail: socialData.email,
+          allowDifferentEmail: true,
+        });
+
+        // 원래 계정으로 복원 (웹과 동일 로직)
+        const currentUserAfterPopup = auth.currentUser;
+        if (currentUserAfterPopup?.uid !== userData.userId) {
+          console.log('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원 필요');
+          
+          const hasPasswordProvider = userData.authProviders?.some(
+            (p: any) => p.providerId === 'password'
+          );
+
+          // 비밀번호가 있으면 재로그인
+          if (hasPasswordProvider && (userData as any)._firebaseAuthPassword) {
+            await signIn(userData.email, (userData as any)._firebaseAuthPassword);
+          }
+          // TODO: Custom Token 방식도 추가 가능
+        }
+
+        // Firebase Auth 연동 시도
+        if (credential) {
+          const { linkWithCredential } = await import('firebase/auth');
+          try {
+            await linkWithCredential(auth.currentUser!, credential);
+            console.log('✅ Firebase Auth 소셜 계정 연동 완료');
+          } catch (authError: any) {
+            if (authError.code === 'auth/credential-already-in-use') {
+              console.log('⚠️ 구글 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
+            } else {
+              throw authError;
+            }
+          }
+        }
+      } else if (providerId === 'naver') {
+        const { signInWithNaver } = await import('../services/naverAuthService');
+        socialData = await signInWithNaver();
+      } else {
+        Alert.alert('알림', '해당 소셜 로그인은 준비 중입니다.');
+        return;
+      }
+
+      // Firestore에 연동 정보 추가
+      const { linkSocialProvider } = await import('@smis-mentor/shared');
+      const { arrayUnion } = await import('firebase/firestore');
+      const { getUserById, updateUser } = await import('../services/authService');
+
+      await linkSocialProvider(
+        userData.userId,
+        socialData,
+        getUserById,
+        updateUser,
+        arrayUnion
+      );
+
+      Alert.alert('성공', '소셜 계정이 성공적으로 연동되었습니다.');
+      
+      // 사용자 데이터 새로고침
+      await loadJobCodes();
+    } catch (error: any) {
+      console.error('소셜 계정 연동 오류:', error);
+      
+      let errorMessage = '소셜 계정 연동 중 오류가 발생했습니다.';
+      if (error.message === 'POPUP_CLOSED') {
+        errorMessage = '로그인 창이 닫혔습니다.';
+      } else if (error.message?.includes('취소')) {
+        errorMessage = '로그인이 취소되었습니다.';
+      }
+      
+      Alert.alert('오류', errorMessage);
+    }
+  };
+
+  /**
+   * 소셜 계정 연동 해제
+   */
+  const handleSocialUnlink = async (providerId: string) => {
+    if (!userData) return;
+
+    const providerName = 
+      providerId === 'google.com' ? 'Google' :
+      providerId === 'naver' || providerId === 'naver.com' ? '네이버' :
+      providerId === 'kakao' ? '카카오' :
+      providerId === 'apple.com' ? 'Apple' : '소셜';
+
+    Alert.alert(
+      '연동 해제',
+      `${providerName} 계정 연동을 해제하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '해제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // 1. 캐시 무효화
+              console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
+              const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
+              await removeCache(CACHE_STORE.USERS, userData.userId);
+
+              // 2. Firestore에서 연동 해제
+              const { unlinkSocialProvider } = await import('@smis-mentor/shared');
+              const { getUserById, updateUser, getUserByEmail } = await import('../services/authService');
+              const { runTransaction, doc } = await import('firebase/firestore');
+              const { db } = await import('../config/firebase');
+
+              // Transaction wrapper
+              const runTransactionWrapper = async (updateFn: (user: any) => any) => {
+                await runTransaction(db, async (transaction) => {
+                  const userRef = doc(db, 'users', userData.userId);
+                  const userDoc = await transaction.get(userRef);
+                  
+                  if (!userDoc.exists()) {
+                    throw new Error('사용자 문서를 찾을 수 없습니다.');
+                  }
+                  
+                  const latestUserData = userDoc.data();
+                  const updates = await updateFn(latestUserData);
+                  
+                  transaction.update(userRef, updates);
+                });
+              };
+
+              await unlinkSocialProvider(
+                auth,
+                providerId,
+                userData.userId,
+                getUserById,
+                updateUser,
+                runTransactionWrapper
+              );
+
+              Alert.alert('성공', `${providerName} 계정 연동이 해제되었습니다.`);
+              
+              // 사용자 데이터 새로고침
+              await loadJobCodes();
+            } catch (error: any) {
+              console.error('연동 해제 오류:', error);
+              Alert.alert('오류', error.message || '연동 해제 중 오류가 발생했습니다.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -865,7 +1036,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                         </View>
                       </View>
                       {canUnlink ? (
-                        <Text style={styles.socialAccountUnlinkText}>웹에서 해제</Text>
+                        <TouchableOpacity
+                          onPress={() => handleSocialUnlink(provider.providerId)}
+                          style={styles.unlinkButton}
+                        >
+                          <Text style={styles.unlinkButtonText}>해제</Text>
+                        </TouchableOpacity>
                       ) : (
                         <Text style={styles.socialAccountRequiredText}>기본</Text>
                       )}
@@ -874,9 +1050,28 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 })}
                 
                 <Text style={[styles.socialSectionLabel, { marginTop: 16 }]}>추가 연동 가능</Text>
-                <Text style={styles.socialAccountHint}>
-                  추가 소셜 계정 연동은 웹에서 진행해주세요.
-                </Text>
+                
+                {/* Google 연동 버튼 */}
+                {!userData.authProviders.some((p: any) => p.providerId === 'google.com') && (
+                  <TouchableOpacity
+                    style={styles.socialLinkButton}
+                    onPress={() => handleSocialLink('google.com')}
+                  >
+                    <Text style={styles.socialLinkIcon}>🔵</Text>
+                    <Text style={styles.socialLinkText}>Google 연동</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* 네이버 연동 버튼 */}
+                {!userData.authProviders.some((p: any) => p.providerId === 'naver' || p.providerId === 'naver.com') && (
+                  <TouchableOpacity
+                    style={styles.socialLinkButton}
+                    onPress={() => handleSocialLink('naver')}
+                  >
+                    <Text style={styles.socialLinkIcon}>🟢</Text>
+                    <Text style={styles.socialLinkText}>네이버 연동</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           )}
@@ -1399,6 +1594,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
   },
+  unlinkButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#fee2e2',
+    borderRadius: 6,
+  },
+  unlinkButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#dc2626',
+  },
   socialAccountRequiredText: {
     fontSize: 11,
     fontWeight: '600',
@@ -1416,6 +1622,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: '#f1f5f9',
     borderRadius: 8,
+  },
+  socialLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  socialLinkIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  socialLinkText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
   },
   
   // 로그아웃 버튼

@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { signIn, resetPassword, getUserByPhone } from '../services/authService';
-import { GoogleSignInButton, PhoneInputModal, PasswordInputModal } from '../components';
+import { GoogleSignInButton, PhoneInputModal, PasswordInputModal, NaverSignInButton } from '../components';
 import { 
   handleSocialLogin, 
   checkTempAccountByPhone,
@@ -256,6 +256,51 @@ export function SignInScreen({
    */
   const handleGoogleSignInError = (error: Error) => {
     console.error('Google 로그인 실패:', error);
+    Alert.alert('로그인 실패', handleSocialAuthError(error));
+  };
+
+  /**
+   * 네이버 로그인 성공 핸들러
+   */
+  const handleNaverSignInSuccess = async (socialUserData: SocialUserData) => {
+    try {
+      const { getUserByEmail } = await import('../services/authService');
+      
+      const result = await handleSocialLogin(socialUserData, getUserByEmail);
+      
+      switch (result.action) {
+        case 'LOGIN':
+          // 기존 active 계정 → 즉시 로그인
+          Alert.alert('로그인 성공', '환영합니다!');
+          onSignInSuccess();
+          break;
+          
+        case 'NEED_PHONE':
+          // 전화번호 입력 필요
+          setSocialData(socialUserData);
+          setShowPhoneModal(true);
+          break;
+          
+        case 'LINK_TEMP':
+          // temp 계정 (이메일 있음 - 드문 케이스)
+          setSocialData(socialUserData);
+          setShowPhoneModal(true);
+          break;
+          
+        default:
+          Alert.alert('오류', '알 수 없는 오류가 발생했습니다.');
+      }
+    } catch (error: any) {
+      console.error('소셜 로그인 처리 실패:', error);
+      Alert.alert('오류', handleSocialAuthError(error));
+    }
+  };
+
+  /**
+   * 네이버 로그인 에러 핸들러
+   */
+  const handleNaverSignInError = (error: Error) => {
+    console.error('네이버 로그인 실패:', error);
     Alert.alert('로그인 실패', handleSocialAuthError(error));
   };
 
@@ -620,6 +665,13 @@ export function SignInScreen({
             <GoogleSignInButton
               onSuccess={handleGoogleSignInSuccess}
               onError={handleGoogleSignInError}
+              disabled={isLoading}
+            />
+            
+            {/* 네이버 로그인 버튼 */}
+            <NaverSignInButton
+              onSuccess={handleNaverSignInSuccess}
+              onError={handleNaverSignInError}
               disabled={isLoading}
             />
           </View>

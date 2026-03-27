@@ -8,9 +8,14 @@ import { SocialUserData } from '@smis-mentor/shared';
 
 const googleProvider = new GoogleAuthProvider();
 
-// 추가 스코프 설정 (선택 사항)
-googleProvider.addScope('profile');
-googleProvider.addScope('email');
+// 추가 스코프 설정 (이메일 필수)
+googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
+googleProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+
+// ✅ 이메일 정보를 반드시 요청하도록 설정
+googleProvider.setCustomParameters({
+  prompt: 'select_account', // 계정 선택 화면 표시
+});
 
 /**
  * Google 팝업 로그인 수행
@@ -31,15 +36,38 @@ export async function signInWithGooglePopup(): Promise<SocialUserData> {
  * Firebase User와 Credential에서 SocialUserData 추출
  */
 function extractSocialUserData(user: any, credential: OAuthCredential | null): SocialUserData {
-  // 이메일이 없는 경우 providerData에서 추출 시도
+  console.log('🔍 SocialUserData 추출 시작:', {
+    userEmail: user.email,
+    providerData: user.providerData,
+    credentialIdToken: credential?.idToken ? 'exists' : 'missing',
+  });
+  
+  // 1. user.email에서 추출
   let email = user.email;
+  
+  // 2. providerData에서 추출
   if (!email && user.providerData && user.providerData.length > 0) {
     email = user.providerData[0].email;
+    console.log('📧 providerData에서 이메일 추출:', email);
+  }
+  
+  // 3. credential의 ID 토큰에서 추출 (JWT 디코딩)
+  if (!email && credential?.idToken) {
+    try {
+      const payload = JSON.parse(atob(credential.idToken.split('.')[1]));
+      email = payload.email;
+      console.log('📧 ID 토큰에서 이메일 추출:', email);
+    } catch (e) {
+      console.error('ID 토큰 파싱 실패:', e);
+    }
   }
   
   if (!email) {
-    throw new Error('Google 계정에서 이메일 정보를 가져올 수 없습니다.');
+    console.error('❌ 이메일을 가져올 수 없음:', { user, credential });
+    throw new Error('Google 계정에서 이메일 정보를 가져올 수 없습니다. 구글 계정 설정에서 이메일 공개를 허용해주세요.');
   }
+  
+  console.log('✅ SocialUserData 추출 완료:', { email, name: user.displayName });
   
   return {
     email: email,
@@ -80,6 +108,54 @@ export function handleGoogleAuthError(error: any): string {
         return '소셜 로그인을 사용하려면 브라우저에서 팝업을 허용해야 합니다. 브라우저 설정을 확인해주세요.';
       }
       return error?.message || 'Google 로그인 중 오류가 발생했습니다.';
+  }
+}
+
+/**
+ * Google Credential만 가져오기 (계정 연동용)
+ * 기존 로그인 상태를 유지하면서 Google credential만 획득
+ */
+export async function getGoogleCredential(): Promise<{
+  socialData: SocialUserData;
+  credential: OAuthCredential;
+}> {
+  try {
+    // 1. 현재 로그인된 사용자 저장
+    const currentUser = auth.currentUser;
+    const currentUserData = currentUser ? {
+      uid: currentUser.uid,
+      email: currentUser.email,
+    } : null;
+    
+    console.log('🔑 Google Credential 획득 시작:', currentUserData);
+    
+    // 2. Google 팝업 열기 (임시로 로그인됨)
+    const result = await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    
+    if (!credential) {
+      throw new Error('Google credential을 가져올 수 없습니다.');
+    }
+    
+    console.log('✅ Google 팝업 완료:', {
+      email: result.user.email,
+      uid: result.user.uid,
+      isNewUser: currentUserData?.uid !== result.user.uid,
+    });
+    
+    // 3. SocialUserData 추출
+    const socialData = extractSocialUserData(result.user, credential);
+    
+    // 4. ✅ 수정: 임시 계정 삭제하지 않음
+    // → Firebase Auth에 구글 계정이 생성되어도 괜찮음
+    // → linkWithCredential에서 credential-already-in-use 에러 발생 시 Firestore에만 저장
+    console.log('ℹ️ Google 계정이 Firebase Auth에 생성되었습니다 (정상)');
+    console.log('ℹ️ linkWithCredential이 실패하면 Firestore에만 저장됩니다');
+    
+    return { socialData, credential };
+  } catch (error: any) {
+    console.error('Google Credential 획득 오류:', error);
+    throw error;
   }
 }
 

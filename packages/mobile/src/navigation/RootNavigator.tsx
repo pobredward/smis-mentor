@@ -30,21 +30,12 @@ const linking = {
   prefixes: ['smismentor://', 'https://smis-mentor.com'],
   config: {
     screens: {
-      MainTabs: {
-        screens: {
-          Camp: {
-            screens: {
-              Tasks: 'camp/tasks',
-            },
-          },
-        },
-      },
-      TaskDetail: {
-        path: 'camp/tasks/:taskId',
-        parse: {
-          taskId: (taskId: string) => taskId,
-        },
-      },
+      MainTabs: 'tabs',
+      TaskDetail: 'camp/tasks/:taskId',
+      Settings: 'settings',
+      NotificationTest: 'notification-test',
+      PrivacyPolicy: 'privacy-policy',
+      TermsOfService: 'terms-of-service',
     },
   },
 };

@@ -594,3 +594,191 @@ export const verifyAuthFirestoreConsistency = functions
       throw new functions.https.HttpsError('internal', '검증에 실패했습니다.');
     }
   });
+
+/**
+ * 소셜 제공자 연동 해제 시 Firebase Auth에서도 계정 삭제
+ * Multiple Email Policy에서 별도 계정으로 생성된 소셜 계정 정리
+ */
+export const deleteOrphanedSocialAccount = functionsV2.https.onCall({
+  region: 'asia-northeast3',
+  cors: true, // ✅ CORS 허용
+}, async (request) => {
+  try {
+    // 인증 확인
+    if (!request.auth) {
+      throw new functionsV2.https.HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+
+    const { providerId, providerEmail } = request.data;
+    const currentUserId = request.auth.uid;
+
+    console.log('🗑️ 고아 소셜 계정 삭제 요청:', {
+      currentUserId,
+      providerId,
+      providerEmail,
+    });
+
+    if (!providerId || !providerEmail) {
+      throw new functionsV2.https.HttpsError('invalid-argument', 'providerId와 providerEmail이 필요합니다.');
+    }
+
+    // 1. Firestore에서 현재 사용자 확인
+    const userDoc = await db.collection('users').doc(currentUserId).get();
+    if (!userDoc.exists) {
+      throw new functionsV2.https.HttpsError('not-found', '사용자를 찾을 수 없습니다.');
+    }
+
+    const userData = userDoc.data();
+    console.log('👤 현재 사용자:', {
+      userId: currentUserId,
+      email: userData?.email,
+    });
+
+    // 2. providerEmail로 Firebase Auth 사용자 검색
+    let targetAuthUser;
+    try {
+      targetAuthUser = await admin.auth().getUserByEmail(providerEmail);
+      console.log('🔍 Firebase Auth 사용자 발견:', {
+        uid: targetAuthUser.uid,
+        email: targetAuthUser.email,
+        providers: targetAuthUser.providerData?.map(p => p.providerId),
+      });
+    } catch (error: any) {
+      if (error.code === 'auth/user-not-found') {
+        console.log('ℹ️ Firebase Auth에 해당 이메일 없음 (이미 삭제됨)');
+        return { success: true, message: 'Firebase Auth 계정 없음 (정상)' };
+      }
+      throw error;
+    }
+
+    // 3. 안전성 검증: 현재 사용자와 다른 계정인지 확인
+    if (targetAuthUser.uid === currentUserId) {
+      throw new functionsV2.https.HttpsError(
+        'failed-precondition',
+        '본인 계정은 삭제할 수 없습니다.'
+      );
+    }
+
+    // 4. Firestore에 해당 UID가 없거나 active가 아닌지 확인
+    const targetUserDoc = await db.collection('users').doc(targetAuthUser.uid).get();
+    if (targetUserDoc.exists && targetUserDoc.data()?.status === 'active') {
+      console.warn('⚠️ Firestore에 active 상태로 존재하는 계정 - 삭제 거부');
+      throw new functionsV2.https.HttpsError(
+        'failed-precondition',
+        'Firestore에 존재하는 active 계정은 삭제할 수 없습니다.'
+      );
+    }
+
+    // 5. Firebase Auth에서 삭제
+    await admin.auth().deleteUser(targetAuthUser.uid);
+    console.log('✅ Firebase Auth 사용자 삭제 완료:', targetAuthUser.uid);
+
+    return {
+      success: true,
+      deletedUid: targetAuthUser.uid,
+      deletedEmail: targetAuthUser.email,
+      message: 'Firebase Auth 계정이 성공적으로 삭제되었습니다.',
+    };
+  } catch (error: any) {
+    console.error('❌ 고아 소셜 계정 삭제 실패:', error);
+    if (error instanceof functionsV2.https.HttpsError) {
+      throw error;
+    }
+    throw new functionsV2.https.HttpsError('internal', error.message || '계정 삭제에 실패했습니다.');
+  }
+});
+
+/**
+ * 매일 자동으로 고아 소셜 계정 정리
+ * Firestore authProviders에 없는 Firebase Auth 계정 삭제
+ */
+export const cleanupOrphanedSocialAccounts = functionsV2.scheduler.onSchedule({
+  schedule: 'every 24 hours',
+  timeZone: 'Asia/Seoul',
+  region: 'asia-northeast3',
+}, async (event) => {
+    try {
+      console.log('🧹 고아 소셜 계정 정리 시작');
+
+      // 1. 모든 Firebase Auth 사용자 가져오기
+      const authUsers = new Map<string, any>();
+      let nextPageToken: string | undefined;
+
+      do {
+        const listUsersResult = await admin.auth().listUsers(1000, nextPageToken);
+        listUsersResult.users.forEach(user => {
+          authUsers.set(user.uid, user);
+        });
+        nextPageToken = listUsersResult.pageToken;
+      } while (nextPageToken);
+
+      console.log('📊 Firebase Auth 사용자 총 개수:', authUsers.size);
+
+      // 2. 모든 Firestore 사용자 가져오기
+      const firestoreUsersSnapshot = await db.collection('users')
+        .where('status', '==', 'active')
+        .get();
+
+      const firestoreUsers = new Set<string>();
+      const authProvidersMap = new Map<string, string[]>(); // email -> [uids]
+
+      firestoreUsersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        firestoreUsers.add(doc.id); // Document ID
+        if (userData.userId) firestoreUsers.add(userData.userId); // userId 필드
+
+        // authProviders에서 연동된 소셜 계정 UID 수집
+        const authProviders = userData.authProviders || [];
+        authProviders.forEach((p: any) => {
+          if (p.email && p.uid) {
+            const existing = authProvidersMap.get(p.email) || [];
+            existing.push(p.uid);
+            authProvidersMap.set(p.email, existing);
+          }
+        });
+      });
+
+      console.log('📊 Firestore active 사용자:', firestoreUsers.size);
+      console.log('📊 authProviders 매핑:', authProvidersMap.size);
+
+      // 3. 고아 계정 찾기 및 삭제
+      let deletedCount = 0;
+      const deletedAccounts: string[] = [];
+
+      for (const [uid, authUser] of authUsers) {
+        // Firestore에 존재하지 않고
+        if (!firestoreUsers.has(uid)) {
+          // authProviders에도 없는 경우
+          const linkedUids = authUser.email ? authProvidersMap.get(authUser.email) || [] : [];
+          const isLinkedAccount = linkedUids.includes(uid);
+
+          if (!isLinkedAccount) {
+            // 진짜 고아 계정 → 삭제
+            try {
+              await admin.auth().deleteUser(uid);
+              deletedCount++;
+              deletedAccounts.push(`${authUser.email || 'no-email'} (${uid})`);
+              console.log('🗑️ 고아 계정 삭제:', {
+                uid,
+                email: authUser.email,
+                displayName: authUser.displayName,
+              });
+            } catch (deleteError) {
+              console.error('❌ 고아 계정 삭제 실패:', uid, deleteError);
+            }
+          }
+        }
+      }
+
+      console.log('✅ 고아 계정 정리 완료:', {
+        deletedCount,
+        deletedAccounts: deletedAccounts.slice(0, 10), // 처음 10개만 로그
+      });
+
+      // ✅ Scheduler 함수는 return 값 없음
+    } catch (error) {
+      console.error('❌ 고아 계정 정리 실패:', error);
+    }
+  });
+
+

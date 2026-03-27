@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { signIn, resetPassword, getUserByEmail, getUserByPhone, getUserByForeignName, updateUser, getUserById, signInWithCustomTokenFromFunction } from '@/lib/firebaseService';
+import { signIn, resetPassword, getUserByEmail, getUserByPhone, getUserByForeignName, updateUser, getUserById, signInWithCustomTokenFromFunction, getUserBySocialProvider } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -156,7 +156,7 @@ export function SignInClient() {
   const handleGoogleSignInSuccess = async (data: SocialUserData) => {
     setIsLoading(true); // ✅ 로딩 시작
     try {
-      const result = await handleSocialLogin(data, getUserByEmail);
+      const result = await handleSocialLogin(data, getUserByEmail, getUserBySocialProvider);
       
       if (result.action === 'LOGIN') {
         // 기존 소셜 계정으로 바로 로그인
@@ -165,6 +165,54 @@ export function SignInClient() {
           email: data.email,
           userId: result.user?.userId,
         });
+        
+        // ✅ 구글 로그인: Firebase Auth 세션 복원 필요
+        if (data.providerId === 'google.com') {
+          const currentUser = auth.currentUser;
+          const targetUserId = result.user?.userId;
+          
+          console.log('🔑 구글 로그인 - Firebase Auth 세션 확인:', {
+            currentUserUid: currentUser?.uid,
+            targetUserId,
+            needRestore: currentUser?.uid !== targetUserId,
+          });
+          
+          // Firebase Auth UID와 Firestore userId가 다르면 재로그인 필요
+          if (currentUser?.uid !== targetUserId) {
+            console.log('⚠️ Firebase Auth 세션이 다름 → 원래 계정으로 재로그인');
+            
+            const hasPasswordProvider = result.user?.authProviders?.some(
+              (p: any) => p.providerId === 'password'
+            );
+            const firebaseAuthPassword = (result.user as any)._firebaseAuthPassword;
+            
+            if (hasPasswordProvider && firebaseAuthPassword) {
+              console.log('🔑 비밀번호로 재로그인');
+              await signIn(result.user.email, firebaseAuthPassword);
+            } else {
+              console.log('🔑 Custom Token으로 재로그인');
+              toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
+              try {
+                await signInWithCustomTokenFromFunction(
+                  result.user.userId,
+                  result.user.email,
+                  targetUserId
+                );
+                toast.dismiss('custom-token-loading');
+              } catch (customTokenError) {
+                toast.dismiss('custom-token-loading');
+                console.error('❌ Custom Token 로그인 실패:', customTokenError);
+                toast.error('로그인에 실패했습니다. 관리자에게 문의하세요.', { duration: 6000 });
+                setIsLoading(false);
+                return;
+              }
+            }
+            
+            console.log('✅ Firebase Auth 세션 복원 완료');
+          } else {
+            console.log('✅ Firebase Auth 세션 정상');
+          }
+        }
         
         // 네이버/카카오는 임시 비밀번호로 Firebase Auth 로그인
         if (data.providerId === 'naver' || data.providerId === 'kakao') {
@@ -225,7 +273,6 @@ export function SignInClient() {
             return;
           }
         }
-        // Google은 이미 Firebase Auth에 로그인되어 있으므로 추가 작업 불필요
         
         toast.success('로그인에 성공했습니다!', { duration: 2000 });
         setTimeout(() => {
@@ -703,6 +750,10 @@ export function SignInClient() {
     
     setIsLoading(true);
     try {
+      // ✅ arrayUnion import 추가 (동시성 안전)
+      const { linkSocialProvider } = await import('@smis-mentor/shared');
+      const { arrayUnion } = await import('firebase/firestore');
+      
       await linkSocialToExistingAccount(
         auth,
         existingUserEmail,
@@ -711,7 +762,8 @@ export function SignInClient() {
         signIn,
         getUserByEmail,
         getUserById,
-        updateUser
+        updateUser,
+        arrayUnion // ✅ arrayUnion 전달
       );
       
       // providerId에 따라 메시지 구별

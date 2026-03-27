@@ -3,6 +3,7 @@ import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -27,8 +28,14 @@ if (typeof window !== 'undefined') {
 
 const db = getFirestore(app);
 const storage = getStorage(app, 'gs://smis-mentor.firebasestorage.app');
+const functions = getFunctions(app, 'asia-northeast3');
+
+// 로컬 개발 환경에서 Functions Emulator 사용
+if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
+  connectFunctionsEmulator(functions, 'localhost', 5001);
+}
 
 // Analytics는 브라우저 환경에서만 사용 가능하도록 설정
 const analytics = typeof window !== 'undefined' ? isSupported().then(yes => yes ? getAnalytics(app) : null) : null;
 
-export { app, auth, db, storage, analytics }; 
+export { app, auth, db, storage, functions, analytics }; 

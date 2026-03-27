@@ -17,16 +17,36 @@ import type {
 /**
  * 소셜 로그인 메인 플로우
  * 이메일로 기존 계정 확인 후 적절한 액션 반환
+ * Multiple Email Policy: 이메일이 다르더라도 authProviders에서 매칭
  */
 export async function handleSocialLogin(
   socialData: SocialUserData,
-  getUserByEmail: (email: string) => Promise<any | null>
+  getUserByEmail: (email: string) => Promise<any | null>,
+  getUserBySocialProvider?: (providerId: string, providerUid: string) => Promise<any | null>
 ): Promise<SocialLoginResult> {
   try {
     console.log('🔍 소셜 로그인 처리 시작:', socialData.email);
     
     // 1. 이메일로 기존 계정 확인
-    const existingUser = await getUserByEmail(socialData.email);
+    let existingUser = await getUserByEmail(socialData.email);
+
+    // 2. ✅ 이메일로 못 찾았으면 authProviders에서 소셜 제공자 UID로 검색
+    if (!existingUser && getUserBySocialProvider) {
+      console.log('📧 이메일로 계정 없음 → authProviders에서 소셜 제공자 검색');
+      existingUser = await getUserBySocialProvider(
+        socialData.providerId,
+        socialData.providerUid
+      );
+      
+      if (existingUser) {
+        console.log('✅ authProviders에서 계정 발견:', {
+          userId: existingUser.userId,
+          email: existingUser.email,
+          socialEmail: socialData.email,
+          matchedBy: 'authProviders',
+        });
+      }
+    }
 
     if (existingUser) {
       console.log('📧 기존 계정 발견:', {
@@ -78,7 +98,7 @@ export async function handleSocialLogin(
       throw new Error('계정 상태가 비정상적입니다. 관리자에게 문의하세요.');
     }
 
-    // 2. 이메일로 계정 없음 → 전화번호 입력 필요
+    // 3. 이메일로도, authProviders로도 계정 없음 → 전화번호 입력 필요
     console.log('📱 신규 사용자 - 전화번호 입력 필요');
     return {
       action: 'NEED_PHONE',
@@ -209,7 +229,7 @@ export async function activateTempAccountWithSocial(
     
     await updateUser(tempUserId, {
       email: socialData.email,
-      profileImage: socialData.photoURL,
+      profileImage: socialData.photoURL || null, // undefined 대신 null
       status: 'active',
       authProviders: [
         {
@@ -217,8 +237,8 @@ export async function activateTempAccountWithSocial(
           uid: socialData.providerUid,
           email: socialData.email,
           linkedAt: Timestamp.now(),
-          displayName: socialData.name,
-          photoURL: socialData.photoURL,
+          ...(socialData.name && { displayName: socialData.name }), // undefined 방지
+          ...(socialData.photoURL && { photoURL: socialData.photoURL }), // undefined 방지
         },
       ],
       primaryAuthMethod: 'social',
@@ -277,8 +297,8 @@ export async function linkSocialProvider(
       uid: socialData.providerUid,
       email: socialData.email,
       linkedAt: Timestamp.now(),
-      displayName: socialData.name,
-      photoURL: socialData.photoURL,
+      ...(socialData.name && { displayName: socialData.name }), // undefined 방지
+      ...(socialData.photoURL && { photoURL: socialData.photoURL }), // undefined 방지
     };
 
     // ✅ arrayUnion을 사용하면 동시성 문제 해결 (Firestore 서버에서 원자적 연산)
@@ -316,7 +336,8 @@ export async function linkSocialToExistingAccount(
   signIn: (email: string, password: string) => Promise<any>,
   getUserByEmail: (email: string) => Promise<any | null>,
   getUserById: (userId: string) => Promise<any | null>,
-  updateUser: (userId: string, data: any) => Promise<void>
+  updateUser: (userId: string, data: any) => Promise<void>,
+  arrayUnion?: (...elements: any[]) => any // ✅ Firestore FieldValue.arrayUnion (가변 인자)
 ): Promise<void> {
   try {
     // 1. 기존 계정으로 로그인
@@ -360,7 +381,8 @@ export async function linkSocialToExistingAccount(
         user.userId || user.id,
         socialData,
         getUserById,
-        updateUser
+        updateUser,
+        arrayUnion // ✅ arrayUnion 전달 (동시성 안전)
       );
     }
   } catch (error) {
@@ -436,8 +458,18 @@ export async function unlinkSocialProvider(
         await unlink(currentUser, providerId);
         console.log('✅ Firebase Auth 연동 해제 완료:', providerId);
       } catch (error: any) {
-        // Firebase Auth에서 연동 해제 실패해도 Firestore는 업데이트
-        console.warn('⚠️ Firebase Auth 연동 해제 실패 (무시):', error.message);
+        // Firebase Auth에서 연동 해제 실패
+        console.warn('⚠️ Firebase Auth 연동 해제 실패:', error.message);
+        
+        if (error.code === 'auth/no-such-provider') {
+          // 현재 계정에 해당 제공자가 연결되어 있지 않음
+          // → 별도 계정으로 존재하는 경우 (Multiple Email Policy)
+          console.log('ℹ️ Firebase Auth에 별도 계정으로 존재 (정상)');
+          console.log('ℹ️ Firestore에서만 연동 정보를 제거합니다');
+        } else {
+          // 기타 에러 - 무시하고 계속 진행
+          console.warn('⚠️ Firebase Auth 연동 해제 실패하지만 계속 진행');
+        }
       }
     } else {
       console.log('ℹ️ Custom Token 제공업체 - Firebase Auth 연동 해제 생략:', providerId);
@@ -591,8 +623,8 @@ export async function linkAdditionalProvider(
       uid: socialData.providerUid,
       email: socialData.email,
       linkedAt: Timestamp.now(),
-      displayName: socialData.name,
-      photoURL: socialData.photoURL,
+      ...(socialData.name && { displayName: socialData.name }), // undefined 방지
+      ...(socialData.photoURL && { photoURL: socialData.photoURL }), // undefined 방지
     };
 
     await updateUser(currentUser.uid, {
