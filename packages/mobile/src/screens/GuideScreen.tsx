@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
@@ -33,7 +33,7 @@ const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
 export function GuideScreen() {
   const { guides, loadingStates, zoomLevels, setZoomLevel, applyZoom, renderWebView, refreshResources, loading } = useWebViewCache();
   const { userData } = useAuth();
-  const [selectedGuideId, setSelectedGuideId] = useState(guides[0]?.id);
+  const [selectedGuideId, setSelectedGuideId] = useState<string | undefined>(undefined);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -53,6 +53,13 @@ export function GuideScreen() {
     if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
     return false;
   });
+
+  // 필터링된 인솔표가 로드되면 첫 번째 항목을 자동 선택
+  useEffect(() => {
+    if (filteredGuides.length > 0 && !selectedGuideId) {
+      setSelectedGuideId(filteredGuides[0].id);
+    }
+  }, [filteredGuides, selectedGuideId]);
 
   const selectedGuide = filteredGuides.find(g => g.id === selectedGuideId) || filteredGuides[0];
   // Android는 1.0, iOS는 0.6 기본 줌

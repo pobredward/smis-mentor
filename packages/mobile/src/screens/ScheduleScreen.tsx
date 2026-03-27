@@ -33,7 +33,7 @@ const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
 export function ScheduleScreen() {
   const { schedules, loadingStates, zoomLevels, setZoomLevel, applyZoom, renderWebView, refreshResources, loading } = useWebViewCache();
   const { userData } = useAuth();
-  const [selectedScheduleId, setSelectedScheduleId] = useState(schedules[0]?.id);
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | undefined>(undefined);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -53,6 +53,13 @@ export function ScheduleScreen() {
     if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
     return false;
   });
+
+  // 필터링된 시간표가 로드되면 첫 번째 항목을 자동 선택
+  useEffect(() => {
+    if (filteredSchedules.length > 0 && !selectedScheduleId) {
+      setSelectedScheduleId(filteredSchedules[0].id);
+    }
+  }, [filteredSchedules, selectedScheduleId]);
 
   const selectedSchedule = filteredSchedules.find(s => s.id === selectedScheduleId) || filteredSchedules[0];
   
