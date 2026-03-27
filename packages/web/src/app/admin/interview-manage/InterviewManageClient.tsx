@@ -2170,69 +2170,22 @@ export function InterviewManageClient() {
                       
                       {/* 면접 예정 메시지 박스 */}
                       {showInterviewScheduledMessage && (
-                        <div className="mt-4 border border-blue-200 rounded-md p-4 bg-blue-50">
-                          <label className="block text-sm font-medium text-blue-700 mb-2">
-                            면접 예정 메시지 내용
-                          </label>
-                          <textarea
-                            className="w-full p-2 border border-blue-300 rounded-md text-sm mb-3"
-                            rows={8}
-                            value={interviewScheduledMessage}
-                            onChange={(e) => setInterviewScheduledMessage(e.target.value)}
-                          />
-                          <div className="mb-3">
-                            <label className="block text-sm font-medium text-blue-700 mb-2">
-                              발신번호 선택
-                            </label>
-                            <div className="flex items-center space-x-4">
-                              <label className="inline-flex items-center">
-                                <input
-                                  type="radio"
-                                  className="form-radio text-blue-600"
-                                  name="fromNumberIntScheduled"
-                                  checked={fromNumber === '01067117933'}
-                                  onChange={() => setFromNumber('01067117933')}
-                                />
-                                <span className="ml-2 text-sm">010-6711-7933</span>
-                              </label>
-                              <label className="inline-flex items-center">
-                                <input
-                                  type="radio"
-                                  className="form-radio text-blue-600"
-                                  name="fromNumberIntScheduled"
-                                  checked={fromNumber === '01076567933'}
-                                  onChange={() => setFromNumber('01076567933')}
-                                />
-                                <span className="ml-2 text-sm">010-7656-7933</span>
-                              </label>
-                            </div>
-                          </div>
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setShowInterviewScheduledMessage(false)}
-                            >
-                              취소
-                            </Button>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => saveTemplate('interview_scheduled', interviewScheduledMessage)}
-                              isLoading={isSavingTemplate}
-                            >
-                              저장
-                            </Button>
-                            <Button
-                              variant="success"
-                              size="sm"
-                              onClick={() => sendMessage(interviewScheduledMessage)}
-                              isLoading={isLoadingMessage}
-                            >
-                              전송
-                            </Button>
-                          </div>
-                        </div>
+                        <SMSMessageBox
+                          title="면접 예정 메시지 내용"
+                          type="interview_scheduled"
+                          message={interviewScheduledMessage}
+                          onMessageChange={setInterviewScheduledMessage}
+                          fromNumber={fromNumber}
+                          onFromNumberChange={setFromNumber}
+                          currentJobBoardId={selectedDate?.jobBoardId || ''}
+                          onSave={() => saveTemplate('interview_scheduled', interviewScheduledMessage)}
+                          onSend={() => sendMessage(interviewScheduledMessage)}
+                          onCancel={() => setShowInterviewScheduledMessage(false)}
+                          isSaving={isSavingTemplate}
+                          isSending={isLoadingMessage}
+                          backgroundColor="#dbeafe"
+                          buttonColor="#3b82f6"
+                        />
                       )}
                       
                       {/* 면접 합격 메시지 박스 */}
