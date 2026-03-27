@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { doc, setDoc, getDoc, deleteField } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -18,8 +19,20 @@ export interface NotificationSettings {
   generalNotifications: boolean;
 }
 
+// Expo Go 환경인지 확인
+function isExpoGo(): boolean {
+  return Constants.appOwnership === 'expo';
+}
+
 export async function registerForPushNotificationsAsync(): Promise<string | undefined> {
   let token: string | undefined;
+
+  // Expo Go에서는 원격 푸시 알림이 지원되지 않으므로 스킵
+  if (isExpoGo()) {
+    console.log('⚠️ Expo Go에서는 원격 푸시 알림이 지원되지 않습니다.');
+    console.log('💡 Development Build를 사용하여 푸시 알림을 테스트하세요.');
+    return undefined;
+  }
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
@@ -52,11 +65,16 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
       return;
     }
     
-    token = (await Notifications.getExpoPushTokenAsync({
-      projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
-    })).data;
-    
-    console.log('Expo Push Token:', token);
+    try {
+      token = (await Notifications.getExpoPushTokenAsync({
+        projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
+      })).data;
+      
+      console.log('Expo Push Token:', token);
+    } catch (error) {
+      console.error('푸시 토큰 발급 실패:', error);
+      return undefined;
+    }
   } else {
     console.log('실제 기기에서만 푸시 알림을 사용할 수 있습니다.');
   }

@@ -3,7 +3,8 @@
   "version": "1.1.0",
   "main": "index.ts",
   "scripts": {
-    "start": "expo start",
+    "start": "CI=false expo start",
+    "start:go": "CI=false expo start --go",
     "start:clear": "bash scripts/clear-cache-and-start.sh",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -39,6 +40,7 @@
     "expo": "~54.0.33",
     "expo-auth-session": "~7.0.10",
     "expo-checkbox": "~5.0.8",
+    "expo-constants": "^18.0.13",
     "expo-crypto": "~15.0.8",
     "expo-dev-client": "~6.0.20",
     "expo-device": "~8.0.10",
@@ -63,7 +65,7 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-tab-view": "^4.2.2",
-    "react-native-webview": "13.15.0",
+    "react-native-webview": "^13.15.0",
     "uuid": "^11.1.0",
     "zod": "^3.24.2"
   },
