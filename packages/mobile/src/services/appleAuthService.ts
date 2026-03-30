@@ -35,9 +35,16 @@ export async function signInWithApple(): Promise<SocialUserData> {
       fullName: credential.fullName,
     });
 
-    // 이메일이 없는 경우 (재로그인 시 발생 가능)
-    if (!credential.email) {
-      throw new Error('이메일 정보를 가져올 수 없습니다. 설정 > Apple ID > 암호 및 보안 > Apple로 로그인에서 앱을 삭제한 후 다시 시도해주세요.');
+    // 이메일 처리 (재로그인 시 email이 null일 수 있음)
+    let email = credential.email || '';
+    
+    // 이메일이 없는 경우 임시 이메일 생성 (Apple ID 기반)
+    if (!email) {
+      console.log('ℹ️ Apple 재로그인 감지 - 이메일 미제공');
+      console.log('   → Apple ID로 기존 계정을 찾습니다');
+      // Apple ID를 기반으로 임시 이메일 생성
+      // getUserBySocialProvider가 providerUid로 실제 계정을 찾아줌
+      email = `apple_${credential.user}@privaterelay.appleid.com`;
     }
 
     // 이름 조합 (첫 로그인 시에만 제공됨)
@@ -53,17 +60,17 @@ export async function signInWithApple(): Promise<SocialUserData> {
       }
     }
 
-    // 이름이 없으면 이메일 앞부분 사용
-    if (!name && credential.email) {
-      name = credential.email.split('@')[0];
+    // 이름이 없으면 기본값 사용 (실제 계정을 찾으면 DB의 이름 사용)
+    if (!name) {
+      name = 'Apple 사용자'; // 임시 이름 (기존 계정 찾으면 대체됨)
     }
 
     const socialData: SocialUserData = {
-      email: credential.email,
+      email: email,
       name: name,
       photoURL: undefined, // 애플은 프로필 사진 제공 안 함
       providerId: 'apple.com',
-      providerUid: credential.user,
+      providerUid: credential.user, // 이것으로 기존 계정 찾기
       idToken: credential.identityToken || undefined,
       accessToken: credential.authorizationCode || undefined,
     };

@@ -33,6 +33,7 @@ export async function signInWithApplePopup(): Promise<SocialUserData> {
 function extractSocialUserData(user: any, credential: OAuthCredential | null): SocialUserData {
   console.log('🔍 Apple SocialUserData 추출 시작:', {
     userEmail: user.email,
+    userUid: user.uid,
     providerData: user.providerData,
     credentialIdToken: credential?.idToken ? 'exists' : 'missing',
   });
@@ -40,20 +41,26 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
   // 1. user.email에서 추출
   let email = user.email;
   let name = user.displayName;
+  let appleUserId = '';
   
-  // 2. providerData에서 추출
-  if (!email && user.providerData && user.providerData.length > 0) {
-    email = user.providerData[0].email;
-    name = name || user.providerData[0].displayName;
-    console.log('📧 providerData에서 정보 추출:', { email, name });
+  // 2. providerData에서 실제 Apple User ID 추출 (중요!)
+  if (user.providerData && user.providerData.length > 0) {
+    const appleProviderData = user.providerData.find((p: any) => p.providerId === 'apple.com');
+    if (appleProviderData) {
+      appleUserId = appleProviderData.uid; // ✅ 실제 Apple User ID
+      email = email || appleProviderData.email;
+      name = name || appleProviderData.displayName;
+      console.log('🍎 providerData에서 Apple User ID 추출:', appleUserId);
+    }
   }
   
-  // 3. credential의 ID 토큰에서 추출 (JWT 디코딩)
+  // 3. credential의 ID 토큰에서 추출
   if (!email && credential?.idToken) {
     try {
       const payload = JSON.parse(atob(credential.idToken.split('.')[1]));
       email = payload.email;
-      console.log('📧 ID 토큰에서 이메일 추출:', email);
+      appleUserId = appleUserId || payload.sub; // JWT의 sub가 실제 Apple User ID
+      console.log('📧 ID 토큰에서 정보 추출:', { email, appleUserId });
     } catch (e) {
       console.error('ID 토큰 파싱 실패:', e);
     }
@@ -64,19 +71,25 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
     throw new Error('Apple 계정에서 이메일 정보를 가져올 수 없습니다. Apple 계정 설정에서 이메일 공개를 허용해주세요.');
   }
   
+  // ⚠️ providerUid는 Firebase Auth UID가 아닌 실제 Apple User ID를 사용해야 함
+  if (!appleUserId) {
+    console.warn('⚠️ Apple User ID를 찾을 수 없음, Firebase UID 사용');
+    appleUserId = user.uid;
+  }
+  
   // 이름이 없으면 이메일 앞부분 사용
   if (!name) {
     name = email.split('@')[0];
   }
   
-  console.log('✅ Apple SocialUserData 추출 완료:', { email, name });
+  console.log('✅ Apple SocialUserData 추출 완료:', { email, name, appleUserId });
   
   return {
     email: email,
     name: name,
     photoURL: user.photoURL || undefined, // Apple은 프로필 사진 제공 안 함
     providerId: 'apple.com',
-    providerUid: user.uid,
+    providerUid: appleUserId, // ✅ 실제 Apple User ID 사용
     idToken: credential?.idToken,
     accessToken: credential?.accessToken,
   };

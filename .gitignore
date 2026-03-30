@@ -42,6 +42,9 @@ GoogleService-Info.plist
 !packages/mobile/GoogleService-Info.plist
 !packages/mobile/google-services.json
 
+# Apple AuthKey (Private Key)
+AuthKey_*.p8
+
 # vercel
 .vercel
 
