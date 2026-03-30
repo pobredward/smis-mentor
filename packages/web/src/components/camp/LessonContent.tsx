@@ -55,19 +55,13 @@ function SectionForm({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     
-    // URL 형식 검증
+    // URL 형식 검증 (값이 있을 때만)
     if (viewUrl && !isValidUrl(viewUrl)) {
       alert('공개보기 링크의 URL 형식이 올바르지 않습니다.\n예: https://docs.google.com/...');
       return;
     }
     if (originalUrl && !isValidUrl(originalUrl)) {
       alert('원본 링크의 URL 형식이 올바르지 않습니다.\n예: https://docs.google.com/...');
-      return;
-    }
-    
-    // 최소 하나의 URL 필수
-    if (!viewUrl.trim() && !originalUrl.trim()) {
-      alert('공개보기 링크 또는 원본 링크 중 최소 하나는 입력해주세요.');
       return;
     }
     
