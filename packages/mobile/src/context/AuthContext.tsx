@@ -21,6 +21,7 @@ import {
 } from '../services/notificationService';
 import * as Notifications from 'expo-notifications';
 import { useNavigation } from '@react-navigation/native';
+import Constants from 'expo-constants';
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
@@ -46,6 +47,73 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [authReady, setAuthReady] = useState(false);
   const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
   const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
+
+  // 네이버 SDK 초기화 (Development Build 전용)
+  // Expo Go에서는 Native SDK를 사용할 수 없음!
+  useEffect(() => {
+    const initNaverSDK = async () => {
+      try {
+        const NaverLoginModule = await import('@react-native-seoul/naver-login');
+        const NaverLogin = NaverLoginModule.default;
+
+        if (!NaverLogin || typeof NaverLogin.initialize !== 'function') {
+          console.warn('⚠️ Expo Go 환경: 네이버 Native SDK를 사용할 수 없습니다');
+          console.warn('💡 Development Build에서 테스트하세요: npx expo run:ios');
+          return;
+        }
+
+        const consumerKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_NAVER_CLIENT_ID || '';
+        const consumerSecret = Constants.expoConfig?.extra?.EXPO_PUBLIC_NAVER_CLIENT_SECRET || '';
+        const appName = 'SMIS Mentor';
+        const serviceUrlSchemeIOS = 'com.smis.smismentor';
+
+        if (consumerKey && consumerSecret) {
+          await NaverLogin.initialize({
+            appName,
+            consumerKey,
+            consumerSecret,
+            serviceUrlSchemeIOS,
+            disableNaverAppAuthIOS: true,
+          });
+          console.log('✅ 네이버 SDK 초기화 완료 (Development Build)');
+        }
+      } catch (error) {
+        console.warn('⚠️ 네이버 SDK 로드 실패 (Expo Go에서는 정상):', error);
+      }
+    };
+
+    initNaverSDK();
+  }, []);
+
+  // Google Sign-In SDK 초기화 (Development Build)
+  useEffect(() => {
+    const initGoogleSDK = async () => {
+      try {
+        const GoogleSignInModule = await import('@react-native-google-signin/google-signin');
+        const { GoogleSignin } = GoogleSignInModule;
+
+        if (!GoogleSignin || typeof GoogleSignin.configure !== 'function') {
+          console.warn('⚠️ Expo Go 환경: Google Native SDK를 사용할 수 없습니다');
+          return;
+        }
+
+        const iosClientId = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
+        const webClientId = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
+
+        if (iosClientId && webClientId) {
+          GoogleSignin.configure({
+            iosClientId,
+            webClientId,
+          });
+          console.log('✅ Google Sign-In SDK 초기화 완료 (Development Build)');
+        }
+      } catch (error) {
+        console.warn('⚠️ Google SDK 로드 실패 (Expo Go에서는 정상):', error);
+      }
+    };
+
+    initGoogleSDK();
+  }, []);
 
   // 푸시 알림 등록 및 토큰 저장
   useEffect(() => {

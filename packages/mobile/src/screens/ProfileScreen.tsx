@@ -47,7 +47,7 @@ type Screen =
   | 'profile-edit';
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
-  const { isAuthenticated, userData, loading, updateActiveJobCode } = useAuth();
+  const { isAuthenticated, userData, loading, updateActiveJobCode, refreshUserData } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<Screen>('signin');
   const [selectedRole, setSelectedRole] = useState<'mentor' | 'foreign' | null>(null);
   const [signUpData, setSignUpData] = useState<{
@@ -489,10 +489,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       let credential;
 
       if (providerId === 'google.com') {
-        const { useGoogleAuth, getGoogleCredential } = await import('../services/googleAuthService');
-        const { promptAsync } = useGoogleAuth();
-        
-        const result = await getGoogleCredential(promptAsync);
+        const { signInWithGoogleDirect } = await import('../services/googleAuthService');
+
+        const result = await signInWithGoogleDirect();
         socialData = result.socialData;
         credential = result.credential;
 
@@ -502,20 +501,14 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           allowDifferentEmail: true,
         });
 
-        // 원래 계정으로 복원 (웹과 동일 로직)
+        // 원래 계정으로 복원
         const currentUserAfterPopup = auth.currentUser;
         if (currentUserAfterPopup?.uid !== userData.userId) {
-          console.log('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원 필요');
-          
-          const hasPasswordProvider = userData.authProviders?.some(
-            (p: any) => p.providerId === 'password'
-          );
+          console.log('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원');
 
-          // 비밀번호가 있으면 재로그인
-          if (hasPasswordProvider && (userData as any)._firebaseAuthPassword) {
-            await signIn(userData.email, (userData as any)._firebaseAuthPassword);
-          }
-          // TODO: Custom Token 방식도 추가 가능
+          // Custom Token으로 복원
+          const { signInWithCustomToken } = await import('../services/authService');
+          await signInWithCustomToken(userData.userId, userData.email);
         }
 
         // Firebase Auth 연동 시도
@@ -533,6 +526,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           }
         }
       } else if (providerId === 'naver') {
+        // OAuth 2.0 방식 (Expo Go 호환)
         const { signInWithNaver } = await import('../services/naverAuthService');
         socialData = await signInWithNaver();
       } else {
@@ -554,9 +548,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       );
 
       Alert.alert('성공', '소셜 계정이 성공적으로 연동되었습니다.');
-      
-      // 사용자 데이터 새로고침
-      await loadJobCodes();
+
+      // 사용자 데이터 새로고침 (UI 즉시 반영)
+      console.log('🔄 사용자 데이터 새로고침 시작');
+      await refreshUserData();
+      console.log('✅ 사용자 데이터 새로고침 완료');
     } catch (error: any) {
       console.error('소셜 계정 연동 오류:', error);
       
@@ -631,9 +627,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               );
 
               Alert.alert('성공', `${providerName} 계정 연동이 해제되었습니다.`);
-              
-              // 사용자 데이터 새로고침
-              await loadJobCodes();
+
+              // 사용자 데이터 새로고침 (UI 즉시 반영)
+              console.log('🔄 사용자 데이터 새로고침 시작');
+              await refreshUserData();
+              console.log('✅ 사용자 데이터 새로고침 완료');
             } catch (error: any) {
               console.error('연동 해제 오류:', error);
               Alert.alert('오류', error.message || '연동 해제 중 오류가 발생했습니다.');
@@ -1085,19 +1083,6 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             <View style={styles.settingsButtonContent}>
               <Ionicons name="settings-outline" size={20} color="#3b82f6" />
               <Text style={styles.settingsButtonText}>알림 설정</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-          </TouchableOpacity>
-
-          {/* 알림 테스트 버튼 */}
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={() => navigation.navigate('NotificationTest' as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.settingsButtonContent}>
-              <Ionicons name="notifications-outline" size={20} color="#10b981" />
-              <Text style={styles.testButtonText}>푸시 알림 테스트</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
           </TouchableOpacity>
@@ -1665,24 +1650,6 @@ const styles = StyleSheet.create({
   },
   settingsButtonText: {
     color: '#3b82f6',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  testButton: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#d1fae5',
-    backgroundColor: '#f0fdf4',
-  },
-  testButtonText: {
-    color: '#10b981',
     fontSize: 15,
     fontWeight: '600',
   },

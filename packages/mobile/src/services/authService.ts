@@ -50,18 +50,77 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
 export const getUserByPhone = async (phone: string): Promise<User | null> => {
   try {
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('phone', '==', phone));
-    const querySnapshot = await getDocs(q);
+    // phone과 phoneNumber 둘 다 체크 (데이터 일관성)
+    const q1 = query(usersRef, where('phoneNumber', '==', phone));
+    const querySnapshot1 = await getDocs(q1);
 
-    if (querySnapshot.empty) {
-      return null;
+    if (!querySnapshot1.empty) {
+      const doc = querySnapshot1.docs[0];
+      return { ...doc.data(), userId: doc.id } as User;
     }
 
-    const doc = querySnapshot.docs[0];
-    return { ...doc.data(), userId: doc.id } as User;
+    // phoneNumber로 없으면 phone 필드로도 시도 (하위 호환성)
+    const q2 = query(usersRef, where('phone', '==', phone));
+    const querySnapshot2 = await getDocs(q2);
+
+    if (!querySnapshot2.empty) {
+      const doc = querySnapshot2.docs[0];
+      return { ...doc.data(), userId: doc.id } as User;
+    }
+
+    return null;
   } catch (error) {
     console.error('전화번호로 사용자 조회 실패:', error);
     throw error;
+  }
+};
+
+/**
+ * authProviders에서 소셜 제공자로 사용자 조회
+ * Multiple Email Policy 지원
+ */
+export const getUserBySocialProvider = async (
+  providerId: string,
+  providerUid: string
+): Promise<User | null> => {
+  try {
+    console.log('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
+
+    // Firestore에서 authProviders 배열을 직접 검색할 수 없으므로
+    // 모든 active 사용자를 가져와서 클라이언트에서 필터링
+    const q = query(
+      collection(db, 'users'),
+      where('status', '==', 'active')
+    );
+
+    const querySnapshot = await getDocs(q);
+
+    for (const doc of querySnapshot.docs) {
+      const userData = doc.data() as User;
+      const authProviders = userData.authProviders || [];
+
+      // providerId 정규화 비교 (google.com = google, naver.com = naver)
+      const normalizedSearchId = providerId.replace('.com', '');
+      const matchedProvider = authProviders.find((p: any) => {
+        const normalizedStoredId = p.providerId.replace('.com', '');
+        return normalizedStoredId === normalizedSearchId && p.uid === providerUid;
+      });
+
+      if (matchedProvider) {
+        console.log('✅ 소셜 제공자로 사용자 발견:', {
+          userId: userData.userId,
+          email: userData.email,
+          providerId: matchedProvider.providerId,
+        });
+        return { ...userData, userId: doc.id } as User;
+      }
+    }
+
+    console.log('❌ 소셜 제공자로 사용자를 찾을 수 없음');
+    return null;
+  } catch (error) {
+    console.error('소셜 제공자로 사용자 조회 실패:', error);
+    return null;
   }
 };
 
@@ -198,6 +257,45 @@ export const signUp = async (email: string, password: string) => {
     return userCredential;
   } catch (error) {
     console.error('회원가입 실패:', error);
+    throw error;
+  }
+};
+
+/**
+ * Custom Token으로 Firebase Auth 로그인
+ * Cloud Function을 통해 Custom Token 생성 후 로그인
+ */
+export const signInWithCustomToken = async (userId: string, email: string) => {
+  try {
+    console.log('🔑 Custom Token 생성 요청:', { userId, email });
+
+    // Firebase Functions를 통해 Custom Token 생성
+    const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions');
+    const functions = getFunctions(undefined, 'asia-northeast3');
+
+    // 개발 환경에서는 emulator 사용 (필요 시)
+    // if (__DEV__ && USE_EMULATOR) {
+    //   connectFunctionsEmulator(functions, 'localhost', 5001);
+    // }
+
+    const createCustomToken = httpsCallable(functions, 'createCustomToken');
+    const result = await createCustomToken({ userId, email });
+    
+    const { customToken } = result.data as { customToken: string };
+    console.log('✅ Custom Token 획득');
+
+    // Custom Token으로 Firebase Auth 로그인
+    const { signInWithCustomToken: firebaseSignInWithCustomToken } = await import('firebase/auth');
+    const userCredential = await firebaseSignInWithCustomToken(auth, customToken);
+
+    console.log('✅ Custom Token 로그인 성공:', {
+      uid: userCredential.user.uid,
+      email: userCredential.user.email,
+    });
+
+    return userCredential;
+  } catch (error) {
+    console.error('❌ Custom Token 로그인 실패:', error);
     throw error;
   }
 };

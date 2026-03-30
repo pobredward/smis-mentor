@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   TouchableOpacity,
   Text,
@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { SocialUserData } from '@smis-mentor/shared';
-import { useGoogleAuth, handleGoogleAuthResponse } from '../services/googleAuthService';
+import { signInWithGoogleDirect } from '../services/googleAuthService';
 
 interface GoogleSignInButtonProps {
   onSuccess: (socialData: SocialUserData) => void;
@@ -16,43 +16,29 @@ interface GoogleSignInButtonProps {
   disabled?: boolean;
 }
 
+/**
+ * Google 로그인 버튼
+ * - Development Build: Native SDK 자동 사용
+ * - Expo Go: OAuth 2.0 자동 사용
+ */
 export function GoogleSignInButton({
   onSuccess,
   onError,
   disabled = false,
 }: GoogleSignInButtonProps) {
   const [loading, setLoading] = useState(false);
-  const { request, response, promptAsync } = useGoogleAuth();
-
-  // 인증 응답 처리
-  useEffect(() => {
-    if (response) {
-      handleAuthResponse();
-    }
-  }, [response]);
-
-  const handleAuthResponse = async () => {
-    if (!response) return;
-
-    setLoading(true);
-    try {
-      const socialData = await handleGoogleAuthResponse(response);
-      onSuccess(socialData);
-    } catch (error) {
-      onError(error as Error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePress = async () => {
-    if (disabled || loading || !request) return;
+    if (disabled || loading) return;
 
     setLoading(true);
     try {
-      await promptAsync();
-    } catch (error) {
-      onError(error as Error);
+      const result = await signInWithGoogleDirect();
+      onSuccess(result.socialData);
+    } catch (error: any) {
+      console.error('Google 로그인 실패:', error);
+      onError(error);
+    } finally {
       setLoading(false);
     }
   };
@@ -61,10 +47,10 @@ export function GoogleSignInButton({
     <TouchableOpacity
       style={[
         styles.button,
-        (disabled || loading || !request) && styles.buttonDisabled,
+        (disabled || loading) && styles.buttonDisabled,
       ]}
       onPress={handlePress}
-      disabled={disabled || loading || !request}
+      disabled={disabled || loading}
       activeOpacity={0.7}
     >
       {loading ? (

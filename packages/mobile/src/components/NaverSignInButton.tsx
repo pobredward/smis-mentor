@@ -15,6 +15,12 @@ interface NaverSignInButtonProps {
   disabled?: boolean;
 }
 
+/**
+ * 네이버 로그인 버튼
+ * 
+ * Expo Go: OAuth 2.0 방식
+ * Development Build: Native SDK 사용 가능
+ */
 export function NaverSignInButton({
   onSuccess,
   onError,
@@ -29,8 +35,8 @@ export function NaverSignInButton({
     try {
       const socialData = await signInWithNaver();
       onSuccess(socialData);
-    } catch (error) {
-      onError(error as Error);
+    } catch (error: any) {
+      onError(error);
     } finally {
       setLoading(false);
     }

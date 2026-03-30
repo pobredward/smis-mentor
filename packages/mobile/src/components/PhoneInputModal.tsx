@@ -14,9 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 interface PhoneInputModalProps {
   visible: boolean;
-  socialProviderName: string; // "Google", "Apple" 등
-  onSubmit: (phone: string) => void;
+  socialProviderName: string; // "Google", "네이버" 등
+  onSubmit: (data: { name: string; phone: string }) => void;
   onCancel: () => void;
+  defaultName?: string; // 소셜 로그인에서 가져온 이름
 }
 
 export function PhoneInputModal({
@@ -24,10 +25,26 @@ export function PhoneInputModal({
   socialProviderName,
   onSubmit,
   onCancel,
+  defaultName = '',
 }: PhoneInputModalProps) {
+  const [name, setName] = useState(defaultName);
   const [phone, setPhone] = useState('');
 
+  // 모달이 열릴 때 defaultName 설정
+  React.useEffect(() => {
+    if (visible && defaultName) {
+      setName(defaultName);
+    }
+  }, [visible, defaultName]);
+
   const handleSubmit = () => {
+    // 이름 유효성 검사
+    const trimmedName = name.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      Alert.alert('입력 오류', '이름을 2글자 이상 입력해주세요.');
+      return;
+    }
+
     // 전화번호 유효성 검사
     const cleanedPhone = phone.replace(/[^0-9]/g, '');
     
@@ -36,11 +53,13 @@ export function PhoneInputModal({
       return;
     }
 
-    onSubmit(cleanedPhone);
-    setPhone(''); // 초기화
+    onSubmit({ name: trimmedName, phone: cleanedPhone });
+    setName('');
+    setPhone('');
   };
 
   const handleCancel = () => {
+    setName('');
     setPhone('');
     onCancel();
   };
@@ -65,16 +84,32 @@ export function PhoneInputModal({
         <View style={styles.modalContent}>
           <View style={styles.header}>
             <View style={styles.iconContainer}>
-              <Ionicons name="call-outline" size={24} color="#3b82f6" />
+              <Ionicons name="person-outline" size={24} color="#3b82f6" />
             </View>
-            <Text style={styles.title}>휴대폰 번호 입력</Text>
+            <Text style={styles.title}>본인 확인</Text>
             <Text style={styles.description}>
               {socialProviderName} 계정으로 회원가입하려면{'\n'}
-              휴대폰 번호를 입력해주세요.{'\n\n'}
-              관리자가 등록한 계정이 있는지 확인합니다.
+              이름과 휴대폰 번호를 입력해주세요.{'\n\n'}
+              해당 정보로 이미 가입한 유저가 있는지 확인합니다.
             </Text>
           </View>
 
+          {/* 이름 입력 */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>이름</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="홍길동"
+              placeholderTextColor="#9ca3af"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              autoFocus
+            />
+            <Text style={styles.hint}>실명을 입력해주세요</Text>
+          </View>
+
+          {/* 전화번호 입력 */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>휴대폰 번호</Text>
             <TextInput
@@ -85,7 +120,6 @@ export function PhoneInputModal({
               value={phone}
               onChangeText={setPhone}
               maxLength={11}
-              autoFocus
             />
             <Text style={styles.hint}>'-' 없이 숫자만 입력하세요</Text>
           </View>
@@ -102,7 +136,7 @@ export function PhoneInputModal({
             <TouchableOpacity
               style={[styles.button, styles.submitButton]}
               onPress={handleSubmit}
-              disabled={!phone}
+              disabled={!name || !phone}
               activeOpacity={0.7}
             >
               <Text style={styles.submitButtonText}>확인</Text>

@@ -34,6 +34,145 @@ export function useGoogleAuth() {
 }
 
 /**
+ * Google 로그인 직접 실행 (Hook 없이)
+ * ProfileScreen 등에서 사용
+ * 
+ * - Development Build: Native SDK 사용 (권장)
+ * - Expo Go: OAuth 2.0 사용
+ */
+export async function signInWithGoogleDirect(): Promise<{
+  socialData: SocialUserData;
+  credential: any;
+}> {
+  try {
+    // Native SDK 사용 가능 여부 확인
+    let GoogleSignin: any = null;
+    try {
+      const GoogleSignInModule = await import('@react-native-google-signin/google-signin');
+      GoogleSignin = GoogleSignInModule.GoogleSignin;
+      
+      if (GoogleSignin && typeof GoogleSignin.signIn === 'function') {
+        console.log('🔵 구글 로그인 시작 (Native SDK - Development Build)');
+        return await signInWithNativeGoogleSDK(GoogleSignin);
+      }
+    } catch (error) {
+      console.log('⚠️ Google Native SDK 불가능, OAuth 2.0 사용 (Expo Go)');
+    }
+
+    // Native SDK를 사용할 수 없으면 OAuth 2.0 사용
+    console.log('🔵 구글 로그인 시작 (OAuth 2.0 - Expo Go)');
+    return await signInWithGoogleOAuth();
+  } catch (error) {
+    console.error('❌ 구글 로그인 실패 (Direct):', error);
+    throw error;
+  }
+}
+
+/**
+ * Google Native SDK 방식 (Development Build)
+ */
+async function signInWithNativeGoogleSDK(GoogleSignin: any): Promise<{
+  socialData: SocialUserData;
+  credential: any;
+}> {
+  await GoogleSignin.hasPlayServices();
+  const response = await GoogleSignin.signIn();
+
+  const idToken = response.data?.idToken || response.idToken;
+
+  if (!idToken) {
+    throw new Error('Google ID 토큰을 가져오지 못했습니다');
+  }
+
+  console.log('✅ Google ID Token 획득 (Native SDK)');
+
+  // Firebase Credential 생성
+  const credential = GoogleAuthProvider.credential(idToken);
+
+  // 사용자 정보
+  const user = response.data?.user || response.user;
+
+  const socialData: SocialUserData = {
+    email: user.email || '',
+    name: user.name || user.givenName || '',
+    photoURL: user.photo,
+    providerId: 'google.com',
+    providerUid: user.id,
+    displayName: user.name,
+  };
+
+  console.log('✅ 구글 로그인 완료 (Native SDK):', { email: socialData.email });
+
+  return { socialData, credential };
+}
+
+/**
+ * Google OAuth 2.0 방식 (Expo Go)
+ */
+async function signInWithGoogleOAuth(): Promise<{
+  socialData: SocialUserData;
+  credential: any;
+}> {
+  console.log('🔵 구글 로그인 시작 (OAuth 2.0 - Expo Go)');
+
+  // Redirect URI
+  const redirectUri = makeRedirectUri();
+  
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
+    client_id: GOOGLE_WEB_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'id_token token',
+    scope: 'openid profile email',
+    nonce: Math.random().toString(36).substring(7),
+  })}`;
+
+  console.log('📍 Redirect URI:', redirectUri);
+
+  // 브라우저 열기
+  const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+  if (result.type === 'cancel') {
+    throw new Error('로그인이 취소되었습니다');
+  }
+
+  if (result.type !== 'success') {
+    throw new Error('Google 로그인에 실패했습니다');
+  }
+
+  // URL에서 id_token 추출
+  const url = result.url;
+  const params = new URLSearchParams(url.split('#')[1] || '');
+  const idToken = params.get('id_token');
+
+  if (!idToken) {
+    throw new Error('Google ID 토큰을 가져올 수 없습니다');
+  }
+
+  console.log('✅ Google ID Token 획득 (OAuth 2.0)');
+
+  // Firebase Credential 생성
+  const credential = GoogleAuthProvider.credential(idToken);
+
+  // 사용자 정보 추출 (JWT 디코딩)
+  const payload = JSON.parse(
+    Buffer.from(idToken.split('.')[1], 'base64').toString()
+  );
+
+  const socialData: SocialUserData = {
+    email: payload.email || '',
+    name: payload.name || '',
+    photoURL: payload.picture,
+    providerId: 'google.com',
+    providerUid: payload.sub,
+    displayName: payload.name,
+  };
+
+  console.log('✅ 구글 로그인 완료 (OAuth 2.0):', { email: socialData.email });
+
+  return { socialData, credential };
+}
+
+/**
  * Google 인증 응답을 Firebase 로그인으로 변환
  */
 export async function handleGoogleAuthResponse(

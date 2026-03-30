@@ -45,6 +45,8 @@ export function SignInScreen({
   onSignInSuccess,
   onSocialSignUp,
 }: SignInScreenProps) {
+  const { refreshUserData } = useAuth(); // AuthContext에서 refreshUserData 가져오기
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -219,15 +221,34 @@ export function SignInScreen({
    */
   const handleGoogleSignInSuccess = async (socialUserData: SocialUserData) => {
     try {
-      const { getUserByEmail } = await import('../services/authService');
-      
-      const result = await handleSocialLogin(socialUserData, getUserByEmail);
+      setIsLoading(true); // 로딩 시작
+      const { getUserByEmail, getUserBySocialProvider } = await import('../services/authService');
+
+      const result = await handleSocialLogin(
+        socialUserData, 
+        getUserByEmail,
+        getUserBySocialProvider
+      );
       
       switch (result.action) {
         case 'LOGIN':
-          // 기존 active 계정 → 즉시 로그인
-          Alert.alert('로그인 성공', '환영합니다!');
-          onSignInSuccess();
+          // 기존 active 계정 → Firebase Auth로 로그인
+          console.log('✅ Google 로그인 성공 - Firebase Auth 로그인 시작:', {
+            email: socialUserData.email,
+            userId: result.user?.userId,
+          });
+
+          try {
+            const { signInWithCustomToken } = await import('../services/authService');
+            await signInWithCustomToken(result.user.userId, result.user.email);
+            
+            console.log('✅ Firebase Auth 로그인 완료');
+            Alert.alert('로그인 성공', '환영합니다!');
+            onSignInSuccess();
+          } catch (authError: any) {
+            console.error('❌ Firebase Auth 로그인 실패:', authError);
+            Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
+          }
           break;
           
         case 'NEED_PHONE':
@@ -248,6 +269,8 @@ export function SignInScreen({
     } catch (error: any) {
       console.error('소셜 로그인 처리 실패:', error);
       Alert.alert('오류', handleSocialAuthError(error));
+    } finally {
+      setIsLoading(false); // 로딩 종료
     }
   };
 
@@ -264,15 +287,34 @@ export function SignInScreen({
    */
   const handleNaverSignInSuccess = async (socialUserData: SocialUserData) => {
     try {
-      const { getUserByEmail } = await import('../services/authService');
-      
-      const result = await handleSocialLogin(socialUserData, getUserByEmail);
+      setIsLoading(true); // 로딩 시작
+      const { getUserByEmail, getUserBySocialProvider } = await import('../services/authService');
+
+      const result = await handleSocialLogin(
+        socialUserData, 
+        getUserByEmail,
+        getUserBySocialProvider
+      );
       
       switch (result.action) {
         case 'LOGIN':
-          // 기존 active 계정 → 즉시 로그인
-          Alert.alert('로그인 성공', '환영합니다!');
-          onSignInSuccess();
+          // 기존 active 계정 → Firebase Auth로 로그인
+          console.log('✅ 네이버 로그인 성공 - Firebase Auth 로그인 시작:', {
+            email: socialUserData.email,
+            userId: result.user?.userId,
+          });
+
+          try {
+            const { signInWithCustomToken } = await import('../services/authService');
+            await signInWithCustomToken(result.user.userId, result.user.email);
+            
+            console.log('✅ Firebase Auth 로그인 완료');
+            Alert.alert('로그인 성공', '환영합니다!');
+            onSignInSuccess();
+          } catch (authError: any) {
+            console.error('❌ Firebase Auth 로그인 실패:', authError);
+            Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
+          }
           break;
           
         case 'NEED_PHONE':
@@ -293,6 +335,8 @@ export function SignInScreen({
     } catch (error: any) {
       console.error('소셜 로그인 처리 실패:', error);
       Alert.alert('오류', handleSocialAuthError(error));
+    } finally {
+      setIsLoading(false); // 로딩 종료
     }
   };
 
@@ -305,9 +349,9 @@ export function SignInScreen({
   };
 
   /**
-   * 전화번호 입력 후 처리
+   * 이름과 전화번호 입력 후 처리
    */
-  const handlePhoneSubmit = async (phone: string) => {
+  const handlePhoneSubmit = async (data: { name: string; phone: string }) => {
     if (!socialData) return;
     
     setIsLoading(true);
@@ -315,7 +359,7 @@ export function SignInScreen({
       const { getUserJobCodesInfo } = await import('../services/authService');
       
       const result = await checkTempAccountByPhone(
-        phone,
+        data.phone,
         socialData,
         getUserByPhone,
         getUserJobCodesInfo
@@ -323,6 +367,17 @@ export function SignInScreen({
       
       if (result.found && result.user) {
         const user = result.user;
+        
+        if (user.status === 'active') {
+          // active 계정 발견 - 연동 필요
+          if (result.needsLink) {
+            // 이메일이 다른 active 계정 - 비밀번호 입력 후 연동
+            setShowPhoneModal(false);
+            setExistingUserEmail(user.email);
+            setShowPasswordModal(true);
+            return;
+          }
+        }
         
         if (user.status === 'temp') {
           // temp 계정 발견
@@ -345,7 +400,7 @@ export function SignInScreen({
                     setShowPhoneModal(false);
                     // 소셜 회원가입으로 이동
                     if (onSocialSignUp) {
-                      onSocialSignUp(socialData);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone });
                     } else {
                       onSignUpPress();
                     }
@@ -357,7 +412,7 @@ export function SignInScreen({
                     setShowPhoneModal(false);
                     // temp 계정 연동 후 회원가입 플로우로 이동
                     if (onSocialSignUp) {
-                      onSocialSignUp(socialData, user.userId || user.id);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, user.userId || user.id);
                     } else {
                       Alert.alert(
                         '안내',
@@ -374,7 +429,7 @@ export function SignInScreen({
             Alert.alert(
               '이름 불일치',
               `전화번호로 "${user.name}"님의 계정이 있습니다.\n` +
-              `소셜 계정 이름은 "${socialData.name}"입니다.\n\n` +
+              `입력한 이름은 "${data.name}"입니다.\n\n` +
               `관리자가 정보를 잘못 입력했을 수 있습니다.`,
               [
                 {
@@ -393,7 +448,7 @@ export function SignInScreen({
                     setShowPhoneModal(false);
                     // 소셜 회원가입으로 이동
                     if (onSocialSignUp) {
-                      onSocialSignUp(socialData);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone });
                     } else {
                       onSignUpPress();
                     }
@@ -408,7 +463,7 @@ export function SignInScreen({
         setShowPhoneModal(false);
         // 소셜 회원가입으로 이동
         if (onSocialSignUp) {
-          onSocialSignUp(socialData);
+          onSocialSignUp({ ...socialData, name: data.name, phone: data.phone });
         } else {
           onSignUpPress();
         }
@@ -432,7 +487,7 @@ export function SignInScreen({
                 setShowPhoneModal(false);
                 // 기존 계정 정보 가져오기
                 try {
-                  const existingUser = await getUserByPhone(phone);
+                  const existingUser = await getUserByPhone(data.phone);
                   if (existingUser && existingUser.email) {
                     setExistingUserEmail(existingUser.email);
                     setShowPasswordModal(true);
@@ -474,6 +529,9 @@ export function SignInScreen({
         getUserById,
         updateUser
       );
+      
+      // ✅ 사용자 데이터 새로고침 (마이페이지 즉시 반영)
+      await refreshUserData();
       
       setShowPasswordModal(false);
       Alert.alert(
@@ -678,10 +736,11 @@ export function SignInScreen({
         </View>
       </ScrollView>
       
-      {/* 전화번호 입력 모달 */}
+      {/* 이름 & 전화번호 입력 모달 */}
       <PhoneInputModal
         visible={showPhoneModal}
         socialProviderName={socialData ? getSocialProviderName(socialData.providerId) : 'Google'}
+        defaultName={socialData?.name || ''}
         onSubmit={handlePhoneSubmit}
         onCancel={() => setShowPhoneModal(false)}
       />
@@ -694,6 +753,16 @@ export function SignInScreen({
         onCancel={() => setShowPasswordModal(false)}
         onForgotPassword={handleForgotPasswordFromModal}
       />
+
+      {/* 로딩 오버레이 */}
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text style={styles.loadingText}>로그인 처리 중...</Text>
+          </View>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -889,6 +958,37 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     fontSize: 14,
     color: '#94a3b8',
+    fontWeight: '500',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#1e293b',
     fontWeight: '500',
   },
 });

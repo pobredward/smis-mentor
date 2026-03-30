@@ -1,0 +1,129 @@
+import { ConfigContext, ExpoConfig } from '@expo/config';
+
+export default ({ config }: ConfigContext): ExpoConfig => ({
+  ...config,
+  name: 'SMIS Mentor',
+  slug: 'smis-mentor',
+  version: '1.1.0',
+  orientation: 'portrait',
+  icon: './assets/icon.png',
+  userInterfaceStyle: 'light',
+  newArchEnabled: true,
+  scheme: 'smismentor',
+  splash: {
+    image: './assets/splash-icon.png',
+    resizeMode: 'contain',
+    backgroundColor: '#ffffff',
+  },
+  ios: {
+    supportsTablet: true,
+    bundleIdentifier: 'com.smis.smismentor',
+    googleServicesFile: './GoogleService-Info.plist',
+    buildNumber: '1',
+    associatedDomains: [
+      'applinks:smis-mentor.com',
+      'applinks:www.smis-mentor.com',
+    ],
+    config: {
+      googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_IOS',
+    },
+    infoPlist: {
+      NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
+      NSCameraUsageDescription: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
+      NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
+      NSLocationWhenInUseUsageDescription: '사용자 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.',
+      ITSAppUsesNonExemptEncryption: false,
+    },
+  },
+  android: {
+    adaptiveIcon: {
+      foregroundImage: './assets/adaptive-icon.png',
+      backgroundColor: '#ffffff',
+    },
+    package: 'com.smis.smismentor',
+    versionCode: 1,
+    edgeToEdgeEnabled: true,
+    predictiveBackGestureEnabled: false,
+    config: {
+      googleMaps: {
+        apiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_ANDROID',
+      },
+    },
+    intentFilters: [
+      {
+        action: 'VIEW',
+        autoVerify: true,
+        data: [
+          {
+            scheme: 'https',
+            host: 'smis-mentor.com',
+            pathPrefix: '/camp/tasks',
+          },
+          {
+            scheme: 'https',
+            host: 'www.smis-mentor.com',
+            pathPrefix: '/camp/tasks',
+          },
+        ],
+        category: ['BROWSABLE', 'DEFAULT'],
+      },
+    ],
+    permissions: [
+      'CAMERA',
+      'READ_EXTERNAL_STORAGE',
+      'WRITE_EXTERNAL_STORAGE',
+      'READ_MEDIA_IMAGES',
+      'ACCESS_FINE_LOCATION',
+      'ACCESS_COARSE_LOCATION',
+      'POST_NOTIFICATIONS',
+    ],
+    googleServicesFile: './google-services.json',
+  },
+  web: {
+    favicon: './assets/favicon.png',
+  },
+  plugins: [
+    [
+      'expo-image-picker',
+      {
+        photosPermission: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
+        cameraPermission: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
+      },
+    ],
+    [
+      'expo-notifications',
+      {
+        icon: './assets/notification-icon.png',
+        color: '#3b82f6',
+        sounds: [],
+        mode: 'production',
+        androidMode: 'default',
+        androidCollapsedTitle: 'SMIS Mentor',
+      },
+    ],
+    'expo-web-browser',
+    [
+      '@react-native-seoul/naver-login',
+      {
+        urlScheme: 'com.smis.smismentor',
+      },
+    ],
+    [
+      '@react-native-google-signin/google-signin',
+      {
+        iosUrlScheme: 'com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me',
+      },
+    ],
+  ],
+  extra: {
+    eas: {
+      projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
+    },
+    EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    EXPO_PUBLIC_NAVER_CLIENT_ID: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID,
+    EXPO_PUBLIC_NAVER_CLIENT_SECRET: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET,
+  },
+  owner: 'pobredward02',
+});
