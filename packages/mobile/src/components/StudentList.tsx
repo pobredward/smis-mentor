@@ -190,6 +190,17 @@ export const StudentList: React.FC<StudentListProps> = ({
     return acc;
   }, {} as Record<string, STSheetStudent[]>);
 
+  // 각 반의 담당 멘토 이름 추출 (반 명단용)
+  const classMentorMap = filterType === 'class' 
+    ? Object.keys(groupedByMentor).reduce((acc, classKey) => {
+        const studentsInClass = groupedByMentor[classKey];
+        // 첫 번째 학생의 classMentor 사용 (같은 반은 같은 멘토)
+        const mentorName = studentsInClass[0]?.classMentor || '';
+        acc[classKey] = mentorName;
+        return acc;
+      }, {} as Record<string, string>)
+    : {};
+
   // 방 명단일 때 멘토별 성별 판단 (해당 유닛의 첫 번째 학생 성별 기준)
   const getMentorGender = (mentorKey: string): 'M' | 'F' | null => {
     if (filterType !== 'room') return null;
@@ -409,6 +420,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                 key={mentor}
                 style={[
                   styles.filterChip,
+                  styles.filterChipColumn,
                   selectedMentor === mentor && styles.filterChipActive
                 ]}
                 onPress={() => setSelectedMentor(mentor)}
@@ -419,6 +431,14 @@ export const StudentList: React.FC<StudentListProps> = ({
                 ]}>
                   {mentor}
                 </Text>
+                {classMentorMap[mentor] && (
+                  <Text style={[
+                    styles.filterChipSubText,
+                    selectedMentor === mentor && styles.filterChipSubTextActive
+                  ]}>
+                    {classMentorMap[mentor]}
+                  </Text>
+                )}
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -846,15 +866,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  filterChipColumn: {
+    height: 'auto',
+    minHeight: 28,
+    paddingVertical: 6,
+  },
   filterChipActive: {
     backgroundColor: '#3b82f6',
     borderColor: '#2563eb',
-    height: 28,
   },
   filterChipText: {
     fontSize: 12,
     color: '#64748b',
     fontWeight: '500' as '500',
+  },
+  filterChipSubText: {
+    fontSize: 9,
+    color: '#94a3b8',
+    fontWeight: '400' as '400',
+    marginTop: 2,
+  },
+  filterChipSubTextActive: {
+    color: '#bfdbfe',
   },
   filterChipTextActive: {
     color: '#fff',

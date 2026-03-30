@@ -187,7 +187,7 @@ export default function ClassContent() {
     }
   };
 
-  // 반별로 그룹화
+  // 반별로 그룹화 + 담당 멘토 추출
   const groupedByClass = useMemo(() => {
     return students.reduce((acc, student) => {
       const classPrefix = student.classNumber?.substring(0, 3) || '';
@@ -200,6 +200,18 @@ export default function ClassContent() {
       return acc;
     }, {} as Record<string, STSheetStudent[]>);
   }, [students]);
+
+  // 각 반의 담당 멘토 이름 추출
+  const classMentorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    Object.keys(groupedByClass).forEach(classKey => {
+      const studentsInClass = groupedByClass[classKey];
+      // 첫 번째 학생의 classMentor 사용 (같은 반은 같은 멘토)
+      const mentorName = studentsInClass[0]?.classMentor || '';
+      map[classKey] = mentorName;
+    });
+    return map;
+  }, [groupedByClass]);
 
   const sortedClasses = useMemo(() => Object.keys(groupedByClass).sort(), [groupedByClass]);
 
@@ -350,13 +362,20 @@ export default function ClassContent() {
               <button
                 key={classKey}
                 onClick={() => setSelectedClass(classKey)}
-                className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex flex-col items-center ${
                   selectedClass === classKey
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                {classKey}
+                <span>{classKey}</span>
+                {classMentorMap[classKey] && (
+                  <span className={`text-[10px] font-normal mt-0.5 ${
+                    selectedClass === classKey ? 'text-blue-100' : 'text-gray-500'
+                  }`}>
+                    {classMentorMap[classKey]}
+                  </span>
+                )}
               </button>
             ))}
           </div>
