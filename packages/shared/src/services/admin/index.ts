@@ -149,15 +149,27 @@ export const createTempUser = async (
 };
 
 // ==================== 모든 사용자 조회 ====================
-export const adminGetAllUsers = async (db: Firestore): Promise<any[]> => {
+export const adminGetAllUsers = async (
+  db: Firestore,
+  includeDeleted: boolean = false
+): Promise<any[]> => {
   try {
     const usersRef = collection(db, 'users');
-    const querySnapshot = await getDocs(usersRef);
+    
+    // 삭제된 사용자 제외 옵션
+    let q = query(usersRef);
+    if (!includeDeleted) {
+      q = query(usersRef, where('status', '!=', 'deleted'));
+    }
+    
+    const querySnapshot = await getDocs(q);
 
     const users: any[] = [];
     querySnapshot.forEach((docSnapshot) => {
       users.push(docSnapshot.data());
     });
+
+    console.log(`✅ 사용자 조회 완료: ${users.length}명 (삭제된 사용자 ${includeDeleted ? '포함' : '제외'})`);
 
     return users;
   } catch (error) {

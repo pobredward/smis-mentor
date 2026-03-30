@@ -2,7 +2,7 @@ import { Firestore } from 'firebase/firestore';
 export declare const createTempUser: (db: Firestore, name: string, phoneNumber: string, jobExperienceIds: string[], jobExperienceGroups?: string[], jobExperienceGroupRoles?: string[], jobExperienceClassCodes?: (string | undefined)[], role?: "mentor_temp" | "foreign_temp" | "admin") => Promise<{
     success: boolean;
 }>;
-export declare const adminGetAllUsers: (db: Firestore) => Promise<any[]>;
+export declare const adminGetAllUsers: (db: Firestore, includeDeleted?: boolean) => Promise<any[]>;
 export declare const adminUpdateUser: (db: Firestore, userId: string, updates: Record<string, any>) => Promise<void>;
 export declare const adminDeleteUser: (db: Firestore, userId: string) => Promise<boolean>;
 export declare const adminReactivateUser: (db: Firestore, userId: string) => Promise<boolean>;

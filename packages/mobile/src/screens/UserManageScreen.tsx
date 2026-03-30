@@ -28,11 +28,12 @@ export function UserManageScreen({ navigation }: any) {
     { value: 'admin', label: '관리자' },
     { value: 'mentor_temp', label: '멘토(임시)' },
     { value: 'foreign_temp', label: '원어민(임시)' },
+    { value: 'deleted', label: '탈퇴' },
   ];
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [selectedRole]);
 
   useEffect(() => {
     filterUsers();
@@ -40,16 +41,26 @@ export function UserManageScreen({ navigation }: any) {
 
   const loadUsers = async () => {
     try {
-      console.log('🔍 Loading users, db:', db);
-      const allUsers = await adminGetAllUsers(db);
-      console.log('✅ Users loaded:', allUsers.length);
+      setIsLoading(true);
+      console.log('🔍 Loading users, db:', db, 'selectedRole:', selectedRole);
+      
+      // 탈퇴 토글 선택 시에만 삭제된 사용자 포함
+      const includeDeleted = selectedRole === 'deleted';
+      const allUsers = await adminGetAllUsers(db, includeDeleted);
+      
+      // 탈퇴 토글이 아닐 때는 삭제된 사용자를 완전히 제외
+      const filteredByStatus = includeDeleted 
+        ? allUsers 
+        : allUsers.filter(user => user.status !== 'deleted' && user.status !== 'inactive');
+      
+      console.log('✅ Users loaded:', filteredByStatus.length);
       // 최신순 정렬
-      allUsers.sort((a: any, b: any) => {
+      filteredByStatus.sort((a: any, b: any) => {
         const dateA = a.createdAt?.seconds || 0;
         const dateB = b.createdAt?.seconds || 0;
         return dateB - dateA;
       });
-      setUsers(allUsers);
+      setUsers(filteredByStatus);
     } catch (error) {
       console.error('사용자 목록 로딩 실패:', error);
       Alert.alert('오류', '사용자 정보를 불러오는 중 오류가 발생했습니다.');
@@ -61,8 +72,28 @@ export function UserManageScreen({ navigation }: any) {
   const filterUsers = () => {
     let filtered = [...users];
 
-    // 역할 필터링 (항상 적용)
-    filtered = filtered.filter((user) => user.role === selectedRole);
+    console.log('🔍 필터링 시작:', {
+      totalUsers: users.length,
+      selectedRole,
+      users: users.map(u => ({ name: u.name, role: u.role, status: u.status }))
+    });
+
+    // 역할 필터링
+    if (selectedRole === 'deleted') {
+      // 탈퇴 버튼 선택 시: 삭제된 사용자만 표시 (status가 'deleted'이거나 'inactive'인 경우)
+      filtered = filtered.filter((user) => {
+        return user.status === 'deleted' || user.status === 'inactive';
+      });
+      console.log('✅ 탈퇴 사용자 필터링 결과:', filtered.length, '명');
+    } else {
+      // 일반 역할 선택 시: 해당 역할이면서 삭제되지 않은 사용자만 표시
+      filtered = filtered.filter((user) => {
+        return user.role === selectedRole && 
+               user.status !== 'deleted' && 
+               user.status !== 'inactive';
+      });
+      console.log(`✅ ${selectedRole} 역할 필터링 결과:`, filtered.length, '명');
+    }
 
     // 검색어 필터링
     if (searchText.trim()) {
@@ -118,6 +149,8 @@ export function UserManageScreen({ navigation }: any) {
         return '#10b981';
       case 'inactive':
         return '#ef4444';
+      case 'deleted':
+        return '#9ca3af';
       default:
         return '#eab308';
     }
@@ -129,6 +162,8 @@ export function UserManageScreen({ navigation }: any) {
         return '활성';
       case 'inactive':
         return '비활성';
+      case 'deleted':
+        return '삭제됨';
       default:
         return '임시';
     }
