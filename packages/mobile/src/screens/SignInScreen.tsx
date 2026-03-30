@@ -530,15 +530,29 @@ export function SignInScreen({
         updateUser
       );
       
-      // ✅ 사용자 데이터 새로고침 (마이페이지 즉시 반영)
-      await refreshUserData();
-      
       setShowPasswordModal(false);
+      
+      // Alert 후 화면 전환
       Alert.alert(
         '연결 완료',
         `${getSocialProviderName(socialData.providerId)} 계정이 연결되었습니다.\n` +
         '다음부터는 소셜 로그인도 사용할 수 있습니다.',
-        [{ text: '확인', onPress: onSignInSuccess }]
+        [{ 
+          text: '확인', 
+          onPress: async () => {
+            // ✅ 화면 전환 직전에 사용자 데이터 새로고침
+            console.log('🔄 SignInScreen: 화면 전환 전 최종 새로고침');
+            try {
+              // AuthContext의 currentUser가 업데이트될 시간을 주고 refreshUserData 호출
+              await new Promise(resolve => setTimeout(resolve, 300));
+              await refreshUserData();
+              console.log('✅ SignInScreen: 최종 새로고침 완료');
+            } catch (error) {
+              console.error('❌ 최종 새로고침 실패:', error);
+            }
+            onSignInSuccess();
+          }
+        }]
       );
     } catch (error: any) {
       console.error('계정 연결 실패:', error);

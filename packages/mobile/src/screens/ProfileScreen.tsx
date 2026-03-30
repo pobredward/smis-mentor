@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabScreenProps } from '../navigation/types';
@@ -75,6 +76,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [loadingJobCodes, setLoadingJobCodes] = useState(false);
   const [changingJobCode, setChangingJobCode] = useState(false);
   const [jobCodesExpanded, setJobCodesExpanded] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (userData) {
@@ -451,6 +453,30 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     }
   };
 
+  /**
+   * Pull-to-refresh 핸들러
+   */
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      console.log('🔄 ProfileScreen: Pull-to-refresh 시작');
+      
+      // 사용자 데이터 새로고침
+      await refreshUserData();
+      
+      // 직무 코드 새로고침 (펼쳐져 있을 때만)
+      if (jobCodesExpanded && userData?.jobExperiences) {
+        await loadJobCodes();
+      }
+      
+      console.log('✅ ProfileScreen: Pull-to-refresh 완료');
+    } catch (error) {
+      console.error('❌ ProfileScreen: Pull-to-refresh 실패:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleLogout = async () => {
     Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
       {
@@ -661,7 +687,17 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
 
     return (
-      <ScrollView style={styles.container}>
+      <ScrollView 
+        style={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#3b82f6"
+            colors={['#3b82f6']}
+          />
+        }
+      >
         <View style={styles.content}>
           {/* 헤더 */}
           <View style={styles.header}>

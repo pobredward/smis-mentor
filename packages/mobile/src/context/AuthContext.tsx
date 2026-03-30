@@ -177,15 +177,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (currentUser?.email) {
       try {
         console.log('🔄 AuthContext: userData 새로고침 시작 -', currentUser.email);
+        
+        // Firestore에서 직접 최신 데이터 가져오기 (캐시 무시)
         const userRecord = await getUserByEmail(currentUser.email);
+        
         if (userRecord) {
           console.log('✅ AuthContext: userData 새로고침 성공');
+          console.log('  - userId:', userRecord.userId);
+          console.log('  - authProviders:', userRecord.authProviders?.length || 0);
           console.log('  - activeJobExperienceId:', userRecord.activeJobExperienceId);
           setUserData(userRecord);
+        } else {
+          console.warn('⚠️ AuthContext: 사용자 데이터를 찾을 수 없음');
         }
       } catch (error) {
         console.error('❌ AuthContext: Failed to refresh user data:', error);
       }
+    } else {
+      console.warn('⚠️ AuthContext: currentUser 또는 email이 없음');
     }
   }, [currentUser?.email]);
 
