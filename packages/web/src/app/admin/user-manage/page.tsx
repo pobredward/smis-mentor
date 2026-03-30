@@ -152,12 +152,17 @@ export default function UserManage() {
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 탈퇴 버튼 선택 시에만 삭제된 사용자 포함
+      // 탈퇴 토글 선택 시에만 삭제된 사용자 포함
       const includeDeleted = selectedRole === 'deleted';
       const fetchedUsers = await getAllUsers(includeDeleted);
       
+      // 탈퇴 토글이 아닐 때는 삭제된 사용자를 완전히 제외
+      const filteredByStatus = includeDeleted 
+        ? fetchedUsers 
+        : fetchedUsers.filter(user => (user.status as any) !== 'deleted');
+      
       // 가입일시를 기준으로 내림차순 정렬 (최신순)
-      const sortedUsers = [...fetchedUsers].sort((a, b) => {
+      const sortedUsers = [...filteredByStatus].sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(0);
         const dateB = b.createdAt?.toDate?.() || new Date(0);
         return dateB.getTime() - dateA.getTime();
@@ -252,15 +257,27 @@ export default function UserManage() {
   useEffect(() => {
     let filtered = [...users];
 
+    console.log('🔍 필터링 시작:', {
+      totalUsers: users.length,
+      selectedRole,
+      users: users.map(u => ({ name: u.name, role: u.role, status: u.status }))
+    });
+
     // 역할 필터링
     if (selectedRole === 'deleted') {
-      // 탈퇴 버튼 선택 시: 삭제된 사용자만 표시
-      filtered = filtered.filter(user => (user.status as any) === 'deleted');
+      // 탈퇴 버튼 선택 시: 삭제된 사용자만 표시 (status가 'deleted'이거나 'inactive'인 경우)
+      filtered = filtered.filter(user => {
+        const status = user.status as any;
+        return status === 'deleted' || status === 'inactive';
+      });
+      console.log('✅ 탈퇴 사용자 필터링 결과:', filtered.length, '명');
     } else {
       // 일반 역할 선택 시: 해당 역할이면서 삭제되지 않은 사용자만 표시
-      filtered = filtered.filter(user => 
-        user.role === selectedRole && (user.status as any) !== 'deleted'
-      );
+      filtered = filtered.filter(user => {
+        const status = user.status as any;
+        return user.role === selectedRole && status !== 'deleted' && status !== 'inactive';
+      });
+      console.log(`✅ ${selectedRole} 역할 필터링 결과:`, filtered.length, '명');
     }
 
     // 검색어 필터링
