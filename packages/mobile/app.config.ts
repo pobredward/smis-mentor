@@ -102,6 +102,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     'expo-web-browser',
+    'expo-apple-authentication',
     [
       '@react-native-seoul/naver-login',
       {

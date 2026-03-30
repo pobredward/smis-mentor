@@ -13,6 +13,7 @@ import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import GoogleSignInButton from '@/components/common/GoogleSignInButton';
 import NaverSignInButton from '@/components/common/NaverSignInButton';
+import AppleSignInButton from '@/components/common/AppleSignInButton';
 import PhoneInputModal from '@/components/common/PhoneInputModal';
 import ForeignPhoneInputModal from '@/components/common/ForeignPhoneInputModal';
 import RoleSelectionModal from '@/components/common/RoleSelectionModal';
@@ -28,6 +29,7 @@ import {
 } from '@smis-mentor/shared';
 import { handleGoogleAuthError } from '@/lib/googleAuthService';
 import { handleNaverAuthError } from '@/lib/naverAuthService';
+import { handleAppleAuthError } from '@/lib/appleAuthService';
 import { auth } from '@/lib/firebase';
 
 const loginSchema = z.object({
@@ -166,12 +168,13 @@ export function SignInClient() {
           userId: result.user?.userId,
         });
         
-        // ✅ 구글 로그인: Firebase Auth 세션 복원 필요
-        if (data.providerId === 'google.com') {
+        // ✅ 구글/애플 로그인: Firebase Auth 세션 복원 필요
+        if (data.providerId === 'google.com' || data.providerId === 'apple.com') {
           const currentUser = auth.currentUser;
           const targetUserId = result.user?.userId;
           
-          console.log('🔑 구글 로그인 - Firebase Auth 세션 확인:', {
+          console.log('🔑 구글/애플 로그인 - Firebase Auth 세션 확인:', {
+            provider: data.providerId,
             currentUserUid: currentUser?.uid,
             targetUserId,
             needRestore: currentUser?.uid !== targetUserId,
@@ -382,6 +385,8 @@ export function SignInClient() {
         errorMessage = handleNaverAuthError(error);
       } else if (data.providerId === 'google.com') {
         errorMessage = handleGoogleAuthError(error);
+      } else if (data.providerId === 'apple.com') {
+        errorMessage = handleAppleAuthError(error);
       } else {
         errorMessage = handleSocialAuthError(error);
       }
@@ -413,6 +418,12 @@ export function SignInClient() {
   // 네이버 로그인 에러 핸들러
   const handleNaverSignInError = (error: any) => {
     const errorMessage = handleNaverAuthError(error);
+    toast.error(errorMessage);
+  };
+  
+  // Apple 로그인 에러 핸들러
+  const handleAppleSignInError = (error: any) => {
+    const errorMessage = handleAppleAuthError(error);
     toast.error(errorMessage);
   };
   
@@ -773,6 +784,8 @@ export function SignInClient() {
         ? 'Naver' 
         : socialData.providerId === 'kakao'
         ? 'Kakao'
+        : socialData.providerId === 'apple.com'
+        ? 'Apple'
         : '소셜';
       toast.success(`${providerName} 계정이 연동되었습니다!`);
       setShowPasswordModal(false);
@@ -889,6 +902,12 @@ export function SignInClient() {
                 onError={handleNaverSignInError}
                 disabled={isLoading}
               />
+              
+              <AppleSignInButton
+                onSuccess={handleGoogleSignInSuccess}
+                onError={handleAppleSignInError}
+                disabled={isLoading}
+              />
             </div>
             
             {/* 비밀번호 찾기 / 회원가입 버튼 */}
@@ -985,6 +1004,8 @@ export function SignInClient() {
             ? 'Naver' 
             : socialData?.providerId === 'kakao'
             ? 'Kakao'
+            : socialData?.providerId === 'apple.com'
+            ? 'Apple'
             : '소셜'
         } 계정과 연동하려면 기존 비밀번호를 입력해주세요.`}
         isLoading={isLoading}

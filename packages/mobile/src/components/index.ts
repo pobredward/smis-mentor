@@ -7,5 +7,6 @@ export { StudentList } from './StudentList';
 export { TemplateSelector } from './TemplateSelector';
 export { GoogleSignInButton } from './GoogleSignInButton';
 export { NaverSignInButton } from './NaverSignInButton';
+export { AppleSignInButton } from './AppleSignInButton';
 export { PhoneInputModal } from './PhoneInputModal';
 export { PasswordInputModal } from './PasswordInputModal';
