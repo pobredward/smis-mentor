@@ -1,4 +1,5 @@
 // Geocoding 유틸리티 함수
+import { logger } from '@smis-mentor/shared';
 
 import { Timestamp } from 'firebase/firestore';
 
@@ -10,7 +11,7 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; ln
     const apiKey = process.env.NEXT_PUBLIC_KAKAO_REST_API_KEY;
     
     if (!apiKey || apiKey === 'YOUR_KAKAO_REST_API_KEY') {
-      console.warn('Kakao API 키가 설정되지 않았습니다.');
+      logger.warn('Kakao API 키가 설정되지 않았습니다.');
       return null;
     }
 
@@ -24,7 +25,7 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; ln
     );
 
     if (!response.ok) {
-      console.error('Kakao API 오류:', response.status);
+      logger.error('Kakao API 오류:', response.status);
       return null;
     }
 
@@ -40,7 +41,7 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; ln
 
     return null;
   } catch (error) {
-    console.error('Geocoding 오류:', error);
+    logger.error('Geocoding 오류:', error);
     return null;
   }
 }
@@ -57,13 +58,13 @@ export async function updateGeocodeIfAddressChanged(
     return {};
   }
 
-  console.log('📍 주소 변경 감지, 좌표 변환 시작:', newAddress);
+  logger.info('📍 주소 변경 감지, 좌표 변환 시작:', newAddress);
 
   try {
     const coords = await geocodeAddress(newAddress);
     
     if (coords) {
-      console.log('✅ 좌표 변환 성공:', coords);
+      logger.info('✅ 좌표 변환 성공:', coords);
       return {
         geocode: {
           lat: coords.lat,
@@ -72,11 +73,11 @@ export async function updateGeocodeIfAddressChanged(
         },
       };
     } else {
-      console.warn('⚠️ 좌표 변환 실패, 기존 geocode 유지');
+      logger.warn('⚠️ 좌표 변환 실패, 기존 geocode 유지');
       return {};
     }
   } catch (error) {
-    console.error('❌ 좌표 변환 중 오류:', error);
+    logger.error('❌ 좌표 변환 중 오류:', error);
     return {};
   }
 }

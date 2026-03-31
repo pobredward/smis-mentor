@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -75,7 +76,7 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
       editor.chain().focus().setImage({ src: imageUrl }).run();
       toast.success('이미지가 업로드되었습니다.');
     } catch (err) {
-      console.error('이미지 업로드 오류:', err);
+      logger.error('이미지 업로드 오류:', err);
       toast.error('이미지 업로드에 실패했습니다.');
     }
   };

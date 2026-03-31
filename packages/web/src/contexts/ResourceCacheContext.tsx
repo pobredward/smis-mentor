@@ -16,6 +16,7 @@ import {
 } from '@/lib/lessonMaterialService';
 import { getUserJobCodesInfo } from '@/lib/firebaseService';
 import { JobCodeWithGroup } from '@/types';
+import { logger } from '@smis-mentor/shared';
 
 type SectionDataWithLinks = SectionData & {
   links?: { label: string; url: string }[];
@@ -101,7 +102,7 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
         setLoadingStatesMap(initialLoadingStates);
       }
     } catch (error) {
-      console.error('리소스 로드 실패:', error);
+      logger.error('리소스 로드 실패:', error);
     } finally {
       setLoading(false);
     }
@@ -118,7 +119,7 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
       setUserJobCodes(jobCodesInfo);
       return jobCodesInfo;
     } catch (error) {
-      console.error('활성화된 직무 코드 정보 가져오기 오류:', error);
+      logger.error('활성화된 직무 코드 정보 가져오기 오류:', error);
       return [];
     }
   };
@@ -208,7 +209,7 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
           
           // 중복 templateId 체크 (첫 번째만 표시)
           if (seenTemplateIdsInFinal.has(mat.templateId)) {
-            console.log('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
+            logger.info('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
             return false;
           }
           seenTemplateIdsInFinal.add(mat.templateId);
@@ -276,7 +277,7 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
       }
       setSections(allSections);
     } catch (error) {
-      console.error('교육 자료 로드 오류:', error);
+      logger.error('교육 자료 로드 오류:', error);
     } finally {
       setLessonLoading(false);
     }

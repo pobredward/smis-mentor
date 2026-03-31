@@ -1,4 +1,5 @@
 import { getFirestore, collection, doc, getDoc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { logger } from '@smis-mentor/shared';
 import { db } from './firebase';
 
 export interface STSheetStudent {
@@ -122,7 +123,7 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
       throw new Error(`캠프 코드 ${campCode}에 대한 설정을 찾을 수 없습니다.`);
     }
 
-    console.log(`📊 Google Sheets 데이터 가져오기 시작... (캠프: ${campCode})`);
+    logger.info(`📊 Google Sheets 데이터 가져오기 시작... (캠프: ${campCode})`);
     
     const exportUrl = `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/export?format=tsv&gid=${config.gid}`;
     
@@ -134,7 +135,7 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
     
     const lines = tsvData.split('\n').filter((line: string) => line.trim());
     const headers = lines[0].split('\t');
-    console.log(`📋 헤더 ${headers.length}개 로드`);
+    logger.info(`📋 헤더 ${headers.length}개 로드`);
     
     const headerIndexMap: Record<string, number> = {};
     if (config.useHeaderMapping) {
@@ -142,18 +143,18 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
         const trimmedHeader = header.trim();
         headerIndexMap[trimmedHeader] = index;
       });
-      console.log(`📋 헤더 매핑:`, headerIndexMap);
+      logger.info(`📋 헤더 매핑:`, headerIndexMap);
       
       // 프로필사진 열이 있는지 확인
       if (headerIndexMap['프로필사진'] !== undefined) {
-        console.log(`✅ "프로필사진" 열 발견! 인덱스: ${headerIndexMap['프로필사진']}`);
+        logger.info(`✅ "프로필사진" 열 발견! 인덱스: ${headerIndexMap['프로필사진']}`);
       } else {
-        console.warn(`⚠️ "프로필사진" 열을 찾을 수 없습니다. 사용 가능한 헤더:`, Object.keys(headerIndexMap));
+        logger.warn(`⚠️ "프로필사진" 열을 찾을 수 없습니다. 사용 가능한 헤더:`, Object.keys(headerIndexMap));
       }
     }
     
     const rows = lines.slice(1).map((line: string) => line.split('\t'));
-    console.log(`📊 총 ${rows.length}개 행 로드`);
+    logger.info(`📊 총 ${rows.length}개 행 로드`);
 
     const students: STSheetStudent[] = rows
       .filter((row: any[]) => row[0] && row[0].trim())
@@ -200,7 +201,7 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
 
         // 프로필사진 디버깅 (첫 5명)
         if (index < 5 && student.profilePhoto) {
-          console.log(`📸 [stSheetService] 학생 ${index + 1}:`, {
+          logger.info(`📸 [stSheetService] 학생 ${index + 1}:`, {
             name: student.name,
             profilePhoto: student.profilePhoto,
             photoLength: student.profilePhoto.length
@@ -223,10 +224,10 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
       });
 
     const studentsWithPhotos = students.filter(s => s.profilePhoto);
-    console.log(`✅ ${students.length}명의 학생 데이터 변환 완료 (프로필사진: ${studentsWithPhotos.length}명)`);
+    logger.info(`✅ ${students.length}명의 학생 데이터 변환 완료 (프로필사진: ${studentsWithPhotos.length}명)`);
     return students;
   } catch (error) {
-    console.error('❌ Google Sheets 데이터 가져오기 실패:', error);
+    logger.error('❌ Google Sheets 데이터 가져오기 실패:', error);
     throw error;
   }
 };
@@ -461,7 +462,7 @@ export const stSheetService = {
       
       // 임시 데이터 사용 설정이 켜져있으면 무조건 임시 데이터 반환
       if (useTemporaryData) {
-        console.log(`⚠️ ${campCode} 임시 데이터 표시 설정이 활성화되어 있습니다.`);
+        logger.info(`⚠️ ${campCode} 임시 데이터 표시 설정이 활성화되어 있습니다.`);
         return getTemporaryData(campCode);
       }
       
@@ -476,7 +477,7 @@ export const stSheetService = {
       // 실제 데이터도 없으면 빈 배열 반환
       return [];
     } catch (error) {
-      console.error('Firestore 데이터 로드 실패:', error);
+      logger.error('Firestore 데이터 로드 실패:', error);
       throw error;
     }
   },
@@ -494,7 +495,7 @@ export const stSheetService = {
       // 임시 데이터 사용 설정이 꺼져있으면 무조건 false
       return false;
     } catch (error) {
-      console.error('임시 데이터 확인 실패:', error);
+      logger.error('임시 데이터 확인 실패:', error);
       return true;
     }
   },
@@ -512,7 +513,7 @@ export const stSheetService = {
       const hasReal = await stSheetService.hasRealData(campCode);
       return !hasReal; // 실제 데이터가 없으면 true (임시 데이터 표시)
     } catch (error) {
-      console.error('설정 조회 실패:', error);
+      logger.error('설정 조회 실패:', error);
       return false;
     }
   },
@@ -527,7 +528,7 @@ export const stSheetService = {
         updatedAt: new Date().toISOString()
       }, { merge: true });
     } catch (error) {
-      console.error('설정 저장 실패:', error);
+      logger.error('설정 저장 실패:', error);
       throw error;
     }
   },
@@ -539,7 +540,7 @@ export const stSheetService = {
       const docSnap = await getDoc(docRef);
       return docSnap.exists() && docSnap.data()?.data && docSnap.data()?.data.length > 0;
     } catch (error) {
-      console.error('실제 데이터 확인 실패:', error);
+      logger.error('실제 데이터 확인 실패:', error);
       return false;
     }
   },
@@ -567,19 +568,19 @@ export const stSheetService = {
 
       return filtered;
     } catch (error) {
-      console.error('학생 목록 조회 실패:', error);
+      logger.error('학생 목록 조회 실패:', error);
       throw error;
     }
   },
 
   syncSTSheet: async (campCode: CampCode = 'E27'): Promise<{ success: boolean; count: number; lastSync: string }> => {
     try {
-      console.log(`🔄 ST 시트 전체 데이터 동기화 시작... (캠프: ${campCode})`);
+      logger.info(`🔄 ST 시트 전체 데이터 동기화 시작... (캠프: ${campCode})`);
 
       // Google Sheets에서 전체 데이터 가져오기
       const allStudents = await fetchGoogleSheetsData(campCode);
 
-      console.log(`✅ 전체 학생: ${allStudents.length}명`);
+      logger.info(`✅ 전체 학생: ${allStudents.length}명`);
 
       // Firestore에 전체 데이터 저장
       const docRef = doc(db, 'stSheetCache', campCode);
@@ -593,7 +594,7 @@ export const stSheetService = {
         totalStudents: allStudents.length
       });
 
-      console.log(`✅ Firestore 저장 완료! (캠프: ${campCode})`);
+      logger.info(`✅ Firestore 저장 완료! (캠프: ${campCode})`);
 
       return {
         success: true,
@@ -601,7 +602,7 @@ export const stSheetService = {
         lastSync: new Date().toISOString()
       };
     } catch (error) {
-      console.error('동기화 실패:', error);
+      logger.error('동기화 실패:', error);
       throw error;
     }
   },
@@ -612,7 +613,7 @@ export const stSheetService = {
       const student = students.find(s => s.studentId === studentId);
       return student || null;
     } catch (error) {
-      console.error('학생 상세 정보 조회 실패:', error);
+      logger.error('학생 상세 정보 조회 실패:', error);
       throw error;
     }
   },
@@ -664,7 +665,7 @@ export const jobCodesService = {
 
       return jobCodes;
     } catch (error) {
-      console.error('JobCodes 조회 실패:', error);
+      logger.error('JobCodes 조회 실패:', error);
       throw error;
     }
   },

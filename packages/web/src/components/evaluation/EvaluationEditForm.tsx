@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Evaluation, EvaluationCriteria, EvaluationService, EvaluationCriteriaService } from '@smis-mentor/shared';
@@ -55,7 +56,7 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
         });
       }
     } catch (error) {
-      console.error('평가 기준 로드 오류:', error);
+      logger.error('평가 기준 로드 오류:', error);
     } finally {
       setIsLoadingCriteria(false);
     }
@@ -127,7 +128,7 @@ export default function EvaluationEditForm({ evaluation, onSuccess, onCancel }: 
       await EvaluationService.updateEvaluation(db, evaluation.id, updateData);
       onSuccess();
     } catch (error) {
-      console.error('평가 수정 오류:', error);
+      logger.error('평가 수정 오류:', error);
     } finally {
       setIsLoading(false);
     }

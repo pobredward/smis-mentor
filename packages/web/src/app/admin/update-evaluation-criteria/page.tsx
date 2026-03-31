@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState } from 'react';
 import { updateCampLifeCriteria } from '@/scripts/updateCampLifeCriteria';
@@ -15,7 +16,7 @@ export default function UpdateEvaluationCriteriaPage() {
       const res = await updateCampLifeCriteria();
       setResult(res);
     } catch (error) {
-      console.error('업데이트 오류:', error);
+      logger.error('업데이트 오류:', error);
       setResult({
         success: false,
         message: '업데이트 중 오류가 발생했습니다.'

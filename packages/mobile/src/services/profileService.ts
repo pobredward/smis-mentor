@@ -1,4 +1,5 @@
 import {
+import { logger } from '@smis-mentor/shared';
   doc,
   updateDoc,
   query,
@@ -31,7 +32,7 @@ export async function uploadProfileImage(
           }
         },
         (error) => {
-          console.error('이미지 업로드 실패:', error);
+          logger.error('이미지 업로드 실패:', error);
           reject(error);
         },
         async () => {
@@ -45,7 +46,7 @@ export async function uploadProfileImage(
       );
     });
   } catch (error) {
-    console.error('프로필 이미지 업로드 오류:', error);
+    logger.error('프로필 이미지 업로드 오류:', error);
     throw error;
   }
 }
@@ -64,7 +65,7 @@ export async function updateUserProfile(
       updatedAt: new Date(),
     });
   } catch (error) {
-    console.error('사용자 정보 업데이트 오류:', error);
+    logger.error('사용자 정보 업데이트 오류:', error);
     throw error;
   }
 }
@@ -93,7 +94,7 @@ export async function checkEmailExists(
     
     return true;
   } catch (error) {
-    console.error('이메일 중복 확인 오류:', error);
+    logger.error('이메일 중복 확인 오류:', error);
     throw error;
   }
 }
@@ -122,7 +123,7 @@ export async function checkPhoneExists(
     
     return true;
   } catch (error) {
-    console.error('전화번호 중복 확인 오류:', error);
+    logger.error('전화번호 중복 확인 오류:', error);
     throw error;
   }
 }

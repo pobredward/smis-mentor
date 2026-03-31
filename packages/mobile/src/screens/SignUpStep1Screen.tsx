@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -130,7 +131,7 @@ export function SignUpStep1Screen({
         onNext({ name, phone: phoneNumber });
       }
     } catch (error) {
-      console.error('사용자 정보 확인 오류:', error);
+      logger.error('사용자 정보 확인 오류:', error);
       Alert.alert('오류', '사용자 정보 확인 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

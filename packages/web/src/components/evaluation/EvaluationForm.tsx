@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
@@ -60,27 +61,27 @@ export default function EvaluationForm({
   const loadCriteriaTemplates = async () => {
     try {
       setIsLoading(true);
-      console.log('평가 기준 로드 시작:', formData.evaluationStage);
+      logger.info('평가 기준 로드 시작:', formData.evaluationStage);
       
       const templates = await EvaluationCriteriaService.getCriteriaByStage(
         db,
         formData.evaluationStage
       );
       
-      console.log('로드된 템플릿:', templates);
+      logger.info('로드된 템플릿:', templates);
       setCriteriaTemplates(templates);
       
       // 기본 템플릿이 있으면 자동 선택
       const defaultTemplate = templates.find(t => t.isDefault);
       if (defaultTemplate) {
-        console.log('기본 템플릿 선택:', defaultTemplate.name);
+        logger.info('기본 템플릿 선택:', defaultTemplate.name);
         setFormData(prev => ({
           ...prev,
           criteriaTemplateId: defaultTemplate.id
         }));
         setSelectedCriteria(defaultTemplate);
       } else {
-        console.log('기본 템플릿 없음, 첫 번째 템플릿 선택');
+        logger.info('기본 템플릿 없음, 첫 번째 템플릿 선택');
         if (templates.length > 0) {
           setFormData(prev => ({
             ...prev,
@@ -90,7 +91,7 @@ export default function EvaluationForm({
         }
       }
     } catch (error) {
-      console.error('평가 기준 로드 오류:', error);
+      logger.error('평가 기준 로드 오류:', error);
       toast.error('평가 기준을 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -170,7 +171,7 @@ export default function EvaluationForm({
       toast.success('평가가 성공적으로 저장되었습니다.');
       onSuccess?.(evaluationId);
     } catch (error) {
-      console.error('평가 저장 오류:', error);
+      logger.error('평가 저장 오류:', error);
       toast.error('평가 저장 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
@@ -191,7 +192,7 @@ export default function EvaluationForm({
         toast.error(result.message || '평가 기준 생성에 실패했습니다.');
       }
     } catch (error) {
-      console.error('평가 기준 생성 오류:', error);
+      logger.error('평가 기준 생성 오류:', error);
       toast.error('평가 기준 생성 중 오류가 발생했습니다.');
     } finally {
       setIsCreatingCriteria(false);

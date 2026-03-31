@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -44,14 +45,14 @@ export default function EvaluationStageCards({ userId, onAddEvaluation }: Props)
     if (userId) {
       loadEvaluations();
     } else {
-      console.warn('EvaluationStageCards: userId가 undefined입니다.');
+      logger.warn('EvaluationStageCards: userId가 undefined입니다.');
       setIsLoading(false);
     }
   }, [userId]);
 
   const loadEvaluations = async () => {
     if (!userId) {
-      console.error('평가 로드 오류: userId가 없습니다.');
+      logger.error('평가 로드 오류: userId가 없습니다.');
       setIsLoading(false);
       return;
     }
@@ -72,7 +73,7 @@ export default function EvaluationStageCards({ userId, onAddEvaluation }: Props)
               criteriaData[templateId] = criteria;
             }
           } catch (error) {
-            console.error(`평가 기준 로드 실패 (${templateId}):`, error);
+            logger.error(`평가 기준 로드 실패 (${templateId}):`, error);
           }
         })
       );
@@ -94,7 +95,7 @@ export default function EvaluationStageCards({ userId, onAddEvaluation }: Props)
         '캠프 생활': grouped['캠프 생활'] || []
       });
     } catch (error) {
-      console.error('평가 로드 오류:', error);
+      logger.error('평가 로드 오류:', error);
       Alert.alert('오류', '평가 정보를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -143,7 +144,7 @@ export default function EvaluationStageCards({ userId, onAddEvaluation }: Props)
               await loadEvaluations();
               Alert.alert('성공', '평가가 삭제되었습니다.');
             } catch (error) {
-              console.error('평가 삭제 오류:', error);
+              logger.error('평가 삭제 오류:', error);
               Alert.alert('오류', '평가 삭제에 실패했습니다.');
             }
           }

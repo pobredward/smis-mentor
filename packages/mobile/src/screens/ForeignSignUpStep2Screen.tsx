@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -69,7 +70,7 @@ export function ForeignSignUpStep2Screen({
         const existingUser = await getUserByEmail(email);
         setEmailExists(!!existingUser);
       } catch (error) {
-        console.error('Email duplicate check error:', error);
+        logger.error('Email duplicate check error:', error);
       }
     }
   };
@@ -104,7 +105,7 @@ export function ForeignSignUpStep2Screen({
         setCvFile(result.assets[0]);
       }
     } catch (error) {
-      console.error('CV file selection error:', error);
+      logger.error('CV file selection error:', error);
       Alert.alert('Error', 'An error occurred while selecting the CV file.');
     }
   };
@@ -213,7 +214,7 @@ export function ForeignSignUpStep2Screen({
         foreignIdCard,
       });
     } catch (error) {
-      console.error('Account information verification error:', error);
+      logger.error('Account information verification error:', error);
       Alert.alert('Error', 'An error occurred while verifying account information.');
     } finally {
       setIsLoading(false);

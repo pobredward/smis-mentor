@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -59,7 +60,7 @@ export default function JobBoardListClient() {
           setAllJobCodes(codes);
         }
       } catch (error) {
-        console.error('공고 정보 로드 오류:', error);
+        logger.error('공고 정보 로드 오류:', error);
         toast.error('공고 정보를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
@@ -86,7 +87,7 @@ export default function JobBoardListClient() {
       ));
       toast.success(`공고가 ${newStatus === 'active' ? '모집중' : '마감'}으로 변경되었습니다.`);
     } catch (error) {
-      console.error('공고 상태 변경 오류:', error);
+      logger.error('공고 상태 변경 오류:', error);
       toast.error('공고 상태 변경 중 오류가 발생했습니다.');
     }
   };
@@ -156,7 +157,7 @@ export default function JobBoardListClient() {
       
       handleCancelCreate();
     } catch (error) {
-      console.error('공고 생성 오류:', error);
+      logger.error('공고 생성 오류:', error);
       toast.error('공고 생성 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);

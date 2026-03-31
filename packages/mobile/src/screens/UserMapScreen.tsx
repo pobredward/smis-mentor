@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -32,7 +33,7 @@ const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY || '';
 const geocodeAddress = async (address: string): Promise<{ lat: number; lng: number } | null> => {
   try {
     if (!KAKAO_REST_API_KEY || KAKAO_REST_API_KEY === 'YOUR_KAKAO_REST_API_KEY') {
-      console.warn('Kakao API 키가 설정되지 않았습니다.');
+      logger.warn('Kakao API 키가 설정되지 않았습니다.');
       return null;
     }
 
@@ -46,7 +47,7 @@ const geocodeAddress = async (address: string): Promise<{ lat: number; lng: numb
     );
 
     if (!response.ok) {
-      console.error('Kakao API 오류:', response.status);
+      logger.error('Kakao API 오류:', response.status);
       return null;
     }
 
@@ -62,7 +63,7 @@ const geocodeAddress = async (address: string): Promise<{ lat: number; lng: numb
 
     return null;
   } catch (error) {
-    console.error('Geocoding 오류:', error);
+    logger.error('Geocoding 오류:', error);
     return null;
   }
 };
@@ -166,7 +167,7 @@ export function UserMapScreen({ navigation }: AdminStackScreenProps<'UserMap'>) 
       const fetchedUsers = await adminGetAllUsers(db);
       setUsers(fetchedUsers);
     } catch (error) {
-      console.error('사용자 목록 로딩 실패:', error);
+      logger.error('사용자 목록 로딩 실패:', error);
     } finally {
       setIsLoading(false);
     }
@@ -202,8 +203,8 @@ export function UserMapScreen({ navigation }: AdminStackScreenProps<'UserMap'>) 
       }
     }
 
-    console.log(`✅ 캐시된 좌표: ${processed.length}명`);
-    console.log(`⏳ 변환 필요: ${usersNeedingGeocode.length}명`);
+    logger.info(`✅ 캐시된 좌표: ${processed.length}명`);
+    logger.info(`⏳ 변환 필요: ${usersNeedingGeocode.length}명`);
 
     // 2단계: 좌표가 없는 사용자만 변환 (순차적으로 처리)
     for (const user of usersNeedingGeocode) {
@@ -221,7 +222,7 @@ export function UserMapScreen({ navigation }: AdminStackScreenProps<'UserMap'>) 
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    console.log(`✅ ${processed.length}명의 좌표 데이터 준비 완료`);
+    logger.info(`✅ ${processed.length}명의 좌표 데이터 준비 완료`);
     setUsersWithCoords(processed);
     setIsGeocoding(false);
 
@@ -252,7 +253,7 @@ export function UserMapScreen({ navigation }: AdminStackScreenProps<'UserMap'>) 
         const jobCodesInfo = await adminGetUserJobCodesInfo(db, user.jobExperiences);
         setJobCodes(jobCodesInfo);
       } catch (error) {
-        console.error('직무 경험 정보 로드 오류:', error);
+        logger.error('직무 경험 정보 로드 오류:', error);
       } finally {
         setIsLoadingJobCodes(false);
       }

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback } from 'react';
 import React from 'react';
@@ -72,11 +73,11 @@ export default function UserManage() {
   const loadCurrentAdminName = async () => {
     try {
       const currentUser = auth.currentUser;
-      console.log('🔍 Current user in user-manage:', currentUser?.uid, currentUser?.email);
+      logger.info('🔍 Current user in user-manage:', currentUser?.uid, currentUser?.email);
       
       if (currentUser && currentUser.email) {
         // 이메일을 기준으로 users 컬렉션에서 사용자 찾기
-        console.log('📧 Searching for user by email:', currentUser.email);
+        logger.info('📧 Searching for user by email:', currentUser.email);
         
         try {
           const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -87,7 +88,7 @@ export default function UserManage() {
           
           if (userByEmail) {
             const userData = userByEmail.data() as User;
-            console.log('✅ Found user by email:', { 
+            logger.info('✅ Found user by email:', { 
               docId: userByEmail.id,
               name: userData.name, 
               email: userData.email,
@@ -97,31 +98,31 @@ export default function UserManage() {
             });
             
             if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-              console.log('✅ Using users.name from email search:', userData.name);
+              logger.info('✅ Using users.name from email search:', userData.name);
               setCurrentAdminName(userData.name.trim());
               return;
             } else {
-              console.log('❌ users.name is empty or invalid:', userData.name);
+              logger.info('❌ users.name is empty or invalid:', userData.name);
             }
           } else {
-            console.log('❌ No user found by email in users collection');
+            logger.info('❌ No user found by email in users collection');
           }
         } catch (emailSearchError) {
-          console.error('Email search error:', emailSearchError);
+          logger.error('Email search error:', emailSearchError);
         }
         
         // UID로도 시도해보기 (백업 방법)
-        console.log('🔄 Trying UID as backup:', currentUser.uid);
+        logger.info('🔄 Trying UID as backup:', currentUser.uid);
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
-          console.log('📄 Found user by UID:', { 
+          logger.info('📄 Found user by UID:', { 
             name: userData.name, 
             email: userData.email 
           });
           
           if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-            console.log('✅ Using users.name from UID search:', userData.name);
+            logger.info('✅ Using users.name from UID search:', userData.name);
             setCurrentAdminName(userData.name.trim());
             return;
           }
@@ -129,21 +130,21 @@ export default function UserManage() {
         
         // Firebase Auth의 displayName 사용
         if (currentUser.displayName) {
-          console.log('✅ Using auth.displayName:', currentUser.displayName);
+          logger.info('✅ Using auth.displayName:', currentUser.displayName);
           setCurrentAdminName(currentUser.displayName);
           return;
         }
         
         // 이메일에서 이름 부분 추출 (최후의 수단)
         const emailName = currentUser.email.split('@')[0];
-        console.log('⚠️ Using email name as fallback:', emailName);
+        logger.info('⚠️ Using email name as fallback:', emailName);
         setCurrentAdminName(emailName);
       } else {
-        console.log('❌ No current user or email');
+        logger.info('❌ No current user or email');
         setCurrentAdminName('관리자');
       }
     } catch (error) {
-      console.error('관리자 이름 로드 오류:', error);
+      logger.error('관리자 이름 로드 오류:', error);
       setCurrentAdminName('관리자');
     }
   };
@@ -171,7 +172,7 @@ export default function UserManage() {
       setUsers(sortedUsers);
       setFilteredUsers(sortedUsers);
     } catch (error) {
-      console.error('사용자 목록 로딩 실패:', error);
+      logger.error('사용자 목록 로딩 실패:', error);
       toast.error('사용자 정보를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -238,14 +239,14 @@ export default function UserManage() {
 
   // currentAdminName 변경 감지
   useEffect(() => {
-    console.log('📝 currentAdminName changed in user-manage:', currentAdminName);
+    logger.info('📝 currentAdminName changed in user-manage:', currentAdminName);
   }, [currentAdminName]);
 
   // 페이지 로드 시에도 관리자 이름 로드 시도 (Auth가 이미 로드된 경우)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (auth.currentUser) {
-        console.log('⏰ Delayed admin name load attempt');
+        logger.info('⏰ Delayed admin name load attempt');
         loadCurrentAdminName();
       }
     }, 1000); // 1초 후 시도
@@ -257,7 +258,7 @@ export default function UserManage() {
   useEffect(() => {
     let filtered = [...users];
 
-    console.log('🔍 필터링 시작:', {
+    logger.info('🔍 필터링 시작:', {
       totalUsers: users.length,
       selectedRole,
       users: users.map(u => ({ name: u.name, role: u.role, status: u.status }))
@@ -270,14 +271,14 @@ export default function UserManage() {
         const status = user.status as any;
         return status === 'deleted' || status === 'inactive';
       });
-      console.log('✅ 탈퇴 사용자 필터링 결과:', filtered.length, '명');
+      logger.info('✅ 탈퇴 사용자 필터링 결과:', filtered.length, '명');
     } else {
       // 일반 역할 선택 시: 해당 역할이면서 삭제되지 않은 사용자만 표시
       filtered = filtered.filter(user => {
         const status = user.status as any;
         return user.role === selectedRole && status !== 'deleted' && status !== 'inactive';
       });
-      console.log(`✅ ${selectedRole} 역할 필터링 결과:`, filtered.length, '명');
+      logger.info(`✅ ${selectedRole} 역할 필터링 결과:`, filtered.length, '명');
     }
 
     // 검색어 필터링
@@ -339,7 +340,7 @@ export default function UserManage() {
         const jobCodesInfo = await getUserJobCodesInfo(user.jobExperiences);
         setUserJobCodes(jobCodesInfo);
       } catch (error) {
-        console.error('직무 경험 정보 로드 오류:', error);
+        logger.error('직무 경험 정보 로드 오류:', error);
         toast.error('직무 경험 정보를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoadingJobCodes(false);
@@ -447,7 +448,7 @@ export default function UserManage() {
       
       toast.success('사용자 정보가 업데이트되었습니다.');
     } catch (error) {
-      console.error('사용자 업데이트 오류:', error);
+      logger.error('사용자 업데이트 오류:', error);
       toast.error('사용자 정보 업데이트 중 오류가 발생했습니다.');
     }
   };
@@ -498,7 +499,7 @@ export default function UserManage() {
       toast.success(`사용자가 삭제되었습니다. ${dataCheck.hasData ? '(작성한 데이터는 보존됨)' : ''}`);
       
     } catch (error) {
-      console.error('사용자 삭제 오류:', error);
+      logger.error('사용자 삭제 오류:', error);
       toast.error('사용자 삭제 중 오류가 발생했습니다.');
     }
   };
@@ -560,7 +561,7 @@ export default function UserManage() {
       toast.success('사용자가 Firestore에서 완전히 삭제되었습니다.');
       
     } catch (error) {
-      console.error('사용자 완전 삭제 오류:', error);
+      logger.error('사용자 완전 삭제 오류:', error);
       toast.error('사용자 완전 삭제 중 오류가 발생했습니다.');
     }
   };
@@ -583,7 +584,7 @@ export default function UserManage() {
         
         setAllGenerations(generations);
       } catch (error) {
-        console.error('직무 코드 로드 오류:', error);
+        logger.error('직무 코드 로드 오류:', error);
       }
     };
     
@@ -657,7 +658,7 @@ export default function UserManage() {
       setClassCodeInput('');
       toast.success('직무 코드가 추가되었습니다.');
     } catch (error) {
-      console.error('직무 코드 추가 실패:', error);
+      logger.error('직무 코드 추가 실패:', error);
       toast.error('직무 코드 추가에 실패했습니다.');
     }
   };
@@ -692,7 +693,7 @@ export default function UserManage() {
       
       toast.success('직무 코드가 제거되었습니다.');
     } catch (error) {
-      console.error('직무 코드 제거 실패:', error);
+      logger.error('직무 코드 제거 실패:', error);
       toast.error('직무 코드 제거에 실패했습니다.');
     }
   };
@@ -925,7 +926,7 @@ export default function UserManage() {
         (user.phoneNumber ?? '').includes(searchTerm)
       ));
     } catch (error) {
-      console.error('사용자 계정 복구 실패:', error);
+      logger.error('사용자 계정 복구 실패:', error);
       toast.error('사용자 계정 복구에 실패했습니다.');
     }
   };

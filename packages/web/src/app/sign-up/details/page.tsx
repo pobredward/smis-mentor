@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -105,7 +106,7 @@ export default function SignUpDetails() {
     try {
       const { name, phoneNumber, email, password, university, grade, isOnLeave, major1, major2, socialSignUp, tempUserId, socialProvider, firebaseAuthUid, socialProviderUid, socialDisplayName, socialPhotoURL } = signupData;
 
-      console.log('🔍 회원가입 데이터 확인:', {
+      logger.info('🔍 회원가입 데이터 확인:', {
         socialSignUp,
         socialProvider,
         email,
@@ -138,7 +139,7 @@ export default function SignUpDetails() {
       if (existingUser && existingUser.status === 'active') {
         // tempUserId가 있고, 기존 유저의 userId와 다르면 중복 가입 시도
         if (tempUserId && existingUser.userId !== tempUserId) {
-          console.error('⚠️ 동시 가입 시도 감지:', {
+          logger.error('⚠️ 동시 가입 시도 감지:', {
             tempUserId,
             existingUserId: existingUser.userId,
           });
@@ -149,7 +150,7 @@ export default function SignUpDetails() {
         }
         // tempUserId가 없는데 active 유저가 있으면 중복
         if (!tempUserId) {
-          console.error('⚠️ 이미 가입된 전화번호:', phoneNumber);
+          logger.error('⚠️ 이미 가입된 전화번호:', phoneNumber);
           toast.error('이 전화번호는 이미 가입되어 있습니다.');
           signupStorage.clear();
           router.push('/sign-in');
@@ -190,7 +191,7 @@ export default function SignUpDetails() {
           
           // 네이버/카카오의 경우 Custom Token으로 재로그인 시도
           if (!currentUser && (socialProvider === 'naver' || socialProvider === 'kakao')) {
-            console.log('🔄 Custom Token 재로그인 시도...', { firebaseAuthUid, tempUserId, email });
+            logger.info('🔄 Custom Token 재로그인 시도...', { firebaseAuthUid, tempUserId, email });
             try {
               const { signInWithCustomTokenFromFunction } = await import('@/lib/firebaseService');
               // firebaseAuthUid 또는 tempUserId 사용
@@ -199,17 +200,17 @@ export default function SignUpDetails() {
               if (uidToUse) {
                 await signInWithCustomTokenFromFunction(uidToUse, email);
                 currentUser = auth.currentUser;
-                console.log('✅ Custom Token 재로그인 성공:', currentUser?.uid);
+                logger.info('✅ Custom Token 재로그인 성공:', currentUser?.uid);
               } else {
-                console.error('❌ UID 정보 없음');
+                logger.error('❌ UID 정보 없음');
               }
             } catch (error) {
-              console.error('❌ Custom Token 재로그인 실패:', error);
+              logger.error('❌ Custom Token 재로그인 실패:', error);
             }
           }
           
           if (!currentUser) {
-            console.error('❌ Auth 상태 확인 실패:', {
+            logger.error('❌ Auth 상태 확인 실패:', {
               socialProvider,
               email,
               tempUserId,
@@ -223,7 +224,7 @@ export default function SignUpDetails() {
           }
           
           newUserId = currentUser.uid;
-          console.log('✅ 소셜 가입 - Auth UID 사용:', newUserId);
+          logger.info('✅ 소셜 가입 - Auth UID 사용:', newUserId);
           
           // socialProvider 동적 처리 및 정규화
           // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
@@ -253,7 +254,7 @@ export default function SignUpDetails() {
           }
           userCredential = await signUp(email, password);
           newUserId = userCredential.user.uid;
-          console.log('✅ 일반 가입 - 새 Auth 계정 생성:', newUserId);
+          logger.info('✅ 일반 가입 - 새 Auth 계정 생성:', newUserId);
           
           // 일반 가입도 authProviders 정보 설정
           userCredential.authProviders = [{
@@ -314,7 +315,7 @@ export default function SignUpDetails() {
         }, newUserId);
 
         // ✅ 기존 temp 문서 삭제
-        console.log('🗑️ 기존 temp 문서 삭제:', oldTempUserId);
+        logger.info('🗑️ 기존 temp 문서 삭제:', oldTempUserId);
         const { deleteDoc, doc } = await import('firebase/firestore');
         const { db } = await import('@/lib/firebase');
         await deleteDoc(doc(db, 'users', oldTempUserId));
@@ -344,7 +345,7 @@ export default function SignUpDetails() {
         if (socialSignUp) {
           // 소셜 가입: 일반 가입처럼 이메일/비밀번호로 Firebase Auth 계정 생성
           // (네이버 신규 가입은 Custom Token을 생성할 Firestore 사용자가 없으므로)
-          console.log('✅ 소셜 신규 가입 - Firebase Auth 계정 생성');
+          logger.info('✅ 소셜 신규 가입 - Firebase Auth 계정 생성');
           
           // 임시 비밀번호 생성 (사용자는 모르는 비밀번호)
           tempPasswordForSocial = `${email}_${Date.now()}_${Math.random().toString(36)}`;
@@ -352,7 +353,7 @@ export default function SignUpDetails() {
           try {
             const userCredential = await signUp(email, tempPasswordForSocial);
             newUserId = userCredential.user.uid;
-            console.log('✅ Firebase Auth 계정 생성 완료, UID:', newUserId);
+            logger.info('✅ Firebase Auth 계정 생성 완료, UID:', newUserId);
           } catch (authError: any) {
             if (authError.code === 'auth/email-already-in-use') {
               // 이미 계정이 존재하면 로그인으로 안내
@@ -394,7 +395,7 @@ export default function SignUpDetails() {
           }
           const userCredential = await signUp(email, password);
           newUserId = userCredential.user.uid;
-          console.log('✅ 일반 신규 가입 - 새 Auth 계정 생성:', newUserId);
+          logger.info('✅ 일반 신규 가입 - 새 Auth 계정 생성:', newUserId);
           
           // 일반 가입도 authProviders에 password provider 추가
           authProvidersData = {
@@ -461,7 +462,7 @@ export default function SignUpDetails() {
         router.replace('/profile');
       }
     } catch (error) {
-      console.error('회원가입 오류:', error);
+      logger.error('회원가입 오류:', error);
       toast.error('회원가입 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -88,7 +89,7 @@ export function TasksScreen() {
   // route params에서 selectedDate 및 refresh, editTaskId 가져오기
   useEffect(() => {
     const params = route.params as any;
-    console.log('TasksScreen received params:', params);
+    logger.info('TasksScreen received params:', params);
     
     // params가 중첩된 경우 처리
     const actualParams = params?.params || params;
@@ -101,15 +102,15 @@ export function TasksScreen() {
           setCurrentDate(date);
         }
       } catch (error) {
-        console.error('날짜 파라미터 파싱 오류:', error);
+        logger.error('날짜 파라미터 파싱 오류:', error);
       }
     }
     
     // editTaskId 처리 (한 번만 실행)
     if (actualParams?.editTaskId && tasks.length > 0) {
-      console.log('editTaskId found:', actualParams.editTaskId);
+      logger.info('editTaskId found:', actualParams.editTaskId);
       const taskToEdit = tasks.find(t => t.id === actualParams.editTaskId);
-      console.log('taskToEdit:', taskToEdit);
+      logger.info('taskToEdit:', taskToEdit);
       if (taskToEdit && !editingTask) {
         setEditingTask(taskToEdit);
         setShowAddModal(true);
@@ -126,9 +127,9 @@ export function TasksScreen() {
     
     // copyTaskId 처리 (한 번만 실행)
     if (actualParams?.copyTaskId && tasks.length > 0) {
-      console.log('copyTaskId found:', actualParams.copyTaskId);
+      logger.info('copyTaskId found:', actualParams.copyTaskId);
       const taskToCopy = tasks.find(t => t.id === actualParams.copyTaskId);
-      console.log('taskToCopy:', taskToCopy);
+      logger.info('taskToCopy:', taskToCopy);
       if (taskToCopy && !editingTask) {
         // 복사할 업무의 데이터를 editingTask에 설정하되, id는 제거
         const { id, createdAt, updatedAt, createdBy, completions, ...taskDataWithoutId } = taskToCopy;
@@ -167,7 +168,7 @@ export function TasksScreen() {
       }
       return jobCodesInfo[0] || null;
     } catch (error) {
-      console.error('활성화된 직무 코드 정보 가져오기 오류:', error);
+      logger.error('활성화된 직무 코드 정보 가져오기 오류:', error);
       return null;
     }
   };
@@ -198,7 +199,7 @@ export function TasksScreen() {
       // 선택된 날짜의 업무 로드
       await loadTasksForDate(selectedDate, activeJobCode.code);
     } catch (error) {
-      console.error('업무 목록 가져오기 오류:', error);
+      logger.error('업무 목록 가져오기 오류:', error);
       Alert.alert('오류', '업무 목록을 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -217,7 +218,7 @@ export function TasksScreen() {
       );
       setTaskDates(dates);
     } catch (error) {
-      console.error('월별 업무 날짜 가져오기 오류:', error);
+      logger.error('월별 업무 날짜 가져오기 오류:', error);
     }
   };
 
@@ -238,7 +239,7 @@ export function TasksScreen() {
 
       setSelectedDateTasks(filtered);
     } catch (error) {
-      console.error('날짜별 업무 가져오기 오류:', error);
+      logger.error('날짜별 업무 가져오기 오류:', error);
     }
   };
 
@@ -290,7 +291,7 @@ export function TasksScreen() {
       await toggleTaskCompletion(taskId, userData.userId, userData.name, role);
       await loadTasksForDate(selectedDate);
     } catch (error) {
-      console.error('업무 완료 토글 오류:', error);
+      logger.error('업무 완료 토글 오류:', error);
       Alert.alert('오류', '업무 상태 변경 중 오류가 발생했습니다.');
     }
   };
@@ -869,14 +870,14 @@ function TaskAddModal({
           }
           Alert.alert('성공', '이미지가 업로드되었습니다.');
         } catch (error) {
-          console.error('이미지 업로드 오류:', error);
+          logger.error('이미지 업로드 오류:', error);
           Alert.alert('오류', '이미지 업로드 중 오류가 발생했습니다.');
         } finally {
           setUploadingImage(false);
         }
       }
     } catch (error) {
-      console.error('이미지 선택 오류:', error);
+      logger.error('이미지 선택 오류:', error);
       Alert.alert('오류', '이미지 선택 중 오류가 발생했습니다.');
     }
   };
@@ -1012,7 +1013,7 @@ function TaskAddModal({
       
       onSuccess();
     } catch (error) {
-      console.error('업무 처리 오류:', error);
+      logger.error('업무 처리 오류:', error);
       Alert.alert('오류', `업무 ${isEdit ? '수정' : '추가'} 중 오류가 발생했습니다.`);
     } finally {
       setIsSubmitting(false);

@@ -1,4 +1,5 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { logger } from '@smis-mentor/shared';
 
 /**
  * React Native용 이미지 압축 유틸리티
@@ -28,7 +29,7 @@ export async function compressImage(
     
     return result;
   } catch (error) {
-    console.error('이미지 압축 오류:', error);
+    logger.error('이미지 압축 오류:', error);
     throw error;
   }
 }

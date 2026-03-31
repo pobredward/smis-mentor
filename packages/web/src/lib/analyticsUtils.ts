@@ -1,4 +1,5 @@
 import { Analytics, logEvent as firebaseLogEvent } from 'firebase/analytics';
+import { logger } from '@smis-mentor/shared';
 
 // 주요 분석 이벤트 카테고리 - 현업 기준으로 최적화
 export const AnalyticsEvents = {
@@ -109,7 +110,7 @@ export class AnalyticsLogger {
     if (this.analytics) {
       firebaseLogEvent(this.analytics, eventName, enrichedParams);
     } else if (process.env.NODE_ENV !== 'production') {
-      console.log(`Analytics Event (${eventName}):`, enrichedParams);
+      logger.info(`Analytics Event (${eventName}):`, enrichedParams);
     }
   }
 

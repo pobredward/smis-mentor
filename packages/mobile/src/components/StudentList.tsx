@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -50,7 +51,7 @@ export const StudentList: React.FC<StudentListProps> = ({
     const loadCampCode = async () => {
       // activeJobCodeId가 없으면 로그인하지 않은 상태
       if (!activeJobCodeId || typeof activeJobCodeId !== 'string') {
-        console.log('activeJobCodeId가 없습니다. 로그인이 필요합니다.');
+        logger.info('activeJobCodeId가 없습니다. 로그인이 필요합니다.');
         setLoading(false);
         return;
       }
@@ -59,17 +60,17 @@ export const StudentList: React.FC<StudentListProps> = ({
         const jobCodes = await jobCodesService.getJobCodesByIds([activeJobCodeId]);
         if (jobCodes.length > 0 && jobCodes[0].code) {
           const code = jobCodes[0].code as CampCode;
-          console.log('캠프 코드 로드 성공:', code);
+          logger.info('캠프 코드 로드 성공:', code);
           setCampCode(code);
           const type = stSheetService.getCampType(code);
           setCampType(type);
           onCampTypeChange?.(type);
         } else {
-          console.log('캠프 코드를 찾을 수 없습니다.');
+          logger.info('캠프 코드를 찾을 수 없습니다.');
           setLoading(false);
         }
       } catch (error) {
-        console.error('캠프 코드 로드 실패:', error);
+        logger.error('캠프 코드 로드 실패:', error);
         setLoading(false);
       }
     };
@@ -92,7 +93,7 @@ export const StudentList: React.FC<StudentListProps> = ({
       setUseTemporaryDataSetting(useTempSetting);
       setHasRealData(hasReal);
     } catch (error) {
-      console.error('학생 목록 로드 실패:', error);
+      logger.error('학생 목록 로드 실패:', error);
       Alert.alert('오류', '학생 목록을 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
@@ -138,7 +139,7 @@ export const StudentList: React.FC<StudentListProps> = ({
       await loadAllStudents();
       Alert.alert('성공', '데이터 동기화가 완료되었습니다.');
     } catch (error) {
-      console.error('동기화 실패:', error);
+      logger.error('동기화 실패:', error);
       Alert.alert('오류', '동기화에 실패했습니다.');
     } finally {
       setSyncing(false);
@@ -163,7 +164,7 @@ export const StudentList: React.FC<StudentListProps> = ({
       await loadAllStudents();
       Alert.alert('성공', `임시 데이터 표시가 ${newSetting ? '활성화' : '비활성화'}되었습니다.`);
     } catch (error) {
-      console.error('설정 변경 실패:', error);
+      logger.error('설정 변경 실패:', error);
       Alert.alert('오류', '설정 변경에 실패했습니다.');
     }
   };

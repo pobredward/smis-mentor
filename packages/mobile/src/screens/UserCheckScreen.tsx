@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -134,7 +135,7 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
           setSelectedGeneration(uniqueGenerations[0]);
         }
       } catch (error) {
-        console.error('업무 코드 로드 오류:', error);
+        logger.error('업무 코드 로드 오류:', error);
         Alert.alert('오류', '업무 코드를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
@@ -282,7 +283,7 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
 
         setGroupedUsers(grouped);
       } catch (error) {
-        console.error('사용자 로드 오류:', error);
+        logger.error('사용자 로드 오류:', error);
         Alert.alert('오류', '사용자를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);

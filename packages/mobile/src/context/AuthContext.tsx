@@ -1,4 +1,5 @@
 import React, {
+import { logger } from '@smis-mentor/shared';
   createContext,
   useContext,
   useState,
@@ -57,8 +58,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const NaverLogin = NaverLoginModule.default;
 
         if (!NaverLogin || typeof NaverLogin.initialize !== 'function') {
-          console.warn('⚠️ Expo Go 환경: 네이버 Native SDK를 사용할 수 없습니다');
-          console.warn('💡 Development Build에서 테스트하세요: npx expo run:ios');
+          logger.warn('⚠️ Expo Go 환경: 네이버 Native SDK를 사용할 수 없습니다');
+          logger.warn('💡 Development Build에서 테스트하세요: npx expo run:ios');
           return;
         }
 
@@ -75,10 +76,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             serviceUrlSchemeIOS,
             disableNaverAppAuthIOS: true,
           });
-          console.log('✅ 네이버 SDK 초기화 완료 (Development Build)');
+          logger.info('✅ 네이버 SDK 초기화 완료 (Development Build)');
         }
       } catch (error) {
-        console.warn('⚠️ 네이버 SDK 로드 실패 (Expo Go에서는 정상):', error);
+        logger.warn('⚠️ 네이버 SDK 로드 실패 (Expo Go에서는 정상):', error);
       }
     };
 
@@ -93,7 +94,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const { GoogleSignin } = GoogleSignInModule;
 
         if (!GoogleSignin || typeof GoogleSignin.configure !== 'function') {
-          console.warn('⚠️ Expo Go 환경: Google Native SDK를 사용할 수 없습니다');
+          logger.warn('⚠️ Expo Go 환경: Google Native SDK를 사용할 수 없습니다');
           return;
         }
 
@@ -105,10 +106,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             iosClientId,
             webClientId,
           });
-          console.log('✅ Google Sign-In SDK 초기화 완료 (Development Build)');
+          logger.info('✅ Google Sign-In SDK 초기화 완료 (Development Build)');
         }
       } catch (error) {
-        console.warn('⚠️ Google SDK 로드 실패 (Expo Go에서는 정상):', error);
+        logger.warn('⚠️ Google SDK 로드 실패 (Expo Go에서는 정상):', error);
       }
     };
 
@@ -122,12 +123,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         .then(token => {
           if (token) {
             savePushToken(userData.userId, token).catch(error => {
-              console.error('푸시 토큰 저장 실패:', error);
+              logger.error('푸시 토큰 저장 실패:', error);
             });
           }
         })
         .catch(error => {
-          console.error('푸시 알림 등록 실패:', error);
+          logger.error('푸시 알림 등록 실패:', error);
         });
     }
   }, [userData?.userId]);
@@ -135,11 +136,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // 알림 리스너 설정
   useEffect(() => {
     notificationListener.current = addNotificationReceivedListener(notification => {
-      console.log('알림 수신:', notification);
+      logger.info('알림 수신:', notification);
     });
 
     responseListener.current = addNotificationResponseReceivedListener(response => {
-      console.log('알림 응답:', response);
+      logger.info('알림 응답:', response);
       const data = response.notification.request.content.data;
       
       if (data?.type === 'task-reminder' && data?.taskId) {
@@ -176,25 +177,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const refreshUserData = useCallback(async () => {
     if (currentUser?.email) {
       try {
-        console.log('🔄 AuthContext: userData 새로고침 시작 -', currentUser.email);
+        logger.info('🔄 AuthContext: userData 새로고침 시작 -', currentUser.email);
         
         // Firestore에서 직접 최신 데이터 가져오기 (캐시 무시)
         const userRecord = await getUserByEmail(currentUser.email);
         
         if (userRecord) {
-          console.log('✅ AuthContext: userData 새로고침 성공');
-          console.log('  - userId:', userRecord.userId);
-          console.log('  - authProviders:', userRecord.authProviders?.length || 0);
-          console.log('  - activeJobExperienceId:', userRecord.activeJobExperienceId);
+          logger.info('✅ AuthContext: userData 새로고침 성공');
+          logger.info('  - userId:', userRecord.userId);
+          logger.info('  - authProviders:', userRecord.authProviders?.length || 0);
+          logger.info('  - activeJobExperienceId:', userRecord.activeJobExperienceId);
           setUserData(userRecord);
         } else {
-          console.warn('⚠️ AuthContext: 사용자 데이터를 찾을 수 없음');
+          logger.warn('⚠️ AuthContext: 사용자 데이터를 찾을 수 없음');
         }
       } catch (error) {
-        console.error('❌ AuthContext: Failed to refresh user data:', error);
+        logger.error('❌ AuthContext: Failed to refresh user data:', error);
       }
     } else {
-      console.warn('⚠️ AuthContext: currentUser 또는 email이 없음');
+      logger.warn('⚠️ AuthContext: currentUser 또는 email이 없음');
     }
   }, [currentUser?.email]);
 
@@ -205,18 +206,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
 
     try {
-      console.log('🔄 AuthContext: activeJobCode 업데이트 시작');
-      console.log('  - userId:', userData.userId);
-      console.log('  - 새로운 jobCodeId:', jobCodeId);
+      logger.info('🔄 AuthContext: activeJobCode 업데이트 시작');
+      logger.info('  - userId:', userData.userId);
+      logger.info('  - 새로운 jobCodeId:', jobCodeId);
       
       await jobCodesService.updateUserActiveJobCode(userData.userId, jobCodeId);
       
-      console.log('✅ AuthContext: Firestore 업데이트 완료, userData 새로고침 시작');
+      logger.info('✅ AuthContext: Firestore 업데이트 완료, userData 새로고침 시작');
       await refreshUserData();
       
-      console.log('✅ AuthContext: userData 새로고침 완료');
+      logger.info('✅ AuthContext: userData 새로고침 완료');
     } catch (error) {
-      console.error('❌ AuthContext: 기수 변경 실패:', error);
+      logger.error('❌ AuthContext: 기수 변경 실패:', error);
       throw error;
     }
   }, [userData?.userId, refreshUserData]);
@@ -224,7 +225,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     // Firebase 인증 상태 변경 감지
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log(
+      logger.info(
         'Auth state changed:',
         user ? `로그인됨 (${user.email})` : '로그아웃됨'
       );
@@ -236,13 +237,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             const userRecord = await getUserByEmail(user.email || '');
             if (userRecord) {
               setUserData(userRecord);
-              console.log('사용자 데이터 로드 성공:', userRecord.name);
+              logger.info('사용자 데이터 로드 성공:', userRecord.name);
             } else if (retryCount < 2) {
               // 최대 2번까지 재시도 (조용히)
               await new Promise((resolve) => setTimeout(resolve, 1500));
               await loadUserData(retryCount + 1);
             } else {
-              console.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
+              logger.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
             }
           } catch (error) {
             if (retryCount < 2) {
@@ -250,7 +251,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               await new Promise((resolve) => setTimeout(resolve, 1500));
               await loadUserData(retryCount + 1);
             } else {
-              console.error('사용자 데이터 가져오기 실패:', error);
+              logger.error('사용자 데이터 가져오기 실패:', error);
             }
           }
         };

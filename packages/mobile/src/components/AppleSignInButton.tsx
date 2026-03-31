@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   TouchableOpacity,
   Text,
@@ -48,7 +49,7 @@ export function AppleSignInButton({
       const result = await signInWithApple();
       onSuccess(result);
     } catch (error: any) {
-      console.error('Apple 로그인 실패:', error);
+      logger.error('Apple 로그인 실패:', error);
       onError(error);
     } finally {
       setLoading(false);

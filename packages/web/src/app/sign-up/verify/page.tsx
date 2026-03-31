@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -32,7 +33,7 @@ export default function SignUpVerify() {
             }
           }
         } catch (error) {
-          console.error('사용자 정보 조회 오류:', error);
+          logger.error('사용자 정보 조회 오류:', error);
         }
       }
     };

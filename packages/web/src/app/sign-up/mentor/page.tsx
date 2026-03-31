@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -61,7 +62,7 @@ export default function MentorSignUpStep1() {
         
         // 본인 확인 (이름 매칭)
         if (data.name === originalName) {
-          console.log('🔄 삭제된 계정 발견 - 자동 복구 프로세스 시작:', {
+          logger.info('🔄 삭제된 계정 발견 - 자동 복구 프로세스 시작:', {
             userId: userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId,
             name: originalName,
             phone: data.phoneNumber,
@@ -76,7 +77,7 @@ export default function MentorSignUpStep1() {
           return;
         } else {
           // 이름이 다른 경우 - 다른 사람의 삭제된 계정
-          console.warn('⚠️ 삭제된 계정이지만 이름 불일치:', {
+          logger.warn('⚠️ 삭제된 계정이지만 이름 불일치:', {
             inputName: data.name,
             originalName,
           });
@@ -101,12 +102,12 @@ export default function MentorSignUpStep1() {
           // 이름과 전화번호가 일치하는 경우
           if (status === 'temp' && jobExperiences && jobExperiences.length > 0) {
             // Case 1: temp 상태이고 jobExperiences가 있는 경우
-            console.log('임시 사용자 jobExperiences:', jobExperiences);
+            logger.info('임시 사용자 jobExperiences:', jobExperiences);
             const jobCodes = await getUserJobCodesInfo(jobExperiences);
-            console.log('조회된 jobCodes:', jobCodes);
+            logger.info('조회된 jobCodes:', jobCodes);
             
             if (jobCodes.length === 0) {
-              console.error('jobExperiences에 해당하는 직무 정보를 찾을 수 없습니다.');
+              logger.error('jobExperiences에 해당하는 직무 정보를 찾을 수 없습니다.');
               toast.error('직무 정보를 불러오는데 실패했습니다. 관리자에게 문의하세요.');
               setIsLoading(false);
               return;
@@ -131,7 +132,7 @@ export default function MentorSignUpStep1() {
           // 이름이 일치하지 않는 경우
           if (status === 'active') {
             // Active 계정이면서 이름 불일치 → 차단
-            console.error('⚠️ Active 계정 이름 불일치 - 다른 사람 계정 가능성:', {
+            logger.error('⚠️ Active 계정 이름 불일치 - 다른 사람 계정 가능성:', {
               registered: name,
               input: data.name,
             });
@@ -143,7 +144,7 @@ export default function MentorSignUpStep1() {
             return;
           } else {
             // Temp 계정이면서 이름 불일치 → 차단
-            console.error('⚠️ Temp 계정 이름 불일치 - 다른 사람이 잘못 등록한 가능성:', {
+            logger.error('⚠️ Temp 계정 이름 불일치 - 다른 사람이 잘못 등록한 가능성:', {
               registered: name,
               input: data.name,
             });
@@ -161,7 +162,7 @@ export default function MentorSignUpStep1() {
         router.push('/sign-up/account');
       }
     } catch (error) {
-      console.error('사용자 정보 확인 오류:', error);
+      logger.error('사용자 정보 확인 오류:', error);
       toast.error('사용자 정보 확인 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -208,7 +209,7 @@ export default function MentorSignUpStep1() {
       }, 3000);
     } catch (error: any) {
       toast.dismiss(loadingToast);
-      console.error('계정 복구 실패:', error);
+      logger.error('계정 복구 실패:', error);
       
       if (error.message?.includes('이미 활성화된')) {
         toast.error('이미 활성화된 계정입니다. 로그인 페이지로 이동합니다.');

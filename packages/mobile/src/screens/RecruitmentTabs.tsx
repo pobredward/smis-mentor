@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -58,7 +59,7 @@ export function ApplicationStatusScreen() {
               jobBoard,
             } as ApplicationWithJobDetails;
           } catch (error) {
-            console.error(`공고 정보 로드 오류 (${app.refJobBoardId}):`, error);
+            logger.error(`공고 정보 로드 오류 (${app.refJobBoardId}):`, error);
             return app as ApplicationWithJobDetails;
           }
         })
@@ -66,7 +67,7 @@ export function ApplicationStatusScreen() {
 
       setApplications(applicationsWithJobDetails);
     } catch (error) {
-      console.error('지원 내역 로드 오류:', error);
+      logger.error('지원 내역 로드 오류:', error);
       Alert.alert('오류', '지원 내역을 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -199,7 +200,7 @@ export function ApplicationStatusScreen() {
       );
       Alert.alert('완료', '지원이 취소되었습니다.');
     } catch (error) {
-      console.error('지원 취소 오류:', error);
+      logger.error('지원 취소 오류:', error);
       Alert.alert('오류', '지원 취소 중 오류가 발생했습니다.');
     }
   };
@@ -413,7 +414,7 @@ function ReviewFormModal({ review, onClose }: ReviewFormModalProps) {
 
       onClose();
     } catch (error) {
-      console.error('후기 저장 오류:', error);
+      logger.error('후기 저장 오류:', error);
       Alert.alert('오류', '후기 저장 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
@@ -539,7 +540,7 @@ export function MentorReviewScreen() {
       const reviewsData = await getAllReviews();
       setReviews(reviewsData);
     } catch (error) {
-      console.error('후기 조회 오류:', error);
+      logger.error('후기 조회 오류:', error);
       Alert.alert('오류', '후기를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -589,7 +590,7 @@ export function MentorReviewScreen() {
               await loadReviews();
               Alert.alert('완료', '후기가 삭제되었습니다.');
             } catch (error) {
-              console.error('후기 삭제 오류:', error);
+              logger.error('후기 삭제 오류:', error);
               Alert.alert('오류', '후기 삭제 중 오류가 발생했습니다.');
             }
           },

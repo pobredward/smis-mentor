@@ -1,4 +1,5 @@
 /**
+import { logger } from '@smis-mentor/shared';
  * 평가 기준 초기화 스크립트
  * 
  * 사용법:
@@ -11,11 +12,11 @@ import { db } from '@/lib/firebase';
 
 export const initializeDefaultEvaluationCriteria = async () => {
   try {
-    console.log('기본 평가 기준 생성을 시작합니다...');
+    logger.info('기본 평가 기준 생성을 시작합니다...');
     
     await EvaluationCriteriaService.createDefaultCriteria(db);
     
-    console.log('기본 평가 기준이 성공적으로 생성되었습니다.');
+    logger.info('기본 평가 기준이 성공적으로 생성되었습니다.');
     
     // 생성된 기준 확인
     const documentCriteria = await EvaluationCriteriaService.getDefaultCriteria(db, '서류 전형');
@@ -23,11 +24,11 @@ export const initializeDefaultEvaluationCriteria = async () => {
     const educationCriteria = await EvaluationCriteriaService.getDefaultCriteria(db, '대면 교육');
     const campCriteria = await EvaluationCriteriaService.getDefaultCriteria(db, '캠프 생활');
     
-    console.log('생성된 평가 기준:');
-    console.log('- 서류 전형:', documentCriteria?.name);
-    console.log('- 면접 전형:', interviewCriteria?.name);
-    console.log('- 대면 교육:', educationCriteria?.name);
-    console.log('- 캠프 생활:', campCriteria?.name);
+    logger.info('생성된 평가 기준:');
+    logger.info('- 서류 전형:', documentCriteria?.name);
+    logger.info('- 면접 전형:', interviewCriteria?.name);
+    logger.info('- 대면 교육:', educationCriteria?.name);
+    logger.info('- 캠프 생활:', campCriteria?.name);
     
     return {
       success: true,
@@ -40,7 +41,7 @@ export const initializeDefaultEvaluationCriteria = async () => {
       }
     };
   } catch (error) {
-    console.error('기본 평가 기준 생성 중 오류 발생:', error);
+    logger.error('기본 평가 기준 생성 중 오류 발생:', error);
     
     return {
       success: false,

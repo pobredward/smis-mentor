@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, setDoc, DocumentData } from 'firebase/firestore';
@@ -118,7 +119,7 @@ export function InterviewManageClient() {
       // 면접 일정 정보 로드
       await loadInterviewDates(jobBoardsData);
     } catch (error) {
-      console.error('채용 공고 로드 오류:', error);
+      logger.error('채용 공고 로드 오류:', error);
       toast.error('채용 공고를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoadingDates(false);
@@ -144,7 +145,7 @@ export function InterviewManageClient() {
       // 면접 일정 정보 로드 
       await loadInterviewDates(jobBoardsData);
     } catch (error) {
-      console.error('채용 공고 로드 오류:', error);
+      logger.error('채용 공고 로드 오류:', error);
       toast.error('채용 공고를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -313,7 +314,7 @@ export function InterviewManageClient() {
             }
             return { key, recordingUrl: undefined };
           } catch (error) {
-            console.error('녹화 영상 URL 로드 오류:', error);
+            logger.error('녹화 영상 URL 로드 오류:', error);
             return { key, recordingUrl: undefined };
           }
         })
@@ -354,7 +355,7 @@ export function InterviewManageClient() {
       );
       
     } catch (error) {
-      console.error('면접 일정 로드 오류:', error);
+      logger.error('면접 일정 로드 오류:', error);
       toast.error('면접 일정을 불러오는 중 오류가 발생했습니다.');
     }
   };
@@ -397,7 +398,7 @@ export function InterviewManageClient() {
         });
       }
     } catch (error) {
-      console.error('채용 공고 정보 로드 오류:', error);
+      logger.error('채용 공고 정보 로드 오류:', error);
       toast.error('채용 공고 정보를 불러오는 중 오류가 발생했습니다.');
     }
     
@@ -414,7 +415,7 @@ export function InterviewManageClient() {
       await loadUserAppliedCampsForAll(userId);
       
     } catch (error) {
-      console.error('지원 캠프 로드 오류:', error);
+      logger.error('지원 캠프 로드 오류:', error);
       setUserAppliedCamps([]);
     }
   };
@@ -463,7 +464,7 @@ export function InterviewManageClient() {
       }
       
     } catch (error) {
-      console.error('지원 캠프 로드 오류:', error);
+      logger.error('지원 캠프 로드 오류:', error);
       setAppliedCampsMap(prev => ({
         ...prev,
         [userId]: []
@@ -517,7 +518,7 @@ export function InterviewManageClient() {
         setScriptText('# 진행자 스크립트\n\n## 면접 시작 인사\n안녕하세요, SMIS 면접에 참여해 주셔서 감사합니다.\n\n## 지원자 소개\n간단한 자기소개를 부탁드립니다.\n\n## 주요 질문 리스트\n1. 지원 동기가 무엇인가요?\n2. 팀 프로젝트 경험이 있다면 말씀해주세요.\n3. 어려운 상황을 극복한 경험이 있나요?\n\n## 마무리 인사\n면접에 참여해 주셔서 감사합니다. 결과는 추후 안내해 드리겠습니다.');
       }
     } catch (error) {
-      console.error('진행자 스크립트 로드 오류:', error);
+      logger.error('진행자 스크립트 로드 오류:', error);
       toast.error('진행자 스크립트를 불러오는 중 오류가 발생했습니다.');
       setScriptText('');
     }
@@ -537,7 +538,7 @@ export function InterviewManageClient() {
 
       toast.success('진행자 스크립트가 저장되었습니다.');
     } catch (error) {
-      console.error('진행자 스크립트 저장 오류:', error);
+      logger.error('진행자 스크립트 저장 오류:', error);
       toast.error('진행자 스크립트를 저장하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -550,7 +551,7 @@ export function InterviewManageClient() {
       const links = await getInterviewLinks();
       setInterviewLinks(links);
     } catch (error) {
-      console.error('면접 링크 로드 오류:', error);
+      logger.error('면접 링크 로드 오류:', error);
       toast.error('면접 링크를 불러오는 중 오류가 발생했습니다.');
     }
   };
@@ -650,7 +651,7 @@ export function InterviewManageClient() {
           setInterviewDates(updatedDates);
         })
         .catch((error) => {
-          console.error('상태 변경 오류:', error);
+          logger.error('상태 변경 오류:', error);
           toast.error('상태를 변경하는 중 오류가 발생했습니다.');
           
           // 오류 발생 시 UI 롤백
@@ -695,7 +696,7 @@ export function InterviewManageClient() {
         });
       
     } catch (error) {
-      console.error('상태 변경 오류:', error);
+      logger.error('상태 변경 오류:', error);
       toast.error('상태를 변경하는 중 오류가 발생했습니다.');
       setLoading(false);
     }
@@ -778,7 +779,7 @@ export function InterviewManageClient() {
           setInterviewDates(updatedDates);
         })
         .catch((error) => {
-          console.error('면접 상태 변경 오류:', error);
+          logger.error('면접 상태 변경 오류:', error);
           toast.error('면접 상태를 변경하는 중 오류가 발생했습니다.');
           
           // 오류 발생 시 UI 롤백
@@ -809,7 +810,7 @@ export function InterviewManageClient() {
         });
       
     } catch (error) {
-      console.error('면접 상태 변경 오류:', error);
+      logger.error('면접 상태 변경 오류:', error);
       toast.error('면접 상태를 변경하는 중 오류가 발생했습니다.');
       setLoading(false);
     }
@@ -880,7 +881,7 @@ export function InterviewManageClient() {
           setInterviewDates(updatedDates);
         })
         .catch((error) => {
-          console.error('최종 상태 변경 오류:', error);
+          logger.error('최종 상태 변경 오류:', error);
           toast.error('최종 상태를 변경하는 중 오류가 발생했습니다.');
           
           // 오류 발생 시 UI 롤백
@@ -911,7 +912,7 @@ export function InterviewManageClient() {
         });
       
     } catch (error) {
-      console.error('최종 상태 변경 오류:', error);
+      logger.error('최종 상태 변경 오류:', error);
       toast.error('최종 상태를 변경하는 중 오류가 발생했습니다.');
       setLoading(false);
     }
@@ -1044,7 +1045,7 @@ export function InterviewManageClient() {
       });
       
     } catch (error) {
-      console.error('면접 날짜/시간 저장 오류:', error);
+      logger.error('면접 날짜/시간 저장 오류:', error);
       toast.error('면접 날짜/시간을 저장하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -1135,7 +1136,7 @@ export function InterviewManageClient() {
       setInterviewTime('');
       
     } catch (error) {
-      console.error('면접 날짜 변경 오류:', error);
+      logger.error('면접 날짜 변경 오류:', error);
       toast.error('면접 날짜를 변경하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -1210,7 +1211,7 @@ export function InterviewManageClient() {
       toast.success('녹화 영상 URL이 저장되었습니다.');
       handleCloseRecordingModal();
     } catch (error) {
-      console.error('녹화 영상 URL 저장 오류:', error);
+      logger.error('녹화 영상 URL 저장 오류:', error);
       toast.error('녹화 영상 URL을 저장하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -1235,7 +1236,7 @@ export function InterviewManageClient() {
       await getAllSMSTemplates();
       // setSmsTemplates(templates);
     } catch (error) {
-      console.error('SMS 템플릿 로드 오류:', error);
+      logger.error('SMS 템플릿 로드 오류:', error);
     }
   };
   
@@ -1312,7 +1313,7 @@ export function InterviewManageClient() {
         setFinalFailMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
       }
     } catch (error) {
-      console.error('템플릿 로드 실패:', error);
+      logger.error('템플릿 로드 실패:', error);
       toast.error('템플릿을 불러오는 데 실패했습니다.');
     } finally {
       setLoading(false);
@@ -1351,7 +1352,7 @@ export function InterviewManageClient() {
         toast.error(`메시지 전송 실패: ${result.message}`);
       }
     } catch (error: any) {
-      console.error('메시지 전송 오류:', error);
+      logger.error('메시지 전송 오류:', error);
       toast.error(error.message || '메시지 전송 중 오류가 발생했습니다.');
     } finally {
       setIsLoadingMessage(false);
@@ -1381,7 +1382,7 @@ export function InterviewManageClient() {
           title: `${type} 템플릿`,
           createdBy
         }).catch(error => {
-          console.error('템플릿 업데이트 실패:', error);
+          logger.error('템플릿 업데이트 실패:', error);
           toast.error('템플릿 업데이트에 실패했습니다. 다시 시도해주세요.');
         });
       } else {
@@ -1393,7 +1394,7 @@ export function InterviewManageClient() {
           title: `${type} 템플릿`,
           createdBy
         }).catch(error => {
-          console.error('템플릿 생성 실패:', error);
+          logger.error('템플릿 생성 실패:', error);
           toast.error('템플릿 생성에 실패했습니다. 다시 시도해주세요.');
         });
       }
@@ -1427,11 +1428,11 @@ export function InterviewManageClient() {
       
       // 백그라운드에서 최신 템플릿 데이터 로드
       loadSmsTemplates().catch(error => {
-        console.error('템플릿 로드 실패:', error);
+        logger.error('템플릿 로드 실패:', error);
       });
       
     } catch (error) {
-      console.error('템플릿 저장 실패:', error);
+      logger.error('템플릿 저장 실패:', error);
       toast.error('템플릿 저장에 실패했습니다.');
     } finally {
       setIsSavingTemplate(false);

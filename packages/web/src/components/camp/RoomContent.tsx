@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,7 +42,7 @@ const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
     // 방법 3: 기존 방식
     // const viewUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
     
-    console.log('🔄 [convertGoogleDriveUrl] URL 변환:', {
+    logger.info('🔄 [convertGoogleDriveUrl] URL 변환:', {
       original: url,
       converted: thumbnailUrl,
       fileId,
@@ -91,7 +92,7 @@ export default function RoomContent() {
           setLoading(false);
         }
       } catch (error) {
-        console.error('캠프 코드 로드 실패:', error);
+        logger.error('캠프 코드 로드 실패:', error);
         setLoading(false);
       }
     };
@@ -104,15 +105,15 @@ export default function RoomContent() {
     
     try {
       setLoading(true);
-      console.log('📥 [RoomContent] 학생 데이터 로딩 시작...', { campCode });
+      logger.info('📥 [RoomContent] 학생 데이터 로딩 시작...', { campCode });
       const data = await stSheetService.getCachedData(campCode);
-      console.log('📊 [RoomContent] 로드된 학생 수:', data.length);
+      logger.info('📊 [RoomContent] 로드된 학생 수:', data.length);
       
       // 처음 몇 명의 프로필사진 정보 출력
       const studentsWithPhotos = data.filter(s => s.profilePhoto);
-      console.log('📸 [RoomContent] 프로필사진 있는 학생:', studentsWithPhotos.length);
+      logger.info('📸 [RoomContent] 프로필사진 있는 학생:', studentsWithPhotos.length);
       if (studentsWithPhotos.length > 0) {
-        console.log('📸 [RoomContent] 프로필사진 샘플:', studentsWithPhotos.slice(0, 3).map(s => ({
+        logger.info('📸 [RoomContent] 프로필사진 샘플:', studentsWithPhotos.slice(0, 3).map(s => ({
           name: s.name,
           profilePhoto: s.profilePhoto,
           photoLength: s.profilePhoto?.length
@@ -127,7 +128,7 @@ export default function RoomContent() {
       setUseTemporaryDataSetting(useTempSetting);
       setHasRealData(hasReal);
     } catch (error) {
-      console.error('❌ [RoomContent] 학생 목록 로드 실패:', error);
+      logger.error('❌ [RoomContent] 학생 목록 로드 실패:', error);
       alert('학생 목록을 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
@@ -157,7 +158,7 @@ export default function RoomContent() {
       await loadAllStudents();
       alert('데이터 동기화가 완료되었습니다.');
     } catch (error) {
-      console.error('동기화 실패:', error);
+      logger.error('동기화 실패:', error);
       alert('동기화에 실패했습니다.');
     } finally {
       setSyncing(false);
@@ -182,7 +183,7 @@ export default function RoomContent() {
       await loadAllStudents();
       alert(`임시 데이터 표시가 ${newSetting ? '활성화' : '비활성화'}되었습니다.`);
     } catch (error) {
-      console.error('설정 변경 실패:', error);
+      logger.error('설정 변경 실패:', error);
       alert('설정 변경에 실패했습니다.');
     }
   };
@@ -486,7 +487,7 @@ export default function RoomContent() {
               {/* 프로필 사진 */}
               {(() => {
                 const profilePhotoUrl = convertGoogleDriveUrl(selectedStudent.profilePhoto);
-                console.log('🖼️ [RoomContent] 학생 정보:', {
+                logger.info('🖼️ [RoomContent] 학생 정보:', {
                   name: selectedStudent.name,
                   studentId: selectedStudent.studentId,
                   profilePhoto: selectedStudent.profilePhoto,
@@ -502,11 +503,11 @@ export default function RoomContent() {
                       alt={`${selectedStudent.name} 프로필`}
                       className="w-48 h-48 rounded-full object-cover border-2 border-gray-200"
                       onLoad={(e) => {
-                        console.log('✅ [RoomContent] 프로필사진 로드 성공:', selectedStudent.name, profilePhotoUrl);
+                        logger.info('✅ [RoomContent] 프로필사진 로드 성공:', selectedStudent.name, profilePhotoUrl);
                       }}
                       onError={(e) => {
                         const imgElement = e.currentTarget as HTMLImageElement;
-                        console.error('❌ [RoomContent] 프로필사진 로드 실패:', {
+                        logger.error('❌ [RoomContent] 프로필사진 로드 실패:', {
                           name: selectedStudent.name,
                           originalUrl: selectedStudent.profilePhoto,
                           convertedUrl: profilePhotoUrl,

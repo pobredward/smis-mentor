@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { logger } from '@smis-mentor/shared';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -22,7 +23,7 @@ const auth = getAuth(app);
 // 브라우저 환경에서만 persistence 설정
 if (typeof window !== 'undefined') {
   setPersistence(auth, browserLocalPersistence).catch((error) => {
-    console.error('Firebase Auth persistence 설정 실패:', error);
+    logger.error('Firebase Auth persistence 설정 실패:', error);
   });
 }
 

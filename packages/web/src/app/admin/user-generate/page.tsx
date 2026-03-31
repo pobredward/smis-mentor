@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
@@ -118,7 +119,7 @@ export default function UserGenerate() {
 
         setAllGenerations(generations);
       } catch (error) {
-        console.error('직무 코드 조회 오류:', error);
+        logger.error('직무 코드 조회 오류:', error);
         toast.error('직무 코드 정보를 불러오는데 실패했습니다.');
       } finally {
         setIsLoadingJobCodes(false);
@@ -214,7 +215,7 @@ export default function UserGenerate() {
       });
       setSelectedGenerations([]);
     } catch (error) {
-      console.error('임시 사용자 생성 오류:', error);
+      logger.error('임시 사용자 생성 오류:', error);
 
       // 중복 사용자 에러 체크
       if (error instanceof Error && error.message === '이미 등록된 유저입니다') {

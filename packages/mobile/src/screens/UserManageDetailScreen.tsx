@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -144,7 +145,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
         }
       }
     } catch (error) {
-      console.error('현재 사용자 정보 로드 오류:', error);
+      logger.error('현재 사용자 정보 로드 오류:', error);
     }
   };
 
@@ -170,7 +171,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
         setSelectedGeneration(uniqueGenerations[0]);
       }
     } catch (error) {
-      console.error('전체 직무 코드 로드 오류:', error);
+      logger.error('전체 직무 코드 로드 오류:', error);
     }
   };
 
@@ -185,7 +186,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
       const jobCodesInfo = await adminGetUserJobCodesInfo(db, user.jobExperiences);
       setJobCodes(jobCodesInfo);
     } catch (error) {
-      console.error('직무 경험 정보 로드 오류:', error);
+      logger.error('직무 경험 정보 로드 오류:', error);
     } finally {
       setIsLoading(false);
     }
@@ -194,11 +195,11 @@ export function UserManageDetailScreen({ route, navigation }: any) {
   const reloadUserData = async () => {
     try {
       const userId = user.id || user.userId;
-      console.log('🔄 사용자 데이터 새로고침 시작:', userId);
+      logger.info('🔄 사용자 데이터 새로고침 시작:', userId);
       
       const updatedUser = await getUserById(db, userId);
       if (updatedUser) {
-        console.log('✅ 업데이트된 사용자 데이터:', {
+        logger.info('✅ 업데이트된 사용자 데이터:', {
           jobExperiences: updatedUser.jobExperiences,
         });
         setUser(updatedUser);
@@ -206,15 +207,15 @@ export function UserManageDetailScreen({ route, navigation }: any) {
         // user state가 업데이트된 후 jobCodes를 로드
         if (updatedUser.jobExperiences && updatedUser.jobExperiences.length > 0) {
           const jobCodesInfo = await adminGetUserJobCodesInfo(db, updatedUser.jobExperiences);
-          console.log('✅ 직무 코드 정보 로드 완료:', jobCodesInfo.length);
+          logger.info('✅ 직무 코드 정보 로드 완료:', jobCodesInfo.length);
           setJobCodes(jobCodesInfo);
         } else {
-          console.log('ℹ️ 직무 경험 없음');
+          logger.info('ℹ️ 직무 경험 없음');
           setJobCodes([]);
         }
       }
     } catch (error) {
-      console.error('❌ 사용자 데이터 새로고침 오류:', error);
+      logger.error('❌ 사용자 데이터 새로고침 오류:', error);
     }
   };
 
@@ -285,7 +286,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
       const userId = user.id || user.userId;
       
       // 디버깅: 파라미터 확인
-      console.log('직무 경험 추가 시도:', {
+      logger.info('직무 경험 추가 시도:', {
         userId,
         selectedJobCodeId,
         selectedGroup,
@@ -311,7 +312,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
       // 사용자 데이터 및 직무 경험 목록 새로고침
       await reloadUserData();
     } catch (error: any) {
-      console.error('직무 경험 추가 오류:', error);
+      logger.error('직무 경험 추가 오류:', error);
       Alert.alert('오류', error.message || '직무 경험 추가 중 오류가 발생했습니다.');
     } finally {
       setIsUpdating(false);
@@ -335,7 +336,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
               setIsUpdating(true);
               const userId = user.id || user.userId;
 
-              console.log('🗑️ 직무 경험 삭제 시도:', { 
+              logger.info('🗑️ 직무 경험 삭제 시도:', { 
                 userId, 
                 jobCodeId,
                 현재직무수: user.jobExperiences?.length || 0
@@ -343,14 +344,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
 
               const updatedJobExperiences = await adminRemoveUserJobCode(db, userId, jobCodeId);
 
-              console.log('✅ 직무 경험 삭제 완료, 남은 직무 수:', updatedJobExperiences.length);
+              logger.info('✅ 직무 경험 삭제 완료, 남은 직무 수:', updatedJobExperiences.length);
 
               Alert.alert('성공', '직무 경험이 삭제되었습니다.');
 
               // 사용자 데이터 및 직무 경험 목록 새로고침
               await reloadUserData();
             } catch (error: any) {
-              console.error('❌ 직무 경험 삭제 오류:', error);
+              logger.error('❌ 직무 경험 삭제 오류:', error);
               Alert.alert('오류', error.message || '직무 경험 삭제 중 오류가 발생했습니다.');
             } finally {
               setIsUpdating(false);
@@ -389,11 +390,11 @@ export function UserManageDetailScreen({ route, navigation }: any) {
       }
 
       const result = await response.json();
-      console.log(`✅ 사용자 ${deleteType === 'hard' ? '영구' : '일반'} 삭제 성공:`, result);
+      logger.info(`✅ 사용자 ${deleteType === 'hard' ? '영구' : '일반'} 삭제 성공:`, result);
 
       return true;
     } catch (error: any) {
-      console.error('사용자 삭제 실패:', error);
+      logger.error('사용자 삭제 실패:', error);
       throw error;
     }
   };
@@ -421,7 +422,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                 },
               ]);
             } catch (error: any) {
-              console.error('사용자 임시삭제 오류:', error);
+              logger.error('사용자 임시삭제 오류:', error);
               Alert.alert('오류', error.message || '사용자 임시삭제 중 오류가 발생했습니다.');
             } finally {
               setIsUpdating(false);
@@ -468,7 +469,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                         },
                       ]);
                     } catch (error: any) {
-                      console.error('사용자 완전삭제 오류:', error);
+                      logger.error('사용자 완전삭제 오류:', error);
                       Alert.alert('오류', error.message || '사용자 완전삭제 중 오류가 발생했습니다.');
                     } finally {
                       setIsUpdating(false);

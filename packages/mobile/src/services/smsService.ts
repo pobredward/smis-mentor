@@ -1,4 +1,5 @@
 import { 
+import { logger } from '@smis-mentor/shared';
   SMSApiClient, 
   SendSMSParams, 
   SendSMSResponse,
@@ -70,7 +71,7 @@ export const sendSMSWithTemplate = async (
       userName,
     });
   } catch (error) {
-    console.error('템플릿 기반 SMS 전송 오류:', error);
+    logger.error('템플릿 기반 SMS 전송 오류:', error);
     return {
       success: false,
       message: 'SMS 전송 중 오류가 발생했습니다.',

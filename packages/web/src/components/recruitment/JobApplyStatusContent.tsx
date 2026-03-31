@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -45,7 +46,7 @@ export default function JobApplyStatusContent() {
                 jobBoard
               } as ApplicationWithJobDetails;
             } catch (error) {
-              console.error(`공고 정보 로드 오류 (${app.refJobBoardId}):`, error);
+              logger.error(`공고 정보 로드 오류 (${app.refJobBoardId}):`, error);
               return app as ApplicationWithJobDetails;
             }
           })
@@ -53,7 +54,7 @@ export default function JobApplyStatusContent() {
         
         setApplications(applicationsWithJobDetails);
       } catch (error) {
-        console.error('지원 내역 로드 오류:', error);
+        logger.error('지원 내역 로드 오류:', error);
         toast.error('지원 내역을 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
@@ -160,7 +161,7 @@ export default function JobApplyStatusContent() {
       setCancelModalOpen(false);
       setSelectedApplicationId(null);
     } catch (error) {
-      console.error('지원 취소 오류:', error);
+      logger.error('지원 취소 오류:', error);
       toast.error('지원 취소 중 오류가 발생했습니다.');
     } finally {
       setIsCancelling(false);

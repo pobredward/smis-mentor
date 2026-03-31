@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -137,7 +138,7 @@ export default function UserMapTest({ users, onUserClick }: UserMapTestProps) {
       const apiKey = process.env.NEXT_PUBLIC_KAKAO_REST_API_KEY;
       
       if (!apiKey || apiKey === 'YOUR_KAKAO_REST_API_KEY') {
-        console.warn('Kakao API 키가 설정되지 않았습니다. 모킹 데이터를 사용합니다.');
+        logger.warn('Kakao API 키가 설정되지 않았습니다. 모킹 데이터를 사용합니다.');
         return mockGeocodeAddress(address);
       }
 
@@ -151,7 +152,7 @@ export default function UserMapTest({ users, onUserClick }: UserMapTestProps) {
       );
 
       if (!response.ok) {
-        console.error('Kakao API 오류:', response.status);
+        logger.error('Kakao API 오류:', response.status);
         return mockGeocodeAddress(address);
       }
 
@@ -168,7 +169,7 @@ export default function UserMapTest({ users, onUserClick }: UserMapTestProps) {
       // 주소를 찾지 못하면 모킹 데이터 사용
       return mockGeocodeAddress(address);
     } catch (error) {
-      console.error('Geocoding 오류:', error);
+      logger.error('Geocoding 오류:', error);
       return mockGeocodeAddress(address);
     }
   };
@@ -236,8 +237,8 @@ export default function UserMapTest({ users, onUserClick }: UserMapTestProps) {
         }
       }
 
-      console.log(`✅ 캐시된 좌표: ${processed.length}명`);
-      console.log(`⏳ 변환 필요: ${usersNeedingGeocode.length}명`);
+      logger.info(`✅ 캐시된 좌표: ${processed.length}명`);
+      logger.info(`⏳ 변환 필요: ${usersNeedingGeocode.length}명`);
 
       // 2단계: 좌표가 없는 사용자만 변환 (순차적으로 처리)
       for (const user of usersNeedingGeocode) {
@@ -255,7 +256,7 @@ export default function UserMapTest({ users, onUserClick }: UserMapTestProps) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      console.log(`✅ ${processed.length}명의 좌표 데이터 준비 완료`);
+      logger.info(`✅ ${processed.length}명의 좌표 데이터 준비 완료`);
       setUsersWithCoords(processed);
       setIsGeocoding(false);
     };

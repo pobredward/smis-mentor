@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -76,7 +77,7 @@ export function SignUpStep3Screen({
         major2,
       });
     } catch (error) {
-      console.error('교육 정보 확인 오류:', error);
+      logger.error('교육 정보 확인 오류:', error);
       Alert.alert('오류', '교육 정보 확인 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

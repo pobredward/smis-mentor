@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -88,7 +89,7 @@ export function SignInScreen({
         }
       }
     } catch (error) {
-      console.error('저장된 로그인 정보 확인 실패:', error);
+      logger.error('저장된 로그인 정보 확인 실패:', error);
     }
   };
 
@@ -103,7 +104,7 @@ export function SignInScreen({
         AsyncStorage.setItem(STORAGE_KEYS.LOGIN_EXPIRY, expiryDate.toISOString()),
       ]);
     } catch (error) {
-      console.error('로그인 정보 저장 실패:', error);
+      logger.error('로그인 정보 저장 실패:', error);
     }
   };
 
@@ -115,7 +116,7 @@ export function SignInScreen({
         AsyncStorage.removeItem(STORAGE_KEYS.LOGIN_EXPIRY),
       ]);
     } catch (error) {
-      console.error('저장된 로그인 정보 삭제 실패:', error);
+      logger.error('저장된 로그인 정보 삭제 실패:', error);
     }
   };
 
@@ -154,7 +155,7 @@ export function SignInScreen({
       Alert.alert('로그인 성공', '환영합니다!');
       onSignInSuccess();
     } catch (error: any) {
-      // 인증 실패는 Alert로만 표시 (console.error 제거)
+      // 인증 실패는 Alert로만 표시 (logger.error 제거)
       if (
         error.code === 'auth/user-not-found' ||
         error.code === 'auth/wrong-password' ||
@@ -167,7 +168,7 @@ export function SignInScreen({
           '너무 많은 로그인 시도가 있었습니다. 나중에 다시 시도해주세요.'
         );
       } else {
-        console.error('로그인 오류:', error);
+        logger.error('로그인 오류:', error);
         Alert.alert('로그인 실패', '로그인 중 오류가 발생했습니다.');
       }
     } finally {
@@ -198,7 +199,7 @@ export function SignInScreen({
       setShowResetForm(false);
       setResetEmail('');
     } catch (error: any) {
-      console.error('비밀번호 재설정 오류:', error);
+      logger.error('비밀번호 재설정 오류:', error);
       
       if (error.code === 'auth/user-not-found') {
         Alert.alert('오류', '해당 이메일로 등록된 계정이 없습니다.');
@@ -233,7 +234,7 @@ export function SignInScreen({
       switch (result.action) {
         case 'LOGIN':
           // 기존 active 계정 → Firebase Auth로 로그인
-          console.log('✅ Google 로그인 성공 - Firebase Auth 로그인 시작:', {
+          logger.info('✅ Google 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
             userId: result.user?.userId,
           });
@@ -242,18 +243,18 @@ export function SignInScreen({
             const { signInWithCustomToken } = await import('../services/authService');
             await signInWithCustomToken(result.user.userId, result.user.email);
             
-            console.log('✅ Firebase Auth 로그인 완료');
+            logger.info('✅ Firebase Auth 로그인 완료');
             Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
           } catch (authError: any) {
-            console.error('❌ Firebase Auth 로그인 실패:', authError);
+            logger.error('❌ Firebase Auth 로그인 실패:', authError);
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
           break;
         
         case 'LINK_ACTIVE':
           // 기존 active 계정에 Google 연동 필요 → 비밀번호 입력
-          console.log('🔗 Google 연동 필요 - 비밀번호 확인 모달 표시');
+          logger.info('🔗 Google 연동 필요 - 비밀번호 확인 모달 표시');
           setSocialData(socialUserData);
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
@@ -275,7 +276,7 @@ export function SignInScreen({
           Alert.alert('오류', '알 수 없는 오류가 발생했습니다.');
       }
     } catch (error: any) {
-      console.error('소셜 로그인 처리 실패:', error);
+      logger.error('소셜 로그인 처리 실패:', error);
       Alert.alert('오류', handleSocialAuthError(error));
     } finally {
       setIsLoading(false); // 로딩 종료
@@ -286,7 +287,7 @@ export function SignInScreen({
    * Google 로그인 에러 핸들러
    */
   const handleGoogleSignInError = (error: Error) => {
-    console.error('Google 로그인 실패:', error);
+    logger.error('Google 로그인 실패:', error);
     Alert.alert('로그인 실패', handleSocialAuthError(error));
   };
 
@@ -307,7 +308,7 @@ export function SignInScreen({
       switch (result.action) {
         case 'LOGIN':
           // 기존 active 계정 → Firebase Auth로 로그인
-          console.log('✅ 네이버 로그인 성공 - Firebase Auth 로그인 시작:', {
+          logger.info('✅ 네이버 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
             userId: result.user?.userId,
           });
@@ -316,18 +317,18 @@ export function SignInScreen({
             const { signInWithCustomToken } = await import('../services/authService');
             await signInWithCustomToken(result.user.userId, result.user.email);
             
-            console.log('✅ Firebase Auth 로그인 완료');
+            logger.info('✅ Firebase Auth 로그인 완료');
             Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
           } catch (authError: any) {
-            console.error('❌ Firebase Auth 로그인 실패:', authError);
+            logger.error('❌ Firebase Auth 로그인 실패:', authError);
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
           break;
         
         case 'LINK_ACTIVE':
           // 기존 active 계정에 네이버 연동 필요 → 비밀번호 입력
-          console.log('🔗 네이버 연동 필요 - 비밀번호 확인 모달 표시');
+          logger.info('🔗 네이버 연동 필요 - 비밀번호 확인 모달 표시');
           setSocialData(socialUserData);
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
@@ -349,7 +350,7 @@ export function SignInScreen({
           Alert.alert('오류', '알 수 없는 오류가 발생했습니다.');
       }
     } catch (error: any) {
-      console.error('소셜 로그인 처리 실패:', error);
+      logger.error('소셜 로그인 처리 실패:', error);
       Alert.alert('오류', handleSocialAuthError(error));
     } finally {
       setIsLoading(false); // 로딩 종료
@@ -360,7 +361,7 @@ export function SignInScreen({
    * 네이버 로그인 에러 핸들러
    */
   const handleNaverSignInError = (error: Error) => {
-    console.error('네이버 로그인 실패:', error);
+    logger.error('네이버 로그인 실패:', error);
     Alert.alert('로그인 실패', handleSocialAuthError(error));
   };
 
@@ -381,7 +382,7 @@ export function SignInScreen({
       switch (result.action) {
         case 'LOGIN':
           // 기존 active 계정 → Firebase Auth로 로그인
-          console.log('✅ Apple 로그인 성공 - Firebase Auth 로그인 시작:', {
+          logger.info('✅ Apple 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
             userId: result.user?.userId,
           });
@@ -390,18 +391,18 @@ export function SignInScreen({
             const { signInWithCustomToken } = await import('../services/authService');
             await signInWithCustomToken(result.user.userId, result.user.email);
             
-            console.log('✅ Firebase Auth 로그인 완료');
+            logger.info('✅ Firebase Auth 로그인 완료');
             Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
           } catch (authError: any) {
-            console.error('❌ Firebase Auth 로그인 실패:', authError);
+            logger.error('❌ Firebase Auth 로그인 실패:', authError);
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
           break;
         
         case 'LINK_ACTIVE':
           // 기존 active 계정에 Apple 연동 필요 → 비밀번호 입력
-          console.log('🔗 Apple 연동 필요 - 비밀번호 확인 모달 표시');
+          logger.info('🔗 Apple 연동 필요 - 비밀번호 확인 모달 표시');
           setSocialData(socialUserData);
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
@@ -423,7 +424,7 @@ export function SignInScreen({
           Alert.alert('오류', '알 수 없는 오류가 발생했습니다.');
       }
     } catch (error: any) {
-      console.error('소셜 로그인 처리 실패:', error);
+      logger.error('소셜 로그인 처리 실패:', error);
       Alert.alert('오류', handleSocialAuthError(error));
     } finally {
       setIsLoading(false); // 로딩 종료
@@ -434,7 +435,7 @@ export function SignInScreen({
    * Apple 로그인 에러 핸들러
    */
   const handleAppleSignInError = (error: Error) => {
-    console.error('Apple 로그인 실패:', error);
+    logger.error('Apple 로그인 실패:', error);
     Alert.alert('로그인 실패', handleSocialAuthError(error));
   };
 
@@ -590,7 +591,7 @@ export function SignInScreen({
           ]
         );
       } else {
-        console.error('전화번호 확인 중 오류:', error);
+        logger.error('전화번호 확인 중 오류:', error);
         Alert.alert('오류', '계정 확인 중 오류가 발생했습니다.');
       }
     } finally {
@@ -625,13 +626,13 @@ export function SignInScreen({
       setShowPasswordModal(false);
       
       // ✅ 연동 완료 즉시 새로고침 (Alert 전)
-      console.log('🔄 계정 연동 완료 - 즉시 새로고침');
+      logger.info('🔄 계정 연동 완료 - 즉시 새로고침');
       try {
         // 1. 캐시 무효화
         const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
         const currentUserBefore = auth.currentUser;
         if (currentUserBefore?.uid) {
-          console.log('🗑️ 캐시 무효화:', currentUserBefore.uid);
+          logger.info('🗑️ 캐시 무효화:', currentUserBefore.uid);
           await removeCache(CACHE_STORE.USERS, currentUserBefore.uid);
         }
         
@@ -639,14 +640,14 @@ export function SignInScreen({
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // 3. ✅ onAuthStateChanged가 실행될 때까지 대기 (최대 3초)
-        console.log('⏳ onAuthStateChanged 대기 중...');
+        logger.info('⏳ onAuthStateChanged 대기 중...');
         let attempts = 0;
         const maxAttempts = 30; // 3초
         
         while (attempts < maxAttempts) {
           const currentUserNow = auth.currentUser;
           if (currentUserNow?.email === existingUserEmail) {
-            console.log('✅ onAuthStateChanged 감지됨:', currentUserNow.email);
+            logger.info('✅ onAuthStateChanged 감지됨:', currentUserNow.email);
             break;
           }
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -654,18 +655,18 @@ export function SignInScreen({
         }
         
         if (attempts >= maxAttempts) {
-          console.warn('⚠️ onAuthStateChanged 타임아웃 (무시하고 계속)');
+          logger.warn('⚠️ onAuthStateChanged 타임아웃 (무시하고 계속)');
         }
         
         // 4. ✅ AuthContext.refreshUserData 호출
         await refreshUserData();
-        console.log('✅ refreshUserData 완료');
+        logger.info('✅ refreshUserData 완료');
         
         // 5. React 상태 업데이트 대기
         await new Promise(resolve => setTimeout(resolve, 300));
-        console.log('✅ React 상태 업데이트 대기 완료');
+        logger.info('✅ React 상태 업데이트 대기 완료');
       } catch (error) {
-        console.error('❌ 즉시 새로고침 실패:', error);
+        logger.error('❌ 즉시 새로고침 실패:', error);
       }
       
       // Alert 후 화면 전환
@@ -676,13 +677,13 @@ export function SignInScreen({
         [{ 
           text: '확인', 
           onPress: () => {
-            console.log('✅ 화면 전환 (데이터 이미 최신화됨)');
+            logger.info('✅ 화면 전환 (데이터 이미 최신화됨)');
             onSignInSuccess();
           }
         }]
       );
     } catch (error: any) {
-      console.error('계정 연결 실패:', error);
+      logger.error('계정 연결 실패:', error);
       
       if (error.code === 'auth/wrong-password') {
         Alert.alert(

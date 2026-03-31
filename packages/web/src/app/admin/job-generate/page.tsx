@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -74,7 +75,7 @@ export default function JobGenerate() {
         setSelectedGeneration(uniqueGenerations[0]);
       }
     } catch (error) {
-      console.error('업무 코드 로드 오류:', error);
+      logger.error('업무 코드 로드 오류:', error);
       toast.error('업무 코드 로드 중 오류가 발생했습니다.');
     }
   };
@@ -92,7 +93,7 @@ export default function JobGenerate() {
         toast.success('업무가 삭제되었습니다.');
         loadJobCodes();
       } catch (error) {
-        console.error('업무 삭제 오류:', error);
+        logger.error('업무 삭제 오류:', error);
         toast.error('업무 삭제 중 오류가 발생했습니다.');
       } finally {
         setIsDeleting(prev => ({ ...prev, [id]: false }));
@@ -190,7 +191,7 @@ export default function JobGenerate() {
       // 목록 새로고침
       loadJobCodes();
     } catch (error) {
-      console.error('업무 저장 오류:', error);
+      logger.error('업무 저장 오류:', error);
       toast.error('업무 저장 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -233,7 +234,7 @@ export default function JobGenerate() {
       // 기타 경우
       return '날짜 없음';
     } catch (error) {
-      console.error('날짜 변환 오류:', error, timestamp);
+      logger.error('날짜 변환 오류:', error, timestamp);
       return '날짜 변환 오류';
     }
   };

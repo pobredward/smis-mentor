@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { logger } from '@smis-mentor/shared';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewNavigation } from 'react-native-webview';
@@ -64,7 +65,7 @@ export function EducationScreen() {
 
   const loadEducationLinks = useCallback(async () => {
     if (!activeJobCodeId) {
-      console.log('⚠️ EducationScreen: activeJobCodeId 없음');
+      logger.info('⚠️ EducationScreen: activeJobCodeId 없음');
       setLoading(false);
       setEducationLinks([]);
       setSelectedLinkId(null);
@@ -72,7 +73,7 @@ export function EducationScreen() {
     }
 
     try {
-      console.log('📥 EducationScreen: 교육 링크 로드 시작 -', activeJobCodeId);
+      logger.info('📥 EducationScreen: 교육 링크 로드 시작 -', activeJobCodeId);
       setLoading(true);
       
       // 기존 데이터 초기화
@@ -82,7 +83,7 @@ export function EducationScreen() {
       const resources = await generationResourcesService.getResourcesByJobCodeId(activeJobCodeId);
       
       if (resources?.educationLinks) {
-        console.log('✅ EducationScreen: 교육 링크 로드 성공 -', resources.educationLinks.length, '개');
+        logger.info('✅ EducationScreen: 교육 링크 로드 성공 -', resources.educationLinks.length, '개');
         setEducationLinks(resources.educationLinks);
         
         // 필터링된 링크 중 첫 번째를 선택
@@ -98,10 +99,10 @@ export function EducationScreen() {
           setSelectedLinkId(filtered[0].id);
         }
       } else {
-        console.log('⚠️ EducationScreen: 해당 기수의 교육 링크 없음');
+        logger.info('⚠️ EducationScreen: 해당 기수의 교육 링크 없음');
       }
     } catch (error) {
-      console.error('❌ EducationScreen: 교육 링크 로드 실패:', error);
+      logger.error('❌ EducationScreen: 교육 링크 로드 실패:', error);
       Alert.alert('오류', '교육 링크를 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
@@ -109,7 +110,7 @@ export function EducationScreen() {
   }, [activeJobCodeId]);
 
   useEffect(() => {
-    console.log('🔄 EducationScreen: activeJobCodeId 변경됨:', activeJobCodeId);
+    logger.info('🔄 EducationScreen: activeJobCodeId 변경됨:', activeJobCodeId);
     if (activeJobCodeId) {
       loadEducationLinks();
     }
@@ -139,7 +140,7 @@ export function EducationScreen() {
       setShowActionSheet(false);
       Alert.alert('성공', '링크가 삭제되었습니다.');
     } catch (error) {
-      console.error('링크 삭제 실패:', error);
+      logger.error('링크 삭제 실패:', error);
       Alert.alert('오류', '링크 삭제에 실패했습니다.');
     }
   };
@@ -158,7 +159,7 @@ export function EducationScreen() {
       await generationResourcesService.reorderLinks(activeJobCodeId, 'educationLinks', newLinks);
       setEducationLinks(newLinks);
     } catch (error) {
-      console.error('순서 변경 실패:', error);
+      logger.error('순서 변경 실패:', error);
       Alert.alert('오류', '순서 변경에 실패했습니다.');
     }
   };
@@ -182,7 +183,7 @@ export function EducationScreen() {
       setShowActionSheet(false);
       Alert.alert('성공', '링크가 수정되었습니다.');
     } catch (error) {
-      console.error('링크 수정 실패:', error);
+      logger.error('링크 수정 실패:', error);
       Alert.alert('오류', '링크 수정에 실패했습니다.');
     }
   };

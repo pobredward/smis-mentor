@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -119,7 +120,7 @@ export function JobBoardApplicantsScreen({
         [userId]: uniqueCodes
       }));
     } catch (error) {
-      console.error('지원 캠프 로드 오류:', error);
+      logger.error('지원 캠프 로드 오류:', error);
       setAppliedCampsMap(prev => ({
         ...prev,
         [userId]: []
@@ -153,7 +154,7 @@ export function JobBoardApplicantsScreen({
               user: userData,
             };
           } catch (error) {
-            console.error(`사용자 정보 로드 오류 (${app.refUserId}):`, error);
+            logger.error(`사용자 정보 로드 오류 (${app.refUserId}):`, error);
             return app;
           }
         })
@@ -176,7 +177,7 @@ export function JobBoardApplicantsScreen({
         })
       );
     } catch (error) {
-      console.error('데이터 로드 오류:', error);
+      logger.error('데이터 로드 오류:', error);
       Alert.alert('오류', '데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -266,7 +267,7 @@ export function JobBoardApplicantsScreen({
               newStatus === 'closed' ? '공고가 마감되었습니다.' : '공고가 활성화되었습니다.'
             );
           } catch (error) {
-            console.error('상태 변경 오류:', error);
+            logger.error('상태 변경 오류:', error);
             Alert.alert('오류', '상태 변경 중 오류가 발생했습니다.');
           }
         },

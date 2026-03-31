@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { logger } from '@smis-mentor/shared';
 
 const envSchema = z.object({
   // Firebase Client
@@ -62,9 +63,9 @@ export function validateEnv() {
   const result = envSchema.safeParse(process.env);
   
   if (!result.success) {
-    console.error('❌ 환경변수 검증 실패:');
+    logger.error('❌ 환경변수 검증 실패:');
     result.error.errors.forEach((error) => {
-      console.error(`  - ${error.path.join('.')}: ${error.message}`);
+      logger.error(`  - ${error.path.join('.')}: ${error.message}`);
     });
     throw new Error('환경변수 설정이 올바르지 않습니다. 위 오류를 확인해주세요.');
   }

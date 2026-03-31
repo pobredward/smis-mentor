@@ -1,4 +1,5 @@
 import { db } from '@/lib/firebase';
+import { logger } from '@smis-mentor/shared';
 import { collection, doc, getDoc, setDoc, updateDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 import { Timestamp } from 'firebase/firestore';
 
@@ -37,7 +38,7 @@ export async function saveSMSTemplate(template: Omit<SMSTemplate, 'id' | 'create
     
     return { id: templateRef.id, ...template, createdAt: now, updatedAt: now };
   } catch (error) {
-    console.error('템플릿 저장 오류:', error);
+    logger.error('템플릿 저장 오류:', error);
     throw error;
   }
 }
@@ -55,7 +56,7 @@ export async function updateSMSTemplate(id: string, template: Partial<Omit<SMSTe
     
     return { id, ...template, updatedAt: now };
   } catch (error) {
-    console.error('템플릿 업데이트 오류:', error);
+    logger.error('템플릿 업데이트 오류:', error);
     throw error;
   }
 }
@@ -72,7 +73,7 @@ export async function getSMSTemplate(id: string) {
     
     return { id: templateDoc.id, ...templateDoc.data() } as SMSTemplate;
   } catch (error) {
-    console.error('템플릿 조회 오류:', error);
+    logger.error('템플릿 조회 오류:', error);
     throw error;
   }
 }
@@ -84,7 +85,7 @@ export async function deleteSMSTemplate(id: string) {
     await deleteDoc(templateRef);
     return true;
   } catch (error) {
-    console.error('템플릿 삭제 오류:', error);
+    logger.error('템플릿 삭제 오류:', error);
     throw error;
   }
 }
@@ -161,7 +162,7 @@ export async function getSMSTemplateByTypeAndJobBoard(type: TemplateType, jobBoa
       b.updatedAt.toMillis() - a.updatedAt.toMillis()
     )[0];
   } catch (error) {
-    console.error('템플릿 조회 오류:', error);
+    logger.error('템플릿 조회 오류:', error);
     throw error;
   }
 }
@@ -177,7 +178,7 @@ export async function getAllSMSTemplates() {
       ...doc.data()
     })) as SMSTemplate[];
   } catch (error) {
-    console.error('모든 템플릿 조회 오류:', error);
+    logger.error('모든 템플릿 조회 오류:', error);
     throw error;
   }
 }
@@ -194,7 +195,7 @@ export async function getTemplatesByJobBoard(jobBoardId: string) {
       ...doc.data()
     })) as SMSTemplate[];
   } catch (error) {
-    console.error('공고별 템플릿 조회 오류:', error);
+    logger.error('공고별 템플릿 조회 오류:', error);
     throw error;
   }
 }
@@ -229,7 +230,7 @@ export async function getTemplatesByType(type: TemplateType) {
       b.updatedAt.toMillis() - a.updatedAt.toMillis()
     );
   } catch (error) {
-    console.error('타입별 템플릿 조회 오류:', error);
+    logger.error('타입별 템플릿 조회 오류:', error);
     throw error;
   }
 }
@@ -263,7 +264,7 @@ export async function getTemplatesWithJobBoardInfo(type: TemplateType) {
             };
           }
         } catch (error) {
-          console.error('공고 정보 조회 실패:', error);
+          logger.error('공고 정보 조회 실패:', error);
         }
         
         return {
@@ -276,7 +277,7 @@ export async function getTemplatesWithJobBoardInfo(type: TemplateType) {
     
     return templatesWithJobBoard;
   } catch (error) {
-    console.error('템플릿 및 공고 정보 조회 오류:', error);
+    logger.error('템플릿 및 공고 정보 조회 오류:', error);
     throw error;
   }
 } 

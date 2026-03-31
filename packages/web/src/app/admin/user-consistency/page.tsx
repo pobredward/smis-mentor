@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle, XCircle, Search, Download, Edit2, Save, X } from 'lucide-react';
@@ -60,7 +61,7 @@ export default function UserConsistencyPage() {
         toast.error('검증 실패: ' + data.error);
       }
     } catch (error: any) {
-      console.error('검증 오류:', error);
+      logger.error('검증 오류:', error);
       toast.error(error.message || '검증 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -172,7 +173,7 @@ export default function UserConsistencyPage() {
         toast.error(`ID 변경 실패: ${result.error}`);
       }
     } catch (error: any) {
-      console.error('ID 변경 오류:', error);
+      logger.error('ID 변경 오류:', error);
       toast.error(error.message || 'ID 변경 중 오류가 발생했습니다.');
     } finally {
       setUpdating(false);

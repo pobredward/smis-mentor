@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -47,7 +48,7 @@ export function InterviewLinksManager({
       setLinks(currentLinks);
       setErrors({});
     } catch (error) {
-      console.error('링크 로드 오류:', error);
+      logger.error('링크 로드 오류:', error);
       Alert.alert('오류', '링크를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -90,7 +91,7 @@ export function InterviewLinksManager({
       Alert.alert('성공', '링크가 성공적으로 저장되었습니다.');
       onClose();
     } catch (error) {
-      console.error('링크 저장 오류:', error);
+      logger.error('링크 저장 오류:', error);
       Alert.alert('오류', '링크를 저장하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);

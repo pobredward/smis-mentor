@@ -1,4 +1,5 @@
 "use client";
+import { logger } from '@smis-mentor/shared';
 
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -107,7 +108,7 @@ const Header = () => {
       await signOut();
       router.push('/');
     } catch (error) {
-      console.error('로그아웃 오류:', error);
+      logger.error('로그아웃 오류:', error);
     }
   }, [router]);
 

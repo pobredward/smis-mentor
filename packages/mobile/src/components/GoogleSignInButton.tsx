@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   TouchableOpacity,
   Text,
@@ -36,7 +37,7 @@ export function GoogleSignInButton({
       const result = await signInWithGoogleDirect();
       onSuccess(result.socialData);
     } catch (error: any) {
-      console.error('Google 로그인 실패:', error);
+      logger.error('Google 로그인 실패:', error);
       onError(error);
     } finally {
       setLoading(false);

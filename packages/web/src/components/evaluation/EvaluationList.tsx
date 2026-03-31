@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
@@ -34,7 +35,7 @@ export default function EvaluationList({
       const data = await EvaluationService.getUserEvaluations(db, userId, evaluationStage);
       setEvaluations(maxItems ? data.slice(0, maxItems) : data);
     } catch (error) {
-      console.error('평가 목록 로드 오류:', error);
+      logger.error('평가 목록 로드 오류:', error);
     } finally {
       setIsLoading(false);
     }

@@ -1,4 +1,5 @@
 import {
+import { logger } from '@smis-mentor/shared';
   collection,
   doc,
   getDoc,
@@ -58,7 +59,7 @@ export const getAllJobBoards = async (): Promise<JobBoardWithId[]> => {
 
     return jobBoards;
   } catch (error) {
-    console.error('공고 목록 조회 실패:', error);
+    logger.error('공고 목록 조회 실패:', error);
     throw error;
   }
 };
@@ -79,7 +80,7 @@ export const getJobBoardById = async (
       ...docSnap.data(),
     } as JobBoardWithId;
   } catch (error) {
-    console.error('공고 조회 실패:', error);
+    logger.error('공고 조회 실패:', error);
     throw error;
   }
 };
@@ -100,7 +101,7 @@ export const getJobCodeById = async (
       ...docSnap.data(),
     } as JobCodeWithId;
   } catch (error) {
-    console.error('직무 코드 조회 실패:', error);
+    logger.error('직무 코드 조회 실패:', error);
     throw error;
   }
 };

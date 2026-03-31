@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
@@ -236,7 +237,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
       setAttachments(prev => [...prev, ...uploadedAttachments]);
       toast.success('파일이 업로드되었습니다.');
     } catch (error) {
-      console.error('파일 업로드 오류:', error);
+      logger.error('파일 업로드 오류:', error);
       toast.error('파일 업로드 중 오류가 발생했습니다.');
     } finally {
       setUploadingFiles(false);
@@ -372,7 +373,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
       onSuccess();
       onClose();
     } catch (error) {
-      console.error('업무 저장 오류:', error);
+      logger.error('업무 저장 오류:', error);
       toast.error('업무 저장 중 오류가 발생했습니다.');
     } finally {
       setSubmitting(false);

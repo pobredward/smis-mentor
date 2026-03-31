@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { NotionRenderer } from 'react-notion-x';
@@ -80,7 +81,7 @@ export function NotionPage({ pageId }: NotionPageProps) {
         const data = await response.json();
         setRecordMap(data);
       } catch (err) {
-        console.error('Error fetching Notion page:', err);
+        logger.error('Error fetching Notion page:', err);
         setError('페이지를 불러오는데 실패했습니다.');
       } finally {
         setLoading(false);

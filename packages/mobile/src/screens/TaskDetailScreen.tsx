@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -72,7 +73,7 @@ export default function TaskDetailScreen() {
       }
       setTask(taskData);
     } catch (error) {
-      console.error('업무 로드 오류:', error);
+      logger.error('업무 로드 오류:', error);
       Alert.alert('오류', '업무를 불러오는 중 오류가 발생했습니다.');
       handleBack();
     } finally {
@@ -89,7 +90,7 @@ export default function TaskDetailScreen() {
       await toggleTaskCompletion(task.id, userData.userId, userData.name, role);
       await loadTask();
     } catch (error) {
-      console.error('업무 완료 토글 오류:', error);
+      logger.error('업무 완료 토글 오류:', error);
       Alert.alert('오류', '업무 상태 변경 중 오류가 발생했습니다.');
     }
   };
@@ -111,7 +112,7 @@ export default function TaskDetailScreen() {
               Alert.alert('성공', '업무가 삭제되었습니다.');
               handleBack();
             } catch (error) {
-              console.error('업무 삭제 오류:', error);
+              logger.error('업무 삭제 오류:', error);
               Alert.alert('오류', '업무 삭제 중 오류가 발생했습니다.');
             }
           },
@@ -152,7 +153,7 @@ export default function TaskDetailScreen() {
       );
     } catch (error: any) {
       if (error?.message !== 'User did not share') {
-        console.error('공유 오류:', error);
+        logger.error('공유 오류:', error);
       }
     }
   };
@@ -160,7 +161,7 @@ export default function TaskDetailScreen() {
   const handleEdit = () => {
     if (!task) return;
     
-    console.log('handleEdit called, navigating back with editTaskId:', task.id);
+    logger.info('handleEdit called, navigating back with editTaskId:', task.id);
     
     // handleBack과 동일한 구조로 navigation
     navigation.navigate('MainTabs', {
@@ -179,7 +180,7 @@ export default function TaskDetailScreen() {
   const handleCopy = () => {
     if (!task) return;
     
-    console.log('handleCopy called, navigating back with copyTaskId:', task.id);
+    logger.info('handleCopy called, navigating back with copyTaskId:', task.id);
     
     // handleBack과 동일한 구조로 navigation
     navigation.navigate('MainTabs', {
@@ -408,7 +409,7 @@ export default function TaskDetailScreen() {
             onPress={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              console.log('Copy button pressed');
+              logger.info('Copy button pressed');
               handleCopy();
             }}
             style={({ pressed }) => [
@@ -423,7 +424,7 @@ export default function TaskDetailScreen() {
             onPress={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              console.log('Edit button pressed');
+              logger.info('Edit button pressed');
               handleEdit();
             }}
             style={({ pressed }) => [
@@ -439,7 +440,7 @@ export default function TaskDetailScreen() {
               onPress={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Delete button pressed');
+                logger.info('Delete button pressed');
                 handleDelete();
               }}
               style={({ pressed }) => [

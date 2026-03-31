@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import { 
   getSMSTemplateByTypeAndJobBoard, 
   TemplateType,
@@ -131,7 +132,7 @@ export const useSMSTemplates = ({
       setMessages(newMessages);
       onLoadSuccess?.();
     } catch (error) {
-      console.error('템플릿 로드 실패:', error);
+      logger.error('템플릿 로드 실패:', error);
       const err = error instanceof Error ? error : new Error('템플릿 로드 실패');
       onLoadError?.(err);
       
@@ -179,7 +180,7 @@ export const useSMSTemplates = ({
             const socialUser = JSON.parse(socialUserStr);
             createdBy = socialUser.userId;
           } catch (error) {
-            console.error('소셜 로그인 사용자 ID 파싱 실패:', error);
+            logger.error('소셜 로그인 사용자 ID 파싱 실패:', error);
           }
         }
       }
@@ -216,7 +217,7 @@ export const useSMSTemplates = ({
       toast.success('템플릿이 저장되었습니다.');
       return true;
     } catch (error) {
-      console.error('템플릿 저장 실패:', error);
+      logger.error('템플릿 저장 실패:', error);
       toast.error('템플릿 저장에 실패했습니다.');
       return false;
     } finally {

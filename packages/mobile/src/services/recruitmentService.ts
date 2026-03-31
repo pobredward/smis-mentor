@@ -1,4 +1,5 @@
 import {
+import { logger } from '@smis-mentor/shared';
   collection,
   query,
   where,
@@ -47,7 +48,7 @@ export const getApplicationsByUserId = async (
       return dateB - dateA;
     });
   } catch (error) {
-    console.error('지원 내역 조회 오류:', error);
+    logger.error('지원 내역 조회 오류:', error);
     throw error;
   }
 };
@@ -80,7 +81,7 @@ export const createApplication = async (applicationData: any): Promise<string> =
 
     return docRef.id;
   } catch (error) {
-    console.error('지원서 생성 실패:', error);
+    logger.error('지원서 생성 실패:', error);
     throw error;
   }
 };
@@ -90,7 +91,7 @@ export const cancelApplication = async (applicationId: string): Promise<void> =>
     const applicationRef = doc(db, 'applicationHistories', applicationId);
     await deleteDoc(applicationRef);
   } catch (error) {
-    console.error('지원 취소 오류:', error);
+    logger.error('지원 취소 오류:', error);
     throw error;
   }
 };
@@ -116,7 +117,7 @@ export const getAllReviews = async (): Promise<ReviewWithId[]> => {
       return dateB - dateA;
     });
   } catch (error) {
-    console.error('후기 조회 오류:', error);
+    logger.error('후기 조회 오류:', error);
     throw error;
   }
 };
@@ -126,7 +127,7 @@ export const deleteReview = async (reviewId: string): Promise<void> => {
     const reviewRef = doc(db, 'reviews', reviewId);
     await deleteDoc(reviewRef);
   } catch (error) {
-    console.error('후기 삭제 오류:', error);
+    logger.error('후기 삭제 오류:', error);
     throw error;
   }
 };
@@ -141,7 +142,7 @@ export const addReview = async (reviewData: any): Promise<string> => {
     });
     return docRef.id;
   } catch (error) {
-    console.error('후기 추가 오류:', error);
+    logger.error('후기 추가 오류:', error);
     throw error;
   }
 };
@@ -154,7 +155,7 @@ export const updateReview = async (reviewId: string, reviewData: any): Promise<v
       updatedAt: Timestamp.now(),
     });
   } catch (error) {
-    console.error('후기 수정 오류:', error);
+    logger.error('후기 수정 오류:', error);
     throw error;
   }
 };

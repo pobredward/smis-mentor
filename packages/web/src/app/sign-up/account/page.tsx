@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -44,7 +45,7 @@ export default function SignUpAccount() {
     
     if (data?.socialSignUp) {
       // 소셜 로그인은 이메일/비밀번호 불필요 - 건너뛰기
-      console.log('소셜 로그인 감지 - education 페이지로 이동');
+      logger.info('소셜 로그인 감지 - education 페이지로 이동');
       router.push('/sign-up/education');
     } else if (!data?.name || !data?.phoneNumber) {
       // 필수 정보 없으면 처음부터 시작
@@ -73,7 +74,7 @@ export default function SignUpAccount() {
         const existingUser = await getUserByEmail(currentEmail);
         setEmailExists(!!existingUser);
       } catch (error) {
-        console.error('이메일 중복 확인 오류:', error);
+        logger.error('이메일 중복 확인 오류:', error);
       }
     }
   };
@@ -116,7 +117,7 @@ export default function SignUpAccount() {
       // 다음 단계로 이동
       router.push('/sign-up/education');
     } catch (error) {
-      console.error('계정 정보 확인 오류:', error);
+      logger.error('계정 정보 확인 오류:', error);
       toast.error('계정 정보 확인 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

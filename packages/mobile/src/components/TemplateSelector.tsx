@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -67,7 +68,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
       const filtered = data.filter((t: any) => t.refJobBoardId !== currentJobBoardId);
       setTemplates(filtered);
     } catch (error) {
-      console.error('템플릿 목록 로드 실패:', error);
+      logger.error('템플릿 목록 로드 실패:', error);
     } finally {
       setIsLoading(false);
     }

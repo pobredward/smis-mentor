@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -137,7 +138,7 @@ export function HTMLRenderer({ html }: HTMLRendererProps) {
         setWebViewHeight(data.height + 20); // 약간의 여백 추가
       }
     } catch (error) {
-      console.error('WebView message parsing error:', error);
+      logger.error('WebView message parsing error:', error);
     }
   };
 

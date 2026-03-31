@@ -1,4 +1,5 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { logger } from '@smis-mentor/shared';
 import { storage } from '../config/firebase';
 
 /**
@@ -28,7 +29,7 @@ export async function uploadForeignProfileImage(
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
-    console.error('프로필 이미지 업로드 실패:', error);
+    logger.error('프로필 이미지 업로드 실패:', error);
     throw new Error('프로필 이미지 업로드에 실패했습니다.');
   }
 }
@@ -48,7 +49,7 @@ export async function uploadCV(
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
-    console.error('CV 업로드 실패:', error);
+    logger.error('CV 업로드 실패:', error);
     throw new Error('CV 업로드에 실패했습니다.');
   }
 }
@@ -67,7 +68,7 @@ export async function uploadPassportPhoto(
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
-    console.error('여권 사진 업로드 실패:', error);
+    logger.error('여권 사진 업로드 실패:', error);
     throw new Error('여권 사진 업로드에 실패했습니다.');
   }
 }
@@ -86,7 +87,7 @@ export async function uploadForeignIdCard(
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
-    console.error('외국인 등록증 업로드 실패:', error);
+    logger.error('외국인 등록증 업로드 실패:', error);
     throw new Error('외국인 등록증 업로드에 실패했습니다.');
   }
 }

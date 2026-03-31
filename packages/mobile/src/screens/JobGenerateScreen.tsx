@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -108,7 +109,7 @@ export function JobGenerateScreen({
         setSelectedGeneration(uniqueGenerations[0]);
       }
     } catch (error) {
-      console.error('업무 코드 로드 오류:', error);
+      logger.error('업무 코드 로드 오류:', error);
       Alert.alert('오류', '업무 코드 로드 중 오류가 발생했습니다.');
     }
   };
@@ -151,7 +152,7 @@ export function JobGenerateScreen({
       
       await loadJobCodes();
     } catch (error) {
-      console.error('업무 생성/수정 오류:', error);
+      logger.error('업무 생성/수정 오류:', error);
       Alert.alert('오류', `업무 ${isEditing ? '수정' : '생성'} 중 오류가 발생했습니다.`);
     } finally {
       setIsLoading(false);
@@ -171,7 +172,7 @@ export function JobGenerateScreen({
             Alert.alert('성공', '업무가 삭제되었습니다.');
             await loadJobCodes();
           } catch (error) {
-            console.error('업무 삭제 오류:', error);
+            logger.error('업무 삭제 오류:', error);
             Alert.alert('오류', '업무 삭제 중 오류가 발생했습니다.');
           }
         },

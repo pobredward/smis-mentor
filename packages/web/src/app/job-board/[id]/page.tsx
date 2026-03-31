@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, use, useCallback, lazy, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -124,7 +125,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
 
                 return `${year}-${month}-${day} ${hours}:${minutes}`;
               } catch (error) {
-                console.error('날짜 변환 오류:', error);
+                logger.error('날짜 변환 오류:', error);
                 return null;
               }
             })
@@ -165,7 +166,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                   end: `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}`
                 };
               } catch (error) {
-                console.error('날짜 변환 오류:', error);
+                logger.error('날짜 변환 오류:', error);
                 return null;
               }
             })
@@ -182,7 +183,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
           setIsEditing(true);
         }
       } catch (error) {
-        console.error('공고 정보 로드 오류:', error);
+        logger.error('공고 정보 로드 오류:', error);
         toast.error('공고 정보를 불러오는 중 오류가 발생했습니다.');
         router.push('/job-board');
       } finally {
@@ -235,7 +236,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
             const dateMatch = trimmed.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
             
             if (!dateMatch) {
-              console.warn('잘못된 날짜 형식:', line);
+              logger.warn('잘못된 날짜 형식:', line);
               return null;
             }
 
@@ -256,7 +257,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
               end: Timestamp.fromDate(endDate)
             };
           } catch (error) {
-            console.error('날짜 파싱 오류:', error, line);
+            logger.error('날짜 파싱 오류:', error, line);
             return null;
           }
         })
@@ -292,7 +293,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       // URL에서 edit 파라미터 제거
       router.replace(`/job-board/${id}`);
     } catch (error) {
-      console.error('공고 수정 오류:', error);
+      logger.error('공고 수정 오류:', error);
       toast.error('공고 수정 중 오류가 발생했습니다.');
     }
   };
@@ -338,7 +339,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       toast.success('공고가 성공적으로 삭제되었습니다.');
       router.push('/admin/job-board-write');
     } catch (error) {
-      console.error('공고 삭제 오류:', error);
+      logger.error('공고 삭제 오류:', error);
       toast.error('공고 삭제 중 오류가 발생했습니다.');
     }
   };
@@ -374,7 +375,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
 
               return `${year}-${month}-${day} ${hours}:${minutes}`;
             } catch (error) {
-              console.error('날짜 변환 오류:', error);
+              logger.error('날짜 변환 오류:', error);
               return null;
             }
           })
@@ -451,7 +452,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       toast.success('지원이 완료되었습니다.');
       router.push('/profile/job-apply');
     } catch (error) {
-      console.error('지원 오류:', error);
+      logger.error('지원 오류:', error);
       toast.error('지원 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
@@ -467,7 +468,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
         router.push('/job-board');
       }
     } catch (error) {
-      console.error('네비게이션 오류:', error);
+      logger.error('네비게이션 오류:', error);
       // 뒤로가기 실패 시 기본 페이지로 이동
       router.push('/job-board');
     }
@@ -857,7 +858,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                                 </div>
                               );
                             } catch (error) {
-                              console.error('날짜 렌더링 오류:', error);
+                              logger.error('날짜 렌더링 오류:', error);
                               return null;
                             }
                           })

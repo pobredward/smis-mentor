@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -36,7 +37,7 @@ export default function JobBoardListContent() {
         setJobCodesMap(jobCodesData);
         setJobBoards(sortedBoards);
       } catch (error) {
-        console.error('공고 정보 로드 오류:', error);
+        logger.error('공고 정보 로드 오류:', error);
         toast.error('공고 정보를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);

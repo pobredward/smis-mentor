@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { AuthProvider, SocialProvider } from '@smis-mentor/shared';
 import { getSocialProviderName, getSocialProviderIcon } from '@smis-mentor/shared';
@@ -28,7 +29,7 @@ export default function LinkedAccountsDisplay({
 }: LinkedAccountsDisplayProps) {
   // authProviders null/undefined 체크
   if (!authProviders || !Array.isArray(authProviders)) {
-    console.error('❌ authProviders가 유효하지 않습니다:', authProviders);
+    logger.error('❌ authProviders가 유효하지 않습니다:', authProviders);
     return (
       <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
         <p className="text-sm text-amber-800">

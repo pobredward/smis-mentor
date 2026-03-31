@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -47,7 +48,7 @@ export function SignUpStep2Screen({
         const existingUser = await getUserByEmail(email);
         setEmailExists(!!existingUser);
       } catch (error) {
-        console.error('이메일 중복 확인 오류:', error);
+        logger.error('이메일 중복 확인 오류:', error);
       }
     }
   };
@@ -98,7 +99,7 @@ export function SignUpStep2Screen({
 
       onNext({ email, password });
     } catch (error) {
-      console.error('계정 정보 확인 오류:', error);
+      logger.error('계정 정보 확인 오류:', error);
       Alert.alert('오류', '계정 정보 확인 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

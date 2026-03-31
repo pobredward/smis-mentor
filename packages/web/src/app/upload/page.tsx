@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -236,7 +237,7 @@ export default function UploadPage() {
       setUserJobCodes(jobCodesInfo);
       return jobCodesInfo;
     } catch (error) {
-      console.error('사용자 직무 코드 정보 가져오기 오류:', error);
+      logger.error('사용자 직무 코드 정보 가져오기 오류:', error);
       return [];
     }
   };
@@ -258,24 +259,24 @@ export default function UploadPage() {
     try {
       // 1. 먼저 사용자 직무 코드 정보 가져오기
       const userCodes = await fetchUserJobCodes();
-      console.log('사용자 직무 코드:', userCodes.map(uc => uc.code));
+      logger.info('사용자 직무 코드:', userCodes.map(uc => uc.code));
       
       // 2. 모든 템플릿 가져오기
       const allTemplates = await getLessonMaterialTemplates();
       setTemplates(allTemplates);
-      console.log('모든 템플릿:', allTemplates.map(t => ({ title: t.title, code: t.code })));
+      logger.info('모든 템플릿:', allTemplates.map(t => ({ title: t.title, code: t.code })));
       
       // 3. 사용자가 접근할 수 있는 템플릿 필터링
       const accessibleTemplates = getAccessibleTemplates(allTemplates, userCodes);
-      console.log('접근 가능한 템플릿:', accessibleTemplates.map(t => ({ title: t.title, code: t.code })));
+      logger.info('접근 가능한 템플릿:', accessibleTemplates.map(t => ({ title: t.title, code: t.code })));
       
       // 4. 기존 수업 자료 가져오기
       const mats = await getLessonMaterials(userData.userId);
-      console.log('기존 수업 자료:', mats.map(m => ({ title: m.title, templateId: m.templateId })));
+      logger.info('기존 수업 자료:', mats.map(m => ({ title: m.title, templateId: m.templateId })));
       
       // 사용자가 추가한 대주제 확인
       const userAddedMaterials = mats.filter(m => !m.templateId);
-      console.log('사용자가 추가한 대주제:', userAddedMaterials.map(m => ({ id: m.id, title: m.title })));
+      logger.info('사용자가 추가한 대주제:', userAddedMaterials.map(m => ({ id: m.id, title: m.title })));
       
       // 5. 기존 수업 자료 중복 제거 및 접근 권한 체크
       const userCodesList = userCodes.map(uc => uc.code);
@@ -319,7 +320,7 @@ export default function UploadPage() {
       
       // 6. 제목 업데이트
       for (const { id, newTitle } of materialsToUpdate) {
-        console.log('제목 업데이트:', id, newTitle);
+        logger.info('제목 업데이트:', id, newTitle);
         await updateLessonMaterial(id, { title: newTitle });
       }
       
@@ -327,7 +328,7 @@ export default function UploadPage() {
       for (let i = 0; i < accessibleTemplates.length; i++) {
         const template = accessibleTemplates[i];
         if (!seenTemplateIds.has(template.id)) {
-          console.log('새 템플릿 추가:', template.title, `(order: ${i})`);
+          logger.info('새 템플릿 추가:', template.title, `(order: ${i})`);
           await addLessonMaterial(userData.userId, template.title, i, template.id);
         }
       }
@@ -346,14 +347,14 @@ export default function UploadPage() {
         
         // 중복 templateId 체크 (첫 번째만 표시)
         if (seenTemplateIdsInFinal.has(mat.templateId)) {
-          console.log('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
+          logger.info('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
           return false;
         }
         seenTemplateIdsInFinal.add(mat.templateId);
         return true;
       });
       
-      console.log('최종 수업 자료:', accessibleMats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
+      logger.info('최종 수업 자료:', accessibleMats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
       setMaterials(accessibleMats);
       
       // 9. 각 수업 자료의 소제목 가져오기
@@ -363,7 +364,7 @@ export default function UploadPage() {
         
         // 템플릿 sections 가져오기
         const template = mat.templateId ? allTemplates.find(t => t.id === mat.templateId) : null;
-        console.log('Material:', mat.title, 'Template:', template?.title, 'Template sections:', template?.sections);
+        logger.info('Material:', mat.title, 'Template:', template?.title, 'Template sections:', template?.sections);
         
         // 유저 sections에 템플릿 정보 병합
         const mergedSections: SectionDataWithLinks[] = [];
@@ -420,12 +421,12 @@ export default function UploadPage() {
           }));
         
         allSections[mat.id] = [...mergedSections, ...additionalUserSections];
-        console.log('Final sections for', mat.title, ':', allSections[mat.id]);
+        logger.info('Final sections for', mat.title, ':', allSections[mat.id]);
       }
       setSections(allSections);
       
     } catch (error) {
-      console.error('데이터 로드 오류:', error);
+      logger.error('데이터 로드 오류:', error);
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -492,7 +493,7 @@ export default function UploadPage() {
       await reorderLessonMaterials(userData!.userId, newMaterials.map(m => m.id));
       toast.success('대제목 순서가 변경되었습니다.');
     } catch (error) {
-      console.error('대제목 순서 변경 오류:', error);
+      logger.error('대제목 순서 변경 오류:', error);
       toast.error('대제목 순서 변경 중 오류가 발생했습니다.');
       // 오류 발생 시 원래 상태로 복원
       setMaterials(materials);
@@ -533,14 +534,14 @@ export default function UploadPage() {
       setAddingSectionFor(null);
       toast.success('소제목이 추가되었습니다.');
     } catch (error) {
-      console.error('소제목 추가 오류:', error);
+      logger.error('소제목 추가 오류:', error);
       toast.error('소제목 추가 중 오류가 발생했습니다.');
     }
   };
 
   // 유저 대주제 추가
   const handleAddUserMaterial = async () => {
-    console.log('handleAddUserMaterial 시작:', { newMaterialTitle, userData, selectedMaterialCode });
+    logger.info('handleAddUserMaterial 시작:', { newMaterialTitle, userData, selectedMaterialCode });
     
     if (!newMaterialTitle.trim()) {
       toast.error('대주제 이름을 입력해주세요.');
@@ -555,10 +556,10 @@ export default function UploadPage() {
     
     try {
       const order = materials.length;
-      console.log('대주제 추가 시도:', { userId: userData!.userId, title: newMaterialTitle.trim(), order, code: selectedMaterialCode });
+      logger.info('대주제 추가 시도:', { userId: userData!.userId, title: newMaterialTitle.trim(), order, code: selectedMaterialCode });
       
       const materialId = await addLessonMaterial(userData!.userId, newMaterialTitle.trim(), order);
-      console.log('대주제 추가 성공:', materialId);
+      logger.info('대주제 추가 성공:', materialId);
       
       // 추가된 대주제에 코드 정보를 저장하기 위해 업데이트
       await updateLessonMaterial(materialId, { 
@@ -577,10 +578,10 @@ export default function UploadPage() {
         userCode: selectedMaterialCode,
       };
       
-      console.log('로컬 상태 업데이트:', newMaterial);
+      logger.info('로컬 상태 업데이트:', newMaterial);
       setMaterials(prev => {
         const updated = [...prev, newMaterial];
-        console.log('업데이트된 materials:', updated);
+        logger.info('업데이트된 materials:', updated);
         return updated;
       });
       setSections(prev => ({
@@ -592,7 +593,7 @@ export default function UploadPage() {
       setShowAddMaterialForm(false);
       toast.success(`${selectedMaterialCode}에 대주제가 추가되었습니다.`);
     } catch (error) {
-      console.error('대주제 추가 오류:', error);
+      logger.error('대주제 추가 오류:', error);
       toast.error('대주제 추가 중 오류가 발생했습니다.');
     }
   };
@@ -659,7 +660,7 @@ export default function UploadPage() {
       setEditingSection(null);
       toast.success('소제목이 수정되었습니다.');
     } catch (error) {
-      console.error('소제목 수정 오류:', error);
+      logger.error('소제목 수정 오류:', error);
       toast.error('소제목 수정 중 오류가 발생했습니다.');
     }
   };
@@ -686,7 +687,7 @@ export default function UploadPage() {
       
       toast.success('소제목이 삭제되었습니다.');
     } catch (error) {
-      console.error('소제목 삭제 오류:', error);
+      logger.error('소제목 삭제 오류:', error);
       toast.error('소제목 삭제 중 오류가 발생했습니다.');
     }
   };
@@ -717,7 +718,7 @@ export default function UploadPage() {
       
       toast.success('대주제가 삭제되었습니다.');
     } catch (error) {
-      console.error('대주제 삭제 오류:', error);
+      logger.error('대주제 삭제 오류:', error);
       toast.error('대주제 삭제 중 오류가 발생했습니다.');
     }
   };
@@ -753,7 +754,7 @@ export default function UploadPage() {
       await reorderSections(materialId, newUserSections.map(s => s.id));
       toast.success('소제목 순서가 변경되었습니다.');
     } catch (error) {
-      console.error('소제목 순서 변경 오류:', error);
+      logger.error('소제목 순서 변경 오류:', error);
       toast.error('소제목 순서 변경 중 오류가 발생했습니다.');
       // 오류 발생 시 원래 상태로 복원
       setSections(prev => ({

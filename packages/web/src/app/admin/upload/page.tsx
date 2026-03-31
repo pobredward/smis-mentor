@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -64,7 +65,7 @@ function SectionEditor({
     try {
       await onSectionsChange(newSections);
     } catch (error) {
-      console.error('섹션 저장 실패:', error);
+      logger.error('섹션 저장 실패:', error);
     } finally {
       setIsLoading(false);
     }

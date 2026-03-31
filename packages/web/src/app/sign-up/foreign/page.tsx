@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -73,7 +74,7 @@ export default function ForeignSignUpStep1() {
       }, 3000);
     } catch (error: any) {
       toast.dismiss(loadingToast);
-      console.error('Account restoration failed:', error);
+      logger.error('Account restoration failed:', error);
       
       if (error.message?.includes('이미 활성화된')) {
         toast.error('Account is already active. Redirecting to login page...');
@@ -137,7 +138,7 @@ export default function ForeignSignUpStep1() {
         }
         
         if (namesMatch) {
-          console.log('🔄 Deleted account found - starting auto-restore process:', {
+          logger.info('🔄 Deleted account found - starting auto-restore process:', {
             userId: userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId,
             name: originalName,
             phone: fullPhone,
@@ -149,7 +150,7 @@ export default function ForeignSignUpStep1() {
           setIsLoading(false);
           return;
         } else {
-          console.warn('⚠️ Deleted account but name mismatch:', {
+          logger.warn('⚠️ Deleted account but name mismatch:', {
             inputName: inputFullName,
             originalName,
           });
@@ -252,7 +253,7 @@ export default function ForeignSignUpStep1() {
         router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
       }
     } catch (error) {
-      console.error('User information verification error:', error);
+      logger.error('User information verification error:', error);
       toast.error('An error occurred while verifying user information.');
     } finally {
       setIsLoading(false);

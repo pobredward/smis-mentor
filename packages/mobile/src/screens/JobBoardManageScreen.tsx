@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -58,20 +59,20 @@ export function JobBoardManageScreen({
       const boards = await getAllJobBoards(db);
 
       // 각 공고의 지원 수 가져오기
-      console.log('📋 총 공고 수:', boards.length);
+      logger.info('📋 총 공고 수:', boards.length);
       const jobBoardsWithApplications = await Promise.all(
         boards.map(async (board: any) => {
           try {
-            console.log(`🔍 공고 ID ${board.id} (${board.title})의 지원자 조회 중...`);
+            logger.info(`🔍 공고 ID ${board.id} (${board.title})의 지원자 조회 중...`);
             const applications = await getApplicationsByJobBoardId(db, board.id);
-            console.log(`✅ 공고 ID ${board.id}: ${applications.length}명의 지원자 발견`);
+            logger.info(`✅ 공고 ID ${board.id}: ${applications.length}명의 지원자 발견`);
             return {
               ...board,
               applications,
               applicationsCount: applications.length,
             };
           } catch (error) {
-            console.error(`❌ 지원 정보 로드 오류 (${board.id}):`, error);
+            logger.error(`❌ 지원 정보 로드 오류 (${board.id}):`, error);
             return {
               ...board,
               applications: [],
@@ -88,7 +89,7 @@ export function JobBoardManageScreen({
 
       setJobBoards(sortedBoards);
     } catch (error) {
-      console.error('데이터 로드 오류:', error);
+      logger.error('데이터 로드 오류:', error);
       Alert.alert('오류', '데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

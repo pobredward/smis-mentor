@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -88,7 +89,7 @@ export default function JobBoardManage() {
                 applicationsCount: applications.length
               };
             } catch (error) {
-              console.error(`지원 정보 로드 오류 (${board.id}):`, error);
+              logger.error(`지원 정보 로드 오류 (${board.id}):`, error);
               return {
                 ...board,
                 applications: [],
@@ -127,7 +128,7 @@ export default function JobBoardManage() {
           }
         }
       } catch (error) {
-        console.error('데이터 로드 오류:', error);
+        logger.error('데이터 로드 오류:', error);
         toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
@@ -151,7 +152,7 @@ export default function JobBoardManage() {
   
   // 공고 수정 핸들러
   const handleEditJobBoard = (jobBoard: JobBoardWithApplications) => {
-    console.log('Editing job board:', jobBoard);
+    logger.info('Editing job board:', jobBoard);
     setSelectedJobBoard(jobBoard);
     setIsCreating(false);
     
@@ -191,7 +192,7 @@ export default function JobBoardManage() {
         // URL 파라미터 제거
         router.replace('/admin/job-board-manage');
       } catch (error) {
-        console.error('공고 마감 오류:', error);
+        logger.error('공고 마감 오류:', error);
         toast.error('공고 마감 중 오류가 발생했습니다.');
       } finally {
         setIsSubmitting(false);
@@ -220,7 +221,7 @@ export default function JobBoardManage() {
         // URL 파라미터 제거
         router.replace('/admin/job-board-manage');
       } catch (error) {
-        console.error('공고 활성화 오류:', error);
+        logger.error('공고 활성화 오류:', error);
         toast.error('공고 활성화 중 오류가 발생했습니다.');
       } finally {
         setIsSubmitting(false);
@@ -355,7 +356,7 @@ export default function JobBoardManage() {
       // 페이지 데이터 새로고침
       window.location.reload();
     } catch (error) {
-      console.error('공고 저장 오류:', error);
+      logger.error('공고 저장 오류:', error);
       toast.error('공고 저장 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
@@ -87,7 +88,7 @@ export default function UserCheck() {
           setSelectedGeneration(uniqueGenerations[0]);
         }
       } catch (error) {
-        console.error('업무 코드 로드 오류:', error);
+        logger.error('업무 코드 로드 오류:', error);
         toast.error('업무 코드를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
@@ -194,7 +195,7 @@ export default function UserCheck() {
                 // 그룹 이름 추가
                 return { ...user, groupName: jobGroup };
               } catch (error) {
-                console.error('사용자 그룹 정보 로드 오류:', error);
+                logger.error('사용자 그룹 정보 로드 오류:', error);
                 return { ...user, groupName: 'junior' }; // 오류 시 기본값
               }
             }
@@ -224,10 +225,10 @@ export default function UserCheck() {
           return user.role === selectedRole;
         });
         
-        console.log('🔍 User Check - 필터링 전 사용자 수:', enrichedUsers.length);
-        console.log('🔍 User Check - selectedRole:', selectedRole);
-        console.log('🔍 User Check - 필터링 후 사용자 수:', filteredUsers.length);
-        console.log('🔍 User Check - 사용자 role 분포:', 
+        logger.info('🔍 User Check - 필터링 전 사용자 수:', enrichedUsers.length);
+        logger.info('🔍 User Check - selectedRole:', selectedRole);
+        logger.info('🔍 User Check - 필터링 후 사용자 수:', filteredUsers.length);
+        logger.info('🔍 User Check - 사용자 role 분포:', 
           enrichedUsers.reduce((acc: any, user) => {
             acc[user.role] = (acc[user.role] || 0) + 1;
             return acc;
@@ -247,7 +248,7 @@ export default function UserCheck() {
         setUsers(filteredUsers);
         setGroupedUsers(grouped);
       } catch (error) {
-        console.error('사용자 로드 오류:', error);
+        logger.error('사용자 로드 오류:', error);
         toast.error('사용자 정보를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);

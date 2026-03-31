@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -102,7 +103,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
         setRecentApplications(applications.slice(0, 3));
       }
     } catch (error) {
-      console.error('홈 데이터 로드 오류:', error);
+      logger.error('홈 데이터 로드 오류:', error);
     } finally {
       setLoading(false);
     }

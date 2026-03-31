@@ -1,4 +1,5 @@
 "use client";
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -41,7 +42,7 @@ export default function ApplicationSection() {
                 jobBoard
               } as ApplicationWithJobDetails;
             } catch (error) {
-              console.error(`공고 정보 로드 오류 (${app.refJobBoardId}):`, error);
+              logger.error(`공고 정보 로드 오류 (${app.refJobBoardId}):`, error);
               return app as ApplicationWithJobDetails;
             }
           })
@@ -49,7 +50,7 @@ export default function ApplicationSection() {
         
         setApplications(applicationsWithJobDetails);
       } catch (error) {
-        console.error('지원 내역 로드 오류:', error);
+        logger.error('지원 내역 로드 오류:', error);
       } finally {
         setIsLoading(false);
       }

@@ -1,4 +1,5 @@
 /**
+import { logger } from '@smis-mentor/shared';
  * 캠프 생활 평가 기준 업데이트 스크립트
  * 
  * 사용법:
@@ -19,7 +20,7 @@ import {
 
 export const updateCampLifeCriteria = async () => {
   try {
-    console.log('🔄 캠프 생활 평가 기준 업데이트를 시작합니다...');
+    logger.info('🔄 캠프 생활 평가 기준 업데이트를 시작합니다...');
     
     // 캠프 생활 평가 기준 조회
     const q = query(
@@ -31,7 +32,7 @@ export const updateCampLifeCriteria = async () => {
     const snapshot = await getDocs(q);
     
     if (snapshot.empty) {
-      console.log('❌ 캠프 생활 평가 기준을 찾을 수 없습니다.');
+      logger.info('❌ 캠프 생활 평가 기준을 찾을 수 없습니다.');
       return {
         success: false,
         message: '캠프 생활 평가 기준을 찾을 수 없습니다.'
@@ -42,7 +43,7 @@ export const updateCampLifeCriteria = async () => {
     const criteriaDoc = snapshot.docs[0];
     const criteriaId = criteriaDoc.id;
     
-    console.log(`📝 문서 ID: ${criteriaId} 업데이트 중...`);
+    logger.info(`📝 문서 ID: ${criteriaId} 업데이트 중...`);
     
     // 새로운 평가 항목
     const newCriteria = [
@@ -82,10 +83,10 @@ export const updateCampLifeCriteria = async () => {
       updatedAt: Timestamp.now()
     });
     
-    console.log('✅ 캠프 생활 평가 기준이 성공적으로 업데이트되었습니다!');
-    console.log('📋 새로운 평가 항목:');
+    logger.info('✅ 캠프 생활 평가 기준이 성공적으로 업데이트되었습니다!');
+    logger.info('📋 새로운 평가 항목:');
     newCriteria.forEach(item => {
-      console.log(`  ${item.order}. ${item.name} - ${item.description}`);
+      logger.info(`  ${item.order}. ${item.name} - ${item.description}`);
     });
     
     return {
@@ -95,7 +96,7 @@ export const updateCampLifeCriteria = async () => {
       newCriteria
     };
   } catch (error) {
-    console.error('❌ 평가 기준 업데이트 중 오류 발생:', error);
+    logger.error('❌ 평가 기준 업데이트 중 오류 발생:', error);
     return {
       success: false,
       message: '평가 기준 업데이트에 실패했습니다.',

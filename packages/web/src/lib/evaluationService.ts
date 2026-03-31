@@ -1,4 +1,5 @@
 import { 
+import { logger } from '@smis-mentor/shared';
   collection, 
   doc, 
   addDoc, 
@@ -201,9 +202,9 @@ export class EvaluationCriteriaService {
       }
       
       await batch.commit();
-      console.log('기본 평가 기준이 생성되었습니다.');
+      logger.info('기본 평가 기준이 생성되었습니다.');
     } catch (error) {
-      console.error('기본 평가 기준 생성 오류:', error);
+      logger.error('기본 평가 기준 생성 오류:', error);
       throw error;
     }
   }
@@ -224,7 +225,7 @@ export class EvaluationCriteriaService {
         ...doc.data()
       })) as EvaluationCriteria[];
     } catch (error) {
-      console.error('평가 기준 조회 오류:', error);
+      logger.error('평가 기준 조회 오류:', error);
       throw error;
     }
   }
@@ -245,7 +246,7 @@ export class EvaluationCriteriaService {
             ...doc.data()
           }))[0] as EvaluationCriteria | undefined;
         } catch (error) {
-          console.error('기본 평가 기준 조회 오류:', error);
+          logger.error('기본 평가 기준 조회 오류:', error);
           throw error;
         }
       }
@@ -264,7 +265,7 @@ export class EvaluationCriteriaService {
           }
           return null;
         } catch (error) {
-          console.error('평가 기준 조회 오류:', error);
+          logger.error('평가 기준 조회 오류:', error);
           throw error;
         }
       }
@@ -319,7 +320,7 @@ export class EvaluationService {
       const maxTotalScore = 10; // 기본 최대 점수
       const percentage = (finalScore / maxTotalScore) * 100;
       
-      console.log('💾 Saving evaluation with evaluatorName:', evaluatorName);
+      logger.info('💾 Saving evaluation with evaluatorName:', evaluatorName);
       
       const evaluationData: Omit<Evaluation, 'id'> = {
         refUserId: formData.targetUserId,
@@ -352,7 +353,7 @@ export class EvaluationService {
       
       return docRef.id;
     } catch (error) {
-      console.error('평가 생성 오류:', error);
+      logger.error('평가 생성 오류:', error);
       throw error;
     }
   }
@@ -381,7 +382,7 @@ export class EvaluationService {
         ...doc.data()
       })) as Evaluation[];
     } catch (error) {
-      console.error('사용자 평가 조회 오류:', error);
+      logger.error('사용자 평가 조회 오류:', error);
       throw error;
     }
   }
@@ -404,10 +405,10 @@ export class EvaluationService {
           await deleteDoc(summaryDocRef);
         } catch (error) {
           // 문서가 없을 수도 있으므로 에러 무시
-          console.log('요약 문서가 이미 존재하지 않습니다:', error);
+          logger.info('요약 문서가 이미 존재하지 않습니다:', error);
         }
         
-        console.log('모든 평가가 삭제되어 evaluationSummary 필드를 제거했습니다.');
+        logger.info('모든 평가가 삭제되어 evaluationSummary 필드를 제거했습니다.');
         return;
       }
       
@@ -484,7 +485,7 @@ export class EvaluationService {
       }, { merge: true });
       
     } catch (error) {
-      console.error('사용자 평가 요약 업데이트 오류:', error);
+      logger.error('사용자 평가 요약 업데이트 오류:', error);
       throw error;
     }
   }
@@ -504,7 +505,7 @@ export class EvaluationService {
         await this.updateUserEvaluationSummary(evaluation.refUserId);
       }
     } catch (error) {
-      console.error('평가 수정 오류:', error);
+      logger.error('평가 수정 오류:', error);
       throw error;
     }
   }
@@ -525,7 +526,7 @@ export class EvaluationService {
       // 사용자 평가 요약 업데이트
       await this.updateUserEvaluationSummary(userId);
     } catch (error) {
-      console.error('평가 삭제 오류:', error);
+      logger.error('평가 삭제 오류:', error);
       throw error;
     }
   }

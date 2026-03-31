@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
@@ -129,7 +130,7 @@ export function ScheduleScreen() {
                 setSelectedScheduleId(schedules[0].id);
               }
             } catch (error) {
-              console.error('시간표 삭제 실패:', error);
+              logger.error('시간표 삭제 실패:', error);
               Alert.alert('오류', '시간표 삭제에 실패했습니다.');
             }
           },
@@ -152,7 +153,7 @@ export function ScheduleScreen() {
       await generationResourcesService.reorderLinks(activeJobCodeId, 'scheduleLinks', newSchedules);
       await refreshResources();
     } catch (error) {
-      console.error('순서 변경 실패:', error);
+      logger.error('순서 변경 실패:', error);
       Alert.alert('오류', '순서 변경에 실패했습니다.');
     }
   };
@@ -183,7 +184,7 @@ export function ScheduleScreen() {
       setShowEditModal(false);
       Alert.alert('성공', '시간표가 수정되었습니다.');
     } catch (error) {
-      console.error('시간표 수정 실패:', error);
+      logger.error('시간표 수정 실패:', error);
       Alert.alert('오류', '시간표 수정에 실패했습니다.');
     }
   };

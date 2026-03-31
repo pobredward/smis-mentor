@@ -1,4 +1,5 @@
 /**
+import { logger } from '@smis-mentor/shared';
  * Firestore generationResources 초기 데이터 생성 스크립트
  * 
  * 사용법:
@@ -142,10 +143,10 @@ export const createInitialGenerationResources = async () => {
     // jobCodeId를 문서 ID로 사용
     const docRef = doc(db, 'generationResources', e27InitialData.jobCodeId);
     await setDoc(docRef, e27InitialData);
-    console.log('✅ E27 기수 리소스 초기 데이터 생성 완료');
+    logger.info('✅ E27 기수 리소스 초기 데이터 생성 완료');
     return true;
   } catch (error) {
-    console.error('❌ 초기 데이터 생성 실패:', error);
+    logger.error('❌ 초기 데이터 생성 실패:', error);
     throw error;
   }
 };

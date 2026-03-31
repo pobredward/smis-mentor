@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWebViewCache } from '../context/WebViewCacheContext';
@@ -107,7 +108,7 @@ export function GuideScreen() {
                 setSelectedGuideId(guides[0].id);
               }
             } catch (error) {
-              console.error('인솔표 삭제 실패:', error);
+              logger.error('인솔표 삭제 실패:', error);
               Alert.alert('오류', '인솔표 삭제에 실패했습니다.');
             }
           },
@@ -130,7 +131,7 @@ export function GuideScreen() {
       await generationResourcesService.reorderLinks(activeJobCodeId, 'guideLinks', newGuides);
       await refreshResources();
     } catch (error) {
-      console.error('순서 변경 실패:', error);
+      logger.error('순서 변경 실패:', error);
       Alert.alert('오류', '순서 변경에 실패했습니다.');
     }
   };
@@ -161,7 +162,7 @@ export function GuideScreen() {
       setShowEditModal(false);
       Alert.alert('성공', '인솔표가 수정되었습니다.');
     } catch (error) {
-      console.error('인솔표 수정 실패:', error);
+      logger.error('인솔표 수정 실패:', error);
       Alert.alert('오류', '인솔표 수정에 실패했습니다.');
     }
   };

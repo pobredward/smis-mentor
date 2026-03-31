@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -216,7 +217,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
         await uploadImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('이미지 선택 오류:', error);
+      logger.error('이미지 선택 오류:', error);
       Alert.alert('오류', '이미지 선택 중 오류가 발생했습니다.');
     }
   };
@@ -251,7 +252,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       await refreshUserData();
       Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Profile image has been updated.' : '프로필 이미지가 변경되었습니다.');
     } catch (error) {
-      console.error('이미지 업로드 오류:', error);
+      logger.error('이미지 업로드 오류:', error);
       Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'An error occurred while uploading the image.' : '이미지 업로드 중 오류가 발생했습니다.');
     } finally {
       setIsUploading(false);
@@ -289,7 +290,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       await refreshUserData();
       Alert.alert('Success', 'CV has been updated.');
     } catch (error) {
-      console.error('CV 업로드 오류:', error);
+      logger.error('CV 업로드 오류:', error);
       Alert.alert('Error', 'An error occurred while uploading CV.');
     } finally {
       setIsUploading(false);
@@ -332,7 +333,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       await refreshUserData();
       Alert.alert('Success', 'Passport photo has been updated.');
     } catch (error) {
-      console.error('여권 사진 업로드 오류:', error);
+      logger.error('여권 사진 업로드 오류:', error);
       Alert.alert('Error', 'An error occurred while uploading passport photo.');
     } finally {
       setIsUploading(false);
@@ -375,7 +376,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       await refreshUserData();
       Alert.alert('Success', 'Foreign ID card has been updated.');
     } catch (error) {
-      console.error('외국인 ID 카드 업로드 오류:', error);
+      logger.error('외국인 ID 카드 업로드 오류:', error);
       Alert.alert('Error', 'An error occurred while uploading foreign ID card.');
     } finally {
       setIsUploading(false);
@@ -389,7 +390,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
         const exists = await checkEmailExists(currentEmail, userData?.userId);
         setEmailExists(exists);
       } catch (error) {
-        console.error('이메일 검증 오류:', error);
+        logger.error('이메일 검증 오류:', error);
         setEmailExists(false);
       }
     } else {
@@ -404,7 +405,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
         const exists = await checkPhoneExists(currentPhone, userData?.userId);
         setPhoneExists(exists);
       } catch (error) {
-        console.error('전화번호 검증 오류:', error);
+        logger.error('전화번호 검증 오류:', error);
         setPhoneExists(false);
       }
     } else {
@@ -513,7 +514,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
         },
       ]);
     } catch (error) {
-      console.error('프로필 업데이트 오류:', error);
+      logger.error('프로필 업데이트 오류:', error);
       Alert.alert('오류', '프로필 업데이트 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { ArrowLeft, RefreshCw, Database, Search, Download, CheckCircle, AlertTriangle } from 'lucide-react';
@@ -52,7 +53,7 @@ export default function UserIdBackupPage() {
         setBackupStatus(data);
       }
     } catch (error: any) {
-      console.error('백업 상태 조회 실패:', error);
+      logger.error('백업 상태 조회 실패:', error);
     }
   };
 
@@ -76,7 +77,7 @@ export default function UserIdBackupPage() {
         toast.error('백업 실패: ' + data.error);
       }
     } catch (error: any) {
-      console.error('백업 오류:', error);
+      logger.error('백업 오류:', error);
       toast.error(error.message || '백업 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -102,7 +103,7 @@ export default function UserIdBackupPage() {
         toast.error('해당 이메일의 백업 데이터를 찾을 수 없습니다.');
       }
     } catch (error: any) {
-      console.error('검색 오류:', error);
+      logger.error('검색 오류:', error);
       toast.error(error.message || '검색 중 오류가 발생했습니다.');
     } finally {
       setSearchLoading(false);

@@ -1,4 +1,5 @@
 import { getFirestore, collection, doc, getDoc, setDoc } from 'firebase/firestore';
+import { logger } from '@smis-mentor/shared';
 import { app } from '../config/firebase';
 import { STSheetStudent, ST_SHEET_COLUMNS, ST_SHEET_HEADER_MAPPING, CAMP_SHEET_CONFIG, CampCode, CampType } from '@smis-mentor/shared';
 
@@ -38,17 +39,17 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
       throw new Error(`캠프 코드 ${campCode}에 대한 설정을 찾을 수 없습니다.`);
     }
 
-    console.log(`📊 Google Sheets 데이터 가져오기 시작... (캠프: ${campCode})`);
-    console.log('   Spreadsheet ID:', config.spreadsheetId);
-    console.log('   Sheet Name:', config.sheetName);
-    console.log('   Sheet GID:', config.gid);
-    console.log('   Camp Type:', config.type);
-    console.log('   Use Header Mapping:', config.useHeaderMapping);
+    logger.info(`📊 Google Sheets 데이터 가져오기 시작... (캠프: ${campCode})`);
+    logger.info('   Spreadsheet ID:', config.spreadsheetId);
+    logger.info('   Sheet Name:', config.sheetName);
+    logger.info('   Sheet GID:', config.gid);
+    logger.info('   Camp Type:', config.type);
+    logger.info('   Use Header Mapping:', config.useHeaderMapping);
 
     // 공개 스프레드시트를 TSV 형식으로 가져오기
     const exportUrl = `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/export?format=tsv&gid=${config.gid}`;
     
-    console.log('   Export URL:', exportUrl);
+    logger.info('   Export URL:', exportUrl);
     
     const response = await fetch(exportUrl);
     if (!response.ok) {
@@ -59,7 +60,7 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
     // TSV 파싱
     const lines = tsvData.split('\n').filter((line: string) => line.trim());
     const headers = lines[0].split('\t');
-    console.log(`📋 헤더 ${headers.length}개 로드`);
+    logger.info(`📋 헤더 ${headers.length}개 로드`);
     
     // 헤더 기반 매핑을 위한 인덱스 맵 생성
     const headerIndexMap: Record<string, number> = {};
@@ -67,12 +68,12 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
       headers.forEach((header, index) => {
         const trimmedHeader = header.trim();
         headerIndexMap[trimmedHeader] = index;
-        console.log(`   헤더[${index}]: "${trimmedHeader}"`);
+        logger.info(`   헤더[${index}]: "${trimmedHeader}"`);
       });
     }
     
     const rows = lines.slice(1).map((line: string) => line.split('\t'));
-    console.log(`📊 총 ${rows.length}개 행 로드`);
+    logger.info(`📊 총 ${rows.length}개 행 로드`);
 
     // 각 행을 STSheetStudent 객체로 변환
     const students: STSheetStudent[] = rows
@@ -158,19 +159,19 @@ const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent
 
         // 디버깅: 첫 5명의 정보 출력
         if (index < 5) {
-          console.log(`   학생 ${index + 1}: ${student.name} | ${student.englishName} | 반멘토: "${student.classMentor}" | 유닛: "${student.unitMentor}"`);
+          logger.info(`   학생 ${index + 1}: ${student.name} | ${student.englishName} | 반멘토: "${student.classMentor}" | 유닛: "${student.unitMentor}"`);
         }
 
         return student;
       });
 
-    console.log(`✅ ${students.length}명의 학생 데이터 변환 완료`);
+    logger.info(`✅ ${students.length}명의 학생 데이터 변환 완료`);
     
     return students;
   } catch (error) {
-    console.error('❌ Google Sheets 데이터 가져오기 실패:', error);
+    logger.error('❌ Google Sheets 데이터 가져오기 실패:', error);
     if (error instanceof Error) {
-      console.error('   에러 메시지:', error.message);
+      logger.error('   에러 메시지:', error.message);
     }
     throw error;
   }
@@ -407,7 +408,7 @@ export const stSheetService = {
       
       // 임시 데이터 사용 설정이 켜져있으면 무조건 임시 데이터 반환
       if (useTemporaryData) {
-        console.log(`⚠️ ${campCode} 임시 데이터 표시 설정이 활성화되어 있습니다.`);
+        logger.info(`⚠️ ${campCode} 임시 데이터 표시 설정이 활성화되어 있습니다.`);
         return getTemporaryData(campCode);
       }
       
@@ -422,7 +423,7 @@ export const stSheetService = {
       // 실제 데이터도 없으면 빈 배열 반환
       return [];
     } catch (error) {
-      console.error('❌ Firestore 데이터 로드 실패:', error);
+      logger.error('❌ Firestore 데이터 로드 실패:', error);
       throw error;
     }
   },
@@ -444,10 +445,10 @@ export const stSheetService = {
         }
       });
 
-      console.log(`✅ ${mentorName} 멘토의 ${filterType} 학생: ${filtered.length}명 (캠프: ${campCode})`);
+      logger.info(`✅ ${mentorName} 멘토의 ${filterType} 학생: ${filtered.length}명 (캠프: ${campCode})`);
       return filtered;
     } catch (error) {
-      console.error('❌ 학생 목록 조회 실패:', error);
+      logger.error('❌ 학생 목록 조회 실패:', error);
       throw error;
     }
   },
@@ -455,12 +456,12 @@ export const stSheetService = {
   // Google Sheets에서 실제 데이터 동기화 (모든 행 가져오기 - 관리자용)
   syncSTSheet: async (campCode: CampCode = 'E27'): Promise<SyncSTSheetResponse> => {
     try {
-      console.log(`🔄 ST 시트 전체 데이터 동기화 시작... (캠프: ${campCode})`);
+      logger.info(`🔄 ST 시트 전체 데이터 동기화 시작... (캠프: ${campCode})`);
 
       // Google Sheets에서 전체 데이터 가져오기
       const allStudents = await fetchGoogleSheetsData(campCode);
 
-      console.log(`✅ 전체 학생: ${allStudents.length}명`);
+      logger.info(`✅ 전체 학생: ${allStudents.length}명`);
 
       // Firestore에 전체 데이터 저장
       const docRef = doc(db, 'stSheetCache', campCode);
@@ -474,7 +475,7 @@ export const stSheetService = {
         totalStudents: allStudents.length
       });
 
-      console.log(`✅ Firestore 저장 완료! (캠프: ${campCode})`);
+      logger.info(`✅ Firestore 저장 완료! (캠프: ${campCode})`);
 
       return {
         success: true,
@@ -482,7 +483,7 @@ export const stSheetService = {
         lastSync: new Date().toISOString()
       };
     } catch (error) {
-      console.error('❌ 동기화 실패:', error);
+      logger.error('❌ 동기화 실패:', error);
       throw error;
     }
   },
@@ -494,7 +495,7 @@ export const stSheetService = {
       const student = students.find(s => s.studentId === studentId);
       return student || null;
     } catch (error) {
-      console.error('❌ 학생 상세 정보 조회 실패:', error);
+      logger.error('❌ 학생 상세 정보 조회 실패:', error);
       throw error;
     }
   },
@@ -518,7 +519,7 @@ export const stSheetService = {
       // 임시 데이터 사용 설정이 꺼져있으면 무조건 false
       return false;
     } catch (error) {
-      console.error('임시 데이터 확인 실패:', error);
+      logger.error('임시 데이터 확인 실패:', error);
       return true;
     }
   },
@@ -536,7 +537,7 @@ export const stSheetService = {
       const hasReal = await stSheetService.hasRealData(campCode);
       return !hasReal; // 실제 데이터가 없으면 true (임시 데이터 표시)
     } catch (error) {
-      console.error('설정 조회 실패:', error);
+      logger.error('설정 조회 실패:', error);
       return false;
     }
   },
@@ -551,7 +552,7 @@ export const stSheetService = {
         updatedAt: new Date().toISOString()
       }, { merge: true });
     } catch (error) {
-      console.error('설정 저장 실패:', error);
+      logger.error('설정 저장 실패:', error);
       throw error;
     }
   },
@@ -563,7 +564,7 @@ export const stSheetService = {
       const docSnap = await getDoc(docRef);
       return docSnap.exists() && docSnap.data()?.data && docSnap.data()?.data.length > 0;
     } catch (error) {
-      console.error('실제 데이터 확인 실패:', error);
+      logger.error('실제 데이터 확인 실패:', error);
       return false;
     }
   },

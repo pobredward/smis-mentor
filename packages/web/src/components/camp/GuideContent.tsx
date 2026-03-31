@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -103,7 +104,7 @@ export default function GuideContent() {
       setNewLinkUrl('');
       setNewLinkTargetRole('common');
     } catch (error) {
-      console.error('링크 추가 실패:', error);
+      logger.error('링크 추가 실패:', error);
       alert('링크 추가에 실패했습니다.');
     } finally {
       setIsAddingLink(false);
@@ -118,7 +119,7 @@ export default function GuideContent() {
       await generationResourcesService.deleteLink(activeJobCodeId, 'guideLinks', linkId);
       await refreshResources();
     } catch (error) {
-      console.error('인솔표 삭제 실패:', error);
+      logger.error('인솔표 삭제 실패:', error);
       alert('인솔표 삭제에 실패했습니다.');
     }
   };
@@ -137,7 +138,7 @@ export default function GuideContent() {
       await generationResourcesService.reorderLinks(activeJobCodeId, 'guideLinks', newLinks);
       await refreshResources();
     } catch (error) {
-      console.error('순서 변경 실패:', error);
+      logger.error('순서 변경 실패:', error);
       alert('순서 변경에 실패했습니다.');
     }
   };
@@ -168,7 +169,7 @@ export default function GuideContent() {
       setShowEditModal(false);
       alert('인솔표가 수정되었습니다.');
     } catch (error) {
-      console.error('인솔표 수정 실패:', error);
+      logger.error('인솔표 수정 실패:', error);
       alert('인솔표 수정에 실패했습니다.');
     }
   };

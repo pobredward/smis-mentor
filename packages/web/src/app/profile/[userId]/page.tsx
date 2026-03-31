@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
@@ -33,7 +34,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ userId: 
           setJobCodes(jobCodesInfo);
         }
       } catch (error) {
-        console.error('사용자 정보 불러오기 오류:', error);
+        logger.error('사용자 정보 불러오기 오류:', error);
         setError('사용자 정보를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setLoading(false);

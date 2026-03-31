@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -182,7 +183,7 @@ export function ForeignSignUpStep1Screen({
         });
       }
     } catch (error) {
-      console.error('User information verification error:', error);
+      logger.error('User information verification error:', error);
       Alert.alert('Error', 'An error occurred while verifying user information.');
     } finally {
       setIsLoading(false);

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -48,7 +49,7 @@ export default function JobBoardSection() {
         setSortedBoards(sorted);
         setJobCodesMap(jobCodes);
       } catch (error) {
-        console.error('공고 정보 로드 오류:', error);
+        logger.error('공고 정보 로드 오류:', error);
       } finally {
         setIsLoading(false);
       }

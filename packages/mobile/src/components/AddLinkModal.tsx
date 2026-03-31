@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -63,7 +64,7 @@ export const AddLinkModal: React.FC<AddLinkModalProps> = ({
       onSuccess();
       onClose();
     } catch (error) {
-      console.error('링크 추가 실패:', error);
+      logger.error('링크 추가 실패:', error);
       Alert.alert('오류', '링크 추가에 실패했습니다.');
     } finally {
       setLoading(false);

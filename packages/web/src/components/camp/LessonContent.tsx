@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -181,7 +182,7 @@ export default function LessonContent() {
       setUserJobCodes(jobCodesInfo);
       return jobCodesInfo;
     } catch (error) {
-      console.error('활성화된 직무 코드 정보 가져오기 오류:', error);
+      logger.error('활성화된 직무 코드 정보 가져오기 오류:', error);
       return [];
     }
   };
@@ -279,7 +280,7 @@ export default function LessonContent() {
           
           // 중복 templateId 체크 (첫 번째만 표시)
           if (seenTemplateIdsInFinal.has(mat.templateId)) {
-            console.log('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
+            logger.info('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
             return false;
           }
           seenTemplateIdsInFinal.add(mat.templateId);
@@ -349,7 +350,7 @@ export default function LessonContent() {
       }
       setSections(allSections);
     } catch (error) {
-      console.error('데이터 로드 오류:', error);
+      logger.error('데이터 로드 오류:', error);
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -381,12 +382,12 @@ export default function LessonContent() {
     return a.localeCompare(b);
   });
   
-  console.log('📊 [WEB] materialCodeMap:', materialCodeMap);
-  console.log('📊 [WEB] userCodes:', userCodes);
-  console.log('📊 [WEB] allMaterialCodes:', allMaterialCodes);
-  console.log('📊 [WEB] sortedMaterialCodes:', sortedMaterialCodes);
-  console.log('📊 [WEB] selectedMaterialCode:', selectedMaterialCode);
-  console.log('📊 [WEB] 대주제 추가 버튼 표시 조건:', selectedMaterialCode && selectedMaterialCode !== '개인 자료');
+  logger.info('📊 [WEB] materialCodeMap:', materialCodeMap);
+  logger.info('📊 [WEB] userCodes:', userCodes);
+  logger.info('📊 [WEB] allMaterialCodes:', allMaterialCodes);
+  logger.info('📊 [WEB] sortedMaterialCodes:', sortedMaterialCodes);
+  logger.info('📊 [WEB] selectedMaterialCode:', selectedMaterialCode);
+  logger.info('📊 [WEB] 대주제 추가 버튼 표시 조건:', selectedMaterialCode && selectedMaterialCode !== '개인 자료');
 
   const filteredMaterials = selectedMaterialCode
     ? materials.filter((m) => materialCodeMap[m.id] === selectedMaterialCode)
@@ -403,26 +404,26 @@ export default function LessonContent() {
 
   // 코드 필터 초기화
   useEffect(() => {
-    console.log('📍 [WEB] 코드 필터 초기화 useEffect');
-    console.log('  - sortedMaterialCodes:', sortedMaterialCodes);
-    console.log('  - selectedMaterialCode:', selectedMaterialCode);
-    console.log('  - materials 개수:', materials.length);
+    logger.info('📍 [WEB] 코드 필터 초기화 useEffect');
+    logger.info('  - sortedMaterialCodes:', sortedMaterialCodes);
+    logger.info('  - selectedMaterialCode:', selectedMaterialCode);
+    logger.info('  - materials 개수:', materials.length);
     
     if (sortedMaterialCodes.length > 0) {
       // selectedMaterialCode가 없거나, sortedMaterialCodes에 포함되지 않으면 업데이트
       if (!selectedMaterialCode || !sortedMaterialCodes.includes(selectedMaterialCode)) {
         const hasPersonalMaterials = materials.some((m) => !m.templateId);
-        console.log('  - hasPersonalMaterials:', hasPersonalMaterials);
+        logger.info('  - hasPersonalMaterials:', hasPersonalMaterials);
         
         if (hasPersonalMaterials && sortedMaterialCodes.includes('개인 자료')) {
-          console.log('  ✅ selectedMaterialCode 설정: 개인 자료');
+          logger.info('  ✅ selectedMaterialCode 설정: 개인 자료');
           setSelectedMaterialCode('개인 자료');
         } else {
-          console.log('  ✅ selectedMaterialCode 설정:', sortedMaterialCodes[0]);
+          logger.info('  ✅ selectedMaterialCode 설정:', sortedMaterialCodes[0]);
           setSelectedMaterialCode(sortedMaterialCodes[0]);
         }
       } else {
-        console.log('  ℹ️ selectedMaterialCode 유지:', selectedMaterialCode);
+        logger.info('  ℹ️ selectedMaterialCode 유지:', selectedMaterialCode);
       }
     }
   }, [sortedMaterialCodes, selectedMaterialCode, materials]);
@@ -459,7 +460,7 @@ export default function LessonContent() {
       setAddingSectionFor(null);
       toast.success('소제목이 추가되었습니다.');
     } catch (error) {
-      console.error('소제목 추가 오류:', error);
+      logger.error('소제목 추가 오류:', error);
       toast.error('소제목 추가 중 오류가 발생했습니다.');
     }
   };
@@ -528,7 +529,7 @@ export default function LessonContent() {
       setEditingSection(null);
       toast.success('소제목이 수정되었습니다.');
     } catch (error) {
-      console.error('소제목 수정 오류:', error);
+      logger.error('소제목 수정 오류:', error);
       toast.error('소제목 수정 중 오류가 발생했습니다.');
     }
   };
@@ -553,7 +554,7 @@ export default function LessonContent() {
 
       toast.success('소제목이 삭제되었습니다.');
     } catch (error) {
-      console.error('소제목 삭제 오류:', error);
+      logger.error('소제목 삭제 오류:', error);
       toast.error('소제목 삭제 중 오류가 발생했습니다.');
     }
   };
@@ -598,7 +599,7 @@ export default function LessonContent() {
       setShowAddMaterialForm(false);
       toast.success(`${selectedMaterialCode}에 대주제가 추가되었습니다.`);
     } catch (error) {
-      console.error('대주제 추가 오류:', error);
+      logger.error('대주제 추가 오류:', error);
       toast.error('대주제 추가 중 오류가 발생했습니다.');
     }
   };
@@ -627,7 +628,7 @@ export default function LessonContent() {
 
       toast.success('대주제가 삭제되었습니다.');
     } catch (error) {
-      console.error('대주제 삭제 오류:', error);
+      logger.error('대주제 삭제 오류:', error);
       toast.error('대주제 삭제 중 오류가 발생했습니다.');
     }
   };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -222,7 +223,7 @@ export function ApplicantDetailScreen({
       // 지원 장소 로드
       await loadUserAppliedCamps(app.refUserId);
     } catch (error) {
-      console.error('데이터 로드 오류:', error);
+      logger.error('데이터 로드 오류:', error);
       Alert.alert('오류', '데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -265,7 +266,7 @@ export function ApplicantDetailScreen({
 
       setAppliedCamps(uniqueCodes);
     } catch (error) {
-      console.error('지원 캠프 로드 오류:', error);
+      logger.error('지원 캠프 로드 오류:', error);
       setAppliedCamps([]);
     }
   };
@@ -338,7 +339,7 @@ export function ApplicantDetailScreen({
         setFinalFailMessage(DEFAULT_SMS_TEMPLATES['final_fail']);
       }
     } catch (error) {
-      console.error('템플릿 로드 실패:', error);
+      logger.error('템플릿 로드 실패:', error);
       // 실패 시 기본 템플릿 사용 (사용자에게 알림 없이)
     } finally {
       setIsLoadingTemplates(false);
@@ -367,7 +368,7 @@ export function ApplicantDetailScreen({
         setCurrentUser({ name: '관리자' });
       }
     } catch (error) {
-      console.error('현재 사용자 정보 로드 오류:', error);
+      logger.error('현재 사용자 정보 로드 오류:', error);
       setCurrentUser({ name: '관리자' });
     }
   };
@@ -391,7 +392,7 @@ export function ApplicantDetailScreen({
     try {
       await updateApplication(db, applicationId, { applicationStatus: newStatus });
     } catch (error) {
-      console.error('상태 업데이트 오류:', error);
+      logger.error('상태 업데이트 오류:', error);
       Alert.alert('오류', '상태 변경 중 오류가 발생했습니다.');
       // 실패 시 롤백
       if (application) {
@@ -426,7 +427,7 @@ export function ApplicantDetailScreen({
       try {
         await updateApplication(db, applicationId, { interviewStatus: 'pending' });
       } catch (error) {
-        console.error('면접 상태 업데이트 오류:', error);
+        logger.error('면접 상태 업데이트 오류:', error);
         Alert.alert('오류', '면접 상태 변경 중 오류가 발생했습니다.');
         // 실패 시 롤백
         if (application) {
@@ -455,7 +456,7 @@ export function ApplicantDetailScreen({
     try {
       await updateApplication(db, applicationId, { interviewStatus: newStatus });
     } catch (error) {
-      console.error('면접 상태 업데이트 오류:', error);
+      logger.error('면접 상태 업데이트 오류:', error);
       Alert.alert('오류', '면접 상태 변경 중 오류가 발생했습니다.');
       // 실패 시 롤백
       if (application) {
@@ -484,7 +485,7 @@ export function ApplicantDetailScreen({
     try {
       await updateApplication(db, applicationId, { finalStatus: newStatus });
     } catch (error) {
-      console.error('최종 상태 업데이트 오류:', error);
+      logger.error('최종 상태 업데이트 오류:', error);
       Alert.alert('오류', '최종 상태 변경 중 오류가 발생했습니다.');
       // 실패 시 롤백
       if (application) {
@@ -637,10 +638,10 @@ export function ApplicantDetailScreen({
       
       // 백그라운드에서 최신 템플릿 로드
       loadTemplates().catch(error => {
-        console.error('템플릿 로드 실패:', error);
+        logger.error('템플릿 로드 실패:', error);
       });
     } catch (error) {
-      console.error('템플릿 저장 실패:', error);
+      logger.error('템플릿 저장 실패:', error);
       Alert.alert('오류', '템플릿 저장에 실패했습니다.');
     } finally {
       setIsSavingTemplate(false);
@@ -696,7 +697,7 @@ export function ApplicantDetailScreen({
         Alert.alert('오류', `SMS 전송 실패: ${result.message}`);
       }
     } catch (error) {
-      console.error('SMS 전송 실패:', error);
+      logger.error('SMS 전송 실패:', error);
       Alert.alert('오류', 'SMS 전송 중 오류가 발생했습니다.');
     } finally {
       setIsSendingSMS(false);
@@ -1246,7 +1247,7 @@ export function ApplicantDetailScreen({
                       Alert.alert('성공', '면접 일자가 변경되었습니다.');
                       loadData();
                     } catch (error) {
-                      console.error('면접 일자 변경 오류:', error);
+                      logger.error('면접 일자 변경 오류:', error);
                       Alert.alert('오류', '면접 일자 변경에 실패했습니다.');
                     }
                   }}
@@ -1264,7 +1265,7 @@ export function ApplicantDetailScreen({
                       Alert.alert('성공', '면접 일자가 미정으로 변경되었습니다.');
                       loadData();
                     } catch (error) {
-                      console.error('면접 일자 미정 변경 오류:', error);
+                      logger.error('면접 일자 미정 변경 오류:', error);
                       Alert.alert('오류', '면접 일자 변경에 실패했습니다.');
                     }
                   }}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -78,7 +79,7 @@ export default function EvaluationForm({
         Alert.alert('오류', '평가 기준을 찾을 수 없습니다.');
       }
     } catch (error) {
-      console.error('평가 기준 로드 오류:', error);
+      logger.error('평가 기준 로드 오류:', error);
       Alert.alert('오류', '평가 기준을 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -150,7 +151,7 @@ export default function EvaluationForm({
         { text: '확인', onPress: onSuccess }
       ]);
     } catch (error) {
-      console.error('평가 저장 오류:', error);
+      logger.error('평가 저장 오류:', error);
       Alert.alert('오류', '평가 저장 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import React, { useState, useEffect } from 'react';
 import { getTemplatesWithJobBoardInfo, TemplateType, SMSTemplate } from '@/lib/smsTemplateService';
@@ -41,7 +42,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
       const filtered = data.filter(t => t.refJobBoardId !== currentJobBoardId);
       setTemplates(filtered);
     } catch (error) {
-      console.error('템플릿 목록 로드 실패:', error);
+      logger.error('템플릿 목록 로드 실패:', error);
     } finally {
       setIsLoading(false);
     }

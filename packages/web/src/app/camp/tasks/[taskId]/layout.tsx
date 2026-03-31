@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { logger } from '@smis-mentor/shared';
 import { getTaskById } from '@/lib/taskService';
 
 export async function generateMetadata({ 
@@ -55,7 +56,7 @@ export async function generateMetadata({
       },
     };
   } catch (error) {
-    console.error('메타데이터 생성 오류:', error);
+    logger.error('메타데이터 생성 오류:', error);
     return {
       title: '업무 로딩 중 - SMIS 멘토',
       description: '업무 정보를 불러오는 중입니다.',

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -243,7 +244,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         })
       );
     } catch (error) {
-      console.error('데이터 로드 오류:', error);
+      logger.error('데이터 로드 오류:', error);
       toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -281,7 +282,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           });
         setAllGenerations(generations);
       } catch (error) {
-        console.error('직무 코드 로딩 실패:', error);
+        logger.error('직무 코드 로딩 실패:', error);
       }
     };
     
@@ -312,11 +313,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const loadCurrentAdminName = async () => {
     try {
       const currentUser = auth.currentUser;
-      console.log('🔍 Current user in applicants:', currentUser?.uid, currentUser?.email);
+      logger.info('🔍 Current user in applicants:', currentUser?.uid, currentUser?.email);
       
       if (currentUser && currentUser.email) {
         // 이메일을 기준으로 users 컬렉션에서 사용자 찾기
-        console.log('📧 Searching for user by email in applicants:', currentUser.email);
+        logger.info('📧 Searching for user by email in applicants:', currentUser.email);
         
         try {
           const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -327,7 +328,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           
           if (userByEmail) {
             const userData = userByEmail.data() as User;
-            console.log('✅ Found user by email in applicants:', { 
+            logger.info('✅ Found user by email in applicants:', { 
               docId: userByEmail.id,
               name: userData.name, 
               email: userData.email,
@@ -337,31 +338,31 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
             });
             
             if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-              console.log('✅ Using users.name from email search in applicants:', userData.name);
+              logger.info('✅ Using users.name from email search in applicants:', userData.name);
               setCurrentAdminName(userData.name.trim());
               return;
             } else {
-              console.log('❌ users.name is empty or invalid in applicants:', userData.name);
+              logger.info('❌ users.name is empty or invalid in applicants:', userData.name);
             }
           } else {
-            console.log('❌ No user found by email in users collection (applicants)');
+            logger.info('❌ No user found by email in users collection (applicants)');
           }
         } catch (emailSearchError) {
-          console.error('Email search error in applicants:', emailSearchError);
+          logger.error('Email search error in applicants:', emailSearchError);
         }
         
         // UID로도 시도해보기 (백업 방법)
-        console.log('🔄 Trying UID as backup in applicants:', currentUser.uid);
+        logger.info('🔄 Trying UID as backup in applicants:', currentUser.uid);
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
-          console.log('📄 Found user by UID in applicants:', { 
+          logger.info('📄 Found user by UID in applicants:', { 
             name: userData.name, 
             email: userData.email 
           });
           
           if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-            console.log('✅ Using users.name from UID search in applicants:', userData.name);
+            logger.info('✅ Using users.name from UID search in applicants:', userData.name);
             setCurrentAdminName(userData.name.trim());
             return;
           }
@@ -369,21 +370,21 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         
         // Firebase Auth의 displayName 사용
         if (currentUser.displayName) {
-          console.log('✅ Using auth.displayName in applicants:', currentUser.displayName);
+          logger.info('✅ Using auth.displayName in applicants:', currentUser.displayName);
           setCurrentAdminName(currentUser.displayName);
           return;
         }
         
         // 이메일에서 이름 부분 추출 (최후의 수단)
         const emailName = currentUser.email.split('@')[0];
-        console.log('⚠️ Using email name as fallback in applicants:', emailName);
+        logger.info('⚠️ Using email name as fallback in applicants:', emailName);
         setCurrentAdminName(emailName);
       } else {
-        console.log('❌ No current user or email in applicants');
+        logger.info('❌ No current user or email in applicants');
         setCurrentAdminName('관리자');
       }
     } catch (error) {
-      console.error('관리자 이름 로드 오류:', error);
+      logger.error('관리자 이름 로드 오류:', error);
       setCurrentAdminName('관리자');
     }
   };
@@ -507,7 +508,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         [userId]: uniqueCodes
       }));
     } catch (error) {
-      console.error('지원 캠프 로드 오류:', error);
+      logger.error('지원 캠프 로드 오류:', error);
       setAppliedCampsMap(prev => ({
         ...prev,
         [userId]: []
@@ -553,7 +554,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         [userId]: uniqueCodes
       }));
     } catch (error) {
-      console.error('지원 캠프 로드 오류:', error);
+      logger.error('지원 캠프 로드 오류:', error);
     }
   };
   
@@ -658,7 +659,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // Firestore 업데이트 - 비동기 작업이지만 로컬 상태 업데이트를 먼저 하기 위해 await을 사용하지 않음
       updateDoc(applicationRef, firestoreUpdateData)
         .catch((error) => {
-          console.error('Firestore 업데이트 오류:', error);
+          logger.error('Firestore 업데이트 오류:', error);
           // Firestore 업데이트 오류 시 사용자에게 알림
           toast.error('상태 업데이트 중 오류가 발생했습니다. 다시 시도해주세요.');
           // 로컬 상태를 원래대로 복원하는 로직이 필요하다면 여기에 추가
@@ -683,7 +684,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // 토스트 메시지 표시
       toast.success('상태가 업데이트되었습니다.');
     } catch (error) {
-      console.error('상태 업데이트 오류:', error);
+      logger.error('상태 업데이트 오류:', error);
       toast.error('상태 업데이트 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -727,7 +728,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // Firestore 업데이트 - 비동기 작업이지만 로컬 상태 업데이트를 먼저 하기 위해 await을 사용하지 않음
       updateDoc(applicationRef, updateData)
         .catch((error) => {
-          console.error('면접 정보 저장 오류:', error);
+          logger.error('면접 정보 저장 오류:', error);
           toast.error('면접 정보 저장 중 오류가 발생했습니다. 다시 시도해주세요.');
         });
 
@@ -749,7 +750,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
 
       toast.success('면접 날짜/시간이 저장되었습니다.');
     } catch (error) {
-      console.error('면접 날짜/시간 저장 오류:', error);
+      logger.error('면접 날짜/시간 저장 오류:', error);
       toast.error('면접 날짜/시간 저장 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -774,7 +775,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // Firestore 업데이트 - 비동기 작업이지만 로컬 상태 업데이트를 먼저 하기 위해 await을 사용하지 않음
       updateDoc(applicationRef, updateData)
         .catch((error) => {
-          console.error('면접 날짜 변경 오류:', error);
+          logger.error('면접 날짜 변경 오류:', error);
           toast.error('면접 날짜 변경 중 오류가 발생했습니다. 다시 시도해주세요.');
         });
 
@@ -800,7 +801,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
 
       toast.success('면접 날짜가 미정으로 변경되었습니다.');
     } catch (error) {
-      console.error('면접 날짜 변경 오류:', error);
+      logger.error('면접 날짜 변경 오류:', error);
       toast.error('면접 날짜 변경 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -853,7 +854,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       
       toast.success('직무 코드가 추가되었습니다.');
     } catch (error) {
-      console.error('직무 코드 추가 실패:', error);
+      logger.error('직무 코드 추가 실패:', error);
       toast.error('직무 코드 추가에 실패했습니다.');
     }
   };
@@ -885,7 +886,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       const jobCodes = await getUserJobCodesInfo(jobExperiences);
       setUserJobCodesMap(prev => ({ ...prev, [userId]: jobCodes }));
     } catch (error) {
-      console.error('직무 경험 정보 로드 실패:', error);
+      logger.error('직무 경험 정보 로드 실패:', error);
       setUserJobCodesMap(prev => ({ ...prev, [userId]: [] }));
     } finally {
       setIsLoadingJobCodes(prev => ({ ...prev, [userId]: false }));
@@ -922,7 +923,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       
       toast.success('직무 경험이 삭제되었습니다.');
     } catch (error) {
-      console.error('직무 경험 삭제 실패:', error);
+      logger.error('직무 경험 삭제 실패:', error);
       toast.error('직무 경험 삭제에 실패했습니다.');
     }
   };
@@ -933,7 +934,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       const templates = await getAllSMSTemplates();
       setSmsTemplates(templates);
     } catch (error) {
-      console.error('SMS 템플릿 로드 오류:', error);
+      logger.error('SMS 템플릿 로드 오류:', error);
     }
   };
   
@@ -993,7 +994,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         toast.error(`SMS 전송 실패: ${result.message}`);
       }
     } catch (error: any) {
-      console.error('SMS 전송 오류:', error);
+      logger.error('SMS 전송 오류:', error);
       toast.error(error.message || 'SMS 전송 중 오류가 발생했습니다.');
     } finally {
       setIsSendingSMS(false);
@@ -1102,7 +1103,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         setFinalFailMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
       }
     } catch (error) {
-      console.error('템플릿 로드 실패:', error);
+      logger.error('템플릿 로드 실패:', error);
       toast.error('템플릿을 불러오는 데 실패했습니다.');
     } finally {
       setIsLoading(false);
@@ -1142,7 +1143,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           toast.error(`SMS 전송 실패: ${result.message}`);
         }
       } catch (error: any) {
-        console.error('SMS 전송 오류:', error);
+        logger.error('SMS 전송 오류:', error);
         toast.error(error.message || 'SMS 전송 중 오류가 발생했습니다.');
       } finally {
         setIsLoadingMessage(false);
@@ -1156,7 +1157,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       
     } catch (error) {
       // 이 부분은 fetch 자체가 실패할 경우에만 실행됨 (네트워크 오류 등)
-      console.error('SMS 전송 오류:', error);
+      logger.error('SMS 전송 오류:', error);
       toast.error('SMS 전송 중 오류가 발생했습니다.');
       setIsLoadingMessage(false);
     }
@@ -1185,7 +1186,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           title: `${type} 템플릿`,
           createdBy
         }).catch(error => {
-          console.error('템플릿 업데이트 실패:', error);
+          logger.error('템플릿 업데이트 실패:', error);
           toast.error('템플릿 업데이트에 실패했습니다. 다시 시도해주세요.');
         });
       } else {
@@ -1197,7 +1198,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           title: `${type} 템플릿`,
           createdBy
         }).catch(error => {
-          console.error('템플릿 생성 실패:', error);
+          logger.error('템플릿 생성 실패:', error);
           toast.error('템플릿 생성에 실패했습니다. 다시 시도해주세요.');
         });
       }
@@ -1233,12 +1234,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // 백그라운드에서 최신 템플릿 데이터 로드
       // 이 부분은 필요한 경우에만 유지하세요. 즉시 UI 업데이트가 더 중요하다면 제거해도 됩니다.
       loadTemplates().catch(error => {
-        console.error('템플릿 로드 실패:', error);
+        logger.error('템플릿 로드 실패:', error);
         // 템플릿 로드 실패는 사용자 경험에 큰 영향이 없으므로 toast 알림은 표시하지 않음
       });
       
     } catch (error) {
-      console.error('템플릿 저장 실패:', error);
+      logger.error('템플릿 저장 실패:', error);
       toast.error('템플릿 저장에 실패했습니다.');
     } finally {
       setIsSavingTemplate(false);

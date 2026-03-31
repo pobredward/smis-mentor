@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useRef, ReactNode, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import { View, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useAuth } from './AuthContext';
@@ -32,7 +33,7 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
   useEffect(() => {
-    console.log('🔄 WebViewCache: activeJobCodeId 변경됨:', activeJobCodeId);
+    logger.info('🔄 WebViewCache: activeJobCodeId 변경됨:', activeJobCodeId);
     if (activeJobCodeId) {
       loadResources();
     }
@@ -40,13 +41,13 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
 
   const loadResources = async () => {
     if (!activeJobCodeId) {
-      console.log('⚠️ WebViewCache: activeJobCodeId 없음, 리소스 로드 중단');
+      logger.info('⚠️ WebViewCache: activeJobCodeId 없음, 리소스 로드 중단');
       setLoading(false);
       return;
     }
 
     try {
-      console.log('📥 WebViewCache: 리소스 로드 시작 -', activeJobCodeId);
+      logger.info('📥 WebViewCache: 리소스 로드 시작 -', activeJobCodeId);
       setLoading(true);
       
       // 기존 데이터 초기화
@@ -56,9 +57,9 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
       const resources = await generationResourcesService.getResourcesByJobCodeId(activeJobCodeId);
       
       if (resources) {
-        console.log('✅ WebViewCache: 리소스 로드 성공');
-        console.log('  - scheduleLinks:', resources.scheduleLinks?.length || 0);
-        console.log('  - guideLinks:', resources.guideLinks?.length || 0);
+        logger.info('✅ WebViewCache: 리소스 로드 성공');
+        logger.info('  - scheduleLinks:', resources.scheduleLinks?.length || 0);
+        logger.info('  - guideLinks:', resources.guideLinks?.length || 0);
         
         setSchedules(resources.scheduleLinks || []);
         setGuides(resources.guideLinks || []);
@@ -72,12 +73,12 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         setLoadingStates(initialLoadingStates);
         setZoomLevelsState(initialZoomLevels);
       } else {
-        console.log('⚠️ WebViewCache: 해당 기수의 리소스 없음');
+        logger.info('⚠️ WebViewCache: 해당 기수의 리소스 없음');
         setSchedules([]);
         setGuides([]);
       }
     } catch (error) {
-      console.error('❌ WebViewCache: 리소스 로드 실패:', error);
+      logger.error('❌ WebViewCache: 리소스 로드 실패:', error);
       setSchedules([]);
       setGuides([]);
     } finally {
@@ -111,7 +112,7 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
             iframes[i].style.width = (100 / ${zoom}) + "%";
             iframes[i].style.height = (100 / ${zoom}) + "%";
           } catch(e) {
-            console.log('iframe access error:', e);
+            logger.info('iframe access error:', e);
           }
         }
         

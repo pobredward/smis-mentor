@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -68,7 +69,7 @@ export default function TaskDetailPage() {
       }
       setTask(taskData);
     } catch (error) {
-      console.error('업무 로드 오류:', error);
+      logger.error('업무 로드 오류:', error);
       toast.error('업무를 불러오는 중 오류가 발생했습니다.');
       router.push('/camp');
     } finally {
@@ -86,7 +87,7 @@ export default function TaskDetailPage() {
       await loadTask();
       toast.success('업무 상태가 변경되었습니다.');
     } catch (error) {
-      console.error('업무 완료 토글 오류:', error);
+      logger.error('업무 완료 토글 오류:', error);
       toast.error('업무 상태 변경 중 오류가 발생했습니다.');
     }
   };
@@ -100,7 +101,7 @@ export default function TaskDetailPage() {
         toast.success('업무가 삭제되었습니다.');
         handleBack();
       } catch (error) {
-        console.error('업무 삭제 오류:', error);
+        logger.error('업무 삭제 오류:', error);
         toast.error('업무 삭제 중 오류가 발생했습니다.');
       }
     }
@@ -133,7 +134,7 @@ export default function TaskDetailPage() {
         toast.success('공유되었습니다.');
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-          console.error('공유 오류:', error);
+          logger.error('공유 오류:', error);
         }
       }
     } else {
@@ -142,7 +143,7 @@ export default function TaskDetailPage() {
         await navigator.clipboard.writeText(url);
         toast.success('링크가 클립보드에 복사되었습니다.');
       } catch (error) {
-        console.error('클립보드 복사 오류:', error);
+        logger.error('클립보드 복사 오류:', error);
         toast.error('링크 복사에 실패했습니다.');
       }
     }

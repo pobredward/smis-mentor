@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -134,7 +135,7 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
       );
       setJobBoards(sortedBoards);
     } catch (error) {
-      console.error('데이터 로드 오류:', error);
+      logger.error('데이터 로드 오류:', error);
       Alert.alert('오류', '데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -264,7 +265,7 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
       setShowForm(false);
       await loadData();
     } catch (error) {
-      console.error('공고 저장 오류:', error);
+      logger.error('공고 저장 오류:', error);
       Alert.alert('오류', `공고 ${isCreating ? '생성' : '수정'} 중 오류가 발생했습니다.`);
     } finally {
       setIsLoading(false);
@@ -284,7 +285,7 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
             Alert.alert('성공', '공고가 삭제되었습니다.');
             await loadData();
           } catch (error) {
-            console.error('공고 삭제 오류:', error);
+            logger.error('공고 삭제 오류:', error);
             Alert.alert('오류', '공고 삭제 중 오류가 발생했습니다.');
           }
         },

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -99,7 +100,7 @@ export default function SignUpEducation() {
       // 다음 단계로 이동
       router.push('/sign-up/details');
     } catch (error) {
-      console.error('교육 정보 확인 오류:', error);
+      logger.error('교육 정보 확인 오류:', error);
       toast.error('교육 정보 확인 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

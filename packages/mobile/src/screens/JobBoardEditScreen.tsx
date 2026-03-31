@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -80,7 +81,7 @@ export function JobBoardEditScreen({
               Alert.alert('성공', '공고가 수정되었습니다.');
               onSave();
             } catch (error) {
-              console.error('공고 수정 오류:', error);
+              logger.error('공고 수정 오류:', error);
               Alert.alert('오류', '공고 수정 중 오류가 발생했습니다.');
             } finally {
               setIsSaving(false);

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState } from 'react';
 import { FaApple } from 'react-icons/fa';
@@ -32,7 +33,7 @@ export default function AppleSignInButton({
       setIsLoading(false);
       onSuccess(result);
     } catch (error) {
-      console.error('Apple 로그인 오류:', error);
+      logger.error('Apple 로그인 오류:', error);
       setIsLoading(false);
       onError(error);
     }

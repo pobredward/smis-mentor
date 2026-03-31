@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import Button from '@/components/common/Button';
@@ -84,7 +85,7 @@ export function ShareLinkModal({
       setExpiresAt(data.expiresAt);
       toast.success('공유 링크가 생성되었습니다!');
     } catch (error) {
-      console.error('링크 생성 오류:', error);
+      logger.error('링크 생성 오류:', error);
       toast.error(error instanceof Error ? error.message : '링크 생성에 실패했습니다.');
     } finally {
       setIsGenerating(false);

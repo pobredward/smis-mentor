@@ -1,3 +1,4 @@
+import { logger } from '@smis-mentor/shared';
 import {
   doc,
   getDoc,
@@ -54,7 +55,7 @@ export const generationResourcesService = {
       }
       return null;
     } catch (error) {
-      console.error('generationResourcesService: 리소스 가져오기 실패:', error);
+      logger.error('generationResourcesService: 리소스 가져오기 실패:', error);
       throw error;
     }
   },
@@ -111,7 +112,7 @@ export const generationResourcesService = {
         });
       }
     } catch (error) {
-      console.error('링크 추가 실패:', error);
+      logger.error('링크 추가 실패:', error);
       throw error;
     }
   },
@@ -129,7 +130,7 @@ export const generationResourcesService = {
         updatedAt: Timestamp.now(),
       });
     } catch (error) {
-      console.error('링크 순서 변경 실패:', error);
+      logger.error('링크 순서 변경 실패:', error);
       throw error;
     }
   },
@@ -156,7 +157,7 @@ export const generationResourcesService = {
         updatedAt: Timestamp.now(),
       });
     } catch (error) {
-      console.error('링크 삭제 실패:', error);
+      logger.error('링크 삭제 실패:', error);
       throw error;
     }
   },

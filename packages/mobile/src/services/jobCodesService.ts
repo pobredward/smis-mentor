@@ -1,4 +1,5 @@
 import {
+import { logger } from '@smis-mentor/shared';
   collection,
   query,
   where,
@@ -36,7 +37,7 @@ const jobCodesService = {
 
       return jobCodes;
     } catch (error) {
-      console.error('모든 JobCodes 조회 실패:', error);
+      logger.error('모든 JobCodes 조회 실패:', error);
       throw error;
     }
   },
@@ -87,7 +88,7 @@ const jobCodesService = {
 
       return jobCodes;
     } catch (error) {
-      console.error('JobCodes 조회 실패:', error);
+      logger.error('JobCodes 조회 실패:', error);
       throw error;
     }
   },
@@ -109,7 +110,7 @@ const jobCodesService = {
         ...jobCodeSnap.data(),
       } as JobCode;
     } catch (error) {
-      console.error('JobCode 조회 실패:', error);
+      logger.error('JobCode 조회 실패:', error);
       throw error;
     }
   },
@@ -155,7 +156,7 @@ const jobCodesService = {
         });
       }
     } catch (error) {
-      console.error('activeJobExperienceId 업데이트 실패:', error);
+      logger.error('activeJobExperienceId 업데이트 실패:', error);
       throw error;
     }
   },

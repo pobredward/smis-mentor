@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -49,7 +50,7 @@ export default function JobApplyStatus() {
                 jobBoard
               } as ApplicationWithJobDetails;
             } catch (error) {
-              console.error(`공고 정보 로드 오류 (${app.refJobBoardId}):`, error);
+              logger.error(`공고 정보 로드 오류 (${app.refJobBoardId}):`, error);
               return app as ApplicationWithJobDetails;
             }
           })
@@ -57,7 +58,7 @@ export default function JobApplyStatus() {
         
         applicationsWithJobDetails.forEach(app => {
           if (app.applicationStatus === 'accepted' && app.interviewStatus === 'pending') {
-            console.log('면접 정보:', {
+            logger.info('면접 정보:', {
               applicationId: app.applicationHistoryId,
               interviewDate: app.interviewDate,
               interviewBaseLink: app.interviewBaseLink,
@@ -69,7 +70,7 @@ export default function JobApplyStatus() {
         
         setApplications(applicationsWithJobDetails);
       } catch (error) {
-        console.error('지원 내역 로드 오류:', error);
+        logger.error('지원 내역 로드 오류:', error);
         toast.error('지원 내역을 불러오는 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
@@ -186,7 +187,7 @@ export default function JobApplyStatus() {
       toast.success('지원이 취소되었습니다.');
       setCancelModalOpen(false);
     } catch (error) {
-      console.error('지원 취소 오류:', error);
+      logger.error('지원 취소 오류:', error);
       let errorMessage = '지원 취소 중 오류가 발생했습니다.';
       
       if (error instanceof Error) {

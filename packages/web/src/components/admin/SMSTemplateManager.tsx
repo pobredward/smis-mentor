@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -42,7 +43,7 @@ export default function SMSTemplateManager({ adminId }: SMSTemplateManagerProps)
       const allTemplates = await getAllSMSTemplates();
       setTemplates(allTemplates);
     } catch (error) {
-      console.error('템플릿 로드 오류:', error);
+      logger.error('템플릿 로드 오류:', error);
       toast.error('템플릿을 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -81,7 +82,7 @@ export default function SMSTemplateManager({ adminId }: SMSTemplateManagerProps)
       setSelectedTemplate(null);
       setIsModalOpen(false);
     } catch (error) {
-      console.error('템플릿 저장 오류:', error);
+      logger.error('템플릿 저장 오류:', error);
       toast.error('템플릿 저장 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -109,7 +110,7 @@ export default function SMSTemplateManager({ adminId }: SMSTemplateManagerProps)
       toast.success('템플릿이 삭제되었습니다.');
       await loadTemplates();
     } catch (error) {
-      console.error('템플릿 삭제 오류:', error);
+      logger.error('템플릿 삭제 오류:', error);
       toast.error('템플릿 삭제 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

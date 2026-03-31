@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -158,13 +159,13 @@ export default function ForeignSignUpStep2() {
       // 소셜 로그인 케이스
       let tempPasswordForSocial: string | undefined;
       if (socialSignUp && socialProvider) {
-        console.log('🔗 Social sign-up flow for foreign teacher');
+        logger.info('🔗 Social sign-up flow for foreign teacher');
         
         // Firebase Auth 계정 확인 및 생성
         const currentUser = auth.currentUser;
         if (!currentUser) {
           // 네이버/카카오는 Firebase Auth 계정이 없으므로 생성
-          console.log('🔐 Creating Firebase Auth account for social sign-up (Naver/Kakao)');
+          logger.info('🔐 Creating Firebase Auth account for social sign-up (Naver/Kakao)');
           const { createUserWithEmailAndPassword } = await import('firebase/auth');
           
           // 임시 비밀번호 생성
@@ -173,11 +174,11 @@ export default function ForeignSignUpStep2() {
           try {
             const userCredential = await createUserWithEmailAndPassword(auth, data.email, tempPasswordForSocial);
             userId = userCredential.user.uid;
-            console.log('✅ Firebase Auth account created, UID:', userId);
+            logger.info('✅ Firebase Auth account created, UID:', userId);
           } catch (authError: any) {
             if (authError.code === 'auth/email-already-in-use') {
               // 이미 계정이 있으면 로그인 시도
-              console.log('⚠️ Email already exists, trying to sign in...');
+              logger.info('⚠️ Email already exists, trying to sign in...');
               toast.error('This email is already in use. Please sign in instead.');
               setIsLoading(false);
               return;
@@ -187,12 +188,12 @@ export default function ForeignSignUpStep2() {
           }
         } else {
           userId = currentUser.uid;
-          console.log('✅ Using existing social auth UID:', userId);
+          logger.info('✅ Using existing social auth UID:', userId);
         }
         
         // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
         if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
-          console.log('📋 Found existing foreign_temp user, will migrate to new UID');
+          logger.info('📋 Found existing foreign_temp user, will migrate to new UID');
           isUpdatingExistingUser = true;
           
           // 이메일이 다른 계정에서 사용 중인지 확인
@@ -212,7 +213,7 @@ export default function ForeignSignUpStep2() {
         // 일반 가입 케이스
         // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
         if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
-          console.log('📋 Found existing foreign_temp user, updating account...');
+          logger.info('📋 Found existing foreign_temp user, updating account...');
           
           // 이메일이 다른 계정에서 사용 중인지 확인
           if (existingUserByEmail && existingUserByEmail.userId !== existingUserByPhone.userId) {
@@ -222,7 +223,7 @@ export default function ForeignSignUpStep2() {
           }
           
           // Firebase Authentication에 이메일/비밀번호 설정
-          console.log('🔐 Creating new Firebase Auth account for temp user');
+          logger.info('🔐 Creating new Firebase Auth account for temp user');
           const { createUserWithEmailAndPassword } = await import('firebase/auth');
           const { auth } = await import('@/lib/firebase');
           
@@ -230,7 +231,7 @@ export default function ForeignSignUpStep2() {
             const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             userId = userCredential.user.uid;
             isUpdatingExistingUser = true;
-            console.log('✅ Created new Firebase Auth account, will migrate temp data to UID:', userId);
+            logger.info('✅ Created new Firebase Auth account, will migrate temp data to UID:', userId);
           } catch (authError: any) {
             if (authError.code === 'auth/email-already-in-use') {
               toast.error('This email is already in use.');
@@ -249,53 +250,53 @@ export default function ForeignSignUpStep2() {
         }
         // Case 3: 완전히 새로운 사용자
         else {
-          console.log('🔐 Creating new Firebase Authentication account:', data.email);
+          logger.info('🔐 Creating new Firebase Authentication account:', data.email);
           const { createUserWithEmailAndPassword } = await import('firebase/auth');
           const { auth } = await import('@/lib/firebase');
           const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
           userId = userCredential.user.uid;
-          console.log('✅ Firebase Authentication account created, UID:', userId);
+          logger.info('✅ Firebase Authentication account created, UID:', userId);
         }
       }
 
       // 2. 파일 업로드
-      console.log('📤 Uploading files...');
+      logger.info('📤 Uploading files...');
       const { getStorage } = await import('firebase/storage');
       const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
       const storage = getStorage();
 
       // 프로필 이미지 업로드
-      console.log('  - Uploading profile image...');
+      logger.info('  - Uploading profile image...');
       const profileImageRef = ref(storage, `foreign-teachers/${userId}/profile.jpg`);
       await uploadBytes(profileImageRef, profileImage);
       const profileImageUrl = await getDownloadURL(profileImageRef);
-      console.log('  ✅ Profile image uploaded');
+      logger.info('  ✅ Profile image uploaded');
 
       // CV 업로드
-      console.log('  - Uploading CV...');
+      logger.info('  - Uploading CV...');
       const cvRef = ref(storage, `foreign-teachers/${userId}/cv_${cvFile.name}`);
       await uploadBytes(cvRef, cvFile);
       const cvUrl = await getDownloadURL(cvRef);
-      console.log('  ✅ CV uploaded');
+      logger.info('  ✅ CV uploaded');
 
       // 여권 사진 업로드
-      console.log('  - Uploading passport photo...');
+      logger.info('  - Uploading passport photo...');
       const passportRef = ref(storage, `foreign-teachers/${userId}/passport.jpg`);
       await uploadBytes(passportRef, passportPhoto);
       const passportPhotoUrl = await getDownloadURL(passportRef);
-      console.log('  ✅ Passport photo uploaded');
+      logger.info('  ✅ Passport photo uploaded');
 
       // 외국인 등록증 업로드 (선택사항)
       let foreignIdCardUrl = '';
       if (foreignIdCard) {
-        console.log('  - Uploading foreign ID card...');
+        logger.info('  - Uploading foreign ID card...');
         const foreignIdRef = ref(storage, `foreign-teachers/${userId}/foreign_id.jpg`);
         await uploadBytes(foreignIdRef, foreignIdCard);
         foreignIdCardUrl = await getDownloadURL(foreignIdRef);
-        console.log('  ✅ Foreign ID card uploaded');
+        logger.info('  ✅ Foreign ID card uploaded');
       }
 
-      console.log('✅ All files uploaded successfully');
+      logger.info('✅ All files uploaded successfully');
 
       // 3. Firestore에 사용자 문서 생성 또는 업데이트
       const { doc, setDoc, updateDoc, Timestamp } = await import('firebase/firestore');
@@ -372,16 +373,16 @@ export default function ForeignSignUpStep2() {
       if (isUpdatingExistingUser && existingUserByPhone) {
         const oldTempUserId = existingUserByPhone.userId;
         
-        console.log('📝 Creating new Firestore document with Auth UID:', userId);
+        logger.info('📝 Creating new Firestore document with Auth UID:', userId);
         await setDoc(doc(db, 'users', userId), userData);
-        console.log('✅ New Firestore document created');
+        logger.info('✅ New Firestore document created');
         
         // ✅ 기존 temp 문서 삭제 (userId가 다른 경우에만)
         if (oldTempUserId !== userId) {
-          console.log('🗑️ Deleting old temp document:', oldTempUserId);
+          logger.info('🗑️ Deleting old temp document:', oldTempUserId);
           const { deleteDoc } = await import('firebase/firestore');
           await deleteDoc(doc(db, 'users', oldTempUserId));
-          console.log('✅ Old temp document deleted');
+          logger.info('✅ Old temp document deleted');
         }
         
         toast.success(
@@ -389,9 +390,9 @@ export default function ForeignSignUpStep2() {
           { duration: 8000 }
         );
       } else {
-        console.log('📝 Creating new Firestore user document');
+        logger.info('📝 Creating new Firestore user document');
         await setDoc(doc(db, 'users', userId), userData);
-        console.log('✅ Firestore user document created');
+        logger.info('✅ Firestore user document created');
         
         toast.success(
           `Welcome, ${fullName}!\n\nYour account has been successfully created.\nYou can now log in and start using the platform.`, 
@@ -404,7 +405,7 @@ export default function ForeignSignUpStep2() {
         router.push('/sign-in');
       }, 3000);
     } catch (error: any) {
-      console.error('Sign up error:', error);
+      logger.error('Sign up error:', error);
       
       let errorMessage = 'An error occurred during sign up.';
       if (error.code === 'auth/email-already-in-use') {

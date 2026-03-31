@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useMemo } from 'react';
 import Layout from '@/components/common/Layout';
@@ -69,7 +70,7 @@ export default function UserMapTestPage() {
       const fetchedUsers = await getAllUsers();
       setUsers(fetchedUsers);
     } catch (error) {
-      console.error('사용자 목록 로딩 실패:', error);
+      logger.error('사용자 목록 로딩 실패:', error);
       toast.error('사용자 정보를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -104,7 +105,7 @@ export default function UserMapTestPage() {
           const jobCodesInfo = await getUserJobCodesInfo(selectedUser.jobExperiences);
           setUserJobCodes(jobCodesInfo);
         } catch (error) {
-          console.error('직무 경험 정보 로드 오류:', error);
+          logger.error('직무 경험 정보 로드 오류:', error);
         } finally {
           setIsLoadingJobCodes(false);
         }

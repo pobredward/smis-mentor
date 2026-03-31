@@ -1,4 +1,5 @@
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { logger } from '@smis-mentor/shared';
 import { db } from '../config/firebase';
 
 export interface InterviewLinks {
@@ -29,7 +30,7 @@ export const getInterviewLinks = async (): Promise<InterviewLinks> => {
       canvaUrl: '',
     };
   } catch (error) {
-    console.error('면접 링크 로드 오류:', error);
+    logger.error('면접 링크 로드 오류:', error);
     throw error;
   }
 };
@@ -46,7 +47,7 @@ export const setInterviewLinks = async (links: Omit<InterviewLinks, 'updatedAt'>
       { merge: true }
     );
   } catch (error) {
-    console.error('면접 링크 저장 오류:', error);
+    logger.error('면접 링크 저장 오류:', error);
     throw error;
   }
 };

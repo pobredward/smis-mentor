@@ -1,4 +1,5 @@
 import { SocialUserData } from '@smis-mentor/shared';
+import { logger } from '@smis-mentor/shared';
 
 const NAVER_CLIENT_ID = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID!;
 const NAVER_CALLBACK_URL = process.env.NEXT_PUBLIC_NAVER_CALLBACK_URL!;
@@ -37,7 +38,7 @@ export async function signInWithNaverPopup(): Promise<SocialUserData> {
     const top = window.screenY + (window.outerHeight - height) / 2;
     
     const loginUrl = getNaverLoginUrl();
-    console.log('🟢 네이버 로그인 URL:', loginUrl);
+    logger.info('🟢 네이버 로그인 URL:', loginUrl);
     
     const popup = window.open(
       loginUrl,
@@ -46,16 +47,16 @@ export async function signInWithNaverPopup(): Promise<SocialUserData> {
     );
     
     if (!popup) {
-      console.error('❌ 팝업이 차단되었습니다');
+      logger.error('❌ 팝업이 차단되었습니다');
       reject(new Error('POPUP_BLOCKED'));
       return;
     }
     
-    console.log('✅ 팝업 창이 열렸습니다');
+    logger.info('✅ 팝업 창이 열렸습니다');
     
     // 팝업에서 메시지 수신
     const messageHandler = (event: MessageEvent) => {
-      console.log('📨 메시지 수신:', {
+      logger.info('📨 메시지 수신:', {
         origin: event.origin,
         windowOrigin: window.location.origin,
         type: event.data?.type,
@@ -63,18 +64,18 @@ export async function signInWithNaverPopup(): Promise<SocialUserData> {
       
       // 보안: origin 체크
       if (event.origin !== window.location.origin) {
-        console.warn('⚠️ Origin 불일치, 무시:', event.origin);
+        logger.warn('⚠️ Origin 불일치, 무시:', event.origin);
         return;
       }
       
       if (event.data.type === 'NAVER_LOGIN_SUCCESS') {
-        console.log('✅ 네이버 로그인 성공:', event.data.userData);
+        logger.info('✅ 네이버 로그인 성공:', event.data.userData);
         window.removeEventListener('message', messageHandler);
         clearInterval(checkClosed);
         popup.close();
         resolve(event.data.userData);
       } else if (event.data.type === 'NAVER_LOGIN_ERROR') {
-        console.error('❌ 네이버 로그인 에러:', event.data.error);
+        logger.error('❌ 네이버 로그인 에러:', event.data.error);
         window.removeEventListener('message', messageHandler);
         clearInterval(checkClosed);
         popup.close();
@@ -87,7 +88,7 @@ export async function signInWithNaverPopup(): Promise<SocialUserData> {
     // 팝업이 닫혔는지 체크
     const checkClosed = setInterval(() => {
       if (popup.closed) {
-        console.warn('⚠️ 팝업이 닫혔습니다 (사용자가 닫았거나 콜백 실패)');
+        logger.warn('⚠️ 팝업이 닫혔습니다 (사용자가 닫았거나 콜백 실패)');
         clearInterval(checkClosed);
         window.removeEventListener('message', messageHandler);
         reject(new Error('POPUP_CLOSED'));

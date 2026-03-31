@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -142,7 +143,7 @@ export function InterviewManageScreen({
 
       await loadInterviewDates(jobBoardsData);
     } catch (error) {
-      console.error('채용 공고 로드 오류:', error);
+      logger.error('채용 공고 로드 오류:', error);
       Alert.alert('오류', '채용 공고를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoadingDates(false);
@@ -300,7 +301,7 @@ export function InterviewManageScreen({
         Array.from(allUserIds).map((userId) => loadUserAppliedCampsForAll(userId))
       );
     } catch (error) {
-      console.error('면접 일정 로드 오류:', error);
+      logger.error('면접 일정 로드 오류:', error);
       Alert.alert('오류', '면접 일정을 불러오는 중 오류가 발생했습니다.');
     }
   };
@@ -336,7 +337,7 @@ export function InterviewManageScreen({
         [userId]: uniqueCodes,
       }));
     } catch (error) {
-      console.error('지원 캠프 로드 오류:', error);
+      logger.error('지원 캠프 로드 오류:', error);
       setAppliedCampsMap((prev) => ({
         ...prev,
         [userId]: [],
@@ -358,7 +359,7 @@ export function InterviewManageScreen({
         );
       }
     } catch (error) {
-      console.error('진행자 스크립트 로드 오류:', error);
+      logger.error('진행자 스크립트 로드 오류:', error);
       Alert.alert('오류', '진행자 스크립트를 불러오는 중 오류가 발생했습니다.');
       setScriptText('');
     }
@@ -381,7 +382,7 @@ export function InterviewManageScreen({
 
       Alert.alert('성공', '진행자 스크립트가 저장되었습니다.');
     } catch (error) {
-      console.error('진행자 스크립트 저장 오류:', error);
+      logger.error('진행자 스크립트 저장 오류:', error);
       Alert.alert('오류', '진행자 스크립트를 저장하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -394,7 +395,7 @@ export function InterviewManageScreen({
       const links = await getInterviewLinks();
       setInterviewLinks(links);
     } catch (error) {
-      console.error('면접 링크 로드 오류:', error);
+      logger.error('면접 링크 로드 오류:', error);
       Alert.alert('오류', '면접 링크를 불러오는 중 오류가 발생했습니다.');
     }
   };
@@ -459,7 +460,7 @@ export function InterviewManageScreen({
         });
       }
     } catch (error) {
-      console.error('채용 공고 정보 로드 오류:', error);
+      logger.error('채용 공고 정보 로드 오류:', error);
       Alert.alert('오류', '채용 공고 정보를 불러오는 중 오류가 발생했습니다.');
     }
   };
@@ -520,7 +521,7 @@ export function InterviewManageScreen({
         });
       }
     } catch (error) {
-      console.error('상태 변경 오류:', error);
+      logger.error('상태 변경 오류:', error);
       Alert.alert('오류', '상태를 변경하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -539,7 +540,7 @@ export function InterviewManageScreen({
         }
       }
     } catch (error) {
-      console.error('사용자 정보 로드 오류:', error);
+      logger.error('사용자 정보 로드 오류:', error);
     }
   };
 
@@ -595,7 +596,7 @@ export function InterviewManageScreen({
         }));
       }
     } catch (error) {
-      console.error('SMS 템플릿 로드 오류:', error);
+      logger.error('SMS 템플릿 로드 오류:', error);
       setSmsMessages(prev => ({
         ...prev,
         [type]: getDefaultSMSMessage(type),
@@ -651,7 +652,7 @@ export function InterviewManageScreen({
         Alert.alert('오류', response.message || 'SMS 전송에 실패했습니다.');
       }
     } catch (error) {
-      console.error('SMS 전송 오류:', error);
+      logger.error('SMS 전송 오류:', error);
       Alert.alert('오류', 'SMS 전송 중 오류가 발생했습니다.');
     } finally {
       setIsSendingSMS(false);
@@ -670,7 +671,7 @@ export function InterviewManageScreen({
 
       Alert.alert('성공', '템플릿이 저장되었습니다.');
     } catch (error) {
-      console.error('템플릿 저장 오류:', error);
+      logger.error('템플릿 저장 오류:', error);
       Alert.alert('오류', '템플릿 저장에 실패했습니다.');
     } finally {
       setIsSavingSMS(false);

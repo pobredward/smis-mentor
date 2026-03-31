@@ -1,4 +1,5 @@
 "use client";
+import { logger } from '@smis-mentor/shared';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -100,7 +101,7 @@ export function SignInClient() {
         }, 1000);
       }
     } catch (error) {
-      console.error('로그인 오류:', error);
+      logger.error('로그인 오류:', error);
       const firebaseError = error as FirebaseError;
       if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password') {
         toast.error('이메일 또는 비밀번호가 올바르지 않습니다.');
@@ -137,7 +138,7 @@ export function SignInClient() {
       );
       setShowResetForm(false);
     } catch (error) {
-      console.error('비밀번호 재설정 오류:', error);
+      logger.error('비밀번호 재설정 오류:', error);
       const firebaseError = error as FirebaseError;
       
       if (firebaseError.code === 'auth/user-not-found') {
@@ -162,7 +163,7 @@ export function SignInClient() {
       
       if (result.action === 'LOGIN') {
         // 기존 소셜 계정으로 바로 로그인
-        console.log('✅ 로그인 성공:', {
+        logger.info('✅ 로그인 성공:', {
           provider: data.providerId,
           email: data.email,
           userId: result.user?.userId,
@@ -173,7 +174,7 @@ export function SignInClient() {
           const currentUser = auth.currentUser;
           const targetUserId = result.user?.userId;
           
-          console.log('🔑 구글/애플 로그인 - Firebase Auth 세션 확인:', {
+          logger.info('🔑 구글/애플 로그인 - Firebase Auth 세션 확인:', {
             provider: data.providerId,
             currentUserUid: currentUser?.uid,
             targetUserId,
@@ -182,7 +183,7 @@ export function SignInClient() {
           
           // Firebase Auth UID와 Firestore userId가 다르면 재로그인 필요
           if (currentUser?.uid !== targetUserId) {
-            console.log('⚠️ Firebase Auth 세션이 다름 → 원래 계정으로 재로그인');
+            logger.info('⚠️ Firebase Auth 세션이 다름 → 원래 계정으로 재로그인');
             
             const hasPasswordProvider = result.user?.authProviders?.some(
               (p: any) => p.providerId === 'password'
@@ -190,10 +191,10 @@ export function SignInClient() {
             const firebaseAuthPassword = (result.user as any)._firebaseAuthPassword;
             
             if (hasPasswordProvider && firebaseAuthPassword) {
-              console.log('🔑 비밀번호로 재로그인');
+              logger.info('🔑 비밀번호로 재로그인');
               await signIn(result.user.email, firebaseAuthPassword);
             } else {
-              console.log('🔑 Custom Token으로 재로그인');
+              logger.info('🔑 Custom Token으로 재로그인');
               toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
               try {
                 await signInWithCustomTokenFromFunction(
@@ -204,16 +205,16 @@ export function SignInClient() {
                 toast.dismiss('custom-token-loading');
               } catch (customTokenError) {
                 toast.dismiss('custom-token-loading');
-                console.error('❌ Custom Token 로그인 실패:', customTokenError);
+                logger.error('❌ Custom Token 로그인 실패:', customTokenError);
                 toast.error('로그인에 실패했습니다. 관리자에게 문의하세요.', { duration: 6000 });
                 setIsLoading(false);
                 return;
               }
             }
             
-            console.log('✅ Firebase Auth 세션 복원 완료');
+            logger.info('✅ Firebase Auth 세션 복원 완료');
           } else {
-            console.log('✅ Firebase Auth 세션 정상');
+            logger.info('✅ Firebase Auth 세션 정상');
           }
         }
         
@@ -230,7 +231,7 @@ export function SignInClient() {
             const firebaseAuthPassword = (result.user as any)._firebaseAuthPassword;
             
             if (!firebaseAuthPassword) {
-              console.log('ℹ️ _firebaseAuthPassword 없음 → Custom Token 방식 사용');
+              logger.info('ℹ️ _firebaseAuthPassword 없음 → Custom Token 방식 사용');
               
               // ⏳ Custom Token 생성 중 안내
               toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
@@ -238,7 +239,7 @@ export function SignInClient() {
               // Fallback: Custom Token 방식 (기존 사용자 또는 비밀번호 있는 사용자)
               try {
                 const existingFirebaseUid = result.user.userId;
-                console.log('🔑 Custom Token 생성 시작:', {
+                logger.info('🔑 Custom Token 생성 시작:', {
                   userId: existingFirebaseUid,
                   email: result.user.email,
                 });
@@ -249,10 +250,10 @@ export function SignInClient() {
                   existingFirebaseUid
                 );
                 
-                console.log('✅ Custom Token 로그인 완료');
+                logger.info('✅ Custom Token 로그인 완료');
                 toast.dismiss('custom-token-loading'); // ✅ 로딩 토스트 제거
               } catch (customTokenError) {
-                console.error('❌ Custom Token 로그인 실패:', customTokenError);
+                logger.error('❌ Custom Token 로그인 실패:', customTokenError);
                 toast.dismiss('custom-token-loading'); // ❌ 로딩 토스트 제거
                 toast.error(
                   '로그인에 실패했습니다.\n' +
@@ -265,12 +266,12 @@ export function SignInClient() {
               }
             } else {
               // Firebase Auth 비밀번호로 로그인 (소셜 전용 계정)
-              console.log('🔑 _firebaseAuthPassword로 로그인 시도');
+              logger.info('🔑 _firebaseAuthPassword로 로그인 시도');
               await signIn(result.user.email, firebaseAuthPassword);
-              console.log('✅ _firebaseAuthPassword 로그인 완료');
+              logger.info('✅ _firebaseAuthPassword 로그인 완료');
             }
           } catch (error) {
-            console.error('❌ Firebase Auth 로그인 실패:', error);
+            logger.error('❌ Firebase Auth 로그인 실패:', error);
             toast.error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.', { duration: 4000 });
             setIsLoading(false);
             return;
@@ -290,7 +291,7 @@ export function SignInClient() {
           try {
             await currentUser.delete();
           } catch (deleteError) {
-            console.error('계정 삭제 실패:', deleteError);
+            logger.error('계정 삭제 실패:', deleteError);
             await auth.signOut();
           }
         }
@@ -333,9 +334,9 @@ export function SignInClient() {
         // 이메일로 계정이 없음 - 역할 선택 필요
         const currentUser = auth.currentUser;
         
-        console.log('🔑 NEED_PHONE - Firebase Auth UID:', currentUser?.uid);
-        console.log('🔑 Provider UID (네이버 ID):', data.providerUid);
-        console.log('🔑 Provider:', data.providerId);
+        logger.info('🔑 NEED_PHONE - Firebase Auth UID:', currentUser?.uid);
+        logger.info('🔑 Provider UID (네이버 ID):', data.providerUid);
+        logger.info('🔑 Provider:', data.providerId);
         
         // ✅ Firebase Auth UID 또는 Provider UID를 socialData에 저장
         // 네이버/카카오 신규 가입의 경우 currentUser가 없으므로 email을 키로 사용
@@ -344,7 +345,7 @@ export function SignInClient() {
           firebaseAuthUid: currentUser?.uid || `${data.providerId}_${data.email}`, // 임시 키 생성
         };
         
-        console.log('💾 updatedSocialData:', {
+        logger.info('💾 updatedSocialData:', {
           email: updatedSocialData.email,
           firebaseAuthUid: updatedSocialData.firebaseAuthUid,
         });
@@ -352,9 +353,9 @@ export function SignInClient() {
         if (currentUser) {
           try {
             await currentUser.delete();
-            console.log('🗑️ Firebase Auth 임시 계정 삭제 완료');
+            logger.info('🗑️ Firebase Auth 임시 계정 삭제 완료');
           } catch (deleteError) {
-            console.error('계정 삭제 실패:', deleteError);
+            logger.error('계정 삭제 실패:', deleteError);
             await auth.signOut();
           }
         }
@@ -368,7 +369,7 @@ export function SignInClient() {
           try {
             await currentUser.delete();
           } catch (deleteError) {
-            console.error('계정 삭제 실패:', deleteError);
+            logger.error('계정 삭제 실패:', deleteError);
             await auth.signOut();
           }
         }
@@ -377,7 +378,7 @@ export function SignInClient() {
         router.push(`/sign-up/account?tempUserId=${result.tempUserId}&socialSignUp=true&socialProvider=google`);
       }
     } catch (error) {
-      console.error('소셜 로그인 처리 오류:', error);
+      logger.error('소셜 로그인 처리 오류:', error);
       
       // 소셜 제공자에 따라 적절한 에러 메시지 표시
       let errorMessage: string;
@@ -451,7 +452,7 @@ export function SignInClient() {
       const fullPhone = `${data.countryCode}${cleanPhone}`;
       
         // ✅ 원어민은 First Name + Last Name으로만 검색
-        console.log('🔍 원어민 계정 검색:', { firstName: data.firstName, lastName: data.lastName });
+        logger.info('🔍 원어민 계정 검색:', { firstName: data.firstName, lastName: data.lastName });
         const existingUser = await getUserByForeignName(data.firstName, data.lastName);
         
         if (existingUser) {
@@ -459,7 +460,7 @@ export function SignInClient() {
           
           const role = existingUser.role;
           
-          console.log('👤 원어민 계정 발견:', {
+          logger.info('👤 원어민 계정 발견:', {
             role,
             status: existingUser.status,
             name: existingUser.name,
@@ -495,7 +496,7 @@ export function SignInClient() {
           
           // foreign_temp 계정 발견
           if (role === 'foreign_temp' && existingUser.status === 'temp') {
-            console.log('✅ foreign_temp 계정 발견 - 활성화 진행');
+            logger.info('✅ foreign_temp 계정 발견 - 활성화 진행');
             toast.success('Temporary account found. Please complete your registration.');
             const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
             router.push(
@@ -534,7 +535,7 @@ export function SignInClient() {
           return;
         } else {
           // ✅ 신규 원어민 가입
-          console.log('🆕 신규 원어민 가입 진행');
+          logger.info('🆕 신규 원어민 가입 진행');
           toast.success(`Welcome ${data.firstName}! Please complete your registration.`);
           setShowForeignPhoneModal(false);
           const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
@@ -553,7 +554,7 @@ export function SignInClient() {
           );
         }
     } catch (error: any) {
-      console.error('Foreign name verification error:', error);
+      logger.error('Foreign name verification error:', error);
       toast.error('An error occurred while verifying your account.');
     } finally {
       setIsLoading(false);
@@ -564,7 +565,7 @@ export function SignInClient() {
   const handlePhoneSubmit = async (data: { name: string; phoneNumber: string }) => {
     if (!socialData) return;
     
-    console.log('📝 handlePhoneSubmit - socialData:', {
+    logger.info('📝 handlePhoneSubmit - socialData:', {
       email: socialData.email,
       providerId: socialData.providerId,
       firebaseAuthUid: socialData.firebaseAuthUid,
@@ -585,7 +586,7 @@ export function SignInClient() {
         if (result.isActive && result.needsLink) {
           // 이름이 일치하지 않는 경우 이메일+비밀번호로 검증
           if (result.nameMatches === false) {
-            console.warn('⚠️ 이름 불일치 - 이메일+비밀번호 검증 필요:', {
+            logger.warn('⚠️ 이름 불일치 - 이메일+비밀번호 검증 필요:', {
               registered: result.user.name,
               input: data.name,
             });
@@ -606,7 +607,7 @@ export function SignInClient() {
         
         // temp 계정 발견
         if (result.nameMatches === false) {
-          console.error('⚠️ temp 계정 이름 불일치 - 다른 사람이 잘못 등록한 가능성:', {
+          logger.error('⚠️ temp 계정 이름 불일치 - 다른 사람이 잘못 등록한 가능성:', {
             registered: result.user.name,
             input: data.name,
           });
@@ -627,7 +628,7 @@ export function SignInClient() {
         const role = result.user.role;
         const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
         
-        console.log('💾 SessionStorage 저장 - firebaseAuthUid:', socialData.firebaseAuthUid);
+        logger.info('💾 SessionStorage 저장 - firebaseAuthUid:', socialData.firebaseAuthUid);
         
         if (role === 'foreign_temp') {
           // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
@@ -659,7 +660,7 @@ export function SignInClient() {
         const { signupStorage } = await import('@/utils/signupStorage');
         const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
         
-        console.log('💾 SessionStorage 저장 (신규) - firebaseAuthUid:', socialData.firebaseAuthUid);
+        logger.info('💾 SessionStorage 저장 (신규) - firebaseAuthUid:', socialData.firebaseAuthUid);
         
           signupStorage.save({
             name: data.name,
@@ -680,7 +681,7 @@ export function SignInClient() {
         router.push('/sign-up/education');
       }
     } catch (error: any) {
-      console.error('이름/전화번호 확인 오류:', error);
+      logger.error('이름/전화번호 확인 오류:', error);
       if (error.message === 'ALREADY_REGISTERED') {
         toast.error('이 전화번호로 이미 등록된 계정이 있습니다. 해당 이메일로 로그인해주세요.');
       } else {
@@ -696,10 +697,10 @@ export function SignInClient() {
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        console.log('소셜 로그인 역할 선택 중단 - Firebase Auth 계정 삭제');
+        logger.info('소셜 로그인 역할 선택 중단 - Firebase Auth 계정 삭제');
         await currentUser.delete();
       } catch (error) {
-        console.error('계정 삭제 실패, 로그아웃 시도:', error);
+        logger.error('계정 삭제 실패, 로그아웃 시도:', error);
         await auth.signOut();
       }
     }
@@ -712,10 +713,10 @@ export function SignInClient() {
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        console.log('소셜 로그인 중단 - Firebase Auth 계정 삭제');
+        logger.info('소셜 로그인 중단 - Firebase Auth 계정 삭제');
         await currentUser.delete();
       } catch (error) {
-        console.error('계정 삭제 실패, 로그아웃 시도:', error);
+        logger.error('계정 삭제 실패, 로그아웃 시도:', error);
         await auth.signOut();
       }
     }
@@ -727,10 +728,10 @@ export function SignInClient() {
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        console.log('원어민 소셜 로그인 중단 - Firebase Auth 계정 삭제');
+        logger.info('원어민 소셜 로그인 중단 - Firebase Auth 계정 삭제');
         await currentUser.delete();
       } catch (error) {
-        console.error('계정 삭제 실패, 로그아웃 시도:', error);
+        logger.error('계정 삭제 실패, 로그아웃 시도:', error);
         await auth.signOut();
       }
     }
@@ -743,10 +744,10 @@ export function SignInClient() {
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        console.log('계정 연동 중단 - Firebase Auth 계정 삭제');
+        logger.info('계정 연동 중단 - Firebase Auth 계정 삭제');
         await currentUser.delete();
       } catch (error) {
-        console.error('계정 삭제 실패, 로그아웃 시도:', error);
+        logger.error('계정 삭제 실패, 로그아웃 시도:', error);
         await auth.signOut();
       }
     }
@@ -795,7 +796,7 @@ export function SignInClient() {
         window.location.href = '/profile';
       }, 1000);
     } catch (error) {
-      console.error('계정 연동 오류:', error);
+      logger.error('계정 연동 오류:', error);
       const firebaseError = error as FirebaseError;
       if (firebaseError.code === 'auth/wrong-password') {
         toast.error(

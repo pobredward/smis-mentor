@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -121,9 +122,9 @@ export function UserGenerateScreen({ navigation }: any) {
 
   const loadJobCodes = async () => {
     try {
-      console.log('🔍 Loading job codes, db:', db);
+      logger.info('🔍 Loading job codes, db:', db);
       const codes = await adminGetAllJobCodes(db);
-      console.log('✅ Job codes loaded:', codes.length);
+      logger.info('✅ Job codes loaded:', codes.length);
       setJobCodes(codes);
 
       // 기수 추출 및 정렬
@@ -136,7 +137,7 @@ export function UserGenerateScreen({ navigation }: any) {
 
       setGenerations(uniqueGenerations);
     } catch (error) {
-      console.error('직무 코드 조회 오류:', error);
+      logger.error('직무 코드 조회 오류:', error);
       Alert.alert('오류', '직무 코드 정보를 불러오는데 실패했습니다.');
     } finally {
       setIsLoadingJobCodes(false);
@@ -172,7 +173,7 @@ export function UserGenerateScreen({ navigation }: any) {
         },
       ]);
     } catch (error: any) {
-      console.error('임시 사용자 생성 오류:', error);
+      logger.error('임시 사용자 생성 오류:', error);
       Alert.alert('오류', error.message || '사용자 생성 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);

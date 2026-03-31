@@ -1,4 +1,5 @@
 import { openDB } from 'idb';
+import { logger } from '@smis-mentor/shared';
 
 // 브라우저 환경인지 확인하는 유틸리티 함수
 const isBrowser = () => typeof window !== 'undefined';
@@ -78,7 +79,7 @@ export const setCache = async <T>(storeName: string, data: T, expiryTime = CACHE
     await tx.done;
     return true;
   } catch (error) {
-    console.error(`캐시 저장 오류 (${storeName}):`, error);
+    logger.error(`캐시 저장 오류 (${storeName}):`, error);
     return false;
   }
 };
@@ -108,7 +109,7 @@ export const getCache = async <T>(storeName: string, key: string): Promise<T | n
     const { _cacheExpiry, ...cacheData } = data;
     return cacheData as T;
   } catch (error) {
-    console.error(`캐시 조회 오류 (${storeName}):`, error);
+    logger.error(`캐시 조회 오류 (${storeName}):`, error);
     return null;
   }
 };
@@ -119,7 +120,7 @@ const safeGetItem = (key: string): string | null => {
   try {
     return localStorage.getItem(key);
   } catch (error) {
-    console.error(`localStorage 접근 오류 (${key}):`, error);
+    logger.error(`localStorage 접근 오류 (${key}):`, error);
     return null;
   }
 };
@@ -131,7 +132,7 @@ const safeSetItem = (key: string, value: string): boolean => {
     localStorage.setItem(key, value);
     return true;
   } catch (error) {
-    console.error(`localStorage 저장 오류 (${key}):`, error);
+    logger.error(`localStorage 저장 오류 (${key}):`, error);
     return false;
   }
 };
@@ -143,7 +144,7 @@ const safeRemoveItem = (key: string): boolean => {
     localStorage.removeItem(key);
     return true;
   } catch (error) {
-    console.error(`localStorage 삭제 오류 (${key}):`, error);
+    logger.error(`localStorage 삭제 오류 (${key}):`, error);
     return false;
   }
 };
@@ -178,7 +179,7 @@ export const setCacheCollection = async <T>(storeName: string, data: T[], expiry
     
     return true;
   } catch (error) {
-    console.error(`컬렉션 캐시 저장 오류 (${storeName}):`, error);
+    logger.error(`컬렉션 캐시 저장 오류 (${storeName}):`, error);
     return false;
   }
 };
@@ -215,7 +216,7 @@ export const getCacheCollection = async <T>(storeName: string): Promise<T[] | nu
     
     return validData as T[];
   } catch (error) {
-    console.error(`컬렉션 캐시 조회 오류 (${storeName}):`, error);
+    logger.error(`컬렉션 캐시 조회 오류 (${storeName}):`, error);
     return null;
   }
 };
@@ -237,7 +238,7 @@ export const removeCache = async (storeName: string, key: string) => {
     await tx.done;
     return true;
   } catch (error) {
-    console.error(`캐시 삭제 오류 (${storeName}, ${key}):`, error);
+    logger.error(`캐시 삭제 오류 (${storeName}, ${key}):`, error);
     return false;
   }
 };
@@ -264,7 +265,7 @@ export const clearCacheCollection = async (storeName: string) => {
     
     return true;
   } catch (error) {
-    console.error(`캐시 컬렉션 삭제 오류 (${storeName}):`, error);
+    logger.error(`캐시 컬렉션 삭제 오류 (${storeName}):`, error);
     return false;
   }
 };

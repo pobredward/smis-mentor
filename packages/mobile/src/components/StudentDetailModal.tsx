@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -50,7 +51,7 @@ const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
     // 썸네일 API 사용 (더 안정적, CORS 문제 없음)
     const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
     
-    console.log('🔄 [convertGoogleDriveUrl] URL 변환:', {
+    logger.info('🔄 [convertGoogleDriveUrl] URL 변환:', {
       original: url,
       converted: thumbnailUrl,
       fileId,
@@ -294,10 +295,10 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                       source={{ uri: profilePhotoUrl }}
                       style={styles.profilePhoto}
                       onLoad={() => {
-                        console.log('✅ [StudentDetailModal] 프로필사진 로드 성공:', student.name, profilePhotoUrl);
+                        logger.info('✅ [StudentDetailModal] 프로필사진 로드 성공:', student.name, profilePhotoUrl);
                       }}
                       onError={(e) => {
-                        console.error('❌ [StudentDetailModal] 프로필사진 로드 실패:', {
+                        logger.error('❌ [StudentDetailModal] 프로필사진 로드 실패:', {
                           name: student.name,
                           originalUrl: student.profilePhoto,
                           convertedUrl: profilePhotoUrl,

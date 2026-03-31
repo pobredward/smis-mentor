@@ -5,6 +5,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getUserByEmail, updateUserActiveJobCode } from '@/lib/firebaseService';
 import { User } from '@/types';
+import { logger } from '@smis-mentor/shared';
 
 type AuthContextType = {
   currentUser: FirebaseUser | null;
@@ -65,7 +66,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setUserData(userRecord as unknown as User);
         }
       } catch (error) {
-        console.error('Failed to refresh user data:', error);
+        logger.error('Failed to refresh user data:', error);
       }
     } 
     // 소셜 로그인 사용자 (세션 스토리지)
@@ -79,7 +80,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             setUserData(userRecord as unknown as User);
           }
         } catch (error) {
-          console.error('Failed to refresh social user data:', error);
+          logger.error('Failed to refresh social user data:', error);
         }
       } else {
         // 세션이 없으면 userData 초기화
@@ -98,7 +99,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       await updateUserActiveJobCode(userData.userId, jobCodeId);
       await refreshUserData();
     } catch (error) {
-      console.error('기수 변경 실패:', error);
+      logger.error('기수 변경 실패:', error);
       throw error;
     }
   }, [userData?.userId, refreshUserData]);
@@ -110,19 +111,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (socialUserStr) {
         try {
           const socialUser = JSON.parse(socialUserStr);
-          console.log('✅ 세션 스토리지에서 소셜 사용자 발견:', socialUser);
+          logger.info('✅ 세션 스토리지에서 소셜 사용자 발견:', socialUser);
           
           // Firestore에서 사용자 데이터 가져오기
           const userRecord = await getUserByEmail(socialUser.email);
           if (userRecord) {
             setUserData(userRecord as unknown as User);
-            console.log('✅ 네이버/카카오 사용자 데이터 로드 성공:', userRecord.name);
+            logger.info('✅ 네이버/카카오 사용자 데이터 로드 성공:', userRecord.name);
             setLoading(false);
             setAuthReady(true);
             return true;
           }
         } catch (error) {
-          console.error('세션 스토리지 사용자 데이터 로드 실패:', error);
+          logger.error('세션 스토리지 사용자 데이터 로드 실패:', error);
         }
       }
       return false;
@@ -131,13 +132,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // 소셜 로그인 성공 이벤트 리스너
     const handleSocialLoginSuccess = (event: Event) => {
       const customEvent = event as CustomEvent;
-      console.log('🎉 소셜 로그인 성공 이벤트 수신:', customEvent.detail);
+      logger.info('🎉 소셜 로그인 성공 이벤트 수신:', customEvent.detail);
       checkSocialSession();
     };
     
     // 로그아웃 이벤트 리스너
     const handleUserLogout = () => {
-      console.log('👋 로그아웃 이벤트 수신');
+      logger.info('👋 로그아웃 이벤트 수신');
       setUserData(null);
       setCurrentUser(null);
     };
@@ -154,13 +155,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       // Firebase 인증 상태 변경 감지
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        console.log('Auth state changed:', user ? `로그인됨 (${user.email})` : '로그아웃됨');
+        logger.info('Auth state changed:', user ? `로그인됨 (${user.email})` : '로그아웃됨');
         setCurrentUser(user);
         
         if (user) {
           // 이메일이 없는 경우 (비정상 상태)
           if (!user.email) {
-            console.warn('Firebase Auth 사용자에 이메일이 없습니다. 로그아웃 처리합니다.');
+            logger.warn('Firebase Auth 사용자에 이메일이 없습니다. 로그아웃 처리합니다.');
             setUserData(null);
             setLoading(false);
             setAuthReady(true);
@@ -171,35 +172,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             const userRecord = await getUserByEmail(user.email);
             if (userRecord) {
               setUserData(userRecord as unknown as User);
-              console.log('사용자 데이터 로드 성공:', userRecord.name);
+              logger.info('사용자 데이터 로드 성공:', userRecord.name);
             } else {
-              console.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
-              console.log('회원가입 진행 중이거나 Firestore 데이터가 없는 상태일 수 있습니다.');
+              logger.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
+              logger.info('회원가입 진행 중이거나 Firestore 데이터가 없는 상태일 수 있습니다.');
               // 3초 후 한 번 더 시도
               setTimeout(async () => {
                 try {
                   const retryUserRecord = await getUserByEmail(user.email || '');
                   if (retryUserRecord) {
                     setUserData(retryUserRecord as unknown as User);
-                    console.log('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
+                    logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
                   }
                 } catch (retryError) {
-                  console.error('사용자 데이터 재시도 실패:', retryError);
+                  logger.error('사용자 데이터 재시도 실패:', retryError);
                 }
               }, 3000);
             }
           } catch (error) {
-            console.error('사용자 데이터 가져오기 실패:', error);
+            logger.error('사용자 데이터 가져오기 실패:', error);
             // 네트워크 오류 등의 경우 재시도
             setTimeout(async () => {
               try {
                 const retryUserRecord = await getUserByEmail(user.email || '');
                 if (retryUserRecord) {
                   setUserData(retryUserRecord as unknown as User);
-                  console.log('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
+                  logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
                 }
               } catch (retryError) {
-                console.error('사용자 데이터 재시도 실패:', retryError);
+                logger.error('사용자 데이터 재시도 실패:', retryError);
               }
             }, 3000);
           }

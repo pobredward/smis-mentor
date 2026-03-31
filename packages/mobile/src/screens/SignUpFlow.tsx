@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import { Alert, ActivityIndicator, View, StyleSheet } from 'react-native';
 import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
@@ -95,7 +96,7 @@ export function SignUpFlow({
         [{ text: '확인', onPress: onComplete }]
       );
     } catch (error: any) {
-      console.error('회원가입 실패:', error);
+      logger.error('회원가입 실패:', error);
       Alert.alert('오류', error.message || '회원가입 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
@@ -128,7 +129,7 @@ export function SignUpFlow({
 
     if (tempUserId) {
       // temp 계정 활성화
-      console.log('✅ temp 계정 활성화:', tempUserId);
+      logger.info('✅ temp 계정 활성화:', tempUserId);
       
       const { getUserById } = await import('../services/authService');
       
@@ -149,7 +150,7 @@ export function SignUpFlow({
       );
     } else {
       // 완전히 새로운 소셜 계정 생성
-      console.log('✅ 새 소셜 계정 생성');
+      logger.info('✅ 새 소셜 계정 생성');
       
       // ✅ Apple 임시 이메일로 신규 가입 불가
       if (socialData.email.includes('@privaterelay.appleid.com')) {

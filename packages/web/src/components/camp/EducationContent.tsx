@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,7 +27,7 @@ const extractNotionPageId = (url: string): string | null => {
     
     return null;
   } catch (e) {
-    console.error('Failed to extract Notion page ID:', e);
+    logger.error('Failed to extract Notion page ID:', e);
     return null;
   }
 };
@@ -135,7 +136,7 @@ export default function EducationContent() {
         }
       }
     } catch (error) {
-      console.error('EducationContent: 교육 링크 로드 실패:', error);
+      logger.error('EducationContent: 교육 링크 로드 실패:', error);
     } finally {
       setLoading(false);
     }
@@ -171,7 +172,7 @@ export default function EducationContent() {
       setNewLinkUrl('');
       setNewLinkTargetRole('common');
     } catch (error) {
-      console.error('링크 추가 실패:', error);
+      logger.error('링크 추가 실패:', error);
       alert('링크 추가에 실패했습니다.');
     } finally {
       setIsAddingLink(false);
@@ -186,7 +187,7 @@ export default function EducationContent() {
       await generationResourcesService.deleteLink(activeJobCodeId, 'educationLinks', linkId);
       await loadEducationLinks();
     } catch (error) {
-      console.error('링크 삭제 실패:', error);
+      logger.error('링크 삭제 실패:', error);
       alert('링크 삭제에 실패했습니다.');
     }
   };
@@ -205,7 +206,7 @@ export default function EducationContent() {
       await generationResourcesService.reorderLinks(activeJobCodeId, 'educationLinks', newLinks);
       setEducationLinks(newLinks);
     } catch (error) {
-      console.error('순서 변경 실패:', error);
+      logger.error('순서 변경 실패:', error);
       alert('순서 변경에 실패했습니다.');
     }
   };
@@ -236,7 +237,7 @@ export default function EducationContent() {
       setShowEditModal(false);
       alert('링크가 수정되었습니다.');
     } catch (error) {
-      console.error('링크 수정 실패:', error);
+      logger.error('링크 수정 실패:', error);
       alert('링크 수정에 실패했습니다.');
     }
   };

@@ -1,4 +1,5 @@
 import {
+import { logger } from '@smis-mentor/shared';
   doc,
   getDoc,
   updateDoc,
@@ -49,24 +50,24 @@ const generationResourcesService = {
     jobCodeId: string
   ): Promise<GenerationResources | null> => {
     try {
-      console.log('📥 generationResourcesService: 리소스 요청 -', jobCodeId);
+      logger.info('📥 generationResourcesService: 리소스 요청 -', jobCodeId);
       const docRef = doc(db, 'generationResources', jobCodeId);
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        console.log('✅ generationResourcesService: 리소스 찾음 -', jobCodeId);
+        logger.info('✅ generationResourcesService: 리소스 찾음 -', jobCodeId);
         const data = docSnap.data();
-        console.log('  - generation:', data.generation);
-        console.log('  - code:', data.code);
-        console.log('  - educationLinks:', data.educationLinks?.length || 0);
-        console.log('  - scheduleLinks:', data.scheduleLinks?.length || 0);
-        console.log('  - guideLinks:', data.guideLinks?.length || 0);
+        logger.info('  - generation:', data.generation);
+        logger.info('  - code:', data.code);
+        logger.info('  - educationLinks:', data.educationLinks?.length || 0);
+        logger.info('  - scheduleLinks:', data.scheduleLinks?.length || 0);
+        logger.info('  - guideLinks:', data.guideLinks?.length || 0);
         return { ...data, jobCodeId } as GenerationResources;
       }
-      console.log('⚠️ generationResourcesService: 리소스 없음 -', jobCodeId);
+      logger.info('⚠️ generationResourcesService: 리소스 없음 -', jobCodeId);
       return null;
     } catch (error) {
-      console.error('❌ generationResourcesService: 리소스 가져오기 실패:', error);
+      logger.error('❌ generationResourcesService: 리소스 가져오기 실패:', error);
       throw error;
     }
   },
@@ -123,7 +124,7 @@ const generationResourcesService = {
         });
       }
     } catch (error) {
-      console.error('링크 추가 실패:', error);
+      logger.error('링크 추가 실패:', error);
       throw error;
     }
   },
@@ -141,7 +142,7 @@ const generationResourcesService = {
         updatedAt: Timestamp.now(),
       });
     } catch (error) {
-      console.error('링크 순서 변경 실패:', error);
+      logger.error('링크 순서 변경 실패:', error);
       throw error;
     }
   },
@@ -168,7 +169,7 @@ const generationResourcesService = {
         updatedAt: Timestamp.now(),
       });
     } catch (error) {
-      console.error('링크 삭제 실패:', error);
+      logger.error('링크 삭제 실패:', error);
       throw error;
     }
   },

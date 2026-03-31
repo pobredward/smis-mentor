@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { format, type Locale } from 'date-fns';
@@ -53,7 +54,7 @@ export function SharedApplicantsClient({ token }: Props) {
         
         // 디버깅: 프로필 이미지 URL 확인
         result.applications.forEach((app: any) => {
-          console.log('지원자:', app.user?.name, 'profileImage:', app.user?.profileImage, 'profileImageUrl:', app.user?.profileImageUrl);
+          logger.info('지원자:', app.user?.name, 'profileImage:', app.user?.profileImage, 'profileImageUrl:', app.user?.profileImageUrl);
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
@@ -68,7 +69,7 @@ export function SharedApplicantsClient({ token }: Props) {
   }, [token]);
 
   const handleImageError = (appId: string, profileUrl: string) => {
-    console.error('이미지 로딩 실패:', profileUrl);
+    logger.error('이미지 로딩 실패:', profileUrl);
     setImageErrors(prev => ({ ...prev, [appId]: true }));
   };
 

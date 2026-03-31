@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import Button from '@/components/common/Button';
@@ -35,7 +36,7 @@ export function InterviewLinksManager({ isOpen, onClose, onUpdate }: InterviewLi
       setLinks(currentLinks);
       setErrors({});
     } catch (error) {
-      console.error('링크 로드 오류:', error);
+      logger.error('링크 로드 오류:', error);
       toast.error('링크를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -78,7 +79,7 @@ export function InterviewLinksManager({ isOpen, onClose, onUpdate }: InterviewLi
       toast.success('링크가 성공적으로 저장되었습니다.');
       onClose();
     } catch (error) {
-      console.error('링크 저장 오류:', error);
+      logger.error('링크 저장 오류:', error);
       toast.error('링크를 저장하는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);

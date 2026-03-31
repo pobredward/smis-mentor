@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -351,7 +352,7 @@ export default function EditProfilePage() {
       await refreshUserData();
       toast.success('CV has been updated.');
     } catch (error) {
-      console.error('CV 업로드 오류:', error);
+      logger.error('CV 업로드 오류:', error);
       toast.error('An error occurred while uploading CV.');
     } finally {
       setIsUploading(false);
@@ -392,7 +393,7 @@ export default function EditProfilePage() {
       await refreshUserData();
       toast.success('Passport photo has been updated.');
     } catch (error) {
-      console.error('여권 사진 업로드 오류:', error);
+      logger.error('여권 사진 업로드 오류:', error);
       toast.error('An error occurred while uploading passport photo.');
     } finally {
       setIsUploading(false);
@@ -433,7 +434,7 @@ export default function EditProfilePage() {
       await refreshUserData();
       toast.success('Foreign ID card has been updated.');
     } catch (error) {
-      console.error('외국인 ID 카드 업로드 오류:', error);
+      logger.error('외국인 ID 카드 업로드 오류:', error);
       toast.error('An error occurred while uploading foreign ID card.');
     } finally {
       setIsUploading(false);
@@ -511,7 +512,7 @@ export default function EditProfilePage() {
           setEmailExists(false);
         }
       } catch (error) {
-        console.error("이메일 검증 중 오류 발생:", error);
+        logger.error("이메일 검증 중 오류 발생:", error);
         setEmailExists(false); // 오류 발생 시 저장 버튼이 비활성화되지 않도록 함
       }
     } else {
@@ -530,7 +531,7 @@ export default function EditProfilePage() {
           setPhoneExists(false);
         }
       } catch (error) {
-        console.error("전화번호 검증 중 오류 발생:", error);
+        logger.error("전화번호 검증 중 오류 발생:", error);
         setPhoneExists(false); // 오류 발생 시 저장 버튼이 비활성화되지 않도록 함
       }
     } else {
@@ -1283,7 +1284,7 @@ export default function EditProfilePage() {
                 disabled={emailExists || phoneExists}
                 onClick={() => {
                   if (emailExists || phoneExists) {
-                    console.log('저장 버튼 비활성화 상태:', { emailExists, phoneExists });
+                    logger.info('저장 버튼 비활성화 상태:', { emailExists, phoneExists });
                     if (emailExists) {
                       toast.error('이미 사용 중인 이메일입니다. 다른 이메일을 입력해주세요.');
                     }

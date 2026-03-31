@@ -1,3 +1,4 @@
+import { logger } from '@smis-mentor/shared';
 import {
   collection,
   doc,
@@ -47,7 +48,7 @@ export const createTask = async (
 
     return docRef.id;
   } catch (error) {
-    console.error('업무 생성 오류:', error);
+    logger.error('업무 생성 오류:', error);
     throw error;
   }
 };
@@ -88,7 +89,7 @@ export const getTasksByCampCode = async (campCode: string): Promise<Task[]> => {
       return 0;
     });
   } catch (error) {
-    console.error('업무 목록 가져오기 오류:', error);
+    logger.error('업무 목록 가져오기 오류:', error);
     throw error;
   }
 };
@@ -112,7 +113,7 @@ export const getTasksByDate = async (
       return taskDate.getTime() === targetTime;
     });
 
-    console.log('날짜별 업무 필터링:', {
+    logger.info('날짜별 업무 필터링:', {
       targetDate: {
         year: targetDate.getFullYear(),
         month: targetDate.getMonth() + 1,
@@ -132,7 +133,7 @@ export const getTasksByDate = async (
       return 0;
     });
   } catch (error) {
-    console.error('날짜별 업무 가져오기 오류:', error);
+    logger.error('날짜별 업무 가져오기 오류:', error);
     throw error;
   }
 };
@@ -152,7 +153,7 @@ export const getTaskById = async (taskId: string): Promise<Task | null> => {
       ...docSnap.data(),
     } as Task;
   } catch (error) {
-    console.error('업무 상세 가져오기 오류:', error);
+    logger.error('업무 상세 가져오기 오류:', error);
     throw error;
   }
 };
@@ -178,7 +179,7 @@ export const updateTask = async (
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
-    console.error('업무 수정 오류:', error);
+    logger.error('업무 수정 오류:', error);
     throw error;
   }
 };
@@ -195,7 +196,7 @@ export const deleteTask = async (taskId: string): Promise<void> => {
             const fileRef = ref(storage, attachment.url);
             await deleteObject(fileRef);
           } catch (err) {
-            console.warn('첨부파일 삭제 실패:', err);
+            logger.warn('첨부파일 삭제 실패:', err);
           }
         }
       }
@@ -204,7 +205,7 @@ export const deleteTask = async (taskId: string): Promise<void> => {
     const docRef = doc(db, TASKS_COLLECTION, taskId);
     await deleteDoc(docRef);
   } catch (error) {
-    console.error('업무 삭제 오류:', error);
+    logger.error('업무 삭제 오류:', error);
     throw error;
   }
 };
@@ -246,7 +247,7 @@ export const toggleTaskCompletion = async (
       });
     }
   } catch (error) {
-    console.error('업무 완료 토글 오류:', error);
+    logger.error('업무 완료 토글 오류:', error);
     throw error;
   }
 };
@@ -273,7 +274,7 @@ export const uploadTaskImage = async (
       thumbnail,
     };
   } catch (error) {
-    console.error('이미지 업로드 오류:', error);
+    logger.error('이미지 업로드 오류:', error);
     throw error;
   }
 };
@@ -296,7 +297,7 @@ export const uploadTaskFile = async (
       label: file.name,
     };
   } catch (error) {
-    console.error('파일 업로드 오류:', error);
+    logger.error('파일 업로드 오류:', error);
     throw error;
   }
 };
@@ -397,7 +398,7 @@ export const getTaskDatesInMonth = async (
 
     return dates;
   } catch (error) {
-    console.error('월별 업무 날짜 가져오기 오류:', error);
+    logger.error('월별 업무 날짜 가져오기 오류:', error);
     throw error;
   }
 };

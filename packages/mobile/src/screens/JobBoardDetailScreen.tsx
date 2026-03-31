@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -81,7 +82,7 @@ export function JobBoardDetailScreen({
         setJobCode(jobCodeData);
       }
     } catch (error) {
-      console.error('공고 정보 로드 오류:', error);
+      logger.error('공고 정보 로드 오류:', error);
       Alert.alert('오류', '공고 정보를 불러오는 중 오류가 발생했습니다.');
       navigation.goBack();
     } finally {
@@ -186,7 +187,7 @@ export function JobBoardDetailScreen({
         ]
       );
     } catch (error: any) {
-      console.error('지원 오류:', error);
+      logger.error('지원 오류:', error);
       
       // 중복 지원 확인
       if (error.message && error.message.includes('이미 지원')) {

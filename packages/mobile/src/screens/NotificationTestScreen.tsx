@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -35,7 +36,7 @@ export function NotificationTestScreen() {
       });
       Alert.alert('성공', '알림이 전송되었습니다!');
     } catch (error) {
-      console.error('즉시 알림 전송 실패:', error);
+      logger.error('즉시 알림 전송 실패:', error);
       Alert.alert('오류', '알림 전송에 실패했습니다.');
     } finally {
       setLoading(false);
@@ -67,7 +68,7 @@ export function NotificationTestScreen() {
         `${seconds}초 후에 알림이 전송됩니다.\n앱을 백그라운드로 전환해보세요.`
       );
     } catch (error) {
-      console.error('예약 알림 전송 실패:', error);
+      logger.error('예약 알림 전송 실패:', error);
       Alert.alert('오류', '알림 예약에 실패했습니다.');
     } finally {
       setLoading(false);
@@ -91,7 +92,7 @@ export function NotificationTestScreen() {
         '업무 독촉 스타일 알림이 5초 후 전송됩니다.\n앱을 백그라운드로 전환해보세요.'
       );
     } catch (error) {
-      console.error('업무 알림 전송 실패:', error);
+      logger.error('업무 알림 전송 실패:', error);
       Alert.alert('오류', '업무 알림 전송에 실패했습니다.');
     } finally {
       setLoading(false);
@@ -122,7 +123,7 @@ export function NotificationTestScreen() {
         `- Android importance: ${settings.android?.importance}`
       );
     } catch (error) {
-      console.error('권한 확인 실패:', error);
+      logger.error('권한 확인 실패:', error);
       Alert.alert('오류', '권한 확인에 실패했습니다.');
     } finally {
       setLoading(false);
@@ -136,7 +137,7 @@ export function NotificationTestScreen() {
       await Notifications.cancelAllScheduledNotificationsAsync();
       Alert.alert('완료', '예약된 모든 알림이 취소되었습니다.');
     } catch (error) {
-      console.error('알림 취소 실패:', error);
+      logger.error('알림 취소 실패:', error);
       Alert.alert('오류', '알림 취소에 실패했습니다.');
     } finally {
       setLoading(false);
@@ -169,7 +170,7 @@ export function NotificationTestScreen() {
         );
       }
     } catch (error) {
-      console.error('토큰 조회 실패:', error);
+      logger.error('토큰 조회 실패:', error);
       Alert.alert('오류', '토큰 조회에 실패했습니다.');
     } finally {
       setLoading(false);

@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { EvaluationStage, EvaluationCriteria, EvaluationFormData, EvaluationService, EvaluationCriteriaService } from '@smis-mentor/shared';
@@ -59,7 +60,7 @@ export default function EvaluationModalForm({
         handleSelectCriteria(defaultTemplate.id);
       }
     } catch (error) {
-      console.error('평가 기준 로드 오류:', error);
+      logger.error('평가 기준 로드 오류:', error);
       toast.error('평가 기준을 불러오는데 실패했습니다.');
     } finally {
       setIsLoading(false);
@@ -127,7 +128,7 @@ export default function EvaluationModalForm({
       toast.success('평가가 성공적으로 저장되었습니다!');
       onSuccess();
     } catch (error) {
-      console.error('평가 저장 오류:', error);
+      logger.error('평가 저장 오류:', error);
       toast.error('평가 저장에 실패했습니다.');
     } finally {
       setIsSubmitting(false);

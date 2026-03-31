@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState } from 'react';
 import { FcGoogle } from 'react-icons/fc';
@@ -32,7 +33,7 @@ export default function GoogleSignInButton({
       setIsLoading(false);
       onSuccess(result);
     } catch (error) {
-      console.error('Google 로그인 오류:', error);
+      logger.error('Google 로그인 오류:', error);
       setIsLoading(false);
       onError(error);
     }

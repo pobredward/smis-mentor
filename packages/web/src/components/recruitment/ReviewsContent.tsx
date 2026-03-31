@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
@@ -89,7 +90,7 @@ function ReviewFormModal({ review, onClose, onSave }: ReviewFormModalProps) {
       onSave();
       onClose();
     } catch (error) {
-      console.error('후기 저장 오류:', error);
+      logger.error('후기 저장 오류:', error);
       alert('후기 저장 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
@@ -211,7 +212,7 @@ export default function ReviewsContent() {
       }));
       setReviews(reviewsData);
     } catch (err) {
-      console.error('후기를 불러오는 중 오류가 발생했습니다:', err);
+      logger.error('후기를 불러오는 중 오류가 발생했습니다:', err);
       setError('후기를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -248,7 +249,7 @@ export default function ReviewsContent() {
         await fetchReviews();
         alert('후기가 삭제되었습니다.');
       } catch (err) {
-        console.error('후기 삭제 중 오류가 발생했습니다:', err);
+        logger.error('후기 삭제 중 오류가 발생했습니다:', err);
         alert('후기 삭제 중 오류가 발생했습니다.');
       } finally {
         setIsDeleting(false);

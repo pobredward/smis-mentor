@@ -1,4 +1,5 @@
 'use client';
+import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
@@ -61,7 +62,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
           const socialUser = JSON.parse(socialUserStr);
           setCurrentUserId(socialUser.userId);
         } catch (error) {
-          console.error('소셜 로그인 사용자 ID 파싱 실패:', error);
+          logger.error('소셜 로그인 사용자 ID 파싱 실패:', error);
         }
       }
     }
@@ -84,7 +85,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
               criteriaData[templateId] = criteria;
             }
           } catch (error) {
-            console.error(`평가 기준 로드 실패 (${templateId}):`, error);
+            logger.error(`평가 기준 로드 실패 (${templateId}):`, error);
           }
         })
       );
@@ -114,7 +115,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
         '캠프 생활': grouped['캠프 생활'] || []
       });
     } catch (error) {
-      console.error('평가 로드 오류:', error);
+      logger.error('평가 로드 오류:', error);
     } finally {
       setIsLoading(false);
     }
@@ -184,7 +185,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
         onEvaluationSuccess();
       }
     } catch (error) {
-      console.error('평가 삭제 오류:', error);
+      logger.error('평가 삭제 오류:', error);
       toast.error('평가 삭제에 실패했습니다.');
     }
   };
@@ -228,14 +229,14 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
               criteriaData[stage] = templates.find(t => t.isDefault) || templates[0];
             }
           } catch (error) {
-            console.error(`${stage} 평가 기준 로드 실패:`, error);
+            logger.error(`${stage} 평가 기준 로드 실패:`, error);
           }
         })
       );
 
       setAvailableCriteria(criteriaData);
     } catch (error) {
-      console.error('평가 기준 로드 오류:', error);
+      logger.error('평가 기준 로드 오류:', error);
     }
   };
 
@@ -323,7 +324,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
     try {
       setIsSubmitting(true);
       
-      console.log('🔄 Creating evaluation with:', {
+      logger.info('🔄 Creating evaluation with:', {
         currentUserId,
         evaluatorName: evaluationFormData.evaluatorName,
         evaluationStage: evaluationFormData.evaluationStage
@@ -345,7 +346,7 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
       onEvaluationSuccess?.(); // 부모 컴포넌트에 알림
       
     } catch (error) {
-      console.error('평가 저장 오류:', error);
+      logger.error('평가 저장 오류:', error);
       const errorMessage = error instanceof Error ? error.message : '평가 저장에 실패했습니다.';
       toast.error(errorMessage);
     } finally {

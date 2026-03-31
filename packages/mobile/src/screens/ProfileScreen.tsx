@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -112,7 +113,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       
       setJobCodes(sortedCodes);
     } catch (error) {
-      console.error('기수 정보 로드 실패:', error);
+      logger.error('기수 정보 로드 실패:', error);
     } finally {
       setLoadingJobCodes(false);
     }
@@ -153,16 +154,16 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
     try {
       setChangingJobCode(true);
-      console.log('🔄 ProfileScreen: 기수 변경 요청');
-      console.log('  - 현재 activeJobExperienceId:', userData?.activeJobExperienceId);
-      console.log('  - 새로운 jobCodeId:', jobCodeId);
+      logger.info('🔄 ProfileScreen: 기수 변경 요청');
+      logger.info('  - 현재 activeJobExperienceId:', userData?.activeJobExperienceId);
+      logger.info('  - 새로운 jobCodeId:', jobCodeId);
       
       await updateActiveJobCode(jobCodeId);
       
-      console.log('✅ ProfileScreen: 기수 변경 완료');
+      logger.info('✅ ProfileScreen: 기수 변경 완료');
       Alert.alert('성공', '기수가 변경되었습니다.\n캠프 탭에서 해당 기수의 자료를 확인하세요.');
     } catch (error) {
-      console.error('❌ ProfileScreen: 기수 변경 실패:', error);
+      logger.error('❌ ProfileScreen: 기수 변경 실패:', error);
       Alert.alert('오류', '기수 변경에 실패했습니다.');
     } finally {
       setChangingJobCode(false);
@@ -295,20 +296,20 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
       // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
       if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
-        console.log('📋 기존 foreign_temp 사용자 발견, 계정 업데이트 진행...');
+        logger.info('📋 기존 foreign_temp 사용자 발견, 계정 업데이트 진행...');
         
         // 기존 계정의 userId 사용
         userId = existingUserByPhone.userId;
         isUpdatingExistingUser = true;
         
         // Firebase Authentication 계정이 이미 있을 수 있으므로 체크
-        console.log('🔐 Firebase Authentication 계정 생성/확인 시작:', data.email);
+        logger.info('🔐 Firebase Authentication 계정 생성/확인 시작:', data.email);
         try {
           const userCredential = await signUp(data.email, data.password);
-          console.log('✅ Firebase Authentication 계정 생성 완료');
+          logger.info('✅ Firebase Authentication 계정 생성 완료');
         } catch (authError: any) {
           if (authError.code === 'auth/email-already-in-use') {
-            console.log('⚠️ Firebase Auth 이미 존재, Firestore만 업데이트');
+            logger.info('⚠️ Firebase Auth 이미 존재, Firestore만 업데이트');
           } else {
             throw authError;
           }
@@ -316,14 +317,14 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       }
       // Case 2: 완전히 새로운 사용자
       else {
-        console.log('🔐 Firebase Authentication 계정 생성 시작:', data.email);
+        logger.info('🔐 Firebase Authentication 계정 생성 시작:', data.email);
         const userCredential = await signUp(data.email, data.password);
         userId = userCredential.user.uid;
-        console.log('✅ Firebase Authentication 계정 생성 완료, UID:', userId);
+        logger.info('✅ Firebase Authentication 계정 생성 완료, UID:', userId);
       }
 
       // 2. 파일 업로드
-      console.log('📤 파일 업로드 시작...');
+      logger.info('📤 파일 업로드 시작...');
       let profileImageUrl = '';
       let cvUrl = '';
       let passportPhotoUrl = '';
@@ -331,30 +332,30 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
       try {
         // 프로필 이미지 업로드
-        console.log('  - 프로필 이미지 업로드 중...');
+        logger.info('  - 프로필 이미지 업로드 중...');
         profileImageUrl = await uploadForeignProfileImage(userId, data.profileImage);
-        console.log('  ✅ 프로필 이미지 업로드 완료');
+        logger.info('  ✅ 프로필 이미지 업로드 완료');
 
         // CV 업로드
-        console.log('  - CV 업로드 중...');
+        logger.info('  - CV 업로드 중...');
         cvUrl = await uploadCV(userId, data.cvFile.uri, data.cvFile.name);
-        console.log('  ✅ CV 업로드 완료');
+        logger.info('  ✅ CV 업로드 완료');
 
         // 여권 사진 업로드
-        console.log('  - 여권 사진 업로드 중...');
+        logger.info('  - 여권 사진 업로드 중...');
         passportPhotoUrl = await uploadPassportPhoto(userId, data.passportPhoto);
-        console.log('  ✅ 여권 사진 업로드 완료');
+        logger.info('  ✅ 여권 사진 업로드 완료');
 
         // 외국인 등록증 업로드 (선택사항)
         if (data.foreignIdCard) {
-          console.log('  - 외국인 등록증 업로드 중...');
+          logger.info('  - 외국인 등록증 업로드 중...');
           foreignIdCardUrl = await uploadForeignIdCard(userId, data.foreignIdCard);
-          console.log('  ✅ 외국인 등록증 업로드 완료');
+          logger.info('  ✅ 외국인 등록증 업로드 완료');
         }
 
-        console.log('✅ 모든 파일 업로드 완료');
+        logger.info('✅ 모든 파일 업로드 완료');
       } catch (uploadError) {
-        console.error('❌ 파일 업로드 실패:', uploadError);
+        logger.error('❌ 파일 업로드 실패:', uploadError);
         throw new Error('파일 업로드에 실패했습니다. 관리자에게 문의해주세요.');
       }
 
@@ -400,9 +401,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       };
 
       if (isUpdatingExistingUser) {
-        console.log('📝 Firestore 사용자 문서 업데이트 시작');
+        logger.info('📝 Firestore 사용자 문서 업데이트 시작');
         await setDoc(doc(db, 'users', userId), userData, { merge: true });
-        console.log('✅ Firestore 사용자 문서 업데이트 완료 (foreign_temp → foreign)');
+        logger.info('✅ Firestore 사용자 문서 업데이트 완료 (foreign_temp → foreign)');
         
         Alert.alert(
           'Account Activated',
@@ -419,9 +420,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           ]
         );
       } else {
-        console.log('📝 Firestore 사용자 문서 생성 시작');
+        logger.info('📝 Firestore 사용자 문서 생성 시작');
         await setDoc(doc(db, 'users', userId), userData);
-        console.log('✅ Firestore 사용자 문서 생성 완료');
+        logger.info('✅ Firestore 사용자 문서 생성 완료');
         
         Alert.alert(
           'Sign Up Complete',
@@ -439,7 +440,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         );
       }
     } catch (error: any) {
-      console.error('❌ 원어민 회원가입 오류:', error);
+      logger.error('❌ 원어민 회원가입 오류:', error);
       
       let errorMessage = error.message || 'An error occurred during sign up.';
       if (error.code === 'auth/email-already-in-use') {
@@ -460,7 +461,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      console.log('🔄 ProfileScreen: Pull-to-refresh 시작');
+      logger.info('🔄 ProfileScreen: Pull-to-refresh 시작');
       
       // 사용자 데이터 새로고침
       await refreshUserData();
@@ -470,9 +471,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         await loadJobCodes();
       }
       
-      console.log('✅ ProfileScreen: Pull-to-refresh 완료');
+      logger.info('✅ ProfileScreen: Pull-to-refresh 완료');
     } catch (error) {
-      console.error('❌ ProfileScreen: Pull-to-refresh 실패:', error);
+      logger.error('❌ ProfileScreen: Pull-to-refresh 실패:', error);
     } finally {
       setRefreshing(false);
     }
@@ -492,7 +493,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             await signOut();
             Alert.alert('로그아웃', '로그아웃되었습니다.');
           } catch (error) {
-            console.error('로그아웃 오류:', error);
+            logger.error('로그아웃 오류:', error);
             Alert.alert('오류', '로그아웃 중 오류가 발생했습니다.');
           }
         },
@@ -508,7 +509,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
     try {
       // 1. 캐시 무효화
-      console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
+      logger.info('🗑️ 사용자 캐시 무효화:', userData.userId);
       const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
       await removeCache(CACHE_STORE.USERS, userData.userId);
 
@@ -522,7 +523,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         socialData = result.socialData;
         credential = result.credential;
 
-        console.log('🔗 구글 계정 연동:', {
+        logger.info('🔗 구글 계정 연동:', {
           currentEmail: userData.email,
           googleEmail: socialData.email,
           allowDifferentEmail: true,
@@ -531,7 +532,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         // 원래 계정으로 복원
         const currentUserAfterPopup = auth.currentUser;
         if (currentUserAfterPopup?.uid !== userData.userId) {
-          console.log('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원');
+          logger.info('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원');
 
           // Custom Token으로 복원
           const { signInWithCustomToken } = await import('../services/authService');
@@ -543,10 +544,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           const { linkWithCredential } = await import('firebase/auth');
           try {
             await linkWithCredential(auth.currentUser!, credential);
-            console.log('✅ Firebase Auth 소셜 계정 연동 완료');
+            logger.info('✅ Firebase Auth 소셜 계정 연동 완료');
           } catch (authError: any) {
             if (authError.code === 'auth/credential-already-in-use') {
-              console.log('⚠️ 구글 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
+              logger.info('⚠️ 구글 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
             } else {
               throw authError;
             }
@@ -561,7 +562,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         const { signInWithApple } = await import('../services/appleAuthService');
         socialData = await signInWithApple();
         
-        console.log('🔗 애플 계정 연동:', {
+        logger.info('🔗 애플 계정 연동:', {
           currentEmail: userData.email,
           appleEmail: socialData.email,
           appleUserId: socialData.providerUid,
@@ -570,12 +571,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         // ✅ Apple 팝업으로 세션 변경될 수 있음 → 원래 계정으로 복원
         const currentUserAfterApple = auth.currentUser;
         if (currentUserAfterApple?.uid !== userData.userId) {
-          console.log('⚠️ Apple 팝업으로 세션 변경됨 → 원래 계정으로 복원');
+          logger.info('⚠️ Apple 팝업으로 세션 변경됨 → 원래 계정으로 복원');
           
           // Custom Token으로 원래 계정 복원
           const { signInWithCustomToken } = await import('../services/authService');
           await signInWithCustomToken(userData.userId, userData.email);
-          console.log('✅ 원래 계정으로 복원 완료');
+          logger.info('✅ 원래 계정으로 복원 완료');
         }
         
         // ✅ Apple도 Firebase Auth 연동 시도
@@ -590,12 +591,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             });
             
             await linkWithCredential(auth.currentUser!, credential);
-            console.log('✅ Firebase Auth Apple 연동 완료');
+            logger.info('✅ Firebase Auth Apple 연동 완료');
           } catch (authError: any) {
             if (authError.code === 'auth/credential-already-in-use') {
-              console.log('⚠️ Apple 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
+              logger.info('⚠️ Apple 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
             } else {
-              console.error('⚠️ Firebase Auth Apple 연동 실패:', authError);
+              logger.error('⚠️ Firebase Auth Apple 연동 실패:', authError);
             }
           }
         }
@@ -620,11 +621,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       Alert.alert('성공', '소셜 계정이 성공적으로 연동되었습니다.');
 
       // 사용자 데이터 새로고침 (UI 즉시 반영)
-      console.log('🔄 사용자 데이터 새로고침 시작');
+      logger.info('🔄 사용자 데이터 새로고침 시작');
       await refreshUserData();
-      console.log('✅ 사용자 데이터 새로고침 완료');
+      logger.info('✅ 사용자 데이터 새로고침 완료');
     } catch (error: any) {
-      console.error('소셜 계정 연동 오류:', error);
+      logger.error('소셜 계정 연동 오류:', error);
       
       let errorMessage = '소셜 계정 연동 중 오류가 발생했습니다.';
       if (error.message === 'POPUP_CLOSED') {
@@ -660,7 +661,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           onPress: async () => {
             try {
               // 1. 캐시 무효화
-              console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
+              logger.info('🗑️ 사용자 캐시 무효화:', userData.userId);
               const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
               await removeCache(CACHE_STORE.USERS, userData.userId);
 
@@ -699,11 +700,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               Alert.alert('성공', `${providerName} 계정 연동이 해제되었습니다.`);
 
               // 사용자 데이터 새로고침 (UI 즉시 반영)
-              console.log('🔄 사용자 데이터 새로고침 시작');
+              logger.info('🔄 사용자 데이터 새로고침 시작');
               await refreshUserData();
-              console.log('✅ 사용자 데이터 새로고침 완료');
+              logger.info('✅ 사용자 데이터 새로고침 완료');
             } catch (error: any) {
-              console.error('연동 해제 오류:', error);
+              logger.error('연동 해제 오류:', error);
               Alert.alert('오류', error.message || '연동 해제 중 오류가 발생했습니다.');
             }
           },

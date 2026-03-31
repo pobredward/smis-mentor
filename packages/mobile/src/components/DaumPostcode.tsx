@@ -1,4 +1,5 @@
 import React from 'react';
+import { logger } from '@smis-mentor/shared';
 import { Modal, View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -12,14 +13,14 @@ interface DaumPostcodeProps {
 export function DaumPostcode({ visible, onComplete, onClose }: DaumPostcodeProps) {
   const handleMessage = (event: any) => {
     const messageData = event.nativeEvent.data;
-    console.log('📱 Message received from WebView:', messageData);
+    logger.info('📱 Message received from WebView:', messageData);
     
     try {
       const data = JSON.parse(messageData);
-      console.log('📱 Parsed data:', data);
+      logger.info('📱 Parsed data:', data);
       
       if (data.type === 'complete') {
-        console.log('📱 Address complete! Calling onComplete with:', {
+        logger.info('📱 Address complete! Calling onComplete with:', {
           address: data.address,
           zonecode: data.zonecode
         });
@@ -31,20 +32,20 @@ export function DaumPostcode({ visible, onComplete, onClose }: DaumPostcodeProps
         
         // 잠시 후 모달 닫기 (사용자가 선택한 것을 볼 수 있도록)
         setTimeout(() => {
-          console.log('📱 Closing modal');
+          logger.info('📱 Closing modal');
           onClose();
         }, 300);
         
       } else if (data.type === 'close') {
-        console.log('📱 Postcode closed by user');
+        logger.info('📱 Postcode closed by user');
         onClose();
       } else if (data.type === 'error') {
-        console.error('📱 WebView error:', data.message);
+        logger.error('📱 WebView error:', data.message);
         onClose();
       }
     } catch (error) {
-      console.error('📱 DaumPostcode message parse error:', error);
-      console.error('📱 Raw message:', messageData);
+      logger.error('📱 DaumPostcode message parse error:', error);
+      logger.error('📱 Raw message:', messageData);
     }
   };
 
@@ -65,25 +66,25 @@ export function DaumPostcode({ visible, onComplete, onClose }: DaumPostcodeProps
   <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
   <script>
     (function() {
-      console.log('🌐 Script starting...');
+      logger.info('🌐 Script starting...');
       
       function sendToRN(data) {
         var msg = JSON.stringify(data);
-        console.log('🌐 Sending:', msg);
+        logger.info('🌐 Sending:', msg);
         try {
           window.ReactNativeWebView.postMessage(msg);
         } catch (e) {
-          console.error('🌐 Send error:', e);
+          logger.error('🌐 Send error:', e);
         }
       }
       
       function init() {
-        console.log('🌐 Initializing Daum Postcode...');
+        logger.info('🌐 Initializing Daum Postcode...');
         try {
           new daum.Postcode({
             oncomplete: function(data) {
-              console.log('🌐 oncomplete fired!');
-              console.log('🌐 Data:', JSON.stringify(data));
+              logger.info('🌐 oncomplete fired!');
+              logger.info('🌐 Data:', JSON.stringify(data));
               
               var addr = data.userSelectedType === 'R' ? data.roadAddress : data.jibunAddress;
               if (!addr) addr = data.address;
@@ -95,15 +96,15 @@ export function DaumPostcode({ visible, onComplete, onClose }: DaumPostcodeProps
               });
             },
             onresize: function(size) {
-              console.log('🌐 onresize:', size);
+              logger.info('🌐 onresize:', size);
             },
             width: '100%',
             height: '100%'
           }).embed(document.body, { autoClose: false });
           
-          console.log('🌐 Embed complete!');
+          logger.info('🌐 Embed complete!');
         } catch (e) {
-          console.error('🌐 Init error:', e);
+          logger.error('🌐 Init error:', e);
           sendToRN({ type: 'error', message: e.toString() });
         }
       }
@@ -151,32 +152,32 @@ export function DaumPostcode({ visible, onComplete, onClose }: DaumPostcodeProps
           cacheEnabled={false}
           incognito={true}
           injectedJavaScriptBeforeContentLoaded={`
-            console.log('📱 injectedJavaScriptBeforeContentLoaded');
+            logger.info('📱 injectedJavaScriptBeforeContentLoaded');
             window.isReactNativeWebView = true;
             true;
           `}
           injectedJavaScript={`
-            console.log('📱 injectedJavaScript executed');
+            logger.info('📱 injectedJavaScript executed');
             setTimeout(function() {
-              console.log('📱 Checking daum object:', typeof daum);
+              logger.info('📱 Checking daum object:', typeof daum);
             }, 2000);
             true;
           `}
-          onLoadStart={() => console.log('📱 WebView loading started')}
-          onLoadEnd={() => console.log('📱 WebView loading ended')}
+          onLoadStart={() => logger.info('📱 WebView loading started')}
+          onLoadEnd={() => logger.info('📱 WebView loading ended')}
           onLoadProgress={({ nativeEvent }) => {
-            console.log('📱 Load progress:', nativeEvent.progress);
+            logger.info('📱 Load progress:', nativeEvent.progress);
           }}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
-            console.error('📱 WebView error: ', nativeEvent);
+            logger.error('📱 WebView error: ', nativeEvent);
           }}
           onHttpError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
-            console.error('📱 WebView HTTP error: ', nativeEvent);
+            logger.error('📱 WebView HTTP error: ', nativeEvent);
           }}
           onContentProcessDidTerminate={() => {
-            console.warn('📱 WebView content process terminated');
+            logger.warn('📱 WebView content process terminated');
           }}
         />
       </SafeAreaView>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -44,7 +45,7 @@ export function SettingsScreen() {
       const userSettings = await getNotificationSettings(userData.userId);
       setSettings(userSettings);
     } catch (error) {
-      console.error('알림 설정 로드 실패:', error);
+      logger.error('알림 설정 로드 실패:', error);
       Alert.alert('오류', '알림 설정을 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
@@ -63,7 +64,7 @@ export function SettingsScreen() {
     try {
       await updateNotificationSettings(userData.userId, { [key]: newValue });
     } catch (error) {
-      console.error('알림 설정 업데이트 실패:', error);
+      logger.error('알림 설정 업데이트 실패:', error);
       setSettings({ ...settings, [key]: !newValue });
       Alert.alert('오류', '알림 설정 변경에 실패했습니다.');
     } finally {
