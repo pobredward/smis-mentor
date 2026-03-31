@@ -1,5 +1,5 @@
-/**
 import { logger } from '@smis-mentor/shared';
+/**
  * Firestore generationResources 초기 데이터 생성 스크립트
  * 
  * 사용법:

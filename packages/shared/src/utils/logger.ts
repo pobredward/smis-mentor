@@ -1,6 +1,7 @@
 /**
  * 통합 로깅 유틸리티
  * 환경별로 적절한 로그 레벨을 제공합니다.
+ * Sentry와 통합하여 프로덕션 에러를 추적합니다.
  */
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -44,7 +45,6 @@ class Logger {
         break;
       case 'error':
         console.error(prefix, ...args);
-        // 프로덕션에서는 Sentry 등 에러 트래킹 서비스로 전송
         break;
     }
   }

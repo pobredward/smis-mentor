@@ -1,5 +1,5 @@
-import {
 import { logger } from '@smis-mentor/shared';
+import {
   doc,
   getDoc,
   updateDoc,

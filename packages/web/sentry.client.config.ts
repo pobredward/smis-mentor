@@ -3,20 +3,14 @@ import * as Sentry from '@sentry/nextjs';
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   
-  // 환경 설정 (개발 환경도 전송)
-  environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+  // 환경 설정
+  environment: process.env.NODE_ENV,
   
-  // 트레이싱 샘플링 비율 (100% - 테스트용)
-  tracesSampleRate: 1.0,
+  // 트레이싱 샘플링 비율 (10%)
+  tracesSampleRate: 0.1,
   
-  // 디버그 모드
-  debug: true,
-  
-  // 개발 환경에서도 강제 활성화
-  enabled: true,
-  
-  // transport 강제 설정
-  transport: undefined, // 기본 transport 사용
+  // 디버그 모드 (개발 환경에서만)
+  debug: process.env.NODE_ENV === 'development',
   
   // Replay 설정 (사용자 세션 재생)
   replaysSessionSampleRate: 0.1, // 세션의 10% 기록
