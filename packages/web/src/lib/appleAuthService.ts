@@ -4,7 +4,7 @@ import {
   OAuthCredential
 } from 'firebase/auth';
 import { auth } from './firebase';
-import { SocialUserData } from '@smis-mentor/shared';
+import { SocialUserData, logger } from '@smis-mentor/shared';
 
 const appleProvider = new OAuthProvider('apple.com');
 
@@ -22,7 +22,7 @@ export async function signInWithApplePopup(): Promise<SocialUserData> {
     
     return extractSocialUserData(result.user, credential);
   } catch (error: any) {
-    console.error('Apple Popup 로그인 오류:', error);
+    logger.error('Apple Popup 로그인 오류:', error);
     throw error;
   }
 }
@@ -31,7 +31,7 @@ export async function signInWithApplePopup(): Promise<SocialUserData> {
  * Firebase User와 Credential에서 SocialUserData 추출
  */
 function extractSocialUserData(user: any, credential: OAuthCredential | null): SocialUserData {
-  console.log('🔍 Apple SocialUserData 추출 시작:', {
+  logger.info('🔍 Apple SocialUserData 추출 시작:', {
     userEmail: user.email,
     userUid: user.uid,
     providerData: user.providerData,
@@ -50,7 +50,7 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
       appleUserId = appleProviderData.uid; // ✅ 실제 Apple User ID
       email = email || appleProviderData.email;
       name = name || appleProviderData.displayName;
-      console.log('🍎 providerData에서 Apple User ID 추출:', appleUserId);
+      logger.info('🍎 providerData에서 Apple User ID 추출:', appleUserId);
     }
   }
   
@@ -60,20 +60,20 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
       const payload = JSON.parse(atob(credential.idToken.split('.')[1]));
       email = payload.email;
       appleUserId = appleUserId || payload.sub; // JWT의 sub가 실제 Apple User ID
-      console.log('📧 ID 토큰에서 정보 추출:', { email, appleUserId });
+      logger.info('📧 ID 토큰에서 정보 추출:', { email, appleUserId });
     } catch (e) {
-      console.error('ID 토큰 파싱 실패:', e);
+      logger.error('ID 토큰 파싱 실패:', e);
     }
   }
   
   if (!email) {
-    console.error('❌ 이메일을 가져올 수 없음:', { user, credential });
+    logger.error('❌ 이메일을 가져올 수 없음:', { user, credential });
     throw new Error('Apple 계정에서 이메일 정보를 가져올 수 없습니다. Apple 계정 설정에서 이메일 공개를 허용해주세요.');
   }
   
   // ⚠️ providerUid는 Firebase Auth UID가 아닌 실제 Apple User ID를 사용해야 함
   if (!appleUserId) {
-    console.warn('⚠️ Apple User ID를 찾을 수 없음, Firebase UID 사용');
+    logger.warn('⚠️ Apple User ID를 찾을 수 없음, Firebase UID 사용');
     appleUserId = user.uid;
   }
   
@@ -82,7 +82,7 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
     name = email.split('@')[0];
   }
   
-  console.log('✅ Apple SocialUserData 추출 완료:', { email, name, appleUserId });
+  logger.info('✅ Apple SocialUserData 추출 완료:', { email, name, appleUserId });
   
   return {
     email: email,
@@ -144,7 +144,7 @@ export async function getAppleCredential(): Promise<{
       email: currentUser.email,
     } : null;
     
-    console.log('🔑 Apple Credential 획득 시작:', currentUserData);
+    logger.info('🔑 Apple Credential 획득 시작:', currentUserData);
     
     // 2. Apple 팝업 열기 (임시로 로그인됨)
     const result = await signInWithPopup(auth, appleProvider);
@@ -154,7 +154,7 @@ export async function getAppleCredential(): Promise<{
       throw new Error('Apple credential을 가져올 수 없습니다.');
     }
     
-    console.log('✅ Apple 팝업 완료:', {
+    logger.info('✅ Apple 팝업 완료:', {
       email: result.user.email,
       uid: result.user.uid,
       isNewUser: currentUserData?.uid !== result.user.uid,
@@ -164,12 +164,12 @@ export async function getAppleCredential(): Promise<{
     const socialData = extractSocialUserData(result.user, credential);
     
     // 4. Firebase Auth에 Apple 계정이 생성되어도 괜찮음
-    console.log('ℹ️ Apple 계정이 Firebase Auth에 생성되었습니다 (정상)');
-    console.log('ℹ️ linkWithCredential이 실패하면 Firestore에만 저장됩니다');
+    logger.info('ℹ️ Apple 계정이 Firebase Auth에 생성되었습니다 (정상)');
+    logger.info('ℹ️ linkWithCredential이 실패하면 Firestore에만 저장됩니다');
     
     return { socialData, credential };
   } catch (error: any) {
-    console.error('Apple Credential 획득 오류:', error);
+    logger.error('Apple Credential 획득 오류:', error);
     throw error;
   }
 }

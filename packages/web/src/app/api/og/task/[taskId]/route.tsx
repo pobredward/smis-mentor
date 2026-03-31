@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { NextRequest } from 'next/server';
+import { logger } from '@smis-mentor/shared';
 
 export const runtime = 'edge';
 
@@ -78,7 +79,7 @@ export async function GET(
       }
     );
   } catch (error) {
-    console.error('OG Image 생성 오류:', error);
+    logger.error('OG Image 생성 오류:', error);
     
     // 오류 발생 시 기본 이미지
     return new ImageResponse(

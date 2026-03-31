@@ -2,6 +2,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import type { SocialUserData } from '@smis-mentor/shared';
 import Constants from 'expo-constants';
+import { logger } from '@smis-mentor/shared';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -22,18 +23,18 @@ export async function signInWithNaver(): Promise<SocialUserData> {
       NaverLogin = NaverLoginModule.default;
       
       if (NaverLogin && typeof NaverLogin.login === 'function') {
-        console.log('🟢 네이버 로그인 시작 (Native SDK - Development Build)');
+        logger.info('🟢 네이버 로그인 시작 (Native SDK - Development Build)');
         return await signInWithNativeSDK(NaverLogin);
       }
     } catch (error) {
-      console.log('⚠️ Native SDK 불가능, OAuth 2.0 사용 (Expo Go)');
+      logger.info('⚠️ Native SDK 불가능, OAuth 2.0 사용 (Expo Go)');
     }
 
     // Native SDK를 사용할 수 없으면 OAuth 2.0 사용
-    console.log('🟢 네이버 로그인 시작 (OAuth 2.0 - Expo Go)');
+    logger.info('🟢 네이버 로그인 시작 (OAuth 2.0 - Expo Go)');
     return await signInWithOAuth();
   } catch (error: any) {
-    console.error('❌ 네이버 로그인 실패:', error);
+    logger.error('❌ 네이버 로그인 실패:', error);
     throw error;
   }
 }
@@ -49,7 +50,7 @@ async function signInWithNativeSDK(NaverLogin: any): Promise<SocialUserData> {
   }
 
   const { accessToken } = successResponse;
-  console.log('✅ 액세스 토큰 획득 (Native SDK)');
+  logger.info('✅ 액세스 토큰 획득 (Native SDK)');
 
   // 사용자 정보 가져오기
   const profileResult = await NaverLogin.getProfile(accessToken);
@@ -69,7 +70,7 @@ async function signInWithNativeSDK(NaverLogin: any): Promise<SocialUserData> {
     accessToken: accessToken,
   };
 
-  console.log('✅ 네이버 로그인 완료 (Native SDK):', { email: socialData.email });
+  logger.info('✅ 네이버 로그인 완료 (Native SDK):', { email: socialData.email });
   return socialData;
 }
 
@@ -84,7 +85,7 @@ async function signInWithOAuth(): Promise<SocialUserData> {
     // 프로덕션: smismentor://redirect
   });
 
-  console.log('📍 Redirect URI:', redirectUri);
+  logger.info('📍 Redirect URI:', redirectUri);
 
   // state 파라미터 (CSRF 방지)
   const state = Math.random().toString(36).substring(7);
@@ -122,7 +123,7 @@ async function signInWithOAuth(): Promise<SocialUserData> {
     throw new Error('보안 검증에 실패했습니다');
   }
 
-  console.log('✅ Authorization Code 획득');
+  logger.info('✅ Authorization Code 획득');
 
   // 3. Access Token 요청
   const tokenParams = new URLSearchParams({
@@ -148,7 +149,7 @@ async function signInWithOAuth(): Promise<SocialUserData> {
   }
 
   const accessToken = tokenData.access_token;
-  console.log('✅ Access Token 획득');
+  logger.info('✅ Access Token 획득');
 
   // 4. 사용자 정보 조회
   const userInfoResponse = await fetch('https://openapi.naver.com/v1/nid/me', {
@@ -174,7 +175,7 @@ async function signInWithOAuth(): Promise<SocialUserData> {
     accessToken: accessToken,
   };
 
-  console.log('✅ 네이버 로그인 완료 (OAuth 2.0):', { email: socialData.email });
+  logger.info('✅ 네이버 로그인 완료 (OAuth 2.0):', { email: socialData.email });
   return socialData;
 }
 
@@ -184,9 +185,9 @@ async function signInWithOAuth(): Promise<SocialUserData> {
 export async function signOutNaver(): Promise<void> {
   try {
     // OAuth 2.0 방식에서는 별도 로그아웃 불필요
-    console.log('✅ 네이버 로그아웃 완료');
+    logger.info('✅ 네이버 로그아웃 완료');
   } catch (error) {
-    console.error('네이버 로그아웃 실패:', error);
+    logger.error('네이버 로그아웃 실패:', error);
     throw error;
   }
 }

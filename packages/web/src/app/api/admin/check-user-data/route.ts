@@ -1,16 +1,24 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
 /**
  * 사용자 삭제 전 관련 데이터 확인
  * GET /api/admin/check-user-data?userId=xxx
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const db = getAdminFirestore();
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
-    const adminUserId = searchParams.get('adminUserId');
 
     if (!userId) {
       return NextResponse.json(
@@ -19,24 +27,7 @@ export async function GET(request: Request) {
       );
     }
 
-    if (!adminUserId) {
-      return NextResponse.json(
-        { error: '관리자 인증이 필요합니다.' },
-        { status: 401 }
-      );
-    }
-
-    console.log(`📊 사용자 데이터 확인: ${userId}`);
-
-    // 관리자 권한 체크
-    const adminDoc = await db.collection('users').doc(adminUserId).get();
-    
-    if (!adminDoc.exists || adminDoc.data()?.role !== 'admin') {
-      return NextResponse.json(
-        { error: '관리자 권한이 필요합니다.' },
-        { status: 403 }
-      );
-    }
+    logger.info(`📊 사용자 데이터 확인: ${userId}`);
 
     // 병렬로 데이터 확인
     const [evaluationsCount, applicationsCount, tasksCount, smsTemplatesCount] = await Promise.all([
@@ -72,7 +63,7 @@ export async function GET(request: Request) {
 
     const totalDataCount = evaluationsCount + applicationsCount + tasksCount + smsTemplatesCount;
 
-    console.log('📊 사용자 데이터 통계:', {
+    logger.info('📊 사용자 데이터 통계:', {
       userId,
       evaluationsCount,
       applicationsCount,
@@ -98,7 +89,7 @@ export async function GET(request: Request) {
     });
 
   } catch (error: any) {
-    console.error('❌ 사용자 데이터 확인 실패:', {
+    logger.error('❌ 사용자 데이터 확인 실패:', {
       error: error.message,
       code: error.code,
       timestamp: new Date().toISOString(),

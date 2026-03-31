@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../config/firebase';
 import { User } from '../types';
 import { getCache, setCache, CACHE_STORE, CACHE_TTL, removeCache } from './cacheUtils';
+import { logger } from '@smis-mentor/shared';
 
 const STORAGE_KEYS = {
   REMEMBER_ME: '@smis_remember_me',
@@ -42,7 +43,7 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
     const doc = querySnapshot.docs[0];
     return { ...doc.data(), userId: doc.id } as User;
   } catch (error) {
-    console.error('사용자 조회 실패:', error);
+    logger.error('사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -70,7 +71,7 @@ export const getUserByPhone = async (phone: string): Promise<User | null> => {
 
     return null;
   } catch (error) {
-    console.error('전화번호로 사용자 조회 실패:', error);
+    logger.error('전화번호로 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -84,7 +85,7 @@ export const getUserBySocialProvider = async (
   providerUid: string
 ): Promise<User | null> => {
   try {
-    console.log('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
+    logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
 
     // Firestore에서 authProviders 배열을 직접 검색할 수 없으므로
     // 모든 active 사용자를 가져와서 클라이언트에서 필터링
@@ -107,7 +108,7 @@ export const getUserBySocialProvider = async (
       });
 
       if (matchedProvider) {
-        console.log('✅ 소셜 제공자로 사용자 발견:', {
+        logger.info('✅ 소셜 제공자로 사용자 발견:', {
           userId: userData.userId,
           email: userData.email,
           providerId: matchedProvider.providerId,
@@ -116,10 +117,10 @@ export const getUserBySocialProvider = async (
       }
     }
 
-    console.log('❌ 소셜 제공자로 사용자를 찾을 수 없음');
+    logger.info('❌ 소셜 제공자로 사용자를 찾을 수 없음');
     return null;
   } catch (error) {
-    console.error('소셜 제공자로 사용자 조회 실패:', error);
+    logger.error('소셜 제공자로 사용자 조회 실패:', error);
     return null;
   }
 };
@@ -128,21 +129,21 @@ export const getUserById = async (userId: string): Promise<User | null> => {
   try {
     // userId 유효성 검사
     if (!userId || typeof userId !== 'string') {
-      console.error('유효하지 않은 userId:', userId);
+      logger.error('유효하지 않은 userId:', userId);
       return null;
     }
 
     // 캐시에서 데이터 확인
     const cachedUser = await getCache<User>(CACHE_STORE.USERS, userId);
     if (cachedUser) {
-      console.log('캐시에서 사용자 정보 로드:', userId);
+      logger.info('캐시에서 사용자 정보 로드:', userId);
       return cachedUser;
     }
 
     // 캐시에 없는 경우 Firestore에서 조회
     const userDoc = await getDoc(doc(db, 'users', userId));
     if (!userDoc.exists()) {
-      console.warn('사용자를 찾을 수 없음:', userId);
+      logger.warn('사용자를 찾을 수 없음:', userId);
       return null;
     }
     
@@ -153,7 +154,7 @@ export const getUserById = async (userId: string): Promise<User | null> => {
     
     return userData;
   } catch (error) {
-    console.error('사용자 조회 실패:', error);
+    logger.error('사용자 조회 실패:', error);
     return null; // throw 대신 null 반환
   }
 };
@@ -181,7 +182,7 @@ export const getUserJobCodesInfo = async (
 
     return jobCodesInfo;
   } catch (error) {
-    console.error('직무 코드 정보 조회 실패:', error);
+    logger.error('직무 코드 정보 조회 실패:', error);
     throw error;
   }
 };
@@ -200,9 +201,9 @@ export const updateUser = async (
     
     // 캐시 무효화
     await removeCache(CACHE_STORE.USERS, userId);
-    console.log('✅ 사용자 정보 업데이트 완료 (캐시 무효화):', userId);
+    logger.info('✅ 사용자 정보 업데이트 완료 (캐시 무효화):', userId);
   } catch (error) {
-    console.error('사용자 업데이트 실패:', error);
+    logger.error('사용자 업데이트 실패:', error);
     throw error;
   }
 };
@@ -242,7 +243,7 @@ export const signIn = async (email: string, password: string) => {
       throw error;
     }
     // 네트워크 오류 등 예상치 못한 오류만 로그
-    console.error('로그인 실패:', error);
+    logger.error('로그인 실패:', error);
     throw error;
   }
 };
@@ -256,7 +257,7 @@ export const signUp = async (email: string, password: string) => {
     );
     return userCredential;
   } catch (error) {
-    console.error('회원가입 실패:', error);
+    logger.error('회원가입 실패:', error);
     throw error;
   }
 };
@@ -267,7 +268,7 @@ export const signUp = async (email: string, password: string) => {
  */
 export const signInWithCustomToken = async (userId: string, email: string) => {
   try {
-    console.log('🔑 Custom Token 생성 요청:', { userId, email });
+    logger.info('🔑 Custom Token 생성 요청:', { userId, email });
 
     // Firebase Functions를 통해 Custom Token 생성
     const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions');
@@ -282,20 +283,20 @@ export const signInWithCustomToken = async (userId: string, email: string) => {
     const result = await createCustomToken({ userId, email });
     
     const { customToken } = result.data as { customToken: string };
-    console.log('✅ Custom Token 획득');
+    logger.info('✅ Custom Token 획득');
 
     // Custom Token으로 Firebase Auth 로그인
     const { signInWithCustomToken: firebaseSignInWithCustomToken } = await import('firebase/auth');
     const userCredential = await firebaseSignInWithCustomToken(auth, customToken);
 
-    console.log('✅ Custom Token 로그인 성공:', {
+    logger.info('✅ Custom Token 로그인 성공:', {
       uid: userCredential.user.uid,
       email: userCredential.user.email,
     });
 
     return userCredential;
   } catch (error) {
-    console.error('❌ Custom Token 로그인 실패:', error);
+    logger.error('❌ Custom Token 로그인 실패:', error);
     throw error;
   }
 };
@@ -305,7 +306,7 @@ export const sendVerificationEmail = async (user: FirebaseUser) => {
     await sendEmailVerification(user);
     return true;
   } catch (error) {
-    console.error('이메일 인증 메일 발송 실패:', error);
+    logger.error('이메일 인증 메일 발송 실패:', error);
     throw error;
   }
 };
@@ -320,10 +321,10 @@ export const resetPassword = async (email: string) => {
 
     // 2. 비밀번호 재설정 메일 발송
     await sendPasswordResetEmail(auth, email);
-    console.log('비밀번호 재설정 메일 발송 성공:', email);
+    logger.info('비밀번호 재설정 메일 발송 성공:', email);
     return true;
   } catch (error: any) {
-    console.error('비밀번호 재설정 메일 발송 실패:', error);
+    logger.error('비밀번호 재설정 메일 발송 실패:', error);
     
     // Firebase Auth 에러 코드 처리
     if (error?.code === 'auth/user-not-found') {
@@ -343,7 +344,7 @@ export const signOut = async () => {
     // "로그인 저장" 기능은 유지하되, 로그아웃 시에는 세션을 완전히 종료
     // 다음 로그인 시 다시 "로그인 저장"을 선택할 수 있음
   } catch (error) {
-    console.error('로그아웃 실패:', error);
+    logger.error('로그아웃 실패:', error);
     throw error;
   }
 };

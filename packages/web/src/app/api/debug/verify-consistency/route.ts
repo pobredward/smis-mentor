@@ -1,11 +1,20 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const db = getAdminFirestore();
     const auth = getAdminAuth();
-    console.log('🔍 Firebase Auth ↔ Firestore 일관성 검증 시작...');
+    logger.info('🔍 Firebase Auth ↔ Firestore 일관성 검증 시작...');
 
     // 1. 모든 Firestore 사용자 조회
     const usersSnapshot = await db.collection('users').get();
@@ -25,7 +34,7 @@ export async function GET() {
       });
     });
 
-    console.log(`📊 Firestore 사용자 수: ${firestoreUsers.size}`);
+    logger.info(`📊 Firestore 사용자 수: ${firestoreUsers.size}`);
 
     // 2. 모든 Firebase Auth 사용자 조회 (페이징)
     const authUsers = new Map<string, any>();
@@ -48,7 +57,7 @@ export async function GET() {
       nextPageToken = listUsersResult.pageToken;
     } while (nextPageToken);
 
-    console.log(`📊 Firebase Auth 사용자 수: ${authUsers.size}`);
+    logger.info(`📊 Firebase Auth 사용자 수: ${authUsers.size}`);
 
     // 3. 일관성 분석 (모든 사용자 포함)
     const allUsers: any[] = [];
@@ -171,14 +180,14 @@ export async function GET() {
       orphanedAuthUsers,
     };
 
-    console.log('✅ 검증 완료:', result.summary);
+    logger.info('✅ 검증 완료:', result.summary);
 
     return NextResponse.json({
       success: true,
       ...result,
     });
   } catch (error: any) {
-    console.error('❌ 검증 실패:', error);
+    logger.error('❌ 검증 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

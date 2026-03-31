@@ -1,15 +1,24 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
 /**
  * evaluations 컬렉션의 refUserId, evaluatorId를 구 Document ID → 새 Auth UID로 마이그레이션
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const db = getAdminFirestore();
     const { dryRun = true } = await request.json();
     
-    console.log(`🔄 evaluations 참조 필드 마이그레이션 시작 (dryRun: ${dryRun})...`);
+    logger.info(`🔄 evaluations 참조 필드 마이그레이션 시작 (dryRun: ${dryRun})...`);
     
     // 1. 백업 컬렉션에서 ID 매핑 데이터 로드
     const mappingsSnapshot = await db.collection('user_id_mappings_backup').get();
@@ -34,11 +43,11 @@ export async function POST(request: Request) {
       }
     }
     
-    console.log(`📊 매핑 데이터: ${oldIdToNewId.size}개 사용자`);
+    logger.info(`📊 매핑 데이터: ${oldIdToNewId.size}개 사용자`);
     
     // 2. evaluations 컬렉션 조회
     const evaluationsSnapshot = await db.collection('evaluations').get();
-    console.log(`📊 총 ${evaluationsSnapshot.size}개 평가 문서 발견`);
+    logger.info(`📊 총 ${evaluationsSnapshot.size}개 평가 문서 발견`);
     
     let needUpdateCount = 0;
     let alreadyUpdatedCount = 0;
@@ -56,7 +65,7 @@ export async function POST(request: Request) {
       const currentEvaluatorId = evalData.evaluatorId;
       
       if (!currentRefUserId) {
-        console.warn(`⚠️ refUserId 없음: ${evalDoc.id}`);
+        logger.warn(`⚠️ refUserId 없음: ${evalDoc.id}`);
         continue;
       }
       
@@ -91,7 +100,7 @@ export async function POST(request: Request) {
       }
       
       if (status === 'NOT_FOUND') {
-        console.warn(`❌ 매핑 없음 (평가 ID: ${evalDoc.id}):`, issues.join(', '));
+        logger.warn(`❌ 매핑 없음 (평가 ID: ${evalDoc.id}):`, issues.join(', '));
       }
       
       needUpdateCount++;
@@ -110,7 +119,7 @@ export async function POST(request: Request) {
       });
     }
     
-    console.log(`
+    logger.info(`
 📊 분석 결과:
   - 업데이트 필요: ${needUpdateCount}개
   - 이미 업데이트됨: ${alreadyUpdatedCount}개
@@ -120,7 +129,7 @@ export async function POST(request: Request) {
     
     // 4. Dry Run이 아니면 실제 업데이트 실행
     if (!dryRun && needUpdateCount > 0) {
-      console.log('🚀 실제 업데이트 시작...');
+      logger.info('🚀 실제 업데이트 시작...');
       
       let updateSuccessCount = 0;
       let updateErrorCount = 0;
@@ -170,15 +179,15 @@ export async function POST(request: Request) {
               evaluationId: item.evaluationId,
               error: error.message,
             });
-            console.error(`❌ 업데이트 실패 (${item.evaluationId}):`, error);
+            logger.error(`❌ 업데이트 실패 (${item.evaluationId}):`, error);
           }
         }
         
         await batch.commit();
-        console.log(`  ✅ ${i + chunk.length}/${needUpdateItems.length} 업데이트 완료`);
+        logger.info(`  ✅ ${i + chunk.length}/${needUpdateItems.length} 업데이트 완료`);
       }
       
-      console.log('✅ 마이그레이션 완료!');
+      logger.info('✅ 마이그레이션 완료!');
       
       return NextResponse.json({
         success: true,
@@ -215,7 +224,7 @@ export async function POST(request: Request) {
     }
     
   } catch (error: any) {
-    console.error('❌ 마이그레이션 실패:', error);
+    logger.error('❌ 마이그레이션 실패:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -304,7 +313,7 @@ export async function GET() {
     });
     
   } catch (error: any) {
-    console.error('❌ 상태 조회 실패:', error);
+    logger.error('❌ 상태 조회 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

@@ -1,10 +1,19 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const db = getAdminFirestore();
-    console.log('🔍 userId 참조 관계 분석 중...');
+    logger.info('🔍 userId 참조 관계 분석 중...');
 
     const collections = [
       'jobExperiences',
@@ -64,7 +73,7 @@ export async function GET() {
       references,
     });
   } catch (error: any) {
-    console.error('❌ 분석 실패:', error);
+    logger.error('❌ 분석 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

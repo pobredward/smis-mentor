@@ -36,6 +36,8 @@ import {
 import { db, auth, storage } from './firebase';
 import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup, Review, JobExperienceGroupRole } from '@/types';
 import { getCache, setCache, CACHE_STORE, CACHE_TTL, getCacheCollection, setCacheCollection, removeCache, clearCacheCollection } from './cacheUtils';
+import { logger } from '@smis-mentor/shared';
+import { authenticatedGet, authenticatedPost } from './apiClient';
 
 // User 관련 함수
 export const createUser = async (userData: Omit<User, 'userId' | 'id'>, userId?: string) => {
@@ -65,21 +67,21 @@ export const getUserById = async (userId: string) => {
   try {
     // userId 유효성 검사
     if (!userId || typeof userId !== 'string') {
-      console.error('유효하지 않은 userId:', userId);
+      logger.error('유효하지 않은 userId:', userId);
       return null;
     }
 
     // 캐시에서 데이터 확인
     const cachedUser = await getCache<User>(CACHE_STORE.USERS, userId);
     if (cachedUser) {
-      console.log('캐시에서 사용자 정보 로드:', userId);
+      logger.info('캐시에서 사용자 정보 로드:', userId);
       return cachedUser;
     }
 
     // 캐시에 없는 경우 Firestore에서 조회
     const userDoc = await getDoc(doc(db, 'users', userId));
     if (!userDoc.exists()) {
-      console.warn('사용자를 찾을 수 없음:', userId);
+      logger.warn('사용자를 찾을 수 없음:', userId);
       return null;
     }
     
@@ -90,7 +92,7 @@ export const getUserById = async (userId: string) => {
     
     return userData;
   } catch (error) {
-    console.error('사용자 정보 가져오기 실패:', error);
+    logger.error('사용자 정보 가져오기 실패:', error);
     return null; // throw 대신 null 반환
   }
 };
@@ -99,7 +101,7 @@ export const getUserByEmail = async (email: string) => {
   try {
     // email 유효성 검사
     if (!email || typeof email !== 'string') {
-      console.error('유효하지 않은 email:', email);
+      logger.error('유효하지 않은 email:', email);
       return null;
     }
 
@@ -115,13 +117,13 @@ export const getUserByEmail = async (email: string) => {
     
     // deleted만 있거나 사용자가 없는 경우
     if (activeUsers.length === 0) {
-      console.log('📍 삭제된 사용자만 존재 - null 반환');
+      logger.info('📍 삭제된 사용자만 존재 - null 반환');
       return null;
     }
     
     // 여러 사용자가 있는 경우 우선순위: active > temp > inactive
     if (activeUsers.length > 1) {
-      console.warn('⚠️ 동일한 이메일로 여러 사용자 발견 (deleted 제외):', {
+      logger.warn('⚠️ 동일한 이메일로 여러 사용자 발견 (deleted 제외):', {
         email,
         count: activeUsers.length,
       });
@@ -135,7 +137,7 @@ export const getUserByEmail = async (email: string) => {
     
     return activeUsers[0].data() as User;
   } catch (error) {
-    console.error('이메일로 사용자 조회 실패:', error);
+    logger.error('이메일로 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -143,7 +145,7 @@ export const getUserByEmail = async (email: string) => {
 // authProviders에서 소셜 제공자로 사용자 조회
 export const getUserBySocialProvider = async (providerId: string, providerUid: string) => {
   try {
-    console.log('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
+    logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
     
     // Firestore에서 authProviders 배열을 검색할 수 없으므로
     // 모든 active 사용자를 가져와서 클라이언트에서 필터링
@@ -166,7 +168,7 @@ export const getUserBySocialProvider = async (providerId: string, providerUid: s
       });
       
       if (matchedProvider) {
-        console.log('✅ 소셜 제공자로 사용자 발견:', {
+        logger.info('✅ 소셜 제공자로 사용자 발견:', {
           userId: userData.userId,
           email: userData.email,
           providerId: matchedProvider.providerId,
@@ -175,10 +177,10 @@ export const getUserBySocialProvider = async (providerId: string, providerUid: s
       }
     }
     
-    console.log('❌ 소셜 제공자로 사용자를 찾을 수 없음');
+    logger.info('❌ 소셜 제공자로 사용자를 찾을 수 없음');
     return null;
   } catch (error) {
-    console.error('소셜 제공자로 사용자 조회 실패:', error);
+    logger.error('소셜 제공자로 사용자 조회 실패:', error);
     return null;
   }
 };
@@ -188,7 +190,7 @@ export const getUserByPhoneIncludeDeleted = async (phoneNumber: string) => {
   try {
     // phoneNumber 유효성 검사
     if (!phoneNumber || typeof phoneNumber !== 'string') {
-      console.error('유효하지 않은 phoneNumber:', phoneNumber);
+      logger.error('유효하지 않은 phoneNumber:', phoneNumber);
       return null;
     }
 
@@ -200,7 +202,7 @@ export const getUserByPhoneIncludeDeleted = async (phoneNumber: string) => {
     const statusPriority = { active: 1, temp: 2, inactive: 3, deleted: 4 };
     
     if (querySnapshot.docs.length > 1) {
-      console.warn('⚠️ 동일한 전화번호로 여러 사용자 발견:', {
+      logger.warn('⚠️ 동일한 전화번호로 여러 사용자 발견:', {
         phoneNumber,
         count: querySnapshot.docs.length,
         users: querySnapshot.docs.map(doc => ({
@@ -223,7 +225,7 @@ export const getUserByPhoneIncludeDeleted = async (phoneNumber: string) => {
     
     return querySnapshot.docs[0].data() as User;
   } catch (error) {
-    console.error('전화번호로 사용자 조회 실패 (deleted 포함):', error);
+    logger.error('전화번호로 사용자 조회 실패 (deleted 포함):', error);
     throw error;
   }
 };
@@ -232,7 +234,7 @@ export const getUserByPhone = async (phoneNumber: string) => {
   try {
     // phoneNumber 유효성 검사
     if (!phoneNumber || typeof phoneNumber !== 'string') {
-      console.error('유효하지 않은 phoneNumber:', phoneNumber);
+      logger.error('유효하지 않은 phoneNumber:', phoneNumber);
       return null;
     }
 
@@ -248,13 +250,13 @@ export const getUserByPhone = async (phoneNumber: string) => {
     
     // deleted만 있거나 사용자가 없는 경우
     if (activeUsers.length === 0) {
-      console.log('📍 삭제된 사용자만 존재 - null 반환');
+      logger.info('📍 삭제된 사용자만 존재 - null 반환');
       return null;
     }
     
     // 여러 사용자가 있는 경우 (데이터 무결성 문제)
     if (activeUsers.length > 1) {
-      console.warn('⚠️ 동일한 전화번호로 여러 사용자 발견 (deleted 제외):', {
+      logger.warn('⚠️ 동일한 전화번호로 여러 사용자 발견 (deleted 제외):', {
         phoneNumber,
         count: activeUsers.length,
         users: activeUsers.map(doc => ({
@@ -267,25 +269,25 @@ export const getUserByPhone = async (phoneNumber: string) => {
       // active 사용자 우선 반환
       const activeUser = activeUsers.find(doc => doc.data().status === 'active');
       if (activeUser) {
-        console.log('✅ active 사용자 반환');
+        logger.info('✅ active 사용자 반환');
         return activeUser.data() as User;
       }
       
       // temp 사용자 우선 반환
       const tempUser = activeUsers.find(doc => doc.data().status === 'temp');
       if (tempUser) {
-        console.log('✅ temp 사용자 반환');
+        logger.info('✅ temp 사용자 반환');
         return tempUser.data() as User;
       }
       
       // 그 외 첫 번째 사용자 반환 (inactive 등)
-      console.log('⚠️ inactive 사용자 반환');
+      logger.info('⚠️ inactive 사용자 반환');
       return activeUsers[0].data() as User;
     }
     
     return activeUsers[0].data() as User;
   } catch (error) {
-    console.error('전화번호로 사용자 조회 실패:', error);
+    logger.error('전화번호로 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -295,7 +297,7 @@ export const getUserByForeignName = async (firstName: string, lastName: string) 
   try {
     // 이름 유효성 검사
     if (!firstName || !lastName || typeof firstName !== 'string' || typeof lastName !== 'string') {
-      console.error('유효하지 않은 이름:', { firstName, lastName });
+      logger.error('유효하지 않은 이름:', { firstName, lastName });
       return null;
     }
 
@@ -317,13 +319,13 @@ export const getUserByForeignName = async (firstName: string, lastName: string) 
     
     // deleted만 있거나 사용자가 없는 경우
     if (activeUsers.length === 0) {
-      console.log('📍 삭제된 사용자만 존재 - null 반환');
+      logger.info('📍 삭제된 사용자만 존재 - null 반환');
       return null;
     }
     
     // 여러 사용자가 있는 경우 우선순위: active > temp > inactive
     if (activeUsers.length > 1) {
-      console.warn('⚠️ 동일한 이름으로 여러 원어민 사용자 발견 (deleted 제외):', {
+      logger.warn('⚠️ 동일한 이름으로 여러 원어민 사용자 발견 (deleted 제외):', {
         firstName,
         lastName,
         count: activeUsers.length,
@@ -338,7 +340,7 @@ export const getUserByForeignName = async (firstName: string, lastName: string) 
     
     return activeUsers[0].data() as User;
   } catch (error) {
-    console.error('원어민 이름으로 사용자 조회 실패:', error);
+    logger.error('원어민 이름으로 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -397,7 +399,7 @@ export const updateUserActiveJobCode = async (userId: string, jobCodeId: string)
     // 해당 사용자 캐시 삭제
     await clearUserCache(userId);
   } catch (error) {
-    console.error('activeJobExperienceId 업데이트 실패:', error);
+    logger.error('activeJobExperienceId 업데이트 실패:', error);
     throw error;
   }
 };
@@ -426,16 +428,16 @@ export const deactivateUser = async (userId: string) => {
     if (auth.currentUser && auth.currentUser.email === userData.email) {
       try {
         await deleteAuthUser(auth.currentUser);
-        console.log('Firebase Authentication 계정이 삭제되었습니다.');
+        logger.info('Firebase Authentication 계정이 삭제되었습니다.');
       } catch (authError) {
-        console.error('Firebase Authentication 계정 삭제 실패:', authError);
+        logger.error('Firebase Authentication 계정 삭제 실패:', authError);
         // Authentication 오류는 무시하고 Firestore 업데이트는 진행
       }
     }
     
     return true;
   } catch (error) {
-    console.error('사용자 비활성화 실패:', error);
+    logger.error('사용자 비활성화 실패:', error);
     throw error;
   }
 };
@@ -452,11 +454,11 @@ export const getDeletedUsers = async () => {
       users.push(doc.data() as User);
     });
     
-    console.log(`✅ 삭제된 사용자 조회 완료: ${users.length}명`);
+    logger.info(`✅ 삭제된 사용자 조회 완료: ${users.length}명`);
     
     return users;
   } catch (error) {
-    console.error('삭제된 사용자 조회 실패:', error);
+    logger.error('삭제된 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -468,19 +470,12 @@ export const checkUserData = async (userId: string) => {
       throw new Error('인증이 필요합니다.');
     }
 
-    const response = await fetch(`/api/admin/check-user-data?userId=${userId}&adminUserId=${auth.currentUser.uid}`);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || '데이터 확인에 실패했습니다.');
-    }
-
-    const result = await response.json();
-    console.log('✅ 사용자 데이터 확인:', result);
+    const result = await authenticatedGet<any>(`/api/admin/check-user-data?userId=${userId}`);
+    logger.info('✅ 사용자 데이터 확인:', result);
     
     return result;
   } catch (error) {
-    console.error('사용자 데이터 확인 실패:', error);
+    logger.error('사용자 데이터 확인 실패:', error);
     throw error;
   }
 };
@@ -512,7 +507,7 @@ export const reactivateUser = async (userId: string) => {
       throw new Error('복구할 이메일 정보를 찾을 수 없습니다.');
     }
     
-    console.log(`✅ 사용자 복구 시작: ${originalName} (${originalEmail})`);
+    logger.info(`✅ 사용자 복구 시작: ${originalName} (${originalEmail})`);
     
     // 3. Firebase Auth 계정 재생성 (삭제된 경우)
     const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-2).toUpperCase() + '!';
@@ -523,27 +518,27 @@ export const reactivateUser = async (userId: string) => {
     try {
       // 임시 로그아웃
       if (currentUserBackup) {
-        console.log('기존 로그인 상태 백업');
+        logger.info('기존 로그인 상태 백업');
         await firebaseSignOut(auth);
       }
       
       // Auth 계정 생성 시도
       try {
-        console.log(`Firebase Auth 계정 재생성 시도: ${originalEmail}`);
+        logger.info(`Firebase Auth 계정 재생성 시도: ${originalEmail}`);
         await createUserWithEmailAndPassword(auth, originalEmail, tempPassword);
-        console.log('✅ Firebase Auth 계정 생성 완료');
+        logger.info('✅ Firebase Auth 계정 생성 완료');
         
         // 비밀번호 재설정 이메일 전송
         await sendPasswordResetEmail(auth, originalEmail);
-        console.log('✅ 비밀번호 재설정 이메일 전송 완료');
+        logger.info('✅ 비밀번호 재설정 이메일 전송 완료');
         
       } catch (createError) {
         if (createError instanceof FirebaseError && createError.code === 'auth/email-already-in-use') {
-          console.log('⚠️ 이미 Firebase Auth 계정이 존재합니다 (정상 복구 가능)');
+          logger.info('⚠️ 이미 Firebase Auth 계정이 존재합니다 (정상 복구 가능)');
           // 비밀번호 재설정 이메일만 전송
           await sendPasswordResetEmail(auth, originalEmail);
         } else {
-          console.warn('⚠️ Firebase Auth 계정 생성 실패 (Firestore는 복구됨):', createError);
+          logger.warn('⚠️ Firebase Auth 계정 생성 실패 (Firestore는 복구됨):', createError);
         }
       }
       
@@ -551,7 +546,7 @@ export const reactivateUser = async (userId: string) => {
       await firebaseSignOut(auth);
       
     } catch (authError) {
-      console.warn('⚠️ Firebase Auth 복구 중 오류 (Firestore는 복구 진행):', authError);
+      logger.warn('⚠️ Firebase Auth 복구 중 오류 (Firestore는 복구 진행):', authError);
     }
     
     // 4. Firestore 사용자 문서 복원
@@ -565,46 +560,31 @@ export const reactivateUser = async (userId: string) => {
       deletedBy: null,
     });
     
-    console.log('✅ 사용자 복구 완료');
+    logger.info('✅ 사용자 복구 완료');
     
     return true;
   } catch (error) {
-    console.error('❌ 사용자 재활성화 실패:', error);
+    logger.error('❌ 사용자 재활성화 실패:', error);
     throw error;
   }
 };
 
 export const deleteUser = async (userId: string, deleteType: 'soft' | 'hard' = 'soft') => {
   try {
-    // 현재 로그인한 관리자 확인
     if (!auth.currentUser) {
       throw new Error('인증이 필요합니다.');
     }
 
-    // Admin API Route 호출
-    const response = await fetch('/api/admin/delete-user', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        userId,
-        adminUserId: auth.currentUser.uid,
-        deleteType,
-      }),
+    const result = await authenticatedPost<any>('/api/admin/delete-user', {
+      userId,
+      deleteType,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || '사용자 삭제에 실패했습니다.');
-    }
-
-    const result = await response.json();
-    console.log(`✅ 사용자 ${deleteType === 'hard' ? '영구' : '일반'} 삭제 성공:`, result);
+    logger.info(`✅ 사용자 ${deleteType === 'hard' ? '영구' : '일반'} 삭제 성공:`, result);
     
     return true;
   } catch (error) {
-    console.error('사용자 삭제 실패:', error);
+    logger.error('사용자 삭제 실패:', error);
     throw error;
   }
 };
@@ -613,8 +593,8 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
   try {
     if (!jobExperiences || jobExperiences.length === 0) return [];
     
-    // console.log('=== getUserJobCodesInfo 호출 ===');
-    // console.log('검색할 jobExperiences:', jobExperiences);
+    // logger.info('=== getUserJobCodesInfo 호출 ===');
+    // logger.info('검색할 jobExperiences:', jobExperiences);
     
     // 배열 형식 확인 및 ID 추출
     const jobIds = jobExperiences.map(exp => {
@@ -638,7 +618,7 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
         const jobCodeDoc = await getDoc(doc(db, 'jobCodes', idOrCode));
         
         if (jobCodeDoc.exists()) {
-          // console.log(`'${idOrCode}'는 jobCodes 컬렉션의 문서 ID입니다.`);
+          // logger.info(`'${idOrCode}'는 jobCodes 컬렉션의 문서 ID입니다.`);
           
           // 그룹 정보와 함께 반환
           return {
@@ -653,7 +633,7 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
         const jobExperienceDoc = await getDoc(doc(db, 'jobExperiences', idOrCode));
         
         if (jobExperienceDoc.exists()) {
-          // console.log(`'${idOrCode}'는 jobExperiences 컬렉션의 문서 ID입니다.`);
+          // logger.info(`'${idOrCode}'는 jobExperiences 컬렉션의 문서 ID입니다.`);
           // jobExperiences 컬렉션에 문서가 존재하는 경우 (기존 로직)
           const jobExperience = { 
             jobExperienceId: idOrCode,
@@ -669,17 +649,17 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
           
           const jobCodeSnapshot = await getDocs(jobCodeQuery);
           if (!jobCodeSnapshot.empty) {
-            console.log(`jobExperience에서 참조하는 JobCode 찾음: ${jobExperience.refGeneration}-${jobExperience.refCode}`);
+            logger.info(`jobExperience에서 참조하는 JobCode 찾음: ${jobExperience.refGeneration}-${jobExperience.refCode}`);
             return {
               id: jobCodeSnapshot.docs[0].id,
               ...jobCodeSnapshot.docs[0].data() as JobCode,
               group
             } as JobCodeWithGroup;
           } else {
-            console.log(`jobExperience가 참조하는 JobCode를 찾을 수 없음: ${jobExperience.refGeneration}-${jobExperience.refCode}`);
+            logger.info(`jobExperience가 참조하는 JobCode를 찾을 수 없음: ${jobExperience.refGeneration}-${jobExperience.refCode}`);
           }
         } else {
-          console.log(`'${idOrCode}'는 직접 코드로 간주하고 검색합니다.`);
+          logger.info(`'${idOrCode}'는 직접 코드로 간주하고 검색합니다.`);
           // 2.2. jobExperiences 컬렉션에 없는 경우, idOrCode를 직접 코드로 간주하고 검색
           const jobCodeQuery = query(
             collection(db, 'jobCodes'),
@@ -692,19 +672,19 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
           const jobCodeSnapshot = await getDocs(jobCodeQuery);
           if (!jobCodeSnapshot.empty) {
             const jobCode = jobCodeSnapshot.docs[0].data() as JobCode;
-            console.log(`코드 '${idOrCode}'에 해당하는 JobCode 찾음: ${jobCode.generation}-${jobCode.code}`);
+            logger.info(`코드 '${idOrCode}'에 해당하는 JobCode 찾음: ${jobCode.generation}-${jobCode.code}`);
             return {
               id: jobCodeSnapshot.docs[0].id,
               ...jobCode,
               group
             } as JobCodeWithGroup;
           } else {
-            console.log(`코드 '${idOrCode}'에 해당하는 JobCode를 찾을 수 없음`);
+            logger.info(`코드 '${idOrCode}'에 해당하는 JobCode를 찾을 수 없음`);
           }
         }
         return null;
       } catch (error) {
-        console.error('직무 코드 정보 가져오기 오류:', error);
+        logger.error('직무 코드 정보 가져오기 오류:', error);
         return null;
       }
     });
@@ -715,7 +695,7 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
     // null 값 제거 및 결과 반환
     return results.filter((result): result is JobCodeWithGroup => result !== null);
   } catch (error) {
-    console.error('직무 코드 정보 가져오기 오류:', error);
+    logger.error('직무 코드 정보 가져오기 오류:', error);
     return [];
   }
 };
@@ -746,7 +726,7 @@ export const getAllJobBoards = async () => {
     // 캐시에서 데이터 확인
     const cachedJobBoards = await getCacheCollection<JobBoardWithId>(CACHE_STORE.JOB_BOARDS);
     if (cachedJobBoards) {
-      console.log('캐시에서 공고 목록 로드, 총', cachedJobBoards.length, '개');
+      logger.info('캐시에서 공고 목록 로드, 총', cachedJobBoards.length, '개');
       return cachedJobBoards;
     }
 
@@ -771,7 +751,7 @@ export const getAllJobBoards = async () => {
     
     return jobBoards;
   } catch (error) {
-    console.error('모든 공고 조회 실패:', error);
+    logger.error('모든 공고 조회 실패:', error);
     throw error;
   }
 };
@@ -789,7 +769,7 @@ export const getActiveJobBoards = async () => {
         // 캐시에서 status가 active인 데이터만 필터링
         const activeBoards = cachedData.filter(board => board.status === 'active');
         if (activeBoards.length > 0) {
-          console.log('캐시에서 활성화 공고 목록 로드, 총', activeBoards.length, '개');
+          logger.info('캐시에서 활성화 공고 목록 로드, 총', activeBoards.length, '개');
           return activeBoards;
         }
       }
@@ -844,7 +824,7 @@ export const getActiveJobBoards = async () => {
     
     return jobBoards;
   } catch (error) {
-    console.error('활성화된 공고 조회 실패:', error);
+    logger.error('활성화된 공고 조회 실패:', error);
     throw error;
   }
 };
@@ -874,7 +854,7 @@ export const createApplication = async (applicationData: Omit<ApplicationHistory
       applicationHistoryId: docRef.id 
     });
   } catch (error) {
-    console.error('지원서 생성 실패:', error);
+    logger.error('지원서 생성 실패:', error);
     throw error;
   }
 };
@@ -898,7 +878,7 @@ export const getApplicationsByUserId = async (userId: string) => {
       b.applicationDate.seconds - a.applicationDate.seconds
     );
   } catch (error) {
-    console.error('지원 내역 조회 오류:', error);
+    logger.error('지원 내역 조회 오류:', error);
     throw error;
   }
 };
@@ -922,7 +902,7 @@ export const getApplicationsByJobBoardId = async (jobBoardId: string) => {
       b.applicationDate.seconds - a.applicationDate.seconds
     );
   } catch (error) {
-    console.error(`공고 ID(${jobBoardId}) 지원 내역 조회 오류:`, error);
+    logger.error(`공고 ID(${jobBoardId}) 지원 내역 조회 오류:`, error);
     throw error;
   }
 };
@@ -945,7 +925,7 @@ export const cancelApplication = async (applicationId: string) => {
     await deleteDoc(applicationRef);
     return true;
   } catch (error) {
-    console.error('지원 취소 실패:', error);
+    logger.error('지원 취소 실패:', error);
     throw error;
   }
 };
@@ -973,7 +953,7 @@ export const signIn = async (email: string, password: string) => {
     }
     return userCredential.user;
   } catch (error) {
-    console.error('로그인 실패:', error);
+    logger.error('로그인 실패:', error);
     throw error;
   }
 };
@@ -983,7 +963,7 @@ export const signUp = async (email: string, password: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     return userCredential;
   } catch (error) {
-    console.error('회원가입 실패:', error);
+    logger.error('회원가입 실패:', error);
     throw error;
   }
 };
@@ -993,7 +973,7 @@ export const sendVerificationEmail = async (user: FirebaseUser) => {
     await sendEmailVerification(user);
     return true;
   } catch (error) {
-    console.error('이메일 인증 메일 발송 실패:', error);
+    logger.error('이메일 인증 메일 발송 실패:', error);
     throw error;
   }
 };
@@ -1008,10 +988,10 @@ export const resetPassword = async (email: string) => {
 
     // 2. 비밀번호 재설정 메일 발송
     await sendPasswordResetEmail(auth, email);
-    console.log('비밀번호 재설정 이메일 발송 성공:', email);
+    logger.info('비밀번호 재설정 이메일 발송 성공:', email);
     return true;
   } catch (error: any) {
-    console.error('비밀번호 재설정 이메일 발송 실패:', error);
+    logger.error('비밀번호 재설정 이메일 발송 실패:', error);
     
     // Firebase Auth 에러 코드 처리
     if (error?.code === 'auth/user-not-found') {
@@ -1027,7 +1007,7 @@ export const updateUserProfile = async (user: FirebaseUser, displayName?: string
     await updateProfile(user, { displayName, photoURL });
     return true;
   } catch (error) {
-    console.error('사용자 프로필 업데이트 실패:', error);
+    logger.error('사용자 프로필 업데이트 실패:', error);
     throw error;
   }
 };
@@ -1038,7 +1018,7 @@ export const signInWithCustomTokenFromFunction = async (
   existingUid?: string // 기존 Firebase Auth UID (있으면 재사용)
 ) => {
   try {
-    console.log('🔑 Custom Token 생성 요청:', {
+    logger.info('🔑 Custom Token 생성 요청:', {
       userId,
       email,
       existingUid: existingUid ? `${existingUid.substring(0, 8)}...` : 'none',
@@ -1068,14 +1048,14 @@ export const signInWithCustomTokenFromFunction = async (
     const authModule = await import('firebase/auth');
     const userCredential = await authModule.signInWithCustomToken(auth, customToken);
     
-    console.log('✅ Custom Token 로그인 성공:', {
+    logger.info('✅ Custom Token 로그인 성공:', {
       uid: userCredential.user.uid,
       uidMatch: existingUid ? userCredential.user.uid === existingUid : 'N/A',
     });
     
     return userCredential;
   } catch (error) {
-    console.error('Custom Token 로그인 실패:', error);
+    logger.error('Custom Token 로그인 실패:', error);
     throw error;
   }
 };
@@ -1093,7 +1073,7 @@ export const signOut = async () => {
     
     return true;
   } catch (error) {
-    console.error('로그아웃 실패:', error);
+    logger.error('로그아웃 실패:', error);
     throw error;
   }
 };
@@ -1123,7 +1103,7 @@ export const uploadProfileImage = async (
         (snapshot) => {
           // 업로드 진행 상태 (필요시 사용)
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log(`업로드 진행률: ${progress}%`);
+          logger.info(`업로드 진행률: ${progress}%`);
           // 진행률 콜백 호출
           if (onProgress) {
             onProgress(progress);
@@ -1131,7 +1111,7 @@ export const uploadProfileImage = async (
         },
         (error) => {
           // 업로드 실패
-          console.error('이미지 업로드 오류:', error);
+          logger.error('이미지 업로드 오류:', error);
           reject(error);
         },
         async () => {
@@ -1148,7 +1128,7 @@ export const uploadProfileImage = async (
               await deleteObject(oldImageRef);
             } catch (error) {
               // 이전 이미지 삭제 실패해도 진행
-              console.error('이전 이미지 삭제 오류:', error);
+              logger.error('이전 이미지 삭제 오류:', error);
             }
           }
           
@@ -1157,7 +1137,7 @@ export const uploadProfileImage = async (
       );
     });
   } catch (error) {
-    console.error('프로필 이미지 업로드 실패:', error);
+    logger.error('프로필 이미지 업로드 실패:', error);
     throw error;
   }
 };
@@ -1183,7 +1163,7 @@ export const uploadForeignCV = async (
           }
         },
         (error) => {
-          console.error('CV 업로드 오류:', error);
+          logger.error('CV 업로드 오류:', error);
           reject(error);
         },
         async () => {
@@ -1193,7 +1173,7 @@ export const uploadForeignCV = async (
       );
     });
   } catch (error) {
-    console.error('CV 업로드 실패:', error);
+    logger.error('CV 업로드 실패:', error);
     throw error;
   }
 };
@@ -1218,7 +1198,7 @@ export const uploadForeignPassportPhoto = async (
           }
         },
         (error) => {
-          console.error('여권 사진 업로드 오류:', error);
+          logger.error('여권 사진 업로드 오류:', error);
           reject(error);
         },
         async () => {
@@ -1228,7 +1208,7 @@ export const uploadForeignPassportPhoto = async (
       );
     });
   } catch (error) {
-    console.error('여권 사진 업로드 실패:', error);
+    logger.error('여권 사진 업로드 실패:', error);
     throw error;
   }
 };
@@ -1253,7 +1233,7 @@ export const uploadForeignIdCard = async (
           }
         },
         (error) => {
-          console.error('외국인 ID 카드 업로드 오류:', error);
+          logger.error('외국인 ID 카드 업로드 오류:', error);
           reject(error);
         },
         async () => {
@@ -1263,7 +1243,7 @@ export const uploadForeignIdCard = async (
       );
     });
   } catch (error) {
-    console.error('외국인 ID 카드 업로드 실패:', error);
+    logger.error('외국인 ID 카드 업로드 실패:', error);
     throw error;
   }
 };
@@ -1334,7 +1314,7 @@ export const createTempUser = async (
     
     return { success: true };
   } catch (error) {
-    console.error('임시 사용자 생성 오류:', error);
+    logger.error('임시 사용자 생성 오류:', error);
     throw error;
   }
 };
@@ -1357,11 +1337,11 @@ export const getAllUsers = async (includeDeleted: boolean = false) => {
       users.push(doc.data() as User);
     });
     
-    console.log(`✅ 사용자 조회 완료: ${users.length}명 (삭제된 사용자 ${includeDeleted ? '포함' : '제외'})`);
+    logger.info(`✅ 사용자 조회 완료: ${users.length}명 (삭제된 사용자 ${includeDeleted ? '포함' : '제외'})`);
     
     return users;
   } catch (error) {
-    console.error('모든 사용자 조회 실패:', error);
+    logger.error('모든 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -1432,7 +1412,7 @@ export const getUsersByJobCode = async (generation: string, code: string) => {
     
     return users;
   } catch (error) {
-    console.error('직무 코드별 사용자 조회 실패:', error);
+    logger.error('직무 코드별 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -1449,7 +1429,7 @@ export const getAllJobCodes = async () => {
     // 캐시에서 데이터 확인
     const cachedJobCodes = await getCacheCollection<JobCodeWithId>(CACHE_STORE.JOB_CODES);
     if (cachedJobCodes) {
-      console.log('캐시에서 직무 코드 목록 로드, 총', cachedJobCodes.length, '개');
+      logger.info('캐시에서 직무 코드 목록 로드, 총', cachedJobCodes.length, '개');
       return cachedJobCodes;
     }
     
@@ -1465,7 +1445,7 @@ export const getAllJobCodes = async () => {
     
     return jobCodes;
   } catch (error) {
-    console.error('직무 코드 조회 실패:', error);
+    logger.error('직무 코드 조회 실패:', error);
     throw error;
   }
 };
@@ -1475,7 +1455,7 @@ export const createJobCode = async (jobCodeData: Omit<JobCode, 'id'>) => {
     const docRef = await addDoc(collection(db, 'jobCodes'), jobCodeData);
     return docRef.id;
   } catch (error) {
-    console.error('업무 코드 생성 실패:', error);
+    logger.error('업무 코드 생성 실패:', error);
     throw error;
   }
 };
@@ -1485,7 +1465,7 @@ export const deleteJobCode = async (jobCodeId: string) => {
     await deleteDoc(doc(db, 'jobCodes', jobCodeId));
     return true;
   } catch (error) {
-    console.error('업무 코드 삭제 실패:', error);
+    logger.error('업무 코드 삭제 실패:', error);
     throw error;
   }
 };
@@ -1495,7 +1475,7 @@ export const updateJobCode = async (jobCodeId: string, jobCodeData: Partial<JobC
     await updateDoc(doc(db, 'jobCodes', jobCodeId), jobCodeData);
     return true;
   } catch (error) {
-    console.error('업무 코드 업데이트 실패:', error);
+    logger.error('업무 코드 업데이트 실패:', error);
     throw error;
   }
 };
@@ -1513,7 +1493,7 @@ export const uploadImage = async (file: File): Promise<string> => {
     
     return downloadURL;
   } catch (error) {
-    console.error('이미지 업로드 오류:', error);
+    logger.error('이미지 업로드 오류:', error);
     throw new Error('이미지 업로드에 실패했습니다.');
   }
 };
@@ -1552,7 +1532,7 @@ export const addUserJobCode = async (
     await updateDoc(userRef, { jobExperiences: updatedJobExperiences });
     return updatedJobExperiences;
   } catch (error) {
-    console.error('직무 코드 추가 실패:', error);
+    logger.error('직무 코드 추가 실패:', error);
     throw error;
   }
 };
@@ -1571,7 +1551,7 @@ export const getReviews = async () => {
       ...doc.data(),
     }));
   } catch (error) {
-    console.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
+    logger.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
     throw error;
   }
 };
@@ -1588,7 +1568,7 @@ export const getReviewById = async (reviewId: string) => {
       throw new Error('해당 리뷰를 찾을 수 없습니다.');
     }
   } catch (error) {
-    console.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
+    logger.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
     throw error;
   }
 };
@@ -1605,7 +1585,7 @@ export const addReview = async (reviewData: Omit<Review, 'id' | 'createdAt' | 'u
     
     return reviewRef.id;
   } catch (error) {
-    console.error('리뷰를 추가하는 중 오류가 발생했습니다:', error);
+    logger.error('리뷰를 추가하는 중 오류가 발생했습니다:', error);
     throw error;
   }
 };
@@ -1621,7 +1601,7 @@ export const updateReview = async (reviewId: string, reviewData: Partial<Omit<Re
     
     return true;
   } catch (error) {
-    console.error('리뷰를 업데이트하는 중 오류가 발생했습니다:', error);
+    logger.error('리뷰를 업데이트하는 중 오류가 발생했습니다:', error);
     throw error;
   }
 };
@@ -1631,7 +1611,7 @@ export const deleteReview = async (reviewId: string) => {
     await deleteDoc(doc(db, 'reviews', reviewId));
     return true;
   } catch (error) {
-    console.error('리뷰를 삭제하는 중 오류가 발생했습니다:', error);
+    logger.error('리뷰를 삭제하는 중 오류가 발생했습니다:', error);
     throw error;
   }
 };
@@ -1653,7 +1633,7 @@ export const getRecentReviews = async (limit: number = 3): Promise<Review[]> => 
       } as Review;
     });
   } catch (error) {
-    console.error('최신 리뷰를 가져오는 중 오류가 발생했습니다:', error);
+    logger.error('최신 리뷰를 가져오는 중 오류가 발생했습니다:', error);
     return [];
   }
 };
@@ -1687,7 +1667,7 @@ export const getBestReviews = async (limit: number = 3): Promise<Review[]> => {
     // 지정된 개수만큼 반환
     return bestReviews.slice(0, limit);
   } catch (error) {
-    console.error('Best 후기를 가져오는 중 오류가 발생했습니다:', error);
+    logger.error('Best 후기를 가져오는 중 오류가 발생했습니다:', error);
     return [];
   }
 };
@@ -1736,7 +1716,7 @@ export const clearAllCaches = async () => {
     
     return true;
   } catch (error) {
-    console.error('캐시 전체 삭제 실패:', error);
+    logger.error('캐시 전체 삭제 실패:', error);
     return false;
   }
 };
@@ -1774,7 +1754,7 @@ export const verifyAuthFirestoreConsistency = async () => {
     
     return result.data;
   } catch (error) {
-    console.error('❌ 일관성 검증 실패:', error);
+    logger.error('❌ 일관성 검증 실패:', error);
     throw error;
   }
 };

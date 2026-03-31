@@ -5,6 +5,7 @@ import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import type { SocialUserData } from '@smis-mentor/shared';
 import Constants from 'expo-constants';
+import { logger } from '@smis-mentor/shared';
 
 // WebBrowser 설정 (로그인 완료 후 브라우저 자동 닫기)
 WebBrowser.maybeCompleteAuthSession();
@@ -52,18 +53,18 @@ export async function signInWithGoogleDirect(): Promise<{
       GoogleSignin = GoogleSignInModule.GoogleSignin;
       
       if (GoogleSignin && typeof GoogleSignin.signIn === 'function') {
-        console.log('🔵 구글 로그인 시작 (Native SDK - Development Build)');
+        logger.info('🔵 구글 로그인 시작 (Native SDK - Development Build)');
         return await signInWithNativeGoogleSDK(GoogleSignin);
       }
     } catch (error) {
-      console.log('⚠️ Google Native SDK 불가능, OAuth 2.0 사용 (Expo Go)');
+      logger.info('⚠️ Google Native SDK 불가능, OAuth 2.0 사용 (Expo Go)');
     }
 
     // Native SDK를 사용할 수 없으면 OAuth 2.0 사용
-    console.log('🔵 구글 로그인 시작 (OAuth 2.0 - Expo Go)');
+    logger.info('🔵 구글 로그인 시작 (OAuth 2.0 - Expo Go)');
     return await signInWithGoogleOAuth();
   } catch (error) {
-    console.error('❌ 구글 로그인 실패 (Direct):', error);
+    logger.error('❌ 구글 로그인 실패 (Direct):', error);
     throw error;
   }
 }
@@ -84,7 +85,7 @@ async function signInWithNativeGoogleSDK(GoogleSignin: any): Promise<{
     throw new Error('Google ID 토큰을 가져오지 못했습니다');
   }
 
-  console.log('✅ Google ID Token 획득 (Native SDK)');
+  logger.info('✅ Google ID Token 획득 (Native SDK)');
 
   // Firebase Credential 생성
   const credential = GoogleAuthProvider.credential(idToken);
@@ -103,7 +104,7 @@ async function signInWithNativeGoogleSDK(GoogleSignin: any): Promise<{
     accessToken: undefined, // Google Native SDK는 accessToken 불필요
   };
 
-  console.log('✅ 구글 로그인 완료 (Native SDK):', { email: socialData.email });
+  logger.info('✅ 구글 로그인 완료 (Native SDK):', { email: socialData.email });
 
   return { socialData, credential };
 }
@@ -115,7 +116,7 @@ async function signInWithGoogleOAuth(): Promise<{
   socialData: SocialUserData;
   credential: any;
 }> {
-  console.log('🔵 구글 로그인 시작 (OAuth 2.0 - Expo Go)');
+  logger.info('🔵 구글 로그인 시작 (OAuth 2.0 - Expo Go)');
 
   // Redirect URI
   const redirectUri = makeRedirectUri();
@@ -128,7 +129,7 @@ async function signInWithGoogleOAuth(): Promise<{
     nonce: Math.random().toString(36).substring(7),
   })}`;
 
-  console.log('📍 Redirect URI:', redirectUri);
+  logger.info('📍 Redirect URI:', redirectUri);
 
   // 브라우저 열기
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
@@ -150,7 +151,7 @@ async function signInWithGoogleOAuth(): Promise<{
     throw new Error('Google ID 토큰을 가져올 수 없습니다');
   }
 
-  console.log('✅ Google ID Token 획득 (OAuth 2.0)');
+  logger.info('✅ Google ID Token 획득 (OAuth 2.0)');
 
   // Firebase Credential 생성
   const credential = GoogleAuthProvider.credential(idToken);
@@ -171,7 +172,7 @@ async function signInWithGoogleOAuth(): Promise<{
     accessToken: params.get('access_token') || undefined, // ✅ accessToken 추가
   };
 
-  console.log('✅ 구글 로그인 완료 (OAuth 2.0):', { email: socialData.email });
+  logger.info('✅ 구글 로그인 완료 (OAuth 2.0):', { email: socialData.email });
 
   return { socialData, credential };
 }
@@ -228,7 +229,7 @@ export async function signInWithGoogle(promptAsync: any): Promise<SocialUserData
     const response = await promptAsync();
     return await handleGoogleAuthResponse(response);
   } catch (error: any) {
-    console.error('Google 로그인 실패:', error);
+    logger.error('Google 로그인 실패:', error);
     throw error;
   }
 }
@@ -242,11 +243,11 @@ export async function getGoogleCredential(promptAsync: any): Promise<{
   credential: any;
 }> {
   try {
-    console.log('🔑 Google Credential 획득 시작');
+    logger.info('🔑 Google Credential 획득 시작');
     
     // 현재 로그인된 사용자 저장
     const currentUser = auth.currentUser;
-    console.log('현재 사용자:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'none');
+    logger.info('현재 사용자:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'none');
     
     // Google 인증 팝업
     const response = await promptAsync();
@@ -272,7 +273,7 @@ export async function getGoogleCredential(promptAsync: any): Promise<{
     const result = await signInWithCredential(auth, credential);
     const user = result.user;
 
-    console.log('✅ Google 팝업 완료:', {
+    logger.info('✅ Google 팝업 완료:', {
       email: user.email,
       uid: user.uid,
       isNewUser: (result as any)._tokenResponse?.isNewUser,
@@ -283,7 +284,7 @@ export async function getGoogleCredential(promptAsync: any): Promise<{
       let email = null;
       if (user.providerData && user.providerData.length > 0) {
         email = user.providerData[0].email;
-        console.log('📧 providerData에서 이메일 추출:', email);
+        logger.info('📧 providerData에서 이메일 추출:', email);
       }
       
       if (!email) {
@@ -300,20 +301,20 @@ export async function getGoogleCredential(promptAsync: any): Promise<{
       idToken: id_token,
     };
 
-    console.log('✅ SocialUserData 추출 완료:', { email: socialData.email, name: socialData.name });
-    console.log('ℹ️ Google 계정이 Firebase Auth에 생성되었습니다 (정상)');
-    console.log('ℹ️ linkWithCredential이 실패하면 Firestore에만 저장됩니다');
+    logger.info('✅ SocialUserData 추출 완료:', { email: socialData.email, name: socialData.name });
+    logger.info('ℹ️ Google 계정이 Firebase Auth에 생성되었습니다 (정상)');
+    logger.info('ℹ️ linkWithCredential이 실패하면 Firestore에만 저장됩니다');
 
     return { socialData, credential };
   } catch (error: any) {
-    console.error('❌ Google Credential 획득 실패:', error);
+    logger.error('❌ Google Credential 획득 실패:', error);
     throw error;
   }
 }
 
 // 이전 버전과의 호환성을 위한 더미 함수들
 export function configureGoogleSignIn(): void {
-  console.log('✅ Expo AuthSession 사용 - 설정 불필요');
+  logger.info('✅ Expo AuthSession 사용 - 설정 불필요');
 }
 
 export async function isGoogleSignedIn(): Promise<boolean> {
@@ -322,11 +323,11 @@ export async function isGoogleSignedIn(): Promise<boolean> {
 
 export async function signOutGoogle(): Promise<void> {
   // Expo AuthSession은 별도 로그아웃 불필요
-  console.log('Google 로그아웃 (Expo AuthSession)');
+  logger.info('Google 로그아웃 (Expo AuthSession)');
 }
 
 export async function revokeGoogleAccess(): Promise<void> {
-  console.log('Google 계정 연결 해제 (Expo AuthSession)');
+  logger.info('Google 계정 연결 해제 (Expo AuthSession)');
 }
 
 export async function getCurrentGoogleUser() {

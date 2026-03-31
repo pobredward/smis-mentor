@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import type { User } from './legacy';
 
 /**
  * 소셜 로그인 제공자 타입
@@ -29,7 +30,7 @@ export interface SocialUserData {
  * 인증 제공자 정보 (Firestore에 저장)
  */
 export interface AuthProvider {
-  providerId: SocialProvider | 'password';
+  providerId: SocialProvider | 'password' | 'apple'; // 'apple' 정규화 전 값 허용
   uid: string;
   email?: string;
   linkedAt: Timestamp;
@@ -49,7 +50,7 @@ export type SocialLoginAction =
 
 export interface SocialLoginResult {
   action: SocialLoginAction;
-  user?: any; // User 타입 (순환 참조 방지)
+  user?: User; // User 타입 (from legacy.ts)
   socialData?: SocialUserData;
   tempUserId?: string;
   requiresPhone?: boolean;
@@ -113,7 +114,7 @@ export interface AccountLinkConfirmation {
  */
 export interface TempAccountMatchResult {
   found: boolean;
-  user?: any;
+  user?: User;
   nameMatches?: boolean;
   jobCodes?: Array<{
     generation: string;

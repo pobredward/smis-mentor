@@ -1,14 +1,23 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const db = getAdminFirestore();
     const { searchParams } = new URL(request.url);
     const dryRun = searchParams.get('dryRun') === 'true';
     
-    console.log('🔄 참조 필드 업데이트 시작...');
-    console.log(`📋 모드: ${dryRun ? 'DRY RUN' : 'PRODUCTION'}`);
+    logger.info('🔄 참조 필드 업데이트 시작...');
+    logger.info(`📋 모드: ${dryRun ? 'DRY RUN' : 'PRODUCTION'}`);
     
     const results: any = {
       evaluations: { total: 0, updated: 0, skipped: 0, failed: 0 },
@@ -26,10 +35,10 @@ export async function POST(request: Request) {
       }
     });
     
-    console.log(`📋 ID 매핑 로드: ${idMapping.size}개`);
+    logger.info(`📋 ID 매핑 로드: ${idMapping.size}개`);
     
     // 1. evaluations 업데이트
-    console.log('\n1️⃣  evaluations.evaluatorId 업데이트 중...');
+    logger.info('\n1️⃣  evaluations.evaluatorId 업데이트 중...');
     const evaluationsSnapshot = await db.collection('evaluations').get();
     results.evaluations.total = evaluationsSnapshot.size;
     
@@ -51,7 +60,7 @@ export async function POST(request: Request) {
           continue;
         }
         
-        console.log(`  🔄 ${evalDoc.id}: ${oldEvaluatorId} → ${newEvaluatorId}`);
+        logger.info(`  🔄 ${evalDoc.id}: ${oldEvaluatorId} → ${newEvaluatorId}`);
         
         if (!dryRun) {
           await evalDoc.ref.update({
@@ -63,13 +72,13 @@ export async function POST(request: Request) {
         results.evaluations.updated++;
         
       } catch (error: any) {
-        console.error(`  ❌ 실패 (${evalDoc.id}):`, error.message);
+        logger.error(`  ❌ 실패 (${evalDoc.id}):`, error.message);
         results.evaluations.failed++;
       }
     }
     
     // 2. lessonMaterials 업데이트
-    console.log('\n2️⃣  lessonMaterials.userId 업데이트 중...');
+    logger.info('\n2️⃣  lessonMaterials.userId 업데이트 중...');
     const materialsSnapshot = await db.collection('lessonMaterials').get();
     results.lessonMaterials.total = materialsSnapshot.size;
     
@@ -90,7 +99,7 @@ export async function POST(request: Request) {
           continue;
         }
         
-        console.log(`  🔄 ${materialDoc.id}: ${oldUserId} → ${newUserId}`);
+        logger.info(`  🔄 ${materialDoc.id}: ${oldUserId} → ${newUserId}`);
         
         if (!dryRun) {
           await materialDoc.ref.update({
@@ -102,13 +111,13 @@ export async function POST(request: Request) {
         results.lessonMaterials.updated++;
         
       } catch (error: any) {
-        console.error(`  ❌ 실패 (${materialDoc.id}):`, error.message);
+        logger.error(`  ❌ 실패 (${materialDoc.id}):`, error.message);
         results.lessonMaterials.failed++;
       }
     }
     
-    console.log('\n✅ 참조 필드 업데이트 완료');
-    console.log(results);
+    logger.info('\n✅ 참조 필드 업데이트 완료');
+    logger.info(results);
     
     return NextResponse.json({
       success: true,
@@ -117,7 +126,7 @@ export async function POST(request: Request) {
     });
     
   } catch (error: any) {
-    console.error('❌ 참조 업데이트 실패:', error);
+    logger.error('❌ 참조 업데이트 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

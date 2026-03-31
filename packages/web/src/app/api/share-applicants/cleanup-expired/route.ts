@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { logger } from '@smis-mentor/shared';
 
 /**
  * 만료된 공유 토큰을 비활성화하는 API
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       deactivatedCount: expiredTokensSnapshot.size,
     });
   } catch (error) {
-    console.error('만료된 토큰 정리 오류:', error);
+    logger.error('만료된 토큰 정리 오류:', error);
     return NextResponse.json(
       { error: '토큰 정리에 실패했습니다.' },
       { status: 500 }

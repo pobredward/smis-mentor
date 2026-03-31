@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '@smis-mentor/shared';
 
 /**
  * 캐시 스토어 이름
@@ -57,7 +58,7 @@ export async function getCache<T>(
 
     return cacheItem.data;
   } catch (error) {
-    console.error('캐시 조회 실패:', error);
+    logger.error('캐시 조회 실패:', error);
     return null;
   }
 }
@@ -65,17 +66,17 @@ export async function getCache<T>(
 /**
  * 캐시에 데이터 저장
  */
-export async function setCache<T>(
+export async function setCache<T extends { userId?: string; id?: string }>(
   storeName: string,
   data: T,
   ttl: number = CACHE_TTL.MEDIUM
 ): Promise<void> {
   try {
     // userId나 id 필드에서 키 추출
-    const key = (data as any).userId || (data as any).id;
+    const key = data.userId || data.id;
     
     if (!key) {
-      console.warn('캐시 키를 찾을 수 없음:', data);
+      logger.warn('캐시 키를 찾을 수 없음:', data);
       return;
     }
 
@@ -88,7 +89,7 @@ export async function setCache<T>(
 
     await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheItem));
   } catch (error) {
-    console.error('캐시 저장 실패:', error);
+    logger.error('캐시 저장 실패:', error);
   }
 }
 
@@ -102,9 +103,9 @@ export async function removeCache(
   try {
     const cacheKey = getCacheKey(storeName, key);
     await AsyncStorage.removeItem(cacheKey);
-    console.log('🗑️ 캐시 삭제:', cacheKey);
+    logger.info('🗑️ 캐시 삭제:', cacheKey);
   } catch (error) {
-    console.error('캐시 삭제 실패:', error);
+    logger.error('캐시 삭제 실패:', error);
   }
 }
 
@@ -119,10 +120,10 @@ export async function clearCacheCollection(storeName: string): Promise<void> {
     
     if (keysToRemove.length > 0) {
       await AsyncStorage.multiRemove(keysToRemove);
-      console.log(`🗑️ ${storeName} 캐시 전체 삭제:`, keysToRemove.length);
+      logger.info(`🗑️ ${storeName} 캐시 전체 삭제:`, keysToRemove.length);
     }
   } catch (error) {
-    console.error('캐시 컬렉션 삭제 실패:', error);
+    logger.error('캐시 컬렉션 삭제 실패:', error);
   }
 }
 
@@ -136,9 +137,9 @@ export async function clearAllCache(): Promise<void> {
     
     if (cacheKeys.length > 0) {
       await AsyncStorage.multiRemove(cacheKeys);
-      console.log('🗑️ 전체 캐시 삭제:', cacheKeys.length);
+      logger.info('🗑️ 전체 캐시 삭제:', cacheKeys.length);
     }
   } catch (error) {
-    console.error('전체 캐시 삭제 실패:', error);
+    logger.error('전체 캐시 삭제 실패:', error);
   }
 }

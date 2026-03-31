@@ -1,23 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveSMSTemplate } from '@/lib/smsTemplateService';
+import { createSMSTemplateSchema } from '@/lib/validationSchemas';
+import { logger } from '@smis-mentor/shared';
+import { getAuthenticatedUser, requireMentor } from '@/lib/authMiddleware';
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, content, type, createdBy } = await request.json();
+    const authContext = await getAuthenticatedUser(request);
     
-    if (!title || !content || !type) {
+    const mentorCheck = requireMentor(authContext);
+    if (mentorCheck) {
+      return mentorCheck;
+    }
+
+    const body = await request.json();
+    
+    // Zod 스키마 검증
+    const validationResult = createSMSTemplateSchema.safeParse(body);
+    if (!validationResult.success) {
       return NextResponse.json(
-        { success: false, message: '필수 필드가 누락되었습니다.' },
+        { 
+          success: false, 
+          message: validationResult.error.errors[0].message,
+          errors: validationResult.error.errors
+        },
         { status: 400 }
       );
     }
+    
+    const { title, content, type } = validationResult.data;
+    const createdBy = authContext!.user.userId || authContext!.user.id;
     
     // 템플릿 저장
     const template = await saveSMSTemplate({
       title,
       content,
       type,
-      createdBy: createdBy || 'admin'
+      createdBy
     });
     
     return NextResponse.json({ 
@@ -26,7 +45,7 @@ export async function POST(request: NextRequest) {
       template
     });
   } catch (error) {
-    console.error('템플릿 생성 오류:', error);
+    logger.error('템플릿 생성 오류:', error);
     return NextResponse.json(
       { success: false, message: '서버 오류가 발생했습니다.' },
       { status: 500 }

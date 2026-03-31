@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { collection, query, where, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ShareToken, ApplicationHistory, User, JobBoard } from '@/types';
+import { logger } from '@smis-mentor/shared';
 
 export async function GET(
   request: NextRequest,
@@ -130,7 +131,7 @@ export async function GET(
       expiresAt: expiresAt.toISOString(),
     });
   } catch (error) {
-    console.error('지원자 정보 조회 오류:', error);
+    logger.error('지원자 정보 조회 오류:', error);
     return NextResponse.json(
       { error: '지원자 정보를 불러오는데 실패했습니다.' },
       { status: 500 }

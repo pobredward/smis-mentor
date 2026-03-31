@@ -12,6 +12,7 @@ import {
   Firestore,
 } from 'firebase/firestore';
 import type { JobExperienceGroupRole } from '../../types/camp';
+import { logger } from '../../utils/logger';
 
 // Local types (not exported to avoid conflicts)
 interface JobCode {
@@ -58,7 +59,7 @@ interface User {
   name: string;
   phoneNumber: string;
   phone?: string;
-  role: 'user' | 'mentor' | 'admin';
+  role: 'user' | 'mentor' | 'admin' | 'foreign' | 'foreign_temp' | 'mentor_temp';
   status: 'active' | 'inactive' | 'temp';
   jobExperiences?: JobExperienceItem[];
   address?: string;
@@ -102,14 +103,14 @@ export const createTempUser = async (
     }
 
     // JobExperiences 객체 배열 생성
-    const jobExperiences: any[] = jobExperienceIds.map((id, index) => ({
+    const jobExperiences: JobExperienceItem[] = jobExperienceIds.map((id, index) => ({
       id,
-      group:
-        index < jobExperienceGroups.length ? jobExperienceGroups[index] : 'junior',
-      groupRole:
-        index < jobExperienceGroupRoles.length
+      group: (index < jobExperienceGroups.length 
+        ? jobExperienceGroups[index] 
+        : 'junior') as JobGroup,
+      groupRole: (index < jobExperienceGroupRoles.length
           ? jobExperienceGroupRoles[index]
-          : '담임',
+          : '담임') as JobExperienceGroupRole,
       classCode:
         index < jobExperienceClassCodes.length
           ? jobExperienceClassCodes[index]
@@ -119,7 +120,13 @@ export const createTempUser = async (
     const now = Timestamp.now();
 
     // Firestore에 임시 사용자 정보 저장
-    const userData: any = {
+    const userData: Partial<User> & {
+      email: string;
+      name: string;
+      phoneNumber: string;
+      role: string;
+      status: string;
+    } = {
       email: '',
       name,
       phoneNumber,
@@ -143,7 +150,7 @@ export const createTempUser = async (
 
     return { success: true };
   } catch (error) {
-    console.error('임시 사용자 생성 오류:', error);
+    logger.error('임시 사용자 생성 오류:', error);
     throw error;
   }
 };
@@ -152,7 +159,7 @@ export const createTempUser = async (
 export const adminGetAllUsers = async (
   db: Firestore,
   includeDeleted: boolean = false
-): Promise<any[]> => {
+): Promise<User[]> => {
   try {
     const usersRef = collection(db, 'users');
     
@@ -164,16 +171,16 @@ export const adminGetAllUsers = async (
     
     const querySnapshot = await getDocs(q);
 
-    const users: any[] = [];
+    const users: User[] = [];
     querySnapshot.forEach((docSnapshot) => {
-      users.push(docSnapshot.data());
+      users.push(docSnapshot.data() as User);
     });
 
-    console.log(`✅ 사용자 조회 완료: ${users.length}명 (삭제된 사용자 ${includeDeleted ? '포함' : '제외'})`);
+    logger.info(`✅ 사용자 조회 완료: ${users.length}명 (삭제된 사용자 ${includeDeleted ? '포함' : '제외'})`);
 
     return users;
   } catch (error) {
-    console.error('모든 사용자 조회 실패:', error);
+    logger.error('모든 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -182,7 +189,7 @@ export const adminGetAllUsers = async (
 export const adminUpdateUser = async (
   db: Firestore,
   userId: string,
-  updates: Record<string, any>
+  updates: Partial<User>
 ) => {
   const now = Timestamp.now();
   const userRef = doc(db, 'users', userId);
@@ -200,7 +207,7 @@ export const adminDeleteUser = async (db: Firestore, userId: string) => {
     await deleteDoc(userRef);
     return true;
   } catch (error) {
-    console.error('사용자 삭제 실패:', error);
+    logger.error('사용자 삭제 실패:', error);
     throw error;
   }
 };
@@ -227,7 +234,7 @@ export const adminReactivateUser = async (db: Firestore, userId: string) => {
 
     return true;
   } catch (error) {
-    console.error('사용자 재활성화 실패:', error);
+    logger.error('사용자 재활성화 실패:', error);
     throw error;
   }
 };
@@ -235,17 +242,17 @@ export const adminReactivateUser = async (db: Firestore, userId: string) => {
 // ==================== JobCode 관련 함수 ====================
 
 // 모든 JobCode 조회
-export const adminGetAllJobCodes = async (db: Firestore): Promise<any[]> => {
+export const adminGetAllJobCodes = async (db: Firestore): Promise<JobCodeWithId[]> => {
   try {
     const querySnapshot = await getDocs(collection(db, 'jobCodes'));
     const jobCodes = querySnapshot.docs.map((docSnapshot) => ({
       id: docSnapshot.id,
       ...docSnapshot.data(),
-    }));
+    } as JobCodeWithId));
 
     return jobCodes;
   } catch (error) {
-    console.error('직무 코드 조회 실패:', error);
+    logger.error('직무 코드 조회 실패:', error);
     throw error;
   }
 };
@@ -253,13 +260,13 @@ export const adminGetAllJobCodes = async (db: Firestore): Promise<any[]> => {
 // JobCode 생성
 export const adminCreateJobCode = async (
   db: Firestore,
-  jobCodeData: Record<string, any>
+  jobCodeData: Omit<JobCode, 'createdAt' | 'updatedAt'>
 ) => {
   try {
     const docRef = await addDoc(collection(db, 'jobCodes'), jobCodeData);
     return docRef.id;
   } catch (error) {
-    console.error('업무 코드 생성 실패:', error);
+    logger.error('업무 코드 생성 실패:', error);
     throw error;
   }
 };
@@ -270,7 +277,7 @@ export const adminDeleteJobCode = async (db: Firestore, jobCodeId: string) => {
     await deleteDoc(doc(db, 'jobCodes', jobCodeId));
     return true;
   } catch (error) {
-    console.error('업무 코드 삭제 실패:', error);
+    logger.error('업무 코드 삭제 실패:', error);
     throw error;
   }
 };
@@ -279,13 +286,13 @@ export const adminDeleteJobCode = async (db: Firestore, jobCodeId: string) => {
 export const adminUpdateJobCode = async (
   db: Firestore,
   jobCodeId: string,
-  jobCodeData: Record<string, any>
+  jobCodeData: Partial<JobCode>
 ) => {
   try {
     await updateDoc(doc(db, 'jobCodes', jobCodeId), jobCodeData);
     return true;
   } catch (error) {
-    console.error('업무 코드 업데이트 실패:', error);
+    logger.error('업무 코드 업데이트 실패:', error);
     throw error;
   }
 };
@@ -308,27 +315,27 @@ export const adminAddUserJobCode = async (
   group: string,
   groupRole: string,
   classCode?: string
-): Promise<any[]> => {
+): Promise<JobExperienceItem[]> => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
     if (!userDoc.exists()) {
       throw new Error('사용자를 찾을 수 없습니다.');
     }
-    const user = userDoc.data();
+    const user = userDoc.data() as User;
     const jobExperiences = user.jobExperiences || [];
 
     // 이미 존재하는지 확인
-    const exists = jobExperiences.some((exp: any) => exp.id === jobCodeId);
+    const exists = jobExperiences.some((exp) => exp.id === jobCodeId);
     if (exists) {
       throw new Error('이미 추가된 직무 코드입니다.');
     }
 
     // 새 형식으로 추가
-    const newJobExperience: any = {
+    const newJobExperience: JobExperienceItem = {
       id: jobCodeId,
-      group,
-      groupRole,
+      group: group as JobGroup,
+      groupRole: groupRole as JobExperienceGroupRole,
     };
     if (classCode && classCode.trim() !== '') {
       newJobExperience.classCode = classCode.trim();
@@ -339,7 +346,7 @@ export const adminAddUserJobCode = async (
 
     return updatedJobExperiences;
   } catch (error) {
-    console.error('직무 코드 추가 실패:', error);
+    logger.error('직무 코드 추가 실패:', error);
     throw error;
   }
 };
@@ -349,26 +356,26 @@ export const adminRemoveUserJobCode = async (
   db: Firestore,
   userId: string,
   jobCodeId: string
-): Promise<any[]> => {
+): Promise<JobExperienceItem[]> => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
     if (!userDoc.exists()) {
       throw new Error('사용자를 찾을 수 없습니다.');
     }
-    const user = userDoc.data();
+    const user = userDoc.data() as User;
     const jobExperiences = user.jobExperiences || [];
 
     // 해당 jobCodeId를 제외한 배열 생성
     const updatedJobExperiences = jobExperiences.filter(
-      (exp: any) => exp.id !== jobCodeId
+      (exp) => exp.id !== jobCodeId
     );
 
     await updateDoc(userRef, { jobExperiences: updatedJobExperiences });
 
     return updatedJobExperiences;
   } catch (error) {
-    console.error('직무 코드 삭제 실패:', error);
+    logger.error('직무 코드 삭제 실패:', error);
     throw error;
   }
 };
@@ -376,8 +383,8 @@ export const adminRemoveUserJobCode = async (
 // 사용자 JobCode 정보 조회
 export const adminGetUserJobCodesInfo = async (
   db: Firestore,
-  jobExperiences: any[]
-): Promise<any[]> => {
+  jobExperiences: JobExperienceItem[] | string[]
+): Promise<JobCodeWithGroup[]> => {
   try {
     if (!jobExperiences || jobExperiences.length === 0) return [];
 
@@ -395,9 +402,11 @@ export const adminGetUserJobCodesInfo = async (
     const tasks = jobIds.map(async (idOrCode, index) => {
       try {
         // 그룹 정보 준비 (새 형식인 경우에만 포함)
-        const group =
-          typeof jobExperiences[index] === 'object' && 'group' in jobExperiences[index]
-            ? jobExperiences[index].group
+        const group: JobGroup =
+          typeof jobExperiences[index] === 'object' && 
+          jobExperiences[index] !== null &&
+          'group' in jobExperiences[index]
+            ? (jobExperiences[index] as JobExperienceItem).group
             : 'junior';
 
         // jobCodes 컬렉션에서 직접 ID로 조회
@@ -408,12 +417,12 @@ export const adminGetUserJobCodesInfo = async (
             id: jobCodeDoc.id,
             ...jobCodeDoc.data(),
             group,
-          };
+          } as JobCodeWithGroup;
         }
 
         return null;
       } catch (error) {
-        console.error('직무 코드 정보 가져오기 오류:', error);
+        logger.error('직무 코드 정보 가져오기 오류:', error);
         return null;
       }
     });
@@ -422,9 +431,9 @@ export const adminGetUserJobCodesInfo = async (
     const results = await Promise.all(tasks);
 
     // null 값 제거 및 결과 반환
-    return results.filter((result): result is any => result !== null);
+    return results.filter((result): result is JobCodeWithGroup => result !== null);
   } catch (error) {
-    console.error('직무 코드 정보 가져오기 오류:', error);
+    logger.error('직무 코드 정보 가져오기 오류:', error);
     return [];
   }
 };
@@ -434,9 +443,9 @@ export const adminGetUsersByJobCode = async (
   db: Firestore,
   generation: string,
   code: string
-): Promise<any[]> => {
+): Promise<User[]> => {
   try {
-    const users: any[] = [];
+    const users: User[] = [];
 
     // jobCodes 컬렉션에서 해당 코드와 세대에 맞는 문서 ID 찾기
     const jobCodesRef = collection(db, 'jobCodes');
@@ -460,11 +469,11 @@ export const adminGetUsersByJobCode = async (
     const userSnapshot = await getDocs(usersRef);
 
     userSnapshot.forEach((docSnapshot) => {
-      const userData = docSnapshot.data();
+      const userData = docSnapshot.data() as User;
       // jobExperiences 배열에서 id 필드가 jobCodeId와 일치하는 항목이 있는지 확인
       if (
         userData.jobExperiences &&
-        userData.jobExperiences.some((exp: any) => exp.id === jobCodeId)
+        userData.jobExperiences.some((exp) => exp.id === jobCodeId)
       ) {
         users.push(userData);
       }
@@ -472,7 +481,7 @@ export const adminGetUsersByJobCode = async (
 
     return users;
   } catch (error) {
-    console.error('직무 코드별 사용자 조회 실패:', error);
+    logger.error('직무 코드별 사용자 조회 실패:', error);
     throw error;
   }
 };
@@ -487,14 +496,14 @@ export const adminGetUserById = async (db: Firestore, userId: string) => {
     
     // id 필드가 없는 경우 자동으로 추가 (오래된 데이터 마이그레이션)
     if (!userData.id) {
-      console.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
+      logger.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
       await updateDoc(doc(db, 'users', userId), { id: userId });
       return { ...userData, id: userId };
     }
 
     return userData;
   } catch (error) {
-    console.error('사용자 정보 가져오기 실패:', error);
+    logger.error('사용자 정보 가져오기 실패:', error);
     throw error;
   }
 };

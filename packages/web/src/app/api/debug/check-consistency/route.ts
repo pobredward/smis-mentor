@@ -1,10 +1,19 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 전체 사용자 데이터 일관성 검사 시작...');
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
+    logger.info('🔍 전체 사용자 데이터 일관성 검사 시작...');
 
     const querySnapshot = await getDocs(collection(db, 'users'));
 
@@ -65,7 +74,7 @@ export async function GET() {
       }),
     });
   } catch (error: any) {
-    console.error('❌ 분석 실패:', error);
+    logger.error('❌ 분석 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

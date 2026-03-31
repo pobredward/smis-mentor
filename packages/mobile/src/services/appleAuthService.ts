@@ -2,6 +2,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import type { SocialUserData } from '@smis-mentor/shared';
 import { Platform } from 'react-native';
 import { decode as atob } from 'base-64'; // ✅ base64 디코딩
+import { logger } from '@smis-mentor/shared';
 
 /**
  * 애플 로그인 (iOS만 지원)
@@ -20,7 +21,7 @@ export async function signInWithApple(): Promise<SocialUserData> {
       throw new Error('이 기기에서는 애플 로그인을 사용할 수 없습니다. (iOS 13 이상 필요)');
     }
 
-    console.log('🟢 애플 로그인 시작');
+    logger.info('🟢 애플 로그인 시작');
 
     // 애플 로그인 요청
     const credential = await AppleAuthentication.signInAsync({
@@ -30,7 +31,7 @@ export async function signInWithApple(): Promise<SocialUserData> {
       ],
     });
 
-    console.log('✅ 애플 로그인 credential 획득:', {
+    logger.info('✅ 애플 로그인 credential 획득:', {
       user: credential.user,
       email: credential.email,
       fullName: credential.fullName,
@@ -48,24 +49,24 @@ export async function signInWithApple(): Promise<SocialUserData> {
         const payload = JSON.parse(atob(base64Payload));
         
         if (payload.email) {
-          console.log('✅ identityToken에서 이메일 추출:', payload.email);
+          logger.info('✅ identityToken에서 이메일 추출:', payload.email);
           email = payload.email;
         }
         
-        console.log('🔍 identityToken payload:', {
+        logger.info('🔍 identityToken payload:', {
           email: payload.email,
           sub: payload.sub, // Apple User ID
           email_verified: payload.email_verified,
         });
       } catch (parseError) {
-        console.error('⚠️ identityToken 파싱 실패:', parseError);
+        logger.error('⚠️ identityToken 파싱 실패:', parseError);
       }
     }
     
     // 여전히 이메일이 없으면 임시 이메일 생성
     if (!email) {
-      console.log('ℹ️ Apple 재로그인 감지 - 이메일 미제공');
-      console.log('   → Apple ID로 기존 계정을 찾습니다');
+      logger.info('ℹ️ Apple 재로그인 감지 - 이메일 미제공');
+      logger.info('   → Apple ID로 기존 계정을 찾습니다');
       // Apple ID를 기반으로 임시 이메일 생성
       // getUserBySocialProvider가 providerUid로 실제 계정을 찾아줌
       email = `apple_${credential.user}@privaterelay.appleid.com`;
@@ -99,10 +100,10 @@ export async function signInWithApple(): Promise<SocialUserData> {
       accessToken: credential.authorizationCode || undefined,
     };
 
-    console.log('✅ 애플 로그인 완료:', { email: socialData.email, name: socialData.name });
+    logger.info('✅ 애플 로그인 완료:', { email: socialData.email, name: socialData.name });
     return socialData;
   } catch (error: any) {
-    console.error('❌ 애플 로그인 실패:', error);
+    logger.error('❌ 애플 로그인 실패:', error);
     
     // 사용자가 취소한 경우
     if (error.code === 'ERR_CANCELED' || error.code === 'ERR_REQUEST_CANCELED') {
@@ -118,9 +119,9 @@ export async function signInWithApple(): Promise<SocialUserData> {
  */
 export async function signOutApple(): Promise<void> {
   try {
-    console.log('✅ 애플 로그아웃 완료');
+    logger.info('✅ 애플 로그아웃 완료');
   } catch (error) {
-    console.error('애플 로그아웃 실패:', error);
+    logger.error('애플 로그아웃 실패:', error);
     throw error;
   }
 }
@@ -136,7 +137,7 @@ export async function isAppleAuthAvailable(): Promise<boolean> {
   try {
     return await AppleAuthentication.isAvailableAsync();
   } catch (error) {
-    console.error('애플 로그인 사용 가능 여부 확인 실패:', error);
+    logger.error('애플 로그인 사용 가능 여부 확인 실패:', error);
     return false;
   }
 }

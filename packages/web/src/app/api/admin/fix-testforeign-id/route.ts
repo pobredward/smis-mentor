@@ -1,8 +1,17 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const db = getAdminFirestore();
     const userId = '620AsKFbNVW0UcdD8oWHz91wbeA3';
     const userRef = db.collection('users').doc(userId);
@@ -17,7 +26,7 @@ export async function POST() {
     }
     
     const userData = userDoc.data();
-    console.log('📋 Current user data:', {
+    logger.info('📋 Current user data:', {
       userId: userData?.userId,
       id: userData?.id,
       email: userData?.email,
@@ -28,7 +37,7 @@ export async function POST() {
       id: userId,
     });
     
-    console.log('✅ Successfully updated id field to:', userId);
+    logger.info('✅ Successfully updated id field to:', userId);
     
     // 업데이트 확인
     const updatedDoc = await userRef.get();
@@ -47,7 +56,7 @@ export async function POST() {
       },
     });
   } catch (error: any) {
-    console.error('Fix user ID error:', error);
+    logger.error('Fix user ID error:', error);
     return NextResponse.json(
       { error: error.message },
       { status: 500 }

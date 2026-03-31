@@ -1,5 +1,6 @@
 import { collection, query, where, getDocs, getDoc, Firestore, doc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { TemplateType, SMSTemplate } from '../../types/sms';
+import { logger } from '../../utils/logger';
 
 // 템플릿 저장
 export async function saveSMSTemplate(
@@ -18,7 +19,7 @@ export async function saveSMSTemplate(
     
     return { id: templateRef.id, ...template, createdAt: now, updatedAt: now };
   } catch (error) {
-    console.error('템플릿 저장 오류:', error);
+    logger.error('템플릿 저장 오류:', error);
     throw error;
   }
 }
@@ -40,7 +41,7 @@ export async function updateSMSTemplate(
     
     return { id, ...template, updatedAt: now };
   } catch (error) {
-    console.error('템플릿 업데이트 오류:', error);
+    logger.error('템플릿 업데이트 오류:', error);
     throw error;
   }
 }
@@ -54,7 +55,7 @@ export async function getSMSTemplateByTypeAndJobBoard(
   try {
     // jobBoardId가 명시적으로 undefined인 경우 조기 반환
     if (jobBoardId === undefined) {
-      console.warn('getSMSTemplateByTypeAndJobBoard: jobBoardId is undefined');
+      logger.warn('getSMSTemplateByTypeAndJobBoard: jobBoardId is undefined');
       return null;
     }
     
@@ -127,7 +128,7 @@ export async function getSMSTemplateByTypeAndJobBoard(
       b.updatedAt.toMillis() - a.updatedAt.toMillis()
     )[0];
   } catch (error) {
-    console.error('템플릿 조회 오류:', error);
+    logger.error('템플릿 조회 오류:', error);
     throw error;
   }
 }
@@ -169,14 +170,14 @@ export async function getTemplatesByType(db: Firestore, type: TemplateType) {
     const templates = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    })) as any[];
+    })) as SMSTemplate[];
     
     // 최신순으로 정렬
     return templates.sort((a, b) => 
       b.updatedAt.toMillis() - a.updatedAt.toMillis()
     );
   } catch (error) {
-    console.error('타입별 템플릿 조회 오류:', error);
+    logger.error('타입별 템플릿 조회 오류:', error);
     throw error;
   }
 }
@@ -188,7 +189,7 @@ export async function getTemplatesWithJobBoardInfo(db: Firestore, type: Template
     
     // 공고 정보를 병렬로 가져오기
     const templatesWithJobBoard = await Promise.all(
-      templates.map(async (template: any) => {
+      templates.map(async (template) => {
         if (!template.refJobBoardId) {
           return {
             ...template,
@@ -210,7 +211,7 @@ export async function getTemplatesWithJobBoardInfo(db: Firestore, type: Template
             };
           }
         } catch (error) {
-          console.error('공고 정보 조회 실패:', error);
+          logger.error('공고 정보 조회 실패:', error);
         }
         
         return {
@@ -223,7 +224,7 @@ export async function getTemplatesWithJobBoardInfo(db: Firestore, type: Template
     
     return templatesWithJobBoard;
   } catch (error) {
-    console.error('템플릿 및 공고 정보 조회 오류:', error);
+    logger.error('템플릿 및 공고 정보 조회 오류:', error);
     throw error;
   }
 }

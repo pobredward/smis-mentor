@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 import type { JobExperienceGroupRole } from './camp';
+import type { AuthProvider } from './auth';
 export interface PartTimeJob {
     period: string;
     companyName: string;
@@ -63,6 +64,8 @@ export interface User {
         period: string;
         description: string;
     }[];
+    authProviders?: AuthProvider[];
+    primaryAuthMethod?: 'email' | 'social';
     evaluationSummary?: {
         documentReview?: {
             averageScore: number;

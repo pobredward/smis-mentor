@@ -1,8 +1,17 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const db = getAdminFirestore();
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
@@ -37,7 +46,7 @@ export async function GET(request: Request) {
     });
     
   } catch (error: any) {
-    console.error('❌ 백업 조회 실패:', error);
+    logger.error('❌ 백업 조회 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

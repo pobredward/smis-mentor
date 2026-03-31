@@ -21,12 +21,12 @@ export default function Button({
   const baseStyles = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50';
   
   const variantStyles = {
-    primary: 'bg-primary text-primary-foreground shadow hover:bg-primary/90',
-    secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
-    danger: 'bg-red-500 text-white shadow-sm hover:bg-red-600',
-    'danger-dark': 'bg-red-700 text-white shadow-sm hover:bg-red-800',
-    success: 'bg-green-600 text-white shadow-sm hover:bg-green-700',
-    outline: 'border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
+    primary: 'bg-primary-600 text-white shadow hover:bg-primary-700',
+    secondary: 'bg-secondary-100 text-secondary-700 shadow-sm hover:bg-secondary-200',
+    danger: 'bg-danger-500 text-white shadow-sm hover:bg-danger-600',
+    'danger-dark': 'bg-danger-600 text-white shadow-sm hover:bg-danger-700',
+    success: 'bg-success-600 text-white shadow-sm hover:bg-success-700',
+    outline: 'border border-secondary-300 bg-white shadow-sm hover:bg-secondary-50 hover:text-secondary-900'
   };
   
   const sizeStyles = {
@@ -42,6 +42,8 @@ export default function Button({
     <button
       className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthClass} ${disabledClass} ${className}`}
       disabled={disabled || isLoading}
+      aria-busy={isLoading}
+      aria-disabled={disabled || isLoading}
       {...props}
     >
       {isLoading && (
@@ -50,6 +52,7 @@ export default function Button({
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <circle
             className="opacity-25"

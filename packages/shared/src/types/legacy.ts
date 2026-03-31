@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 import type { JobExperienceGroupRole } from './camp';
+import type { AuthProvider } from './auth';
 
 export interface PartTimeJob {
   period: string;
@@ -65,6 +66,10 @@ export interface User {
     period: string;
     description: string;
   }[];
+  
+  // 소셜 로그인 제공자 정보
+  authProviders?: AuthProvider[];
+  primaryAuthMethod?: 'email' | 'social';
   
   // 평가 요약 정보 추가
   evaluationSummary?: {

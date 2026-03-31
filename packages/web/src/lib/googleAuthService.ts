@@ -4,7 +4,7 @@ import {
   OAuthCredential
 } from 'firebase/auth';
 import { auth } from './firebase';
-import { SocialUserData } from '@smis-mentor/shared';
+import { SocialUserData, logger } from '@smis-mentor/shared';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -27,7 +27,7 @@ export async function signInWithGooglePopup(): Promise<SocialUserData> {
     
     return extractSocialUserData(result.user, credential);
   } catch (error: any) {
-    console.error('Google Popup 로그인 오류:', error);
+    logger.error('Google Popup 로그인 오류:', error);
     throw error;
   }
 }
@@ -36,7 +36,7 @@ export async function signInWithGooglePopup(): Promise<SocialUserData> {
  * Firebase User와 Credential에서 SocialUserData 추출
  */
 function extractSocialUserData(user: any, credential: OAuthCredential | null): SocialUserData {
-  console.log('🔍 SocialUserData 추출 시작:', {
+  logger.info('🔍 SocialUserData 추출 시작:', {
     userEmail: user.email,
     providerData: user.providerData,
     credentialIdToken: credential?.idToken ? 'exists' : 'missing',
@@ -48,7 +48,7 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
   // 2. providerData에서 추출
   if (!email && user.providerData && user.providerData.length > 0) {
     email = user.providerData[0].email;
-    console.log('📧 providerData에서 이메일 추출:', email);
+    logger.info('📧 providerData에서 이메일 추출:', email);
   }
   
   // 3. credential의 ID 토큰에서 추출 (JWT 디코딩)
@@ -56,18 +56,18 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
     try {
       const payload = JSON.parse(atob(credential.idToken.split('.')[1]));
       email = payload.email;
-      console.log('📧 ID 토큰에서 이메일 추출:', email);
+      logger.info('📧 ID 토큰에서 이메일 추출:', email);
     } catch (e) {
-      console.error('ID 토큰 파싱 실패:', e);
+      logger.error('ID 토큰 파싱 실패:', e);
     }
   }
   
   if (!email) {
-    console.error('❌ 이메일을 가져올 수 없음:', { user, credential });
+    logger.error('❌ 이메일을 가져올 수 없음:', { user, credential });
     throw new Error('Google 계정에서 이메일 정보를 가져올 수 없습니다. 구글 계정 설정에서 이메일 공개를 허용해주세요.');
   }
   
-  console.log('✅ SocialUserData 추출 완료:', { email, name: user.displayName });
+  logger.info('✅ SocialUserData 추출 완료:', { email, name: user.displayName });
   
   return {
     email: email,
@@ -127,7 +127,7 @@ export async function getGoogleCredential(): Promise<{
       email: currentUser.email,
     } : null;
     
-    console.log('🔑 Google Credential 획득 시작:', currentUserData);
+    logger.info('🔑 Google Credential 획득 시작:', currentUserData);
     
     // 2. Google 팝업 열기 (임시로 로그인됨)
     const result = await signInWithPopup(auth, googleProvider);
@@ -137,7 +137,7 @@ export async function getGoogleCredential(): Promise<{
       throw new Error('Google credential을 가져올 수 없습니다.');
     }
     
-    console.log('✅ Google 팝업 완료:', {
+    logger.info('✅ Google 팝업 완료:', {
       email: result.user.email,
       uid: result.user.uid,
       isNewUser: currentUserData?.uid !== result.user.uid,
@@ -149,12 +149,12 @@ export async function getGoogleCredential(): Promise<{
     // 4. ✅ 수정: 임시 계정 삭제하지 않음
     // → Firebase Auth에 구글 계정이 생성되어도 괜찮음
     // → linkWithCredential에서 credential-already-in-use 에러 발생 시 Firestore에만 저장
-    console.log('ℹ️ Google 계정이 Firebase Auth에 생성되었습니다 (정상)');
-    console.log('ℹ️ linkWithCredential이 실패하면 Firestore에만 저장됩니다');
+    logger.info('ℹ️ Google 계정이 Firebase Auth에 생성되었습니다 (정상)');
+    logger.info('ℹ️ linkWithCredential이 실패하면 Firestore에만 저장됩니다');
     
     return { socialData, credential };
   } catch (error: any) {
-    console.error('Google Credential 획득 오류:', error);
+    logger.error('Google Credential 획득 오류:', error);
     throw error;
   }
 }

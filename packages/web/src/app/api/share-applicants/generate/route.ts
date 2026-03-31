@@ -2,32 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { randomBytes } from 'crypto';
+import { shareApplicantsSchema } from '@/lib/validationSchemas';
+import { logger } from '@smis-mentor/shared';
+import { getAuthenticatedUser, requireMentor } from '@/lib/authMiddleware';
 
 export async function POST(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const mentorCheck = requireMentor(authContext);
+    if (mentorCheck) {
+      return mentorCheck;
+    }
+
     const body = await request.json();
-    const { jobBoardId, applicationIds, expirationHours, createdBy } = body;
-
-    if (!jobBoardId || !applicationIds || !Array.isArray(applicationIds) || applicationIds.length === 0) {
+    
+    // Zod 스키마 검증
+    const validationResult = shareApplicantsSchema.safeParse(body);
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: '필수 정보가 누락되었습니다.' },
+        { 
+          error: validationResult.error.errors[0].message,
+          errors: validationResult.error.errors
+        },
         { status: 400 }
       );
     }
-
-    if (!expirationHours || expirationHours <= 0) {
-      return NextResponse.json(
-        { error: '유효한 만료 시간을 설정해주세요.' },
-        { status: 400 }
-      );
-    }
-
-    if (!createdBy) {
-      return NextResponse.json(
-        { error: '생성자 정보가 필요합니다.' },
-        { status: 401 }
-      );
-    }
+    
+    const { jobBoardId, applicationIds, expirationHours } = validationResult.data;
+    const createdBy = authContext!.user.userId || authContext!.user.id;
 
     // 고유한 토큰 생성 (32바이트 랜덤 문자열)
     const token = randomBytes(32).toString('hex');
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
       tokenId: shareTokenRef.id,
     });
   } catch (error) {
-    console.error('공유 링크 생성 오류:', error);
+    logger.error('공유 링크 생성 오류:', error);
     return NextResponse.json(
       { error: '공유 링크 생성에 실패했습니다.' },
       { status: 500 }

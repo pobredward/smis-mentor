@@ -1,14 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendSMS, PhoneNumber } from '@/lib/naverCloudSMS';
 import { getSMSTemplate, replaceTemplateVariables } from '@/lib/smsTemplateService';
+import { sendSMSSchema } from '@/lib/validationSchemas';
+import { logger } from '@smis-mentor/shared';
+import { getAuthenticatedUser, requireMentor } from '@/lib/authMiddleware';
 
 export async function POST(request: NextRequest) {
   try {
-    const { phoneNumber, templateId, variables, content, userName, fromNumber } = await request.json();
+    const authContext = await getAuthenticatedUser(request);
     
-    if (!phoneNumber) {
+    const mentorCheck = requireMentor(authContext);
+    if (mentorCheck) {
+      return mentorCheck;
+    }
+
+    const body = await request.json();
+    
+    // Zod 스키마 검증
+    const validationResult = sendSMSSchema.safeParse(body);
+    if (!validationResult.success) {
       return NextResponse.json(
-        { success: false, message: '수신자 전화번호가 필요합니다.' },
+        { 
+          success: false, 
+          message: validationResult.error.errors[0].message,
+          errors: validationResult.error.errors
+        },
         { 
           status: 400,
           headers: {
@@ -20,9 +36,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    const { phoneNumber, templateId, variables, content, userName, fromNumber } = validationResult.data;
+    
     // 사용자 변수 준비
     const allVariables = {
-      ...variables || {},
+      ...variables,
       이름: userName || variables?.이름 || '{이름}'
     };
     
@@ -96,7 +114,7 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error('SMS 전송 API 오류:', error);
+    logger.error('SMS 전송 API 오류:', error);
     return NextResponse.json(
       { success: false, message: '서버 오류가 발생했습니다.' },
       { 

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, RefreshCw, Database, Search, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { authenticatedGet, authenticatedPost } from '@/lib/apiClient';
 
 interface BackupMetadata {
   backupDate: { _seconds: number };
@@ -45,13 +46,12 @@ export default function UserIdBackupPage() {
 
   const loadBackupStatus = async () => {
     try {
-      const response = await fetch('/api/admin/backup-user-ids');
-      const data = await response.json();
+      const data = await authenticatedGet<any>('/api/admin/backup-user-ids');
       
       if (data.success) {
         setBackupStatus(data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('백업 상태 조회 실패:', error);
     }
   };
@@ -67,10 +67,7 @@ export default function UserIdBackupPage() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/backup-user-ids', {
-        method: 'POST',
-      });
-      const data = await response.json();
+      const data = await authenticatedPost<any>('/api/admin/backup-user-ids', {});
       
       if (data.success) {
         toast.success(`백업 완료: ${data.summary.successCount}명`);
@@ -80,7 +77,7 @@ export default function UserIdBackupPage() {
       }
     } catch (error: any) {
       console.error('백업 오류:', error);
-      toast.error('백업 중 오류가 발생했습니다.');
+      toast.error(error.message || '백업 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -96,8 +93,7 @@ export default function UserIdBackupPage() {
     setSearchResult(null);
     
     try {
-      const response = await fetch(`/api/admin/backup-user-ids/search?email=${encodeURIComponent(searchEmail)}`);
-      const data = await response.json();
+      const data = await authenticatedGet<any>(`/api/admin/backup-user-ids/search?email=${encodeURIComponent(searchEmail)}`);
       
       if (data.success && data.found) {
         setSearchResult(data.backup);
@@ -107,7 +103,7 @@ export default function UserIdBackupPage() {
       }
     } catch (error: any) {
       console.error('검색 오류:', error);
-      toast.error('검색 중 오류가 발생했습니다.');
+      toast.error(error.message || '검색 중 오류가 발생했습니다.');
     } finally {
       setSearchLoading(false);
     }

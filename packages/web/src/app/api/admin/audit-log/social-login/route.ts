@@ -1,12 +1,21 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
 /**
  * 소셜 로그인 감사 로그 기록
  * POST /api/admin/audit-log/social-login
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const body = await request.json();
     const { 
       action,
@@ -24,7 +33,7 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(`📝 소셜 로그인 감사 로그 기록: ${action} - ${email || userId}`);
+    logger.info(`📝 소셜 로그인 감사 로그 기록: ${action} - ${email || userId}`);
 
     const db = getAdminFirestore();
 
@@ -45,14 +54,14 @@ export async function POST(request: Request) {
       createdAt: adminFieldValue.serverTimestamp(),
     });
 
-    console.log('✅ 감사 로그 기록 완료');
+    logger.info('✅ 감사 로그 기록 완료');
 
     return NextResponse.json({
       success: true,
       message: '감사 로그가 기록되었습니다.',
     });
   } catch (error: any) {
-    console.error('❌ 감사 로그 기록 실패:', {
+    logger.error('❌ 감사 로그 기록 실패:', {
       error: error.message,
       timestamp: new Date().toISOString(),
     });

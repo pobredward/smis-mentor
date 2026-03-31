@@ -1,4 +1,5 @@
 import { collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, Timestamp, } from 'firebase/firestore';
+import { logger } from '../../utils/logger';
 // ==================== 임시 사용자 생성 ====================
 export const createTempUser = async (db, name, phoneNumber, jobExperienceIds, jobExperienceGroups = [], jobExperienceGroupRoles = [], jobExperienceClassCodes = [], role = 'mentor_temp') => {
     try {
@@ -12,10 +13,12 @@ export const createTempUser = async (db, name, phoneNumber, jobExperienceIds, jo
         // JobExperiences 객체 배열 생성
         const jobExperiences = jobExperienceIds.map((id, index) => ({
             id,
-            group: index < jobExperienceGroups.length ? jobExperienceGroups[index] : 'junior',
-            groupRole: index < jobExperienceGroupRoles.length
+            group: (index < jobExperienceGroups.length
+                ? jobExperienceGroups[index]
+                : 'junior'),
+            groupRole: (index < jobExperienceGroupRoles.length
                 ? jobExperienceGroupRoles[index]
-                : '담임',
+                : '담임'),
             classCode: index < jobExperienceClassCodes.length
                 ? jobExperienceClassCodes[index]
                 : undefined,
@@ -45,7 +48,7 @@ export const createTempUser = async (db, name, phoneNumber, jobExperienceIds, jo
         return { success: true };
     }
     catch (error) {
-        console.error('임시 사용자 생성 오류:', error);
+        logger.error('임시 사용자 생성 오류:', error);
         throw error;
     }
 };
@@ -63,11 +66,11 @@ export const adminGetAllUsers = async (db, includeDeleted = false) => {
         querySnapshot.forEach((docSnapshot) => {
             users.push(docSnapshot.data());
         });
-        console.log(`✅ 사용자 조회 완료: ${users.length}명 (삭제된 사용자 ${includeDeleted ? '포함' : '제외'})`);
+        logger.info(`✅ 사용자 조회 완료: ${users.length}명 (삭제된 사용자 ${includeDeleted ? '포함' : '제외'})`);
         return users;
     }
     catch (error) {
-        console.error('모든 사용자 조회 실패:', error);
+        logger.error('모든 사용자 조회 실패:', error);
         throw error;
     }
 };
@@ -85,7 +88,7 @@ export const adminDeleteUser = async (db, userId) => {
         return true;
     }
     catch (error) {
-        console.error('사용자 삭제 실패:', error);
+        logger.error('사용자 삭제 실패:', error);
         throw error;
     }
 };
@@ -108,7 +111,7 @@ export const adminReactivateUser = async (db, userId) => {
         return true;
     }
     catch (error) {
-        console.error('사용자 재활성화 실패:', error);
+        logger.error('사용자 재활성화 실패:', error);
         throw error;
     }
 };
@@ -121,7 +124,7 @@ export const adminGetAllJobCodes = async (db) => {
         return jobCodes;
     }
     catch (error) {
-        console.error('직무 코드 조회 실패:', error);
+        logger.error('직무 코드 조회 실패:', error);
         throw error;
     }
 };
@@ -132,7 +135,7 @@ export const adminCreateJobCode = async (db, jobCodeData) => {
         return docRef.id;
     }
     catch (error) {
-        console.error('업무 코드 생성 실패:', error);
+        logger.error('업무 코드 생성 실패:', error);
         throw error;
     }
 };
@@ -143,7 +146,7 @@ export const adminDeleteJobCode = async (db, jobCodeId) => {
         return true;
     }
     catch (error) {
-        console.error('업무 코드 삭제 실패:', error);
+        logger.error('업무 코드 삭제 실패:', error);
         throw error;
     }
 };
@@ -154,7 +157,7 @@ export const adminUpdateJobCode = async (db, jobCodeId, jobCodeData) => {
         return true;
     }
     catch (error) {
-        console.error('업무 코드 업데이트 실패:', error);
+        logger.error('업무 코드 업데이트 실패:', error);
         throw error;
     }
 };
@@ -183,8 +186,8 @@ export const adminAddUserJobCode = async (db, userId, jobCodeId, group, groupRol
         // 새 형식으로 추가
         const newJobExperience = {
             id: jobCodeId,
-            group,
-            groupRole,
+            group: group,
+            groupRole: groupRole,
         };
         if (classCode && classCode.trim() !== '') {
             newJobExperience.classCode = classCode.trim();
@@ -194,7 +197,7 @@ export const adminAddUserJobCode = async (db, userId, jobCodeId, group, groupRol
         return updatedJobExperiences;
     }
     catch (error) {
-        console.error('직무 코드 추가 실패:', error);
+        logger.error('직무 코드 추가 실패:', error);
         throw error;
     }
 };
@@ -214,7 +217,7 @@ export const adminRemoveUserJobCode = async (db, userId, jobCodeId) => {
         return updatedJobExperiences;
     }
     catch (error) {
-        console.error('직무 코드 삭제 실패:', error);
+        logger.error('직무 코드 삭제 실패:', error);
         throw error;
     }
 };
@@ -236,7 +239,9 @@ export const adminGetUserJobCodesInfo = async (db, jobExperiences) => {
         const tasks = jobIds.map(async (idOrCode, index) => {
             try {
                 // 그룹 정보 준비 (새 형식인 경우에만 포함)
-                const group = typeof jobExperiences[index] === 'object' && 'group' in jobExperiences[index]
+                const group = typeof jobExperiences[index] === 'object' &&
+                    jobExperiences[index] !== null &&
+                    'group' in jobExperiences[index]
                     ? jobExperiences[index].group
                     : 'junior';
                 // jobCodes 컬렉션에서 직접 ID로 조회
@@ -247,7 +252,7 @@ export const adminGetUserJobCodesInfo = async (db, jobExperiences) => {
                 return null;
             }
             catch (error) {
-                console.error('직무 코드 정보 가져오기 오류:', error);
+                logger.error('직무 코드 정보 가져오기 오류:', error);
                 return null;
             }
         });
@@ -257,7 +262,7 @@ export const adminGetUserJobCodesInfo = async (db, jobExperiences) => {
         return results.filter((result) => result !== null);
     }
     catch (error) {
-        console.error('직무 코드 정보 가져오기 오류:', error);
+        logger.error('직무 코드 정보 가져오기 오류:', error);
         return [];
     }
 };
@@ -288,7 +293,7 @@ export const adminGetUsersByJobCode = async (db, generation, code) => {
         return users;
     }
     catch (error) {
-        console.error('직무 코드별 사용자 조회 실패:', error);
+        logger.error('직무 코드별 사용자 조회 실패:', error);
         throw error;
     }
 };
@@ -301,14 +306,14 @@ export const adminGetUserById = async (db, userId) => {
         const userData = userDoc.data();
         // id 필드가 없는 경우 자동으로 추가 (오래된 데이터 마이그레이션)
         if (!userData.id) {
-            console.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
+            logger.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
             await updateDoc(doc(db, 'users', userId), { id: userId });
             return Object.assign(Object.assign({}, userData), { id: userId });
         }
         return userData;
     }
     catch (error) {
-        console.error('사용자 정보 가져오기 실패:', error);
+        logger.error('사용자 정보 가져오기 실패:', error);
         throw error;
     }
 };

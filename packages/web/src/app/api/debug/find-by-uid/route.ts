@@ -1,9 +1,18 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const { searchParams } = new URL(request.url);
     const uid = searchParams.get('uid');
 
@@ -14,7 +23,7 @@ export async function GET(request: Request) {
       });
     }
 
-    console.log('🔍 UID로 사용자 조회:', uid);
+    logger.info('🔍 UID로 사용자 조회:', uid);
 
     // 1. 문서 ID로 직접 조회
     const docRef = doc(db, 'users', uid);
@@ -60,7 +69,7 @@ export async function GET(request: Request) {
       ],
     });
   } catch (error: any) {
-    console.error('❌ 조회 실패:', error);
+    logger.error('❌ 조회 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { doc, setDoc, getDoc, deleteField } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { logger } from '@smis-mentor/shared';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -29,8 +30,8 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
 
   // Expo Go에서는 원격 푸시 알림이 지원되지 않으므로 스킵
   if (isExpoGo()) {
-    console.log('⚠️ Expo Go에서는 원격 푸시 알림이 지원되지 않습니다.');
-    console.log('💡 Development Build를 사용하여 푸시 알림을 테스트하세요.');
+    logger.warn('⚠️ Expo Go에서는 원격 푸시 알림이 지원되지 않습니다.');
+    logger.info('💡 Development Build를 사용하여 푸시 알림을 테스트하세요.');
     return undefined;
   }
 
@@ -61,7 +62,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
     }
     
     if (finalStatus !== 'granted') {
-      console.log('푸시 알림 권한이 거부되었습니다.');
+      logger.warn('푸시 알림 권한이 거부되었습니다.');
       return;
     }
     
@@ -70,13 +71,13 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
         projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
       })).data;
       
-      console.log('Expo Push Token:', token);
+      logger.info('Expo Push Token:', token);
     } catch (error) {
-      console.error('푸시 토큰 발급 실패:', error);
+      logger.error('푸시 토큰 발급 실패:', error);
       return undefined;
     }
   } else {
-    console.log('실제 기기에서만 푸시 알림을 사용할 수 있습니다.');
+    logger.warn('실제 기기에서만 푸시 알림을 사용할 수 있습니다.');
   }
 
   return token;
@@ -98,9 +99,9 @@ export async function savePushToken(userId: string, token: string): Promise<void
       },
       { merge: true }
     );
-    console.log('푸시 토큰 저장 완료:', token);
+    logger.info('푸시 토큰 저장 완료:', token);
   } catch (error) {
-    console.error('푸시 토큰 저장 실패:', error);
+    logger.error('푸시 토큰 저장 실패:', error);
     throw error;
   }
 }
@@ -117,9 +118,9 @@ export async function removePushToken(userId: string, token: string): Promise<vo
       },
       { merge: true }
     );
-    console.log('푸시 토큰 제거 완료:', token);
+    logger.info('푸시 토큰 제거 완료:', token);
   } catch (error) {
-    console.error('푸시 토큰 제거 실패:', error);
+    logger.error('푸시 토큰 제거 실패:', error);
     throw error;
   }
 }
@@ -142,7 +143,7 @@ export async function getNotificationSettings(userId: string): Promise<Notificat
       generalNotifications: data.notificationSettings?.generalNotifications ?? true,
     };
   } catch (error) {
-    console.error('알림 설정 조회 실패:', error);
+    logger.error('알림 설정 조회 실패:', error);
     return {
       taskReminders: true,
       generalNotifications: true,
@@ -163,9 +164,9 @@ export async function updateNotificationSettings(
       },
       { merge: true }
     );
-    console.log('알림 설정 업데이트 완료:', settings);
+    logger.info('알림 설정 업데이트 완료:', settings);
   } catch (error) {
-    console.error('알림 설정 업데이트 실패:', error);
+    logger.error('알림 설정 업데이트 실패:', error);
     throw error;
   }
 }

@@ -1,3 +1,4 @@
+import { logger } from '@smis-mentor/shared';
 import { NextRequest, NextResponse } from 'next/server';
 
 const NAVER_CLIENT_ID = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID!;
@@ -14,16 +15,16 @@ export async function GET(request: NextRequest) {
     
     // 에러 처리
     if (error) {
-      console.error('네이버 로그인 에러:', error, errorDescription);
+      logger.error('네이버 로그인 에러:', error, errorDescription);
       return createErrorResponse(errorDescription || error);
     }
     
     if (!code || !state) {
-      console.error('필수 파라미터 누락:', { code: !!code, state: !!state });
+      logger.error('필수 파라미터 누락:', { code: !!code, state: !!state });
       return createErrorResponse('필수 정보가 누락되었습니다.');
     }
     
-    console.log('🔐 네이버 OAuth 콜백 시작:', { code: code.substring(0, 10) + '...', state });
+    logger.info('🔐 네이버 OAuth 콜백 시작:', { code: code.substring(0, 10) + '...', state });
     
     // 1. Access Token 발급
     const tokenResponse = await fetch(
@@ -44,13 +45,13 @@ export async function GET(request: NextRequest) {
     );
     
     const tokenData = await tokenResponse.json();
-    console.log('📝 토큰 응답:', { 
+    logger.info('📝 토큰 응답:', { 
       success: !!tokenData.access_token,
       error: tokenData.error 
     });
     
     if (!tokenData.access_token) {
-      console.error('토큰 발급 실패:', tokenData);
+      logger.error('토큰 발급 실패:', tokenData);
       throw new Error(tokenData.error_description || 'Failed to get access token');
     }
     
@@ -62,18 +63,18 @@ export async function GET(request: NextRequest) {
     });
     
     const profileData = await profileResponse.json();
-    console.log('👤 프로필 응답:', { 
+    logger.info('👤 프로필 응답:', { 
       resultcode: profileData.resultcode,
       hasResponse: !!profileData.response 
     });
     
     if (profileData.resultcode !== '00') {
-      console.error('프로필 조회 실패:', profileData);
+      logger.error('프로필 조회 실패:', profileData);
       throw new Error('Failed to get user profile');
     }
     
     const profile = profileData.response;
-    console.log('✅ 사용자 정보 수신:', {
+    logger.info('✅ 사용자 정보 수신:', {
       email: profile.email,
       name: profile.name,
       id: profile.id?.substring(0, 5) + '...'
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
         </head>
         <body>
           <script>
-            console.log('네이버 로그인 성공 - opener에게 메시지 전송');
+            logger.info('네이버 로그인 성공 - opener에게 메시지 전송');
             if (window.opener) {
               window.opener.postMessage({
                 type: 'NAVER_LOGIN_SUCCESS',
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
               }, '${BASE_URL}');
               setTimeout(() => window.close(), 500);
             } else {
-              console.error('opener가 없습니다. 메인 페이지로 리다이렉트');
+              logger.error('opener가 없습니다. 메인 페이지로 리다이렉트');
               window.location.href = '/sign-in';
             }
           </script>
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest) {
       }
     );
   } catch (error) {
-    console.error('❌ 네이버 콜백 처리 오류:', error);
+    logger.error('❌ 네이버 콜백 처리 오류:', error);
     return createErrorResponse(error instanceof Error ? error.message : '알 수 없는 오류');
   }
 }
@@ -140,7 +141,7 @@ function createErrorResponse(errorMessage: string) {
       </head>
       <body>
         <script>
-          console.error('네이버 로그인 오류:', '${errorMessage}');
+          logger.error('네이버 로그인 오류:', '${errorMessage}');
           if (window.opener) {
             window.opener.postMessage({
               type: 'NAVER_LOGIN_ERROR',

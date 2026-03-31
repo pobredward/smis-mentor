@@ -1,10 +1,19 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 Firestore 데이터 구조 분석 시작...');
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
+    logger.info('🔍 Firestore 데이터 구조 분석 시작...');
 
     // 최대 10명의 사용자 샘플
     const q = query(collection(db, 'users'), limit(10));
@@ -46,7 +55,7 @@ export async function GET() {
       samples: results,
     });
   } catch (error: any) {
-    console.error('❌ 분석 실패:', error);
+    logger.error('❌ 분석 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

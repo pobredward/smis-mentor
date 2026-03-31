@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use, useCallback } from 'react';
+import { useState, useEffect, use, useCallback, lazy, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -11,10 +11,11 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getJobBoardById, deleteJobBoard, getJobCodeById, getAllJobCodes, createApplication } from '@/lib/firebaseService';
 import { JobBoardWithId, JobCodeWithId, ApplicationHistory } from '@/types';
-import RichTextEditor from '@/components/common/RichTextEditor';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import FormInput from '@/components/common/FormInput';
+
+const RichTextEditor = lazy(() => import('@/components/common/RichTextEditor'));
 
 // 날짜 포맷팅 함수
 const formatDateOnly = (timestamp: Timestamp | null | undefined): string => {
@@ -577,10 +578,12 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                     {/* 공고 내용 */}
                     <div className="mb-4">
                       <label className="block text-gray-700 text-sm font-medium mb-2">공고 내용</label>
-                      <RichTextEditor
-                        content={editedDescription}
-                        onChange={setEditedDescription}
-                      />
+                      <Suspense fallback={<div className="w-full p-4 border border-secondary-300 rounded-md bg-secondary-50 animate-pulse">에디터 로딩 중...</div>}>
+                        <RichTextEditor
+                          content={editedDescription}
+                          onChange={setEditedDescription}
+                        />
+                      </Suspense>
                     </div>
 
                     {/* 면접 정보 */}

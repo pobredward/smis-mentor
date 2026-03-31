@@ -1,29 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateSMSTemplate } from '@/lib/smsTemplateService';
+import { updateSMSTemplateSchema } from '@/lib/validationSchemas';
+import { logger } from '@smis-mentor/shared';
+import { getAuthenticatedUser, requireMentor } from '@/lib/authMiddleware';
 
 export async function POST(request: NextRequest) {
   try {
-    const { id, title, content, type } = await request.json();
+    const authContext = await getAuthenticatedUser(request);
     
-    if (!id) {
+    const mentorCheck = requireMentor(authContext);
+    if (mentorCheck) {
+      return mentorCheck;
+    }
+
+    const body = await request.json();
+    
+    // Zod 스키마 검증
+    const validationResult = updateSMSTemplateSchema.safeParse(body);
+    if (!validationResult.success) {
       return NextResponse.json(
-        { success: false, message: '템플릿 ID가 필요합니다.' },
+        { 
+          success: false, 
+          message: validationResult.error.errors[0].message,
+          errors: validationResult.error.errors
+        },
         { status: 400 }
       );
     }
+    
+    const { id, title, content, type } = validationResult.data;
     
     // 업데이트할 필드만 포함
     const updateData: Record<string, string> = {};
     if (title) updateData.title = title;
     if (content) updateData.content = content;
     if (type) updateData.type = type;
-    
-    if (Object.keys(updateData).length === 0) {
-      return NextResponse.json(
-        { success: false, message: '업데이트할 데이터가 없습니다.' },
-        { status: 400 }
-      );
-    }
     
     // 템플릿 업데이트
     const template = await updateSMSTemplate(id, updateData);
@@ -34,7 +45,7 @@ export async function POST(request: NextRequest) {
       template
     });
   } catch (error) {
-    console.error('템플릿 업데이트 오류:', error);
+    logger.error('템플릿 업데이트 오류:', error);
     return NextResponse.json(
       { success: false, message: '서버 오류가 발생했습니다.' },
       { status: 500 }

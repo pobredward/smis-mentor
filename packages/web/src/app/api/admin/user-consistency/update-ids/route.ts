@@ -1,13 +1,22 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
 interface UpdateIdsRequest {
   currentDocId: string;
   newId: string;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const { currentDocId, newId }: UpdateIdsRequest = await request.json();
 
     // 입력 검증
@@ -28,7 +37,7 @@ export async function POST(request: Request) {
     const db = getAdminFirestore();
     const auth = getAdminAuth();
 
-    console.log(`🔄 사용자 ID 변경 시작: ${currentDocId} → ${newId}`);
+    logger.info(`🔄 사용자 ID 변경 시작: ${currentDocId} → ${newId}`);
 
     // 1. 현재 Firestore 문서 조회
     const currentDocRef = db.collection('users').doc(currentDocId);
@@ -65,9 +74,9 @@ export async function POST(request: Request) {
     try {
       const authUser = await auth.getUser(currentDocId);
       authUid = authUser.uid;
-      console.log(`✅ Firebase Auth 사용자 확인: ${authUid}`);
+      logger.info(`✅ Firebase Auth 사용자 확인: ${authUid}`);
     } catch (error) {
-      console.warn(`⚠️ Firebase Auth에서 사용자를 찾을 수 없습니다: ${currentDocId}`);
+      logger.warn(`⚠️ Firebase Auth에서 사용자를 찾을 수 없습니다: ${currentDocId}`);
       // Auth에 없어도 Firestore는 수정 가능
     }
 
@@ -86,7 +95,7 @@ export async function POST(request: Request) {
       // 4-2. 기존 Document 삭제
       transaction.delete(currentDocRef);
 
-      console.log(`📝 Firestore 트랜잭션 완료: Document ID 변경 (${currentDocId} → ${newId})`);
+      logger.info(`📝 Firestore 트랜잭션 완료: Document ID 변경 (${currentDocId} → ${newId})`);
     });
 
     // 5. Firebase Auth UID 업데이트 (가능한 경우)
@@ -94,11 +103,11 @@ export async function POST(request: Request) {
       try {
         // Firebase Auth의 UID는 변경할 수 없으므로, 
         // Custom Claims에 새로운 ID를 저장하거나 로그만 남김
-        console.log(`⚠️ Firebase Auth UID(${authUid})는 변경할 수 없습니다.`);
-        console.log(`📌 Firestore Document ID만 ${newId}로 변경되었습니다.`);
-        console.log(`💡 Auth UID와 일치시키려면 사용자가 재가입하거나 수동으로 Auth 사용자를 삭제/재생성해야 합니다.`);
+        logger.info(`⚠️ Firebase Auth UID(${authUid})는 변경할 수 없습니다.`);
+        logger.info(`📌 Firestore Document ID만 ${newId}로 변경되었습니다.`);
+        logger.info(`💡 Auth UID와 일치시키려면 사용자가 재가입하거나 수동으로 Auth 사용자를 삭제/재생성해야 합니다.`);
       } catch (error) {
-        console.warn('Firebase Auth 업데이트 실패:', error);
+        logger.warn('Firebase Auth 업데이트 실패:', error);
       }
     }
 
@@ -126,14 +135,14 @@ export async function POST(request: Request) {
             batch.update(doc.ref, { refUserId: newId });
           });
           await batch.commit();
-          console.log(`✅ ${collectionName} 컬렉션 업데이트 완료 (${relatedDocsSnapshot.size}건)`);
+          logger.info(`✅ ${collectionName} 컬렉션 업데이트 완료 (${relatedDocsSnapshot.size}건)`);
         }
       } catch (error) {
-        console.warn(`⚠️ ${collectionName} 컬렉션 업데이트 실패:`, error);
+        logger.warn(`⚠️ ${collectionName} 컬렉션 업데이트 실패:`, error);
       }
     }
 
-    console.log('✅ 사용자 ID 변경 완료');
+    logger.info('✅ 사용자 ID 변경 완료');
 
     return NextResponse.json({
       success: true,
@@ -145,7 +154,7 @@ export async function POST(request: Request) {
         : undefined,
     });
   } catch (error: any) {
-    console.error('❌ 사용자 ID 변경 실패:', error);
+    logger.error('❌ 사용자 ID 변경 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message || '사용자 ID 변경 중 오류가 발생했습니다.' },
       { status: 500 }

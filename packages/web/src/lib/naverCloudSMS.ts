@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import { getRequiredEnv } from './env';
+import { logger } from '@smis-mentor/shared';
 
 export type PhoneNumber = '01076567933' | '01067117933';
 
@@ -12,14 +14,9 @@ interface SendSMSParams {
 export async function sendSMS({ to, content, from = '01076567933' }: SendSMSParams): Promise<boolean> {
   try {
     const timestamp = Date.now().toString();
-    const serviceId = process.env.NAVER_CLOUD_SMS_SERVICE_ID;
-    const accessKey = process.env.NAVER_CLOUD_SMS_ACCESS_KEY;
-    const secretKey = process.env.NAVER_CLOUD_SMS_SECRET_KEY;
-    
-    if (!serviceId || !accessKey || !secretKey) {
-      console.error('네이버 클라우드 환경 변수가 설정되지 않았습니다.');
-      return false;
-    }
+    const serviceId = getRequiredEnv('NAVER_CLOUD_SMS_SERVICE_ID');
+    const accessKey = getRequiredEnv('NAVER_CLOUD_SMS_ACCESS_KEY');
+    const secretKey = getRequiredEnv('NAVER_CLOUD_SMS_SECRET_KEY');
     
     // 전화번호 처리: 국가코드 제거 및 포맷팅
     let phoneNumber = to.replace(/-/g, '').replace(/\s/g, ''); // 하이픈과 공백 제거
@@ -33,7 +30,7 @@ export async function sendSMS({ to, content, from = '01076567933' }: SendSMSPara
     
     // 010으로 시작하지 않는 경우 (잘못된 형식)
     if (!phoneNumber.startsWith('0')) {
-      console.error('유효하지 않은 전화번호 형식:', to);
+      logger.error('유효하지 않은 전화번호 형식:', to);
       return false;
     }
     
@@ -77,15 +74,15 @@ export async function sendSMS({ to, content, from = '01076567933' }: SendSMSPara
     
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('SMS 발송 실패:', errorData);
+      logger.error('SMS 발송 실패:', errorData);
       return false;
     }
     
     const result = await response.json();
-    console.log('SMS 발송 성공:', result);
+    logger.info('SMS 발송 성공:', result);
     return true;
   } catch (error) {
-    console.error('SMS 발송 중 오류 발생:', error);
+    logger.error('SMS 발송 중 오류 발생:', error);
     return false;
   }
 } 

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle, XCircle, Search, Download, Edit2, Save, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { authenticatedGet, authenticatedPost } from '@/lib/apiClient';
 
 interface ConsistencyIssue {
   firestoreDocId: string;
@@ -49,8 +50,7 @@ export default function UserConsistencyPage() {
   const loadReport = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/debug/verify-consistency');
-      const data = await response.json();
+      const data = await authenticatedGet<ConsistencyReport & { success: boolean; error?: string }>('/api/debug/verify-consistency');
       
       if (data.success) {
         setReport(data);
@@ -61,7 +61,7 @@ export default function UserConsistencyPage() {
       }
     } catch (error: any) {
       console.error('검증 오류:', error);
-      toast.error('검증 중 오류가 발생했습니다.');
+      toast.error(error.message || '검증 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -155,16 +155,10 @@ export default function UserConsistencyPage() {
 
     setUpdating(true);
     try {
-      const response = await fetch('/api/admin/user-consistency/update-ids', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentDocId,
-          newId: newIdValue,
-        }),
+      const result = await authenticatedPost<any>('/api/admin/user-consistency/update-ids', {
+        currentDocId,
+        newId: newIdValue,
       });
-
-      const result = await response.json();
 
       if (result.success) {
         toast.success(`사용자 ID가 성공적으로 변경되었습니다: ${currentDocId} → ${newIdValue}`);
@@ -173,14 +167,13 @@ export default function UserConsistencyPage() {
         }
         setEditingUserId(null);
         setNewIdValue('');
-        // 리포트 재로드
         await loadReport();
       } else {
         toast.error(`ID 변경 실패: ${result.error}`);
       }
     } catch (error: any) {
       console.error('ID 변경 오류:', error);
-      toast.error('ID 변경 중 오류가 발생했습니다.');
+      toast.error(error.message || 'ID 변경 중 오류가 발생했습니다.');
     } finally {
       setUpdating(false);
     }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '@/components/common/Layout';
 import { FaSync, FaCheckCircle, FaExclamationTriangle, FaDatabase } from 'react-icons/fa';
+import { authenticatedGet, authenticatedPost } from '@/lib/apiClient';
 
 interface MigrationStats {
   total: number;
@@ -61,8 +62,7 @@ export default function MigrateEvaluationsPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/admin/migrate-evaluation-references');
-      const data = await response.json();
+      const data = await authenticatedGet<any>('/api/admin/migrate-evaluation-references');
 
       if (data.success) {
         setStats(data.stats);
@@ -70,7 +70,7 @@ export default function MigrateEvaluationsPage() {
         setError(data.error || '상태 조회 실패');
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || '상태 조회 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -96,17 +96,10 @@ export default function MigrateEvaluationsPage() {
       setError(null);
       setMigrationResult(null);
 
-      const response = await fetch('/api/admin/migrate-evaluation-references', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dryRun }),
-      });
-
-      const data = await response.json();
+      const data = await authenticatedPost<any>('/api/admin/migrate-evaluation-references', { dryRun });
 
       if (data.success) {
         setMigrationResult(data);
-        // 마이그레이션 후 상태 새로고침
         if (!dryRun) {
           await fetchStats();
         }
@@ -114,7 +107,7 @@ export default function MigrateEvaluationsPage() {
         setError(data.error || '마이그레이션 실패');
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || '마이그레이션 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }

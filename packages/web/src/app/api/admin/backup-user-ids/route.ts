@@ -1,9 +1,18 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    console.log('🔄 사용자 ID 매핑 백업 시작...');
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
+    logger.info('🔄 사용자 ID 매핑 백업 시작...');
     
     const db = getAdminFirestore();
     const auth = getAdminAuth();
@@ -34,7 +43,7 @@ export async function POST() {
             authEmail = authUser.email;
           } catch (authError: any) {
             if (authError.code !== 'auth/user-not-found') {
-              console.warn(`Auth 조회 실패 (${userData.email}):`, authError.message);
+              logger.warn(`Auth 조회 실패 (${userData.email}):`, authError.message);
             }
           }
         }
@@ -88,12 +97,12 @@ export async function POST() {
           email: userDoc.data().email,
           error: error.message,
         });
-        console.error(`❌ 사용자 처리 실패 (${userDoc.id}):`, error);
+        logger.error(`❌ 사용자 처리 실패 (${userDoc.id}):`, error);
       }
     }
     
     // 배치로 저장 (Firestore는 한 번에 500개까지 가능)
-    console.log(`💾 ${mappings.length}개 매핑 데이터 저장 중...`);
+    logger.info(`💾 ${mappings.length}개 매핑 데이터 저장 중...`);
     
     const batchSize = 500;
     for (let i = 0; i < mappings.length; i += batchSize) {
@@ -107,7 +116,7 @@ export async function POST() {
       }
       
       await batch.commit();
-      console.log(`  ✅ ${i + chunk.length}/${mappings.length} 저장 완료`);
+      logger.info(`  ✅ ${i + chunk.length}/${mappings.length} 저장 완료`);
     }
     
     // 백업 메타데이터 저장
@@ -127,7 +136,7 @@ export async function POST() {
       },
     });
     
-    console.log('✅ 백업 완료!');
+    logger.info('✅ 백업 완료!');
     
     return NextResponse.json({
       success: true,
@@ -144,7 +153,7 @@ export async function POST() {
     });
     
   } catch (error: any) {
-    console.error('❌ 백업 실패:', error);
+    logger.error('❌ 백업 실패:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -182,7 +191,7 @@ export async function GET() {
     });
     
   } catch (error: any) {
-    console.error('❌ 백업 상태 조회 실패:', error);
+    logger.error('❌ 백업 상태 조회 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

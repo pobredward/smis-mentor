@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { NotionAPI } from 'notion-client';
+import { logger } from '@smis-mentor/shared';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error('Failed to fetch Notion page:', error);
+    logger.error('Failed to fetch Notion page:', error);
     return NextResponse.json(
       { error: 'Failed to fetch Notion page' },
       { status: 500 }

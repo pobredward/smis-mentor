@@ -1,13 +1,22 @@
-import { NextResponse } from 'next/server';
+import { logger } from '@smis-mentor/shared';
+import { NextRequest, NextResponse } from 'next/server';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const authContext = await getAuthenticatedUser(request);
+    
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email') || 'architronic00@naver.com';
 
-    console.log('🔍 사용자 조회:', email);
+    logger.info('🔍 사용자 조회:', email);
 
     const q = query(collection(db, 'users'), where('email', '==', email));
     const querySnapshot = await getDocs(q);
@@ -46,7 +55,7 @@ export async function GET(request: Request) {
       user: result,
     });
   } catch (error: any) {
-    console.error('❌ 조회 실패:', error);
+    logger.error('❌ 조회 실패:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

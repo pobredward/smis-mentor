@@ -17,6 +17,7 @@ import { getInterviewLinks, InterviewLinks } from '@/lib/interviewLinksService';
 import { InterviewLinksManager } from '@/components/admin/InterviewLinksManager';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
 import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
+import { authenticatedPost } from '@/lib/apiClient';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -1335,34 +1336,23 @@ export function InterviewManageClient() {
     try {
       setIsLoadingMessage(true);
       
-      // {이름} 치환
       const processedMessage = message.replace(/\{이름\}/g, selectedApplication.user?.name || '');
       
-      // 메시지 전송 요청을 백그라운드로 처리
-      const response = await fetch('/api/send-sms', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phoneNumber: selectedApplication.user?.phoneNumber,
-          content: processedMessage,
-          fromNumber
-        }),
+      const result = await authenticatedPost<any>('/api/send-sms', {
+        phoneNumber: selectedApplication.user?.phoneNumber,
+        content: processedMessage,
+        fromNumber
       });
-      
-      const result = await response.json();
       
       if (result.success) {
         toast.success('메시지가 성공적으로 전송되었습니다.');
-        // 모든 메시지 창 닫기
         closeAllMessageBoxes();
       } else {
         toast.error(`메시지 전송 실패: ${result.message}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('메시지 전송 오류:', error);
-      toast.error('메시지 전송 중 오류가 발생했습니다.');
+      toast.error(error.message || '메시지 전송 중 오류가 발생했습니다.');
     } finally {
       setIsLoadingMessage(false);
     }

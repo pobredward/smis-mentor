@@ -38,6 +38,7 @@ import {
   JobExperienceGroupRole,
 } from '@smis-mentor/shared';
 import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
+import { authenticatedPost } from '@/lib/apiClient';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -978,20 +979,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     try {
       setIsSendingSMS(true);
       
-      const response = await fetch('/api/send-sms', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phoneNumber: selectedApplication.user.phoneNumber,
-          content: smsContent,
-          userName: selectedApplication.user.name, // 사용자 이름 추가
-          fromNumber // 발신번호 추가
-        }),
+      const result = await authenticatedPost<any>('/api/send-sms', {
+        phoneNumber: selectedApplication.user.phoneNumber,
+        content: smsContent,
+        userName: selectedApplication.user.name,
+        fromNumber
       });
-      
-      const result = await response.json();
       
       if (result.success) {
         toast.success('SMS가 성공적으로 전송되었습니다.');
@@ -999,9 +992,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       } else {
         toast.error(`SMS 전송 실패: ${result.message}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('SMS 전송 오류:', error);
-      toast.error('SMS 전송 중 오류가 발생했습니다.');
+      toast.error(error.message || 'SMS 전송 중 오류가 발생했습니다.');
     } finally {
       setIsSendingSMS(false);
     }
@@ -1134,35 +1127,26 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       setIsLoadingMessage(true);
       
       // 메시지 전송 요청을 백그라운드로 처리
-      fetch('/api/send-sms', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      try {
+        const result = await authenticatedPost<any>('/api/send-sms', {
           phoneNumber: selectedApplication.user.phoneNumber,
           content: message,
-          userName: selectedApplication.user.name, // 사용자 이름 추가
-          fromNumber // 발신번호 추가
-        }),
-      })
-      .then(response => response.json())
-      .then(result => {
+          userName: selectedApplication.user.name,
+          fromNumber
+        });
+        
         if (result.success) {
           toast.success('SMS가 성공적으로 전송되었습니다.');
-          // 메시지 박스 닫기
           closeAllMessageBoxes();
         } else {
           toast.error(`SMS 전송 실패: ${result.message}`);
         }
-      })
-      .catch(error => {
+      } catch (error: any) {
         console.error('SMS 전송 오류:', error);
-        toast.error('SMS 전송 중 오류가 발생했습니다.');
-      })
-      .finally(() => {
+        toast.error(error.message || 'SMS 전송 중 오류가 발생했습니다.');
+      } finally {
         setIsLoadingMessage(false);
-      });
+      }
       
       // 요청이 완료되기 전에 UI 상태를 업데이트하여 사용자 경험 개선
       // 메시지 전송 중임을 알리는 토스트 표시
