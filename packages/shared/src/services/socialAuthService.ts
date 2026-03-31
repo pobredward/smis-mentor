@@ -45,6 +45,32 @@ export async function handleSocialLogin(
           socialEmail: socialData.email,
           matchedBy: 'authProviders',
         });
+        
+        // ✅ Apple 재로그인: Firestore에 저장된 실제 이메일로 복원
+        const savedProvider = existingUser.authProviders?.find(
+          (p: AuthProvider) => {
+            const normalizedStoredId = p.providerId.replace('.com', '');
+            const normalizedSocialId = socialData.providerId.replace('.com', '');
+            return normalizedStoredId === normalizedSocialId;
+          }
+        );
+        
+        if (savedProvider?.email && socialData.email !== savedProvider.email) {
+          console.log('🔄 Apple 이메일 복원:', {
+            임시이메일: socialData.email,
+            실제이메일: savedProvider.email,
+          });
+          socialData.email = savedProvider.email; // ✅ 실제 이메일로 교체
+        }
+        
+        // ✅ Apple 재로그인: 이름도 복원
+        if (savedProvider?.displayName && socialData.name === 'Apple 사용자') {
+          console.log('🔄 Apple 이름 복원:', {
+            임시이름: socialData.name,
+            실제이름: savedProvider.displayName,
+          });
+          socialData.name = savedProvider.displayName; // ✅ 실제 이름으로 교체
+        }
       }
     }
 
@@ -75,6 +101,49 @@ export async function handleSocialLogin(
         if (hasProviderLinked) {
           // 이미 해당 소셜 계정이 연동됨 → 바로 로그인
           console.log(`✅ 이미 ${socialData.providerId} 계정이 연동된 사용자`);
+          
+          // ✅ Apple: 잘못된 providerUid 자동 마이그레이션
+          if (socialData.providerId === 'apple.com') {
+            const savedProvider = existingUser.authProviders?.find(
+              (p: AuthProvider) => p.providerId === 'apple.com' || p.providerId === 'apple'
+            );
+            
+            if (savedProvider && savedProvider.uid !== socialData.providerUid) {
+              console.log('🔧 Apple providerUid 마이그레이션 필요:', {
+                저장된UID: savedProvider.uid,
+                실제AppleID: socialData.providerUid,
+              });
+              
+              try {
+                // authProviders 배열에서 Apple 항목만 업데이트
+                const updatedProviders = existingUser.authProviders.map((p: AuthProvider) => {
+                  if (p.providerId === 'apple.com' || p.providerId === 'apple') {
+                    return {
+                      ...p,
+                      providerId: 'apple.com', // 정규화
+                      uid: socialData.providerUid, // ✅ 실제 Apple User ID로 교체
+                      email: socialData.email.includes('@privaterelay.appleid.com') 
+                        ? (p.email || socialData.email) // 기존 실제 이메일 유지
+                        : socialData.email, // 새 이메일로 업데이트
+                      displayName: socialData.name === 'Apple 사용자' 
+                        ? (p.displayName || socialData.name) // 기존 이름 유지
+                        : socialData.name, // 새 이름으로 업데이트
+                    };
+                  }
+                  return p;
+                });
+                
+                await updateUser(existingUser.userId, {
+                  authProviders: updatedProviders,
+                });
+                
+                console.log('✅ Apple providerUid 마이그레이션 완료');
+              } catch (migrationError) {
+                console.error('⚠️ Apple providerUid 마이그레이션 실패 (무시하고 계속):', migrationError);
+              }
+            }
+          }
+          
           return {
             action: 'LOGIN',
             user: existingUser,
@@ -152,6 +221,31 @@ export async function checkTempAccountByPhone(
       if (user.email && user.email !== socialData.email) {
         console.log('🔗 다른 이메일의 active 계정 - 연동 필요');
         
+        // ✅ Apple 재로그인: Firestore에 저장된 실제 이메일/이름으로 복원
+        const savedProvider = user.authProviders?.find(
+          (p: AuthProvider) => {
+            const normalizedStoredId = p.providerId.replace('.com', '');
+            const normalizedSocialId = socialData.providerId.replace('.com', '');
+            return normalizedStoredId === normalizedSocialId;
+          }
+        );
+        
+        if (savedProvider?.email && socialData.email !== savedProvider.email) {
+          console.log('🔄 Apple 이메일 복원 (연동):', {
+            임시이메일: socialData.email,
+            실제이메일: savedProvider.email,
+          });
+          socialData.email = savedProvider.email;
+        }
+        
+        if (savedProvider?.displayName && socialData.name === 'Apple 사용자') {
+          console.log('🔄 Apple 이름 복원 (연동):', {
+            임시이름: socialData.name,
+            실제이름: savedProvider.displayName,
+          });
+          socialData.name = savedProvider.displayName;
+        }
+        
         // 이름도 확인하여 본인 계정인지 검증
         const nameMatches = user.name === socialData.name;
         if (!nameMatches) {
@@ -217,7 +311,8 @@ export async function activateTempAccountWithSocial(
   tempUserId: string,
   socialData: SocialUserData,
   additionalData: Record<string, any>,
-  updateUser: (userId: string, data: any) => Promise<void>
+  updateUser: (userId: string, data: any) => Promise<void>,
+  getUserById?: (userId: string) => Promise<any | null> // ✅ 기존 계정 정보 가져오기
 ): Promise<void> {
   try {
     // providerId 정규화: 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
@@ -227,15 +322,30 @@ export async function activateTempAccountWithSocial(
         ? socialData.providerId 
         : `${socialData.providerId}.com`;
     
+    // ✅ Apple 임시 이메일 처리: 기존 temp 계정의 이메일 유지
+    let finalEmail = socialData.email;
+    
+    if (socialData.email.includes('@privaterelay.appleid.com') && getUserById) {
+      console.log('🔍 Apple 임시 이메일 감지 - temp 계정 이메일 확인');
+      const tempUser = await getUserById(tempUserId);
+      
+      if (tempUser?.email && !tempUser.email.includes('@privaterelay.appleid.com')) {
+        console.log('✅ 기존 temp 계정 이메일 사용:', tempUser.email);
+        finalEmail = tempUser.email; // ✅ 기존 이메일 유지
+      } else {
+        console.warn('⚠️ temp 계정에 실제 이메일 없음 - 임시 이메일 사용');
+      }
+    }
+    
     await updateUser(tempUserId, {
-      email: socialData.email,
+      email: finalEmail, // ✅ 실제 이메일 또는 기존 이메일 사용
       profileImage: socialData.photoURL || null, // undefined 대신 null
       status: 'active',
       authProviders: [
         {
           providerId: normalizedProviderId,
           uid: socialData.providerUid,
-          email: socialData.email,
+          email: finalEmail, // ✅ 실제 이메일 저장
           linkedAt: Timestamp.now(),
           ...(socialData.name && { displayName: socialData.name }), // undefined 방지
           ...(socialData.photoURL && { photoURL: socialData.photoURL }), // undefined 방지

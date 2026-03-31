@@ -10,6 +10,7 @@ import {
   Image,
   Linking,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabScreenProps } from '../navigation/types';
@@ -555,6 +556,16 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         // OAuth 2.0 방식 (Expo Go 호환)
         const { signInWithNaver } = await import('../services/naverAuthService');
         socialData = await signInWithNaver();
+      } else if (providerId === 'apple.com') {
+        // Apple 연동
+        const { signInWithApple } = await import('../services/appleAuthService');
+        socialData = await signInWithApple();
+        
+        console.log('🔗 애플 계정 연동:', {
+          currentEmail: userData.email,
+          appleEmail: socialData.email,
+          appleUserId: socialData.providerUid,
+        });
       } else {
         Alert.alert('알림', '해당 소셜 로그인은 준비 중입니다.');
         return;
@@ -1104,6 +1115,17 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                   >
                     <Text style={styles.socialLinkIcon}>🟢</Text>
                     <Text style={styles.socialLinkText}>네이버 연동</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Apple 연동 버튼 (iOS만) */}
+                {Platform.OS === 'ios' && !userData.authProviders.some((p: any) => p.providerId === 'apple.com' || p.providerId === 'apple') && (
+                  <TouchableOpacity
+                    style={styles.socialLinkButton}
+                    onPress={() => handleSocialLink('apple.com')}
+                  >
+                    <Text style={styles.socialLinkIcon}>🍎</Text>
+                    <Text style={styles.socialLinkText}>Apple 연동</Text>
                   </TouchableOpacity>
                 )}
               </View>

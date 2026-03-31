@@ -1,6 +1,7 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import type { SocialUserData } from '@smis-mentor/shared';
 import { Platform } from 'react-native';
+import { decode as atob } from 'base-64'; // ✅ base64 디코딩
 
 /**
  * 애플 로그인 (iOS만 지원)
@@ -33,12 +34,35 @@ export async function signInWithApple(): Promise<SocialUserData> {
       user: credential.user,
       email: credential.email,
       fullName: credential.fullName,
+      identityToken: credential.identityToken ? 'exists' : 'missing',
     });
 
     // 이메일 처리 (재로그인 시 email이 null일 수 있음)
     let email = credential.email || '';
     
-    // 이메일이 없는 경우 임시 이메일 생성 (Apple ID 기반)
+    // ✅ identityToken에서 이메일 추출 (재로그인 시에도 포함됨)
+    if (!email && credential.identityToken) {
+      try {
+        // JWT 디코딩 (payload 부분)
+        const base64Payload = credential.identityToken.split('.')[1];
+        const payload = JSON.parse(atob(base64Payload));
+        
+        if (payload.email) {
+          console.log('✅ identityToken에서 이메일 추출:', payload.email);
+          email = payload.email;
+        }
+        
+        console.log('🔍 identityToken payload:', {
+          email: payload.email,
+          sub: payload.sub, // Apple User ID
+          email_verified: payload.email_verified,
+        });
+      } catch (parseError) {
+        console.error('⚠️ identityToken 파싱 실패:', parseError);
+      }
+    }
+    
+    // 여전히 이메일이 없으면 임시 이메일 생성
     if (!email) {
       console.log('ℹ️ Apple 재로그인 감지 - 이메일 미제공');
       console.log('   → Apple ID로 기존 계정을 찾습니다');

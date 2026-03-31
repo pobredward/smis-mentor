@@ -130,6 +130,8 @@ export function SignUpFlow({
       // temp 계정 활성화
       console.log('✅ temp 계정 활성화:', tempUserId);
       
+      const { getUserById } = await import('../services/authService');
+      
       await activateTempAccountWithSocial(
         tempUserId,
         socialData,
@@ -142,11 +144,20 @@ export function SignUpFlow({
           major2,
           role: 'mentor', // temp_mentor → mentor
         },
-        updateUser
+        updateUser,
+        getUserById // ✅ getUserById 전달
       );
     } else {
       // 완전히 새로운 소셜 계정 생성
       console.log('✅ 새 소셜 계정 생성');
+      
+      // ✅ Apple 임시 이메일로 신규 가입 불가
+      if (socialData.email.includes('@privaterelay.appleid.com')) {
+        throw new Error(
+          'Apple 재로그인 감지: Apple 설정에서 SMIS Mentor 앱 연동을 삭제한 후 다시 시도하세요.\n' +
+          '설정 > Apple ID > 암호 및 보안 > Apple로 로그인을 사용하는 앱'
+        );
+      }
       
       const userId = doc(db, 'users').id;
       
@@ -159,7 +170,7 @@ export function SignUpFlow({
       
       await setDoc(doc(db, 'users', userId), {
         userId,
-        email: socialData.email,
+        email: socialData.email, // ✅ 실제 이메일만 허용
         name,
         phone,
         university,
@@ -174,7 +185,7 @@ export function SignUpFlow({
           {
             providerId: normalizedProviderId,
             uid: socialData.providerUid,
-            email: socialData.email,
+            email: socialData.email, // ✅ 실제 이메일만 허용
             linkedAt: Timestamp.now(),
             displayName: socialData.name,
             photoURL: socialData.photoURL,
