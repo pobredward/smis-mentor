@@ -23,7 +23,7 @@ export default function ProfilePage() {
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
-  const [jobCodesExpanded, setJobCodesExpanded] = useState(true);
+  const [showOlderGenerations, setShowOlderGenerations] = useState(false);
   const [changingJobCode, setChangingJobCode] = useState(false);
   const [isUnlinking, setIsUnlinking] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
@@ -813,121 +813,200 @@ export default function ProfilePage() {
         {/* SMIS 캠프 참여 이력 - 원어민은 숨기기 */}
         {!isForeign && (
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-          <button
-            onClick={() => setJobCodesExpanded(!jobCodesExpanded)}
-            className="w-full border-b px-4 sm:px-6 py-3 hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex justify-between items-start">
-              <h2 className="text-lg font-semibold">
-                {userData.role === 'admin' ? '전체 캠프 코드' : 'SMIS 캠프 참여 이력'}
-              </h2>
-              {jobCodes.length > 0 && (
-                <span className="text-gray-500 text-sm font-semibold flex-shrink-0 ml-2">
-                  {jobCodesExpanded ? '▼' : '▶'}
-                </span>
-              )}
-            </div>
-            {!jobCodesExpanded && jobCodes.length > 0 && (
-              <div className="flex gap-1.5 flex-wrap mt-2">
-                {jobCodes.slice(0, 10).map((job) => (
-                  <span
-                    key={job.id}
-                    className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300 font-semibold whitespace-nowrap"
-                  >
-                    {job.code}
-                  </span>
-                ))}
-                {jobCodes.length > 10 && (
-                  <span className="text-xs px-2 py-0.5 text-gray-500">
-                    +{jobCodes.length - 10}
-                  </span>
-                )}
-              </div>
-            )}
-          </button>
+          <div className="border-b px-4 sm:px-6 py-3">
+            <h2 className="text-lg font-semibold">
+              {userData.role === 'admin' ? '전체 캠프 코드' : 'SMIS 캠프 참여 이력'}
+            </h2>
+          </div>
           
-          {jobCodesExpanded && (
-            <div className="px-4 sm:px-6 py-4">
-              {loading ? (
-                <div className="flex justify-center py-4">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-                </div>
-              ) : jobCodes.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">등록된 참여 이력이 없습니다.</p>
-              ) : (
-                <div className="space-y-2">
-                  {jobCodes.map((job) => {
-                    const exp = userData?.jobExperiences?.find(exp => exp.id === job.id);
-                    const isActive = userData?.activeJobExperienceId === job.id;
-                    return (
-                      <button
-                        key={job.id as string}
-                        onClick={() => handleJobCodeSelect(job.id as string)}
-                        disabled={changingJobCode || isActive}
-                        className={`w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-1.5 px-2.5 rounded-lg transition-all ${
-                          isActive 
-                            ? 'bg-blue-50 border-2 border-blue-200 cursor-default' 
-                            : 'border border-gray-200 hover:bg-gray-50 hover:border-gray-300 cursor-pointer'
-                        } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <div className="hidden sm:block flex-shrink-0 min-w-0 font-medium text-gray-900 text-sm">
-                          {job.generation} {job.name}
-                        </div>
-                        {/* 모바일: 양쪽 정렬로 활성 뱃지 오른쪽 */}
-                        <div className="flex justify-between sm:hidden items-center gap-x-1.5 flex-wrap">
-                          <div className="flex gap-x-1.5 flex-wrap">
-                            {job.code && (
-                              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300 font-semibold">
+          <div className="px-4 sm:px-6 py-4">
+            {loading ? (
+              <div className="flex justify-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              </div>
+            ) : jobCodes.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">등록된 참여 이력이 없습니다.</p>
+            ) : userData.role === 'admin' ? (
+              // Admin: generation별 뱃지 형태 (27기 이상만 표시, 26기 이하는 더보기)
+              <div className="space-y-3">
+                {(() => {
+                  // generation별로 그룹화
+                  const groupedByGeneration = jobCodes.reduce((acc, job) => {
+                    const gen = job.generation;
+                    if (!acc[gen]) {
+                      acc[gen] = [];
+                    }
+                    acc[gen].push(job);
+                    return acc;
+                  }, {} as Record<string, typeof jobCodes>);
+
+                  // generation 순서대로 정렬 (숫자 추출하여 내림차순)
+                  const sortedGenerations = Object.keys(groupedByGeneration).sort((a, b) => {
+                    const numA = parseInt(a.replace(/[^0-9]/g, ''));
+                    const numB = parseInt(b.replace(/[^0-9]/g, ''));
+                    return numB - numA;
+                  });
+
+                  // 27기 이상과 26기 이하 분리
+                  const recentGenerations = sortedGenerations.filter((gen) => {
+                    const num = parseInt(gen.replace(/[^0-9]/g, ''));
+                    return num >= 27;
+                  });
+                  const olderGenerations = sortedGenerations.filter((gen) => {
+                    const num = parseInt(gen.replace(/[^0-9]/g, ''));
+                    return num <= 26;
+                  });
+
+                  return (
+                    <>
+                      {/* 27기 이상 */}
+                      {recentGenerations.map((generation) => (
+                        <div key={generation} className="flex gap-1.5 flex-wrap">
+                          {groupedByGeneration[generation].map((job) => {
+                            const isActive = userData?.activeJobExperienceId === job.id;
+                            return (
+                              <button
+                                key={job.id}
+                                onClick={() => handleJobCodeSelect(job.id as string)}
+                                disabled={changingJobCode || isActive}
+                                className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap transition-all ${
+                                  isActive
+                                    ? 'bg-blue-500 text-white border border-blue-600 cursor-default'
+                                    : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 hover:border-gray-400 cursor-pointer'
+                                } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              >
                                 {job.code}
-                              </span>
-                            )}
-                            {exp?.groupRole && (
-                              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
-                                {exp.groupRole}
-                              </span>
-                            )}
-                            {exp?.classCode && (
-                              <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-semibold">
-                                {exp.classCode}
-                              </span>
-                            )}
-                          </div>
-                          {isActive && (
-                            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
-                              활성
-                            </span>
-                          )}
+                              </button>
+                            );
+                          })}
                         </div>
-                        {/* 데스크탑: 활성 뱃지 맨 앞 */}
-                        <div className="hidden sm:flex items-center gap-x-1.5 flex-wrap">
-                          {isActive && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
-                              활성
-                            </span>
+                      ))}
+                      
+                      {/* 26기 이하 - 더보기 토글 */}
+                      {olderGenerations.length > 0 && (
+                        <>
+                          <button
+                            onClick={() => setShowOlderGenerations(!showOlderGenerations)}
+                            className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1 transition-colors"
+                          >
+                            {showOlderGenerations ? (
+                              <>
+                                <span>26기 이하 접기</span>
+                                <span className="text-xs">▲</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>26기 이하 더보기</span>
+                                <span className="text-xs">▼</span>
+                              </>
+                            )}
+                          </button>
+                          
+                          {showOlderGenerations && (
+                            <div className="space-y-3 pt-1">
+                              {olderGenerations.map((generation) => (
+                                <div key={generation} className="flex gap-1.5 flex-wrap">
+                                  {groupedByGeneration[generation].map((job) => {
+                                    const isActive = userData?.activeJobExperienceId === job.id;
+                                    return (
+                                      <button
+                                        key={job.id}
+                                        onClick={() => handleJobCodeSelect(job.id as string)}
+                                        disabled={changingJobCode || isActive}
+                                        className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap transition-all ${
+                                          isActive
+                                            ? 'bg-blue-500 text-white border border-blue-600 cursor-default'
+                                            : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 hover:border-gray-400 cursor-pointer'
+                                        } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                      >
+                                        {job.code}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </div>
                           )}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : (
+              // 일반 사용자: 기존 리스트 형태
+              <div className="space-y-2">
+                {jobCodes.map((job) => {
+                  const exp = userData?.jobExperiences?.find(exp => exp.id === job.id);
+                  const isActive = userData?.activeJobExperienceId === job.id;
+                  return (
+                    <button
+                      key={job.id as string}
+                      onClick={() => handleJobCodeSelect(job.id as string)}
+                      disabled={changingJobCode || isActive}
+                      className={`w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-1.5 px-2.5 rounded-lg transition-all ${
+                        isActive 
+                          ? 'bg-blue-50 border-2 border-blue-200 cursor-default' 
+                          : 'border border-gray-200 hover:bg-gray-50 hover:border-gray-300 cursor-pointer'
+                      } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <div className="hidden sm:block flex-shrink-0 min-w-0 font-medium text-gray-900 text-sm">
+                        {job.generation} {job.name}
+                      </div>
+                      {/* 모바일: 양쪽 정렬로 활성 뱃지 오른쪽 */}
+                      <div className="flex justify-between sm:hidden items-center gap-x-1.5 flex-wrap">
+                        <div className="flex gap-x-1.5 flex-wrap">
                           {job.code && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300 font-semibold">
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300 font-semibold">
                               {job.code}
                             </span>
                           )}
                           {exp?.groupRole && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
                               {exp.groupRole}
                             </span>
                           )}
                           {exp?.classCode && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-semibold">
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-semibold">
                               {exp.classCode}
                             </span>
                           )}
                         </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                        {isActive && (
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
+                            활성
+                          </span>
+                        )}
+                      </div>
+                      {/* 데스크탑: 활성 뱃지 맨 앞 */}
+                      <div className="hidden sm:flex items-center gap-x-1.5 flex-wrap">
+                        {isActive && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
+                            활성
+                          </span>
+                        )}
+                        {job.code && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300 font-semibold">
+                            {job.code}
+                          </span>
+                        )}
+                        {exp?.groupRole && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
+                            {exp.groupRole}
+                          </span>
+                        )}
+                        {exp?.classCode && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 font-semibold">
+                            {exp.classCode}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
         )}
 
