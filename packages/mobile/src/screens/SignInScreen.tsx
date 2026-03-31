@@ -624,6 +624,50 @@ export function SignInScreen({
       
       setShowPasswordModal(false);
       
+      // ✅ 연동 완료 즉시 새로고침 (Alert 전)
+      console.log('🔄 계정 연동 완료 - 즉시 새로고침');
+      try {
+        // 1. 캐시 무효화
+        const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
+        const currentUserBefore = auth.currentUser;
+        if (currentUserBefore?.uid) {
+          console.log('🗑️ 캐시 무효화:', currentUserBefore.uid);
+          await removeCache(CACHE_STORE.USERS, currentUserBefore.uid);
+        }
+        
+        // 2. Firestore 전파 대기
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // 3. ✅ onAuthStateChanged가 실행될 때까지 대기 (최대 3초)
+        console.log('⏳ onAuthStateChanged 대기 중...');
+        let attempts = 0;
+        const maxAttempts = 30; // 3초
+        
+        while (attempts < maxAttempts) {
+          const currentUserNow = auth.currentUser;
+          if (currentUserNow?.email === existingUserEmail) {
+            console.log('✅ onAuthStateChanged 감지됨:', currentUserNow.email);
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+        
+        if (attempts >= maxAttempts) {
+          console.warn('⚠️ onAuthStateChanged 타임아웃 (무시하고 계속)');
+        }
+        
+        // 4. ✅ AuthContext.refreshUserData 호출
+        await refreshUserData();
+        console.log('✅ refreshUserData 완료');
+        
+        // 5. React 상태 업데이트 대기
+        await new Promise(resolve => setTimeout(resolve, 300));
+        console.log('✅ React 상태 업데이트 대기 완료');
+      } catch (error) {
+        console.error('❌ 즉시 새로고침 실패:', error);
+      }
+      
       // Alert 후 화면 전환
       Alert.alert(
         '연결 완료',
@@ -631,17 +675,8 @@ export function SignInScreen({
         '다음부터는 소셜 로그인도 사용할 수 있습니다.',
         [{ 
           text: '확인', 
-          onPress: async () => {
-            // ✅ 화면 전환 직전에 사용자 데이터 새로고침
-            console.log('🔄 SignInScreen: 화면 전환 전 최종 새로고침');
-            try {
-              // AuthContext의 currentUser가 업데이트될 시간을 주고 refreshUserData 호출
-              await new Promise(resolve => setTimeout(resolve, 300));
-              await refreshUserData();
-              console.log('✅ SignInScreen: 최종 새로고침 완료');
-            } catch (error) {
-              console.error('❌ 최종 새로고침 실패:', error);
-            }
+          onPress: () => {
+            console.log('✅ 화면 전환 (데이터 이미 최신화됨)');
             onSignInSuccess();
           }
         }]
