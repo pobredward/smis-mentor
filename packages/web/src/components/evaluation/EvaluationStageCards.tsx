@@ -605,8 +605,8 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
             {!hasEvaluations && isExpanded && (
               <div className="border-t border-gray-100 bg-gray-50 rounded-b-xl">
                 <div className="p-4">
-                  {/* 평가 작성 버튼 */}
-                  {!hasCurrentUserEvaluated(stageKey) && showingEvaluationForm !== stageKey && (
+                  {/* 평가 작성 버튼 - 중복 평가 허용 */}
+                  {showingEvaluationForm !== stageKey && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -647,6 +647,42 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
             {hasEvaluations && detailExpandedStage === stageKey && (
               <div className="border-t border-gray-100 bg-gray-50 rounded-b-xl">
                 <div className="p-4 space-y-4">
+                  {/* 추가 평가 작성 버튼 */}
+                  {showingEvaluationForm !== stageKey && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 text-lg">📝</span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-blue-800">
+                              추가 평가 작성
+                            </p>
+                            <p className="text-xs text-blue-600">
+                              이 단계에 대한 추가 평가를 작성할 수 있습니다.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleStartEvaluation(stageKey)}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors duration-150 shadow-sm"
+                        >
+                          <span>📝</span>
+                          평가 추가
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 평가 폼 */}
+                  {showingEvaluationForm === stageKey && (
+                    <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-4">
+                      {renderEvaluationForm(stageKey)}
+                    </div>
+                  )}
+
+                  {/* 기존 평가 목록 */}
                   {evaluations.map((evaluation) => (
                     <div key={evaluation.id} className="bg-white rounded-lg p-4 border border-gray-100 shadow-sm">
                       {/* 평가자 정보 헤더 */}
