@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
         </head>
         <body>
           <script>
-            logger.info('네이버 로그인 성공 - opener에게 메시지 전송');
+            console.log('네이버 로그인 성공 - opener에게 메시지 전송');
             if (window.opener) {
               window.opener.postMessage({
                 type: 'NAVER_LOGIN_SUCCESS',
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
               }, '${BASE_URL}');
               setTimeout(() => window.close(), 500);
             } else {
-              logger.error('opener가 없습니다. 메인 페이지로 리다이렉트');
+              console.error('opener가 없습니다. 메인 페이지로 리다이렉트');
               window.location.href = '/sign-in';
             }
           </script>
@@ -141,7 +141,7 @@ function createErrorResponse(errorMessage: string) {
       </head>
       <body>
         <script>
-          logger.error('네이버 로그인 오류:', '${errorMessage}');
+          console.error('네이버 로그인 오류:', '${errorMessage}');
           if (window.opener) {
             window.opener.postMessage({
               type: 'NAVER_LOGIN_ERROR',
