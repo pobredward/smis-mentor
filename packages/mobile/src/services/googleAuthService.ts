@@ -99,6 +99,8 @@ async function signInWithNativeGoogleSDK(GoogleSignin: any): Promise<{
     providerId: 'google.com',
     providerUid: user.id,
     displayName: user.name,
+    idToken: idToken, // ✅ idToken 추가 (Firebase Auth 연동용)
+    accessToken: undefined, // Google Native SDK는 accessToken 불필요
   };
 
   console.log('✅ 구글 로그인 완료 (Native SDK):', { email: socialData.email });
@@ -165,6 +167,8 @@ async function signInWithGoogleOAuth(): Promise<{
     providerId: 'google.com',
     providerUid: payload.sub,
     displayName: payload.name,
+    idToken: idToken, // ✅ idToken 추가
+    accessToken: params.get('access_token') || undefined, // ✅ accessToken 추가
   };
 
   console.log('✅ 구글 로그인 완료 (OAuth 2.0):', { email: socialData.email });

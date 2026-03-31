@@ -566,6 +566,39 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           appleEmail: socialData.email,
           appleUserId: socialData.providerUid,
         });
+        
+        // ✅ Apple 팝업으로 세션 변경될 수 있음 → 원래 계정으로 복원
+        const currentUserAfterApple = auth.currentUser;
+        if (currentUserAfterApple?.uid !== userData.userId) {
+          console.log('⚠️ Apple 팝업으로 세션 변경됨 → 원래 계정으로 복원');
+          
+          // Custom Token으로 원래 계정 복원
+          const { signInWithCustomToken } = await import('../services/authService');
+          await signInWithCustomToken(userData.userId, userData.email);
+          console.log('✅ 원래 계정으로 복원 완료');
+        }
+        
+        // ✅ Apple도 Firebase Auth 연동 시도
+        if (socialData.idToken) {
+          const { OAuthProvider } = await import('firebase/auth');
+          const { linkWithCredential } = await import('firebase/auth');
+          
+          try {
+            const appleProvider = new OAuthProvider('apple.com');
+            credential = appleProvider.credential({
+              idToken: socialData.idToken,
+            });
+            
+            await linkWithCredential(auth.currentUser!, credential);
+            console.log('✅ Firebase Auth Apple 연동 완료');
+          } catch (authError: any) {
+            if (authError.code === 'auth/credential-already-in-use') {
+              console.log('⚠️ Apple 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
+            } else {
+              console.error('⚠️ Firebase Auth Apple 연동 실패:', authError);
+            }
+          }
+        }
       } else {
         Alert.alert('알림', '해당 소셜 로그인은 준비 중입니다.');
         return;

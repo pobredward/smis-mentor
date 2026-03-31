@@ -250,6 +250,14 @@ export function SignInScreen({
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
           break;
+        
+        case 'LINK_ACTIVE':
+          // 기존 active 계정에 Google 연동 필요 → 비밀번호 입력
+          console.log('🔗 Google 연동 필요 - 비밀번호 확인 모달 표시');
+          setSocialData(socialUserData);
+          setExistingUserEmail(result.user.email);
+          setShowPasswordModal(true);
+          break;
           
         case 'NEED_PHONE':
           // 전화번호 입력 필요
@@ -316,6 +324,14 @@ export function SignInScreen({
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
           break;
+        
+        case 'LINK_ACTIVE':
+          // 기존 active 계정에 네이버 연동 필요 → 비밀번호 입력
+          console.log('🔗 네이버 연동 필요 - 비밀번호 확인 모달 표시');
+          setSocialData(socialUserData);
+          setExistingUserEmail(result.user.email);
+          setShowPasswordModal(true);
+          break;
           
         case 'NEED_PHONE':
           // 전화번호 입력 필요
@@ -381,6 +397,14 @@ export function SignInScreen({
             console.error('❌ Firebase Auth 로그인 실패:', authError);
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
+          break;
+        
+        case 'LINK_ACTIVE':
+          // 기존 active 계정에 Apple 연동 필요 → 비밀번호 입력
+          console.log('🔗 Apple 연동 필요 - 비밀번호 확인 모달 표시');
+          setSocialData(socialUserData);
+          setExistingUserEmail(result.user.email);
+          setShowPasswordModal(true);
           break;
           
         case 'NEED_PHONE':
@@ -584,6 +608,7 @@ export function SignInScreen({
     try {
       const { auth } = await import('../config/firebase');
       const { getUserByEmail, getUserById, updateUser } = await import('../services/authService');
+      const { arrayUnion } = await import('firebase/firestore'); // ✅ arrayUnion import
       
       await linkSocialToExistingAccount(
         auth,
@@ -593,7 +618,8 @@ export function SignInScreen({
         signIn,
         getUserByEmail,
         getUserById,
-        updateUser
+        updateUser,
+        arrayUnion // ✅ arrayUnion 전달
       );
       
       setShowPasswordModal(false);
