@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -77,7 +76,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
   const [loadingJobCodes, setLoadingJobCodes] = useState(false);
   const [changingJobCode, setChangingJobCode] = useState(false);
-  const [jobCodesExpanded, setJobCodesExpanded] = useState(true);
+  const [showOlderGenerations, setShowOlderGenerations] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -113,7 +112,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       
       setJobCodes(sortedCodes);
     } catch (error) {
-      logger.error('기수 정보 로드 실패:', error);
+      console.error('기수 정보 로드 실패:', error);
     } finally {
       setLoadingJobCodes(false);
     }
@@ -154,16 +153,16 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
     try {
       setChangingJobCode(true);
-      logger.info('🔄 ProfileScreen: 기수 변경 요청');
-      logger.info('  - 현재 activeJobExperienceId:', userData?.activeJobExperienceId);
-      logger.info('  - 새로운 jobCodeId:', jobCodeId);
+      console.log('🔄 ProfileScreen: 기수 변경 요청');
+      console.log('  - 현재 activeJobExperienceId:', userData?.activeJobExperienceId);
+      console.log('  - 새로운 jobCodeId:', jobCodeId);
       
       await updateActiveJobCode(jobCodeId);
       
-      logger.info('✅ ProfileScreen: 기수 변경 완료');
+      console.log('✅ ProfileScreen: 기수 변경 완료');
       Alert.alert('성공', '기수가 변경되었습니다.\n캠프 탭에서 해당 기수의 자료를 확인하세요.');
     } catch (error) {
-      logger.error('❌ ProfileScreen: 기수 변경 실패:', error);
+      console.error('❌ ProfileScreen: 기수 변경 실패:', error);
       Alert.alert('오류', '기수 변경에 실패했습니다.');
     } finally {
       setChangingJobCode(false);
@@ -296,20 +295,20 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
       // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
       if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
-        logger.info('📋 기존 foreign_temp 사용자 발견, 계정 업데이트 진행...');
+        console.log('📋 기존 foreign_temp 사용자 발견, 계정 업데이트 진행...');
         
         // 기존 계정의 userId 사용
         userId = existingUserByPhone.userId;
         isUpdatingExistingUser = true;
         
         // Firebase Authentication 계정이 이미 있을 수 있으므로 체크
-        logger.info('🔐 Firebase Authentication 계정 생성/확인 시작:', data.email);
+        console.log('🔐 Firebase Authentication 계정 생성/확인 시작:', data.email);
         try {
           const userCredential = await signUp(data.email, data.password);
-          logger.info('✅ Firebase Authentication 계정 생성 완료');
+          console.log('✅ Firebase Authentication 계정 생성 완료');
         } catch (authError: any) {
           if (authError.code === 'auth/email-already-in-use') {
-            logger.info('⚠️ Firebase Auth 이미 존재, Firestore만 업데이트');
+            console.log('⚠️ Firebase Auth 이미 존재, Firestore만 업데이트');
           } else {
             throw authError;
           }
@@ -317,14 +316,14 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       }
       // Case 2: 완전히 새로운 사용자
       else {
-        logger.info('🔐 Firebase Authentication 계정 생성 시작:', data.email);
+        console.log('🔐 Firebase Authentication 계정 생성 시작:', data.email);
         const userCredential = await signUp(data.email, data.password);
         userId = userCredential.user.uid;
-        logger.info('✅ Firebase Authentication 계정 생성 완료, UID:', userId);
+        console.log('✅ Firebase Authentication 계정 생성 완료, UID:', userId);
       }
 
       // 2. 파일 업로드
-      logger.info('📤 파일 업로드 시작...');
+      console.log('📤 파일 업로드 시작...');
       let profileImageUrl = '';
       let cvUrl = '';
       let passportPhotoUrl = '';
@@ -332,30 +331,30 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
       try {
         // 프로필 이미지 업로드
-        logger.info('  - 프로필 이미지 업로드 중...');
+        console.log('  - 프로필 이미지 업로드 중...');
         profileImageUrl = await uploadForeignProfileImage(userId, data.profileImage);
-        logger.info('  ✅ 프로필 이미지 업로드 완료');
+        console.log('  ✅ 프로필 이미지 업로드 완료');
 
         // CV 업로드
-        logger.info('  - CV 업로드 중...');
+        console.log('  - CV 업로드 중...');
         cvUrl = await uploadCV(userId, data.cvFile.uri, data.cvFile.name);
-        logger.info('  ✅ CV 업로드 완료');
+        console.log('  ✅ CV 업로드 완료');
 
         // 여권 사진 업로드
-        logger.info('  - 여권 사진 업로드 중...');
+        console.log('  - 여권 사진 업로드 중...');
         passportPhotoUrl = await uploadPassportPhoto(userId, data.passportPhoto);
-        logger.info('  ✅ 여권 사진 업로드 완료');
+        console.log('  ✅ 여권 사진 업로드 완료');
 
         // 외국인 등록증 업로드 (선택사항)
         if (data.foreignIdCard) {
-          logger.info('  - 외국인 등록증 업로드 중...');
+          console.log('  - 외국인 등록증 업로드 중...');
           foreignIdCardUrl = await uploadForeignIdCard(userId, data.foreignIdCard);
-          logger.info('  ✅ 외국인 등록증 업로드 완료');
+          console.log('  ✅ 외국인 등록증 업로드 완료');
         }
 
-        logger.info('✅ 모든 파일 업로드 완료');
+        console.log('✅ 모든 파일 업로드 완료');
       } catch (uploadError) {
-        logger.error('❌ 파일 업로드 실패:', uploadError);
+        console.error('❌ 파일 업로드 실패:', uploadError);
         throw new Error('파일 업로드에 실패했습니다. 관리자에게 문의해주세요.');
       }
 
@@ -401,9 +400,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       };
 
       if (isUpdatingExistingUser) {
-        logger.info('📝 Firestore 사용자 문서 업데이트 시작');
+        console.log('📝 Firestore 사용자 문서 업데이트 시작');
         await setDoc(doc(db, 'users', userId), userData, { merge: true });
-        logger.info('✅ Firestore 사용자 문서 업데이트 완료 (foreign_temp → foreign)');
+        console.log('✅ Firestore 사용자 문서 업데이트 완료 (foreign_temp → foreign)');
         
         Alert.alert(
           'Account Activated',
@@ -420,9 +419,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           ]
         );
       } else {
-        logger.info('📝 Firestore 사용자 문서 생성 시작');
+        console.log('📝 Firestore 사용자 문서 생성 시작');
         await setDoc(doc(db, 'users', userId), userData);
-        logger.info('✅ Firestore 사용자 문서 생성 완료');
+        console.log('✅ Firestore 사용자 문서 생성 완료');
         
         Alert.alert(
           'Sign Up Complete',
@@ -440,7 +439,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         );
       }
     } catch (error: any) {
-      logger.error('❌ 원어민 회원가입 오류:', error);
+      console.error('❌ 원어민 회원가입 오류:', error);
       
       let errorMessage = error.message || 'An error occurred during sign up.';
       if (error.code === 'auth/email-already-in-use') {
@@ -461,19 +460,19 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      logger.info('🔄 ProfileScreen: Pull-to-refresh 시작');
+      console.log('🔄 ProfileScreen: Pull-to-refresh 시작');
       
       // 사용자 데이터 새로고침
       await refreshUserData();
       
-      // 직무 코드 새로고침 (펼쳐져 있을 때만)
-      if (jobCodesExpanded && userData?.jobExperiences) {
+      // 직무 코드 새로고침
+      if (userData?.jobExperiences) {
         await loadJobCodes();
       }
       
-      logger.info('✅ ProfileScreen: Pull-to-refresh 완료');
+      console.log('✅ ProfileScreen: Pull-to-refresh 완료');
     } catch (error) {
-      logger.error('❌ ProfileScreen: Pull-to-refresh 실패:', error);
+      console.error('❌ ProfileScreen: Pull-to-refresh 실패:', error);
     } finally {
       setRefreshing(false);
     }
@@ -493,7 +492,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             await signOut();
             Alert.alert('로그아웃', '로그아웃되었습니다.');
           } catch (error) {
-            logger.error('로그아웃 오류:', error);
+            console.error('로그아웃 오류:', error);
             Alert.alert('오류', '로그아웃 중 오류가 발생했습니다.');
           }
         },
@@ -509,7 +508,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
     try {
       // 1. 캐시 무효화
-      logger.info('🗑️ 사용자 캐시 무효화:', userData.userId);
+      console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
       const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
       await removeCache(CACHE_STORE.USERS, userData.userId);
 
@@ -523,7 +522,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         socialData = result.socialData;
         credential = result.credential;
 
-        logger.info('🔗 구글 계정 연동:', {
+        console.log('🔗 구글 계정 연동:', {
           currentEmail: userData.email,
           googleEmail: socialData.email,
           allowDifferentEmail: true,
@@ -532,7 +531,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         // 원래 계정으로 복원
         const currentUserAfterPopup = auth.currentUser;
         if (currentUserAfterPopup?.uid !== userData.userId) {
-          logger.info('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원');
+          console.log('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원');
 
           // Custom Token으로 복원
           const { signInWithCustomToken } = await import('../services/authService');
@@ -544,10 +543,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           const { linkWithCredential } = await import('firebase/auth');
           try {
             await linkWithCredential(auth.currentUser!, credential);
-            logger.info('✅ Firebase Auth 소셜 계정 연동 완료');
+            console.log('✅ Firebase Auth 소셜 계정 연동 완료');
           } catch (authError: any) {
             if (authError.code === 'auth/credential-already-in-use') {
-              logger.info('⚠️ 구글 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
+              console.log('⚠️ 구글 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
             } else {
               throw authError;
             }
@@ -562,7 +561,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         const { signInWithApple } = await import('../services/appleAuthService');
         socialData = await signInWithApple();
         
-        logger.info('🔗 애플 계정 연동:', {
+        console.log('🔗 애플 계정 연동:', {
           currentEmail: userData.email,
           appleEmail: socialData.email,
           appleUserId: socialData.providerUid,
@@ -571,12 +570,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         // ✅ Apple 팝업으로 세션 변경될 수 있음 → 원래 계정으로 복원
         const currentUserAfterApple = auth.currentUser;
         if (currentUserAfterApple?.uid !== userData.userId) {
-          logger.info('⚠️ Apple 팝업으로 세션 변경됨 → 원래 계정으로 복원');
+          console.log('⚠️ Apple 팝업으로 세션 변경됨 → 원래 계정으로 복원');
           
           // Custom Token으로 원래 계정 복원
           const { signInWithCustomToken } = await import('../services/authService');
           await signInWithCustomToken(userData.userId, userData.email);
-          logger.info('✅ 원래 계정으로 복원 완료');
+          console.log('✅ 원래 계정으로 복원 완료');
         }
         
         // ✅ Apple도 Firebase Auth 연동 시도
@@ -591,12 +590,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             });
             
             await linkWithCredential(auth.currentUser!, credential);
-            logger.info('✅ Firebase Auth Apple 연동 완료');
+            console.log('✅ Firebase Auth Apple 연동 완료');
           } catch (authError: any) {
             if (authError.code === 'auth/credential-already-in-use') {
-              logger.info('⚠️ Apple 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
+              console.log('⚠️ Apple 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장');
             } else {
-              logger.error('⚠️ Firebase Auth Apple 연동 실패:', authError);
+              console.error('⚠️ Firebase Auth Apple 연동 실패:', authError);
             }
           }
         }
@@ -621,11 +620,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       Alert.alert('성공', '소셜 계정이 성공적으로 연동되었습니다.');
 
       // 사용자 데이터 새로고침 (UI 즉시 반영)
-      logger.info('🔄 사용자 데이터 새로고침 시작');
+      console.log('🔄 사용자 데이터 새로고침 시작');
       await refreshUserData();
-      logger.info('✅ 사용자 데이터 새로고침 완료');
+      console.log('✅ 사용자 데이터 새로고침 완료');
     } catch (error: any) {
-      logger.error('소셜 계정 연동 오류:', error);
+      console.error('소셜 계정 연동 오류:', error);
       
       let errorMessage = '소셜 계정 연동 중 오류가 발생했습니다.';
       if (error.message === 'POPUP_CLOSED') {
@@ -661,7 +660,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           onPress: async () => {
             try {
               // 1. 캐시 무효화
-              logger.info('🗑️ 사용자 캐시 무효화:', userData.userId);
+              console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
               const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
               await removeCache(CACHE_STORE.USERS, userData.userId);
 
@@ -700,11 +699,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               Alert.alert('성공', `${providerName} 계정 연동이 해제되었습니다.`);
 
               // 사용자 데이터 새로고침 (UI 즉시 반영)
-              logger.info('🔄 사용자 데이터 새로고침 시작');
+              console.log('🔄 사용자 데이터 새로고침 시작');
               await refreshUserData();
-              logger.info('✅ 사용자 데이터 새로고침 완료');
+              console.log('✅ 사용자 데이터 새로고침 완료');
             } catch (error: any) {
-              logger.error('연동 해제 오류:', error);
+              console.error('연동 해제 오류:', error);
               Alert.alert('오류', error.message || '연동 해제 중 오류가 발생했습니다.');
             }
           },
@@ -870,92 +869,178 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           {/* SMIS 캠프 참여 이력 - 기수 선택 - 원어민은 숨기기 */}
           {!isForeign && (
           <View style={styles.sectionCard}>
-            <TouchableOpacity 
-              style={styles.sectionHeader}
-              onPress={() => setJobCodesExpanded(!jobCodesExpanded)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.sectionHeaderContent}>
-                <Text style={styles.sectionTitle}>
-                  {userData.role === 'admin' ? '전체 캠프 코드' : 'SMIS 캠프 참여 이력'}
-                </Text>
-                {jobCodes.length > 0 && (
-                  <Text style={styles.expandIcon}>
-                    {jobCodesExpanded ? '▼' : '▶'}
-                  </Text>
-                )}
-              </View>
-              {!jobCodesExpanded && jobCodes.length > 0 && (
-                <View style={styles.collapsedCodesContainer}>
-                  {jobCodes.slice(0, 10).map((jobCode) => (
-                    <View key={jobCode.id} style={styles.collapsedCodeBadge}>
-                      <Text style={styles.collapsedCodeText}>{jobCode.code}</Text>
-                    </View>
-                  ))}
-                  {jobCodes.length > 10 && (
-                    <Text style={styles.moreCodesText}>+{jobCodes.length - 10}</Text>
-                  )}
-                </View>
-              )}
-            </TouchableOpacity>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                {userData.role === 'admin' ? '전체 캠프 코드' : 'SMIS 캠프 참여 이력'}
+              </Text>
+            </View>
             
-            {jobCodesExpanded && (
-              <>
-                {loadingJobCodes ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#3b82f6" />
-                  </View>
-                ) : jobCodes.length === 0 ? (
-                  <Text style={styles.emptyText}>등록된 참여 이력이 없습니다.</Text>
-                ) : (
-                  <View style={styles.jobCodesContainer}>
-                    {jobCodes.map((jobCode) => {
-                      const exp = userData.jobExperiences?.find(e => e.id === jobCode.id);
-                      const isActive = userData.activeJobExperienceId === jobCode.id;
+            {loadingJobCodes ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#3b82f6" />
+              </View>
+            ) : jobCodes.length === 0 ? (
+              <Text style={styles.emptyText}>등록된 참여 이력이 없습니다.</Text>
+            ) : userData.role === 'admin' ? (
+              // Admin: generation별 뱃지 형태 (27기 이상만 표시, 26기 이하는 더보기)
+              <View style={styles.adminBadgesContainer}>
+                {(() => {
+                  // generation별로 그룹화
+                  const groupedByGeneration = jobCodes.reduce((acc: Record<string, typeof jobCodes>, job) => {
+                    const gen = job.generation;
+                    if (!acc[gen]) {
+                      acc[gen] = [];
+                    }
+                    acc[gen].push(job);
+                    return acc;
+                  }, {});
+
+                  // generation 순서대로 정렬 (숫자 추출하여 내림차순)
+                  const sortedGenerations = Object.keys(groupedByGeneration).sort((a, b) => {
+                    const numA = parseInt(a.replace(/[^0-9]/g, ''));
+                    const numB = parseInt(b.replace(/[^0-9]/g, ''));
+                    return numB - numA;
+                  });
+
+                  // 27기 이상과 26기 이하 분리
+                  const recentGenerations = sortedGenerations.filter((gen) => {
+                    const num = parseInt(gen.replace(/[^0-9]/g, ''));
+                    return num >= 27;
+                  });
+                  const olderGenerations = sortedGenerations.filter((gen) => {
+                    const num = parseInt(gen.replace(/[^0-9]/g, ''));
+                    return num <= 26;
+                  });
+
+                  return (
+                    <>
+                      {/* 27기 이상 */}
+                      {recentGenerations.map((generation) => (
+                        <View key={generation} style={styles.badgeRow}>
+                          {groupedByGeneration[generation].map((job) => {
+                            const isActive = userData?.activeJobExperienceId === job.id;
+                            return (
+                              <TouchableOpacity
+                                key={job.id}
+                                onPress={() => handleJobCodeSelect(job.id)}
+                                disabled={changingJobCode || isActive}
+                                style={[
+                                  styles.adminBadge,
+                                  isActive && styles.adminBadgeActive,
+                                  changingJobCode && !isActive && styles.adminBadgeDisabled,
+                                ]}
+                              >
+                                <Text style={[
+                                  styles.adminBadgeText,
+                                  isActive && styles.adminBadgeTextActive,
+                                ]}>
+                                  {job.code}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      ))}
                       
-                      return (
-                        <TouchableOpacity
-                          key={jobCode.id}
-                          style={[
-                            styles.jobCodeItem,
-                            isActive && styles.jobCodeItemActive,
-                          ]}
-                          onPress={() => handleJobCodeSelect(jobCode.id)}
-                          disabled={changingJobCode || isActive}
-                        >
-                          <View style={styles.jobCodeMain}>
-                            <Text style={styles.jobCodeText}>
-                              {jobCode.generation} {jobCode.name}
+                      {/* 26기 이하 - 더보기 토글 */}
+                      {olderGenerations.length > 0 && (
+                        <>
+                          <TouchableOpacity
+                            onPress={() => setShowOlderGenerations(!showOlderGenerations)}
+                            style={styles.toggleButton}
+                          >
+                            <Text style={styles.toggleButtonText}>
+                              {showOlderGenerations ? '26기 이하 접기' : '26기 이하 더보기'}
                             </Text>
-                            <View style={styles.jobCodeBadges}>
-                              {isActive && (
-                                <View style={styles.activeBadge}>
-                                  <Text style={styles.activeBadgeText}>활성</Text>
+                            <Text style={styles.toggleButtonIcon}>
+                              {showOlderGenerations ? '▲' : '▼'}
+                            </Text>
+                          </TouchableOpacity>
+                          
+                          {showOlderGenerations && (
+                            <View style={styles.olderGenerationsContainer}>
+                              {olderGenerations.map((generation) => (
+                                <View key={generation} style={styles.badgeRow}>
+                                  {groupedByGeneration[generation].map((job) => {
+                                    const isActive = userData?.activeJobExperienceId === job.id;
+                                    return (
+                                      <TouchableOpacity
+                                        key={job.id}
+                                        onPress={() => handleJobCodeSelect(job.id)}
+                                        disabled={changingJobCode || isActive}
+                                        style={[
+                                          styles.adminBadge,
+                                          isActive && styles.adminBadgeActive,
+                                          changingJobCode && !isActive && styles.adminBadgeDisabled,
+                                        ]}
+                                      >
+                                        <Text style={[
+                                          styles.adminBadgeText,
+                                          isActive && styles.adminBadgeTextActive,
+                                        ]}>
+                                          {job.code}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
                                 </View>
-                              )}
-                              {jobCode.code && (
-                                <View style={styles.codeBadge}>
-                                  <Text style={styles.codeBadgeText}>{jobCode.code}</Text>
-                                </View>
-                              )}
-                              {exp?.groupRole && (
-                                <View style={styles.roleBadge}>
-                                  <Text style={styles.roleBadgeText}>{exp.groupRole}</Text>
-                                </View>
-                              )}
-                              {exp?.classCode && (
-                                <View style={styles.classBadge}>
-                                  <Text style={styles.classBadgeText}>{exp.classCode}</Text>
-                                </View>
-                              )}
+                              ))}
                             </View>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-              </>
+                          )}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+              </View>
+            ) : (
+              // 일반 사용자: 기존 리스트 형태
+              <View style={styles.jobCodesContainer}>
+                {jobCodes.map((jobCode) => {
+                  const exp = userData.jobExperiences?.find(e => e.id === jobCode.id);
+                  const isActive = userData.activeJobExperienceId === jobCode.id;
+                  
+                  return (
+                    <TouchableOpacity
+                      key={jobCode.id}
+                      style={[
+                        styles.jobCodeItem,
+                        isActive && styles.jobCodeItemActive,
+                      ]}
+                      onPress={() => handleJobCodeSelect(jobCode.id)}
+                      disabled={changingJobCode || isActive}
+                    >
+                      <View style={styles.jobCodeMain}>
+                        <Text style={styles.jobCodeText}>
+                          {jobCode.generation} {jobCode.name}
+                        </Text>
+                        <View style={styles.jobCodeBadges}>
+                          {isActive && (
+                            <View style={styles.activeBadge}>
+                              <Text style={styles.activeBadgeText}>활성</Text>
+                            </View>
+                          )}
+                          {jobCode.code && (
+                            <View style={styles.codeBadge}>
+                              <Text style={styles.codeBadgeText}>{jobCode.code}</Text>
+                            </View>
+                          )}
+                          {exp?.groupRole && (
+                            <View style={styles.roleBadge}>
+                              <Text style={styles.roleBadgeText}>{exp.groupRole}</Text>
+                            </View>
+                          )}
+                          {exp?.classCode && (
+                            <View style={styles.classBadge}>
+                              <Text style={styles.classBadgeText}>{exp.classCode}</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             )}
           </View>
           )}
@@ -1405,6 +1490,61 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1e293b',
   },
+  
+  // Admin 뱃지 스타일
+  adminBadgesContainer: {
+    padding: 16,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  adminBadge: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  adminBadgeActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#2563eb',
+  },
+  adminBadgeDisabled: {
+    opacity: 0.5,
+  },
+  adminBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  adminBadgeTextActive: {
+    color: '#ffffff',
+  },
+  toggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    marginTop: -4,
+    marginBottom: 4,
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  toggleButtonIcon: {
+    fontSize: 10,
+    color: '#64748b',
+  },
+  olderGenerationsContainer: {
+    paddingTop: 4,
+  },
+  
   collapsedCodesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
