@@ -8,13 +8,24 @@ import {
   DEFAULT_SMS_TEMPLATES,
   TemplateType,
 } from '@smis-mentor/shared';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 
 // 환경 변수에서 웹 API URL 가져오기
 const WEB_API_URL = process.env.EXPO_PUBLIC_WEB_API_URL || 'http://localhost:3000';
 
-// SMS API 클라이언트 인스턴스 생성
-const smsClient = new SMSApiClient(WEB_API_URL);
+// Firebase Auth 토큰을 가져오는 함수
+async function getAuthToken(): Promise<string> {
+  const currentUser = auth.currentUser;
+  
+  if (!currentUser) {
+    throw new Error('로그인이 필요합니다.');
+  }
+  
+  return await currentUser.getIdToken();
+}
+
+// SMS API 클라이언트 인스턴스 생성 (인증 토큰 함수 전달)
+const smsClient = new SMSApiClient(WEB_API_URL, getAuthToken);
 
 /**
  * SMS 전송 (기본)
