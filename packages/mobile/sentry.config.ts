@@ -57,6 +57,11 @@ Sentry.init({
     'Aborted',
     'cancelled',
     'timeout',
+    // Expo Go 환경에서 네이티브 모듈 사용 불가 에러
+    'RNGoogleSignin',
+    'TurboModuleRegistry',
+    // Firebase Auth 경고
+    'You are initializing Firebase Auth for React Native without providing',
   ],
 });
 

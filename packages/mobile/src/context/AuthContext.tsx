@@ -108,8 +108,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           });
           logger.info('✅ Google Sign-In SDK 초기화 완료 (Development Build)');
         }
-      } catch (error) {
-        logger.warn('⚠️ Google SDK 로드 실패 (Expo Go에서는 정상):', error);
+      } catch (error: any) {
+        // Expo Go 환경: 네이티브 모듈 사용 불가 (정상)
+        const errorMessage = error?.message || String(error);
+        if (errorMessage.includes('RNGoogleSignin') || errorMessage.includes('TurboModuleRegistry')) {
+          logger.warn('⚠️ Expo Go 환경: Google Native SDK를 사용할 수 없습니다');
+        } else {
+          logger.warn('⚠️ Google SDK 로드 실패 (Expo Go에서는 정상):', error);
+        }
       }
     };
 

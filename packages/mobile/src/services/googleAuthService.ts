@@ -56,8 +56,14 @@ export async function signInWithGoogleDirect(): Promise<{
         logger.info('🔵 구글 로그인 시작 (Native SDK - Development Build)');
         return await signInWithNativeGoogleSDK(GoogleSignin);
       }
-    } catch (error) {
-      logger.info('⚠️ Google Native SDK 불가능, OAuth 2.0 사용 (Expo Go)');
+    } catch (error: any) {
+      // Expo Go 환경: 네이티브 모듈 사용 불가 (정상)
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('RNGoogleSignin') || errorMessage.includes('TurboModuleRegistry')) {
+        logger.warn('⚠️ Expo Go 환경: Google Native SDK를 사용할 수 없습니다');
+      } else {
+        logger.warn('⚠️ Google Native SDK 불가능, OAuth 2.0 사용:', errorMessage);
+      }
     }
 
     // Native SDK를 사용할 수 없으면 OAuth 2.0 사용
