@@ -5,31 +5,59 @@ import { signInWithCustomTokenFromFunction } from './firebaseService';
  * 소셜 로그인 사용자를 Firebase Auth에 로그인시키는 헬퍼
  */
 async function ensureFirebaseAuth(): Promise<string> {
+  console.log('🔐 ensureFirebaseAuth 시작');
+  
   // 이미 Firebase Auth에 로그인되어 있으면 토큰 반환
   if (auth.currentUser) {
-    return await auth.currentUser.getIdToken();
+    console.log('✅ Firebase Auth 사용자 확인:', {
+      uid: auth.currentUser.uid,
+      email: auth.currentUser.email,
+    });
+    const token = await auth.currentUser.getIdToken();
+    console.log('✅ ID 토큰 발급 성공 (길이:', token.length, ')');
+    return token;
   }
+  
+  console.log('⚠️ Firebase Auth 사용자 없음, 소셜 로그인 확인 중...');
   
   // 소셜 로그인 사용자인지 확인
   const socialUserStr = sessionStorage.getItem('social_user');
   if (socialUserStr) {
     try {
       const socialUser = JSON.parse(socialUserStr);
+      console.log('📱 소셜 로그인 사용자 발견:', {
+        userId: socialUser.userId,
+        email: socialUser.email,
+        name: socialUser.name,
+      });
       
       // Firebase Custom Token으로 로그인
+      console.log('🔑 Custom Token 생성 요청 중...');
       const userCredential = await signInWithCustomTokenFromFunction(
         socialUser.userId,
         socialUser.email
       );
       
+      console.log('✅ Custom Token 로그인 성공:', {
+        uid: userCredential.user.uid,
+        email: userCredential.user.email,
+      });
+      
       // ID 토큰 반환
-      return await userCredential.user.getIdToken();
-    } catch (error) {
-      console.error('소셜 로그인 사용자 Firebase Auth 연동 실패:', error);
+      const token = await userCredential.user.getIdToken();
+      console.log('✅ ID 토큰 발급 성공 (길이:', token.length, ')');
+      return token;
+    } catch (error: any) {
+      console.error('❌ 소셜 로그인 사용자 Firebase Auth 연동 실패:', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack?.split('\n').slice(0, 3),
+      });
       throw new Error('인증 처리에 실패했습니다. 다시 로그인해주세요.');
     }
   }
   
+  console.error('❌ 로그인 정보 없음 (Firebase Auth, 소셜 로그인 모두 없음)');
   throw new Error('로그인이 필요합니다.');
 }
 

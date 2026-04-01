@@ -15,19 +15,41 @@ function initializeFirebaseAdmin() {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
+  // 환경 변수 존재 여부만 로깅 (실제 값은 보안상 로깅하지 않음)
+  console.log('🔥 Firebase Admin SDK 초기화 시도:', {
+    env: process.env.NODE_ENV,
+    hasProjectId: !!projectId,
+    hasClientEmail: !!clientEmail,
+    hasPrivateKey: !!privateKey,
+    privateKeyLength: privateKey?.length || 0,
+  });
+
   if (!projectId || !clientEmail || !privateKey) {
+    const missing = [];
+    if (!projectId) missing.push('FIREBASE_PROJECT_ID');
+    if (!clientEmail) missing.push('FIREBASE_CLIENT_EMAIL');
+    if (!privateKey) missing.push('FIREBASE_PRIVATE_KEY');
+    
     throw new Error(
-      'Firebase Admin SDK 환경 변수가 설정되지 않았습니다. FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY를 확인하세요.'
+      `Firebase Admin SDK 환경 변수가 설정되지 않았습니다. 누락된 변수: ${missing.join(', ')}`
     );
   }
 
-  return admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
-  });
+  try {
+    const app = admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+    });
+    
+    console.log('✅ Firebase Admin SDK 초기화 성공');
+    return app;
+  } catch (error) {
+    console.error('❌ Firebase Admin SDK 초기화 실패:', error);
+    throw error;
+  }
 }
 
 /**

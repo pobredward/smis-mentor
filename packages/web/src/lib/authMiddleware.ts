@@ -17,15 +17,18 @@ export async function getAuthenticatedUser(request: NextRequest): Promise<AuthCo
     const authHeader = request.headers.get('Authorization');
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      logger.warn('Authorization 헤더 없음 또는 형식 오류');
       return null;
     }
     
     const idToken = authHeader.substring(7);
     
     // Firebase Admin SDK를 사용하여 토큰 검증
+    logger.info('🔐 토큰 검증 시작');
     const adminAuth = getAdminAuth();
     const decodedToken = await adminAuth.verifyIdToken(idToken);
     const firebaseUid = decodedToken.uid;
+    logger.info('✅ 토큰 검증 성공:', { uid: firebaseUid });
     
     // Firestore에서 사용자 정보 조회
     const db = getAdminFirestore();
@@ -37,13 +40,22 @@ export async function getAuthenticatedUser(request: NextRequest): Promise<AuthCo
     }
     
     const user = { ...userDoc.data(), userId: firebaseUid } as User;
+    logger.info('✅ 사용자 정보 조회 성공:', {
+      userId: user.userId,
+      name: user.name,
+      role: user.role,
+    });
     
     return {
       user,
       firebaseUid,
     };
-  } catch (error) {
-    logger.error('사용자 인증 실패:', error);
+  } catch (error: any) {
+    logger.error('❌ 사용자 인증 실패:', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack?.split('\n').slice(0, 3),
+    });
     return null;
   }
 }
