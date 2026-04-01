@@ -74,18 +74,33 @@ export function requireAdmin(authContext: AuthContext | null): NextResponse | nu
  */
 export function requireMentor(authContext: AuthContext | null): NextResponse | null {
   if (!authContext) {
+    logger.warn('SMS API: 인증 컨텍스트 없음');
     return NextResponse.json(
       { error: '인증이 필요합니다.' },
       { status: 401 }
     );
   }
   
-  if (!['admin', 'mentor', 'foreign'].includes(authContext.user.role)) {
+  const allowedRoles = ['admin', 'mentor', 'foreign', 'mentor_temp', 'foreign_temp'];
+  
+  if (!allowedRoles.includes(authContext.user.role)) {
+    logger.warn('SMS API: 권한 부족', {
+      userId: authContext.user.userId,
+      userName: authContext.user.name,
+      role: authContext.user.role,
+      required: allowedRoles,
+    });
     return NextResponse.json(
       { error: '멘토 이상의 권한이 필요합니다.' },
       { status: 403 }
     );
   }
+  
+  logger.info('SMS API: 권한 확인 통과', {
+    userId: authContext.user.userId,
+    userName: authContext.user.name,
+    role: authContext.user.role,
+  });
   
   return null;
 }

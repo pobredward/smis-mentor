@@ -1,4 +1,37 @@
 import { auth } from './firebase';
+import { signInWithCustomTokenFromFunction } from './firebaseService';
+
+/**
+ * 소셜 로그인 사용자를 Firebase Auth에 로그인시키는 헬퍼
+ */
+async function ensureFirebaseAuth(): Promise<string> {
+  // 이미 Firebase Auth에 로그인되어 있으면 토큰 반환
+  if (auth.currentUser) {
+    return await auth.currentUser.getIdToken();
+  }
+  
+  // 소셜 로그인 사용자인지 확인
+  const socialUserStr = sessionStorage.getItem('social_user');
+  if (socialUserStr) {
+    try {
+      const socialUser = JSON.parse(socialUserStr);
+      
+      // Firebase Custom Token으로 로그인
+      const userCredential = await signInWithCustomTokenFromFunction(
+        socialUser.userId,
+        socialUser.email
+      );
+      
+      // ID 토큰 반환
+      return await userCredential.user.getIdToken();
+    } catch (error) {
+      console.error('소셜 로그인 사용자 Firebase Auth 연동 실패:', error);
+      throw new Error('인증 처리에 실패했습니다. 다시 로그인해주세요.');
+    }
+  }
+  
+  throw new Error('로그인이 필요합니다.');
+}
 
 /**
  * 인증된 API 요청을 보내는 헬퍼 함수
@@ -8,13 +41,7 @@ export async function authenticatedFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const currentUser = auth.currentUser;
-  
-  if (!currentUser) {
-    throw new Error('로그인이 필요합니다.');
-  }
-  
-  const idToken = await currentUser.getIdToken();
+  const idToken = await ensureFirebaseAuth();
   
   const headers = new Headers(options.headers);
   headers.set('Authorization', `Bearer ${idToken}`);
