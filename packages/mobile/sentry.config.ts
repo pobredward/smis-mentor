@@ -10,14 +10,16 @@ Sentry.init({
   // 디버그 모드 (개발 환경에서만)
   debug: __DEV__,
   
-  // 트레이싱 샘플링 (10%)
-  tracesSampleRate: 0.1,
-  
-  // 프로파일링 샘플링
-  profilesSampleRate: 0.1,
+  // 트레이싱 샘플링 (개발: 100%, 프로덕션: 10%)
+  tracesSampleRate: __DEV__ ? 1.0 : 0.1,
   
   // 에러 전송 전 필터링
   beforeSend(event, hint) {
+    // 개발 환경에서는 에러를 콘솔에도 출력
+    if (__DEV__) {
+      console.error('Sentry captured error:', event);
+    }
+    
     // 민감 정보 제거
     if (event.user) {
       delete event.user.ip_address;
@@ -33,6 +35,8 @@ Sentry.init({
       if (data.password) data.password = '[REDACTED]';
       if (data.token) data.token = '[REDACTED]';
       if (data.apiKey) data.apiKey = '[REDACTED]';
+      if (data.ssn) data.ssn = '[REDACTED]';
+      if (data.passportNumber) data.passportNumber = '[REDACTED]';
     }
     
     return event;
@@ -45,18 +49,14 @@ Sentry.init({
       enableNativeFramesTracking: true,
       enableStallTracking: true,
     }),
-    
-    // 스크린샷 (에러 발생 시)
-    Sentry.screenshotIntegration({
-      quality: 0.7,
-    }),
   ],
   
-  // 무시할 에러
+  // 무시할 에러 (네트워크 에러는 추적하지 않음)
   ignoreErrors: [
     'Network request failed',
     'Aborted',
     'cancelled',
+    'timeout',
   ],
 });
 
