@@ -2316,11 +2316,14 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       </div>
                     )}
 
-                    {/* 지원장소 변경 */}
-                    {selectedApplication && (
+                    {/* 지원장소 변경 (개발 환경 전용) */}
+                    {selectedApplication && process.env.NODE_ENV === 'development' && (
                       <div className="mb-6 pb-6 border-b border-gray-200">
                         <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-semibold">지원장소 관리</h3>
+                          <div>
+                            <h3 className="text-lg font-semibold">지원장소 관리</h3>
+                            <p className="text-xs text-orange-600 mt-1">개발 환경 전용 기능</p>
+                          </div>
                           <Button
                             onClick={() => setShowJobBoardChangeModal(true)}
                             className="px-4 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700"
