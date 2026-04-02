@@ -13,7 +13,6 @@ import {
 import { db } from '../config/firebase';
 import { ApplicationHistory, Review } from '@shared/types';
 import { getJobBoardById as getJobBoard } from './jobBoardService';
-import { authenticatedPost } from './apiClient';
 
 export type ApplicationWithJobDetails = ApplicationHistory & {
   jobBoard?: any;
@@ -21,48 +20,6 @@ export type ApplicationWithJobDetails = ApplicationHistory & {
 
 export type ReviewWithId = Review & {
   isOpen?: boolean;
-};
-
-/**
- * 관리자가 지원자의 지원장소를 변경
- */
-export const changeApplicationJobBoard = async (
-  applicationId: string,
-  newJobBoardId: string
-): Promise<{ updatedApplications: number; updatedEvaluations: number }> => {
-  try {
-    logger.info('[changeApplicationJobBoard] API 호출 시작:', {
-      applicationId,
-      newJobBoardId,
-    });
-
-    const response = await authenticatedPost<{
-      success: boolean;
-      message: string;
-      data: { updatedApplications: number; updatedEvaluations: number };
-    }>('/api/admin/change-job-board', {
-      applicationId,
-      newJobBoardId,
-    });
-
-    logger.info('[changeApplicationJobBoard] API 응답 수신:', response);
-
-    if (!response.success) {
-      throw new Error(response.message || '지원장소 변경에 실패했습니다.');
-    }
-
-    if (!response.data) {
-      throw new Error('응답 데이터가 없습니다.');
-    }
-
-    return response.data;
-  } catch (error: any) {
-    logger.error('[changeApplicationJobBoard] 지원장소 변경 오류:', {
-      error: error.message,
-      stack: error.stack,
-    });
-    throw error;
-  }
 };
 
 export const getApplicationsByUserId = async (
