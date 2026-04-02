@@ -32,10 +32,11 @@ import {
   TemplateType,
   saveSMSTemplate,
   updateSMSTemplate,
+  getJobBoardById,
 } from '@smis-mentor/shared';
 import { AdminStackScreenProps } from '../navigation/types';
 import { EvaluationStageCards, EvaluationForm, SMSMessageBox } from '../components';
-import { sendCustomSMS } from '../services';
+import { sendCustomSMS, changeApplicationJobBoard } from '../services';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
@@ -91,11 +92,18 @@ export function ApplicantDetailScreen({
 }: AdminStackScreenProps<'ApplicantDetail'>) {
   const { applicationId, jobBoardId } = route.params;
   const [application, setApplication] = useState<ApplicationWithUser | null>(null);
+  const [jobBoard, setJobBoard] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [appliedCamps, setAppliedCamps] = useState<string[]>([]);
 
   // 현재 로그인한 사용자 정보
   const [currentUser, setCurrentUser] = useState<{ name: string } | null>(null);
+
+  // 지원장소 변경 관련 상태
+  const [showJobBoardChangeModal, setShowJobBoardChangeModal] = useState(false);
+  const [allJobBoards, setAllJobBoards] = useState<any[]>([]);
+  const [selectedNewJobBoardId, setSelectedNewJobBoardId] = useState<string>('');
+  const [isChangingJobBoard, setIsChangingJobBoard] = useState(false);
 
   // 평가 폼 상태
   const [showEvaluationForm, setShowEvaluationForm] = useState(false);
@@ -166,6 +174,13 @@ export function ApplicantDetailScreen({
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
+      
+      // JobBoard 정보 로드
+      const jobBoardData = await getJobBoardById(db, jobBoardId);
+      if (jobBoardData) {
+        setJobBoard(jobBoardData);
+      }
+      
       const applications = await getApplicationsByJobBoardId(db, jobBoardId);
       const app = applications.find((a: any) => a.id === applicationId);
 
@@ -274,7 +289,102 @@ export function ApplicantDetailScreen({
   useEffect(() => {
     loadData();
     loadCurrentUser();
+    loadAllJobBoards();
   }, [loadData]);
+
+  // 모든 JobBoard 로드
+  const loadAllJobBoards = async () => {
+    try {
+      const { collection, getDocs } = await import('firebase/firestore');
+      const jobBoardsSnapshot = await getDocs(collection(db, 'jobBoards'));
+      
+      const jobBoards = jobBoardsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // generation 기준 내림차순 정렬
+      jobBoards.sort((a: any, b: any) => b.generation.localeCompare(a.generation));
+      
+      setAllJobBoards(jobBoards);
+    } catch (error) {
+      logger.error('전체 채용 공고 로드 오류:', error);
+    }
+  };
+
+  // 지원장소 변경 처리
+  const handleChangeJobBoard = async () => {
+    if (!selectedNewJobBoardId) {
+      Alert.alert('알림', '변경할 채용 공고를 선택해주세요.');
+      return;
+    }
+
+    if (application?.refJobBoardId === selectedNewJobBoardId) {
+      Alert.alert('알림', '동일한 채용 공고로는 변경할 수 없습니다.');
+      return;
+    }
+
+    const newJobBoard = allJobBoards.find((jb: any) => jb.id === selectedNewJobBoardId);
+    if (!newJobBoard) {
+      Alert.alert('오류', '선택한 채용 공고를 찾을 수 없습니다.');
+      return;
+    }
+
+    Alert.alert(
+      '지원장소 변경 확인',
+      `정말로 이 지원자의 지원장소를 변경하시겠습니까?\n\n현재: ${jobBoard?.title || '알 수 없음'}\n변경 후: ${newJobBoard.title}\n\n연관된 평가 데이터도 함께 업데이트됩니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '변경',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsChangingJobBoard(true);
+              setShowJobBoardChangeModal(false); // 모달 먼저 닫기
+
+              logger.info('[handleChangeJobBoard] 변경 시작');
+
+              const result = await changeApplicationJobBoard(
+                applicationId,
+                selectedNewJobBoardId
+              );
+
+              logger.info('[handleChangeJobBoard] 변경 완료:', result);
+
+              Alert.alert(
+                '성공',
+                `지원장소가 변경되었습니다.\n(평가 ${result.updatedEvaluations}개 업데이트)`,
+                [
+                  {
+                    text: '확인',
+                    onPress: () => navigation.goBack()
+                  }
+                ]
+              );
+            } catch (error: any) {
+              logger.error('[handleChangeJobBoard] 지원장소 변경 오류:', {
+                error: error.message,
+                stack: error.stack,
+              });
+              
+              // 사용자에게 표시할 메시지 구성
+              let errorMessage = '지원장소 변경 중 오류가 발생했습니다.';
+              if (error.message) {
+                errorMessage = error.message;
+              }
+              
+              Alert.alert('오류', errorMessage);
+              setShowJobBoardChangeModal(true); // 실패 시 모달 다시 열기
+            } finally {
+              setIsChangingJobBoard(false);
+              setSelectedNewJobBoardId('');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   // 템플릿 로드 함수 (웹과 동일한 로직)
   const loadTemplates = useCallback(async () => {
@@ -840,6 +950,27 @@ export function ApplicantDetailScreen({
           )}
         </View>
 
+        {/* 지원장소 관리 (관리자 전용) */}
+        <View style={styles.section}>
+          <View style={styles.jobBoardManageHeader}>
+            <Text style={styles.sectionTitle}>지원장소 관리</Text>
+            <TouchableOpacity
+              style={styles.changeJobBoardButton}
+              onPress={() => setShowJobBoardChangeModal(true)}
+            >
+              <Ionicons name="swap-horizontal" size={16} color="#ffffff" />
+              <Text style={styles.changeJobBoardButtonText}>지원장소 변경</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.currentJobBoardInfo}>
+            <Text style={styles.currentJobBoardLabel}>현재 지원장소</Text>
+            <Text style={styles.currentJobBoardValue}>{jobBoard?.title || '알 수 없음'}</Text>
+            <Text style={styles.currentJobBoardDetail}>
+              {jobBoard?.generation} | {jobBoard?.jobCode}
+            </Text>
+          </View>
+        </View>
+
         {/* 평가 점수 현황 - Interactive */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>평가 점수 현황</Text>
@@ -1348,6 +1479,110 @@ export function ApplicantDetailScreen({
           />
         </Modal>
       )}
+
+      {/* 지원장소 변경 모달 */}
+      <Modal
+        visible={showJobBoardChangeModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowJobBoardChangeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>지원장소 변경</Text>
+              <TouchableOpacity
+                onPress={() => setShowJobBoardChangeModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              {/* 현재 정보 */}
+              <View style={styles.modalInfoBox}>
+                <Text style={styles.modalInfoLabel}>지원자</Text>
+                <Text style={styles.modalInfoValue}>{application?.user?.name || '알 수 없음'}</Text>
+                
+                <Text style={[styles.modalInfoLabel, { marginTop: 12 }]}>현재 지원장소</Text>
+                <Text style={styles.modalInfoValue}>{jobBoard?.title || '알 수 없음'}</Text>
+                <Text style={styles.modalInfoDetail}>
+                  {jobBoard?.generation} | {jobBoard?.jobCode}
+                </Text>
+              </View>
+
+              {/* 새로운 채용 공고 선택 */}
+              <Text style={styles.modalSectionTitle}>변경할 채용 공고 선택</Text>
+              <View style={styles.jobBoardList}>
+                {allJobBoards
+                  .filter((jb: any) => jb.id !== jobBoardId)
+                  .map((jb: any) => (
+                    <TouchableOpacity
+                      key={jb.id}
+                      style={[
+                        styles.jobBoardItem,
+                        selectedNewJobBoardId === jb.id && styles.jobBoardItemSelected
+                      ]}
+                      onPress={() => setSelectedNewJobBoardId(jb.id)}
+                    >
+                      <View style={styles.jobBoardItemContent}>
+                        <Text style={styles.jobBoardItemTitle}>{jb.title}</Text>
+                        <Text style={styles.jobBoardItemDetail}>
+                          {jb.generation} | {jb.jobCode} | {jb.status === 'active' ? '모집중' : '마감'}
+                        </Text>
+                      </View>
+                      {selectedNewJobBoardId === jb.id && (
+                        <Ionicons name="checkmark-circle" size={24} color="#8b5cf6" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+              </View>
+
+              {/* 주의사항 */}
+              <View style={styles.modalWarningBox}>
+                <Text style={styles.modalWarningTitle}>⚠️ 주의사항</Text>
+                <Text style={styles.modalWarningText}>
+                  • 지원장소 변경 시 해당 지원자의 모든 평가 데이터의 refJobBoardId도 함께 업데이트됩니다.
+                </Text>
+                <Text style={styles.modalWarningText}>
+                  • 변경 후에는 이전 페이지로 돌아갑니다.
+                </Text>
+                <Text style={styles.modalWarningText}>
+                  • 이 작업은 되돌릴 수 없으니 신중하게 선택해주세요.
+                </Text>
+              </View>
+            </ScrollView>
+
+            {/* 버튼 */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setShowJobBoardChangeModal(false);
+                  setSelectedNewJobBoardId('');
+                }}
+              >
+                <Text style={styles.modalCancelButtonText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalChangeButton,
+                  (!selectedNewJobBoardId || isChangingJobBoard) && styles.modalChangeButtonDisabled
+                ]}
+                onPress={handleChangeJobBoard}
+                disabled={!selectedNewJobBoardId || isChangingJobBoard}
+              >
+                {isChangingJobBoard ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.modalChangeButtonText}>변경하기</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1791,6 +2026,197 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     marginTop: 4,
+  },
+  jobBoardManageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  changeJobBoardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8b5cf6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    gap: 6,
+  },
+  changeJobBoardButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  currentJobBoardInfo: {
+    backgroundColor: '#eff6ff',
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  currentJobBoardLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  currentJobBoardValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  currentJobBoardDetail: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    width: '100%',
+    maxHeight: '80%',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalBody: {
+    padding: 16,
+    maxHeight: 500,
+  },
+  modalInfoBox: {
+    backgroundColor: '#eff6ff',
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    marginBottom: 16,
+  },
+  modalInfoLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  modalInfoValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalInfoDetail: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  modalSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
+  },
+  jobBoardList: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  jobBoardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
+  },
+  jobBoardItemSelected: {
+    borderColor: '#8b5cf6',
+    backgroundColor: '#f5f3ff',
+  },
+  jobBoardItemContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  jobBoardItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  jobBoardItemDetail: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  modalWarningBox: {
+    backgroundColor: '#fef3c7',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fde047',
+  },
+  modalWarningTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 8,
+  },
+  modalWarningText: {
+    fontSize: 12,
+    color: '#92400e',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  modalChangeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#8b5cf6',
+    alignItems: 'center',
+  },
+  modalChangeButtonDisabled: {
+    backgroundColor: '#d1d5db',
+    opacity: 0.6,
+  },
+  modalChangeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
 

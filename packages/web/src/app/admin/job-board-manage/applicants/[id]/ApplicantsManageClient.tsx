@@ -125,6 +125,11 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [showShareLinkModal, setShowShareLinkModal] = useState(false);
   const [selectedForShare, setSelectedForShare] = useState<string[]>([]);
   
+  // 지원장소 변경 관련 상태
+  const [allJobBoards, setAllJobBoards] = useState<JobBoardWithId[]>([]);
+  const [selectedNewJobBoardId, setSelectedNewJobBoardId] = useState<string>('');
+  const [showJobBoardChangeModal, setShowJobBoardChangeModal] = useState(false);
+  
   // 직무 경험 관련 상수
   const jobGroups = Object.entries(LEGACY_GROUP_REVERSE_MAP).map(([label, value]) => ({
     value,
@@ -264,6 +269,30 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // 모든 JobBoard 로드 (지원장소 변경용)
+  useEffect(() => {
+    const loadAllJobBoards = async () => {
+      try {
+        const jobBoardsRef = collection(db, 'jobBoards');
+        const jobBoardsSnapshot = await getDocs(jobBoardsRef);
+        
+        const jobBoardsData = jobBoardsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as JobBoardWithId[];
+        
+        // generation 기준 내림차순 정렬
+        jobBoardsData.sort((a, b) => b.generation.localeCompare(a.generation));
+        
+        setAllJobBoards(jobBoardsData);
+      } catch (error) {
+        logger.error('전체 채용 공고 로드 오류:', error);
+      }
+    };
+
+    loadAllJobBoards();
   }, []);
 
   // 직무 코드 로딩
@@ -845,20 +874,80 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // 직무 경험 정보 다시 로드
       await loadUserJobCodes(userId, updatedJobExperiences);
       
+      toast.success('직무 경험이 추가되었습니다.');
+      
       // 폼 초기화
       setSelectedJobCodeId('');
-      setSelectedGeneration('');
-      setSelectedGroupRole('담임');
+      setSelectedGroup('junior');
       setClassCodeInput('');
       setShowJobCodeForm(null);
-      
-      toast.success('직무 코드가 추가되었습니다.');
     } catch (error) {
-      logger.error('직무 코드 추가 실패:', error);
-      toast.error('직무 코드 추가에 실패했습니다.');
+      logger.error('직무 경험 추가 오류:', error);
+      toast.error('직무 경험 추가에 실패했습니다.');
     }
   };
 
+  // 지원장소 변경 처리
+  const handleChangeJobBoard = async () => {
+    if (!selectedApplication || !selectedNewJobBoardId) {
+      toast.error('변경할 채용 공고를 선택해주세요.');
+      return;
+    }
+
+    if (selectedApplication.refJobBoardId === selectedNewJobBoardId) {
+      toast.error('동일한 채용 공고로는 변경할 수 없습니다.');
+      return;
+    }
+
+    const newJobBoard = allJobBoards.find(jb => jb.id === selectedNewJobBoardId);
+    if (!newJobBoard) {
+      toast.error('선택한 채용 공고를 찾을 수 없습니다.');
+      return;
+    }
+
+    const confirmMessage = `정말로 이 지원자의 지원장소를 변경하시겠습니까?\n\n현재: ${jobBoard?.title || '알 수 없음'}\n변경 후: ${newJobBoard.title}\n\n연관된 평가 데이터도 함께 업데이트됩니다.`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // API 호출
+      const response = await authenticatedPost<{
+        success: boolean;
+        message: string;
+        data: { updatedApplications: number; updatedEvaluations: number };
+      }>('/api/admin/change-job-board', {
+        applicationId: selectedApplication.id,
+        newJobBoardId: selectedNewJobBoardId,
+      });
+
+      if (response.success) {
+        toast.success(
+          `지원장소가 변경되었습니다. (평가 ${response.data.updatedEvaluations}개 업데이트)`
+        );
+
+        // 현재 페이지의 지원자 목록에서 제거
+        setApplications(prev => prev.filter(app => app.id !== selectedApplication.id));
+        setFilteredApplications(prev => prev.filter(app => app.id !== selectedApplication.id));
+        
+        // 선택 해제 및 모달 닫기
+        setSelectedApplication(null);
+        setShowJobBoardChangeModal(false);
+        setSelectedNewJobBoardId('');
+      } else {
+        toast.error(response.message || '지원장소 변경에 실패했습니다.');
+      }
+    } catch (error: any) {
+      logger.error('지원장소 변경 오류:', error);
+      toast.error(error.message || '지원장소 변경 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+      
   // 직무 경험 추가 폼 토글
   const toggleJobCodeForm = (userId: string) => {
     if (showJobCodeForm === userId) {
@@ -2227,6 +2316,29 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                       </div>
                     )}
 
+                    {/* 지원장소 변경 */}
+                    {selectedApplication && (
+                      <div className="mb-6 pb-6 border-b border-gray-200">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold">지원장소 관리</h3>
+                          <Button
+                            onClick={() => setShowJobBoardChangeModal(true)}
+                            className="px-4 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                          >
+                            지원장소 변경
+                          </Button>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-md">
+                          <p className="text-sm text-gray-600">
+                            <span className="font-medium">현재 지원장소:</span> {jobBoard?.title || '알 수 없음'}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {jobBoard?.generation} | {jobBoard?.jobCode}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* 평가 점수 현황 */}
                     {selectedApplication.user && (
                       <div className="mb-6 pb-6 border-b border-gray-200">
@@ -2467,6 +2579,75 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           currentUserId={auth.currentUser?.uid || ''}
           applicantName={selectedApplication.user?.name || '알 수 없음'}
         />
+      )}
+
+      {/* 지원장소 변경 모달 */}
+      {showJobBoardChangeModal && selectedApplication && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <h3 className="text-xl font-semibold mb-4">지원장소 변경</h3>
+            
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-sm text-gray-700">
+                <span className="font-medium">지원자:</span> {selectedApplication.user?.name || '알 수 없음'}
+              </p>
+              <p className="text-sm text-gray-700 mt-1">
+                <span className="font-medium">현재 지원장소:</span> {jobBoard?.title || '알 수 없음'}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {jobBoard?.generation} | {jobBoard?.jobCode}
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                변경할 채용 공고 선택
+              </label>
+              <select
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                value={selectedNewJobBoardId}
+                onChange={(e) => setSelectedNewJobBoardId(e.target.value)}
+              >
+                <option value="">채용 공고를 선택하세요</option>
+                {allJobBoards
+                  .filter(jb => jb.id !== jobBoardId) // 현재 공고는 제외
+                  .map((jb) => (
+                    <option key={jb.id} value={jb.id}>
+                      [{jb.generation}] {jb.title} ({jb.jobCode}) - {jb.status === 'active' ? '모집중' : '마감'}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800 font-medium mb-1">⚠️ 주의사항</p>
+              <ul className="text-xs text-yellow-700 space-y-1 ml-4 list-disc">
+                <li>지원장소 변경 시 해당 지원자의 모든 평가 데이터의 refJobBoardId도 함께 업데이트됩니다.</li>
+                <li>변경 후에는 이 페이지의 지원자 목록에서 제거됩니다.</li>
+                <li>이 작업은 되돌릴 수 없으니 신중하게 선택해주세요.</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <Button
+                onClick={() => {
+                  setShowJobBoardChangeModal(false);
+                  setSelectedNewJobBoardId('');
+                }}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                취소
+              </Button>
+              <Button
+                onClick={handleChangeJobBoard}
+                disabled={!selectedNewJobBoardId || isLoading}
+                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {isLoading ? '변경 중...' : '변경하기'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );
