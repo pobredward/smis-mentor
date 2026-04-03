@@ -17,6 +17,7 @@ import { STSheetStudent, CampCode, CampType } from '@smis-mentor/shared';
 import { stSheetService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import { jobCodesService } from '../services';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface StudentListProps {
   filterType: 'class' | 'room';
@@ -30,10 +31,8 @@ export const StudentList: React.FC<StudentListProps> = ({
   onCampTypeChange,
 }) => {
   const { userData } = useAuth();
-  const [allStudents, setAllStudents] = useState<STSheetStudent[]>([]);
+  const queryClient = useQueryClient();
   const [selectedMentor, setSelectedMentor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
@@ -52,7 +51,6 @@ export const StudentList: React.FC<StudentListProps> = ({
       // activeJobCodeId가 없으면 로그인하지 않은 상태
       if (!activeJobCodeId || typeof activeJobCodeId !== 'string') {
         logger.info('activeJobCodeId가 없습니다. 로그인이 필요합니다.');
-        setLoading(false);
         return;
       }
       
@@ -67,43 +65,53 @@ export const StudentList: React.FC<StudentListProps> = ({
           onCampTypeChange?.(type);
         } else {
           logger.info('캠프 코드를 찾을 수 없습니다.');
-          setLoading(false);
         }
       } catch (error) {
         logger.error('캠프 코드 로드 실패:', error);
-        setLoading(false);
       }
     };
     
     loadCampCode();
   }, [activeJobCodeId]);
 
-  // 전체 학생 데이터 로드
-  const loadAllStudents = async () => {
-    if (!campCode) return; // campCode가 없으면 로드하지 않음
-    
-    try {
-      setLoading(true);
-      const data = await stSheetService.getCachedData(campCode);
-      const isTemp = await stSheetService.isTemporaryData(campCode);
-      const useTempSetting = await stSheetService.getUseTemporaryDataSetting(campCode);
-      const hasReal = await stSheetService.hasRealData(campCode);
-      setAllStudents(data);
-      setIsTemporaryData(isTemp);
-      setUseTemporaryDataSetting(useTempSetting);
-      setHasRealData(hasReal);
-    } catch (error) {
-      logger.error('학생 목록 로드 실패:', error);
-      Alert.alert('오류', '학생 목록을 불러오는데 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // React Query로 학생 데이터 로드
+  const { data: allStudents = [], isLoading: loading, refetch, error } = useQuery({
+    queryKey: ['students', campCode, filterType],
+    queryFn: async () => {
+      if (!campCode) return [];
+      return await stSheetService.getCachedData(campCode);
+    },
+    enabled: !!campCode,
+    staleTime: 5 * 60 * 1000, // 5분
+    retry: 1, // 1번만 재시도
+  });
 
+  // 에러 발생 시 로그 (앱은 계속 실행)
   useEffect(() => {
-    if (campCode) {
-      loadAllStudents();
+    if (error) {
+      logger.error('학생 데이터 로드 에러:', error);
+      // UI는 빈 배열로 표시됨
     }
+  }, [error]);
+
+  // 추가 메타데이터 로드 (isTemporaryData, useTemporaryDataSetting 등)
+  useEffect(() => {
+    const loadMetadata = async () => {
+      if (!campCode) return;
+      
+      try {
+        const isTemp = await stSheetService.isTemporaryData(campCode);
+        const useTempSetting = await stSheetService.getUseTemporaryDataSetting(campCode);
+        const hasReal = await stSheetService.hasRealData(campCode);
+        setIsTemporaryData(isTemp);
+        setUseTemporaryDataSetting(useTempSetting);
+        setHasRealData(hasReal);
+      } catch (error) {
+        logger.error('메타데이터 로드 실패:', error);
+      }
+    };
+    
+    loadMetadata();
   }, [campCode]);
 
   // 데이터 로드 후 첫 번째 항목을 자동 선택
@@ -117,9 +125,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   }, [allStudents]);
 
   const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadAllStudents();
-    setRefreshing(false);
+    await refetch();
   };
 
   const handleSync = async () => {
@@ -136,7 +142,11 @@ export const StudentList: React.FC<StudentListProps> = ({
     try {
       setSyncing(true);
       await stSheetService.syncSTSheet(campCode);
-      await loadAllStudents();
+      
+      // React Query 캐시 무효화 후 리페칭
+      await queryClient.invalidateQueries({ queryKey: ['students', campCode] });
+      await refetch();
+      
       Alert.alert('성공', '데이터 동기화가 완료되었습니다.');
     } catch (error) {
       logger.error('동기화 실패:', error);
@@ -161,7 +171,11 @@ export const StudentList: React.FC<StudentListProps> = ({
       const newSetting = !useTemporaryDataSetting;
       await stSheetService.setUseTemporaryDataSetting(campCode, newSetting);
       setUseTemporaryDataSetting(newSetting);
-      await loadAllStudents();
+      
+      // React Query 캐시 무효화 후 리페칭
+      await queryClient.invalidateQueries({ queryKey: ['students', campCode] });
+      await refetch();
+      
       Alert.alert('성공', `임시 데이터 표시가 ${newSetting ? '활성화' : '비활성화'}되었습니다.`);
     } catch (error) {
       logger.error('설정 변경 실패:', error);
@@ -461,7 +475,7 @@ export const StudentList: React.FC<StudentListProps> = ({
         <ScrollView
           style={styles.scrollContainer}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#3b82f6']} />
+            <RefreshControl refreshing={loading} onRefresh={handleRefresh} colors={['#3b82f6']} />
           }
         >
           {displayStudents.length === 0 ? (
@@ -674,7 +688,7 @@ export const StudentList: React.FC<StudentListProps> = ({
           )}
           contentContainerStyle={styles.listContainer}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#3b82f6']} />
+            <RefreshControl refreshing={loading} onRefresh={handleRefresh} colors={['#3b82f6']} />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>

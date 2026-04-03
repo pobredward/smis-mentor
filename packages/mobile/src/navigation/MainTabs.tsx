@@ -11,7 +11,6 @@ import {
   ProfileScreen,
 } from '../screens';
 import { useAuth } from '../context/AuthContext';
-import { CampTabProvider } from '../context/CampTabContext';
 
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 
@@ -21,20 +20,19 @@ export function MainTabs() {
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
   return (
-    <CampTabProvider>
-      <Tab.Navigator
-        screenOptions={{
-          tabBarActiveTintColor: '#3b82f6',
-          tabBarInactiveTintColor: '#94a3b8',
-          headerTitleStyle: {
-            fontSize: 20,
-            fontWeight: '600',
-          },
-          headerStyle: {
-            height: Platform.OS === 'android' ? 80 : undefined,
-          },
-        }}
-      >
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: '#3b82f6',
+        tabBarInactiveTintColor: '#94a3b8',
+        headerTitleStyle: {
+          fontSize: 20,
+          fontWeight: '600',
+        },
+        headerStyle: {
+          height: Platform.OS === 'android' ? 80 : undefined,
+        },
+      }}
+    >
         {/* 원어민이 아닌 경우에만 '홈' 탭 표시 */}
         {!isForeign && (
           <Tab.Screen
@@ -96,6 +94,5 @@ export function MainTabs() {
           />
         )}
       </Tab.Navigator>
-    </CampTabProvider>
   );
 }

@@ -2,8 +2,11 @@ import React, { createContext, useContext, useState, useRef, ReactNode, useEffec
 import { logger } from '@smis-mentor/shared';
 import { View, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import { generationResourcesService, ResourceLink } from '../services';
+
+const ZOOM_CACHE_KEY = 'SMIS_WEBVIEW_ZOOM_CACHE';
 
 interface WebViewCache {
   schedules: ResourceLink[];
@@ -31,6 +34,33 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
   const webViewRefs = useRef<Record<string, WebView | null>>({});
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+
+  // AsyncStorage에서 줌 레벨 복원
+  useEffect(() => {
+    loadZoomLevels();
+  }, []);
+
+  const loadZoomLevels = async () => {
+    try {
+      const cached = await AsyncStorage.getItem(ZOOM_CACHE_KEY);
+      if (cached) {
+        const parsedZoom = JSON.parse(cached);
+        setZoomLevelsState(parsedZoom);
+        logger.info('✅ WebView 줌 레벨 복원 완료', { count: Object.keys(parsedZoom).length });
+      }
+    } catch (error) {
+      logger.error('❌ WebView 줌 레벨 복원 실패:', error);
+    }
+  };
+
+  const saveZoomLevels = async (newZoomLevels: Record<string, number>) => {
+    try {
+      await AsyncStorage.setItem(ZOOM_CACHE_KEY, JSON.stringify(newZoomLevels));
+      logger.info('💾 WebView 줌 레벨 저장 완료');
+    } catch (error) {
+      logger.error('❌ WebView 줌 레벨 저장 실패:', error);
+    }
+  };
 
   useEffect(() => {
     logger.info('🔄 WebViewCache: activeJobCodeId 변경됨:', activeJobCodeId);
@@ -95,7 +125,11 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
   };
 
   const setZoomLevel = (id: string, zoom: number) => {
-    setZoomLevelsState(prev => ({ ...prev, [id]: zoom }));
+    setZoomLevelsState(prev => {
+      const newZoomLevels = { ...prev, [id]: zoom };
+      saveZoomLevels(newZoomLevels);
+      return newZoomLevels;
+    });
   };
 
   const applyZoom = (id: string, zoom: number) => {

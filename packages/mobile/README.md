@@ -1,162 +1,205 @@
 # SMIS Mentor Mobile App
 
-React Native (Expo SDK 54) 기반 모바일 앱입니다.
+SMIS Mentor 캠프 운영진을 위한 모바일 애플리케이션입니다.
 
 ## 🚀 빠른 시작
 
-### 개발 서버 실행
-
+### 개발 환경 실행
 ```bash
 npm start
 ```
 
-### Expo Go에서 실행 (제한적)
-
+### 플랫폼별 실행
 ```bash
-# Android
-npm run android
-
-# iOS
-npm run ios
+npm run ios      # iOS 시뮬레이터
+npm run android  # Android 에뮬레이터
 ```
 
-**⚠️ 주의**: Expo Go에서는 일부 기능이 제한됩니다:
-- **원격 푸시 알림 (Remote Push Notifications)**: Expo SDK 53부터 Expo Go에서 제거됨
-- **기타 네이티브 모듈**: 일부 커스텀 네이티브 코드 실행 불가
+---
 
-## 📱 Development Build (권장)
+## 📦 배포 명령어
 
-모든 기능을 테스트하려면 Development Build를 사용하세요.
-
-### 1. 사전 준비
-
-#### Android
-- Android Studio 설치
-- Java 17 설치
-- 환경 변수 설정 (`ANDROID_HOME`, `JAVA_HOME`)
-
-#### iOS (macOS만 가능)
-- Xcode 설치 (최신 버전)
-- CocoaPods 설치: `sudo gem install cocoapods`
-
-### 2. Development Build 생성
-
-#### 로컬 빌드 (빠름, 로컬 머신 필요)
-
+### iOS 배포 (App Store)
 ```bash
-# Android
-npm run prebuild
-npm run android
+# 🍎 빌드 + 자동 제출
+npm run deploy:ios
 
-# iOS (macOS만 가능)
-npm run prebuild
-npm run ios
+# 빌드만
+npm run deploy:build-only:ios
+
+# 제출만 (최신 빌드)
+npm run deploy:submit-only:ios
 ```
 
-#### EAS Build (느림, 클라우드 빌드)
-
+### Android 배포 (Play Store)
 ```bash
-# EAS CLI 설치 (한 번만)
-npm install -g eas-cli
+# 🤖 빌드 + 자동 제출
+npm run deploy:android
 
-# EAS 로그인
-eas login
+# 빌드만
+npm run deploy:build-only:android
 
-# Development Build 생성
-npm run build:dev:android  # Android
-npm run build:dev:ios      # iOS (Apple Developer 계정 필요)
+# 제출만 (최신 빌드)
+npm run deploy:submit-only:android
 ```
 
-빌드 완료 후:
-1. QR 코드 또는 다운로드 링크를 받습니다
-2. 실제 기기에 앱을 설치합니다
-3. 설치된 앱을 실행하고 `npx expo start --dev-client` 실행
-4. QR 코드를 스캔하여 개발 서버에 연결
-
-### 3. Development Build에서 개발
-
+### 양쪽 모두 배포
 ```bash
-# Development Build 전용 서버 시작
-npx expo start --dev-client
-
-# 또는 일반 시작 (자동 감지)
-npm start
+npm run deploy:all
 ```
 
-## 🔔 푸시 알림 테스트
+---
 
-### Expo Go (로컬 알림만)
-- ✅ 로컬 알림 (예약 알림, 즉시 알림)
-- ❌ 원격 푸시 알림 (서버에서 전송)
+## 📱 OTA 업데이트 (즉시 배포)
 
-### Development Build (전체 기능)
-- ✅ 로컬 알림
-- ✅ 원격 푸시 알림
-- ✅ FCM (Firebase Cloud Messaging)
-
-### 푸시 알림 테스트 방법
-
-1. Development Build 설치 및 실행
-2. 앱에서 로그인
-3. 푸시 알림 권한 허용
-4. 콘솔에서 Expo Push Token 확인
-5. [Expo Push Notification Tool](https://expo.dev/notifications)에서 테스트
-
-## 🛠️ 캐시 초기화
-
-문제 발생 시 캐시를 초기화하세요:
+앱 스토어 심사 없이 JavaScript 변경사항만 즉시 배포:
 
 ```bash
-npm run start:clear
+# 프로덕션 환경
+npm run update:production
 
-# 또는 수동 실행
-npx expo start --clear
+# 프리뷰 환경
+npm run update:preview
 ```
 
-## 📦 빌드
+**제한사항**: 네이티브 코드 변경 불가 (새 라이브러리, 권한 등은 전체 빌드 필요)
 
-### Preview 빌드 (내부 테스트)
+---
+
+## 🔧 프로젝트 설정
+
+### 환경 변수
+`.env.local` 파일 생성 필요:
+```env
+# Firebase
+EXPO_PUBLIC_WEB_API_URL=https://www.smis-mentor.com
+
+# 네이버 소셜 로그인
+EXPO_PUBLIC_NAVER_CLIENT_ID=
+EXPO_PUBLIC_NAVER_CLIENT_SECRET=
+
+# Google 소셜 로그인
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=
+
+# Sentry
+EXPO_PUBLIC_SENTRY_DSN=
+```
+
+### 필수 파일
+- `GoogleService-Info.plist` (iOS Firebase 설정)
+- `google-services.json` (Android Firebase 설정)
+
+---
+
+## 📖 상세 가이드
+
+배포 프로세스, 문제 해결 등 자세한 내용은 [DEPLOYMENT.md](./DEPLOYMENT.md)를 참조하세요.
+
+### 주요 내용
+- ✅ 단계별 배포 프로세스
+- ✅ App Store Connect 설정
+- ✅ Google Play Console 설정
+- ✅ 문제 해결 가이드
+- ✅ Transporter 수동 제출 방법
+
+---
+
+## 🏗️ 기술 스택
+
+- **Framework**: React Native (Expo SDK 54)
+- **Language**: TypeScript
+- **Navigation**: React Navigation 6
+- **State Management**: React Hooks, React Query (TanStack Query)
+- **Backend**: Firebase (Firestore, Auth, Storage)
+- **Forms**: React Hook Form + Zod
+- **Deployment**: EAS Build & Submit
+
+---
+
+## ⚡ 성능 최적화
+
+### 캠프 탭 프리로딩
+마이페이지에서 캠프 코드 변경 시, 캠프 탭의 모든 데이터를 사전에 로딩하여 즉각적인 탭 전환이 가능합니다.
 
 ```bash
-npm run build:preview:android
-npm run build:preview:ios
+# 상세 구현 내용
+cat CAMP-PRELOAD-IMPLEMENTATION.md
+cat WEBVIEW-PRELOAD-IMPLEMENTATION.md
+cat FINAL-IMPLEMENTATION-SUMMARY.md
 ```
 
-### Production 빌드 (스토어 배포)
+**Phase 1: 데이터 프리페칭**
+- ✅ React Query 기반 스마트 캐싱 (staleTime: 5분)
+- ✅ 7개 서브탭 데이터 병렬 프리페칭
+- ✅ 자동 캐시 무효화
+
+**Phase 2: WebView 백그라운드 프리로딩** 🌟
+- ✅ 1x1 크기 WebView로 노션/구글시트 페이지 사전 로딩
+- ✅ opacity 0.01 트릭으로 OS 제약 우회
+- ✅ 교육/시간표/인솔표 모든 링크 즉시 표시
+
+**Phase 3: 사용자 경험**
+- ✅ 4단계 프리페칭 모달 (진행률 표시)
+- ✅ 단계별 체크리스트 UI
+- ✅ 완료 메시지 및 사용자 안내
+
+### 성능 비교
+```
+Before: 링크 클릭 → 🐌 2-3초 대기
+After:  링크 클릭 → ⚡ 즉시 표시!
+```
+
+---
+
+## 📂 프로젝트 구조
+
+```
+packages/mobile/
+├── src/
+│   ├── components/       # 재사용 가능한 컴포넌트
+│   ├── screens/          # 화면 컴포넌트
+│   ├── navigation/       # 네비게이션 설정
+│   ├── services/         # Firebase 서비스
+│   └── utils/            # 유틸리티 함수
+├── assets/               # 이미지, 아이콘 등
+├── scripts/              # 배포 스크립트
+├── app.config.ts         # Expo 설정
+├── eas.json              # EAS Build 설정
+└── DEPLOYMENT.md         # 배포 가이드
+```
+
+---
+
+## 🧪 테스트
 
 ```bash
-npm run build:prod:android
-npm run build:prod:ios
+# TypeScript 타입 체크
+npm run type-check
 
-# 또는 동시에
-npm run build:prod:all
+# Linter 실행
+npm run lint
 ```
 
-## 🚢 배포
+---
 
-### Google Play Store
+## 📞 도움말
 
-```bash
-# 빌드 생성
-npm run build:prod:android
+### 빌드 상태 확인
+- Expo 대시보드: https://expo.dev/accounts/pobredward02/projects/smis-mentor/builds
 
-# 스토어 제출
-npm run submit:android
-```
+### 스토어 관리
+- App Store Connect: https://appstoreconnect.apple.com/apps/6759916856
+- Google Play Console: https://play.google.com/console
 
-### Apple App Store
+### 문제 발생 시
+1. `DEPLOYMENT.md`의 문제 해결 섹션 참조
+2. Expo 대시보드에서 빌드 로그 확인
+3. Firebase 콘솔에서 에러 로그 확인
 
-```bash
-# 빌드 생성
-npm run build:prod:ios
+---
 
-# 스토어 제출
-npm run submit:ios
-```
+## 📄 라이선스
 
-## 📚 더 알아보기
-
-- [Expo Documentation](https://docs.expo.dev/)
-- [Development Builds](https://docs.expo.dev/develop/development-builds/introduction/)
-- [EAS Build](https://docs.expo.dev/build/introduction/)
-- [Push Notifications](https://docs.expo.dev/push-notifications/overview/)
+Private - SMIS Mentor

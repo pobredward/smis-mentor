@@ -10,3 +10,5 @@ export { NaverSignInButton } from './NaverSignInButton';
 export { AppleSignInButton } from './AppleSignInButton';
 export { PhoneInputModal } from './PhoneInputModal';
 export { PasswordInputModal } from './PasswordInputModal';
+export { WebViewPreloader } from './WebViewPreloader';
+export type { PreloadLink } from './WebViewPreloader';

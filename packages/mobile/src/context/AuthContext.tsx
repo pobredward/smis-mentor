@@ -10,6 +10,7 @@ import React, {
   useRef,
 } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from '../config/firebase';
 import { getUserByEmail } from '../services/authService';
 import { jobCodesService } from '../services';
@@ -217,6 +218,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       logger.info('  - 새로운 jobCodeId:', jobCodeId);
       
       await jobCodesService.updateUserActiveJobCode(userData.userId, jobCodeId);
+      
+      // AsyncStorage에도 저장 (앱 재시작 시 복원용)
+      try {
+        await AsyncStorage.setItem('SMIS_LAST_ACTIVE_JOB_CODE', jobCodeId);
+        logger.info('💾 마지막 캠프 코드 저장 완료');
+      } catch (storageError) {
+        logger.warn('⚠️ 캠프 코드 저장 실패:', storageError);
+      }
       
       logger.info('✅ AuthContext: Firestore 업데이트 완료, userData 새로고침 시작');
       await refreshUserData();

@@ -33,6 +33,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
       NSLocationWhenInUseUsageDescription: '사용자 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.',
       ITSAppUsesNonExemptEncryption: false,
+      CFBundleURLTypes: [
+        {
+          CFBundleURLSchemes: ['com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me'],
+        },
+        {
+          CFBundleURLSchemes: ['smismentor'],
+        },
+      ],
     },
   },
   android: {

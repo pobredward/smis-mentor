@@ -420,11 +420,13 @@ export const stSheetService = {
         return data.data || [];
       }
       
-      // 실제 데이터도 없으면 빈 배열 반환
+      // 실제 데이터도 없으면 빈 배열 반환 (에러 없음)
+      logger.info(`ℹ️ ${campCode} 학생 데이터 없음 (빈 배열 반환)`);
       return [];
     } catch (error) {
       logger.error('❌ Firestore 데이터 로드 실패:', error);
-      throw error;
+      // 에러 발생 시에도 빈 배열 반환 (앱 크래시 방지)
+      return [];
     }
   },
 

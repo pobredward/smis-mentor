@@ -7,6 +7,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "ios": {
         "resourceClass": "m-medium"
       },
@@ -17,6 +18,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "ios": {
         "simulator": false,
         "resourceClass": "m-medium"
@@ -27,8 +29,11 @@
     },
     "production": {
       "autoIncrement": true,
+      "environment": "production",
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "credentialsSource": "remote",
+        "autoIncrement": "buildNumber"
       },
       "android": {
         "buildType": "app-bundle"
@@ -36,6 +41,17 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6759916856",
+        "appleTeamId": "3V8G7Y74HY",
+        "ascApiKeyPath": "./AuthKey_M5T9V8HJRZ.p8",
+        "ascApiKeyIssuerId": "d6174485-f3ab-4658-866e-7ab524b197d1",
+        "ascApiKeyId": "M5T9V8HJRZ"
+      },
+      "android": {
+        "track": "internal"
+      }
+    }
   }
 }

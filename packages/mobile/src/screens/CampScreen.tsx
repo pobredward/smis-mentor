@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { EducationScreen } from './EducationScreen';
 import { LessonScreen } from './CampTabs';

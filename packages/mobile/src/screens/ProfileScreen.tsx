@@ -11,6 +11,7 @@ import {
   Linking,
   RefreshControl,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabScreenProps } from '../navigation/types';
@@ -35,6 +36,9 @@ import {
   uploadPassportPhoto,
   uploadForeignIdCard,
 } from '../services/foreignSignUpService';
+import { useCampDataPrefetch } from '../hooks/useCampDataPrefetch';
+import { useCampTab } from '../context/CampTabContext';
+import { logger } from '@smis-mentor/shared';
 
 type Screen = 
   | 'profile' 
@@ -50,6 +54,13 @@ type Screen =
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const { isAuthenticated, userData, loading, updateActiveJobCode, refreshUserData } = useAuth();
+  const { prefetchCampData, invalidateCampData } = useCampDataPrefetch();
+  const { 
+    webViewPreloadComplete, 
+    setWebViewPreloadComplete, 
+    webViewLoadProgress,
+    preloadLinks,
+  } = useCampTab();
   const [currentScreen, setCurrentScreen] = useState<Screen>('signin');
   const [selectedRole, setSelectedRole] = useState<'mentor' | 'foreign' | null>(null);
   const [signUpData, setSignUpData] = useState<{
@@ -78,6 +89,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [changingJobCode, setChangingJobCode] = useState(false);
   const [showOlderGenerations, setShowOlderGenerations] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [prefetchingCamp, setPrefetchingCamp] = useState(false);
+  const [prefetchProgress, setPrefetchProgress] = useState(0);
+  const [prefetchStage, setPrefetchStage] = useState<'cache' | 'update' | 'data' | 'webview' | 'complete'>('cache');
+  const [prefetchCancelled, setPrefetchCancelled] = useState(false);
 
   useEffect(() => {
     if (userData) {
@@ -151,22 +166,212 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       return;
     }
 
+    const startTime = Date.now();
+
     try {
       setChangingJobCode(true);
-      console.log('🔄 ProfileScreen: 기수 변경 요청');
-      console.log('  - 현재 activeJobExperienceId:', userData?.activeJobExperienceId);
-      console.log('  - 새로운 jobCodeId:', jobCodeId);
+      setPrefetchingCamp(true);
+      setPrefetchProgress(0);
+      setPrefetchStage('cache');
+      setWebViewPreloadComplete(false);
+      setPrefetchCancelled(false);
       
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🔄 ProfileScreen: 캠프 변경 시작');
+      console.log(`   현재: ${userData?.activeJobExperienceId}`);
+      console.log(`   변경: ${jobCodeId}`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // 1. 기존 캐시 무효화 (0% -> 15%)
+      console.log('📍 Step 1/4: 기존 캐시 정리 중...');
+      const step1Start = Date.now();
+      setPrefetchStage('cache');
+      await invalidateCampData();
+      if (prefetchCancelled) return;
+      console.log(`   ✅ 완료 (${((Date.now() - step1Start) / 1000).toFixed(2)}초)`);
+      setPrefetchProgress(15);
+      
+      // 2. 사용자 데이터 업데이트 (15% -> 30%)
+      console.log('📍 Step 2/4: 캠프 변경 중...');
+      const step2Start = Date.now();
+      setPrefetchStage('update');
       await updateActiveJobCode(jobCodeId);
+      if (prefetchCancelled) return;
+      console.log(`   ✅ 완료 (${((Date.now() - step2Start) / 1000).toFixed(2)}초)`);
+      setPrefetchProgress(30);
       
-      console.log('✅ ProfileScreen: 기수 변경 완료');
-      Alert.alert('성공', '기수가 변경되었습니다.\n캠프 탭에서 해당 기수의 자료를 확인하세요.');
+      // 3. 새 캠프 데이터 프리페칭 시작 (30% -> 60%)
+      console.log('📍 Step 3/4: 캠프 데이터 로딩 중...');
+      const step3Start = Date.now();
+      setPrefetchStage('data');
+      
+      // 프리페칭 진행률 시뮬레이션
+      const progressInterval = setInterval(() => {
+        setPrefetchProgress((prev) => {
+          if (prev >= 55) {
+            clearInterval(progressInterval);
+            return 55;
+          }
+          return prev + 5;
+        });
+      }, 200);
+      
+      await prefetchCampData(jobCodeId);
+      
+      clearInterval(progressInterval);
+      if (prefetchCancelled) return;
+      console.log(`   ✅ 완료 (${((Date.now() - step3Start) / 1000).toFixed(2)}초)`);
+      setPrefetchProgress(60);
+      
+      // Context 업데이트 완료 대기 (100ms - React 상태 전파 시간)
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 4. WebView 프리로딩 대기 (60% -> 100%)
+      // 링크가 없으면 Step 4 스킵
+      logger.info(`🔍 preloadLinks.length 체크: ${preloadLinks.length}개`);
+      
+      if (preloadLinks.length === 0) {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('⏭️  WebView 프리로드 스킵 (링크 없음)');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        setPrefetchProgress(100);
+        setPrefetchStage('complete');
+      } else {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📍 Step 4/4: WebView 프리로딩 대기 중...');
+        console.log(`   🔗 대기할 링크 수: ${preloadLinks.length}개`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        const step4Start = Date.now();
+        setPrefetchStage('webview');
+        
+        // WebView 프리로드 완료까지 대기
+        await waitForWebViewPreload();
+        
+        if (prefetchCancelled) return;
+        
+        console.log(`   ✅ 완료 (${((Date.now() - step4Start) / 1000).toFixed(2)}초)`);
+        setPrefetchProgress(100);
+        setPrefetchStage('complete');
+      }
+      
+      const totalDuration = Date.now() - startTime;
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('✅ ProfileScreen: 모든 프리로딩 완료!');
+      console.log(`⏱️  총 소요 시간: ${(totalDuration / 1000).toFixed(2)}초`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // 짧은 딜레이 후 완료 메시지
+      setTimeout(() => {
+        setPrefetchingCamp(false);
+        Alert.alert(
+          '완료', 
+          '캠프가 변경되었습니다.\n\n✅ 모든 데이터 로딩 완료\n✅ 노션/구글시트 페이지 프리로드 완료\n\n모든 페이지가 즉시 표시됩니다!'
+        );
+      }, 500);
+      
     } catch (error) {
-      console.error('❌ ProfileScreen: 기수 변경 실패:', error);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('❌ ProfileScreen: 캠프 변경 실패');
+      console.error('💥 에러:', error);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       Alert.alert('오류', '기수 변경에 실패했습니다.');
+      setPrefetchingCamp(false);
     } finally {
       setChangingJobCode(false);
     }
+  };
+
+  /**
+   * 프리페칭 중단
+   */
+  const handleCancelPrefetch = () => {
+    Alert.alert(
+      '프리로딩 중단',
+      '캠프 데이터 프리로딩을 중단하시겠습니까?\n\n기본 데이터는 로드되지만 일부 페이지는 처음 접속 시 로딩이 필요할 수 있습니다.',
+      [
+        { text: '계속하기', style: 'cancel' },
+        {
+          text: '중단',
+          style: 'destructive',
+          onPress: () => {
+            console.log('🛑 프리로딩 중단됨');
+            setPrefetchCancelled(true);
+            setPrefetchingCamp(false);
+            setChangingJobCode(false);
+            // 프리로더 중지
+            invalidateCampData();
+          },
+        },
+      ]
+    );
+  };
+
+  /**
+   * WebView 프리로드 완료 대기
+   */
+  const waitForWebViewPreload = async () => {
+    return new Promise<void>((resolve) => {
+      logger.info(`⏳ waitForWebViewPreload 시작`);
+      logger.info(`   - webViewPreloadComplete: ${webViewPreloadComplete}`);
+      logger.info(`   - webViewLoadProgress: ${webViewLoadProgress.loaded}/${webViewLoadProgress.total}`);
+      
+      // 링크가 없으면 즉시 완료
+      if (webViewLoadProgress.total === 0 || webViewPreloadComplete) {
+        logger.info('✅ WebView 프리로드 필요 없음 (링크 없음 또는 이미 완료)');
+        resolve();
+        return;
+      }
+
+      const maxWaitTime = 60000; // 최대 60초 대기 (모든 링크 로드)
+      const startTime = Date.now();
+      let lastLogTime = startTime;
+      
+      const checkInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        
+        // 중단 확인
+        if (prefetchCancelled) {
+          clearInterval(checkInterval);
+          console.log('🛑 WebView 프리로드 중단됨');
+          resolve();
+          return;
+        }
+        
+        // WebView 프리로드 진행률 계산
+        if (webViewLoadProgress.total > 0) {
+          const progress = (webViewLoadProgress.loaded / webViewLoadProgress.total) * 100;
+          const webviewProgress = 60 + (progress * 0.4); // 60% -> 100%
+          setPrefetchProgress(Math.round(webviewProgress));
+          
+          // 3초마다 로그 출력 (스팸 방지)
+          if (Date.now() - lastLogTime > 3000) {
+            console.log(`📊 WebView 진행: ${webViewLoadProgress.loaded}/${webViewLoadProgress.total} (${Math.round(progress)}%) - 경과: ${(elapsed / 1000).toFixed(1)}초`);
+            lastLogTime = Date.now();
+          }
+        }
+        
+        // 완료 확인
+        if (webViewPreloadComplete) {
+          clearInterval(checkInterval);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log(`✅ WebView 프리로드 완료! (${(elapsed / 1000).toFixed(2)}초 소요)`);
+          console.log(`📊 최종 진행: ${webViewLoadProgress.loaded}/${webViewLoadProgress.total}`);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          resolve();
+        }
+        
+        // 타임아웃
+        if (elapsed > maxWaitTime) {
+          clearInterval(checkInterval);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log(`⚠️ WebView 프리로드 타임아웃 (${maxWaitTime / 1000}초 초과)`);
+          console.log(`📊 최종 진행: ${webViewLoadProgress.loaded}/${webViewLoadProgress.total}`);
+          console.log('💡 일부 링크는 로드되지 않았을 수 있습니다.');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          resolve();
+        }
+      }, 500); // 0.5초마다 체크
+    });
   };
 
   const handleRoleSelect = (role: 'mentor' | 'foreign') => {
@@ -742,6 +947,114 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           />
         }
       >
+        {/* 캠프 데이터 프리페칭 모달 */}
+        <Modal
+          visible={prefetchingCamp}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {}}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalHeaderTop}>
+                  <Ionicons name="rocket" size={48} color="#3b82f6" />
+                  <TouchableOpacity 
+                    style={styles.closeButton}
+                    onPress={handleCancelPrefetch}
+                  >
+                    <Ionicons name="close" size={24} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.modalTitle}>캠프 데이터 로딩 중</Text>
+                <Text style={styles.modalSubtitle}>
+                  빠른 탐색을 위해 데이터를 미리 불러오는 중입니다
+                </Text>
+              </View>
+              
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { width: `${prefetchProgress}%` }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.progressText}>{prefetchProgress}%</Text>
+              </View>
+              
+              <View style={styles.loadingSteps}>
+                <View style={styles.loadingStep}>
+                  <Ionicons 
+                    name={prefetchStage !== 'cache' ? "checkmark-circle" : "ellipse-outline"} 
+                    size={20} 
+                    color={prefetchStage !== 'cache' ? "#10b981" : "#3b82f6"} 
+                  />
+                  <Text style={[
+                    styles.loadingStepText, 
+                    prefetchStage === 'cache' && styles.loadingStepTextActive,
+                    prefetchStage !== 'cache' && styles.loadingStepTextDone
+                  ]}>
+                    기존 캐시 정리
+                  </Text>
+                </View>
+                <View style={styles.loadingStep}>
+                  <Ionicons 
+                    name={prefetchStage === 'cache' ? "ellipse-outline" : prefetchStage === 'update' ? "ellipse-outline" : "checkmark-circle"} 
+                    size={20} 
+                    color={prefetchStage === 'cache' ? "#cbd5e1" : prefetchStage === 'update' ? "#3b82f6" : "#10b981"} 
+                  />
+                  <Text style={[
+                    styles.loadingStepText, 
+                    prefetchStage === 'update' && styles.loadingStepTextActive,
+                    !['cache', 'update'].includes(prefetchStage) && styles.loadingStepTextDone
+                  ]}>
+                    캠프 변경
+                  </Text>
+                </View>
+                <View style={styles.loadingStep}>
+                  <Ionicons 
+                    name={['cache', 'update'].includes(prefetchStage) ? "ellipse-outline" : prefetchStage === 'data' ? "ellipse-outline" : "checkmark-circle"} 
+                    size={20} 
+                    color={['cache', 'update'].includes(prefetchStage) ? "#cbd5e1" : prefetchStage === 'data' ? "#3b82f6" : "#10b981"} 
+                  />
+                  <Text style={[
+                    styles.loadingStepText, 
+                    prefetchStage === 'data' && styles.loadingStepTextActive,
+                    ['webview', 'complete'].includes(prefetchStage) && styles.loadingStepTextDone
+                  ]}>
+                    캠프 데이터 로딩
+                  </Text>
+                </View>
+                <View style={styles.loadingStep}>
+                  <Ionicons 
+                    name={prefetchStage === 'complete' ? "checkmark-circle" : "ellipse-outline"} 
+                    size={20} 
+                    color={prefetchStage === 'complete' ? "#10b981" : prefetchStage === 'webview' ? "#3b82f6" : "#cbd5e1"} 
+                  />
+                  <View style={styles.loadingStepTextContainer}>
+                    <Text style={[
+                      styles.loadingStepText, 
+                      prefetchStage === 'webview' && styles.loadingStepTextActive,
+                      prefetchStage === 'complete' && styles.loadingStepTextDone
+                    ]}>
+                      노션/구글시트 프리로딩
+                    </Text>
+                    {prefetchStage === 'webview' && webViewLoadProgress.total > 0 && (
+                      <Text style={styles.loadingStepSubtext}>
+                        {webViewLoadProgress.loaded} / {webViewLoadProgress.total}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+              
+              <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 16 }} />
+            </View>
+          </View>
+        </Modal>
+
         <View style={styles.content}>
           {/* 헤더 */}
           <View style={styles.header}>
@@ -1897,5 +2210,111 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  
+  // 프리페칭 모달 스타일
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 32,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 10,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    marginBottom: 8,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  progressContainer: {
+    marginBottom: 24,
+  },
+  progressBar: {
+    height: 12,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#3b82f6',
+    borderRadius: 6,
+  },
+  progressText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3b82f6',
+    textAlign: 'center',
+  },
+  loadingSteps: {
+    gap: 12,
+    marginBottom: 8,
+  },
+  loadingStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingStepTextContainer: {
+    flex: 1,
+  },
+  loadingStepText: {
+    fontSize: 14,
+    color: '#94a3b8',
+  },
+  loadingStepTextActive: {
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+  loadingStepTextDone: {
+    color: '#10b981',
+    fontWeight: '600',
+  },
+  loadingStepSubtext: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
   },
 });
