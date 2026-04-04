@@ -533,34 +533,54 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       let cvUrl = '';
       let passportPhotoUrl = '';
       let foreignIdCardUrl = '';
+      const uploadedFiles: string[] = []; // 업로드된 파일 경로 추적
 
       try {
         // 프로필 이미지 업로드
         console.log('  - 프로필 이미지 업로드 중...');
         profileImageUrl = await uploadForeignProfileImage(userId, data.profileImage);
+        uploadedFiles.push(`foreign-teachers/${userId}/profile.jpg`);
         console.log('  ✅ 프로필 이미지 업로드 완료');
 
         // CV 업로드
         console.log('  - CV 업로드 중...');
         cvUrl = await uploadCV(userId, data.cvFile.uri, data.cvFile.name);
+        uploadedFiles.push(`foreign-teachers/${userId}/cv_${data.cvFile.name}`);
         console.log('  ✅ CV 업로드 완료');
 
         // 여권 사진 업로드
         console.log('  - 여권 사진 업로드 중...');
         passportPhotoUrl = await uploadPassportPhoto(userId, data.passportPhoto);
+        uploadedFiles.push(`foreign-teachers/${userId}/passport.jpg`);
         console.log('  ✅ 여권 사진 업로드 완료');
 
         // 외국인 등록증 업로드 (선택사항)
         if (data.foreignIdCard) {
           console.log('  - 외국인 등록증 업로드 중...');
           foreignIdCardUrl = await uploadForeignIdCard(userId, data.foreignIdCard);
+          uploadedFiles.push(`foreign-teachers/${userId}/foreign_id.jpg`);
           console.log('  ✅ 외국인 등록증 업로드 완료');
         }
 
         console.log('✅ 모든 파일 업로드 완료');
       } catch (uploadError) {
         console.error('❌ 파일 업로드 실패:', uploadError);
-        throw new Error('파일 업로드에 실패했습니다. 관리자에게 문의해주세요.');
+        
+        // 이미 업로드된 파일 정리
+        const { getStorage, ref, deleteObject } = await import('firebase/storage');
+        const storage = getStorage();
+        
+        for (const filePath of uploadedFiles) {
+          try {
+            console.log(`🗑️ 업로드된 파일 삭제 중: ${filePath}`);
+            await deleteObject(ref(storage, filePath));
+            console.log(`✅ 파일 삭제 완료: ${filePath}`);
+          } catch (deleteError) {
+            console.error(`파일 삭제 실패: ${filePath}`, deleteError);
+          }
+        }
+        
+        throw new Error('파일 업로드에 실패했습니다. 다시 시도해주세요.');
       }
 
       // 3. Firestore에 사용자 문서 생성 또는 업데이트

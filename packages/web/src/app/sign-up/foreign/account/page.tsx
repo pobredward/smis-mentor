@@ -278,151 +278,178 @@ export default function ForeignSignUpStep2() {
       // 2. 파일 업로드
       logger.info('📤 Uploading files...');
       const { getStorage } = await import('firebase/storage');
-      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { ref, uploadBytes, getDownloadURL, deleteObject } = await import('firebase/storage');
       const storage = getStorage();
 
-      // 프로필 이미지 업로드
-      logger.info('  - Uploading profile image...');
-      const profileImageRef = ref(storage, `foreign-teachers/${userId}/profile.jpg`);
-      await uploadBytes(profileImageRef, profileImage);
-      const profileImageUrl = await getDownloadURL(profileImageRef);
-      logger.info('  ✅ Profile image uploaded');
+      const uploadedFiles: string[] = []; // 업로드된 파일 경로 추적
 
-      // CV 업로드
-      logger.info('  - Uploading CV...');
-      const cvRef = ref(storage, `foreign-teachers/${userId}/cv_${cvFile.name}`);
-      await uploadBytes(cvRef, cvFile);
-      const cvUrl = await getDownloadURL(cvRef);
-      logger.info('  ✅ CV uploaded');
+      try {
+        // 프로필 이미지 업로드
+        logger.info('  - Uploading profile image...');
+        const profileImageRef = ref(storage, `foreign-teachers/${userId}/profile.jpg`);
+        await uploadBytes(profileImageRef, profileImage);
+        uploadedFiles.push(`foreign-teachers/${userId}/profile.jpg`);
+        const profileImageUrl = await getDownloadURL(profileImageRef);
+        logger.info('  ✅ Profile image uploaded');
 
-      // 여권 사진 업로드
-      logger.info('  - Uploading passport photo...');
-      const passportRef = ref(storage, `foreign-teachers/${userId}/passport.jpg`);
-      await uploadBytes(passportRef, passportPhoto);
-      const passportPhotoUrl = await getDownloadURL(passportRef);
-      logger.info('  ✅ Passport photo uploaded');
+        // CV 업로드
+        logger.info('  - Uploading CV...');
+        const cvRef = ref(storage, `foreign-teachers/${userId}/cv_${cvFile.name}`);
+        await uploadBytes(cvRef, cvFile);
+        uploadedFiles.push(`foreign-teachers/${userId}/cv_${cvFile.name}`);
+        const cvUrl = await getDownloadURL(cvRef);
+        logger.info('  ✅ CV uploaded');
 
-      // 외국인 등록증 업로드 (선택사항)
-      let foreignIdCardUrl = '';
-      if (foreignIdCard) {
-        logger.info('  - Uploading foreign ID card...');
-        const foreignIdRef = ref(storage, `foreign-teachers/${userId}/foreign_id.jpg`);
-        await uploadBytes(foreignIdRef, foreignIdCard);
-        foreignIdCardUrl = await getDownloadURL(foreignIdRef);
-        logger.info('  ✅ Foreign ID card uploaded');
-      }
+        // 여권 사진 업로드
+        logger.info('  - Uploading passport photo...');
+        const passportRef = ref(storage, `foreign-teachers/${userId}/passport.jpg`);
+        await uploadBytes(passportRef, passportPhoto);
+        uploadedFiles.push(`foreign-teachers/${userId}/passport.jpg`);
+        const passportPhotoUrl = await getDownloadURL(passportRef);
+        logger.info('  ✅ Passport photo uploaded');
 
-      logger.info('✅ All files uploaded successfully');
+        // 외국인 등록증 업로드 (선택사항)
+        let foreignIdCardUrl = '';
+        if (foreignIdCard) {
+          logger.info('  - Uploading foreign ID card...');
+          const foreignIdRef = ref(storage, `foreign-teachers/${userId}/foreign_id.jpg`);
+          await uploadBytes(foreignIdRef, foreignIdCard);
+          uploadedFiles.push(`foreign-teachers/${userId}/foreign_id.jpg`);
+          foreignIdCardUrl = await getDownloadURL(foreignIdRef);
+          logger.info('  ✅ Foreign ID card uploaded');
+        }
 
-      // 3. Firestore에 사용자 문서 생성 또는 업데이트
-      const { doc, setDoc, updateDoc, Timestamp } = await import('firebase/firestore');
-      const { db } = await import('@/lib/firebase');
+        logger.info('✅ All files uploaded successfully');
 
-      const userData = {
-        userId: userId,
-        id: userId,  // ✅ id 필드 추가
-        name: fullName,
-        email: data.email,
-        phone: fullPhone,
-        phoneNumber: fullPhone,
-        password: '', // 보안상 저장하지 않음
-        address: existingUserByPhone?.address || '',
-        addressDetail: existingUserByPhone?.addressDetail || '',
-        role: 'foreign', // 원어민은 바로 활성화
-        jobExperiences: existingUserByPhone?.jobExperiences || [],
-        partTimeJobs: existingUserByPhone?.partTimeJobs || [],
-        createdAt: existingUserByPhone?.createdAt || Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        agreedTerms: true,
-        agreedPersonal: true,
-        profileImage: profileImageUrl,
-        status: 'active', // 원어민은 바로 활성 상태
-        isEmailVerified: false,
-        isPhoneVerified: false,
-        isProfileCompleted: true,
-        isTermsAgreed: true,
-        isPersonalAgreed: true,
-        isAddressVerified: false,
-        isProfileImageUploaded: true,
-        jobMotivation: 'Foreign Teacher Application',
-        feedback: existingUserByPhone?.feedback || '',
-        // 원어민 특화 정보
-        foreignTeacher: {
-          firstName: firstName || '',
-          lastName: lastName || '',
-          middleName: middleName || '',
-          countryCode: countryCode || '',
-          cvUrl: cvUrl,
-          passportPhotoUrl: passportPhotoUrl,
-          foreignIdCardUrl: foreignIdCardUrl,
-          applicationDate: Timestamp.now(),
-        },
-        // 소셜 로그인 정보 추가 (소셜 가입인 경우)
-        ...(socialSignUp && socialProvider && {
-          authProviders: [{
-            // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
-            providerId: socialProvider === 'naver' || socialProvider === 'kakao' 
-              ? socialProvider 
-              : `${socialProvider}.com`,
-            uid: socialProviderUid || userId, // 소셜 제공자 고유 ID 우선
-            email: data.email,
-            linkedAt: Timestamp.now(),
-            displayName: socialDisplayName,
-            photoURL: socialPhotoURL,
-          }],
-          primaryAuthMethod: 'social',
-          // 🔑 소셜 전용 계정의 Firebase Auth 로그인용 비밀번호
-          ...(tempPasswordForSocial && { _firebaseAuthPassword: tempPasswordForSocial }),
-        }),
-        // 일반 가입인 경우 password provider 추가
-        ...(!socialSignUp && {
-          authProviders: [{
-            providerId: 'password',
-            uid: userId,
-            email: data.email,
-            linkedAt: Timestamp.now(),
-          }],
-          primaryAuthMethod: 'password',
-        }),
-      };
+        // 3. Firestore에 사용자 문서 생성 또는 업데이트
+        const { doc, setDoc, updateDoc, Timestamp } = await import('firebase/firestore');
+        const { db } = await import('@/lib/firebase');
 
-      if (isUpdatingExistingUser && existingUserByPhone) {
-        const oldTempUserId = existingUserByPhone.userId;
-        
-        logger.info('📝 Creating new Firestore document with Auth UID:', userId);
-        await setDoc(doc(db, 'users', userId), userData);
-        logger.info('✅ New Firestore document created');
-        
-        // ✅ 기존 temp 문서 삭제 (userId가 다른 경우에만)
-        if (oldTempUserId !== userId) {
-          logger.info('🗑️ Deleting old temp document:', oldTempUserId);
-          const { deleteDoc } = await import('firebase/firestore');
-          await deleteDoc(doc(db, 'users', oldTempUserId));
-          logger.info('✅ Old temp document deleted');
+        const userData = {
+          userId: userId,
+          id: userId,  // ✅ id 필드 추가
+          name: fullName,
+          email: data.email,
+          phone: fullPhone,
+          phoneNumber: fullPhone,
+          password: '', // 보안상 저장하지 않음
+          address: existingUserByPhone?.address || '',
+          addressDetail: existingUserByPhone?.addressDetail || '',
+          role: 'foreign', // 원어민은 바로 활성화
+          jobExperiences: existingUserByPhone?.jobExperiences || [],
+          partTimeJobs: existingUserByPhone?.partTimeJobs || [],
+          createdAt: existingUserByPhone?.createdAt || Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          agreedTerms: true,
+          agreedPersonal: true,
+          profileImage: profileImageUrl,
+          status: 'active', // 원어민은 바로 활성 상태
+          isEmailVerified: false,
+          isPhoneVerified: false,
+          isProfileCompleted: true,
+          isTermsAgreed: true,
+          isPersonalAgreed: true,
+          isAddressVerified: false,
+          isProfileImageUploaded: true,
+          jobMotivation: 'Foreign Teacher Application',
+          feedback: existingUserByPhone?.feedback || '',
+          // 원어민 특화 정보
+          foreignTeacher: {
+            firstName: firstName || '',
+            lastName: lastName || '',
+            middleName: middleName || '',
+            countryCode: countryCode || '',
+            cvUrl: cvUrl,
+            passportPhotoUrl: passportPhotoUrl,
+            foreignIdCardUrl: foreignIdCardUrl,
+            applicationDate: Timestamp.now(),
+          },
+          // 소셜 로그인 정보 추가 (소셜 가입인 경우)
+          ...(socialSignUp && socialProvider && {
+            authProviders: [{
+              // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
+              providerId: socialProvider === 'naver' || socialProvider === 'kakao' 
+                ? socialProvider 
+                : `${socialProvider}.com`,
+              uid: socialProviderUid || userId, // 소셜 제공자 고유 ID 우선
+              email: data.email,
+              linkedAt: Timestamp.now(),
+              displayName: socialDisplayName,
+              photoURL: socialPhotoURL,
+            }],
+            primaryAuthMethod: 'social',
+            // 🔑 소셜 전용 계정의 Firebase Auth 로그인용 비밀번호
+            ...(tempPasswordForSocial && { _firebaseAuthPassword: tempPasswordForSocial }),
+          }),
+          // 일반 가입인 경우 password provider 추가
+          ...(!socialSignUp && {
+            authProviders: [{
+              providerId: 'password',
+              uid: userId,
+              email: data.email,
+              linkedAt: Timestamp.now(),
+            }],
+            primaryAuthMethod: 'password',
+          }),
+        };
+
+        if (isUpdatingExistingUser && existingUserByPhone) {
+          const oldTempUserId = existingUserByPhone.userId;
+          
+          logger.info('📝 Creating new Firestore document with Auth UID:', userId);
+          await setDoc(doc(db, 'users', userId), userData);
+          logger.info('✅ New Firestore document created');
+          
+          // ✅ 기존 temp 문서 삭제 (userId가 다른 경우에만)
+          if (oldTempUserId !== userId) {
+            logger.info('🗑️ Deleting old temp document:', oldTempUserId);
+            const { deleteDoc } = await import('firebase/firestore');
+            await deleteDoc(doc(db, 'users', oldTempUserId));
+            logger.info('✅ Old temp document deleted');
+          }
+          
+          toast.success(
+            `Welcome back, ${fullName}!\n\nYour account has been activated.\nYou can now log in and start using the platform.`, 
+            { duration: 8000 }
+          );
+        } else {
+          logger.info('📝 Creating new Firestore user document');
+          await setDoc(doc(db, 'users', userId), userData);
+          logger.info('✅ Firestore user document created');
+          
+          toast.success(
+            `Welcome, ${fullName}!\n\nYour account has been successfully created.\nYou can now log in and start using the platform.`, 
+            { duration: 8000 }
+          );
         }
         
-        toast.success(
-          `Welcome back, ${fullName}!\n\nYour account has been activated.\nYou can now log in and start using the platform.`, 
-          { duration: 8000 }
-        );
-      } else {
-        logger.info('📝 Creating new Firestore user document');
-        await setDoc(doc(db, 'users', userId), userData);
-        logger.info('✅ Firestore user document created');
+        // startTransition을 사용하여 안전하게 페이지 전환
+        const { startTransition } = await import('react');
+        setTimeout(() => {
+          startTransition(() => {
+            router.push('/sign-in');
+          });
+        }, 3000);
+      } catch (uploadError: any) {
+        // 파일 업로드 중 에러 발생 시 이미 업로드된 파일 정리
+        logger.error('File upload error, cleaning up uploaded files:', uploadError);
         
-        toast.success(
-          `Welcome, ${fullName}!\n\nYour account has been successfully created.\nYou can now log in and start using the platform.`, 
-          { duration: 8000 }
-        );
+        const { getStorage } = await import('firebase/storage');
+        const { ref, deleteObject } = await import('firebase/storage');
+        const storage = getStorage();
+        
+        for (const filePath of uploadedFiles) {
+          try {
+            logger.info(`🗑️ Deleting uploaded file: ${filePath}`);
+            await deleteObject(ref(storage, filePath));
+            logger.info(`✅ File deleted: ${filePath}`);
+          } catch (deleteError) {
+            logger.error(`Failed to delete file: ${filePath}`, deleteError);
+          }
+        }
+        
+        throw uploadError; // 에러를 다시 throw하여 외부 catch에서 처리
       }
-      
-      // startTransition을 사용하여 안전하게 페이지 전환
-      const { startTransition } = await import('react');
-      setTimeout(() => {
-        startTransition(() => {
-          router.push('/sign-in');
-        });
-      }, 3000);
     } catch (error: any) {
       logger.error('Sign up error:', error);
       
