@@ -1,4 +1,40 @@
 import { ConfigContext, ExpoConfig } from '@expo/config';
+import type { ConfigPlugin } from 'expo/config-plugins';
+import { withProjectBuildGradle } from 'expo/config-plugins';
+
+/** android/ 가 gitignore → EAS prebuild 시 매번 생성되므로 여기서 루트 build.gradle을 패치합니다. */
+const withReactNativePickerMonorepo: ConfigPlugin = (cfg) =>
+  withProjectBuildGradle(cfg, (c) => {
+    if (c.modResults.language !== 'groovy') {
+      return c;
+    }
+    const MARKER = 'smis-react-native-picker-monorepo';
+    let contents = c.modResults.contents;
+    if (contents.includes(MARKER)) {
+      return c;
+    }
+    const snippet = `
+// ${MARKER}: @react-native-picker/picker — react-native 패키지 루트(모노레포·npm workspaces·EAS)
+def smisReactNativePackageDir = [
+  new File(rootDir, "../node_modules/react-native"),
+  new File(rootDir, "../../../node_modules/react-native"),
+  new File(rootDir, "../../node_modules/react-native"),
+].find { it.exists() }
+if (smisReactNativePackageDir != null) {
+  ext.REACT_NATIVE_NODE_MODULES_DIR = smisReactNativePackageDir
+}
+`.trim();
+    const anchor = ['apply plugin: "expo-root-project"', "apply plugin: 'expo-root-project'"].find((a) =>
+      contents.includes(a),
+    );
+    if (!anchor) {
+      throw new Error(
+        '[withReactNativePickerMonorepo] android/build.gradle에서 expo-root-project 적용 줄을 찾지 못했습니다.',
+      );
+    }
+    c.modResults.contents = contents.replace(anchor, `${snippet}\n\n${anchor}`);
+    return c;
+  });
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -91,6 +127,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png',
   },
   plugins: [
+    withReactNativePickerMonorepo,
     [
       'expo-image-picker',
       {
