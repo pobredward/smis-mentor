@@ -97,8 +97,11 @@ export default function SignUpEducation() {
         major2: data.major2 || '',
       });
       
-      // 다음 단계로 이동
-      router.push('/sign-up/details');
+      // startTransition을 사용하여 안전하게 페이지 전환
+      const { startTransition } = await import('react');
+      startTransition(() => {
+        router.push('/sign-up/details');
+      });
     } catch (error) {
       logger.error('교육 정보 확인 오류:', error);
       toast.error('교육 정보 확인 중 오류가 발생했습니다.');

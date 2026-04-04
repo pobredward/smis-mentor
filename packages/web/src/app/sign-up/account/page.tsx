@@ -114,8 +114,11 @@ export default function SignUpAccount() {
         password: data.password,
       });
       
-      // 다음 단계로 이동
-      router.push('/sign-up/education');
+      // startTransition을 사용하여 안전하게 페이지 전환
+      const { startTransition } = await import('react');
+      startTransition(() => {
+        router.push('/sign-up/education');
+      });
     } catch (error) {
       logger.error('계정 정보 확인 오류:', error);
       toast.error('계정 정보 확인 중 오류가 발생했습니다.');

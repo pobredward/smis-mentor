@@ -400,9 +400,12 @@ export default function ForeignSignUpStep2() {
         );
       }
       
-      // 3초 후 로그인 페이지로 이동
+      // startTransition을 사용하여 안전하게 페이지 전환
+      const { startTransition } = await import('react');
       setTimeout(() => {
-        router.push('/sign-in');
+        startTransition(() => {
+          router.push('/sign-in');
+        });
       }, 3000);
     } catch (error: any) {
       logger.error('Sign up error:', error);

@@ -69,8 +69,12 @@ export default function ForeignSignUpStep1() {
         { duration: 5000 }
       );
       
+      // startTransition을 사용하여 안전하게 페이지 전환
+      const { startTransition } = await import('react');
       setTimeout(() => {
-        router.push('/sign-in');
+        startTransition(() => {
+          router.push('/sign-in');
+        });
       }, 3000);
     } catch (error: any) {
       toast.dismiss(loadingToast);
@@ -78,7 +82,15 @@ export default function ForeignSignUpStep1() {
       
       if (error.message?.includes('이미 활성화된')) {
         toast.error('Account is already active. Redirecting to login page...');
-        setTimeout(() => router.push('/sign-in'), 2000);
+        
+        // startTransition을 사용하여 안전하게 페이지 전환
+        setTimeout(() => {
+          import('react').then(({ startTransition }) => {
+            startTransition(() => {
+              router.push('/sign-in');
+            });
+          });
+        }, 2000);
       } else {
         toast.error(
           `Failed to restore account.\nPlease contact the administrator.\nAdmin: 010-7656-7933 (Shin Sunwoong)`,
@@ -201,7 +213,12 @@ export default function ForeignSignUpStep1() {
               `Welcome back, ${inputFullName}!\nPlease continue your registration to activate your account.`,
               { duration: 5000 }
             );
-            router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+            
+            // startTransition을 사용하여 안전하게 페이지 전환
+            const { startTransition } = await import('react');
+            startTransition(() => {
+              router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+            });
             return;
           } else {
             // 이름이 불일치 → 관리자가 다른 사람을 등록해둔 것
@@ -243,14 +260,24 @@ export default function ForeignSignUpStep1() {
           `Welcome ${data.firstName}! We're honored to have you with SMIS. Please complete the remaining information.`,
           { duration: 3000 }
         );
-        router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+        
+        // startTransition을 사용하여 안전하게 페이지 전환
+        const { startTransition } = await import('react');
+        startTransition(() => {
+          router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+        });
       } else {
         // 전화번호로 사용자를 찾을 수 없는 경우 → 신규 가입
         toast.success(
           `Welcome ${data.firstName}! We're honored to have you with SMIS. Please complete the remaining information.`,
           { duration: 3000 }
         );
-        router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+        
+        // startTransition을 사용하여 안전하게 페이지 전환
+        const { startTransition } = await import('react');
+        startTransition(() => {
+          router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+        });
       }
     } catch (error) {
       logger.error('User information verification error:', error);
