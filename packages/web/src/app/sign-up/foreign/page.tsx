@@ -370,7 +370,14 @@ export default function ForeignSignUpStep1() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push('/sign-up')}
+                  onClick={() => {
+                    // startTransition을 사용하여 안전하게 페이지 전환
+                    import('react').then(({ startTransition }) => {
+                      startTransition(() => {
+                        router.push('/sign-up');
+                      });
+                    });
+                  }}
                   className="flex-1"
                 >
                   Back
@@ -392,7 +399,14 @@ export default function ForeignSignUpStep1() {
             <p className="text-gray-600 text-sm">
               Already have an account?{' '}
               <button
-                onClick={() => router.push('/sign-in')}
+                onClick={() => {
+                  // startTransition을 사용하여 안전하게 페이지 전환
+                  import('react').then(({ startTransition }) => {
+                    startTransition(() => {
+                      router.push('/sign-in');
+                    });
+                  });
+                }}
                 className="text-green-600 hover:text-green-700 font-semibold hover:underline"
               >
                 Sign In

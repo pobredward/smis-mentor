@@ -74,7 +74,17 @@ export default function ForeignSignUpStep2() {
         <div className="max-w-md mx-auto text-center py-12">
           <h1 className="text-2xl font-bold mb-4">Error</h1>
           <p className="text-gray-600 mb-4">Required information is missing.</p>
-          <Button variant="primary" onClick={() => router.push('/sign-up/foreign')}>
+          <Button 
+            variant="primary" 
+            onClick={() => {
+              // startTransition을 사용하여 안전하게 페이지 전환
+              import('react').then(({ startTransition }) => {
+                startTransition(() => {
+                  router.push('/sign-up/foreign');
+                });
+              });
+            }}
+          >
             Return to Foreign Teacher Sign Up
           </Button>
         </div>
@@ -94,6 +104,12 @@ export default function ForeignSignUpStep2() {
         const reader = new FileReader();
         reader.onloadend = () => {
           setPreview(reader.result as string);
+        };
+        reader.onerror = () => {
+          logger.error('File reading error');
+          toast.error('Failed to read the file. Please try again.');
+          setFile(null);
+          setPreview(null);
         };
         reader.readAsDataURL(file);
       }
@@ -608,7 +624,14 @@ export default function ForeignSignUpStep2() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.back()}
+                  onClick={() => {
+                    // startTransition을 사용하여 안전하게 페이지 전환
+                    import('react').then(({ startTransition }) => {
+                      startTransition(() => {
+                        router.back();
+                      });
+                    });
+                  }}
                   className="flex-1"
                 >
                   Back
