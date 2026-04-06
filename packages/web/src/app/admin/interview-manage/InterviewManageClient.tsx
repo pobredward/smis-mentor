@@ -1563,10 +1563,10 @@ export function InterviewManageClient() {
         return dateInfo.date.getTime() >= twoMonthsAgo.getTime();
       })
       .sort((a, b) => {
-        // 날짜 순 정렬 (가까운 과거 → 현재 → 가까운 미래)
+        // 날짜 순 정렬 (최근 미래 → 현재 → 최근 과거, 내림차순)
         if (a.formattedDate === '날짜 미정') return 1;
         if (b.formattedDate === '날짜 미정') return -1;
-        return a.date.getTime() - b.date.getTime();
+        return b.date.getTime() - a.date.getTime();
       });
     
     // 2개월 이전 ~ 5개월 이내 과거 날짜 (토글로 표시)

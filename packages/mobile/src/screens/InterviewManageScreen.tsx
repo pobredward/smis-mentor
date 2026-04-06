@@ -696,17 +696,26 @@ export function InterviewManageScreen({
   const filterInterviewDates = useMemo(() => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // 2개월 전 날짜 계산
+    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
+    // 5개월 전 날짜 계산
     const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, now.getDate());
 
+    // 미래 날짜 + 2개월 이내 과거 날짜 (기본 표시)
     const futureDates = interviewDates.filter((dateInfo) => {
+      // '날짜 미정'은 항상 표시
       if (dateInfo.formattedDate === '날짜 미정') return true;
-      return dateInfo.date.getTime() >= today.getTime();
+      // 오늘 이후 날짜 또는 2개월 이내 과거 날짜
+      return dateInfo.date.getTime() >= twoMonthsAgo.getTime();
     });
 
+    // 2개월 이전 ~ 5개월 이내 과거 날짜 (토글로 표시)
     const pastDates = interviewDates.filter((dateInfo) => {
+      // '날짜 미정'은 제외
       if (dateInfo.formattedDate === '날짜 미정') return false;
+      // 2개월 이전이고 5개월 이내의 과거 날짜만 필터링
       return (
-        dateInfo.date.getTime() < today.getTime() &&
+        dateInfo.date.getTime() < twoMonthsAgo.getTime() &&
         dateInfo.date.getTime() >= fiveMonthsAgo.getTime()
       );
     });
@@ -776,6 +785,7 @@ export function InterviewManageScreen({
           <Text style={styles.emptyText}>등록된 면접일이 없습니다.</Text>
         ) : (
           <>
+            {/* 기본 표시: 미래 + 2개월 이내 과거 면접일 */}
             {filterInterviewDates.futureDates.map((dateInfo, index) => {
               const shortDate =
                 dateInfo.formattedDate === '날짜 미정'
@@ -785,6 +795,10 @@ export function InterviewManageScreen({
                       'HH:mm'
                     )}`;
 
+              const now = new Date();
+              const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              const isPast = dateInfo.formattedDate !== '날짜 미정' && dateInfo.date.getTime() < today.getTime();
+
               const isSelected =
                 selectedDate &&
                 format(selectedDate.date, 'yyyy-MM-dd-HH:mm') ===
@@ -793,16 +807,27 @@ export function InterviewManageScreen({
               return (
                 <TouchableOpacity
                   key={`future-${index}`}
-                  style={[styles.dateTab, isSelected && styles.dateTabSelected]}
+                  style={[
+                    styles.dateTab,
+                    isPast && styles.dateTabPast,
+                    isSelected && (isPast ? styles.dateTabPastSelected : styles.dateTabSelected),
+                  ]}
                   onPress={() => handleSelectDate(dateInfo)}
                 >
-                  <Text style={[styles.dateTabText, isSelected && styles.dateTabTextSelected]}>
+                  <Text
+                    style={[
+                      styles.dateTabText,
+                      isPast && styles.dateTabTextPast,
+                      isSelected && styles.dateTabTextSelected,
+                    ]}
+                  >
                     {shortDate} ({dateInfo.interviews.length})
                   </Text>
                 </TouchableOpacity>
               );
             })}
 
+            {/* 과거 면접일 토글 버튼 - 2개월 이전 날짜가 있을 때만 표시 */}
             {filterInterviewDates.pastDates.length > 0 && (
               <TouchableOpacity
                 style={[
@@ -819,11 +844,12 @@ export function InterviewManageScreen({
                 >
                   {showPastDates
                     ? '숨기기'
-                    : `과거 면접일 (${filterInterviewDates.pastDates.length})`}
+                    : `2개월 이전 (${filterInterviewDates.pastDates.length})`}
                 </Text>
               </TouchableOpacity>
             )}
 
+            {/* 과거 면접일 표시 - 토글 시에만 표시 */}
             {showPastDates &&
               filterInterviewDates.pastDates.map((dateInfo, index) => {
                 const shortDate = `${format(dateInfo.date, 'M/d(eee)', { locale: ko })} ${format(
