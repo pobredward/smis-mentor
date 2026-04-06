@@ -1549,29 +1549,35 @@ export function InterviewManageClient() {
   const filterInterviewDates = useMemo(() => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // 2개월 전 날짜 계산
+    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
     // 5개월 전 날짜 계산
     const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, now.getDate());
     
+    // 미래 날짜 + 2개월 이내 과거 날짜 (기본 표시)
     const futureDates = interviewDates
       .filter(dateInfo => {
         // '날짜 미정'은 항상 표시
         if (dateInfo.formattedDate === '날짜 미정') return true;
-        // 오늘 이후 날짜만 필터링
-        return dateInfo.date.getTime() >= today.getTime();
+        // 오늘 이후 날짜 또는 2개월 이내 과거 날짜
+        return dateInfo.date.getTime() >= twoMonthsAgo.getTime();
       })
       .sort((a, b) => {
-        // 미래 날짜는 오름차순 정렬 (가까운 미래부터)
+        // 날짜 순 정렬 (가까운 과거 → 현재 → 가까운 미래)
         if (a.formattedDate === '날짜 미정') return 1;
         if (b.formattedDate === '날짜 미정') return -1;
         return a.date.getTime() - b.date.getTime();
       });
     
-    const pastDates = interviewDates.filter(dateInfo => {
-      // '날짜 미정'은 제외
-      if (dateInfo.formattedDate === '날짜 미정') return false;
-      // 5개월 이내의 과거 날짜만 필터링
-      return dateInfo.date.getTime() < today.getTime() && dateInfo.date.getTime() >= fiveMonthsAgo.getTime();
-    });
+    // 2개월 이전 ~ 5개월 이내 과거 날짜 (토글로 표시)
+    const pastDates = interviewDates
+      .filter(dateInfo => {
+        // '날짜 미정'은 제외
+        if (dateInfo.formattedDate === '날짜 미정') return false;
+        // 2개월 이전이고 5개월 이내의 과거 날짜만 필터링
+        return dateInfo.date.getTime() < twoMonthsAgo.getTime() && dateInfo.date.getTime() >= fiveMonthsAgo.getTime();
+      })
+      .sort((a, b) => b.date.getTime() - a.date.getTime()); // 최근 과거부터 정렬
     
     return { futureDates, pastDates };
   }, [interviewDates]);
@@ -1600,33 +1606,29 @@ export function InterviewManageClient() {
           </div>
           <div className="flex items-center">
           <Button 
-            variant="secondary"
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white mr-1"
+            className="bg-blue-600 hover:bg-blue-700 text-white mr-1 px-3 py-1.5 rounded-md transition-colors"
             onClick={() => window.open(interviewLinks.zoomUrl, "_blank")}
           >
             Zoom
           </Button>
           <Button 
-            variant="secondary"
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white mr-1"
+            className="bg-blue-600 hover:bg-blue-700 text-white mr-1 px-3 py-1.5 rounded-md transition-colors"
             onClick={() => window.open(interviewLinks.canvaUrl, "_blank")}
           >
             캔바
           </Button>
           <Button 
-            variant="secondary"
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white mr-1"
+            className="bg-blue-600 hover:bg-blue-700 text-white mr-1 px-3 py-1.5 rounded-md transition-colors"
             onClick={() => setShowScriptModal(true)}
           >
             스크립트
           </Button>
           <Button 
-            variant="secondary"
             size="sm"
-            className="bg-green-600 hover:bg-green-700 text-white"
+            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-md transition-colors"
             onClick={() => setShowLinksManager(true)}
           >
             링크 관리
@@ -1643,19 +1645,29 @@ export function InterviewManageClient() {
               <p className="text-center py-4 text-gray-500">등록된 면접일이 없습니다.</p>
             ) : (
               <>
-                {/* 현재 및 미래 면접일 표시 */}
+                {/* 기본 표시: 미래 + 2개월 이내 과거 면접일 */}
                 {filterInterviewDates.futureDates.map((dateInfo, index) => {
                   const shortDate = dateInfo.formattedDate === '날짜 미정' 
                     ? '미정' 
                     : `${format(dateInfo.date, 'M/d(eee)', { locale: ko })} ${format(dateInfo.date, 'HH:mm')}`;
                   
+                  const now = new Date();
+                  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                  const isPast = dateInfo.formattedDate !== '날짜 미정' && dateInfo.date.getTime() < today.getTime();
+                  
                   return (
                     <button
                       key={`future-${index}`}
                       className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
+                        isPast ? 'border border-dashed' : ''
+                      } ${
                         selectedDate && format(selectedDate.date, 'yyyy-MM-dd-HH:mm') === format(dateInfo.date, 'yyyy-MM-dd-HH:mm')
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                          ? isPast 
+                            ? 'bg-gray-500 text-white border-gray-500'
+                            : 'bg-blue-500 text-white'
+                          : isPast
+                            ? 'bg-gray-50 hover:bg-gray-100 text-gray-500 border-gray-300'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
                       }`}
                       onClick={() => handleSelectDate(dateInfo)}
                     >
@@ -1664,7 +1676,7 @@ export function InterviewManageClient() {
                   );
                 })}
                 
-                {/* 과거 면접일 토글 버튼 - 과거 날짜가 있을 때만 표시 */}
+                {/* 과거 면접일 토글 버튼 - 2개월 이전 날짜가 있을 때만 표시 */}
                 {filterInterviewDates.pastDates.length > 0 && (
                   <button
                     className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
@@ -1674,7 +1686,7 @@ export function InterviewManageClient() {
                     }`}
                     onClick={togglePastDates}
                   >
-                    {showPastDates ? '숨기기' : `과거 면접일 (${filterInterviewDates.pastDates.length})`}
+                    {showPastDates ? '숨기기' : `2개월 이전 (${filterInterviewDates.pastDates.length})`}
                   </button>
                 )}
                 
@@ -1717,18 +1729,16 @@ export function InterviewManageClient() {
                         {selectedJobBoard !== '전체' && ` (${selectedJobBoard})`}
                       </p>
                     </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className={`${
+                    <button
+                      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                         selectedDate.recordingUrl 
-                          ? "bg-purple-600 hover:bg-purple-700 text-white" 
+                          ? "bg-blue-600 hover:bg-blue-700 text-white" 
                           : "bg-gray-400 hover:bg-gray-500 text-white"
                       }`}
                       onClick={handleOpenRecordingModal}
                     >
                       녹화 영상
-                    </Button>
+                    </button>
                   </div>
                 </div>
 
