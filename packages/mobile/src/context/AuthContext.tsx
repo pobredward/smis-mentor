@@ -34,7 +34,19 @@ const AuthContext = createContext<AuthContextType>({
   refreshUserData: async () => {},
   waitForAuthReady: async () => {},
   updateActiveJobCode: async () => {},
+  triggerDataPrefetch: () => {},
 });
+
+// 데이터 프리페칭 트리거 이벤트 (싱글톤 패턴)
+let prefetchTriggerCallback: (() => void) | null = null;
+
+export const registerPrefetchTrigger = (callback: () => void) => {
+  prefetchTriggerCallback = callback;
+};
+
+export const unregisterPrefetchTrigger = () => {
+  prefetchTriggerCallback = null;
+};
 
 export const useAuth = () => useContext(AuthContext);
 
@@ -49,6 +61,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [authReady, setAuthReady] = useState(false);
   const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
   const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
+  const hasPrefetchedRef = useRef(false); // 프리페칭 중복 방지
+
+  // 데이터 프리페칭 트리거 함수
+  const triggerDataPrefetch = useCallback(() => {
+    logger.info('🎯 AuthContext: 데이터 프리페칭 트리거 호출');
+    if (prefetchTriggerCallback) {
+      prefetchTriggerCallback();
+    } else {
+      logger.warn('⚠️ 프리페칭 콜백이 등록되지 않음');
+    }
+  }, []);
 
   // 네이버 SDK 초기화 (Development Build 전용)
   // Expo Go에서는 Native SDK를 사용할 수 없음!
@@ -253,6 +276,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             if (userRecord) {
               setUserData(userRecord);
               logger.info('사용자 데이터 로드 성공:', userRecord.name);
+              
+              // 사용자 데이터 로드 후 프리페칭 트리거 (한 번만)
+              if (!hasPrefetchedRef.current && userRecord.activeJobExperienceId) {
+                hasPrefetchedRef.current = true;
+                logger.info('🚀 AuthContext: 로그인 완료, 데이터 프리페칭 트리거');
+                
+                // 약간의 딜레이를 둬서 UI가 먼저 렌더링되도록 함
+                setTimeout(() => {
+                  triggerDataPrefetch();
+                }, 500);
+              }
             } else if (retryCount < 2) {
               // 최대 2번까지 재시도 (조용히)
               await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -274,6 +308,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         await loadUserData();
       } else {
         setUserData(null);
+        hasPrefetchedRef.current = false;
       }
 
       setLoading(false);
@@ -281,7 +316,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     });
 
     return unsubscribe;
-  }, []);
+  }, [triggerDataPrefetch]);
 
   // Context 값을 useMemo로 메모이제이션
   const value = useMemo(
@@ -294,6 +329,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       refreshUserData,
       waitForAuthReady,
       updateActiveJobCode,
+      triggerDataPrefetch,
     }),
     [
       currentUser,
@@ -303,6 +339,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       refreshUserData,
       waitForAuthReady,
       updateActiveJobCode,
+      triggerDataPrefetch,
     ]
   );
 

@@ -43,7 +43,7 @@ export const CampTabProvider = ({ children }: { children: ReactNode }) => {
   const [webViewPreloadComplete, setWebViewPreloadComplete] = useState(false);
   const [webViewLoadProgress, setWebViewLoadProgress] = useState({ loaded: 0, total: 0 });
 
-  // 앱 시작 시 마지막 탭 복원
+  // 앱 시작 시 마지막 탭 및 프리로드 링크 복원
   useEffect(() => {
     loadLastTab();
     loadLastPreloadLinks();
@@ -66,13 +66,12 @@ export const CampTabProvider = ({ children }: { children: ReactNode }) => {
       const cached = await AsyncStorage.getItem(LAST_PRELOAD_LINKS_KEY);
       if (cached) {
         const links = JSON.parse(cached) as PreloadLink[];
-        logger.info(`✅ 마지막 프리로드 링크 복원: ${links.length}개`);
+        logger.info(`📦 마지막 프리로드 링크 복원: ${links.length}개`);
         
-        // 링크가 있으면 자동으로 프리로드 시작
+        // 링크만 복원하고, 프리로드는 AuthContext에서 트리거
         if (links.length > 0) {
           setPreloadLinksState(links);
-          setIsPreloadingState(true);
-          logger.info('🔄 앱 재시작: WebView 프리로드 자동 시작');
+          logger.info('💾 프리로드 링크 복원 완료 (프리로드는 로그인 후 자동 시작)');
         }
       }
     } catch (error) {

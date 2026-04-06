@@ -75,4 +75,5 @@ export interface AuthContextType {
   refreshUserData: () => Promise<void>;
   waitForAuthReady: () => Promise<void>;
   updateActiveJobCode: (jobCodeId: string) => Promise<void>;
+  triggerDataPrefetch: () => void;
 }
