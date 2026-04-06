@@ -12,11 +12,15 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import Checkbox from 'expo-checkbox';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
-import { signIn, resetPassword, getUserByPhone } from '../services/authService';
+import {
+  signIn,
+  resetPassword,
+  getUserByPhone,
+  persistLoginRememberEmail,
+  getPersistedLoginRememberEmail,
+} from '../services/authService';
 import { GoogleSignInButton, PhoneInputModal, PasswordInputModal, NaverSignInButton, AppleSignInButton } from '../components';
 import { 
   handleSocialLogin, 
@@ -33,14 +37,6 @@ interface SignInScreenProps {
   onSocialSignUp?: (socialData: SocialUserData, tempUserId?: string) => void;
 }
 
-const STORAGE_KEYS = {
-  REMEMBER_ME: '@smis_remember_me',
-  SAVED_EMAIL: '@smis_saved_email',
-  LOGIN_EXPIRY: '@smis_login_expiry',
-} as const;
-
-const LOGIN_EXPIRY_DAYS = 30; // 30일 동안 로그인 유지
-
 export function SignInScreen({
   onSignUpPress,
   onSignInSuccess,
@@ -54,8 +50,7 @@ export function SignInScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [showResetForm, setShowResetForm] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
-  
+
   // 소셜 로그인 관련 상태
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -69,54 +64,12 @@ export function SignInScreen({
 
   const checkSavedLogin = async () => {
     try {
-      const [savedRememberMe, savedEmail, loginExpiry] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.REMEMBER_ME),
-        AsyncStorage.getItem(STORAGE_KEYS.SAVED_EMAIL),
-        AsyncStorage.getItem(STORAGE_KEYS.LOGIN_EXPIRY),
-      ]);
-
-      if (savedRememberMe === 'true' && savedEmail) {
-        const expiryDate = loginExpiry ? new Date(loginExpiry) : null;
-        const now = new Date();
-
-        // 만료 시간 확인
-        if (expiryDate && expiryDate > now) {
-          setEmail(savedEmail);
-          setRememberMe(true);
-        } else {
-          // 만료된 경우 저장된 정보 삭제
-          await clearSavedLogin();
-        }
+      const persisted = await getPersistedLoginRememberEmail();
+      if (persisted) {
+        setEmail(persisted.email);
       }
     } catch (error) {
       logger.error('저장된 로그인 정보 확인 실패:', error);
-    }
-  };
-
-  const saveLoginInfo = async (emailToSave: string) => {
-    try {
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + LOGIN_EXPIRY_DAYS);
-
-      await Promise.all([
-        AsyncStorage.setItem(STORAGE_KEYS.REMEMBER_ME, 'true'),
-        AsyncStorage.setItem(STORAGE_KEYS.SAVED_EMAIL, emailToSave),
-        AsyncStorage.setItem(STORAGE_KEYS.LOGIN_EXPIRY, expiryDate.toISOString()),
-      ]);
-    } catch (error) {
-      logger.error('로그인 정보 저장 실패:', error);
-    }
-  };
-
-  const clearSavedLogin = async () => {
-    try {
-      await Promise.all([
-        AsyncStorage.removeItem(STORAGE_KEYS.REMEMBER_ME),
-        AsyncStorage.removeItem(STORAGE_KEYS.SAVED_EMAIL),
-        AsyncStorage.removeItem(STORAGE_KEYS.LOGIN_EXPIRY),
-      ]);
-    } catch (error) {
-      logger.error('저장된 로그인 정보 삭제 실패:', error);
     }
   };
 
@@ -144,14 +97,8 @@ export function SignInScreen({
     setIsLoading(true);
     try {
       await signIn(email, password);
-      
-      // 로그인 성공 시 "로그인 저장" 체크 여부에 따라 처리
-      if (rememberMe) {
-        await saveLoginInfo(email);
-      } else {
-        await clearSavedLogin();
-      }
-      
+      await persistLoginRememberEmail(email);
+
       Alert.alert('로그인 성공', '환영합니다!');
       onSignInSuccess();
     } catch (error: any) {
@@ -240,9 +187,12 @@ export function SignInScreen({
           });
 
           try {
-            const { signInWithCustomToken } = await import('../services/authService');
+            const { signInWithCustomToken, persistLoginRememberEmail } = await import(
+              '../services/authService'
+            );
             await signInWithCustomToken(result.user.userId, result.user.email);
-            
+            await persistLoginRememberEmail(result.user.email);
+
             logger.info('✅ Firebase Auth 로그인 완료');
             Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
@@ -314,9 +264,12 @@ export function SignInScreen({
           });
 
           try {
-            const { signInWithCustomToken } = await import('../services/authService');
+            const { signInWithCustomToken, persistLoginRememberEmail } = await import(
+              '../services/authService'
+            );
             await signInWithCustomToken(result.user.userId, result.user.email);
-            
+            await persistLoginRememberEmail(result.user.email);
+
             logger.info('✅ Firebase Auth 로그인 완료');
             Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
@@ -388,9 +341,12 @@ export function SignInScreen({
           });
 
           try {
-            const { signInWithCustomToken } = await import('../services/authService');
+            const { signInWithCustomToken, persistLoginRememberEmail } = await import(
+              '../services/authService'
+            );
             await signInWithCustomToken(result.user.userId, result.user.email);
-            
+            await persistLoginRememberEmail(result.user.email);
+
             logger.info('✅ Firebase Auth 로그인 완료');
             Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
@@ -622,7 +578,9 @@ export function SignInScreen({
         updateUser,
         arrayUnion // ✅ arrayUnion 전달
       );
-      
+
+      await persistLoginRememberEmail(existingUserEmail);
+
       setShowPasswordModal(false);
       
       // ✅ 연동 완료 즉시 새로고침 (Alert 전)
@@ -777,21 +735,6 @@ export function SignInScreen({
                 </TouchableOpacity>
               </View>
             </View>
-
-            {/* 로그인 저장 체크박스 */}
-            <TouchableOpacity
-              style={styles.rememberMeContainer}
-              onPress={() => setRememberMe(!rememberMe)}
-              activeOpacity={0.7}
-            >
-              <Checkbox
-                value={rememberMe}
-                onValueChange={setRememberMe}
-                color={rememberMe ? '#3b82f6' : undefined}
-                style={styles.checkbox}
-              />
-              <Text style={styles.rememberMeText}>로그인 저장 (30일)</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={[
@@ -996,23 +939,6 @@ const styles = StyleSheet.create({
   passwordToggle: {
     paddingHorizontal: 12,
     paddingVertical: 12,
-  },
-  rememberMeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  rememberMeText: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '500',
   },
   loginButton: {
     backgroundColor: '#3b82f6',

@@ -29,6 +29,56 @@ const STORAGE_KEYS = {
   LOGIN_EXPIRY: '@smis_login_expiry',
 } as const;
 
+/** 로그인 화면 이메일 자동 입력 유지 기간 (Firebase 리프레시 토큰과 별개) */
+const LOGIN_REMEMBER_EXPIRY_YEARS = 25;
+
+/**
+ * 로그인 성공 시 이메일 자동 입력을 장기간 저장 (로그아웃 시 삭제)
+ */
+export async function persistLoginRememberEmail(email: string): Promise<void> {
+  const expiryDate = new Date();
+  expiryDate.setFullYear(expiryDate.getFullYear() + LOGIN_REMEMBER_EXPIRY_YEARS);
+  await Promise.all([
+    AsyncStorage.setItem(STORAGE_KEYS.REMEMBER_ME, 'true'),
+    AsyncStorage.setItem(STORAGE_KEYS.SAVED_EMAIL, email),
+    AsyncStorage.setItem(STORAGE_KEYS.LOGIN_EXPIRY, expiryDate.toISOString()),
+  ]);
+}
+
+export async function clearLoginRememberEmail(): Promise<void> {
+  await Promise.all([
+    AsyncStorage.removeItem(STORAGE_KEYS.REMEMBER_ME),
+    AsyncStorage.removeItem(STORAGE_KEYS.SAVED_EMAIL),
+    AsyncStorage.removeItem(STORAGE_KEYS.LOGIN_EXPIRY),
+  ]);
+}
+
+/**
+ * 저장된 이메일 자동 입력 정보 (만료·미설정 시 null)
+ */
+export async function getPersistedLoginRememberEmail(): Promise<{
+  email: string;
+} | null> {
+  const [savedRememberMe, savedEmail, loginExpiry] = await Promise.all([
+    AsyncStorage.getItem(STORAGE_KEYS.REMEMBER_ME),
+    AsyncStorage.getItem(STORAGE_KEYS.SAVED_EMAIL),
+    AsyncStorage.getItem(STORAGE_KEYS.LOGIN_EXPIRY),
+  ]);
+
+  if (savedRememberMe !== 'true' || !savedEmail) {
+    return null;
+  }
+
+  if (loginExpiry) {
+    if (new Date(loginExpiry) <= new Date()) {
+      await clearLoginRememberEmail();
+      return null;
+    }
+  }
+
+  return { email: savedEmail };
+}
+
 // 사용자 조회
 export const getUserByEmail = async (email: string): Promise<User | null> => {
   try {
@@ -337,12 +387,8 @@ export const resetPassword = async (email: string) => {
 
 export const signOut = async () => {
   try {
-    // Firebase 로그아웃
     await firebaseSignOut(auth);
-    
-    // 저장된 로그인 정보 삭제 (단, 사용자가 명시적으로 로그아웃하는 경우에만)
-    // "로그인 저장" 기능은 유지하되, 로그아웃 시에는 세션을 완전히 종료
-    // 다음 로그인 시 다시 "로그인 저장"을 선택할 수 있음
+    await clearLoginRememberEmail();
   } catch (error) {
     logger.error('로그아웃 실패:', error);
     throw error;

@@ -29,16 +29,15 @@ const functions = getFunctions(app, 'asia-northeast3');
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Auth 초기화 (React Native용 AsyncStorage persistence 설정)
+// Auth 초기화: 반드시 initializeAuth를 먼저 시도해야 AsyncStorage 영속화가 적용됨.
+// getAuth만 호출하면 RN에서 기본 persistence로 열리며, 앱 재시작 시 세션이 유지되지 않을 수 있음.
 let auth: Auth;
 try {
-  // 이미 초기화된 경우 getAuth 사용
-  auth = getAuth(app);
-} catch {
-  // 처음 초기화하는 경우 initializeAuth + AsyncStorage 사용
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage),
   });
+} catch {
+  auth = getAuth(app);
 }
 
 export { app, functions, db, storage, auth };

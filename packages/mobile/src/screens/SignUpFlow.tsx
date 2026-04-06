@@ -6,7 +6,7 @@ import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
 import type { SocialUserData, SignUpState } from '@smis-mentor/shared';
 import { activateTempAccountWithSocial } from '@smis-mentor/shared';
-import { signUp, updateUser } from '../services/authService';
+import { signUp, updateUser, persistLoginRememberEmail } from '../services/authService';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -88,6 +88,12 @@ export function SignUpFlow({
       } else {
         // 일반 회원가입
         await handleNormalSignUp(finalData);
+      }
+
+      const rememberEmail =
+        finalData.email?.trim() || finalData.socialData?.email?.trim();
+      if (rememberEmail) {
+        await persistLoginRememberEmail(rememberEmail);
       }
 
       Alert.alert(
