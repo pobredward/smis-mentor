@@ -114,9 +114,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     permissions: [
       'CAMERA',
+      // Android 13+ (API 33+)에서는 Photo Picker가 자동으로 사용되어 READ_MEDIA_IMAGES 권한 불필요
+      // Android 12 이하에서는 READ_EXTERNAL_STORAGE로 충분
       'READ_EXTERNAL_STORAGE',
       'WRITE_EXTERNAL_STORAGE',
-      'READ_MEDIA_IMAGES',
+      // 'READ_MEDIA_IMAGES', // Google Play 정책으로 인해 제거 - expo-image-picker가 자동으로 Photo Picker 사용
       'ACCESS_FINE_LOCATION',
       'ACCESS_COARSE_LOCATION',
       'POST_NOTIFICATIONS',
