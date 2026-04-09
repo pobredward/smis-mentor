@@ -37,5 +37,6 @@ export const updateSMSTemplateSchema = z.object({
 export const shareApplicantsSchema = z.object({
   jobBoardId: z.string().min(1, '캠프 공고 ID는 필수입니다.'),
   applicationIds: z.array(z.string().min(1)).min(1, '최소 한 명의 지원자를 선택해야 합니다.'),
-  expirationHours: z.number().min(1, '만료 시간은 최소 1시간 이상이어야 합니다.').max(168, '만료 시간은 최대 7일(168시간)까지 가능합니다.'),
+  expirationHours: z.number().min(1 / 60, '만료 시간은 최소 1분 이상이어야 합니다.').max(43200 / 60, '만료 시간은 최대 30일(720시간)까지 가능합니다.'),
+  createdBy: z.string().min(1, '생성자 ID는 필수입니다.'),
 });

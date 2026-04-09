@@ -57,7 +57,14 @@ function initializeFirebaseAdmin() {
  */
 export function getAdminFirestore() {
   initializeFirebaseAdmin();
-  return getFirestore();
+  const firestore = getFirestore();
+  
+  // undefined 값을 Firestore에 저장하지 않도록 설정
+  firestore.settings({
+    ignoreUndefinedProperties: true,
+  });
+  
+  return firestore;
 }
 
 /**
