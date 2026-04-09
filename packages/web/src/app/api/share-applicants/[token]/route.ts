@@ -3,6 +3,10 @@ import { ShareToken, ApplicationHistory, User, JobBoard } from '@/types';
 import { logger } from '@smis-mentor/shared';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 
+// Vercel에서 Node.js 런타임 사용 (Firebase Admin SDK 필요)
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
