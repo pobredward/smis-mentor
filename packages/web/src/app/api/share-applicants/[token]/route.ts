@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, query, where, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { ShareToken, ApplicationHistory, User, JobBoard } from '@/types';
 import { logger } from '@smis-mentor/shared';
+import { getAdminFirestore } from '@/lib/firebase-admin';
 
 export async function GET(
   request: NextRequest,
@@ -18,17 +17,21 @@ export async function GET(
       );
     }
 
+    logger.info('🔍 공유 링크 조회 시작:', token);
+
+    // Admin Firestore 사용
+    const db = getAdminFirestore();
+
     // 토큰 검증
-    const shareTokensRef = collection(db, 'shareTokens');
-    const tokenQuery = query(
-      shareTokensRef,
-      where('token', '==', token),
-      where('isActive', '==', true)
-    );
-    
-    const tokenSnapshot = await getDocs(tokenQuery);
+    const tokenSnapshot = await db
+      .collection('shareTokens')
+      .where('token', '==', token)
+      .where('isActive', '==', true)
+      .limit(1)
+      .get();
 
     if (tokenSnapshot.empty) {
+      logger.warn('❌ 유효하지 않은 토큰:', token);
       return NextResponse.json(
         { error: '유효하지 않은 링크입니다.' },
         { status: 404 }
@@ -36,22 +39,31 @@ export async function GET(
     }
 
     const shareTokenDoc = tokenSnapshot.docs[0];
-    const shareToken = { id: shareTokenDoc.id, ...shareTokenDoc.data() } as ShareToken;
+    const shareTokenData = shareTokenDoc.data();
+    const shareToken = {
+      id: shareTokenDoc.id,
+      ...shareTokenData,
+      expiresAt: shareTokenData.expiresAt.toDate(),
+    } as ShareToken & { id: string };
 
     // 만료 확인
     const now = new Date();
-    const expiresAt = shareToken.expiresAt.toDate();
+    const expiresAt = shareToken.expiresAt;
     
     if (now > expiresAt) {
+      logger.warn('❌ 만료된 토큰:', token);
       return NextResponse.json(
         { error: '만료된 링크입니다.' },
         { status: 410 }
       );
     }
 
+    logger.info('✅ 토큰 검증 완료, JobBoard 조회 중...');
+
     // JobBoard 정보 조회
-    const jobBoardDoc = await getDoc(doc(db, 'jobBoards', shareToken.refJobBoardId));
-    if (!jobBoardDoc.exists()) {
+    const jobBoardDoc = await db.collection('jobBoards').doc(shareToken.refJobBoardId).get();
+    if (!jobBoardDoc.exists) {
+      logger.warn('❌ JobBoard를 찾을 수 없음:', shareToken.refJobBoardId);
       return NextResponse.json(
         { error: '캠프 정보를 찾을 수 없습니다.' },
         { status: 404 }
@@ -59,20 +71,22 @@ export async function GET(
     }
     const jobBoard = { id: jobBoardDoc.id, ...jobBoardDoc.data() } as JobBoard & { id: string };
 
+    logger.info('✅ JobBoard 조회 완료, 지원서 정보 조회 중...');
+
     // 지원서 정보 조회
     const applications = await Promise.all(
       shareToken.refApplicationIds.map(async (appId) => {
-        const appDoc = await getDoc(doc(db, 'applicationHistories', appId));
-        if (!appDoc.exists()) return null;
+        const appDoc = await db.collection('applicationHistories').doc(appId).get();
+        if (!appDoc.exists) return null;
         
-        const appData = appDoc.data() as ApplicationHistory;
+        const appData = appDoc.data() as any;
         
         // 사용자 정보 조회
-        const userDoc = await getDoc(doc(db, 'users', appData.refUserId));
+        const userDoc = await db.collection('users').doc(appData.refUserId).get();
         let userData = null;
         
-        if (userDoc.exists()) {
-          const rawUserData = userDoc.data();
+        if (userDoc.exists) {
+          const rawUserData = userDoc.data() as any;
           userData = {
             ...rawUserData,
             id: userDoc.id,
@@ -119,6 +133,8 @@ export async function GET(
     // null 제거
     const validApplications = applications.filter(app => app !== null);
 
+    logger.info('✅ 지원자 정보 조회 완료:', validApplications.length);
+
     return NextResponse.json({
       success: true,
       jobBoard: {
@@ -131,7 +147,7 @@ export async function GET(
       expiresAt: expiresAt.toISOString(),
     });
   } catch (error) {
-    logger.error('지원자 정보 조회 오류:', error);
+    logger.error('❌ 지원자 정보 조회 오류:', error);
     return NextResponse.json(
       { error: '지원자 정보를 불러오는데 실패했습니다.' },
       { status: 500 }
