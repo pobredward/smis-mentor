@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     logger.info('✅ 검증 통과, 추출된 값:', { 
       jobBoardId, 
       applicationIds, 
-      expirationHours, 
+      expirationHours,  
       createdBy,
       createdByType: typeof createdBy,
     });
