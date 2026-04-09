@@ -2,20 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { shareApplicantsSchema } from '@/lib/validationSchemas';
 import { logger } from '@smis-mentor/shared';
-import { getAuthenticatedUser, requireMentor } from '@/lib/authMiddleware';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
   try {
     logger.info('📝 공유 링크 생성 API 시작');
-    
-    const authContext = await getAuthenticatedUser(request);
-    
-    const mentorCheck = requireMentor(authContext);
-    if (mentorCheck) {
-      logger.warn('❌ 권한 부족');
-      return mentorCheck;
-    }
 
     const body = await request.json();
     logger.info('📦 요청 본문:', body);
@@ -33,9 +24,34 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { jobBoardId, applicationIds, expirationHours } = validationResult.data;
-    const createdBy = authContext!.user.userId || authContext!.user.id;
+    const { jobBoardId, applicationIds, expirationHours, createdBy } = validationResult.data;
 
+    // createdBy 검증 (사용자 ID가 실제로 존재하는지 확인)
+    const db = getAdminFirestore();
+    const userDoc = await db.collection('users').doc(createdBy).get();
+    
+    if (!userDoc.exists) {
+      logger.warn('❌ 사용자를 찾을 수 없음:', createdBy);
+      return NextResponse.json(
+        { error: '유효하지 않은 사용자입니다.' },
+        { status: 403 }
+      );
+    }
+
+    const userData = userDoc.data();
+    const userRole = userData?.role;
+    
+    // 멘토 이상 권한 확인
+    const allowedRoles = ['admin', 'mentor', 'foreign', 'mentor_temp', 'foreign_temp'];
+    if (!allowedRoles.includes(userRole)) {
+      logger.warn('❌ 권한 부족:', { userId: createdBy, role: userRole });
+      return NextResponse.json(
+        { error: '멘토 이상의 권한이 필요합니다.' },
+        { status: 403 }
+      );
+    }
+
+    logger.info('✅ 사용자 검증 완료:', { userId: createdBy, role: userRole });
     logger.info('✅ 검증 통과, 토큰 생성 중...');
 
     // 고유한 토큰 생성 (32바이트 랜덤 문자열)
@@ -45,8 +61,7 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + expirationHours * 60 * 60 * 1000);
 
-    // Admin Firestore 사용
-    const db = getAdminFirestore();
+    // Firestore에 토큰 저장
     const shareTokenRef = await db.collection('shareTokens').add({
       token,
       refJobBoardId: jobBoardId,
