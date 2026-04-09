@@ -306,7 +306,7 @@ export function SharedApplicantsClient({ token }: Props) {
                         <div>
                           <span className="font-medium text-gray-600">지원일:</span>
                           <p className="text-gray-900 mt-0.5">
-                            {(format as any)((app.applicationDate as any).toDate(), 'yyyy.MM.dd HH:mm', { locale: ko })}
+                            {app.applicationDate ? format(new Date(app.applicationDate), 'yyyy.MM.dd HH:mm', { locale: ko }) : '-'}
                           </p>
                         </div>
                         {app.applicationPath && (
@@ -489,7 +489,7 @@ export function SharedApplicantsClient({ token }: Props) {
                           면접 일정
                         </p>
                         <p className="text-xs sm:text-sm text-indigo-700 ml-5">
-                          {(format as any)((app.interviewDate as any).toDate(), 'yyyy년 M월 d일 HH:mm', { locale: ko })}
+                          {format(new Date(app.interviewDate), 'yyyy년 M월 d일 HH:mm', { locale: ko })}
                         </p>
                       </div>
                     )}
