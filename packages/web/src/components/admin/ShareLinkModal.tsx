@@ -6,6 +6,7 @@ import Button from '@/components/common/Button';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { authenticatedPost } from '@/lib/apiClient';
 
 interface ShareLinkModalProps {
   isOpen: boolean;
@@ -62,25 +63,13 @@ export function ShareLinkModal({
     try {
       setIsGenerating(true);
       
-      const response = await fetch('/api/share-applicants/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jobBoardId,
-          applicationIds: selectedApplicationIds,
-          expirationHours: finalExpirationHours,
-          createdBy: currentUserId,
-        }),
+      const data = await authenticatedPost('/api/share-applicants/generate', {
+        jobBoardId,
+        applicationIds: selectedApplicationIds,
+        expirationHours: finalExpirationHours,
+        createdBy: currentUserId,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '링크 생성에 실패했습니다.');
-      }
-
-      const data = await response.json();
       setGeneratedLink(data.shareUrl);
       setExpiresAt(data.expiresAt);
       toast.success('공유 링크가 생성되었습니다!');
