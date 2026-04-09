@@ -26,32 +26,6 @@ export async function POST(request: NextRequest) {
     
     const { jobBoardId, applicationIds, expirationHours, createdBy } = validationResult.data;
 
-    // createdBy 검증 (사용자 ID가 실제로 존재하는지 확인)
-    const db = getAdminFirestore();
-    const userDoc = await db.collection('users').doc(createdBy).get();
-    
-    if (!userDoc.exists) {
-      logger.warn('❌ 사용자를 찾을 수 없음:', createdBy);
-      return NextResponse.json(
-        { error: '유효하지 않은 사용자입니다.' },
-        { status: 403 }
-      );
-    }
-
-    const userData = userDoc.data();
-    const userRole = userData?.role;
-    
-    // 멘토 이상 권한 확인
-    const allowedRoles = ['admin', 'mentor', 'foreign', 'mentor_temp', 'foreign_temp'];
-    if (!allowedRoles.includes(userRole)) {
-      logger.warn('❌ 권한 부족:', { userId: createdBy, role: userRole });
-      return NextResponse.json(
-        { error: '멘토 이상의 권한이 필요합니다.' },
-        { status: 403 }
-      );
-    }
-
-    logger.info('✅ 사용자 검증 완료:', { userId: createdBy, role: userRole });
     logger.info('✅ 검증 통과, 토큰 생성 중...');
 
     // 고유한 토큰 생성 (32바이트 랜덤 문자열)
@@ -61,7 +35,10 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + expirationHours * 60 * 60 * 1000);
 
+    logger.info('🔥 Firestore 접근 시도...');
+    
     // Firestore에 토큰 저장
+    const db = getAdminFirestore();
     const shareTokenRef = await db.collection('shareTokens').add({
       token,
       refJobBoardId: jobBoardId,
@@ -87,10 +64,17 @@ export async function POST(request: NextRequest) {
       expiresAt: expiresAt.toISOString(),
       tokenId: shareTokenRef.id,
     });
-  } catch (error) {
-    logger.error('❌ 공유 링크 생성 오류:', error);
+  } catch (error: any) {
+    logger.error('❌ 공유 링크 생성 오류:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+    });
     return NextResponse.json(
-      { error: '공유 링크 생성에 실패했습니다.' },
+      { 
+        error: '공유 링크 생성에 실패했습니다.',
+        details: error.message,
+      },
       { status: 500 }
     );
   }
