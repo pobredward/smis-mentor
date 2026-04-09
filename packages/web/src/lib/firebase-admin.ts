@@ -22,6 +22,10 @@ function initializeFirebaseAdmin() {
     hasClientEmail: !!clientEmail,
     hasPrivateKey: !!privateKey,
     privateKeyLength: privateKey?.length || 0,
+    privateKeyStart: privateKey?.substring(0, 30),
+    privateKeyEnd: privateKey?.substring(privateKey.length - 30),
+    hasBeginMarker: privateKey?.includes('-----BEGIN PRIVATE KEY-----'),
+    hasEndMarker: privateKey?.includes('-----END PRIVATE KEY-----'),
   });
 
   if (!projectId || !clientEmail || !privateKey) {
