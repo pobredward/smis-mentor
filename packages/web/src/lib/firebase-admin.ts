@@ -48,6 +48,12 @@ function initializeFirebaseAdmin() {
       }),
     });
     
+    // Firestore settings는 초기화 직후 한 번만 설정
+    const firestore = getFirestore(app);
+    firestore.settings({
+      ignoreUndefinedProperties: true,
+    });
+    
     console.log('✅ Firebase Admin SDK 초기화 성공');
     return app;
   } catch (error) {
@@ -61,14 +67,7 @@ function initializeFirebaseAdmin() {
  */
 export function getAdminFirestore() {
   initializeFirebaseAdmin();
-  const firestore = getFirestore();
-  
-  // undefined 값을 Firestore에 저장하지 않도록 설정
-  firestore.settings({
-    ignoreUndefinedProperties: true,
-  });
-  
-  return firestore;
+  return getFirestore();
 }
 
 /**
