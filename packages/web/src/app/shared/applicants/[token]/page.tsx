@@ -45,14 +45,63 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           const userData = userDoc.data();
           const name = userData?.name || '지원자';
           const age = userData?.age || '';
+          const university = userData?.university || '';
+          const grade = userData?.grade;
+          const isOnLeave = userData?.isOnLeave;
+          const major1 = userData?.major1 || '';
+          const major2 = userData?.major2 || '';
           const profileImage = userData?.profileImage || userData?.photoURL;
           
+          // 지원 경로 (applicationPath)
+          const applicationPath = appData?.applicationPath || '';
+          
+          // 제목: SMIS 멘토 프로필 - 이름(24세)
+          const title = `SMIS 멘토 프로필 - ${name}(${age}세)`;
+          
+          // 설명 구성
+          const descriptionParts = [];
+          
+          // 1. 학교 + 학년 + 재학/휴학
+          if (university) {
+            let schoolInfo = university;
+            if (grade) {
+              if (grade === 6) {
+                schoolInfo += ' 졸업생';
+              } else {
+                schoolInfo += ` ${grade}학년`;
+                if (isOnLeave === true) {
+                  schoolInfo += ' 휴학생';
+                } else if (isOnLeave === false) {
+                  schoolInfo += ' 재학생';
+                }
+              }
+            }
+            descriptionParts.push(schoolInfo);
+          }
+          
+          // 2. 제1전공
+          if (major1) {
+            descriptionParts.push(major1);
+          }
+          
+          // 3. 제2전공
+          if (major2) {
+            descriptionParts.push(major2);
+          }
+          
+          // 4. 지원경로
+          if (applicationPath) {
+            descriptionParts.push(applicationPath);
+          }
+          
+          const description = descriptionParts.join(' | ');
+          
           return {
-            title: '멘토 정보',
-            description: `${name}(${age})`,
+            title,
+            description,
             openGraph: {
-              title: '멘토 정보',
-              description: `${name}(${age})`,
+              title,
+              description,
               images: profileImage ? [
                 {
                   url: profileImage,
@@ -64,8 +113,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
             },
             twitter: {
               card: 'summary',
-              title: '멘토 정보',
-              description: `${name}(${age})`,
+              title,
+              description,
               images: profileImage ? [profileImage] : [],
             },
           };
