@@ -57,10 +57,13 @@ export function GuideScreen() {
 
   // 필터링된 인솔표가 로드되면 첫 번째 항목을 자동 선택
   useEffect(() => {
-    if (filteredGuides.length > 0 && !selectedGuideId) {
-      setSelectedGuideId(filteredGuides[0].id);
+    if (filteredGuides.length > 0) {
+      // 선택된 ID가 없거나, 선택된 ID가 필터링된 목록에 없으면 첫 번째 항목 선택
+      if (!selectedGuideId || !filteredGuides.some(g => g.id === selectedGuideId)) {
+        setSelectedGuideId(filteredGuides[0].id);
+      }
     }
-  }, [filteredGuides, selectedGuideId]);
+  }, [filteredGuides.length, filteredGuides.map(g => g.id).join(','), selectedGuideId]);
 
   const selectedGuide = filteredGuides.find(g => g.id === selectedGuideId) || filteredGuides[0];
   // Android는 1.0, iOS는 0.6 기본 줌

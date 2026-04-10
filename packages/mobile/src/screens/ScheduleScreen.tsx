@@ -57,10 +57,13 @@ export function ScheduleScreen() {
 
   // 필터링된 시간표가 로드되면 첫 번째 항목을 자동 선택
   useEffect(() => {
-    if (filteredSchedules.length > 0 && !selectedScheduleId) {
-      setSelectedScheduleId(filteredSchedules[0].id);
+    if (filteredSchedules.length > 0) {
+      // 선택된 ID가 없거나, 선택된 ID가 필터링된 목록에 없으면 첫 번째 항목 선택
+      if (!selectedScheduleId || !filteredSchedules.some(s => s.id === selectedScheduleId)) {
+        setSelectedScheduleId(filteredSchedules[0].id);
+      }
     }
-  }, [filteredSchedules, selectedScheduleId]);
+  }, [filteredSchedules.length, filteredSchedules.map(s => s.id).join(','), selectedScheduleId]);
 
   const selectedSchedule = filteredSchedules.find(s => s.id === selectedScheduleId) || filteredSchedules[0];
   
