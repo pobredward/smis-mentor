@@ -13,6 +13,7 @@ import {
   TextInput,
   Platform,
   KeyboardAvoidingView,
+  RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -34,7 +35,9 @@ import {
   uploadTaskImage,
 } from '../services/taskService';
 import { getUserJobCodesInfo } from '../services/authService';
-import type { Task, JobExperienceGroupRole, TaskAttachment } from '../../../shared/src/types/camp';
+import { getUsersByJobCode } from '../services/userService';
+import type { Task, JobExperienceGroupRole, TaskAttachment, User } from '../../../shared/src/types';
+import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames } from '@smis-mentor/shared';
 import {
   MENTOR_GROUP_ROLES,
   FOREIGN_GROUP_ROLES,
@@ -70,7 +73,10 @@ export function TasksScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentGroupRole, setCurrentGroupRole] = useState<JobExperienceGroupRole | null>(null);
-  const [currentCampCode, setCurrentCampCode] = useState<string>('');
+  const [currentCampCode, setCurrentCampCode] = useState<string>(''); // code (E27)
+  const [currentCampCodeId, setCurrentCampCodeId] = useState<string>(''); // Firestore 문서 ID
+  const [campUsers, setCampUsers] = useState<User[]>([]); // 캠프 사용자 목록
+  const [refreshing, setRefreshing] = useState(false);
 
   // 캘린더 상태
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -190,6 +196,15 @@ export function TasksScreen() {
       }
 
       setCurrentCampCode(activeJobCode.code);
+      setCurrentCampCodeId(activeJobCode.id);
+      
+      // 캠프 사용자 목록 가져오기 (관리자만)
+      if (isAdmin) {
+        const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
+        logger.info('모바일 - 조회된 캠프 사용자 수:', users.length);
+        setCampUsers(users);
+      }
+
       const fetchedTasks = await getTasksByCampCode(activeJobCode.code);
       setTasks(fetchedTasks);
 
@@ -240,6 +255,31 @@ export function TasksScreen() {
       setSelectedDateTasks(filtered);
     } catch (error) {
       logger.error('날짜별 업무 가져오기 오류:', error);
+    }
+  };
+
+  // Pull to refresh 핸들러
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // 캠프 사용자 목록 다시 가져오기 (관리자만)
+      if (isAdmin && userData?.activeJobExperienceId) {
+        const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
+        const activeJobCode = jobCodesInfo[0];
+        
+        if (activeJobCode) {
+          const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
+          logger.info('모바일 - 새로고침으로 조회된 캠프 사용자 수:', users.length);
+          setCampUsers(users);
+        }
+      }
+      
+      // 선택된 날짜의 업무 다시 로드
+      await loadTasksForDate(selectedDate);
+    } catch (error) {
+      logger.error('새로고침 오류:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -419,7 +459,23 @@ export function TasksScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        alwaysBounceVertical={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#3b82f6"
+            colors={["#3b82f6"]}
+            title="새로고침 중..."
+            titleColor="#6b7280"
+          />
+        }
+      >
         {/* 캘린더 헤더 */}
         <View style={styles.calendarHeaderSection}>
           <TouchableOpacity
@@ -485,7 +541,10 @@ export function TasksScreen() {
                 <TaskCard
                   key={task.id}
                   task={task}
+                  isAdmin={isAdmin}
                   currentUserId={userData.userId}
+                  campUsers={campUsers}
+                  campCodeId={currentCampCodeId}
                   onToggle={handleToggleComplete}
                   onPress={() => {
                     // TaskDetailScreen으로 이동
@@ -535,18 +594,44 @@ export function TasksScreen() {
 // 업무 카드 컴포넌트
 function TaskCard({
   task,
+  isAdmin,
   currentUserId,
+  campUsers,
+  campCodeId,
   onToggle,
   onPress,
 }: {
   task: Task;
+  isAdmin: boolean;
   currentUserId: string;
+  campUsers: User[];
+  campCodeId: string;
   onToggle: (taskId: string) => void;
   onPress: () => void;
 }) {
   const isCompleted = task.completions.some(c => c.userId === currentUserId);
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
+
+  // 관리자용 완료 현황
+  let adminCompletionStatus = null;
+  if (isAdmin && campCodeId) {
+    const targetUsers = getTaskTargetUsers(task, campUsers, campCodeId);
+    const { completedCount, totalCount } = getTaskCompletionStatus(task, targetUsers);
+    const completedNames = getUserNames(
+      targetUsers.filter(u => task.completions.some(c => c.userId === u.userId))
+    );
+    const incompleteNames = getUserNames(
+      targetUsers.filter(u => !task.completions.some(c => c.userId === u.userId))
+    );
+
+    adminCompletionStatus = {
+      completedCount,
+      totalCount,
+      completedNames,
+      incompleteNames,
+    };
+  }
 
   return (
     <TouchableOpacity
@@ -555,7 +640,8 @@ function TaskCard({
       activeOpacity={0.7}
     >
       <View style={styles.taskCardContent}>
-        <View style={styles.taskInfo}>
+        {/* 왼쪽: 업무 정보 (1/3) */}
+        <View style={[styles.taskInfo, isAdmin && adminCompletionStatus && styles.taskInfoWithAdmin]}>
           <View style={styles.taskMeta}>
             {timeStr && (
               <Text style={styles.taskTime}>{timeStr}</Text>
@@ -586,20 +672,38 @@ function TaskCard({
           </View>
         </View>
 
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation();
-            onToggle(task.id);
-          }}
-          style={styles.taskCheckbox}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons
-            name={isCompleted ? 'checkbox' : 'square-outline'}
-            size={28}
-            color={isCompleted ? '#3b82f6' : '#9ca3af'}
-          />
-        </TouchableOpacity>
+        {/* 오른쪽: 관리자용 완료 현황 또는 체크박스 */}
+        {isAdmin && adminCompletionStatus ? (
+          <View style={styles.adminCompletionArea}>
+            <View style={styles.adminCompletionNames}>
+              {adminCompletionStatus.completedNames.length > 0 && (
+                <Text style={styles.adminCompletionTextCompleted}>
+                  ✓ {adminCompletionStatus.completedCount}명: {adminCompletionStatus.completedNames.join(', ')}
+                </Text>
+              )}
+              {adminCompletionStatus.incompleteNames.length > 0 && (
+                <Text style={styles.adminCompletionTextIncomplete}>
+                  ✗ {adminCompletionStatus.incompleteNames.length}명: {adminCompletionStatus.incompleteNames.join(', ')}
+                </Text>
+              )}
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              onToggle(task.id);
+            }}
+            style={styles.taskCheckbox}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={isCompleted ? 'checkbox' : 'square-outline'}
+              size={28}
+              color={isCompleted ? '#3b82f6' : '#9ca3af'}
+            />
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -1423,6 +1527,10 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollViewContent: {
+    flexGrow: 1,
+    paddingBottom: 100,
+  },
   centerContainer: {
     flex: 1,
     alignItems: 'center',
@@ -1602,6 +1710,28 @@ const styles = StyleSheet.create({
   },
   taskInfo: {
     flex: 1,
+  },
+  taskInfoWithAdmin: {
+    flex: 1, // 1/3 정도
+  },
+  adminCompletionArea: {
+    flex: 2, // 2/3 정도
+    paddingLeft: 12,
+    borderLeftWidth: 1,
+    borderLeftColor: '#e5e7eb',
+  },
+  adminCompletionNames: {
+    gap: 4,
+  },
+  adminCompletionTextCompleted: {
+    fontSize: 11,
+    color: '#059669', // 초록색 (완료)
+    lineHeight: 16,
+  },
+  adminCompletionTextIncomplete: {
+    fontSize: 11,
+    color: '#dc2626', // 빨강색 (미완료)
+    lineHeight: 16,
   },
   taskMeta: {
     flexDirection: 'row',

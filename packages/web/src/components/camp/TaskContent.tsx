@@ -18,8 +18,9 @@ import {
   formatTime,
   formatDuration,
 } from '@/lib/taskService';
-import { getUserJobCodesInfo } from '@/lib/firebaseService';
-import type { Task, JobExperienceGroupRole } from '@smis-mentor/shared';
+import { getUserJobCodesInfo, getUsersByJobCode } from '@/lib/firebaseService';
+import type { Task, JobExperienceGroupRole, User } from '@smis-mentor/shared';
+import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames } from '@smis-mentor/shared';
 import { JobCodeWithGroup } from '@/types';
 import TaskFormModal from './TaskFormModal';
 import TaskDetailModal from './TaskDetailModal';
@@ -44,8 +45,11 @@ export default function TaskContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentGroupRole, setCurrentGroupRole] = useState<JobExperienceGroupRole | null>(null);
-  const [currentCampCode, setCurrentCampCode] = useState<string>('');
+  const [currentCampCode, setCurrentCampCode] = useState<string>(''); // code (예: E27)
+  const [currentCampCodeId, setCurrentCampCodeId] = useState<string>(''); // Firestore 문서 ID
+  const [campUsers, setCampUsers] = useState<User[]>([]); // 캠프 사용자 목록
   const [mounted, setMounted] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 캘린더 상태
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -100,7 +104,15 @@ export default function TaskContent() {
       if (activeExp) {
         setCurrentGroupRole(activeExp.groupRole);
       }
-      return jobCodesInfo[0] || null;
+      
+      const jobCodeInfo = jobCodesInfo[0];
+      if (jobCodeInfo) {
+        // jobCodeInfo.id는 Firestore 문서 ID
+        logger.info('fetchActiveJobCode - jobCodeInfo:', jobCodeInfo);
+        logger.info('jobCodeInfo.id (Firestore ID):', jobCodeInfo.id);
+      }
+      
+      return jobCodeInfo || null;
     } catch (error) {
       logger.error('활성화된 직무 코드 정보 가져오기 오류:', error);
       return null;
@@ -123,7 +135,24 @@ export default function TaskContent() {
         return;
       }
 
-      setCurrentCampCode(activeJobCode.code);
+      logger.info('=== 업무 목록 가져오기 ===');
+      logger.info('activeJobCode:', activeJobCode);
+      logger.info('activeJobCode.id (Firestore ID):', activeJobCode.id);
+      logger.info('generation:', activeJobCode.generation);
+      logger.info('code:', activeJobCode.code);
+
+      setCurrentCampCode(activeJobCode.code); // code: E27
+      setCurrentCampCodeId(activeJobCode.id); // Firestore ID
+      
+      // 캠프 사용자 목록 가져오기
+      if (isAdmin) {
+        logger.info('관리자 - 캠프 사용자 조회 시작');
+        const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
+        logger.info('조회된 사용자 수:', users.length);
+        logger.info('사용자 목록:', users.map(u => ({ name: u.name, jobExperiences: u.jobExperiences })));
+        setCampUsers(users);
+      }
+
       const fetchedTasks = await getTasksByCampCode(activeJobCode.code);
       setTasks(fetchedTasks);
 
@@ -163,7 +192,7 @@ export default function TaskContent() {
 
     try {
       const dateTasks = await getTasksByDate(code, date);
-      
+
       // 역할 필터링
       const filtered = dateTasks.filter(task => {
         if (isAdmin) return true;
@@ -174,6 +203,36 @@ export default function TaskContent() {
       setSelectedDateTasks(filtered);
     } catch (error) {
       logger.error('날짜별 업무 가져오기 오류:', error);
+    }
+  };
+
+  // Pull to refresh 핸들러
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    
+    setIsRefreshing(true);
+    try {
+      // 캠프 사용자 목록 다시 가져오기 (관리자만)
+      if (isAdmin && userData?.activeJobExperienceId) {
+        const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
+        const activeJobCode = jobCodesInfo[0];
+        
+        if (activeJobCode) {
+          const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
+          logger.info('웹 - 새로고침으로 조회된 캠프 사용자 수:', users.length);
+          setCampUsers(users);
+        }
+      }
+      
+      // 선택된 날짜의 업무 다시 로드
+      await loadTasksForDate(selectedDate);
+      
+      toast.success('새로고침 완료');
+    } catch (error) {
+      logger.error('새로고침 오류:', error);
+      toast.error('새로고침에 실패했습니다.');
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -509,9 +568,31 @@ export default function TaskContent() {
           <h3 className="text-base font-semibold text-gray-900">
             {selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일 ({DAYS_OF_WEEK[selectedDate.getDay()]})
           </h3>
-          <span className="text-xs text-gray-500">
-            {selectedDateTasks.length}개 업무
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">
+              {selectedDateTasks.length}개 업무
+            </span>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="새로고침"
+            >
+              <svg 
+                className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {selectedDateTasks.length === 0 ? (
@@ -526,6 +607,8 @@ export default function TaskContent() {
                 task={task}
                 isAdmin={isAdmin}
                 currentUserId={userData.userId}
+                campUsers={campUsers}
+                campCode={currentCampCodeId}
                 onToggle={handleToggleComplete}
                 onClick={() => {
                   setSelectedTask(task);
@@ -561,6 +644,8 @@ export default function TaskContent() {
         <TaskDetailModal
           task={selectedTask}
           isAdmin={isAdmin}
+          campUsers={campUsers}
+          campCode={currentCampCodeId}
           onClose={() => {
             setShowTaskDetail(false);
             setSelectedTask(null);
@@ -592,12 +677,16 @@ function TaskCard({
   task,
   isAdmin,
   currentUserId,
+  campUsers,
+  campCode,
   onToggle,
   onClick,
 }: {
   task: Task;
   isAdmin: boolean;
   currentUserId: string;
+  campUsers: User[];
+  campCode: string;
   onToggle: (taskId: string) => void;
   onClick: () => void;
 }) {
@@ -605,48 +694,119 @@ function TaskCard({
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
 
+  // 관리자용: 실제 완료 현황 계산
+  const targetUsers = isAdmin ? getTaskTargetUsers(task, campUsers, campCode) : [];
+  
+  // 디버깅 로그
+  if (isAdmin && campUsers.length > 0) {
+    logger.info('=== TaskCard 디버깅 ===');
+    logger.info('업무:', task.title);
+    logger.info('campCode:', campCode);
+    logger.info('task.targetRoles:', task.targetRoles);
+    logger.info('task.targetGroups:', task.targetGroups);
+    logger.info('전체 campUsers 수:', campUsers.length);
+    logger.info('필터링된 targetUsers 수:', targetUsers.length);
+    if (targetUsers.length > 0) {
+      logger.info('대상 사용자:', targetUsers.map(u => ({ 
+        name: u.name, 
+        jobExps: u.jobExperiences?.map(exp => ({ id: exp.id, role: exp.groupRole, group: exp.group }))
+      })));
+    } else {
+      logger.warn('대상 사용자가 0명입니다. 첫 번째 사용자 jobExperiences 확인:');
+      logger.warn(campUsers[0].jobExperiences);
+    }
+  }
+  
+  const { completedUsers, incompleteUsers } = isAdmin 
+    ? getTaskCompletionStatus(task, targetUsers)
+    : { completedUsers: [], incompleteUsers: [] };
+  
+  const completedNames = getUserNames(completedUsers);
+  const incompleteNames = getUserNames(incompleteUsers);
+
   return (
     <div
-      className="bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-all cursor-pointer"
+      className="bg-white border rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden"
       onClick={onClick}
     >
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            {timeStr && (
-              <span className="text-sm font-semibold text-blue-600">{timeStr}</span>
-            )}
-            {durationStr && (
-              <span className="text-xs text-gray-500">{durationStr}</span>
-            )}
-          </div>
-          
-          <h4 className={`text-sm font-medium ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-            {task.title}
-          </h4>
-          
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-gray-500">
-              {task.targetRoles.join(', ')}
-            </span>
-            {task.attachments && task.attachments.length > 0 && (
-              <span className="text-xs text-gray-400">📎 {task.attachments.length}</span>
+      <div className="flex">
+        {/* 왼쪽: 업무 정보 (1/3) */}
+        <div className="w-1/3 p-3 border-r">
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              {/* 시간 및 소요시간 */}
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                {timeStr && (
+                  <span className="text-sm font-semibold text-blue-600">{timeStr}</span>
+                )}
+                {durationStr && (
+                  <span className="text-xs text-gray-500">{durationStr}</span>
+                )}
+              </div>
+              
+              {/* 제목 */}
+              <h4 className={`text-sm font-medium mb-1.5 ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                {task.title}
+              </h4>
+              
+              {/* 대상 역할 및 첨부파일 */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500">
+                  {task.targetRoles.join(', ')}
+                </span>
+                {task.targetGroups && task.targetGroups.length > 0 && (
+                  <span className="text-xs text-gray-400">
+                    · {task.targetGroups.join(', ')}
+                  </span>
+                )}
+                {task.attachments && task.attachments.length > 0 && (
+                  <span className="text-xs text-gray-400">📎 {task.attachments.length}</span>
+                )}
+              </div>
+            </div>
+
+            {/* 일반 사용자: 체크박스 */}
+            {!isAdmin && (
+              <input
+                type="checkbox"
+                checked={isCompleted}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onToggle(task.id);
+                }}
+                className="mt-1 w-5 h-5 cursor-pointer flex-shrink-0"
+              />
             )}
           </div>
         </div>
 
-        <input
-          type="checkbox"
-          checked={isCompleted}
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-          onChange={(e) => {
-            e.stopPropagation();
-            onToggle(task.id);
-          }}
-          className="mt-1 w-5 h-5 cursor-pointer flex-shrink-0"
-        />
+        {/* 오른쪽: 관리자 완료 현황 (2/3) */}
+        {isAdmin && (
+          <div className="w-2/3 p-3 bg-gray-50 space-y-1.5">
+            {/* 완료한 사람 */}
+            {completedNames.length > 0 && (
+              <div className="flex items-start gap-2">
+                <span className="text-xs font-semibold text-green-700 flex-shrink-0">✓ {completedNames.length}명:</span>
+                <span className="text-xs text-green-800 leading-relaxed">
+                  {completedNames.join(', ')}
+                </span>
+              </div>
+            )}
+
+            {/* 미완료한 사람 */}
+            {incompleteNames.length > 0 && (
+              <div className="flex items-start gap-2">
+                <span className="text-xs font-semibold text-red-700 flex-shrink-0">✗ {incompleteNames.length}명:</span>
+                <span className="text-xs text-red-800 leading-relaxed">
+                  {incompleteNames.join(', ')}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import type { Task } from '@smis-mentor/shared';
+import type { Task, User } from '@smis-mentor/shared';
+import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
+import toast from 'react-hot-toast';
 
 interface TaskDetailModalProps {
   task: Task;
   isAdmin: boolean;
+  campUsers: User[];
+  campCode: string;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -17,6 +21,8 @@ interface TaskDetailModalProps {
 export default function TaskDetailModal({
   task,
   isAdmin,
+  campUsers,
+  campCode,
   onClose,
   onEdit,
   onDelete,
@@ -24,6 +30,8 @@ export default function TaskDetailModal({
   onShare,
 }: TaskDetailModalProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
+  
   const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
@@ -37,6 +45,35 @@ export default function TaskDetailModal({
   const linkAttachments = task.attachments?.filter((a: { type: string }) => a.type === 'link') || [];
   const imageAttachments = task.attachments?.filter((a: { type: string }) => a.type === 'image') || [];
   const otherAttachments = task.attachments?.filter((a: { type: string }) => a.type !== 'link' && a.type !== 'image') || [];
+
+  // 실제 완료 현황 계산
+  const targetUsers = isAdmin ? getTaskTargetUsers(task, campUsers, campCode) : [];
+  const { completedUsers, incompleteUsers, totalCount, completionRate } = isAdmin 
+    ? getTaskCompletionStatus(task, targetUsers)
+    : { completedUsers: [], incompleteUsers: [], totalCount: 0, completionRate: 0 };
+  
+  const sortedCompletedUsers = sortUsersByName(completedUsers);
+  const sortedIncompleteUsers = sortUsersByName(incompleteUsers);
+
+  // 미완료자에게 알림 보내기
+  const handleSendReminder = async () => {
+    setIsSendingReminder(true);
+    try {
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const sendTaskReminder = httpsCallable(functions, 'sendTaskReminderToUsers');
+      
+      const result = await sendTaskReminder({ taskId: task.id });
+      const data = result.data as { success: boolean; message: string; sentCount: number };
+      
+      toast.success(data.message);
+    } catch (error: any) {
+      console.error('푸시 알림 전송 실패:', error);
+      toast.error(error.message || '알림 전송에 실패했습니다.');
+    } finally {
+      setIsSendingReminder(false);
+    }
+  };
 
   return (
     <>
@@ -230,22 +267,133 @@ export default function TaskDetailModal({
               </div>
             )}
 
-            {/* 완료 현황 (Admin) */}
-            {isAdmin && task.completions.length > 0 && (
-              <div>
-                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">
-                  완료 현황 ({task.completions.length}명)
-                </h5>
-                <div className="flex flex-wrap gap-1.5">
-                  {task.completions.map((completion, idx) => (
-                    <div
-                      key={idx}
-                      className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs"
-                    >
-                      {completion.userName} ({completion.userRole})
-                    </div>
-                  ))}
+            {/* 완료 현황 (Admin) - 한 번에 보기 */}
+            {isAdmin && totalCount > 0 && (
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h5 className="text-sm font-semibold text-gray-900">완료 현황</h5>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold text-blue-600">
+                      {sortedCompletedUsers.length}/{totalCount}명
+                    </span>
+                    <span className="text-xs text-gray-500 font-medium">
+                      ({completionRate}%)
+                    </span>
+                  </div>
                 </div>
+
+                {/* 진행률 바 */}
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${
+                      completionRate === 100 ? 'bg-green-500' : 
+                      completionRate >= 70 ? 'bg-blue-500' : 
+                      completionRate >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${completionRate}%` }}
+                  />
+                </div>
+
+                {/* 완료한 사람 (15명) */}
+                {sortedCompletedUsers.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h6 className="text-sm font-semibold text-green-700">✓ 완료 ({sortedCompletedUsers.length}명)</h6>
+                    </div>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 max-h-60 overflow-y-auto">
+                      <div className="flex flex-wrap gap-2">
+                        {sortedCompletedUsers.map((user) => {
+                          const userExp = user.jobExperiences?.find(exp => exp.id === campCode);
+                          return (
+                            <div
+                              key={user.userId}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-green-100 border border-green-300 rounded-md"
+                            >
+                              <span className="text-sm font-medium text-green-900">{user.name}</span>
+                              {userExp && (
+                                <span className="text-xs text-green-600">({userExp.groupRole})</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 미완료한 사람 (10명) */}
+                {sortedIncompleteUsers.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h6 className="text-sm font-semibold text-red-700">✗ 미완료 ({sortedIncompleteUsers.length}명)</h6>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-60 overflow-y-auto">
+                      <div className="flex flex-wrap gap-2">
+                        {sortedIncompleteUsers.map((user) => {
+                          const userExp = user.jobExperiences?.find(exp => exp.id === campCode);
+                          return (
+                            <div
+                              key={user.userId}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-red-100 border border-red-300 rounded-md"
+                            >
+                              <span className="text-sm font-medium text-red-900">{user.name}</span>
+                              {userExp && (
+                                <span className="text-xs text-red-600">({userExp.groupRole})</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 미완료자에게 알림 보내기 */}
+                {sortedIncompleteUsers.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-start gap-2 text-xs text-blue-800">
+                        <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <p className="font-medium mb-0.5">미완료자에게 푸시 알림을 보낼 수 있습니다</p>
+                          <p className="text-blue-600">업무 리마인더가 모바일 앱으로 전송됩니다</p>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSendReminder}
+                      disabled={isSendingReminder}
+                      className="w-full px-4 py-3 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSendingReminder ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                          <span>전송 중...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                          </svg>
+                          <span>미완료자 {sortedIncompleteUsers.length}명에게 알림 보내기</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* 완료 상태일 때 축하 메시지 */}
+                {completionRate === 100 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                    <span className="text-2xl">🎉</span>
+                    <div className="text-sm">
+                      <p className="font-semibold text-green-900">모든 대상자가 완료했습니다!</p>
+                      <p className="text-green-700 text-xs">수고하셨습니다</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

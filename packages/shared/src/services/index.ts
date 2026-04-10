@@ -12,3 +12,4 @@ export * from './evaluation';
 export * from './sms';
 export * from './smsTemplate';
 export * from './socialAuthService';
+export * from './taskService';

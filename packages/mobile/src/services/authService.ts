@@ -211,9 +211,9 @@ export const getUserById = async (userId: string): Promise<User | null> => {
 
 export const getUserJobCodesInfo = async (
   jobExperiences: string[]
-): Promise<{ generation: string; code: string; name: string }[]> => {
+): Promise<{ id: string; generation: string; code: string; name: string }[]> => {
   try {
-    const jobCodesInfo: { generation: string; code: string; name: string }[] =
+    const jobCodesInfo: { id: string; generation: string; code: string; name: string }[] =
       [];
 
     for (const jobExperience of jobExperiences) {
@@ -223,10 +223,12 @@ export const getUserJobCodesInfo = async (
       if (jobDoc.exists()) {
         const data = jobDoc.data();
         jobCodesInfo.push({
+          id: jobDoc.id, // Firestore 문서 ID 추가
           generation: data.generation || '',
           code: data.code || '',
           name: data.name || '',
         });
+        logger.info(`모바일 - jobCode 조회: id=${jobDoc.id}, code=${data.code}, generation=${data.generation}`);
       }
     }
 

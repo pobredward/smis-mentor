@@ -20,7 +20,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
-import type { Task, JobExperienceGroupRole } from '../../../shared/src/types/camp';
+import { getUserJobCodesInfo } from '../services/authService';
+import { getUsersByJobCode } from '../services/userService';
+import type { Task, JobExperienceGroupRole, User } from '../../../shared/src/types';
+import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName } from '@smis-mentor/shared';
 import {
   getTaskById,
   toggleTaskCompletion,
@@ -43,6 +46,8 @@ export default function TaskDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [currentGroupRole, setCurrentGroupRole] = useState<JobExperienceGroupRole | null>(null);
+  const [campUsers, setCampUsers] = useState<User[]>([]);
+  const [currentCampCodeId, setCurrentCampCodeId] = useState<string>('');
 
   const isAdmin = userData?.role === 'admin';
   const isManager = currentGroupRole === '매니저' || currentGroupRole === 'Manager';
@@ -53,15 +58,68 @@ export default function TaskDetailScreen() {
   }, [taskId]);
 
   useEffect(() => {
-    if (userData?.activeJobExperienceId) {
-      const activeExp = userData.jobExperiences?.find(
-        exp => exp.id === userData.activeJobExperienceId
-      );
-      if (activeExp?.groupRole) {
-        setCurrentGroupRole(activeExp.groupRole as JobExperienceGroupRole);
+    loadCampData();
+  }, [userData]);
+
+  const loadCampData = async () => {
+    if (!userData?.activeJobExperienceId) return;
+
+    const activeExp = userData.jobExperiences?.find(
+      exp => exp.id === userData.activeJobExperienceId
+    );
+
+    if (activeExp?.groupRole) {
+      setCurrentGroupRole(activeExp.groupRole as JobExperienceGroupRole);
+    }
+
+    // 캠프 사용자 목록 가져오기 (관리자만)
+    if (isAdmin) {
+      try {
+        const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
+        const activeJobCode = jobCodesInfo[0];
+        
+        if (activeJobCode) {
+          setCurrentCampCodeId(activeJobCode.id);
+          const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
+          logger.info('모바일 TaskDetail - 조회된 캠프 사용자 수:', users.length);
+          setCampUsers(users);
+        }
+      } catch (error) {
+        logger.error('캠프 데이터 로드 오류:', error);
       }
     }
-  }, [userData]);
+  };
+
+  const handleSendReminder = async () => {
+    if (!task) return;
+
+    Alert.alert(
+      '알림 전송',
+      '미완료한 사용자들에게 푸시 알림을 전송하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '전송',
+          onPress: async () => {
+            try {
+              // Firebase Functions 호출
+              const { getFunctions, httpsCallable } = await import('firebase/functions');
+              const functions = getFunctions();
+              const sendTaskReminder = httpsCallable(functions, 'sendTaskReminderToUsers');
+              
+              const result = await sendTaskReminder({ taskId: task.id });
+              const data = result.data as { success: boolean; message: string; sentCount: number };
+              
+              Alert.alert('성공', data.message);
+            } catch (error: any) {
+              logger.error('푸시 알림 전송 실패:', error);
+              Alert.alert('오류', error.message || '알림 전송에 실패했습니다.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const loadTask = async () => {
     try {
@@ -383,20 +441,82 @@ export default function TaskDetailScreen() {
           )}
 
           {/* 완료 현황 (관리자) */}
-          {isAdmin && task.completions.length > 0 && (
+          {isAdmin && currentCampCodeId && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>
-                완료 현황 ({task.completions.length}명)
-              </Text>
-              <View style={styles.badgeContainer}>
-                {task.completions.map((completion, idx) => (
-                  <View key={idx} style={styles.completionBadge}>
-                    <Text style={styles.completionText}>
-                      {completion.userName} ({completion.userRole})
+              <Text style={styles.sectionLabel}>완료 현황</Text>
+              
+              {(() => {
+                const targetUsers = getTaskTargetUsers(task, campUsers, currentCampCodeId);
+                const { completedUsers, incompleteUsers, totalCount, completedCount } = 
+                  getTaskCompletionStatus(task, targetUsers);
+                const sortedCompletedUsers = sortUsersByName(completedUsers);
+                const sortedIncompleteUsers = sortUsersByName(incompleteUsers);
+
+                return (
+                  <View>
+                    <Text style={styles.completionCountText}>
+                      {completedCount}/{totalCount} 명 완료
                     </Text>
+
+                    {/* 완료한 사용자 */}
+                    {sortedCompletedUsers.length > 0 && (
+                      <View style={styles.completionSection}>
+                        <Text style={styles.completionSectionTitle}>
+                          ✓ 완료 ({sortedCompletedUsers.length}명)
+                        </Text>
+                        <View style={styles.badgeContainer}>
+                          {sortedCompletedUsers.map((user) => {
+                            const userGroupRole = user.jobExperiences?.find(
+                              exp => exp.id === currentCampCodeId
+                            )?.groupRole || '';
+                            return (
+                              <View key={user.userId} style={styles.userCompletionBadge}>
+                                <Text style={styles.userCompletionText}>
+                                  {user.name} ({userGroupRole})
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
+
+                    {/* 미완료 사용자 */}
+                    {sortedIncompleteUsers.length > 0 && (
+                      <View style={styles.completionSection}>
+                        <View style={styles.incompleteSectionHeader}>
+                          <Text style={styles.incompleteSectionTitle}>
+                            ✗ 미완료 ({sortedIncompleteUsers.length}명)
+                          </Text>
+                          <TouchableOpacity 
+                            style={styles.sendReminderButton}
+                            onPress={handleSendReminder}
+                          >
+                            <Ionicons name="notifications-outline" size={16} color="#ffffff" />
+                            <Text style={styles.sendReminderButtonText}>
+                              알림 보내기
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.badgeContainer}>
+                          {sortedIncompleteUsers.map((user) => {
+                            const userGroupRole = user.jobExperiences?.find(
+                              exp => exp.id === currentCampCodeId
+                            )?.groupRole || '';
+                            return (
+                              <View key={user.userId} style={styles.userIncompleteBadge}>
+                                <Text style={styles.userIncompleteText}>
+                                  {user.name} ({userGroupRole})
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
                   </View>
-                ))}
-              </View>
+                );
+              })()}
             </View>
           )}
         </View>
@@ -663,6 +783,68 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#065f46',
+  },
+  completionCountText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b82f6',
+    marginBottom: 12,
+  },
+  completionSection: {
+    marginTop: 12,
+  },
+  completionSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  incompleteSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  incompleteSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  sendReminderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f59e0b',
+    borderRadius: 6,
+  },
+  sendReminderButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  userCompletionBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#d1fae5',
+    borderRadius: 16,
+  },
+  userCompletionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065f46',
+  },
+  userIncompleteBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#fee2e2',
+    borderRadius: 16,
+  },
+  userIncompleteText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#dc2626',
   },
   actionButtons: {
     flexDirection: 'row',

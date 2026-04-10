@@ -266,6 +266,103 @@ export const sendTestNotification = functions
     }
   });
 
+// 관리자가 특정 업무의 미완료자에게 푸시 알림 보내기
+export const sendTaskReminderToUsers = functions
+  .region('asia-northeast3')
+  .https.onCall(async (data: { taskId: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', '인증이 필요합니다.');
+    }
+
+    try {
+      // 관리자 권한 확인
+      const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+      const adminData = adminDoc.data();
+      
+      if (!adminData || adminData.role !== 'admin') {
+        throw new functions.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
+      }
+
+      // 업무 정보 조회
+      const taskDoc = await db.collection('tasks').doc(data.taskId).get();
+      
+      if (!taskDoc.exists) {
+        throw new functions.https.HttpsError('not-found', '업무를 찾을 수 없습니다.');
+      }
+
+      const task = { id: taskDoc.id, ...taskDoc.data() } as Task;
+
+      // campCode로 jobCode 문서 ID 찾기
+      const jobCodesSnapshot = await db
+        .collection('jobCodes')
+        .where('code', '==', task.campCode)
+        .get();
+
+      if (jobCodesSnapshot.empty) {
+        throw new functions.https.HttpsError('not-found', '캠프 코드를 찾을 수 없습니다.');
+      }
+
+      const jobCodeId = jobCodesSnapshot.docs[0].id;
+
+      // 모든 사용자 조회하여 대상자 필터링
+      const usersSnapshot = await db.collection('users').get();
+      const incompleteUsers: string[] = [];
+
+      for (const userDoc of usersSnapshot.docs) {
+        const userData = userDoc.data() as UserData;
+
+        // jobExperiences에서 해당 캠프 코드가 있는지 확인
+        if (!userData.jobExperiences) continue;
+
+        const campExperience = userData.jobExperiences.find(exp => exp.id === jobCodeId);
+        if (!campExperience || !campExperience.groupRole) continue;
+
+        // 대상 역할 확인
+        if (!task.targetRoles.includes(campExperience.groupRole)) continue;
+
+        // 대상 그룹 확인 (공통 또는 해당 그룹)
+        // Note: UserData에 group 정보가 있다면 추가 확인 필요
+
+        // 완료 여부 확인
+        const isCompleted = task.completions?.some(c => c.userId === userData.userId);
+        if (isCompleted) continue;
+
+        // 알림 설정 확인
+        const settings = userData.notificationSettings;
+        if (settings?.taskReminders === false) continue;
+
+        incompleteUsers.push(userData.userId);
+      }
+
+      if (incompleteUsers.length === 0) {
+        return { 
+          success: true, 
+          message: '알림을 보낼 미완료자가 없습니다.',
+          sentCount: 0 
+        };
+      }
+
+      // 푸시 알림 전송
+      await sendTaskReminderNotifications(task, incompleteUsers);
+
+      console.log(`✅ 업무 "${task.title}"에 대한 알림 전송 완료: ${incompleteUsers.length}명`);
+
+      return { 
+        success: true, 
+        message: `${incompleteUsers.length}명에게 알림을 전송했습니다.`,
+        sentCount: incompleteUsers.length 
+      };
+    } catch (error) {
+      console.error('업무 알림 전송 실패:', error);
+      
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      
+      throw new functions.https.HttpsError('internal', '알림 전송에 실패했습니다.');
+    }
+  });
+
 // Custom Token 생성 함수 (소셜 로그인용)
 export const createCustomToken = functions
   .region('asia-northeast3')
