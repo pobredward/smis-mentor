@@ -1,6 +1,7 @@
 export * from './HomeScreen';
 export * from './CampScreen';
 export * from './EducationScreen';
+export * from './CampDetailScreen';
 export * from './ClassScreen';
 export * from './RoomScreen';
 export * from './ScheduleScreen';

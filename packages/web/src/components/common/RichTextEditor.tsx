@@ -33,10 +33,15 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
           keepMarks: true,
           keepAttributes: false,
         },
+        hardBreak: {
+          keepMarks: false,
+        },
       }),
       Image,
       Link.configure({
         openOnClick: false,
+        autolink: false,
+        linkOnPaste: false,
       }),
       TextStyle,
       Color,
@@ -47,13 +52,47 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
     ],
     content,
     onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
-      const processedHtml = html.replace(/<p><br><\/p>\s*<p><br><\/p>/g, '<p><br></p><p><br></p>');
-      onChange(processedHtml);
+      // iframe 태그를 제거하고 일반 텍스트로 변환
+      let html = editor.getHTML();
+      
+      // iframe을 일반 텍스트로 변환
+      html = html.replace(/<iframe[^>]*src="([^"]*)"[^>]*>[\s\S]*?<\/iframe>/gi, (match, src) => {
+        return src; // iframe을 URL 텍스트로 변환
+      });
+      
+      // oembed도 제거
+      html = html.replace(/<oembed[^>]*url="([^"]*)"[^>]*>[\s\S]*?<\/oembed>/gi, (match, url) => {
+        return url;
+      });
+      
+      onChange(html);
     },
     editorProps: {
       attributes: {
         class: 'prose prose-slate max-w-none focus:outline-none min-h-[200px] [&>p]:whitespace-pre-wrap [&>p]:break-words [&>p:empty]:h-[1em] [&>p:empty]:block [&>p]:min-h-[1.5em] [&>ul]:list-disc [&>ul]:pl-[1.625em] [&>ol]:list-decimal [&>ol]:pl-[1.625em] [&>h1]:text-4xl [&>h1]:font-bold [&>h1]:mb-4 [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:mb-3 [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:mb-2',
+      },
+      handlePaste: (view, event, slice) => {
+        const clipboardData = event.clipboardData;
+        if (!clipboardData) return false;
+
+        const html = clipboardData.getData('text/html');
+        const text = clipboardData.getData('text/plain');
+
+        // iframe, oembed, youtube 관련 내용이면 일반 텍스트로만 삽입
+        if ((html && (html.includes('<iframe') || html.includes('<oembed') || html.includes('youtube.com') || html.includes('youtu.be'))) || 
+            (text && (text.includes('youtube.com') || text.includes('youtu.be')))) {
+          event.preventDefault();
+          
+          // 일반 텍스트로 삽입
+          const { state, dispatch } = view;
+          const { $from } = state.selection;
+          const tr = state.tr.insertText(text, $from.pos);
+          dispatch(tr);
+          
+          return true;
+        }
+
+        return false;
       },
     },
   });

@@ -1,4 +1,40 @@
 import { auth } from './firebase';
+import { logger } from '@smis-mentor/shared';
+
+/**
+ * 현재 사용자의 ID Token을 가져옴 (Auth 초기화 대기)
+ */
+async function getCurrentUserToken(): Promise<string> {
+  // 이미 currentUser가 있으면 바로 토큰 반환
+  if (auth.currentUser) {
+    return auth.currentUser.getIdToken();
+  }
+  
+  // Auth 초기화 대기 (최대 5초)
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error('인증 정보를 불러오는데 시간이 초과되었습니다. 다시 로그인해주세요.'));
+    }, 5000);
+    
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      clearTimeout(timeout);
+      unsubscribe();
+      
+      if (user) {
+        try {
+          const token = await user.getIdToken();
+          resolve(token);
+        } catch (error) {
+          logger.error('토큰 가져오기 실패:', error);
+          reject(new Error('인증 토큰을 가져올 수 없습니다. 다시 로그인해주세요.'));
+        }
+      } else {
+        reject(new Error('로그인이 필요합니다.'));
+      }
+    });
+  });
+}
 
 /**
  * 인증된 API 요청을 보내는 헬퍼 함수
@@ -8,22 +44,21 @@ export async function authenticatedFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const currentUser = auth.currentUser;
-  
-  if (!currentUser) {
-    throw new Error('로그인이 필요합니다.');
+  try {
+    const idToken = await getCurrentUserToken();
+    
+    const headers = new Headers(options.headers);
+    headers.set('Authorization', `Bearer ${idToken}`);
+    headers.set('Content-Type', 'application/json');
+    
+    return fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    logger.error('인증된 요청 실패:', error);
+    throw error;
   }
-  
-  const idToken = await currentUser.getIdToken();
-  
-  const headers = new Headers(options.headers);
-  headers.set('Authorization', `Bearer ${idToken}`);
-  headers.set('Content-Type', 'application/json');
-  
-  return fetch(url, {
-    ...options,
-    headers,
-  });
 }
 
 /**

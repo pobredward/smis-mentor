@@ -17,6 +17,15 @@ export function SplashPrefetchScreen({
   const [hasStarted, setHasStarted] = useState(false);
   const [startTime] = useState(Date.now());
 
+  // 컴포넌트 마운트 로그
+  useEffect(() => {
+    logger.info('🎬 SplashPrefetchScreen 마운트됨', {
+      isPreloading,
+      preloadLinksCount: preloadLinks.length,
+      webViewPreloadComplete,
+    });
+  }, []);
+
   useEffect(() => {
     if (isPreloading && !hasStarted) {
       setHasStarted(true);
@@ -26,11 +35,11 @@ export function SplashPrefetchScreen({
 
   useEffect(() => {
     // 프리로딩이 완료되고, 최소 표시 시간이 지났으면 페이드아웃 후 완료
-    if (webViewPreloadComplete && hasStarted) {
+    if (webViewPreloadComplete) {
       const elapsed = Date.now() - startTime;
       const remainingTime = Math.max(0, minDisplayTime - elapsed);
 
-      logger.info(`✅ SplashPrefetchScreen: 프리로딩 완료 (경과: ${elapsed}ms, 대기: ${remainingTime}ms)`);
+      logger.info(`✅ SplashPrefetchScreen: 프리로딩 완료 (hasStarted: ${hasStarted}, 경과: ${elapsed}ms, 대기: ${remainingTime}ms)`);
 
       setTimeout(() => {
         Animated.timing(fadeAnim, {
@@ -45,12 +54,13 @@ export function SplashPrefetchScreen({
     }
   }, [webViewPreloadComplete, hasStarted, minDisplayTime, fadeAnim, onComplete, startTime]);
 
-  // 프리로딩이 시작되지 않았거나, 링크가 없으면 바로 완료
-  if (!hasStarted && !isPreloading && preloadLinks.length === 0) {
-    logger.info('⏭️  SplashPrefetchScreen: 프리로딩 없음, 즉시 완료');
-    setTimeout(() => onComplete(), 0);
-    return null;
-  }
+  // 프리로딩이 없거나 완료되었으면 즉시 넘어가기
+  useEffect(() => {
+    if (!isPreloading && preloadLinks.length === 0 && !hasStarted) {
+      logger.info('⏭️  SplashPrefetchScreen: 프리로딩 없음, 즉시 완료');
+      setTimeout(() => onComplete(), 100);
+    }
+  }, [isPreloading, preloadLinks.length, hasStarted, onComplete]);
 
   const percentage = webViewLoadProgress.total > 0 
     ? Math.round((webViewLoadProgress.loaded / webViewLoadProgress.total) * 100)

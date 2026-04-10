@@ -145,3 +145,116 @@ export const cancelApplication = async (db, applicationId) => {
         throw error;
     }
 };
+/**
+ * 관리자가 지원자의 지원장소(JobBoard)를 변경
+ * 연관된 evaluations의 refJobBoardId도 함께 업데이트
+ *
+ * @param db - Firestore 인스턴스
+ * @param applicationId - 변경할 지원 내역 ID
+ * @param newJobBoardId - 새로운 채용 공고 ID
+ * @returns 업데이트된 문서 수 정보
+ */
+export const changeApplicationJobBoard = async (db, applicationId, newJobBoardId) => {
+    try {
+        console.log(`🔄 [changeApplicationJobBoard] 시작: applicationId=${applicationId}, newJobBoardId=${newJobBoardId}`);
+        // 1. 지원 내역 문서 조회 및 검증
+        const applicationRef = doc(db, 'applicationHistories', applicationId);
+        const applicationDoc = await getDoc(applicationRef);
+        if (!applicationDoc.exists()) {
+            throw new Error('지원 내역을 찾을 수 없습니다.');
+        }
+        const applicationData = applicationDoc.data();
+        const oldJobBoardId = applicationData.refJobBoardId;
+        if (oldJobBoardId === newJobBoardId) {
+            throw new Error('동일한 채용 공고로는 변경할 수 없습니다.');
+        }
+        // 2. 새로운 JobBoard 존재 여부 확인
+        const newJobBoardDoc = await getDoc(doc(db, 'jobBoards', newJobBoardId));
+        if (!newJobBoardDoc.exists()) {
+            throw new Error('변경하려는 채용 공고를 찾을 수 없습니다.');
+        }
+        // 3. applicationHistories 업데이트
+        await updateDoc(applicationRef, {
+            refJobBoardId: newJobBoardId,
+            updatedAt: Timestamp.now(),
+        });
+        console.log(`✅ [changeApplicationJobBoard] applicationHistories 업데이트 완료`);
+        // 4. 연관된 evaluations 조회 및 업데이트
+        const evaluationsQuery = query(collection(db, 'evaluations'), where('refApplicationId', '==', applicationId));
+        const evaluationsSnapshot = await getDocs(evaluationsQuery);
+        console.log(`📊 [changeApplicationJobBoard] 연관된 평가 ${evaluationsSnapshot.size}개 발견`);
+        // 모든 evaluation 업데이트
+        const updatePromises = evaluationsSnapshot.docs.map((evalDoc) => updateDoc(doc(db, 'evaluations', evalDoc.id), {
+            refJobBoardId: newJobBoardId,
+            updatedAt: Timestamp.now(),
+        }));
+        await Promise.all(updatePromises);
+        console.log(`✅ [changeApplicationJobBoard] 모든 평가 업데이트 완료`);
+        return {
+            updatedApplications: 1,
+            updatedEvaluations: evaluationsSnapshot.size,
+        };
+    }
+    catch (error) {
+        console.error('❌ [changeApplicationJobBoard] 지원장소 변경 실패:', error);
+        throw error;
+    }
+};
+/**
+ * JobBoard별 지원자 통계 재계산
+ * 지원장소 변경 시 호출하여 통계를 갱신
+ *
+ * @param db - Firestore 인스턴스
+ * @param jobBoardId - 통계를 갱신할 채용 공고 ID
+ */
+export const recalculateJobBoardStats = async (db, jobBoardId) => {
+    try {
+        console.log(`📊 [recalculateJobBoardStats] 통계 재계산 시작: jobBoardId=${jobBoardId}`);
+        // 해당 JobBoard의 모든 지원 내역 조회
+        const applicationsQuery = query(collection(db, 'applicationHistories'), where('refJobBoardId', '==', jobBoardId));
+        const applicationsSnapshot = await getDocs(applicationsQuery);
+        // 통계 계산
+        const stats = {
+            totalApplications: applicationsSnapshot.size,
+            pendingCount: 0,
+            acceptedCount: 0,
+            rejectedCount: 0,
+            interviewScheduledCount: 0,
+            interviewPassedCount: 0,
+            finalAcceptedCount: 0,
+        };
+        applicationsSnapshot.docs.forEach((doc) => {
+            const data = doc.data();
+            // 서류 전형 상태
+            if (data.applicationStatus === 'pending')
+                stats.pendingCount++;
+            if (data.applicationStatus === 'accepted')
+                stats.acceptedCount++;
+            if (data.applicationStatus === 'rejected')
+                stats.rejectedCount++;
+            // 면접 전형 상태
+            if (data.interviewStatus === 'pending' || data.interviewStatus === 'complete') {
+                stats.interviewScheduledCount++;
+            }
+            if (data.interviewStatus === 'passed')
+                stats.interviewPassedCount++;
+            // 최종 합격
+            if (data.finalStatus === 'finalAccepted')
+                stats.finalAcceptedCount++;
+        });
+        // JobBoard 문서에 통계 저장 (선택적)
+        // 필요한 경우 주석 해제하여 사용
+        /*
+        await updateDoc(doc(db, 'jobBoards', jobBoardId), {
+          stats,
+          statsUpdatedAt: Timestamp.now(),
+        });
+        */
+        console.log(`✅ [recalculateJobBoardStats] 통계 재계산 완료:`, stats);
+        return stats;
+    }
+    catch (error) {
+        console.error('❌ [recalculateJobBoardStats] 통계 재계산 실패:', error);
+        throw error;
+    }
+};

@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import { MainTabs } from './MainTabs';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
+import { CampDetailScreen } from '../screens/CampDetailScreen';
+import { CampEditorScreen } from '../screens/CampEditorScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { NotificationTestScreen } from '../screens/NotificationTestScreen';
 import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
@@ -32,6 +34,8 @@ const linking = {
     screens: {
       MainTabs: 'tabs',
       TaskDetail: 'camp/tasks/:taskId',
+      CampDetail: 'camp/:category/:itemId',
+      CampEditor: 'camp/:category/:itemId/edit',
       Settings: 'settings',
       NotificationTest: 'notification-test',
       PrivacyPolicy: 'privacy-policy',
@@ -53,6 +57,26 @@ export function RootNavigator() {
           name="TaskDetail" 
           component={TaskDetailScreen}
           options={{
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen 
+          name="CampDetail" 
+          component={CampDetailScreen}
+          options={({ route }) => ({
+            headerShown: true,
+            title: route.params?.itemTitle || '자료 상세',
+            presentation: 'card',
+            animation: 'slide_from_right',
+          })}
+        />
+        <Stack.Screen 
+          name="CampEditor" 
+          component={CampEditorScreen}
+          options={{
+            headerShown: true,
+            title: '페이지 편집',
             presentation: 'card',
             animation: 'slide_from_right',
           }}

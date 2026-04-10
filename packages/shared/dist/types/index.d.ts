@@ -1,5 +1,6 @@
 export * from './student';
 export * from './camp';
+export * from './campPage';
 export * from './permission';
 export * from './evaluation';
 export * from './sms';

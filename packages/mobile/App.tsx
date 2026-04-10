@@ -74,6 +74,20 @@ function AppContent() {
     }
   }, [authReady, loading, userData]);
 
+  // 프리로드할 링크가 없을 때 즉시 완료 처리
+  useEffect(() => {
+    logger.info(`🔍 AppContent 상태 체크:`, {
+      isPreloading,
+      preloadLinksCount: preloadLinks.length,
+      webViewPreloadComplete,
+    });
+
+    if (!isPreloading && preloadLinks.length === 0 && !webViewPreloadComplete) {
+      logger.info('⏭️  AppContent: 프리로드할 링크 없음, 즉시 완료 처리');
+      setWebViewPreloadComplete(true);
+    }
+  }, [isPreloading, preloadLinks.length, webViewPreloadComplete, setWebViewPreloadComplete]);
+
   const handleWebViewPreloadComplete = useCallback(() => {
     console.log('✅ App: 모든 WebView 프리로드 완료');
     setWebViewPreloadComplete(true);
@@ -103,10 +117,13 @@ function AppContent() {
 
       {/* 스플래시 화면 (프리로딩 진행 중) */}
       {showSplash && userData && (
-        <SplashPrefetchScreen 
-          onComplete={handleSplashComplete}
-          minDisplayTime={1000}
-        />
+        <>
+          {logger.info('🖼️ SplashPrefetchScreen 렌더링 중', { showSplash, hasUserData: !!userData })}
+          <SplashPrefetchScreen 
+            onComplete={handleSplashComplete}
+            minDisplayTime={1000}
+          />
+        </>
       )}
     </>
   );

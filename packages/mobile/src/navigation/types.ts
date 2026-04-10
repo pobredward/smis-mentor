@@ -2,12 +2,20 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
+import type { CampPageCategory } from '@smis-mentor/shared';
 
 // Root Stack (전체 네비게이션)
 export type RootStackParamList = {
   MainTabs: undefined;
   StudentDetail: { studentId: string };
   TaskDetail: { taskId: string; taskDate?: string };
+  CampDetail: { category: CampPageCategory; itemId: string; itemTitle: string };
+  CampEditor: {
+    category: CampPageCategory;
+    itemId: string;
+    itemTitle: string;
+    initialContent: string;
+  };
   Settings: undefined;
   NotificationTest: undefined;
   PrivacyPolicy: undefined;
