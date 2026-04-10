@@ -901,7 +901,7 @@ export function LessonScreen() {
                                   <View style={styles.sectionLeft}>
                                     <View style={styles.sectionTitleRow}>
                                       {section.isFromTemplate && (
-                                        <Ionicons name="lock-closed" size={12} color="#9ca3af" style={{ marginRight: 4 }} />
+                                        <Text style={{ fontSize: 12, marginRight: 4 }}>📌</Text>
                                       )}
                                       <Text style={[styles.sectionTitle, section.isFromTemplate && styles.sectionTitleTemplate]}>
                                         {section.title}

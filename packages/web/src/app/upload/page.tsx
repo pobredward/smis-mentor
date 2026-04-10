@@ -1054,10 +1054,8 @@ export default function UploadPage() {
                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                         </svg>
                                                       </button>
-                                                      <div className="p-1 text-gray-300" title="관리자가 설정한 소제목입니다 (순서 변경 불가)">
-                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                                        </svg>
+                                                      <div className="p-1 text-gray-400" title="관리자가 설정한 소제목입니다 (순서 변경 불가)">
+                                                        <span className="text-xs">📌</span>
                                                       </div>
                                                     </div>
                                                   </div>
