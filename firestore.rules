@@ -48,6 +48,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // 앱 설정 (appConfig) 규칙
+    match /appConfig/{configId} {
+      // 읽기: 인증된 사용자만 (모바일 앱에서 로딩 문구를 불러오기 위함)
+      allow read: if isSignedIn();
+
+      // 생성/수정: Admin만 가능
+      allow create, update: if isAdmin();
+
+      // 삭제: 금지 (설정은 삭제하지 않음)
+      allow delete: if false;
+    }
+
     // 나머지 컬렉션 (기존 규칙 유지 - 임시로 모두 허용)
     match /{document=**} {
       allow read, write: if true;

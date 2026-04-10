@@ -121,7 +121,7 @@ function AppContent() {
           {logger.info('🖼️ SplashPrefetchScreen 렌더링 중', { showSplash, hasUserData: !!userData })}
           <SplashPrefetchScreen 
             onComplete={handleSplashComplete}
-            minDisplayTime={1000}
+            minDisplayTime={1500}
           />
         </>
       )}
