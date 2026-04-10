@@ -1762,9 +1762,8 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 <span className="font-medium">전공1:</span> {selectedApplication.user.major1} | <span className="font-medium">전공2:</span> {selectedApplication.user.major2}
                               </p>
                               <p>
-                                <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath} 
-                                {selectedApplication.user.referralPath === '지인추천' && selectedApplication.user.referrerName && 
-                                  ` (추천인: ${selectedApplication.user.referrerName})`}
+                                <span className="font-medium">지원경로:</span> {selectedApplication.user.referralPath}
+                                {selectedApplication.user.referrerName && ` (${selectedApplication.user.referrerName})`}
                               </p>
                               <p>
                                 <span className="font-medium">지원 장소:</span> {appliedCampsMap[selectedApplication.refUserId]?.length > 0 
