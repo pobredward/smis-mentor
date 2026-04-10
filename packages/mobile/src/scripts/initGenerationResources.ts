@@ -39,41 +39,8 @@ const e27InitialData: GenerationResources = {
   code: 'E27',
   
   educationLinks: [
-    {
-      id: 'edu-schedule-e27',
-      title: '교육일정',
-      url: 'https://smis.notion.site/E27-312722e99421809da7a3ee59102dfb3f?source=copy_link',
-      createdAt: Timestamp.now(),
-      createdBy: 'system',
-    },
-    {
-      id: 'edu-groups-e27',
-      title: '그룹배정',
-      url: 'https://smis.notion.site/E27-312722e9942180eeac80db633ed32c3a?source=copy_link',
-      createdAt: Timestamp.now(),
-      createdBy: 'system',
-    },
-    {
-      id: 'edu-materials-e27',
-      title: '수업자료',
-      url: 'https://smis.notion.site/E27-312722e9942180f4abb6ef2921a9d83c?source=copy_link',
-      createdAt: Timestamp.now(),
-      createdBy: 'system',
-    },
-    {
-      id: 'edu-solutions-e27',
-      title: '대처방안',
-      url: 'https://smis.notion.site/312722e99421806bb6d4e70b1df46dda?source=copy_link',
-      createdAt: Timestamp.now(),
-      createdBy: 'system',
-    },
-    {
-      id: 'edu-others-e27',
-      title: '기타',
-      url: 'https://smis.notion.site/312722e99421809cb792ce884d812468?source=copy_link',
-      createdAt: Timestamp.now(),
-      createdBy: 'system',
-    },
+    // 교육 링크는 구글 시트가 없으므로 빈 배열 유지
+    // 필요 시 여기에 링크 추가
   ],
   
   scheduleLinks: [

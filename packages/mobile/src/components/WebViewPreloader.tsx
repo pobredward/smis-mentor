@@ -47,7 +47,11 @@ export function WebViewPreloader({ links, onLoadComplete, onProgressUpdate, enab
     }
 
     if (links.length === 0) {
-      logger.warn('⚠️ WebViewPreloader: links 배열이 비어있음!');
+      logger.info('⚠️ WebViewPreloader: 프리로드할 링크가 없음 - 즉시 완료 처리');
+      if (!hasCompleted) {
+        setHasCompleted(true);
+        onLoadComplete?.();
+      }
       return;
     }
 
@@ -176,56 +180,42 @@ export function WebViewPreloader({ links, onLoadComplete, onProgressUpdate, enab
 
   return (
     <View style={styles.preloadContainer}>
-      {links.map((link) => {
-        // 노션 페이지 확인
-        const isNotionPage = link.url.includes('notion.site') || link.url.includes('notion.so');
-        
-        return (
-          <WebView
-            key={link.id}
-            source={{ uri: link.url }}
-            style={styles.preloadWebView}
-            cacheEnabled={true}
-            cacheMode="LOAD_CACHE_ELSE_NETWORK"
-            incognito={false}
-            androidLayerType="hardware"
-            onLoadStart={() => handleLoadStart(link)}
-            onLoadEnd={() => handleLoadEnd(link)}
-            onError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              handleLoadError(link, nativeEvent);
-            }}
-            // 로딩 최적화
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            startInLoadingState={false}
-            // 노션 페이지를 위한 설정
-            mediaPlaybackRequiresUserAction={false}
-            allowsInlineMediaPlayback={true}
-            sharedCookiesEnabled={true}
-            thirdPartyCookiesEnabled={true}
-            // UserAgent 설정 (일부 사이트는 모바일 UserAgent를 거부할 수 있음)
-            userAgent={isNotionPage 
-              ? "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
-              : undefined
-            }
-            // 백그라운드 로딩이므로 인터랙션 비활성화
-            scrollEnabled={false}
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-            showsHorizontalScrollIndicator={false}
-            // 네트워크 연결 이슈 처리
-            onShouldStartLoadWithRequest={() => true}
-            onHttpError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              logger.error(`  🌐 HTTP 오류 (${link.title}):`, {
-                statusCode: nativeEvent.statusCode,
-                url: nativeEvent.url,
-              });
-            }}
-          />
-        );
-      })}
+      {links.map((link) => (
+        <WebView
+          key={link.id}
+          source={{ uri: link.url }}
+          style={styles.preloadWebView}
+          cacheEnabled={true}
+          cacheMode="LOAD_CACHE_ELSE_NETWORK"
+          incognito={false}
+          androidLayerType="hardware"
+          onLoadStart={() => handleLoadStart(link)}
+          onLoadEnd={() => handleLoadEnd(link)}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            handleLoadError(link, nativeEvent);
+          }}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          startInLoadingState={false}
+          mediaPlaybackRequiresUserAction={false}
+          allowsInlineMediaPlayback={true}
+          sharedCookiesEnabled={true}
+          thirdPartyCookiesEnabled={true}
+          scrollEnabled={false}
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          onShouldStartLoadWithRequest={() => true}
+          onHttpError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            logger.error(`  🌐 HTTP 오류 (${link.title}):`, {
+              statusCode: nativeEvent.statusCode,
+              url: nativeEvent.url,
+            });
+          }}
+        />
+      ))}
     </View>
   );
 }

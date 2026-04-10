@@ -269,22 +269,9 @@ export function useCampDataPrefetch() {
 
       const allLinks: PreloadLink[] = [];
 
-      // 교육 링크 추가 (구글 시트만)
+      // 교육 링크는 프리로드하지 않음 (구글 시트 없음)
       if (resources.educationLinks) {
-        logger.info(`📚 교육 링크: ${resources.educationLinks.length}개`);
-        const googleSheetLinks = resources.educationLinks.filter(link => 
-          link.url.includes('docs.google.com')
-        );
-        logger.info(`   → 구글 시트만 프리로드: ${googleSheetLinks.length}개`);
-        googleSheetLinks.forEach((link, idx) => {
-          logger.info(`   ${idx + 1}. ${link.title} - ${link.url}`);
-          allLinks.push({
-            id: `education-${link.id}`,
-            title: link.title,
-            url: link.url,
-            type: 'education',
-          });
-        });
+        logger.info(`📚 교육 링크: ${resources.educationLinks.length}개 (프리로드 제외)`);
       }
 
       // 시간표 링크 추가 (구글 시트만)
@@ -406,11 +393,9 @@ export function useCampDataPrefetch() {
 
       logger.info(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
       logger.info(`📊 총 ${allLinks.length}개 WebView 프리로드 시작 (구글 시트만)`);
-      logger.info(`   - 교육: ${resources.educationLinks?.filter(l => l.url.includes('docs.google.com')).length || 0}개`);
       logger.info(`   - 시간표: ${resources.scheduleLinks?.filter(l => l.url.includes('docs.google.com')).length || 0}개`);
       logger.info(`   - 인솔표: ${resources.guideLinks?.filter(l => l.url.includes('docs.google.com')).length || 0}개`);
       logger.info(`   - 수업: ${allLinks.filter(l => l.type === 'lesson').length}개`);
-      logger.info(`   ⚠️ 노션 페이지는 프리로드 제외 (첫 클릭 시 로드)`);
 
 
       // 링크가 없으면 프리로딩 스킵

@@ -265,7 +265,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         setPrefetchingCamp(false);
         Alert.alert(
           '완료', 
-          '캠프가 변경되었습니다.\n\n✅ 모든 데이터 로딩 완료\n✅ 노션/구글시트 페이지 프리로드 완료\n\n모든 페이지가 즉시 표시됩니다!'
+          '캠프가 변경되었습니다.\n\n✅ 모든 데이터 로딩 완료\n✅ 구글시트 페이지 프리로드 완료\n\n모든 페이지가 즉시 표시됩니다!'
         );
       }, 500);
       
@@ -1059,7 +1059,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                       prefetchStage === 'webview' && styles.loadingStepTextActive,
                       prefetchStage === 'complete' && styles.loadingStepTextDone
                     ]}>
-                      노션/구글시트 프리로딩
+                      구글시트 프리로딩
                     </Text>
                     {prefetchStage === 'webview' && webViewLoadProgress.total > 0 && (
                       <Text style={styles.loadingStepSubtext}>

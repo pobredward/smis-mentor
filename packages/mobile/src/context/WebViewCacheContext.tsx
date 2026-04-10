@@ -165,12 +165,9 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
     const sheet = allSheets.find(s => s.id === id);
     if (!sheet) return null;
 
-    // Notion 페이지 확인
-    const isNotionPage = sheet.url.includes('notion.site') || sheet.url.includes('notion.so');
-    
-    // Android는 1.0, iOS는 0.6 기본 줌 (Notion 페이지는 1.0)
+    // Android는 1.0, iOS는 0.6 기본 줌
     const defaultZoom = Platform.OS === 'android' ? 1.0 : 0.6;
-    const initialZoom = isNotionPage ? 1.0 : (zoomLevels[id] || defaultZoom);
+    const initialZoom = zoomLevels[id] || defaultZoom;
 
     return (
       <WebView
@@ -180,17 +177,14 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         style={[styles.webView, !visible && styles.hiddenWebView]}
         onLoadEnd={() => {
           setLoadingState(id, false);
-          // Notion 페이지가 아닌 경우에만 zoom 적용
-          if (!isNotionPage) {
-            setTimeout(() => {
-              applyZoom(id, initialZoom);
-            }, 300);
-          }
+          setTimeout(() => {
+            applyZoom(id, initialZoom);
+          }, 300);
         }}
         onLoadStart={() => {
           setLoadingState(id, true);
         }}
-        scalesPageToFit={!isNotionPage}
+        scalesPageToFit={true}
         showsVerticalScrollIndicator={true}
         showsHorizontalScrollIndicator={true}
         scrollEnabled={true}
@@ -199,7 +193,7 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         cacheMode="LOAD_CACHE_ELSE_NETWORK"
         incognito={false}
         androidLayerType="hardware"
-        injectedJavaScript={isNotionPage ? undefined : `
+        injectedJavaScript={`
           (function() {
             // 초기 zoom 적용 (구글 시트용)
             const initialZoom = ${initialZoom};
