@@ -63,7 +63,7 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
         /* 테이블 wrapper 가로 스크롤 */
         .table-wrapper {
           overflow-x: auto;
-          margin: 0.375rem 0;
+          margin: 6px 0;
         }
         
         /* 테이블 기본 스타일 - 콘텐츠 크기에 맞춤 */
@@ -82,10 +82,12 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
         .prose table td,
         .prose table th {
           border: 1px solid #d1d5db;
-          padding: 0.75rem;
+          padding: 0.5rem;
           vertical-align: top;
           box-sizing: border-box;
-          white-space: nowrap;
+          white-space: normal;
+          word-break: break-word;
+          min-width: 80px;
         }
         
         .prose table th {

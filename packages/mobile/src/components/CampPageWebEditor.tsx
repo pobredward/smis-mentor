@@ -176,18 +176,22 @@ export function CampPageWebEditor({
       
       #editor table {
         border-collapse: collapse;
-        width: 100%;
+        table-layout: auto;
+        width: auto;
         margin: 12px 0;
-        overflow-x: auto;
-        display: block;
+        font-size: 13px;
       }
       
       #editor table td,
       #editor table th {
         border: 1px solid #d1d5db;
-        padding: 8px;
-        min-width: 80px;
+        padding: 5px;
+        min-width: 60px;
         vertical-align: top;
+        white-space: normal;
+        word-break: break-word;
+        font-size: 13px;
+        line-height: 1.3;
       }
       
       #editor table th {

@@ -209,7 +209,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
       /* 볼드체 스타일 */
       strong, b { font-weight: bold; }
       
-      /* 빈 단락 처리 - 웹과 동일 */
+      /* 빈 단락 처리 */
       p:empty,
       p:has(br:only-child) {
         min-height: 28px;
@@ -219,9 +219,39 @@ export function CampDetailScreen({ route, navigation }: Props) {
       ul, ol { margin: 0 0 4px 0; padding-left: 20px; }
       li { margin-bottom: 2px; }
       img { max-width: 100%; height: auto; border-radius: 8px; margin: 6px 0; display: block; }
-      table { border-collapse: collapse; table-layout: auto; width: auto; margin: 6px 0; }
-      th, td { border: 1px solid #d1d5db; padding: 8px; white-space: nowrap; vertical-align: top; }
-      th { background-color: #f3f4f6; font-weight: bold; }
+      
+      /* 테이블 wrapper 가로 스크롤 */
+      .table-wrapper {
+        overflow-x: auto;
+        margin: 6px 0;
+      }
+      
+      /* 테이블 스타일 - 모바일 최적화 (더 컴팩트) */
+      table { 
+        border-collapse: collapse; 
+        table-layout: auto; 
+        width: auto; 
+        margin: 0;
+        font-size: 12px;
+      }
+      
+      th, td { 
+        border: 1px solid #d1d5db; 
+        padding: 5px; 
+        vertical-align: top;
+        box-sizing: border-box;
+        white-space: normal;
+        word-break: break-word;
+        min-width: 60px;
+        font-size: 12px;
+        line-height: 1.3;
+      }
+      
+      th { 
+        background-color: #f3f4f6; 
+        font-weight: bold; 
+      }
+      
       a { color: #2563eb; text-decoration: underline; }
       blockquote { border-left: 4px solid #3b82f6; padding-left: 16px; padding: 8px 16px; margin: 6px 0; background-color: #eff6ff; }
       code { background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; font-size: 14px; color: #dc2626; font-family: monospace; }
@@ -235,6 +265,17 @@ export function CampDetailScreen({ route, navigation }: Props) {
         iframes.forEach(iframe => {
           iframe.setAttribute('allowfullscreen', '');
           iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+        });
+        
+        // 테이블을 wrapper로 감싸기
+        const tables = document.querySelectorAll('table');
+        tables.forEach(table => {
+          if (table.parentElement.classList.contains('table-wrapper')) return;
+          
+          const wrapper = document.createElement('div');
+          wrapper.className = 'table-wrapper';
+          table.parentNode.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
         });
       });
     </script>
@@ -352,11 +393,13 @@ export function CampDetailScreen({ route, navigation }: Props) {
                 padding: 8,
                 backgroundColor: '#f3f4f6',
                 fontWeight: 'bold',
+                minWidth: 80,
               },
               td: {
                 borderWidth: 1,
                 borderColor: '#d1d5db',
                 padding: 8,
+                minWidth: 80,
               },
               a: {
                 color: '#2563eb',
