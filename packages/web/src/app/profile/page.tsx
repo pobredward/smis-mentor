@@ -157,7 +157,7 @@ export default function ProfilePage() {
       // 짧은 딜레이 후 완료 메시지
       setTimeout(() => {
         setPrefetchingCamp(false);
-        toast.success('기수가 변경되었습니다.', { duration: 1500 });
+        toast.success('기수가 변경되었습니다.');
       }, 500);
       
     } catch (error) {
@@ -211,7 +211,7 @@ export default function ProfilePage() {
     const currentUser = auth.currentUser;
     if (!currentUser) {
       // ✅ 세션 만료 - 명확한 안내 및 리다이렉트
-      toast.error('로그인 세션이 만료되었습니다. 다시 로그인해주세요.', { duration: 4000 });
+      toast.error('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
       setTimeout(() => {
         router.push('/sign-in?redirect=/profile');
       }, 2000);
@@ -495,7 +495,7 @@ export default function ProfilePage() {
         arrayUnion // ✅ Firestore arrayUnion 전달 (동시성 안전)
       );
 
-      toast.success('소셜 계정이 성공적으로 연동되었습니다.', { duration: 3000 });
+      toast.success('소셜 계정이 성공적으로 연동되었습니다.');
       
       // 5. 사용자 데이터 새로고침
       await refreshUserData();
@@ -516,7 +516,7 @@ export default function ProfilePage() {
         errorMessage = error.message;
       }
       
-      toast.error(errorMessage, { duration: 5000 });
+      toast.error(errorMessage);
     } finally {
       setIsLinking(false);
     }
@@ -707,14 +707,14 @@ export default function ProfilePage() {
       }
       
       if (showSuccessToast) {
-        toast.success(`${providerName} 계정 연동이 해제되었습니다.`, { duration: 3000 });
+        toast.success(`${providerName} 계정 연동이 해제되었습니다.`);
       }
       
       // 사용자 데이터 새로고침
       await refreshUserData();
     } catch (error: any) {
       console.error('연동 해제 오류:', error);
-      toast.error(error.message || '연동 해제 중 오류가 발생했습니다. 다시 시도해주세요.', { duration: 5000 });
+      toast.error(error.message || '연동 해제 중 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setIsUnlinking(false);
     }

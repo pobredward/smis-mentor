@@ -80,15 +80,13 @@ export function SignInClient() {
       const isProfileIncomplete = isMentor && (!hasProfileImage || !hasSelfIntro || !hasJobMotivation);
       
       if (isProfileIncomplete) {
-        toast.success('로그인에 성공했습니다!', { duration: 2000 });
+        toast.success('로그인에 성공했습니다!');
         setTimeout(() => {
           toast.success('마이페이지에서 "수정" 버튼을 눌러 프로필 사진, 자기소개서 & 지원동기를 작성해주세요!', { duration: 6000 });
           router.replace('/profile');
         }, 500);
       } else {
-        toast.success('로그인에 성공했습니다. 로그인 정보가 브라우저에 안전하게 저장되어 다음에도 자동으로 로그인됩니다.', { 
-          duration: 4000 
-        });
+        toast.success('로그인에 성공했습니다. 로그인 정보가 브라우저에 안전하게 저장되어 다음에도 자동으로 로그인됩니다.');
         
         // URL에서 redirect 매개변수 확인
         const params = new URLSearchParams(window.location.search);
@@ -272,13 +270,13 @@ export function SignInClient() {
             }
           } catch (error) {
             logger.error('❌ Firebase Auth 로그인 실패:', error);
-            toast.error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.', { duration: 4000 });
+            toast.error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
             setIsLoading(false);
             return;
           }
         }
         
-        toast.success('로그인에 성공했습니다!', { duration: 2000 });
+        toast.success('로그인에 성공했습니다!');
         setTimeout(() => {
           const params = new URLSearchParams(window.location.search);
           const redirectTo = params.get('redirect');
@@ -804,9 +802,9 @@ export function SignInClient() {
           { duration: 8000 }
         );
       } else if (firebaseError.code === 'auth/too-many-requests') {
-        toast.error('너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.', { duration: 5000 });
+        toast.error('너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.');
       } else {
-        toast.error('계정 연동 중 오류가 발생했습니다. 다시 시도해주세요.', { duration: 5000 });
+        toast.error('계정 연동 중 오류가 발생했습니다. 다시 시도해주세요.');
       }
     } finally {
       setIsLoading(false);

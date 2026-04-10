@@ -1240,9 +1240,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       
       // 요청이 완료되기 전에 UI 상태를 업데이트하여 사용자 경험 개선
       // 메시지 전송 중임을 알리는 토스트 표시
-      toast.loading('메시지를 전송 중입니다...', {
-        duration: 2000, // 2초 동안 표시
-      });
+      toast.loading('메시지를 전송 중입니다...');
       
     } catch (error) {
       // 이 부분은 fetch 자체가 실패할 경우에만 실행됨 (네트워크 오류 등)

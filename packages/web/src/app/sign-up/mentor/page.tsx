@@ -125,7 +125,7 @@ export default function MentorSignUpStep1() {
             setShowAlreadyRegisteredModal(true);
           } else {
             // temp 상태이지만 jobExperiences가 없는 경우 또는 기타 상태
-            toast.success(`환영합니다 ${data.name}님, SMIS와 함께 하게 되어 영광입니다. 나머지 정보를 채워주세요.`, { duration: 3000 });
+            toast.success(`환영합니다 ${data.name}님, SMIS와 함께 하게 되어 영광입니다. 나머지 정보를 채워주세요.`);
             
             // startTransition을 사용하여 안전하게 페이지 전환
             const { startTransition } = await import('react');
@@ -163,7 +163,7 @@ export default function MentorSignUpStep1() {
         }
       } else {
         // Case 4: 전화번호로 사용자를 찾을 수 없는 경우
-        toast.success(`환영합니다 ${data.name}님, SMIS와 함께 하게 되어 영광입니다. 나머지 정보를 채워주세요.`, { duration: 3000 });
+        toast.success(`환영합니다 ${data.name}님, SMIS와 함께 하게 되어 영광입니다. 나머지 정보를 채워주세요.`);
         
         // startTransition을 사용하여 안전하게 페이지 전환
         const { startTransition } = await import('react');
@@ -180,7 +180,7 @@ export default function MentorSignUpStep1() {
   };
 
   const handleConfirmYes = () => {
-    toast.success('다시 돌아온 것을 환영합니다. 회원가입을 이어서 진행 바랍니다', { duration: 3000 });
+    toast.success('다시 돌아온 것을 환영합니다. 회원가입을 이어서 진행 바랍니다');
     setShowConfirmModal(false);
     
     // startTransition을 사용하여 안전하게 페이지 전환

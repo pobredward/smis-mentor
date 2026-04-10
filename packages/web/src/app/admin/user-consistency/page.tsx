@@ -164,7 +164,7 @@ export default function UserConsistencyPage() {
       if (result.success) {
         toast.success(`사용자 ID가 성공적으로 변경되었습니다: ${currentDocId} → ${newIdValue}`);
         if (result.authNote) {
-          toast.success(result.authNote, { duration: 5000 });
+          toast.success(result.authNote);
         }
         setEditingUserId(null);
         setNewIdValue('');

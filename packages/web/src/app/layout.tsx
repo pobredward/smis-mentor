@@ -151,7 +151,13 @@ export default function RootLayout({
           <AuthProvider>
             <ResourceCacheProvider>
               <AnalyticsProvider>
-                <Toaster position="top-center" reverseOrder={false} />
+                <Toaster 
+                  position="top-center" 
+                  reverseOrder={false}
+                  toastOptions={{
+                    duration: 2000,
+                  }}
+                />
                 {children}
               </AnalyticsProvider>
             </ResourceCacheProvider>
