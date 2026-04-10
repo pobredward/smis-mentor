@@ -14,10 +14,12 @@ import toast from 'react-hot-toast';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { formatPhoneNumber } from '@/utils/phoneUtils';
+import { useCampDataPrefetch } from '@/hooks/useCampDataPrefetch';
 
 export default function ProfilePage() {
   const { userData, waitForAuthReady, refreshUserData, updateActiveJobCode } = useAuth();
   const router = useRouter();
+  const { prefetchCampData, invalidateCampData } = useCampDataPrefetch();
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -27,6 +29,9 @@ export default function ProfilePage() {
   const [changingJobCode, setChangingJobCode] = useState(false);
   const [isUnlinking, setIsUnlinking] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
+  const [prefetchingCamp, setPrefetchingCamp] = useState(false);
+  const [prefetchProgress, setPrefetchProgress] = useState(0);
+  const [prefetchStage, setPrefetchStage] = useState<'cache' | 'update' | 'data' | 'complete'>('cache');
 
   useEffect(() => {
     const checkAuthAndLoadData = async () => {
@@ -90,13 +95,78 @@ export default function ProfilePage() {
       return;
     }
 
+    const startTime = Date.now();
+
     try {
       setChangingJobCode(true);
+      setPrefetchingCamp(true);
+      setPrefetchProgress(0);
+      setPrefetchStage('cache');
+      
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🔄 ProfilePage: 캠프 변경 시작');
+      console.log(`   현재: ${userData?.activeJobExperienceId}`);
+      console.log(`   변경: ${jobCodeId}`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // 1. 기존 캐시 무효화 (0% -> 20%)
+      console.log('📍 Step 1/3: 기존 캐시 정리 중...');
+      const step1Start = Date.now();
+      setPrefetchStage('cache');
+      await invalidateCampData();
+      console.log(`   ✅ 완료 (${((Date.now() - step1Start) / 1000).toFixed(2)}초)`);
+      setPrefetchProgress(20);
+      
+      // 2. 사용자 데이터 업데이트 (20% -> 40%)
+      console.log('📍 Step 2/3: 캠프 변경 중...');
+      const step2Start = Date.now();
+      setPrefetchStage('update');
       await updateActiveJobCode(jobCodeId);
-      toast.success('기수가 변경되었습니다.\n캠프 탭에서 해당 기수의 자료를 확인하세요.');
+      console.log(`   ✅ 완료 (${((Date.now() - step2Start) / 1000).toFixed(2)}초)`);
+      setPrefetchProgress(40);
+      
+      // 3. 새 캠프 데이터 프리페칭 (40% -> 100%)
+      console.log('📍 Step 3/3: 캠프 데이터 로딩 중...');
+      const step3Start = Date.now();
+      setPrefetchStage('data');
+      
+      // 프리페칭 진행률 시뮬레이션
+      const progressInterval = setInterval(() => {
+        setPrefetchProgress((prev) => {
+          if (prev >= 95) {
+            clearInterval(progressInterval);
+            return 95;
+          }
+          return prev + 5;
+        });
+      }, 200);
+      
+      await prefetchCampData(jobCodeId);
+      
+      clearInterval(progressInterval);
+      console.log(`   ✅ 완료 (${((Date.now() - step3Start) / 1000).toFixed(2)}초)`);
+      setPrefetchProgress(100);
+      setPrefetchStage('complete');
+      
+      const totalDuration = Date.now() - startTime;
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('✅ ProfilePage: 모든 프리로딩 완료!');
+      console.log(`⏱️  총 소요 시간: ${(totalDuration / 1000).toFixed(2)}초`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // 짧은 딜레이 후 완료 메시지
+      setTimeout(() => {
+        setPrefetchingCamp(false);
+        toast.success('기수가 변경되었습니다.', { duration: 1500 });
+      }, 500);
+      
     } catch (error) {
-      console.error('기수 변경 실패:', error);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('❌ ProfilePage: 캠프 변경 실패');
+      console.error('💥 에러:', error);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       toast.error('기수 변경에 실패했습니다.');
+      setPrefetchingCamp(false);
     } finally {
       setChangingJobCode(false);
     }
@@ -667,6 +737,88 @@ export default function ProfilePage() {
     <>
       <Layout requireAuth>
       <div className="max-w-2xl mx-auto lg:px-4 px-0">
+        {/* 프리페칭 모달 */}
+        {prefetchingCamp && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-8 m-4">
+              <div className="flex flex-col items-center">
+                <div className="mb-4">
+                  <svg className="w-16 h-16 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">캠프 데이터 로딩 중</h3>
+                <p className="text-gray-600 text-center mb-6">
+                  빠른 탐색을 위해 데이터를 미리 불러오는 중입니다
+                </p>
+                
+                {/* 진행률 바 */}
+                <div className="w-full mb-4">
+                  <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-500 transition-all duration-300 ease-out"
+                      style={{ width: `${prefetchProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-center text-lg font-semibold text-blue-500 mt-2">
+                    {prefetchProgress}%
+                  </p>
+                </div>
+                
+                {/* 로딩 단계 */}
+                <div className="w-full space-y-3">
+                  <div className="flex items-center gap-3">
+                    {prefetchStage !== 'cache' ? (
+                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    )}
+                    <span className={`text-sm ${prefetchStage === 'cache' ? 'text-blue-600 font-semibold' : prefetchStage !== 'cache' ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                      기존 캐시 정리
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {prefetchStage === 'update' ? (
+                      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    ) : ['data', 'complete'].includes(prefetchStage) ? (
+                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <div className="w-5 h-5 border-2 border-gray-300 rounded-full" />
+                    )}
+                    <span className={`text-sm ${prefetchStage === 'update' ? 'text-blue-600 font-semibold' : ['data', 'complete'].includes(prefetchStage) ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                      캠프 변경
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {prefetchStage === 'data' ? (
+                      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    ) : prefetchStage === 'complete' ? (
+                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <div className="w-5 h-5 border-2 border-gray-300 rounded-full" />
+                    )}
+                    <span className={`text-sm ${prefetchStage === 'data' ? 'text-blue-600 font-semibold' : prefetchStage === 'complete' ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                      캠프 데이터 로딩
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="mt-6">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl sm:text-2xl font-bold">{isForeign ? 'My Profile' : '내 프로필'}</h1>
           <Button
