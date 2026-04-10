@@ -202,11 +202,11 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
       </div>
 
       {/* 본문 */}
-      <div className="max-w-5xl mx-auto px-4 py-6">
+      <div className="max-w-5xl mx-auto md:px-4 md:py-6">
         {item.type === 'page' ? (
           <>
             {isEditing ? (
-              <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '500px', maxHeight: '800px' }}>
+              <div className="bg-white md:rounded-lg md:shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '500px', maxHeight: '800px' }}>
                 <CampPageEditor
                   content={editingContent}
                   onChange={setEditingContent}
@@ -215,14 +215,14 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
                 />
               </div>
             ) : (
-              <div className="bg-white rounded-lg shadow-sm">
+              <div className="bg-white md:rounded-lg md:shadow-sm">
                 <CampPageViewer content={item.content || '<p>내용이 없습니다.</p>'} />
               </div>
             )}
           </>
         ) : (
           // 링크 타입 (기존 노션/구글시트)
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}>
+          <div className="bg-white md:rounded-lg md:shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}>
             {extractNotionPageId(item.url || '') ? (
               <NotionPage pageId={extractNotionPageId(item.url || '')!} />
             ) : (

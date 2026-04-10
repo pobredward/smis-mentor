@@ -199,12 +199,15 @@ export function CampDetailScreen({ route, navigation }: Props) {
         margin: 0;
         color: #1f2937;
         font-size: 16px;
-        line-height: 24px;
+        line-height: 28px;
       }
       h1 { font-size: 32px; font-weight: bold; margin: 8px 0 6px 0; padding-top: 4px; color: #111827; line-height: 40px; }
       h2 { font-size: 28px; font-weight: bold; margin: 8px 0 5px 0; color: #111827; line-height: 35px; }
       h3 { font-size: 24px; font-weight: bold; margin: 6px 0 4px 0; color: #111827; line-height: 30px; }
-      p { margin: 0 0 4px 0; line-height: 24px; white-space: pre-wrap; word-break: break-word; }
+      p { margin: 0 0 4px 0; line-height: 28px; white-space: pre-wrap; word-break: break-word; }
+      
+      /* 볼드체 스타일 */
+      strong, b { font-weight: bold; }
       
       /* 빈 단락 처리 - 웹과 동일 */
       p:empty,
@@ -273,7 +276,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
               body: {
                 color: '#1f2937',
                 fontSize: 16,
-                lineHeight: 24,
+                lineHeight: 28,
               },
               h1: {
                 fontSize: 32,
@@ -302,8 +305,14 @@ export function CampDetailScreen({ route, navigation }: Props) {
               },
               p: {
                 marginBottom: 4,
-                lineHeight: 24,
-                minHeight: 24, // 빈 단락도 최소 높이 확보
+                lineHeight: 28,
+                minHeight: 28,
+              },
+              strong: {
+                fontWeight: 'bold',
+              },
+              b: {
+                fontWeight: 'bold',
               },
               ul: {
                 marginBottom: 4,

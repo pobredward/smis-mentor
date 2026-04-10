@@ -58,7 +58,7 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
   }, [content]);
 
   return (
-    <div className="p-6 bg-white rounded-lg">
+    <div className="p-4 md:p-6 bg-white md:rounded-lg">
       <style>{`
         /* 테이블 wrapper 가로 스크롤 */
         .table-wrapper {
@@ -93,11 +93,38 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
           font-weight: 600;
         }
         
+        /* 단락(p) 마진 줄이기 */
+        .prose p {
+          margin-top: 0.25rem !important;
+          margin-bottom: 0.25rem !important;
+        }
+        
         /* 빈 단락 처리 - 높이 확보 */
         .prose p:empty,
         .prose p:has(br:only-child) {
           min-height: 1.75rem;
           display: block;
+        }
+        
+        /* 리스트 마진 줄이기 */
+        .prose ul,
+        .prose ol {
+          margin-top: 0.25rem !important;
+          margin-bottom: 0.25rem !important;
+        }
+        
+        /* 리스트 아이템 내부 단락 마진 제거 */
+        .prose ul > li > p,
+        .prose ol > li > p {
+          margin-top: 0 !important;
+          margin-bottom: 0 !important;
+        }
+        
+        /* 리스트 아이템 간격 */
+        .prose ul > li,
+        .prose ol > li {
+          margin-top: 0.125rem !important;
+          margin-bottom: 0.125rem !important;
         }
         
         /* <br> 태그 줄바꿈 처리 */
@@ -106,13 +133,19 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
           content: '';
           margin: 0;
         }
+        
+        /* 볼드체 스타일 */
+        .prose strong,
+        .prose b {
+          font-weight: 700;
+        }
       `}</style>
       <div
         ref={containerRef}
         className="prose prose-slate max-w-none
-          [&>h1]:text-4xl [&>h1]:font-bold [&>h1]:mb-1.5 [&>h1]:mt-3 [&>h1:first-child]:mt-0
-          [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:mb-1 [&>h2]:mt-2.5
-          [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:mb-1 [&>h3]:mt-2
+          [&>h1]:text-4xl [&>h1]:font-bold [&>h1]:mb-3 [&>h1]:mt-3 [&>h1:first-child]:mt-0
+          [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:mb-2.5 [&>h2]:mt-2.5
+          [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:mb-2 [&>h3]:mt-2
           [&>p]:text-base [&>p]:leading-7 [&>p]:mb-1 [&>p]:whitespace-pre-wrap [&>p]:break-words
           [&>p:empty]:h-[1.75rem] [&>p:empty]:block
           [&>ul]:list-disc [&>ul]:pl-6 [&>ul]:mb-1 [&>ul]:space-y-0.5
