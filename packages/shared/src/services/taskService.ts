@@ -1,4 +1,5 @@
 import type { Task, User, JobExperienceGroupRole, JobExperienceGroup } from '../types';
+import { LEGACY_GROUP_MAP } from '../types/camp';
 
 /**
  * 업무의 대상 사용자 필터링
@@ -19,15 +20,22 @@ export const getTaskTargetUsers = (
     const campExperience = user.jobExperiences.find(exp => exp.id === campCode);
     if (!campExperience) return false;
 
-    // 역할 매칭
+    // 역할 매칭: 업무의 대상 역할에 사용자의 역할이 포함되어야 함
     const matchesRole = task.targetRoles.includes(campExperience.groupRole);
     if (!matchesRole) return false;
 
-    // 그룹 매칭 (공통은 모든 그룹 포함)
-    const matchesGroup = 
-      task.targetGroups.includes('공통') || 
-      task.targetGroups.includes(campExperience.group);
-
+    // 그룹 매칭
+    // 사용자의 그룹명을 한글로 변환 (영어 레거시 그룹명 지원)
+    const userGroupKorean = LEGACY_GROUP_MAP[campExperience.group] || campExperience.group;
+    
+    // 1. 업무 대상 그룹에 "공통"이 포함되어 있으면 모든 그룹의 사용자 포함
+    if (task.targetGroups.includes('공통')) {
+      return true;
+    }
+    
+    // 2. 그렇지 않으면 사용자의 그룹이 업무 대상 그룹에 포함되어야 함
+    const matchesGroup = task.targetGroups.includes(userGroupKorean as JobExperienceGroup);
+    
     return matchesGroup;
   });
 };

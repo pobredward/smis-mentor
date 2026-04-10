@@ -344,6 +344,33 @@ export default function CampPageEditor({
 
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
+        {/* 토글 */}
+        <button
+          onClick={() => {
+            const title = window.prompt('토글 제목을 입력하세요:', '토글 제목');
+            if (!title) return;
+            
+            const toggleHTML = `
+              <div class="toggle-block" data-collapsed="true">
+                <div class="toggle-header">
+                  <span class="toggle-icon">▶</span>
+                  <strong>${title}</strong>
+                </div>
+                <div class="toggle-content" style="display: none;">
+                  <p>내용을 입력하세요...</p>
+                </div>
+              </div>
+            `;
+            editor.chain().focus().insertContent(toggleHTML).run();
+          }}
+          className="px-3 py-1.5 rounded text-sm bg-white hover:bg-gray-100"
+          title="토글 (접기/펼치기)"
+        >
+          ▼
+        </button>
+
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
         {/* 테이블 */}
         <button
           onClick={() =>
@@ -501,6 +528,37 @@ export default function CampPageEditor({
             bottom: 0;
             background: rgba(59, 130, 246, 0.1);
             pointer-events: none;
+          }
+          
+          /* 토글 블록 스타일 */
+          .ProseMirror .toggle-block {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            background-color: #f9fafb;
+          }
+          
+          .ProseMirror .toggle-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            user-select: none;
+          }
+          
+          .ProseMirror .toggle-icon {
+            transition: transform 0.2s ease;
+            font-size: 0.875rem;
+          }
+          
+          .ProseMirror .toggle-block[data-collapsed="false"] .toggle-icon {
+            transform: rotate(90deg);
+          }
+          
+          .ProseMirror .toggle-content {
+            margin-top: 0.5rem;
+            padding-left: 1.5rem;
           }
         `}</style>
         <EditorContent editor={editor} />

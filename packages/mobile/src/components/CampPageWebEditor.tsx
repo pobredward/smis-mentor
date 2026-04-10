@@ -174,6 +174,44 @@ export function CampPageWebEditor({
         margin: 0;
       }
       
+      /* 토글 블록 스타일 */
+      .toggle-block {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 12px;
+        margin: 8px 0;
+        background-color: #f9fafb;
+      }
+      
+      .toggle-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      .toggle-header:active {
+        opacity: 0.7;
+      }
+      
+      .toggle-icon {
+        transition: transform 0.2s ease;
+        font-size: 14px;
+        display: inline-block;
+      }
+      
+      .toggle-block[data-collapsed="false"] .toggle-icon {
+        transform: rotate(90deg);
+      }
+      
+      .toggle-content {
+        margin-top: 8px;
+        padding-left: 24px;
+      }
+      
       #editor table {
         border-collapse: collapse;
         table-layout: auto;
@@ -255,6 +293,10 @@ export function CampPageWebEditor({
       <button class="toolbar-button" onclick="execCommand('insertUnorderedList')" title="글머리 기호">•</button>
       <button class="toolbar-button" onclick="execCommand('insertOrderedList')" title="번호 매기기">1.</button>
       <button class="toolbar-button" onclick="toggleBlockquote()" title="인용구">"</button>
+      
+      <div class="toolbar-divider"></div>
+      
+      <button class="toolbar-button" onclick="insertToggle()" title="토글">▼</button>
       
       <div class="toolbar-divider"></div>
       
@@ -519,6 +561,66 @@ export function CampPageWebEditor({
         if (url) {
           execCommand('createLink', url);
         }
+      }
+      
+      // 토글 삽입
+      function insertToggle() {
+        const title = prompt('토글 제목을 입력하세요:', '토글 제목');
+        if (!title) return;
+        
+        const toggleHTML = \`
+          <div class="toggle-block" data-collapsed="true" contenteditable="false">
+            <div class="toggle-header">
+              <span class="toggle-icon">▶</span>
+              <strong>\${title}</strong>
+            </div>
+            <div class="toggle-content" style="display: none;" contenteditable="true">
+              <p>내용을 입력하세요...</p>
+            </div>
+          </div>
+          <p><br></p>
+        \`;
+        
+        document.execCommand('insertHTML', false, toggleHTML);
+        
+        // 토글 클릭 이벤트 추가
+        attachToggleEvents();
+      }
+      
+      // 토글 클릭 이벤트 연결
+      function attachToggleEvents() {
+        const toggleHeaders = editor.querySelectorAll('.toggle-header');
+        toggleHeaders.forEach(header => {
+          // 기존 이벤트 제거
+          const newHeader = header.cloneNode(true);
+          header.parentNode.replaceChild(newHeader, header);
+          
+          // 새 이벤트 추가
+          newHeader.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const toggleBlock = newHeader.parentElement;
+            if (!toggleBlock) return;
+            
+            const content = toggleBlock.querySelector('.toggle-content');
+            const isCollapsed = toggleBlock.getAttribute('data-collapsed') === 'true';
+            
+            if (isCollapsed) {
+              // 펼치기
+              toggleBlock.setAttribute('data-collapsed', 'false');
+              if (content) {
+                content.style.display = 'block';
+              }
+            } else {
+              // 접기
+              toggleBlock.setAttribute('data-collapsed', 'true');
+              if (content) {
+                content.style.display = 'none';
+              }
+            }
+          });
+        });
       }
       
       // 표 삽입
@@ -1006,6 +1108,9 @@ export function CampPageWebEditor({
             }
           });
         }
+        
+        // 토글 이벤트 연결
+        attachToggleEvents();
         
         if (!isInitialized) {
           isInitialized = true;

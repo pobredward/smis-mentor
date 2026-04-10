@@ -117,11 +117,81 @@ export function HTMLRenderer({ html }: HTMLRendererProps) {
             border-top: 1px solid #e5e7eb;
             margin: 16px 0;
           }
+          
+          /* 토글 블록 스타일 */
+          .toggle-block {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+            background-color: #f9fafb;
+          }
+          
+          .toggle-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+          }
+          
+          .toggle-header:active {
+            opacity: 0.7;
+          }
+          
+          .toggle-icon {
+            transition: transform 0.2s ease;
+            font-size: 14px;
+            display: inline-block;
+          }
+          
+          .toggle-block[data-collapsed="false"] .toggle-icon {
+            transform: rotate(90deg);
+          }
+          
+          .toggle-content {
+            margin-top: 8px;
+            padding-left: 24px;
+          }
         </style>
         <script>
           window.addEventListener('load', function() {
             const height = document.body.scrollHeight;
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'height', height: height }));
+            
+            // 토글 클릭 이벤트 추가
+            const toggleHeaders = document.querySelectorAll('.toggle-header');
+            toggleHeaders.forEach(function(header) {
+              header.addEventListener('click', function() {
+                const toggleBlock = header.parentElement;
+                if (!toggleBlock) return;
+                
+                const content = toggleBlock.querySelector('.toggle-content');
+                const isCollapsed = toggleBlock.getAttribute('data-collapsed') === 'true';
+                
+                if (isCollapsed) {
+                  // 펼치기
+                  toggleBlock.setAttribute('data-collapsed', 'false');
+                  if (content) {
+                    content.style.display = 'block';
+                  }
+                } else {
+                  // 접기
+                  toggleBlock.setAttribute('data-collapsed', 'true');
+                  if (content) {
+                    content.style.display = 'none';
+                  }
+                }
+                
+                // 높이 재계산
+                setTimeout(function() {
+                  const newHeight = document.body.scrollHeight;
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'height', height: newHeight }));
+                }, 100);
+              });
+            });
           });
         </script>
       </head>

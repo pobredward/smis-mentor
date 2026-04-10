@@ -55,6 +55,32 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
         wrapper.appendChild(table);
       }
     });
+
+    // 토글 블록 클릭 이벤트 추가
+    const toggleHeaders = containerRef.current.querySelectorAll('.toggle-header');
+    toggleHeaders.forEach((header) => {
+      const toggleBlock = header.parentElement;
+      if (!toggleBlock) return;
+
+      header.addEventListener('click', () => {
+        const content = toggleBlock.querySelector('.toggle-content');
+        const isCollapsed = toggleBlock.getAttribute('data-collapsed') === 'true';
+
+        if (isCollapsed) {
+          // 펼치기
+          toggleBlock.setAttribute('data-collapsed', 'false');
+          if (content instanceof HTMLElement) {
+            content.style.display = 'block';
+          }
+        } else {
+          // 접기
+          toggleBlock.setAttribute('data-collapsed', 'true');
+          if (content instanceof HTMLElement) {
+            content.style.display = 'none';
+          }
+        }
+      });
+    });
   }, [content]);
 
   return (
@@ -140,6 +166,42 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
         .prose strong,
         .prose b {
           font-weight: 700;
+        }
+        
+        /* 토글 블록 스타일 */
+        .prose .toggle-block {
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
+          padding: 0.75rem;
+          margin: 0.5rem 0;
+          background-color: #f9fafb;
+        }
+        
+        .prose .toggle-header {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          cursor: pointer;
+          user-select: none;
+        }
+        
+        .prose .toggle-header:hover {
+          opacity: 0.8;
+        }
+        
+        .prose .toggle-icon {
+          transition: transform 0.2s ease;
+          font-size: 0.875rem;
+          display: inline-block;
+        }
+        
+        .prose .toggle-block[data-collapsed="false"] .toggle-icon {
+          transform: rotate(90deg);
+        }
+        
+        .prose .toggle-content {
+          margin-top: 0.5rem;
+          padding-left: 1.5rem;
         }
       `}</style>
       <div
