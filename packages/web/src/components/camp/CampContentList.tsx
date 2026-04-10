@@ -213,6 +213,50 @@ export default function CampContentList({
     window.location.href = `/camp/${category}/${item.id}`;
   };
 
+  const handleMoveItemUp = async (item: DisplayItem, sectionItems: DisplayItem[]) => {
+    if (!activeJobCodeId || item.type !== 'page') return;
+
+    const index = sectionItems.findIndex(i => i.id === item.id);
+    if (index <= 0) return;
+
+    try {
+      const newItems = [...sectionItems];
+      [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
+      
+      // 페이지 ID 배열 생성
+      const pageIds = newItems.map(i => i.id);
+      
+      await campPageService.reorderPages(activeJobCodeId, category, pageIds);
+      await loadItems();
+      toast.success('순서가 변경되었습니다.');
+    } catch (error) {
+      logger.error('순서 변경 실패:', error);
+      toast.error('순서 변경에 실패했습니다.');
+    }
+  };
+
+  const handleMoveItemDown = async (item: DisplayItem, sectionItems: DisplayItem[]) => {
+    if (!activeJobCodeId || item.type !== 'page') return;
+
+    const index = sectionItems.findIndex(i => i.id === item.id);
+    if (index < 0 || index >= sectionItems.length - 1) return;
+
+    try {
+      const newItems = [...sectionItems];
+      [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
+      
+      // 페이지 ID 배열 생성
+      const pageIds = newItems.map(i => i.id);
+      
+      await campPageService.reorderPages(activeJobCodeId, category, pageIds);
+      await loadItems();
+      toast.success('순서가 변경되었습니다.');
+    } catch (error) {
+      logger.error('순서 변경 실패:', error);
+      toast.error('순서 변경에 실패했습니다.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -320,7 +364,7 @@ export default function CampContentList({
               <span className="text-sm font-normal text-gray-500">({groupedItems.common.length})</span>
             </h2>
             <div className="grid grid-cols-2 gap-4">
-              {groupedItems.common.map((item) => (
+              {groupedItems.common.map((item, idx) => (
                 <ItemCard
                   key={item.id}
                   item={item}
@@ -328,6 +372,8 @@ export default function CampContentList({
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
                   onEdit={handleStartEditItem}
+                  onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.common) : undefined}
+                  onMoveDown={idx < groupedItems.common.length - 1 ? () => handleMoveItemDown(item, groupedItems.common) : undefined}
                 />
               ))}
             </div>
@@ -343,7 +389,7 @@ export default function CampContentList({
               <span className="text-sm font-normal text-gray-500">({groupedItems.mentor.length})</span>
             </h2>
             <div className="grid grid-cols-2 gap-4">
-              {groupedItems.mentor.map((item) => (
+              {groupedItems.mentor.map((item, idx) => (
                 <ItemCard
                   key={item.id}
                   item={item}
@@ -351,6 +397,8 @@ export default function CampContentList({
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
                   onEdit={handleStartEditItem}
+                  onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.mentor) : undefined}
+                  onMoveDown={idx < groupedItems.mentor.length - 1 ? () => handleMoveItemDown(item, groupedItems.mentor) : undefined}
                 />
               ))}
             </div>
@@ -366,7 +414,7 @@ export default function CampContentList({
               <span className="text-sm font-normal text-gray-500">({groupedItems.foreign.length})</span>
             </h2>
             <div className="grid grid-cols-2 gap-4">
-              {groupedItems.foreign.map((item) => (
+              {groupedItems.foreign.map((item, idx) => (
                 <ItemCard
                   key={item.id}
                   item={item}
@@ -374,6 +422,8 @@ export default function CampContentList({
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
                   onEdit={handleStartEditItem}
+                  onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.foreign) : undefined}
+                  onMoveDown={idx < groupedItems.foreign.length - 1 ? () => handleMoveItemDown(item, groupedItems.foreign) : undefined}
                 />
               ))}
             </div>
@@ -458,12 +508,16 @@ function ItemCard({
   onNavigate,
   onDelete,
   onEdit,
+  onMoveUp,
+  onMoveDown,
 }: {
   item: DisplayItem;
   isAdmin: boolean;
   onNavigate: (item: DisplayItem) => void;
   onDelete: (item: DisplayItem) => void;
   onEdit: (item: DisplayItem) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   return (
     <div
@@ -480,7 +534,7 @@ function ItemCard({
             }`}>
               {item.emoji || (item.type === 'page' ? '📄' : '🔗')}
             </div>
-            <h3 className="font-semibold text-sm sm:text-base text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1 flex-1">
+            <h3 className="font-semibold text-sm sm:text-base text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 flex-1">
               {item.title}
             </h3>
           </div>
@@ -488,31 +542,63 @@ function ItemCard({
           {isAdmin && (
             <div className="flex flex-col gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
               {item.type === 'page' && (
+                <div className="flex gap-0.5">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(item);
+                    }}
+                    className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                    title="수정"
+                  >
+                    <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  {onMoveUp && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMoveUp();
+                      }}
+                      className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                      title="위로 이동"
+                    >
+                      <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-0.5">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onEdit(item);
+                    onDelete(item);
                   }}
-                  className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                  title="수정"
+                  className="w-5 h-5 flex items-center justify-center hover:bg-red-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                  title="삭제"
                 >
                   <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(item);
-                }}
-                className="w-5 h-5 flex items-center justify-center hover:bg-red-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                title="삭제"
-              >
-                <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
+                {onMoveDown && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveDown();
+                    }}
+                    className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                    title="아래로 이동"
+                  >
+                    <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

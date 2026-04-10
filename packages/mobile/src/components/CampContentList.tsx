@@ -263,6 +263,50 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
     }
   };
 
+  const handleMoveItemUp = async (item: DisplayItem, sectionItems: DisplayItem[]) => {
+    if (!activeJobCodeId || item.type !== 'page') return;
+
+    const index = sectionItems.findIndex(i => i.id === item.id);
+    if (index <= 0) return;
+
+    try {
+      const newItems = [...sectionItems];
+      [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
+      
+      // 페이지 ID 배열 생성
+      const pageIds = newItems.map(i => i.id);
+      
+      await campPageService.reorderPages(activeJobCodeId, category, pageIds);
+      await loadItems();
+      Alert.alert('성공', '순서가 변경되었습니다.');
+    } catch (error) {
+      logger.error('순서 변경 실패:', error);
+      Alert.alert('오류', '순서 변경에 실패했습니다.');
+    }
+  };
+
+  const handleMoveItemDown = async (item: DisplayItem, sectionItems: DisplayItem[]) => {
+    if (!activeJobCodeId || item.type !== 'page') return;
+
+    const index = sectionItems.findIndex(i => i.id === item.id);
+    if (index < 0 || index >= sectionItems.length - 1) return;
+
+    try {
+      const newItems = [...sectionItems];
+      [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
+      
+      // 페이지 ID 배열 생성
+      const pageIds = newItems.map(i => i.id);
+      
+      await campPageService.reorderPages(activeJobCodeId, category, pageIds);
+      await loadItems();
+      Alert.alert('성공', '순서가 변경되었습니다.');
+    } catch (error) {
+      logger.error('순서 변경 실패:', error);
+      Alert.alert('오류', '순서 변경에 실패했습니다.');
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -371,7 +415,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                 <Text style={styles.sectionCount}>({groupedItems.common.length})</Text>
               </View>
               <View style={styles.sectionContent}>
-                {groupedItems.common.map((item) => (
+                {groupedItems.common.map((item, idx) => (
                   <ItemCard
                     key={item.id}
                     item={item}
@@ -379,6 +423,8 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                     onNavigate={handleNavigateToDetail}
                     onDelete={handleDeleteItem}
                     onEdit={handleStartEditItem}
+                    onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.common) : undefined}
+                    onMoveDown={idx < groupedItems.common.length - 1 ? () => handleMoveItemDown(item, groupedItems.common) : undefined}
                   />
                 ))}
               </View>
@@ -394,7 +440,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                 <Text style={styles.sectionCount}>({groupedItems.mentor.length})</Text>
               </View>
               <View style={styles.sectionContent}>
-                {groupedItems.mentor.map((item) => (
+                {groupedItems.mentor.map((item, idx) => (
                   <ItemCard
                     key={item.id}
                     item={item}
@@ -402,6 +448,8 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                     onNavigate={handleNavigateToDetail}
                     onDelete={handleDeleteItem}
                     onEdit={handleStartEditItem}
+                    onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.mentor) : undefined}
+                    onMoveDown={idx < groupedItems.mentor.length - 1 ? () => handleMoveItemDown(item, groupedItems.mentor) : undefined}
                   />
                 ))}
               </View>
@@ -417,7 +465,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                 <Text style={styles.sectionCount}>({groupedItems.foreign.length})</Text>
               </View>
               <View style={styles.sectionContent}>
-                {groupedItems.foreign.map((item) => (
+                {groupedItems.foreign.map((item, idx) => (
                   <ItemCard
                     key={item.id}
                     item={item}
@@ -425,6 +473,8 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                     onNavigate={handleNavigateToDetail}
                     onDelete={handleDeleteItem}
                     onEdit={handleStartEditItem}
+                    onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.foreign) : undefined}
+                    onMoveDown={idx < groupedItems.foreign.length - 1 ? () => handleMoveItemDown(item, groupedItems.foreign) : undefined}
                   />
                 ))}
               </View>
@@ -519,12 +569,16 @@ function ItemCard({
   onNavigate,
   onDelete,
   onEdit,
+  onMoveUp,
+  onMoveDown,
 }: {
   item: DisplayItem;
   isAdmin: boolean;
   onNavigate: (item: DisplayItem) => void;
   onDelete: (item: DisplayItem) => void;
   onEdit: (item: DisplayItem) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   return (
     <TouchableOpacity
@@ -548,7 +602,7 @@ function ItemCard({
               </Text>
             </View>
             <View style={styles.titleContainer}>
-              <Text style={styles.cardTitle} numberOfLines={1}>
+              <Text style={styles.cardTitle} numberOfLines={2}>
                 {item.title}
               </Text>
             </View>
@@ -557,25 +611,51 @@ function ItemCard({
           {isAdmin && (
             <View style={styles.actionButtons}>
               {item.type === 'page' && (
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onEdit(item);
+                    }}
+                  >
+                    <Text style={styles.editButtonText}>✏️</Text>
+                  </TouchableOpacity>
+                  {onMoveUp && (
+                    <TouchableOpacity
+                      style={styles.moveButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        onMoveUp();
+                      }}
+                    >
+                      <Text style={styles.moveButtonText}>▲</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              <View style={styles.buttonRow}>
                 <TouchableOpacity
-                  style={styles.editButton}
+                  style={styles.deleteButton}
                   onPress={(e) => {
                     e.stopPropagation();
-                    onEdit(item);
+                    onDelete(item);
                   }}
                 >
-                  <Text style={styles.editButtonText}>✏️</Text>
+                  <Text style={styles.deleteButtonText}>🗑️</Text>
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onDelete(item);
-                }}
-              >
-                <Text style={styles.deleteButtonText}>🗑️</Text>
-              </TouchableOpacity>
+                {onMoveDown && (
+                  <TouchableOpacity
+                    style={styles.moveButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onMoveDown();
+                    }}
+                  >
+                    <Text style={styles.moveButtonText}>▼</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
         </View>
@@ -1061,6 +1141,25 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 2,
     flexShrink: 0,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  moveButton: {
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.9)',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  moveButtonText: {
+    fontSize: 10,
+    color: '#ffffff',
+    fontWeight: '600',
   },
   editButton: {
     width: 22,
