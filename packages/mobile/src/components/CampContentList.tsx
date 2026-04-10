@@ -331,24 +331,13 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
   if (isAdmin && groupedItems) {
     return (
       <View style={styles.container}>
-        {/* 헤더 */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>{categoryTitle}</Text>
-            <Text style={styles.headerSubtitle}>총 {filteredItems.length}개의 자료</Text>
-          </View>
-          
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowAddModal(true)}
-          >
-            <Text style={styles.addButtonText}>+ 자료 추가</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* 섹션별 리스트 */}
         <ScrollView 
           style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
+          bounces={true}
+          alwaysBounceVertical={true}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -358,6 +347,21 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
             />
           }
         >
+          {/* 헤더 */}
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerTitle}>{categoryTitle}</Text>
+              <Text style={styles.headerSubtitle}>총 {filteredItems.length}개의 자료</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowAddModal(true)}
+            >
+              <Text style={styles.addButtonText}>+ 자료 추가</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* 공통 자료 섹션 */}
           {groupedItems.common.length > 0 && (
             <View style={styles.section}>
@@ -778,6 +782,10 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollViewContent: {
+    flexGrow: 1,
+    paddingBottom: 100,
+  },
   listContent: {
     padding: 16,
     flexDirection: 'row',
@@ -831,6 +839,7 @@ const styles = StyleSheet.create({
     color: '#1f2937',
   },
   section: {
+    marginTop: 16,
     marginBottom: 24,
     paddingHorizontal: 16,
   },
