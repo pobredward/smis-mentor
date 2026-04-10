@@ -13,6 +13,9 @@ export interface CampPage {
   // Tiptap 에디터 HTML 콘텐츠
   content: string;
   
+  // 아이콘 이모지 (관리자가 설정)
+  emoji?: string;
+  
   // 메타데이터
   order: number;
   createdAt: Timestamp;
@@ -34,9 +37,31 @@ export interface DisplayItem {
   targetRole: CampPageRole;
   order: number;
   
+  // 아이콘 이모지
+  emoji?: string;
+  
   // type === 'page'
   content?: string;
   
   // type === 'link'
   url?: string;
 }
+
+// 관리자가 선택할 수 있는 기본 이모지 목록
+export const DEFAULT_EMOJIS = [
+  '📄', '📝', '📋', '📌', '📍', 
+  '📖', '📚', '📓', '📔', '📕',
+  '📗', '📘', '📙', '📰', '🗒️',
+  '📑', '🗂️', '📂', '📁', '🏷️',
+  '🎯', '🎨', '🎪', '🎭', '🎬',
+  '💡', '🔔', '🔖', '✅', '❗',
+  '⭐', '🌟', '💫', '✨', '🔥',
+  '👍', '👏', '🙌', '💪', '🏆',
+  '🎓', '📊', '📈', '📉', '💼',
+  '🔧', '🔨', '⚙️', '🛠️', '🧰',
+  '🎁', '🎉', '🎊', '🎈', '🎀',
+  '📢', '📣', '📡', '📺', '📻',
+  '🌍', '🌎', '🌏', '🗺️', '🧭',
+  '⏰', '⏱️', '⏲️', '⌚', '📅',
+  '🔑', '🔐', '🔒', '🔓', '🗝️',
+] as const;

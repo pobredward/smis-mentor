@@ -176,7 +176,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">
-                    {item.type === 'page' ? '📄' : '🔗'}
+                    {item.emoji || (item.type === 'page' ? '📄' : '🔗')}
                   </span>
                   <h1 className="text-xl font-bold text-gray-900">{item.title}</h1>
                 </div>

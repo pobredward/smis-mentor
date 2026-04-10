@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getDisplayItems, campPageService } from '@/lib/campPageService';
 import { generationResourcesService, type ResourceLinkRole, type LinkType } from '@/lib/generationResourcesService';
 import type { DisplayItem, CampPageRole, CampPageCategory } from '@smis-mentor/shared';
+import { DEFAULT_EMOJIS } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
 
 interface CampContentListProps {
@@ -51,6 +52,14 @@ export default function CampContentList({
   const [newTitle, setNewTitle] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newTargetRole, setNewTargetRole] = useState<CampPageRole>('common');
+  const [newEmoji, setNewEmoji] = useState('📄');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  
+  const [editingItem, setEditingItem] = useState<DisplayItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editEmoji, setEditEmoji] = useState('📄');
+  const [editTargetRole, setEditTargetRole] = useState<CampPageRole>('common');
+  const [showEditEmojiPicker, setShowEditEmojiPicker] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
@@ -115,6 +124,7 @@ export default function CampContentList({
           title: newTitle.trim(),
           targetRole: newTargetRole,
           content: '',
+          emoji: newEmoji,
           userId: userData.userId,
         });
       } else {
@@ -136,11 +146,47 @@ export default function CampContentList({
       setNewTitle('');
       setNewUrl('');
       setNewTargetRole('common');
+      setNewEmoji('📄');
+      setShowEmojiPicker(false);
       await loadItems();
       toast.success('추가되었습니다.');
     } catch (error) {
       logger.error('항목 추가 실패:', error);
       toast.error('추가에 실패했습니다.');
+    }
+  };
+
+  const handleStartEditItem = (item: DisplayItem) => {
+    if (item.type !== 'page') return;
+    setEditingItem(item);
+    setEditTitle(item.title);
+    setEditEmoji(item.emoji || '📄');
+    setEditTargetRole(item.targetRole);
+    setShowEditEmojiPicker(false);
+  };
+
+  const handleSaveEditItem = async () => {
+    if (!editingItem || !activeJobCodeId || !editTitle.trim() || !userData?.userId) {
+      toast.error('제목을 입력해주세요.');
+      return;
+    }
+
+    if (editingItem.type !== 'page') return;
+
+    try {
+      await campPageService.updatePage(editingItem.id, {
+        title: editTitle.trim(),
+        emoji: editEmoji,
+        targetRole: editTargetRole,
+        userId: userData.userId,
+      });
+
+      setEditingItem(null);
+      await loadItems();
+      toast.success('수정되었습니다.');
+    } catch (error) {
+      logger.error('항목 수정 실패:', error);
+      toast.error('수정에 실패했습니다.');
     }
   };
 
@@ -229,6 +275,10 @@ export default function CampContentList({
             setNewUrl={setNewUrl}
             newTargetRole={newTargetRole}
             setNewTargetRole={setNewTargetRole}
+            newEmoji={newEmoji}
+            setNewEmoji={setNewEmoji}
+            showEmojiPicker={showEmojiPicker}
+            setShowEmojiPicker={setShowEmojiPicker}
             handleAddItem={handleAddItem}
             allowLinks={allowLinks}
           />
@@ -277,6 +327,7 @@ export default function CampContentList({
                   isAdmin={true}
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
+                  onEdit={handleStartEditItem}
                 />
               ))}
             </div>
@@ -299,6 +350,7 @@ export default function CampContentList({
                   isAdmin={true}
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
+                  onEdit={handleStartEditItem}
                 />
               ))}
             </div>
@@ -321,6 +373,7 @@ export default function CampContentList({
                   isAdmin={true}
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
+                  onEdit={handleStartEditItem}
                 />
               ))}
             </div>
@@ -340,8 +393,29 @@ export default function CampContentList({
             setNewUrl={setNewUrl}
             newTargetRole={newTargetRole}
             setNewTargetRole={setNewTargetRole}
+            newEmoji={newEmoji}
+            setNewEmoji={setNewEmoji}
+            showEmojiPicker={showEmojiPicker}
+            setShowEmojiPicker={setShowEmojiPicker}
             handleAddItem={handleAddItem}
             allowLinks={allowLinks}
+          />
+        )}
+
+        {/* 수정 모달 */}
+        {editingItem && (
+          <EditModal
+            editingItem={editingItem}
+            setEditingItem={setEditingItem}
+            editTitle={editTitle}
+            setEditTitle={setEditTitle}
+            editEmoji={editEmoji}
+            setEditEmoji={setEditEmoji}
+            editTargetRole={editTargetRole}
+            setEditTargetRole={setEditTargetRole}
+            showEditEmojiPicker={showEditEmojiPicker}
+            setShowEditEmojiPicker={setShowEditEmojiPicker}
+            handleSaveEditItem={handleSaveEditItem}
           />
         )}
       </div>
@@ -370,6 +444,7 @@ export default function CampContentList({
             isAdmin={false}
             onNavigate={handleNavigateToDetail}
             onDelete={handleDeleteItem}
+            onEdit={handleStartEditItem}
           />
         ))}
       </div>
@@ -382,51 +457,63 @@ function ItemCard({
   isAdmin,
   onNavigate,
   onDelete,
+  onEdit,
 }: {
   item: DisplayItem;
   isAdmin: boolean;
   onNavigate: (item: DisplayItem) => void;
   onDelete: (item: DisplayItem) => void;
+  onEdit: (item: DisplayItem) => void;
 }) {
   return (
     <div
-      className="bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group"
+      className="bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group relative"
       onClick={() => onNavigate(item)}
     >
-      <div className="p-4">
-        {/* 타입 아이콘 */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg ${
+      <div className="p-3 sm:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 rounded-lg flex items-center justify-center text-base sm:text-lg ${
               item.type === 'page' 
                 ? 'bg-blue-100 text-blue-600' 
                 : 'bg-purple-100 text-purple-600'
             }`}>
-              {item.type === 'page' ? '📄' : '🔗'}
+              {item.emoji || (item.type === 'page' ? '📄' : '🔗')}
             </div>
-            <div>
-              <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
-                {item.title}
-              </h3>
-              <p className="text-xs text-gray-500">
-                {item.type === 'page' ? '페이지' : '외부 링크'}
-              </p>
-            </div>
+            <h3 className="font-semibold text-sm sm:text-base text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1 flex-1">
+              {item.title}
+            </h3>
           </div>
 
           {isAdmin && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(item);
-              }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-50 rounded"
-              title="삭제"
-            >
-              <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
+            <div className="flex flex-col gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
+              {item.type === 'page' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(item);
+                  }}
+                  className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                  title="수정"
+                >
+                  <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(item);
+                }}
+                className="w-5 h-5 flex items-center justify-center hover:bg-red-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                title="삭제"
+              >
+                <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -445,6 +532,10 @@ function AddModal({
   setNewUrl,
   newTargetRole,
   setNewTargetRole,
+  newEmoji,
+  setNewEmoji,
+  showEmojiPicker,
+  setShowEmojiPicker,
   handleAddItem,
   allowLinks,
 }: {
@@ -458,6 +549,10 @@ function AddModal({
   setNewUrl: (url: string) => void;
   newTargetRole: CampPageRole;
   setNewTargetRole: (role: CampPageRole) => void;
+  newEmoji: string;
+  setNewEmoji: (emoji: string) => void;
+  showEmojiPicker: boolean;
+  setShowEmojiPicker: (show: boolean) => void;
   handleAddItem: () => void;
   allowLinks: boolean;
 }) {
@@ -471,6 +566,8 @@ function AddModal({
               setShowAddModal(false);
               setNewTitle('');
               setNewUrl('');
+              setNewEmoji('📄');
+              setShowEmojiPicker(false);
             }}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
@@ -520,6 +617,41 @@ function AddModal({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          {/* 이모지 선택 (페이지 타입일 때만) */}
+          {addType === 'page' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 hover:bg-gray-50"
+              >
+                <span className="text-2xl">{newEmoji}</span>
+                <span className="text-sm text-gray-600">클릭하여 변경</span>
+              </button>
+              
+              {showEmojiPicker && (
+                <div className="mt-2 p-3 border border-gray-300 rounded-lg bg-white max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-8 gap-2">
+                    {DEFAULT_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => {
+                          setNewEmoji(emoji);
+                          setShowEmojiPicker(false);
+                        }}
+                        className="text-2xl hover:bg-gray-100 rounded p-1 transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           
           {addType === 'link' && allowLinks && (
             <div>
@@ -553,6 +685,8 @@ function AddModal({
                 setShowAddModal(false);
                 setNewTitle('');
                 setNewUrl('');
+                setNewEmoji('📄');
+                setShowEmojiPicker(false);
               }}
               className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
@@ -564,6 +698,130 @@ function AddModal({
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               추가
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditModal({
+  editingItem,
+  setEditingItem,
+  editTitle,
+  setEditTitle,
+  editEmoji,
+  setEditEmoji,
+  editTargetRole,
+  setEditTargetRole,
+  showEditEmojiPicker,
+  setShowEditEmojiPicker,
+  handleSaveEditItem,
+}: {
+  editingItem: DisplayItem;
+  setEditingItem: (item: DisplayItem | null) => void;
+  editTitle: string;
+  setEditTitle: (title: string) => void;
+  editEmoji: string;
+  setEditEmoji: (emoji: string) => void;
+  editTargetRole: CampPageRole;
+  setEditTargetRole: (role: CampPageRole) => void;
+  showEditEmojiPicker: boolean;
+  setShowEditEmojiPicker: (show: boolean) => void;
+  handleSaveEditItem: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">페이지 수정</h3>
+          <button
+            onClick={() => {
+              setEditingItem(null);
+              setShowEditEmojiPicker(false);
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="예: 1주차 자료"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
+            <button
+              type="button"
+              onClick={() => setShowEditEmojiPicker(!showEditEmojiPicker)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 hover:bg-gray-50"
+            >
+              <span className="text-2xl">{editEmoji}</span>
+              <span className="text-sm text-gray-600">클릭하여 변경</span>
+            </button>
+            
+            {showEditEmojiPicker && (
+              <div className="mt-2 p-3 border border-gray-300 rounded-lg bg-white max-h-48 overflow-y-auto">
+                <div className="grid grid-cols-8 gap-2">
+                  {DEFAULT_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        setEditEmoji(emoji);
+                        setShowEditEmojiPicker(false);
+                      }}
+                      className="text-2xl hover:bg-gray-100 rounded p-1 transition-colors"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">대상 권한</label>
+            <select
+              value={editTargetRole}
+              onChange={(e) => setEditTargetRole(e.target.value as CampPageRole)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="common">공통 (모든 사용자)</option>
+              <option value="mentor">멘토 전용</option>
+              <option value="foreign">원어민 전용</option>
+            </select>
+          </div>
+          
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => {
+                setEditingItem(null);
+                setShowEditEmojiPicker(false);
+              }}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              취소
+            </button>
+            <button
+              onClick={handleSaveEditItem}
+              disabled={!editTitle.trim()}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              저장
             </button>
           </div>
         </div>

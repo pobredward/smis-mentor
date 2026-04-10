@@ -238,7 +238,6 @@ export default function CampLinkList({
       generationResourcesService.reorderLinks(activeJobCodeId, linkType, newLinks)
         .then(() => {
           setLinks(newLinks);
-          toast.success('순서가 변경되었습니다.');
         })
         .catch((error) => {
           logger.error('순서 변경 실패:', error);
@@ -255,7 +254,6 @@ export default function CampLinkList({
       generationResourcesService.reorderLinks(activeJobCodeId, linkType, newLinks)
         .then(() => {
           setLinks(newLinks);
-          toast.success('순서가 변경되었습니다.');
         })
         .catch((error) => {
           logger.error('순서 변경 실패:', error);
@@ -299,9 +297,9 @@ export default function CampLinkList({
 
   return (
     <div className="h-[calc(100vh-12rem)] w-full flex flex-col">
-      <div className={`bg-white border-b border-gray-200 px-3 flex flex-col sm:flex-row sm:items-center relative ${editMode ? 'bg-amber-50 border-amber-500 border-b-2 py-8' : 'py-2'}`}>
+      <div className={`bg-white border-b border-gray-200 px-3 flex flex-col sm:flex-row sm:items-center relative ${editMode ? 'bg-amber-50 border-amber-500 border-b-2 py-2' : 'py-2'}`} style={editMode ? { overflow: 'visible' } : {}}>
         {/* 스크롤 가능한 탭 영역 */}
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto flex-1 sm:pr-20">
+        <div className={`flex items-center gap-1 sm:gap-1.5 flex-1 sm:pr-20 ${editMode ? '' : 'overflow-x-auto'}`} style={editMode ? { overflowX: 'auto', overflowY: 'visible' } : {}}>
           {isAdmin && (
             <>
               <button
@@ -325,11 +323,11 @@ export default function CampLinkList({
           )}
           
           {filteredLinks.map((link, index) => (
-            <div key={link.id} className="relative" style={{ marginLeft: '2px', marginRight: '2px' }}>
+            <div key={link.id} className="relative" style={{ marginLeft: '2px', marginRight: '2px', paddingTop: editMode ? '28px' : '0', paddingBottom: editMode ? '24px' : '0' }}>
               {editMode && isAdmin && (
                 <>
                   {/* 위쪽: 수정, 삭제 버튼 */}
-                  <div className="absolute -top-7 left-0 right-0 flex items-center justify-center gap-1 z-10">
+                  <div className="absolute top-1 left-0 right-0 flex items-center justify-center gap-1 z-50">
                     <button
                       onClick={() => handleStartEditLink(link)}
                       className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center text-white shadow-md"
@@ -347,7 +345,7 @@ export default function CampLinkList({
                   </div>
 
                   {/* 아래쪽: 화살표 버튼 */}
-                  <div className="absolute -bottom-6 left-0 right-0 flex items-center justify-center gap-1 z-10">
+                  <div className="absolute bottom-1 left-0 right-0 flex items-center justify-center gap-1 z-50">
                     <button
                       onClick={() => handleMoveLeft(link.id)}
                       disabled={index === 0}

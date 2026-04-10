@@ -30,6 +30,7 @@ export class CampPageService {
     title: string;
     targetRole: CampPageRole;
     content: string;
+    emoji?: string;
     userId: string;
   }): Promise<CampPage> {
     const pageId = uuidv4();
@@ -48,6 +49,7 @@ export class CampPageService {
       title: data.title,
       targetRole: data.targetRole,
       content: data.content,
+      emoji: data.emoji || '📄',
       order: maxOrder + 1,
       createdAt: now,
       createdBy: data.userId,
@@ -62,6 +64,7 @@ export class CampPageService {
       title: newPage.title,
       targetRole: newPage.targetRole,
       content: newPage.content,
+      emoji: newPage.emoji,
       order: newPage.order,
       createdAt: newPage.createdAt,
       createdBy: newPage.createdBy,
@@ -79,6 +82,7 @@ export class CampPageService {
       title?: string;
       content?: string;
       targetRole?: CampPageRole;
+      emoji?: string;
       userId: string;
     }
   ): Promise<void> {
@@ -91,6 +95,7 @@ export class CampPageService {
     if (data.title !== undefined) updateData.title = data.title;
     if (data.content !== undefined) updateData.content = data.content;
     if (data.targetRole !== undefined) updateData.targetRole = data.targetRole;
+    if (data.emoji !== undefined) updateData.emoji = data.emoji;
 
     await updateDoc(docRef, updateData);
   }

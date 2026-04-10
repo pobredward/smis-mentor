@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { getDisplayItems, campPageService } from '../services';
 import { generationResourcesService } from '../services';
 import type { DisplayItem, CampPageRole, CampPageCategory } from '@smis-mentor/shared';
+import { DEFAULT_EMOJIS } from '@smis-mentor/shared';
 import type { LinkType, ResourceLinkRole } from '../services/generationResourcesService';
 import { RootStackParamList } from '../navigation/types';
 
@@ -54,10 +55,16 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addType, setAddType] = useState<'page' | 'link'>('page');
   const [newTitle, setNewTitle] = useState('');
-  const [newUrl, setNewUrl] = useState('');
   const [newTargetRole, setNewTargetRole] = useState<CampPageRole>('common');
+  const [newEmoji, setNewEmoji] = useState('📄');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const [editingItem, setEditingItem] = useState<DisplayItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editEmoji, setEditEmoji] = useState('📄');
+  const [editTargetRole, setEditTargetRole] = useState<CampPageRole>('common');
+  const [showEditEmojiPicker, setShowEditEmojiPicker] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
@@ -126,34 +133,21 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
     }
 
     try {
-      if (addType === 'page') {
-        await campPageService.createPage({
-          jobCodeId: activeJobCodeId,
-          category,
-          title: newTitle.trim(),
-          targetRole: newTargetRole,
-          content: '',
-          userId: userData.userId,
-        });
-      } else {
-        if (!newUrl.trim()) {
-          Alert.alert('오류', 'URL을 입력해주세요.');
-          return;
-        }
-        await generationResourcesService.addLink(
-          activeJobCodeId,
-          linkType,
-          newTitle.trim(),
-          newUrl.trim(),
-          userData.userId,
-          newTargetRole as ResourceLinkRole
-        );
-      }
+      await campPageService.createPage({
+        jobCodeId: activeJobCodeId,
+        category,
+        title: newTitle.trim(),
+        targetRole: newTargetRole,
+        content: '',
+        emoji: newEmoji,
+        userId: userData.userId,
+      });
       
       setShowAddModal(false);
       setNewTitle('');
-      setNewUrl('');
       setNewTargetRole('common');
+      setNewEmoji('📄');
+      setShowEmojiPicker(false);
       await loadItems();
       Alert.alert('성공', '추가되었습니다.');
     } catch (error) {
@@ -191,6 +185,40 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
         },
       ]
     );
+  };
+
+  const handleStartEditItem = (item: DisplayItem) => {
+    if (item.type !== 'page') return;
+    setEditingItem(item);
+    setEditTitle(item.title);
+    setEditEmoji(item.emoji || '📄');
+    setEditTargetRole(item.targetRole);
+    setShowEditEmojiPicker(false);
+  };
+
+  const handleSaveEditItem = async () => {
+    if (!editingItem || !activeJobCodeId || !editTitle.trim() || !userData?.userId) {
+      Alert.alert('오류', '제목을 입력해주세요.');
+      return;
+    }
+
+    if (editingItem.type !== 'page') return;
+
+    try {
+      await campPageService.updatePage(editingItem.id, {
+        title: editTitle.trim(),
+        emoji: editEmoji,
+        targetRole: editTargetRole,
+        userId: userData.userId,
+      });
+
+      setEditingItem(null);
+      await loadItems();
+      Alert.alert('성공', '수정되었습니다.');
+    } catch (error) {
+      logger.error('항목 수정 실패:', error);
+      Alert.alert('오류', '수정에 실패했습니다.');
+    }
   };
 
   const handleNavigateToDetail = (item: DisplayItem) => {
@@ -281,16 +309,17 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
             onClose={() => {
               setShowAddModal(false);
               setNewTitle('');
-              setNewUrl('');
+              setNewEmoji('📄');
+              setShowEmojiPicker(false);
             }}
-            addType={addType}
-            setAddType={setAddType}
             newTitle={newTitle}
             setNewTitle={setNewTitle}
-            newUrl={newUrl}
-            setNewUrl={setNewUrl}
             newTargetRole={newTargetRole}
             setNewTargetRole={setNewTargetRole}
+            newEmoji={newEmoji}
+            setNewEmoji={setNewEmoji}
+            showEmojiPicker={showEmojiPicker}
+            setShowEmojiPicker={setShowEmojiPicker}
             onAdd={handleAddItem}
           />
         )}
@@ -345,6 +374,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                     isAdmin={true}
                     onNavigate={handleNavigateToDetail}
                     onDelete={handleDeleteItem}
+                    onEdit={handleStartEditItem}
                   />
                 ))}
               </View>
@@ -367,6 +397,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                     isAdmin={true}
                     onNavigate={handleNavigateToDetail}
                     onDelete={handleDeleteItem}
+                    onEdit={handleStartEditItem}
                   />
                 ))}
               </View>
@@ -389,6 +420,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
                     isAdmin={true}
                     onNavigate={handleNavigateToDetail}
                     onDelete={handleDeleteItem}
+                    onEdit={handleStartEditItem}
                   />
                 ))}
               </View>
@@ -403,17 +435,35 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
             onClose={() => {
               setShowAddModal(false);
               setNewTitle('');
-              setNewUrl('');
+              setNewEmoji('📄');
+              setShowEmojiPicker(false);
             }}
-            addType={addType}
-            setAddType={setAddType}
             newTitle={newTitle}
             setNewTitle={setNewTitle}
-            newUrl={newUrl}
-            setNewUrl={setNewUrl}
             newTargetRole={newTargetRole}
             setNewTargetRole={setNewTargetRole}
+            newEmoji={newEmoji}
+            setNewEmoji={setNewEmoji}
+            showEmojiPicker={showEmojiPicker}
+            setShowEmojiPicker={setShowEmojiPicker}
             onAdd={handleAddItem}
+          />
+        )}
+
+        {/* 수정 모달 */}
+        {editingItem && (
+          <EditModal
+            editingItem={editingItem}
+            setEditingItem={setEditingItem}
+            editTitle={editTitle}
+            setEditTitle={setEditTitle}
+            editEmoji={editEmoji}
+            setEditEmoji={setEditEmoji}
+            editTargetRole={editTargetRole}
+            setEditTargetRole={setEditTargetRole}
+            showEditEmojiPicker={showEditEmojiPicker}
+            setShowEditEmojiPicker={setShowEditEmojiPicker}
+            handleSaveEditItem={handleSaveEditItem}
           />
         )}
       </View>
@@ -451,6 +501,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
             isAdmin={false}
             onNavigate={handleNavigateToDetail}
             onDelete={handleDeleteItem}
+            onEdit={handleStartEditItem}
           />
         ))}
       </ScrollView>
@@ -463,20 +514,20 @@ function ItemCard({
   isAdmin,
   onNavigate,
   onDelete,
+  onEdit,
 }: {
   item: DisplayItem;
   isAdmin: boolean;
   onNavigate: (item: DisplayItem) => void;
   onDelete: (item: DisplayItem) => void;
+  onEdit: (item: DisplayItem) => void;
 }) {
   return (
     <TouchableOpacity
       style={styles.card}
       onPress={() => onNavigate(item)}
-      onLongPress={() => isAdmin && onDelete(item)}
     >
       <View style={styles.cardContent}>
-        {/* 타입 아이콘 */}
         <View style={styles.cardHeader}>
           <View style={styles.iconTitleContainer}>
             <View
@@ -489,29 +540,39 @@ function ItemCard({
               ]}
             >
               <Text style={styles.iconText}>
-                {item.type === 'page' ? '📄' : '🔗'}
+                {item.emoji || (item.type === 'page' ? '📄' : '🔗')}
               </Text>
             </View>
             <View style={styles.titleContainer}>
               <Text style={styles.cardTitle} numberOfLines={1}>
                 {item.title}
               </Text>
-              <Text style={styles.cardType}>
-                {item.type === 'page' ? '페이지' : '외부 링크'}
-              </Text>
             </View>
           </View>
 
           {isAdmin && (
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                onDelete(item);
-              }}
-            >
-              <Text style={styles.deleteButtonText}>🗑️</Text>
-            </TouchableOpacity>
+            <View style={styles.actionButtons}>
+              {item.type === 'page' && (
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onEdit(item);
+                  }}
+                >
+                  <Text style={styles.editButtonText}>✏️</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onDelete(item);
+                }}
+              >
+                <Text style={styles.deleteButtonText}>🗑️</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </View>
@@ -522,26 +583,26 @@ function ItemCard({
 function AddModal({
   visible,
   onClose,
-  addType,
-  setAddType,
   newTitle,
   setNewTitle,
-  newUrl,
-  setNewUrl,
   newTargetRole,
   setNewTargetRole,
+  newEmoji,
+  setNewEmoji,
+  showEmojiPicker,
+  setShowEmojiPicker,
   onAdd,
 }: {
   visible: boolean;
   onClose: () => void;
-  addType: 'page' | 'link';
-  setAddType: (type: 'page' | 'link') => void;
   newTitle: string;
   setNewTitle: (title: string) => void;
-  newUrl: string;
-  setNewUrl: (url: string) => void;
   newTargetRole: CampPageRole;
   setNewTargetRole: (role: CampPageRole) => void;
+  newEmoji: string;
+  setNewEmoji: (emoji: string) => void;
+  showEmojiPicker: boolean;
+  setShowEmojiPicker: (show: boolean) => void;
   onAdd: () => void;
 }) {
   return (
@@ -549,50 +610,13 @@ function AddModal({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>자료 추가</Text>
+            <Text style={styles.modalTitle}>페이지 추가</Text>
             <TouchableOpacity onPress={onClose}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modalContent}>
-            {/* 유형 선택 */}
-            <Text style={styles.label}>유형</Text>
-            <View style={styles.typeButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  addType === 'page' && styles.typeButtonActive,
-                ]}
-                onPress={() => setAddType('page')}
-              >
-                <Text
-                  style={[
-                    styles.typeButtonText,
-                    addType === 'page' && styles.typeButtonTextActive,
-                  ]}
-                >
-                  📄 페이지
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  addType === 'link' && styles.typeButtonActive,
-                ]}
-                onPress={() => setAddType('link')}
-              >
-                <Text
-                  style={[
-                    styles.typeButtonText,
-                    addType === 'link' && styles.typeButtonTextActive,
-                  ]}
-                >
-                  🔗 링크
-                </Text>
-              </TouchableOpacity>
-            </View>
-
+          <ScrollView style={styles.modalContent}>
             {/* 제목 */}
             <Text style={styles.label}>제목</Text>
             <TextInput
@@ -603,20 +627,35 @@ function AddModal({
               placeholderTextColor="#9CA3AF"
             />
 
-            {/* URL (링크 타입일 때만) */}
-            {addType === 'link' && (
-              <>
-                <Text style={styles.label}>URL</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newUrl}
-                  onChangeText={setNewUrl}
-                  placeholder="https://..."
-                  placeholderTextColor="#9CA3AF"
-                  autoCapitalize="none"
-                  keyboardType="url"
-                />
-              </>
+            {/* 이모지 선택 */}
+            <Text style={styles.label}>아이콘</Text>
+            <TouchableOpacity
+              style={styles.emojiButton}
+              onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+            >
+              <Text style={styles.emojiButtonIcon}>{newEmoji}</Text>
+              <Text style={styles.emojiButtonText}>클릭하여 변경</Text>
+            </TouchableOpacity>
+            
+            {showEmojiPicker && (
+              <View style={styles.emojiPicker}>
+                <ScrollView style={styles.emojiPickerScroll}>
+                  <View style={styles.emojiGrid}>
+                    {DEFAULT_EMOJIS.map((emoji) => (
+                      <TouchableOpacity
+                        key={emoji}
+                        style={styles.emojiOption}
+                        onPress={() => {
+                          setNewEmoji(emoji);
+                          setShowEmojiPicker(false);
+                        }}
+                      >
+                        <Text style={styles.emojiOptionText}>{emoji}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
             )}
 
             {/* 권한 */}
@@ -651,16 +690,15 @@ function AddModal({
               <TouchableOpacity
                 style={[
                   styles.addModalButton,
-                  (!newTitle.trim() || (addType === 'link' && !newUrl.trim())) &&
-                    styles.addModalButtonDisabled,
+                  !newTitle.trim() && styles.addModalButtonDisabled,
                 ]}
                 onPress={onAdd}
-                disabled={!newTitle.trim() || (addType === 'link' && !newUrl.trim())}
+                disabled={!newTitle.trim()}
               >
                 <Text style={styles.addModalButtonText}>추가</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -757,47 +795,40 @@ const styles = StyleSheet.create({
     width: '48%',
   },
   cardContent: {
-    padding: 12,
+    padding: 8,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 6,
   },
   iconTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    minWidth: 0,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 6,
+    flexShrink: 0,
   },
   iconText: {
-    fontSize: 18,
+    fontSize: 16,
   },
   titleContainer: {
     flex: 1,
+    minWidth: 0,
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 2,
-  },
-  cardType: {
-    fontSize: 11,
-    color: '#6b7280',
-  },
-  deleteButton: {
-    padding: 4,
-  },
-  deleteButtonText: {
-    fontSize: 18,
   },
   section: {
     marginBottom: 24,
@@ -973,4 +1004,204 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
   },
+  emojiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    gap: 8,
+  },
+  emojiButtonIcon: {
+    fontSize: 24,
+  },
+  emojiButtonText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  emojiPicker: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    marginTop: 8,
+    maxHeight: 200,
+  },
+  emojiPickerScroll: {
+    padding: 8,
+  },
+  emojiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  emojiOption: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+  },
+  emojiOptionText: {
+    fontSize: 24,
+  },
+  actionButtons: {
+    flexDirection: 'column',
+    gap: 2,
+    flexShrink: 0,
+  },
+  editButton: {
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  editButtonText: {
+    fontSize: 11,
+  },
+  deleteButton: {
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  deleteButtonText: {
+    fontSize: 11,
+  },
 });
+
+function EditModal({
+  editingItem,
+  setEditingItem,
+  editTitle,
+  setEditTitle,
+  editEmoji,
+  setEditEmoji,
+  editTargetRole,
+  setEditTargetRole,
+  showEditEmojiPicker,
+  setShowEditEmojiPicker,
+  handleSaveEditItem,
+}: {
+  editingItem: DisplayItem;
+  setEditingItem: (item: DisplayItem | null) => void;
+  editTitle: string;
+  setEditTitle: (title: string) => void;
+  editEmoji: string;
+  setEditEmoji: (emoji: string) => void;
+  editTargetRole: CampPageRole;
+  setEditTargetRole: (role: CampPageRole) => void;
+  showEditEmojiPicker: boolean;
+  setShowEditEmojiPicker: (show: boolean) => void;
+  handleSaveEditItem: () => void;
+}) {
+  return (
+    <Modal visible={true} transparent animationType="fade" onRequestClose={() => setEditingItem(null)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>페이지 수정</Text>
+            <TouchableOpacity onPress={() => setEditingItem(null)}>
+              <Text style={styles.modalClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {/* 제목 */}
+            <Text style={styles.label}>제목</Text>
+            <TextInput
+              style={styles.input}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              placeholder="예: 1주차 자료"
+              placeholderTextColor="#9CA3AF"
+            />
+
+            {/* 이모지 선택 */}
+            <Text style={styles.label}>아이콘</Text>
+            <TouchableOpacity
+              style={styles.emojiButton}
+              onPress={() => setShowEditEmojiPicker(!showEditEmojiPicker)}
+            >
+              <Text style={styles.emojiButtonIcon}>{editEmoji}</Text>
+              <Text style={styles.emojiButtonText}>클릭하여 변경</Text>
+            </TouchableOpacity>
+            
+            {showEditEmojiPicker && (
+              <View style={styles.emojiPicker}>
+                <ScrollView style={styles.emojiPickerScroll}>
+                  <View style={styles.emojiGrid}>
+                    {DEFAULT_EMOJIS.map((emoji) => (
+                      <TouchableOpacity
+                        key={emoji}
+                        style={styles.emojiOption}
+                        onPress={() => {
+                          setEditEmoji(emoji);
+                          setShowEditEmojiPicker(false);
+                        }}
+                      >
+                        <Text style={styles.emojiOptionText}>{emoji}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
+
+            {/* 권한 */}
+            <Text style={styles.label}>대상 권한</Text>
+            <View style={styles.roleButtons}>
+              {(['common', 'mentor', 'foreign'] as CampPageRole[]).map((role) => (
+                <TouchableOpacity
+                  key={role}
+                  style={[
+                    styles.roleButton,
+                    editTargetRole === role && styles.roleButtonActive,
+                  ]}
+                  onPress={() => setEditTargetRole(role)}
+                >
+                  <Text
+                    style={[
+                      styles.roleButtonText,
+                      editTargetRole === role && styles.roleButtonTextActive,
+                    ]}
+                  >
+                    {getRoleLabel(role)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* 버튼 */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setEditingItem(null)}>
+                <Text style={styles.cancelButtonText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.addModalButton,
+                  !editTitle.trim() && styles.addModalButtonDisabled,
+                ]}
+                onPress={handleSaveEditItem}
+                disabled={!editTitle.trim()}
+              >
+                <Text style={styles.addModalButtonText}>저장</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}

@@ -35,6 +35,7 @@ export async function getDisplayItems(
       targetRole: page.targetRole,
       order: page.order,
       content: page.content,
+      emoji: page.emoji,
     }));
     
     // 4. 링크를 DisplayItem으로 변환 (order는 페이지 최댓값 + 1부터)
@@ -49,6 +50,7 @@ export async function getDisplayItems(
       targetRole: link.targetRole || 'common',
       order: maxPageOrder + 1 + index,
       url: link.url,
+      emoji: '🔗',
     }));
     
     // 5. 병합 및 정렬
