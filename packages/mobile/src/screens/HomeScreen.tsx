@@ -225,8 +225,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           <View style={styles.quickActionsRow}>
             <TouchableOpacity
               style={[styles.quickActionButton, { backgroundColor: '#eff6ff' }]}
-              onPress={() => {
-                setActiveTab('schedule');
+              onPress={async () => {
+                await setActiveTab('schedule');
                 navigation.navigate('Camp');
               }}
             >
@@ -236,8 +236,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
 
             <TouchableOpacity
               style={[styles.quickActionButton, { backgroundColor: '#f0fdf4' }]}
-              onPress={() => {
-                setActiveTab('tasks');
+              onPress={async () => {
+                await setActiveTab('tasks');
                 navigation.navigate('Camp');
               }}
             >
@@ -255,8 +255,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
 
             <TouchableOpacity
               style={[styles.quickActionButton, { backgroundColor: '#fae8ff' }]}
-              onPress={() => {
-                setActiveTab('guide');
+              onPress={async () => {
+                await setActiveTab('guide');
                 navigation.navigate('Camp');
               }}
             >
@@ -274,8 +274,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 <Ionicons name="today" size={20} color="#3b82f6" />
                 <Text style={styles.sectionTitle}>오늘의 업무</Text>
               </View>
-              <TouchableOpacity onPress={() => {
-                setActiveTab('tasks');
+              <TouchableOpacity onPress={async () => {
+                await setActiveTab('tasks');
                 navigation.navigate('Camp');
               }}>
                 <Text style={styles.sectionLink}>더보기 →</Text>
