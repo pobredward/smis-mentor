@@ -60,7 +60,7 @@ export async function updateAppConfig(
  */
 export const DEFAULT_LOADING_QUOTES = [
   '오늘도 학생들과 함께 성장하는 하루 되세요 ✨',
-  '멘토링의 순간들이 모여 특별한 여름을 만듭니다 🌟',
+  '특별한 순간들이 모여 특별한 방학을 만듭니다 🌟',
   '작은 관심 하나가 학생들에게 큰 힘이 됩니다 💪',
   '함께 배우고 성장하는 SMIS 캠프 🎓',
   '학생들의 꿈을 응원하는 멘토가 되어주세요 🌈',

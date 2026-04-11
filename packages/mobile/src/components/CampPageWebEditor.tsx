@@ -1,33 +1,95 @@
-import React, { useRef, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import WebView from 'react-native-webview';
 import { logger } from '@smis-mentor/shared';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CampPageWebEditorProps {
   content: string;
   onChange: (content: string) => void;
   placeholder?: string;
-  editable?: boolean; // 편집 모드 여부
+  editable?: boolean;
 }
+
+// Toolbar 버튼 정의
+const TOOLBAR_BUTTONS = [
+  { id: 'undo', label: '↶', title: '실행 취소', command: 'undo' },
+  { id: 'redo', label: '↷', title: '재실행', command: 'redo' },
+  { id: 'divider1', type: 'divider' },
+  { id: 'bold', label: 'B', title: '굵게', command: 'bold' },
+  { id: 'italic', label: 'I', title: '기울임', command: 'italic' },
+  { id: 'underline', label: 'U', title: '밑줄', command: 'underline' },
+  { id: 'divider2', type: 'divider' },
+  { id: 'h1', label: 'H1', title: '제목 1', command: 'h1' },
+  { id: 'h2', label: 'H2', title: '제목 2', command: 'h2' },
+  { id: 'h3', label: 'H3', title: '제목 3', command: 'h3' },
+  { id: 'p', label: 'P', title: '본문', command: 'p' },
+  { id: 'divider3', type: 'divider' },
+  { id: 'ul', label: '•', title: '글머리 기호', command: 'insertUnorderedList' },
+  { id: 'ol', label: '1.', title: '번호 매기기', command: 'insertOrderedList' },
+  { id: 'quote', label: '"', title: '인용구', command: 'blockquote' },
+  { id: 'divider4', type: 'divider' },
+  { id: 'toggle', label: '▼', title: '토글', command: 'toggle' },
+  { id: 'divider5', type: 'divider' },
+  { id: 'link', label: '🔗', title: '링크', command: 'link' },
+  { id: 'table', label: '📊', title: '표 삽입', command: 'table' },
+] as const;
 
 export function CampPageWebEditor({
   content,
   onChange,
   placeholder = '내용을 입력하세요...',
-  editable = true, // 기본값은 편집 가능
+  editable = true,
 }: CampPageWebEditorProps) {
   const webViewRef = useRef<WebView>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const insets = useSafeAreaInsets();
 
-  // 간단한 contenteditable 기반 에디터 HTML
+  // Toolbar 버튼 클릭 핸들러
+  const handleToolbarCommand = (command: string) => {
+    if (!webViewRef.current) return;
+    
+    // WebView에 명령 전송
+    const jsCode = `
+      (function() {
+        try {
+          if ('${command}' === 'undo') {
+            undo();
+          } else if ('${command}' === 'redo') {
+            redo();
+          } else if ('${command}' === 'h1' || '${command}' === 'h2' || '${command}' === 'h3' || '${command}' === 'p') {
+            changeBlockType('${command}');
+          } else if ('${command}' === 'blockquote') {
+            toggleBlockquote();
+          } else if ('${command}' === 'toggle') {
+            insertToggle();
+          } else if ('${command}' === 'link') {
+            insertLink();
+          } else if ('${command}' === 'table') {
+            insertTable();
+          } else {
+            execCommand('${command}');
+          }
+        } catch(e) {
+          console.error('Command error:', e);
+        }
+      })();
+      true;
+    `;
+    
+    webViewRef.current.injectJavaScript(jsCode);
+  };
+
+  // contenteditable 기반 에디터 HTML (Toolbar 제거)
   const editorHTML = `
 <!DOCTYPE html>
 <html>
   <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta charset="UTF-8">
     <script>
-      // 편집 모드 여부
       const IS_EDITABLE = ${editable};
     </script>
     <style>
@@ -37,72 +99,23 @@ export function CampPageWebEditor({
         padding: 0;
       }
       
-      body {
+      html, body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         margin: 0;
         padding: 0;
         background: #fff;
+        height: 100%;
+        overflow: visible;
       }
       
-      #toolbar {
-        position: sticky;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: #f9fafb;
-        border-bottom: 1px solid #e5e7eb;
-        padding: 8px;
-        display: flex;
-        flex-wrap: nowrap;
-        gap: 4px;
-        z-index: 100;
-        overflow-x: auto;
-        overflow-y: hidden;
-        height: 56px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        -webkit-overflow-scrolling: touch;
-      }
-      
-      #toolbar::-webkit-scrollbar {
-        display: none;
-      }
-      
-      .toolbar-button {
-        padding: 8px 12px;
-        border: none;
-        background: white;
-        border-radius: 6px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        white-space: nowrap;
-        min-width: 40px;
-        text-align: center;
-        -webkit-tap-highlight-color: transparent;
-        border: 1px solid #e5e7eb;
-      }
-      
-      .toolbar-button:active {
-        background: #e5e7eb;
-      }
-      
-      .toolbar-button.is-active {
-        background: #3b82f6;
-        color: white;
-        border-color: #3b82f6;
-      }
-      
-      .toolbar-divider {
-        width: 1px;
-        height: 24px;
-        background: #d1d5db;
-        margin: 0 4px;
-        align-self: center;
+      body {
+        position: relative;
+        padding-top: 0px;
       }
       
       #editor {
         padding: 16px;
-        min-height: calc(100vh - 120px);
+        min-height: calc(100vh - 16px);
         outline: none;
         font-size: 16px;
         line-height: 1.6;
@@ -271,39 +284,6 @@ export function CampPageWebEditor({
     </style>
   </head>
   <body>
-    <div id="toolbar">
-      <button class="toolbar-button" onclick="undo()" id="undoBtn" title="실행 취소">↶</button>
-      <button class="toolbar-button" onclick="redo()" id="redoBtn" title="재실행">↷</button>
-      
-      <div class="toolbar-divider"></div>
-      
-      <button class="toolbar-button" onclick="execCommand('bold')" title="굵게">B</button>
-      <button class="toolbar-button" onclick="execCommand('italic')" title="기울임">I</button>
-      <button class="toolbar-button" onclick="execCommand('underline')" title="밑줄">U</button>
-      
-      <div class="toolbar-divider"></div>
-      
-      <button class="toolbar-button" onclick="changeBlockType('h1')" title="제목 1">H1</button>
-      <button class="toolbar-button" onclick="changeBlockType('h2')" title="제목 2">H2</button>
-      <button class="toolbar-button" onclick="changeBlockType('h3')" title="제목 3">H3</button>
-      <button class="toolbar-button" onclick="changeBlockType('p')" title="본문">P</button>
-      
-      <div class="toolbar-divider"></div>
-      
-      <button class="toolbar-button" onclick="execCommand('insertUnorderedList')" title="글머리 기호">•</button>
-      <button class="toolbar-button" onclick="execCommand('insertOrderedList')" title="번호 매기기">1.</button>
-      <button class="toolbar-button" onclick="toggleBlockquote()" title="인용구">"</button>
-      
-      <div class="toolbar-divider"></div>
-      
-      <button class="toolbar-button" onclick="insertToggle()" title="토글">▼</button>
-      
-      <div class="toolbar-divider"></div>
-      
-      <button class="toolbar-button" onclick="insertLink()" title="링크">🔗</button>
-      <button class="toolbar-button" onclick="insertTable()" title="표 삽입">📊</button>
-    </div>
-    
     <div 
       id="editor" 
       contenteditable="true"
@@ -370,30 +350,12 @@ export function CampPageWebEditor({
         }
       }
       
-      // History 버튼 상태 업데이트
+      // History 버튼 상태 업데이트 (React Native로 전송)
       function updateHistoryButtons() {
-        const undoBtn = document.getElementById('undoBtn');
-        const redoBtn = document.getElementById('redoBtn');
-        
-        if (undoBtn) {
-          if (historyStep <= 0) {
-            undoBtn.style.opacity = '0.3';
-            undoBtn.style.cursor = 'not-allowed';
-          } else {
-            undoBtn.style.opacity = '1';
-            undoBtn.style.cursor = 'pointer';
-          }
-        }
-        
-        if (redoBtn) {
-          if (historyStep >= history.length - 1) {
-            redoBtn.style.opacity = '0.3';
-            redoBtn.style.cursor = 'not-allowed';
-          } else {
-            redoBtn.style.opacity = '1';
-            redoBtn.style.cursor = 'pointer';
-          }
-        }
+        sendMessage('HISTORY_STATE', {
+          canUndo: historyStep > 0,
+          canRedo: historyStep < history.length - 1
+        });
       }
       
       // 에디터 명령 실행
@@ -1173,6 +1135,11 @@ export function CampPageWebEditor({
           onChange(data.content);
           break;
           
+        case 'HISTORY_STATE':
+          setCanUndo(data.canUndo);
+          setCanRedo(data.canRedo);
+          break;
+          
         case 'TABLE_DETECTED':
           logger.warn('테이블 감지됨 - 편집 제한');
           break;
@@ -1191,6 +1158,45 @@ export function CampPageWebEditor({
 
   return (
     <View style={styles.container}>
+      {/* React Native Toolbar - 헤더 아래에 고정 */}
+      <View style={styles.toolbar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.toolbarContent}
+        >
+          {TOOLBAR_BUTTONS.map((button) => {
+            if (button.type === 'divider') {
+              return <View key={button.id} style={styles.toolbarDivider} />;
+            }
+            
+            const isDisabled = 
+              (button.id === 'undo' && !canUndo) ||
+              (button.id === 'redo' && !canRedo);
+            
+            return (
+              <TouchableOpacity
+                key={button.id}
+                style={[
+                  styles.toolbarButton,
+                  isDisabled && styles.toolbarButtonDisabled
+                ]}
+                onPress={() => handleToolbarCommand(button.command)}
+                disabled={isDisabled}
+              >
+                <Text style={[
+                  styles.toolbarButtonText,
+                  isDisabled && styles.toolbarButtonTextDisabled
+                ]}>
+                  {button.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* WebView - Toolbar 없이 에디터만 */}
       <WebView
         ref={webViewRef}
         source={{ html: editorHTML }}
@@ -1202,7 +1208,11 @@ export function CampPageWebEditor({
         scalesPageToFit={false}
         showsVerticalScrollIndicator={true}
         originWhitelist={['*']}
+        keyboardDisplayRequiresUserAction={false}
+        hideKeyboardAccessoryView={false}
+        allowsFullscreenVideo={false}
       />
+      
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#3b82f6" />
@@ -1218,12 +1228,63 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  toolbar: {
+    backgroundColor: '#f9fafb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    height: 56,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  toolbarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  toolbarButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 6,
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  toolbarButtonDisabled: {
+    opacity: 0.3,
+  },
+  toolbarButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  toolbarButtonTextDisabled: {
+    color: '#9ca3af',
+  },
+  toolbarDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#d1d5db',
+    marginHorizontal: 4,
+  },
   webview: {
     flex: 1,
   },
   loadingOverlay: {
     position: 'absolute',
-    top: 0,
+    top: 56, // toolbar 높이만큼 아래에서 시작
     left: 0,
     right: 0,
     bottom: 0,

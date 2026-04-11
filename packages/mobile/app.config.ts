@@ -88,6 +88,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     versionCode: 1,
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
+    softwareKeyboardLayoutMode: 'resize',
     config: {
       googleMaps: {
         apiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_ANDROID',
