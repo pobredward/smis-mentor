@@ -40,7 +40,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'SMIS Mentor',
   slug: 'smis-mentor',
-  version: '1.1.1',
+  version: '1.2.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
@@ -55,7 +55,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.smis.smismentor',
     googleServicesFile: './GoogleService-Info.plist',
-    buildNumber: '1',
+    buildNumber: '2',
     associatedDomains: [
       'applinks:smis-mentor.com',
       'applinks:www.smis-mentor.com',
