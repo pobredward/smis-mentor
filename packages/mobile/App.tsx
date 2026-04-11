@@ -10,6 +10,7 @@ import { WebViewPreloader } from './src/components/WebViewPreloader';
 import { SplashPrefetchScreen } from './src/components/SplashPrefetchScreen';
 import { useAuth } from './src/context/AuthContext';
 import { useCampDataPrefetch } from './src/hooks/useCampDataPrefetch';
+import { useRecruitmentDataPrefetch } from './src/hooks/useRecruitmentDataPrefetch';
 import { logger } from '@smis-mentor/shared';
 
 function AppContent() {
@@ -23,6 +24,7 @@ function AppContent() {
   
   const { userData, authReady, loading } = useAuth();
   const { prefetchCampData, invalidateCampData } = useCampDataPrefetch();
+  const { prefetchRecruitmentData } = useRecruitmentDataPrefetch();
   const [showSplash, setShowSplash] = useState(true);
   const [hasTriggeredPrefetch, setHasTriggeredPrefetch] = useState(false);
 
@@ -47,8 +49,13 @@ function AppContent() {
       logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       try {
-        await prefetchCampData(userData.activeJobExperienceId);
-        logger.info('✅ 앱 시작: 데이터 프리페칭 완료');
+        // 캠프 데이터와 채용 데이터를 병렬로 프리페칭
+        await Promise.all([
+          prefetchCampData(userData.activeJobExperienceId),
+          prefetchRecruitmentData(),
+        ]);
+        
+        logger.info('✅ 앱 시작: 모든 데이터 프리페칭 완료');
       } catch (error) {
         logger.error('❌ 앱 시작: 데이터 프리페칭 실패', error);
         // 에러가 발생해도 스플래시는 닫기
@@ -64,7 +71,7 @@ function AppContent() {
     return () => {
       unregisterPrefetchTrigger();
     };
-  }, [userData?.activeJobExperienceId, prefetchCampData, hasTriggeredPrefetch]);
+  }, [userData?.activeJobExperienceId, prefetchCampData, prefetchRecruitmentData, hasTriggeredPrefetch]);
 
   // 인증 완료 및 사용자 데이터가 없으면 스플래시 숨기기
   useEffect(() => {

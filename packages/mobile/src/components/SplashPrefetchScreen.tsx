@@ -25,7 +25,7 @@ export function SplashPrefetchScreen({
   const [startTime] = useState(Date.now());
   const [nativeSplashHidden, setNativeSplashHidden] = useState(false);
   const [randomQuote, setRandomQuote] = useState<string>('');
-  const [loadingStage, setLoadingStage] = useState<'캐시 정리' | '캠프 데이터' | '페이지 프리로드' | '완료'>('캐시 정리');
+  const [loadingStage, setLoadingStage] = useState<'캐시 정리' | '캠프 데이터' | '채용 데이터' | '페이지 프리로드' | '완료'>('캐시 정리');
 
   // Firebase에서 로딩 문구 불러오기
   useEffect(() => {

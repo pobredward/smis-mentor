@@ -37,6 +37,7 @@ import {
   uploadForeignIdCard,
 } from '../services/foreignSignUpService';
 import { useCampDataPrefetch } from '../hooks/useCampDataPrefetch';
+import { useRecruitmentDataPrefetch } from '../hooks/useRecruitmentDataPrefetch';
 import { useCampTab } from '../context/CampTabContext';
 import { logger } from '@smis-mentor/shared';
 
@@ -55,6 +56,7 @@ type Screen =
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const { isAuthenticated, userData, loading, updateActiveJobCode, refreshUserData } = useAuth();
   const { prefetchCampData, invalidateCampData } = useCampDataPrefetch();
+  const { prefetchRecruitmentData, invalidateRecruitmentData } = useRecruitmentDataPrefetch();
   const { 
     webViewPreloadComplete, 
     setWebViewPreloadComplete, 
@@ -91,7 +93,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [refreshing, setRefreshing] = useState(false);
   const [prefetchingCamp, setPrefetchingCamp] = useState(false);
   const [prefetchProgress, setPrefetchProgress] = useState(0);
-  const [prefetchStage, setPrefetchStage] = useState<'cache' | 'update' | 'data' | 'webview' | 'complete'>('cache');
+  const [prefetchStage, setPrefetchStage] = useState<'cache' | 'update' | 'data' | 'recruitment' | 'webview' | 'complete'>('cache');
   const [prefetchCancelled, setPrefetchCancelled] = useState(false);
 
   useEffect(() => {
@@ -183,16 +185,17 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
       // 1. 기존 캐시 무효화 (0% -> 15%)
-      console.log('📍 Step 1/4: 기존 캐시 정리 중...');
+      console.log('📍 Step 1/5: 기존 캐시 정리 중...');
       const step1Start = Date.now();
       setPrefetchStage('cache');
       await invalidateCampData();
+      await invalidateRecruitmentData();
       if (prefetchCancelled) return;
       console.log(`   ✅ 완료 (${((Date.now() - step1Start) / 1000).toFixed(2)}초)`);
       setPrefetchProgress(15);
       
       // 2. 사용자 데이터 업데이트 (15% -> 30%)
-      console.log('📍 Step 2/4: 캠프 변경 중...');
+      console.log('📍 Step 2/5: 캠프 변경 중...');
       const step2Start = Date.now();
       setPrefetchStage('update');
       await updateActiveJobCode(jobCodeId);
@@ -200,19 +203,19 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       console.log(`   ✅ 완료 (${((Date.now() - step2Start) / 1000).toFixed(2)}초)`);
       setPrefetchProgress(30);
       
-      // 3. 새 캠프 데이터 프리페칭 시작 (30% -> 60%)
-      console.log('📍 Step 3/4: 캠프 데이터 로딩 중...');
+      // 3. 새 캠프 데이터 프리페칭 시작 (30% -> 50%)
+      console.log('📍 Step 3/5: 캠프 데이터 로딩 중...');
       const step3Start = Date.now();
       setPrefetchStage('data');
       
       // 프리페칭 진행률 시뮬레이션
       const progressInterval = setInterval(() => {
         setPrefetchProgress((prev) => {
-          if (prev >= 55) {
+          if (prev >= 45) {
             clearInterval(progressInterval);
-            return 55;
+            return 45;
           }
-          return prev + 5;
+          return prev + 3;
         });
       }, 200);
       
@@ -221,13 +224,23 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       clearInterval(progressInterval);
       if (prefetchCancelled) return;
       console.log(`   ✅ 완료 (${((Date.now() - step3Start) / 1000).toFixed(2)}초)`);
+      setPrefetchProgress(50);
+      
+      // 4. 채용 데이터 프리페칭 (50% -> 60%)
+      console.log('📍 Step 4/5: 채용 데이터 로딩 중...');
+      const step4Start = Date.now();
+      
+      await prefetchRecruitmentData();
+      
+      if (prefetchCancelled) return;
+      console.log(`   ✅ 완료 (${((Date.now() - step4Start) / 1000).toFixed(2)}초)`);
       setPrefetchProgress(60);
       
       // Context 업데이트 완료 대기 (100ms - React 상태 전파 시간)
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // 4. WebView 프리로딩 대기 (60% -> 100%)
-      // 링크가 없으면 Step 4 스킵
+      // 5. WebView 프리로딩 대기 (60% -> 100%)
+      // 링크가 없으면 Step 5 스킵
       logger.info(`🔍 preloadLinks.length 체크: ${preloadLinks.length}개`);
       
       if (preloadLinks.length === 0) {
@@ -238,10 +251,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         setPrefetchStage('complete');
       } else {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📍 Step 4/4: WebView 프리로딩 대기 중...');
+        console.log('📍 Step 5/5: WebView 프리로딩 대기 중...');
         console.log(`   🔗 대기할 링크 수: ${preloadLinks.length}개`);
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        const step4Start = Date.now();
+        const step5Start = Date.now();
         setPrefetchStage('webview');
         
         // WebView 프리로드 완료까지 대기
@@ -249,7 +262,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         
         if (prefetchCancelled) return;
         
-        console.log(`   ✅ 완료 (${((Date.now() - step4Start) / 1000).toFixed(2)}초)`);
+        console.log(`   ✅ 완료 (${((Date.now() - step5Start) / 1000).toFixed(2)}초)`);
         setPrefetchProgress(100);
         setPrefetchStage('complete');
       }
@@ -265,7 +278,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         setPrefetchingCamp(false);
         Alert.alert(
           '완료', 
-          '캠프가 변경되었습니다.\n\n✅ 모든 데이터 로딩 완료\n✅ 구글시트 페이지 프리로드 완료\n\n모든 페이지가 즉시 표시됩니다!'
+          '캠프가 변경되었습니다.\n\n✅ 모든 데이터 로딩 완료\n✅ 채용 데이터 프리로드 완료\n✅ 구글시트 페이지 프리로드 완료\n\n모든 페이지가 즉시 표시됩니다!'
         );
       }, 500);
       
@@ -300,6 +313,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             setChangingJobCode(false);
             // 프리로더 중지
             invalidateCampData();
+            invalidateRecruitmentData();
           },
         },
       ]
@@ -1042,9 +1056,23 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                   <Text style={[
                     styles.loadingStepText, 
                     prefetchStage === 'data' && styles.loadingStepTextActive,
-                    ['webview', 'complete'].includes(prefetchStage) && styles.loadingStepTextDone
+                    ['recruitment', 'webview', 'complete'].includes(prefetchStage) && styles.loadingStepTextDone
                   ]}>
                     캠프 데이터 로딩
+                  </Text>
+                </View>
+                <View style={styles.loadingStep}>
+                  <Ionicons 
+                    name={['cache', 'update', 'data'].includes(prefetchStage) ? "ellipse-outline" : prefetchStage === 'recruitment' ? "ellipse-outline" : "checkmark-circle"} 
+                    size={20} 
+                    color={['cache', 'update', 'data'].includes(prefetchStage) ? "#cbd5e1" : prefetchStage === 'recruitment' ? "#3b82f6" : "#10b981"} 
+                  />
+                  <Text style={[
+                    styles.loadingStepText, 
+                    prefetchStage === 'recruitment' && styles.loadingStepTextActive,
+                    ['webview', 'complete'].includes(prefetchStage) && styles.loadingStepTextDone
+                  ]}>
+                    채용 데이터 로딩
                   </Text>
                 </View>
                 <View style={styles.loadingStep}>

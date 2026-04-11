@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
   View,
@@ -20,6 +20,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { HTMLRenderer } from '../components/HTMLRenderer';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { recruitmentQueryKeys } from '../hooks/useRecruitmentDataPrefetch';
 import {
   getApplicationsByUserId,
   getJobBoardById,
@@ -34,20 +36,19 @@ import {
 
 export function ApplicationStatusScreen() {
   const { userData, loading: authLoading } = useAuth();
-  const [applications, setApplications] = useState<ApplicationWithJobDetails[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [cancelModalVisible, setCancelModalVisible] = useState(false);
-  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const loadApplications = useCallback(async () => {
-    if (!userData?.userId) {
-      setIsLoading(false);
-      setIsRefreshing(false);
-      return;
-    }
-
-    try {
+  // React Query로 지원 내역 가져오기 (프리페칭된 데이터 사용)
+  const { 
+    data: applications = [], 
+    isLoading, 
+    refetch,
+    isRefetching 
+  } = useQuery({
+    queryKey: recruitmentQueryKeys.applications(userData?.userId || ''),
+    queryFn: async () => {
+      if (!userData?.userId) return [];
+      
       const userApplications = await getApplicationsByUserId(userData.userId);
 
       const applicationsWithJobDetails = await Promise.all(
@@ -65,25 +66,14 @@ export function ApplicationStatusScreen() {
         })
       );
 
-      setApplications(applicationsWithJobDetails);
-    } catch (error) {
-      logger.error('지원 내역 로드 오류:', error);
-      Alert.alert('오류', '지원 내역을 불러오는 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [userData?.userId]);
-
-  useEffect(() => {
-    if (!authLoading) {
-      loadApplications();
-    }
-  }, [loadApplications, authLoading]);
+      return applicationsWithJobDetails;
+    },
+    enabled: !!userData?.userId && !authLoading,
+    staleTime: 2 * 60 * 1000, // 2분
+  });
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    loadApplications();
+    refetch();
   };
 
   const formatDate = (timestamp: Timestamp | undefined) => {
@@ -195,9 +185,12 @@ export function ApplicationStatusScreen() {
   const handleCancelConfirm = async (applicationId: string) => {
     try {
       await cancelApplication(applicationId);
-      setApplications((prev) =>
-        prev.filter((app) => app.applicationHistoryId !== applicationId)
-      );
+      
+      // React Query 캐시 무효화
+      queryClient.invalidateQueries({ 
+        queryKey: recruitmentQueryKeys.applications(userData?.userId || '') 
+      });
+      
       Alert.alert('완료', '지원이 취소되었습니다.');
     } catch (error) {
       logger.error('지원 취소 오류:', error);
@@ -319,7 +312,7 @@ export function ApplicationStatusScreen() {
         keyExtractor={(item) => item.applicationHistoryId}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+          <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} />
         }
       />
     </View>
@@ -526,42 +519,36 @@ function ReviewFormModal({ review, onClose }: ReviewFormModalProps) {
 
 export function MentorReviewScreen() {
   const { userData } = useAuth();
-  const [reviews, setReviews] = useState<ReviewWithId[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   const [editingReview, setEditingReview] = useState<ReviewWithId | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
 
-  const loadReviews = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const reviewsData = await getAllReviews();
-      setReviews(reviewsData);
-    } catch (error) {
-      logger.error('후기 조회 오류:', error);
-      Alert.alert('오류', '후기를 불러오는 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadReviews();
-  }, [loadReviews]);
+  // React Query로 후기 목록 가져오기 (프리페칭된 데이터 사용)
+  const { 
+    data: reviews = [], 
+    isLoading, 
+    refetch,
+    isRefetching 
+  } = useQuery({
+    queryKey: recruitmentQueryKeys.reviews(),
+    queryFn: getAllReviews,
+    staleTime: 10 * 60 * 1000, // 10분
+  });
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    loadReviews();
+    refetch();
   };
 
   const toggleReview = (id: string) => {
-    setReviews((prev) =>
-      prev.map((review) =>
-        review.id === id ? { ...review, isOpen: !review.isOpen } : review
-      )
+    // 로컬 상태 업데이트 (UI 즉시 반영)
+    queryClient.setQueryData(
+      recruitmentQueryKeys.reviews(),
+      (oldData: ReviewWithId[] | undefined) => 
+        oldData?.map((review) =>
+          review.id === id ? { ...review, isOpen: !review.isOpen } : review
+        ) || []
     );
   };
 
@@ -587,7 +574,12 @@ export function MentorReviewScreen() {
           onPress: async () => {
             try {
               await deleteReview(reviewId);
-              await loadReviews();
+              
+              // React Query 캐시 무효화
+              queryClient.invalidateQueries({ 
+                queryKey: recruitmentQueryKeys.reviews() 
+              });
+              
               Alert.alert('완료', '후기가 삭제되었습니다.');
             } catch (error) {
               logger.error('후기 삭제 오류:', error);
@@ -602,7 +594,11 @@ export function MentorReviewScreen() {
   const handleFormClose = () => {
     setIsFormModalOpen(false);
     setEditingReview(null);
-    loadReviews();
+    
+    // React Query 캐시 무효화
+    queryClient.invalidateQueries({ 
+      queryKey: recruitmentQueryKeys.reviews() 
+    });
   };
 
   const reviewsByGeneration: { [key: string]: ReviewWithId[] } = {};
@@ -652,7 +648,7 @@ export function MentorReviewScreen() {
           <ScrollView
             contentContainerStyle={styles.reviewListContent}
             refreshControl={
-              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} />
             }
           >
             {sortedGenerations.map((generation) => (

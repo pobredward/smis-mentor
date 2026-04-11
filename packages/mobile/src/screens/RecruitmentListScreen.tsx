@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
   View,
@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { RecruitmentStackScreenProps } from '../navigation/types';
 import {
   getAllJobBoards,
@@ -17,6 +18,7 @@ import {
   JobBoardWithId,
   JobCodeWithId,
 } from '../services/jobBoardService';
+import { recruitmentQueryKeys } from '../hooks/useRecruitmentDataPrefetch';
 import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import type { CompositeScreenProps } from '@react-navigation/native';
@@ -31,47 +33,38 @@ type Props = CompositeScreenProps<
 
 export function RecruitmentListScreen({ navigation }: Props) {
   const { userData } = useAuth();
-  const [jobBoards, setJobBoards] = useState<JobBoardWithId[]>([]);
   const [jobCodesMap, setJobCodesMap] = useState<{
     [key: string]: JobCodeWithId;
   }>({});
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<'active' | 'closed'>('active');
 
   const isAdmin = userData?.role === 'admin';
 
-  useEffect(() => {
-    loadJobBoards();
-  }, []);
-
-  const loadJobBoards = async () => {
-    try {
-      setIsLoading(true);
-      const boards = await getAllJobBoards();
-      const sortedBoards = boards.sort(
-        (a, b) => b.createdAt.seconds - a.createdAt.seconds
-      );
-
-      const jobCodeIds = sortedBoards.map((board) => board.refJobCodeId);
+  // React Query로 채용 공고 목록 가져오기 (프리페칭된 데이터 사용)
+  const { data: jobBoards = [], isLoading, refetch } = useQuery({
+    queryKey: recruitmentQueryKeys.jobBoards(),
+    queryFn: getAllJobBoards,
+    staleTime: 5 * 60 * 1000, // 5분
+    onSuccess: async (boards) => {
+      // Job Codes 매핑
+      const jobCodeIds = boards.map((board) => board.refJobCodeId);
       const uniqueJobCodeIds = [...new Set(jobCodeIds)];
       const jobCodesData: { [key: string]: JobCodeWithId } = {};
 
       for (const id of uniqueJobCodeIds) {
-        const jobCode = await getJobCodeById(id);
-        if (jobCode) {
-          jobCodesData[id] = jobCode;
+        try {
+          const jobCode = await getJobCodeById(id);
+          if (jobCode) {
+            jobCodesData[id] = jobCode;
+          }
+        } catch (error) {
+          logger.error(`Job Code 로드 실패 (${id}):`, error);
         }
       }
 
       setJobCodesMap(jobCodesData);
-      setJobBoards(sortedBoards);
-    } catch (error) {
-      logger.error('공고 정보 로드 오류:', error);
-      Alert.alert('오류', '공고 정보를 불러오는 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+  });
 
   const formatDate = (timestamp: Timestamp) => {
     const date = timestamp.toDate();
