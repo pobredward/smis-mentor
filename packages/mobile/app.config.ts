@@ -36,144 +36,148 @@ if (smisReactNativePackageDir != null) {
     return c;
   });
 
-export default ({ config }: ConfigContext): ExpoConfig => ({
-  ...config,
-  name: 'SMIS Mentor',
-  slug: 'smis-mentor',
-  version: '1.2.0',
-  orientation: 'portrait',
-  icon: './assets/icon.png',
-  userInterfaceStyle: 'light',
-  newArchEnabled: true,
-  scheme: 'smismentor',
-  splash: {
-    image: './assets/splash-icon.png',
-    resizeMode: 'contain',
-    backgroundColor: '#ffffff',
-  },
-  ios: {
-    supportsTablet: true,
-    bundleIdentifier: 'com.smis.smismentor',
-    googleServicesFile: './GoogleService-Info.plist',
-    buildNumber: '2',
-    associatedDomains: [
-      'applinks:smis-mentor.com',
-      'applinks:www.smis-mentor.com',
-    ],
-    config: {
-      googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_IOS',
-    },
-    infoPlist: {
-      NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
-      NSCameraUsageDescription: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
-      NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
-      NSLocationWhenInUseUsageDescription: '사용자 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.',
-      ITSAppUsesNonExemptEncryption: false,
-      CFBundleURLTypes: [
-        {
-          CFBundleURLSchemes: ['com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me'],
-        },
-        {
-          CFBundleURLSchemes: ['smismentor'],
-        },
-      ],
-    },
-  },
-  android: {
-    adaptiveIcon: {
-      foregroundImage: './assets/adaptive-icon.png',
+export default ({ config }: ConfigContext): ExpoConfig => {
+  const baseConfig: ExpoConfig = {
+    ...config,
+    name: 'SMIS Mentor',
+    slug: 'smis-mentor',
+    version: '1.2.0',
+    orientation: 'portrait',
+    icon: './assets/icon.png',
+    userInterfaceStyle: 'light',
+    newArchEnabled: true,
+    scheme: 'smismentor',
+    splash: {
+      image: './assets/splash-icon.png',
+      resizeMode: 'contain',
       backgroundColor: '#ffffff',
     },
-    package: 'com.smis.smismentor',
-    versionCode: 1,
-    edgeToEdgeEnabled: true,
-    predictiveBackGestureEnabled: false,
-    softwareKeyboardLayoutMode: 'resize',
-    config: {
-      googleMaps: {
-        apiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_ANDROID',
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: 'com.smis.smismentor',
+      googleServicesFile: './GoogleService-Info.plist',
+      buildNumber: '21',
+      associatedDomains: [
+        'applinks:smis-mentor.com',
+        'applinks:www.smis-mentor.com',
+      ],
+      config: {
+        googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_IOS',
       },
-    },
-    intentFilters: [
-      {
-        action: 'VIEW',
-        autoVerify: true,
-        data: [
+      infoPlist: {
+        NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
+        NSCameraUsageDescription: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
+        NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
+        NSLocationWhenInUseUsageDescription: '사용자 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.',
+        ITSAppUsesNonExemptEncryption: false,
+        CFBundleURLTypes: [
           {
-            scheme: 'https',
-            host: 'smis-mentor.com',
-            pathPrefix: '/camp/tasks',
+            CFBundleURLSchemes: ['com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me'],
           },
           {
-            scheme: 'https',
-            host: 'www.smis-mentor.com',
-            pathPrefix: '/camp/tasks',
+            CFBundleURLSchemes: ['smismentor'],
           },
         ],
-        category: ['BROWSABLE', 'DEFAULT'],
       },
-    ],
-    permissions: [
-      'CAMERA',
-      // Android 13+ (API 33+)에서는 Photo Picker가 자동으로 사용되어 READ_MEDIA_IMAGES 권한 불필요
-      // Android 12 이하에서는 READ_EXTERNAL_STORAGE로 충분
-      'READ_EXTERNAL_STORAGE',
-      'WRITE_EXTERNAL_STORAGE',
-      // 'READ_MEDIA_IMAGES', // Google Play 정책으로 인해 제거 - expo-image-picker가 자동으로 Photo Picker 사용
-      'ACCESS_FINE_LOCATION',
-      'ACCESS_COARSE_LOCATION',
-      'POST_NOTIFICATIONS',
-    ],
-    googleServicesFile: './google-services.json',
-  },
-  web: {
-    favicon: './assets/favicon.png',
-  },
-  plugins: [
-    withReactNativePickerMonorepo,
-    [
-      'expo-image-picker',
-      {
-        photosPermission: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
-        cameraPermission: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
-      },
-    ],
-    [
-      'expo-notifications',
-      {
-        icon: './assets/notification-icon.png',
-        color: '#3b82f6',
-        sounds: [],
-        mode: 'production',
-        androidMode: 'default',
-        androidCollapsedTitle: 'SMIS Mentor',
-      },
-    ],
-    'expo-web-browser',
-    'expo-apple-authentication',
-    [
-      '@react-native-seoul/naver-login',
-      {
-        urlScheme: 'com.smis.smismentor',
-      },
-    ],
-    [
-      '@react-native-google-signin/google-signin',
-      {
-        iosUrlScheme: 'com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me',
-      },
-    ],
-  ],
-  extra: {
-    eas: {
-      projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
     },
-    EXPO_PUBLIC_WEBSITE_URL: process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com',
-    EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    EXPO_PUBLIC_NAVER_CLIENT_ID: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID,
-    EXPO_PUBLIC_NAVER_CLIENT_SECRET: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET,
-  },
-  owner: 'pobredward02',
-});
+    android: {
+      adaptiveIcon: {
+        foregroundImage: './assets/adaptive-icon.png',
+        backgroundColor: '#ffffff',
+      },
+      package: 'com.smis.smismentor',
+      versionCode: 21,
+      edgeToEdgeEnabled: true,
+      predictiveBackGestureEnabled: false,
+      softwareKeyboardLayoutMode: 'resize',
+      config: {
+        googleMaps: {
+          apiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_ANDROID',
+        },
+      },
+      intentFilters: [
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [
+            {
+              scheme: 'https',
+              host: 'smis-mentor.com',
+              pathPrefix: '/camp/tasks',
+            },
+            {
+              scheme: 'https',
+              host: 'www.smis-mentor.com',
+              pathPrefix: '/camp/tasks',
+            },
+          ],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+      ],
+      permissions: [
+        'CAMERA',
+        // Android 13+ (API 33+)에서는 Photo Picker가 자동으로 사용되어 READ_MEDIA_IMAGES 권한 불필요
+        // Android 12 이하에서는 READ_EXTERNAL_STORAGE로 충분
+        'READ_EXTERNAL_STORAGE',
+        'WRITE_EXTERNAL_STORAGE',
+        // 'READ_MEDIA_IMAGES', // Google Play 정책으로 인해 제거 - expo-image-picker가 자동으로 Photo Picker 사용
+        'ACCESS_FINE_LOCATION',
+        'ACCESS_COARSE_LOCATION',
+        'POST_NOTIFICATIONS',
+      ],
+      googleServicesFile: './google-services.json',
+    },
+    web: {
+      favicon: './assets/favicon.png',
+    },
+    plugins: [
+      [
+        'expo-image-picker',
+        {
+          photosPermission: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
+          cameraPermission: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
+        },
+      ],
+      [
+        'expo-notifications',
+        {
+          icon: './assets/notification-icon.png',
+          color: '#3b82f6',
+          sounds: [],
+          mode: 'production',
+          androidMode: 'default',
+          androidCollapsedTitle: 'SMIS Mentor',
+        },
+      ],
+      'expo-web-browser',
+      'expo-apple-authentication',
+      [
+        '@react-native-seoul/naver-login',
+        {
+          urlScheme: 'com.smis.smismentor',
+        },
+      ],
+      [
+        '@react-native-google-signin/google-signin',
+        {
+          iosUrlScheme: 'com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me',
+        },
+      ],
+    ],
+    extra: {
+      eas: {
+        projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
+      },
+      EXPO_PUBLIC_WEBSITE_URL: process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com',
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+      EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+      EXPO_PUBLIC_NAVER_CLIENT_ID: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID,
+      EXPO_PUBLIC_NAVER_CLIENT_SECRET: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET,
+    },
+    owner: 'pobredward02',
+  };
+
+  // ConfigPlugin을 직접 적용하여 타입 오류 해결
+  return withReactNativePickerMonorepo(baseConfig);
+};
