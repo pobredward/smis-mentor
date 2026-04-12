@@ -10,8 +10,8 @@ import AnalyticsProvider from "@/components/analytics/AnalyticsProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SMIS 멘토 채용 플랫폼",
-  description: "SMIS 멘토 채용 플랫폼입니다",
+  title: "SMIS 멘토 플랫폼",
+  description: "SMIS 멘토 플랫폼입니다",
   keywords: "SMIS, 멘토, 대학생, 영어캠프, 해외캠프, 국내캠프, 방학, 여름방학, 겨울방학, 아르바이트, 채용, 교육",
   authors: [{ name: '에스엠아이에스' }],
   publisher: '에스엠아이에스',
@@ -26,16 +26,16 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "SMIS 멘토 채용 플랫폼",
-    description: "SMIS 멘토 채용 플랫폼입니다.",
+    title: "SMIS 멘토 플랫폼",
+    description: "SMIS 멘토 플랫폼입니다.",
     url: 'https://www.smis-mentor.com',
-    siteName: 'SMIS 채용 플랫폼',
+    siteName: 'SMIS 멘토 플랫폼',
     images: [
       {
         url: '/logo-wide-metadata.png',
         width: 1200,
         height: 630,
-        alt: 'SMIS 채용 플랫폼',
+        alt: 'SMIS 멘토 플랫폼',
       }
     ],
     locale: 'ko_KR',
@@ -64,7 +64,7 @@ export const metadata: Metadata = {
     ]
   },
   appleWebApp: {
-    title: 'SMIS 멘토 채용 플랫폼',
+    title: 'SMIS 멘토 플랫폼',
     statusBarStyle: 'default',
   },
 };
@@ -98,7 +98,7 @@ export default function RootLayout({
               {
                 "@type": "Organization",
                 "@id": "https://www.smis-mentor.com/#organization",
-                "name": "SMIS 멘토 채용 플랫폼",
+                "name": "SMIS 멘토 플랫폼",
                 "url": "https://www.smis-mentor.com",
                 "logo": {
                   "@type": "ImageObject",
@@ -129,7 +129,7 @@ export default function RootLayout({
                 "@type": "WebSite",
                 "@id": "https://www.smis-mentor.com/#website",
                 "url": "https://www.smis-mentor.com",
-                "name": "SMIS 멘토 채용 플랫폼",
+                "name": "SMIS 멘토 플랫폼",
                 "publisher": {
                   "@id": "https://www.smis-mentor.com/#organization"
                 },

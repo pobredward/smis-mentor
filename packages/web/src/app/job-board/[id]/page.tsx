@@ -18,6 +18,8 @@ import FormInput from '@/components/common/FormInput';
 
 const RichTextEditor = lazy(() => import('@/components/common/RichTextEditor'));
 
+// 메타데이터는 별도 파일로 분리 (Next.js 15에서 Client Component는 메타데이터 export 불가)
+
 // 날짜 포맷팅 함수
 const formatDateOnly = (timestamp: Timestamp | null | undefined): string => {
   if (!timestamp?.toDate) return '-';
@@ -197,7 +199,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   // 동적 메타데이터 설정 - 제목만 변경
   useEffect(() => {
     if (jobBoard && typeof document !== 'undefined') {
-      document.title = `${jobBoard.title} | SMIS 멘토 채용 플랫폼`;
+      document.title = `${jobBoard.title} | SMIS 멘토 플랫폼`;
     }
   }, [jobBoard]);
 

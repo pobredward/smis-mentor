@@ -19,30 +19,30 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const page = await campPageService.getPage(itemId);
 
     if (!page) {
-      return {
-        title: 'SMIS 교육 자료 페이지',
-        description: '페이지를 찾을 수 없습니다.',
-      };
+    return {
+      title: 'SMIS 멘토 플랫폼 - 교육 자료',
+      description: '페이지를 찾을 수 없습니다.',
+    };
     }
 
     return {
-      title: `SMIS 교육 자료 페이지`,
+      title: `SMIS 멘토 플랫폼 - 교육 자료`,
       description: page.title,
       openGraph: {
-        title: 'SMIS 교육 자료 페이지',
+        title: 'SMIS 멘토 플랫폼 - 교육 자료',
         description: page.title,
         images: [
           {
             url: '/logo-wide-metadata.png',
             width: 1200,
             height: 630,
-            alt: 'SMIS Mentor Logo',
+            alt: 'SMIS 멘토 플랫폼',
           },
         ],
       },
       twitter: {
         card: 'summary_large_image',
-        title: 'SMIS 교육 자료 페이지',
+        title: 'SMIS 멘토 플랫폼 - 교육 자료',
         description: page.title,
         images: ['/logo-wide-metadata.png'],
       },
@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   } catch (error) {
     console.error('메타데이터 생성 실패:', error);
     return {
-      title: 'SMIS 교육 자료 페이지',
+      title: 'SMIS 멘토 플랫폼 - 교육 자료',
       description: '교육 자료를 확인하세요',
     };
   }

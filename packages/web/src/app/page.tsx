@@ -84,7 +84,7 @@ export default function Home() {
             "url": "https://www.smis-mentor.com/job-board/6XxTH28Nu6qi0hPoNaNV",
             "hiringOrganization": {
               "@type": "Organization",
-              "name": "SMIS 멘토 채용 플랫폼",
+              "name": "SMIS 멘토 플랫폼",
               "sameAs": "https://www.smis-mentor.com"
             },
             "jobLocation": {
@@ -106,7 +106,7 @@ export default function Home() {
             "url": "https://www.smis-mentor.com/job-board/NcwLxGHoLRX34uScQ9er",
             "hiringOrganization": {
               "@type": "Organization",
-              "name": "SMIS 멘토 채용 플랫폼",
+              "name": "SMIS 멘토 플랫폼",
               "sameAs": "https://www.smis-mentor.com"
             },
             "jobLocation": {
@@ -128,7 +128,7 @@ export default function Home() {
             "url": "https://www.smis-mentor.com/job-board/7MQ6awgoebb5KQ4IpCgk",
             "hiringOrganization": {
               "@type": "Organization",
-              "name": "SMIS 멘토 채용 플랫폼",
+              "name": "SMIS 멘토 플랫폼",
               "sameAs": "https://www.smis-mentor.com"
             },
             "jobLocation": {
@@ -155,19 +155,19 @@ export default function Home() {
 }
 
 export const metadata = {
-  title: 'SMIS 멘토 채용 플랫폼',
+  title: 'SMIS 멘토 플랫폼',
   description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다. 실제 멘토 후기와 다양한 채용공고를 확인하세요.',
   openGraph: {
-    title: 'SMIS 멘토 채용 플랫폼',
+    title: 'SMIS 멘토 플랫폼',
     description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다.',
     url: 'https://www.smis-mentor.com',
-    siteName: 'SMIS 멘토 채용 플랫폼',
+    siteName: 'SMIS 멘토 플랫폼',
     images: [
       {
         url: '/logo-wide-metadata.png',
         width: 1200,
         height: 630,
-        alt: 'SMIS 멘토 채용 플랫폼',
+        alt: 'SMIS 멘토 플랫폼',
       },
     ],
     locale: 'ko_KR',
@@ -175,7 +175,7 @@ export const metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'SMIS 멘토 채용 플랫폼',
+    title: 'SMIS 멘토 플랫폼',
     description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다.',
     images: ['/logo-wide-metadata.png'],
   },
