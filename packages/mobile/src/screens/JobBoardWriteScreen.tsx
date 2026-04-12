@@ -337,7 +337,12 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
                 open={generationDropdownOpen}
                 value={selectedGeneration}
                 items={generationItems}
-                setOpen={setGenerationDropdownOpen}
+                setOpen={(open) => {
+                  if (open) {
+                    setJobCodeDropdownOpen(false);
+                  }
+                  setGenerationDropdownOpen(open);
+                }}
                 setValue={setSelectedGeneration}
                 setItems={setGenerationItems}
                 onChangeValue={(value) => {
@@ -366,7 +371,12 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
                     open={jobCodeDropdownOpen}
                     value={value}
                     items={jobCodeItems}
-                    setOpen={setJobCodeDropdownOpen}
+                    setOpen={(open) => {
+                      if (open) {
+                        setGenerationDropdownOpen(false);
+                      }
+                      setJobCodeDropdownOpen(open);
+                    }}
                     setValue={(callback) => {
                       const newValue = typeof callback === 'function' ? callback(value) : callback;
                       onChange(newValue);

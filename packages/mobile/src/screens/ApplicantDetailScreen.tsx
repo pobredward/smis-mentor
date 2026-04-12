@@ -865,7 +865,13 @@ export function ApplicantDetailScreen({
                 open={documentOpen}
                 value={documentStatus}
                 items={documentItems}
-                setOpen={setDocumentOpen}
+                setOpen={(open) => {
+                  if (open) {
+                    setInterviewOpen(false);
+                    setFinalOpen(false);
+                  }
+                  setDocumentOpen(open);
+                }}
                 setValue={setDocumentStatus}
                 setItems={setDocumentItems}
                 onSelectItem={(item) => {
@@ -919,6 +925,10 @@ export function ApplicantDetailScreen({
                       Alert.alert('알림', warning);
                     }
                     return;
+                  }
+                  if (open) {
+                    setDocumentOpen(false);
+                    setFinalOpen(false);
                   }
                   setInterviewOpen(open);
                 }}
@@ -993,6 +1003,10 @@ export function ApplicantDetailScreen({
                       Alert.alert('알림', warning);
                     }
                     return;
+                  }
+                  if (open) {
+                    setDocumentOpen(false);
+                    setInterviewOpen(false);
                   }
                   setFinalOpen(open);
                 }}

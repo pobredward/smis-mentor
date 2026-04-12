@@ -374,8 +374,8 @@ export function UserGenerateScreen({ navigation }: any) {
                             placeholderStyle={styles.dropdownPlaceholder}
                             listMode="SCROLLVIEW"
                             maxHeight={200}
-                            zIndex={4000 - index}
-                            zIndexInverse={1000 + index}
+                            zIndex={5000 - (index * 100)}
+                            zIndexInverse={1000 + (index * 100)}
                           />
                       )}
                     />
@@ -427,8 +427,8 @@ export function UserGenerateScreen({ navigation }: any) {
                               maxHeight={250}
                               searchable={true}
                               searchPlaceholder="검색..."
-                              zIndex={3000 - index}
-                              zIndexInverse={2000 + index}
+                              zIndex={4000 - (index * 100)}
+                              zIndexInverse={2000 + (index * 100)}
                             />
                         );
                       }}
@@ -471,8 +471,8 @@ export function UserGenerateScreen({ navigation }: any) {
                               placeholderStyle={styles.dropdownPlaceholder}
                               listMode="SCROLLVIEW"
                               maxHeight={200}
-                              zIndex={2000 - index}
-                              zIndexInverse={3000 + index}
+                              zIndex={3000 - (index * 100)}
+                              zIndexInverse={3000 + (index * 100)}
                             />
                         )}
                       />
@@ -512,8 +512,8 @@ export function UserGenerateScreen({ navigation }: any) {
                               placeholderStyle={styles.dropdownPlaceholder}
                               listMode="SCROLLVIEW"
                               maxHeight={200}
-                              zIndex={1000 - index}
-                              zIndexInverse={4000 + index}
+                              zIndex={2000 - (index * 100)}
+                              zIndexInverse={4000 + (index * 100)}
                             />
                         )}
                       />

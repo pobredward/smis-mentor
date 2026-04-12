@@ -739,7 +739,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   open={generationOpen}
                   value={selectedGeneration}
                   items={generationItems}
-                  setOpen={setGenerationOpen}
+                  setOpen={(open) => {
+                    if (open) {
+                      setJobCodeOpen(false);
+                      setGroupOpen(false);
+                      setGroupRoleOpen(false);
+                    }
+                    setGenerationOpen(open);
+                  }}
                   setValue={setSelectedGeneration}
                   setItems={setGenerationItems}
                   placeholder="기수 선택..."
@@ -762,7 +769,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   open={jobCodeOpen}
                   value={selectedJobCodeId}
                   items={jobCodeItems}
-                  setOpen={setJobCodeOpen}
+                  setOpen={(open) => {
+                    if (open) {
+                      setGenerationOpen(false);
+                      setGroupOpen(false);
+                      setGroupRoleOpen(false);
+                    }
+                    setJobCodeOpen(open);
+                  }}
                   setValue={setSelectedJobCodeId}
                   setItems={setJobCodeItems}
                   placeholder="직무 코드 선택..."
@@ -786,7 +800,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   open={groupOpen}
                   value={selectedGroup}
                   items={groupItems}
-                  setOpen={setGroupOpen}
+                  setOpen={(open) => {
+                    if (open) {
+                      setGenerationOpen(false);
+                      setJobCodeOpen(false);
+                      setGroupRoleOpen(false);
+                    }
+                    setGroupOpen(open);
+                  }}
                   setValue={setSelectedGroup}
                   setItems={setGroupItems}
                   placeholder="그룹 선택..."
@@ -809,7 +830,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   open={groupRoleOpen}
                   value={selectedGroupRole}
                   items={groupRoleItems}
-                  setOpen={setGroupRoleOpen}
+                  setOpen={(open) => {
+                    if (open) {
+                      setGenerationOpen(false);
+                      setJobCodeOpen(false);
+                      setGroupOpen(false);
+                    }
+                    setGroupRoleOpen(open);
+                  }}
                   setValue={setSelectedGroupRole}
                   setItems={setGroupRoleItems}
                   placeholder="역할 선택..."
