@@ -146,3 +146,37 @@ export async function getLessonMaterialTemplates() {
       return timeA - timeB;
     });
 }
+
+export async function addLessonMaterialTemplate(
+  title: string,
+  sections: LessonMaterialTemplateSection[],
+  code?: string,
+  links?: { label: string; url: string }[]
+) {
+  const docRef = await addDoc(collection(db, LESSON_MATERIAL_TEMPLATES), {
+    title,
+    sections,
+    code: code || null,
+    links: links || [],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+
+export async function updateLessonMaterialTemplate(
+  id: string,
+  updates: Partial<Omit<LessonMaterialTemplate, 'id'>>
+) {
+  await updateDoc(doc(db, LESSON_MATERIAL_TEMPLATES, id), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteLessonMaterialTemplate(id: string) {
+  await updateDoc(doc(db, LESSON_MATERIAL_TEMPLATES, id), {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+  });
+}

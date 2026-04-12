@@ -811,10 +811,23 @@ export default function AdminUploadTemplatePage() {
                         <option value="">💡 기존 템플릿 복사하기 (선택)</option>
                         {templates
                           .sort((a, b) => {
-                            // createdAt 기준 오름차순 (추가한 순서대로)
-                            const timeA = a.createdAt?.toMillis?.() || 0;
-                            const timeB = b.createdAt?.toMillis?.() || 0;
-                            return timeA - timeB;
+                            // 코드에서 숫자 추출하여 내림차순 정렬 (높은 기수가 위로)
+                            const getNumber = (code: string | undefined) => {
+                              if (!code) return 0;
+                              const match = code.match(/\d+/);
+                              return match ? parseInt(match[0], 10) : 0;
+                            };
+                            
+                            const numA = getNumber(a.code);
+                            const numB = getNumber(b.code);
+                            
+                            // 숫자가 다르면 내림차순 (높은 숫자가 위로)
+                            if (numA !== numB) {
+                              return numB - numA;
+                            }
+                            
+                            // 숫자가 같으면 코드명으로 알파벳 순
+                            return (a.code || '').localeCompare(b.code || '');
                           })
                           .map(tpl => (
                             <option key={tpl.id} value={tpl.id}>
@@ -1069,13 +1082,6 @@ export default function AdminUploadTemplatePage() {
                                       ))}
                                     </select>
                                   </div>
-                                  
-                                  {/* 코드 변경 불가 안내 */}
-                                  {editing && (
-                                    <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                                      ⚠️ 템플릿 코드는 생성 후 변경할 수 없습니다. (사용자 데이터 보호)
-                                    </p>
-                                  )}
 
                                   {/* 대주제 링크들 */}
                                   <div>
