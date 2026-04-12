@@ -116,7 +116,6 @@ export function AdminScreen({ navigation }: AdminStackScreenProps<'AdminDashboar
       <ScrollView style={styles.scrollView}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>관리자 대시보드</Text>
-          <Text style={styles.headerSubtitle}>업무 및 멘토 관리를 위한 관리자 기능</Text>
         </View>
 
         {adminSections.map((section, sectionIndex) => (
@@ -170,7 +169,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 20,
     paddingHorizontal: 16,
   },
   sectionTitle: {
