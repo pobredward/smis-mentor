@@ -123,6 +123,7 @@ export function ApplicantDetailScreen({
     { label: '완료', value: 'complete' },
     { label: '합격', value: 'passed' },
     { label: '불합격', value: 'failed' },
+    { label: '면접불참', value: 'absent' },
   ]);
   const [finalItems, setFinalItems] = useState([
     { label: '미정', value: '' },

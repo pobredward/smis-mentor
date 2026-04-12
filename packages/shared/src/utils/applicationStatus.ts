@@ -8,7 +8,7 @@
  */
 
 export type ApplicationStatus = 'pending' | 'accepted' | 'rejected';
-export type InterviewStatus = '' | 'pending' | 'complete' | 'passed' | 'failed';
+export type InterviewStatus = '' | 'pending' | 'complete' | 'passed' | 'failed' | 'absent';
 export type FinalStatus = '' | 'finalAccepted' | 'finalRejected';
 
 /**
@@ -86,6 +86,7 @@ export const INTERVIEW_STATUS_LABELS: Record<string, string> = {
   complete: '완료',
   passed: '합격',
   failed: '불합격',
+  absent: '면접불참',
 };
 
 export const FINAL_STATUS_LABELS: Record<string, string> = {

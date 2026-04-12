@@ -543,6 +543,8 @@ export function JobBoardApplicantsScreen({
                                   ? '#f3e8ff'
                                   : app.interviewStatus === 'passed'
                                   ? '#d1fae5'
+                                  : app.interviewStatus === 'absent'
+                                  ? '#f1f5f9'
                                   : '#fee2e2',
                             },
                           ]}
@@ -558,6 +560,8 @@ export function JobBoardApplicantsScreen({
                                     ? '#7e22ce'
                                     : app.interviewStatus === 'passed'
                                     ? '#047857'
+                                    : app.interviewStatus === 'absent'
+                                    ? '#64748b'
                                     : '#dc2626',
                               },
                             ]}
@@ -568,6 +572,8 @@ export function JobBoardApplicantsScreen({
                               ? '완료'
                               : app.interviewStatus === 'passed'
                               ? '합격'
+                              : app.interviewStatus === 'absent'
+                              ? '면접불참'
                               : '불합격'}
                           </Text>
                         </View>
