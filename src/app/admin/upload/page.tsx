@@ -508,7 +508,7 @@ export default function AdminUploadTemplatePage() {
       <main className="max-w-4xl mx-auto px-4 py-6 w-full min-h-[70vh]">
         {/* 헤더 섹션 */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">수업자료 템플릿 관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">수업 템플릿 관리</h1>
           <p className="text-gray-600 text-sm leading-relaxed">
             캠프별 수업자료 업로드 템플릿 제작 페이지
           </p>

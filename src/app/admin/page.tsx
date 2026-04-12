@@ -61,7 +61,7 @@ export default function AdminDashboard() {
       ),
     },
     {
-      title: '수업자료 템플릿 관리',
+      title: '수업 템플릿 관리',
       description: '수업자료 대제목/소제목 템플릿을 생성/수정/삭제합니다.',
       href: '/admin/upload',
       iconClass: 'text-pink-600',

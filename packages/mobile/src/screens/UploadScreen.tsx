@@ -20,9 +20,9 @@ export function UploadScreen({ navigation }: AdminStackScreenProps<'Upload'>) {
             <Ionicons name="arrow-back" size={24} color="#111827" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>수업자료 템플릿 관리</Text>
+            <Text style={styles.headerTitle}>수업 템플릿 관리</Text>
             <Text style={styles.headerSubtitle}>
-              수업자료 템플릿을 관리합니다
+              수업 템플릿을 관리합니다
             </Text>
           </View>
         </View>
@@ -32,7 +32,7 @@ export function UploadScreen({ navigation }: AdminStackScreenProps<'Upload'>) {
           <Ionicons name="folder-outline" size={64} color="#06b6d4" />
           <Text style={styles.comingSoonTitle}>Coming Soon</Text>
           <Text style={styles.comingSoonText}>
-            수업자료 템플릿 관리 기능은 곧 추가될 예정입니다.
+            수업 템플릿 관리 기능은 곧 추가될 예정입니다.
           </Text>
           <Text style={styles.comingSoonSubtext}>
             현재는 Web 버전을 이용해주세요.

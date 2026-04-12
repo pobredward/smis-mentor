@@ -4,123 +4,108 @@ import Link from 'next/link';
 import Layout from '@/components/common/Layout';
 import { FaUserPlus, FaCalendarPlus, FaUserClock } from 'react-icons/fa';
 
+type AdminMenuItem = {
+  title: string;
+  href: string;
+  iconClass: string;
+  icon: React.ReactNode;
+};
+
+type AdminSection = {
+  title: string;
+  items: AdminMenuItem[];
+};
+
 export default function AdminDashboard() {
-  const adminMenus = [
+  const adminSections: AdminSection[] = [
     {
-      title: '임시 사용자 생성',
-      description: '교육생을 위한 임시 계정을 생성합니다.',
-      href: '/admin/user-generate',
-      iconClass: 'text-green-600',
-      icon: <FaUserPlus />,
+      title: '채용 관련',
+      items: [
+        {
+          title: '지원 유저 관리',
+          href: '/admin/job-board-manage',
+          iconClass: 'text-purple-600',
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+            </svg>
+          ),
+        },
+        {
+          title: '면접 관리',
+          href: '/admin/interview-manage',
+          iconClass: 'text-indigo-600',
+          icon: <FaUserClock className="w-5 h-5" />,
+        },
+        {
+          title: '사용자 관리',
+          href: '/admin/user-manage',
+          iconClass: 'text-yellow-600',
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+            </svg>
+          ),
+        },
+      ],
     },
     {
-      title: '업무 생성 & 관리',
-      description: '새로운 업무를 생성하고 관리합니다.',
-      href: '/admin/job-generate',
-      iconClass: 'text-blue-600',
-      icon: <FaCalendarPlus />,
+      title: '교육 관련',
+      items: [
+        {
+          title: '캠프별 유저 조회',
+          href: '/admin/user-check',
+          iconClass: 'text-red-600',
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ),
+        },
+        {
+          title: '수업 템플릿 관리',
+          href: '/admin/upload',
+          iconClass: 'text-pink-600',
+          icon: <FaCalendarPlus className="w-5 h-5" />,
+        },
+      ],
     },
     {
-      title: '지원 유저 관리',
-      description: '지원자 정보와 지원 현황을 관리합니다.',
-      href: '/admin/job-board-manage',
-      iconClass: 'text-purple-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-        </svg>
-      ),
-    },
-    {
-      title: '면접 관리',
-      description: '면접일 및 면접 대상 유저들을 관리합니다.',
-      href: '/admin/interview-manage',
-      iconClass: 'text-indigo-600',
-      icon: <FaUserClock />,
-    },
-    {
-      title: '사용자 관리',
-      description: '사용자 정보를 수정, 삭제 및 기타 기능 수행.',
-      href: '/admin/user-manage',
-      iconClass: 'text-yellow-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-        </svg>
-      ),
-    },
-    {
-      title: '사용자 조회',
-      description: '캠프에 참여했던 유저를 기수별로 조회합니다.',
-      href: '/admin/user-check',
-      iconClass: 'text-red-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-    },
-    {
-      title: '앱 설정 관리',
-      description: '모바일 앱 로딩 화면 문구를 관리합니다.',
-      href: '/admin/app-config',
-      iconClass: 'text-violet-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-        </svg>
-      ),
-    },
-    {
-      title: '수업자료 템플릿 관리',
-      description: '수업자료 대제목/소제목 템플릿을 생성/수정/삭제합니다.',
-      href: '/admin/upload',
-      iconClass: 'text-pink-600',
-      icon: <FaCalendarPlus />,
-    },
-    {
-      title: '사용자 지도',
-      description: '사용자 주소를 지도에 시각화합니다.',
-      href: '/admin/user-map-test',
-      iconClass: 'text-teal-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
-        </svg>
-      ),
-    },
-    {
-      title: 'ID 일관성 검증',
-      description: 'Firebase Auth UID와 Firestore ID의 일관성을 검증합니다.',
-      href: '/admin/user-consistency',
-      iconClass: 'text-orange-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-        </svg>
-      ),
-    },
-    {
-      title: 'ID 매핑 백업',
-      description: '사용자 ID 매핑 데이터를 백업하고 복구합니다.',
-      href: '/admin/user-id-backup',
-      iconClass: 'text-cyan-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-        </svg>
-      ),
-    },
-    {
-      title: '평가 참조 마이그레이션',
-      description: 'evaluations 컬렉션의 refUserId, evaluatorId를 최신 Auth UID로 업데이트합니다.',
-      href: '/admin/migrate-evaluations',
-      iconClass: 'text-emerald-600',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-        </svg>
-      ),
+      title: '기타',
+      items: [
+        {
+          title: '로딩문구 관리',
+          href: '/admin/app-config',
+          iconClass: 'text-violet-600',
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+            </svg>
+          ),
+        },
+        {
+          title: '사용자 지도',
+          href: '/admin/user-map-test',
+          iconClass: 'text-teal-600',
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
+            </svg>
+          ),
+        },
+        {
+          title: '임시 사용자 생성',
+          href: '/admin/user-generate',
+          iconClass: 'text-green-600',
+          icon: <FaUserPlus className="w-5 h-5" />,
+        },
+        {
+          title: '업무 생성',
+          href: '/admin/job-generate',
+          iconClass: 'text-blue-600',
+          icon: <FaCalendarPlus className="w-5 h-5" />,
+        },
+      ],
     },
   ];
 
@@ -132,21 +117,25 @@ export default function AdminDashboard() {
           <p className="mt-1 text-sm text-gray-600">업무 및 멘토 관리를 위한 관리자 기능</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {adminMenus.map((menu, index) => (
-            <Link
-              key={index}
-              href={menu.href}
-              className="block p-6 bg-white shadow-md rounded-lg hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-center mb-4">
-                <div className={`rounded-full p-2 ${menu.iconClass} bg-gray-100`}>
-                  {menu.icon}
-                </div>
-                <h2 className="ml-3 text-lg font-semibold text-gray-900">{menu.title}</h2>
+        <div className="space-y-8">
+          {adminSections.map((section, sectionIndex) => (
+            <div key={sectionIndex}>
+              <h2 className="text-lg font-semibold text-gray-800 mb-4 lg:px-4 px-0">{section.title}</h2>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                {section.items.map((menu, index) => (
+                  <Link
+                    key={index}
+                    href={menu.href}
+                    className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-md transition-all"
+                  >
+                    <div className={`rounded-lg p-2 ${menu.iconClass} bg-gray-50`}>
+                      {menu.icon}
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-900">{menu.title}</h3>
+                  </Link>
+                ))}
               </div>
-              <p className="text-gray-600">{menu.description}</p>
-            </Link>
+            </div>
           ))}
         </div>
       </div>
