@@ -1,12 +1,8 @@
 import { Metadata } from 'next';
-import dynamic from 'next/dynamic';
 import { notFound } from 'next/navigation';
 import { CampPageService } from '@smis-mentor/shared';
 import { db } from '@/lib/firebase';
-
-const CampPageViewer = dynamic(() => import('@/components/camp/CampPageViewer'), {
-  ssr: false,
-});
+import SharePageViewer from './SharePageViewer';
 
 interface PageProps {
   params: Promise<{
@@ -37,7 +33,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         description: page.title,
         images: [
           {
-            url: '/logo-wide.png',
+            url: '/logo-wide-metadata.png',
             width: 1200,
             height: 630,
             alt: 'SMIS Mentor Logo',
@@ -48,7 +44,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         card: 'summary_large_image',
         title: 'SMIS 교육 자료 페이지',
         description: page.title,
-        images: ['/logo-wide.png'],
+        images: ['/logo-wide-metadata.png'],
       },
     };
   } catch (error) {
@@ -92,7 +88,7 @@ export default async function ShareEducationPage({ params }: PageProps) {
         {/* 본문 */}
         <div className="max-w-5xl mx-auto md:px-4 md:py-6">
           <div className="bg-white md:rounded-lg md:shadow-sm">
-            <CampPageViewer content={page.content || '<p>내용이 없습니다.</p>'} />
+            <SharePageViewer content={page.content || '<p>내용이 없습니다.</p>'} />
           </div>
         </div>
 

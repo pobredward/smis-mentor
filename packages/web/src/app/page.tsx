@@ -164,7 +164,7 @@ export const metadata = {
     siteName: 'SMIS 멘토 채용 플랫폼',
     images: [
       {
-        url: '/logo-wide.png',
+        url: '/logo-wide-metadata.png',
         width: 1200,
         height: 630,
         alt: 'SMIS 멘토 채용 플랫폼',
@@ -177,6 +177,6 @@ export const metadata = {
     card: 'summary_large_image',
     title: 'SMIS 멘토 채용 플랫폼',
     description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다.',
-    images: ['/logo-wide.png'],
+    images: ['/logo-wide-metadata.png'],
   },
 };

@@ -47,8 +47,8 @@ export function CampDetailScreen({ route, navigation }: Props) {
       headerBackVisible: true,
       headerRight: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {/* 공유 버튼 (페이지 타입만) */}
-          {item?.type === 'page' && (
+          {/* 공유 버튼 (교육 자료 카테고리의 페이지 타입만) */}
+          {item?.type === 'page' && category === 'education' && (
             <TouchableOpacity
               onPress={handleSharePress}
               style={styles.headerButton}
@@ -69,7 +69,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
         </View>
       ),
     });
-  }, [navigation, itemTitle, isAdmin, item]);
+  }, [navigation, itemTitle, isAdmin, item, category]);
 
   // 화면이 포커스될 때마다 데이터 새로고침
   const loadItem = React.useCallback(async () => {
