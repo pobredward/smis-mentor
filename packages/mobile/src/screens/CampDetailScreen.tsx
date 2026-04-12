@@ -11,7 +11,10 @@ import {
   useWindowDimensions,
   Linking,
   RefreshControl,
+  Share,
+  Platform,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { WebView } from 'react-native-webview';
 import type { WebViewNavigation } from 'react-native-webview';
 import RenderHTML from 'react-native-render-html';
@@ -41,16 +44,30 @@ export function CampDetailScreen({ route, navigation }: Props) {
   React.useLayoutEffect(() => {
     navigation.setOptions({
       title: itemTitle,
-      headerBackVisible: true, // 명시적으로 뒤로 버튼 표시
-      headerRight: () =>
-        isAdmin && item?.type === 'page' ? (
-          <TouchableOpacity
-            onPress={handleEditPress}
-            style={styles.editButton}
-          >
-            <Text style={styles.editButtonText}>편집</Text>
-          </TouchableOpacity>
-        ) : null,
+      headerBackVisible: true,
+      headerRight: () => (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* 공유 버튼 (페이지 타입만) */}
+          {item?.type === 'page' && (
+            <TouchableOpacity
+              onPress={handleSharePress}
+              style={styles.headerButton}
+            >
+              <Text style={styles.headerButtonText}>공유</Text>
+            </TouchableOpacity>
+          )}
+          
+          {/* 편집 버튼 (관리자 + 페이지 타입) */}
+          {isAdmin && item?.type === 'page' && (
+            <TouchableOpacity
+              onPress={handleEditPress}
+              style={styles.headerButton}
+            >
+              <Text style={styles.headerButtonText}>편집</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ),
     });
   }, [navigation, itemTitle, isAdmin, item]);
 
@@ -152,6 +169,41 @@ export function CampDetailScreen({ route, navigation }: Props) {
       itemTitle: itemTitle,
       initialContent: item.content || '',
     });
+  };
+
+  const handleSharePress = async () => {
+    if (!item || item.type !== 'page') return;
+
+    try {
+      // 공개 공유 링크 생성 (환경 변수 사용)
+      const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com';
+      const shareUrl = `${websiteUrl}/share/${category}/${itemId}`;
+      
+      if (Platform.OS === 'ios' || Platform.OS === 'android') {
+        // 네이티브 공유 시트 사용
+        await Share.share({
+          message: `${item.title}\n\n${shareUrl}`,
+          url: shareUrl,
+          title: item.title,
+        });
+      } else {
+        // 웹 또는 기타 플랫폼: 클립보드에 복사
+        await Clipboard.setStringAsync(shareUrl);
+        Alert.alert('성공', '공유 링크가 클립보드에 복사되었습니다!');
+      }
+    } catch (error) {
+      logger.error('공유 실패:', error);
+      
+      // 공유 실패 시 클립보드 복사로 폴백
+      try {
+        const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com';
+        const shareUrl = `${websiteUrl}/share/${category}/${itemId}`;
+        await Clipboard.setStringAsync(shareUrl);
+        Alert.alert('성공', '공유 링크가 클립보드에 복사되었습니다!');
+      } catch (clipboardError) {
+        Alert.alert('오류', '링크 복사에 실패했습니다.');
+      }
+    }
   };
 
   // 테이블 컨트롤 HTML 제거 함수
@@ -528,11 +580,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f8fafc',
   },
-  editButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  headerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  editButtonText: {
+  headerButtonText: {
     color: '#3b82f6',
     fontSize: 16,
     fontWeight: '600',
