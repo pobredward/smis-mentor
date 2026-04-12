@@ -11,8 +11,6 @@ import toast from 'react-hot-toast';
 export default function AppConfigPage() {
   const { userData } = useAuth();
   const [loadingQuotes, setLoadingQuotes] = useState<string[]>([]);
-  const [mentorHomeMessage, setMentorHomeMessage] = useState('');
-  const [foreignHomeMessage, setForeignHomeMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newQuote, setNewQuote] = useState('');
@@ -30,14 +28,6 @@ export default function AppConfigPage() {
         setLoadingQuotes(config.loadingQuotes);
       } else {
         setLoadingQuotes(DEFAULT_LOADING_QUOTES);
-      }
-      
-      if (config?.mentorHomeMessage) {
-        setMentorHomeMessage(config.mentorHomeMessage);
-      }
-      
-      if (config?.foreignHomeMessage) {
-        setForeignHomeMessage(config.foreignHomeMessage);
       }
     } catch (error) {
       console.error('앱 설정 불러오기 실패:', error);
@@ -91,11 +81,7 @@ export default function AppConfigPage() {
       setSaving(true);
       await updateAppConfig(
         db,
-        { 
-          loadingQuotes,
-          mentorHomeMessage,
-          foreignHomeMessage
-        },
+        { loadingQuotes },
         userData.userId
       );
       toast.success('설정이 저장되었습니다!');
@@ -130,56 +116,10 @@ export default function AppConfigPage() {
     <Layout requireAuth requireAdmin>
       <div className="max-w-4xl mx-auto lg:px-4 px-0">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">앱 설정 관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900">로딩 문구 관리</h1>
           <p className="mt-1 text-sm text-gray-600">
-            모바일 앱의 로딩 문구와 역할별 홈 메시지를 관리합니다.
+            모바일 앱 실행 시 표시되는 로딩 문구를 관리합니다.
           </p>
-        </div>
-
-        {/* 멘토 홈 메시지 */}
-        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-          <div className="border-b px-4 sm:px-6 py-3">
-            <h2 className="text-lg font-semibold">멘토 홈 메시지</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              멘토 역할의 사용자가 홈 화면에서 보게 될 메시지입니다.
-            </p>
-          </div>
-          
-          <div className="px-4 sm:px-6 py-4">
-            <textarea
-              value={mentorHomeMessage}
-              onChange={(e) => setMentorHomeMessage(e.target.value)}
-              placeholder="멘토들에게 전달할 메시지를 입력하세요&#10;예: 오늘도 학생들과 함께 즐거운 하루 보내세요! 🎓"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[100px]"
-              disabled={saving}
-            />
-            <p className="mt-2 text-xs text-gray-500">
-              💡 팁: 멘토들에게 동기부여가 되는 긍정적인 메시지를 작성해보세요!
-            </p>
-          </div>
-        </div>
-
-        {/* 외국인 홈 메시지 */}
-        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-          <div className="border-b px-4 sm:px-6 py-3">
-            <h2 className="text-lg font-semibold">외국인 홈 메시지</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              외국인 역할의 사용자가 홈 화면에서 보게 될 메시지입니다.
-            </p>
-          </div>
-          
-          <div className="px-4 sm:px-6 py-4">
-            <textarea
-              value={foreignHomeMessage}
-              onChange={(e) => setForeignHomeMessage(e.target.value)}
-              placeholder="외국인들에게 전달할 메시지를 입력하세요&#10;예: Have a wonderful day with the students! 🎓"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500 min-h-[100px]"
-              disabled={saving}
-            />
-            <p className="mt-2 text-xs text-gray-500">
-              💡 팁: 영어로 작성하면 더 친근하게 전달됩니다!
-            </p>
-          </div>
         </div>
 
         {/* 현재 문구 목록 */}
@@ -279,10 +219,9 @@ export default function AppConfigPage() {
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-blue-900 mb-1">참고 사항</h3>
               <ul className="text-sm text-blue-800 space-y-1">
-                <li>• <strong>멘토 홈 메시지:</strong>멘토 사용자의 홈 화면에 표시됩니다.</li>
-                <li>• <strong>원어민 홈 메시지:</strong> 원어민 사용자의 홈 화면에 표시됩니다.</li>
-                <li>• <strong>로딩 문구:</strong> 모바일 앱 실행 시 랜덤으로 1개가 표시됩니다.</li>
+                <li>• 로딩 문구는 모바일 앱 실행 시 랜덤으로 1개가 표시됩니다.</li>
                 <li>• 변경사항은 즉시 반영되며, 다음 앱 실행부터 적용됩니다.</li>
+                <li>• 최소 1개 이상의 문구가 필요합니다.</li>
               </ul>
             </div>
           </div>

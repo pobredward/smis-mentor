@@ -84,6 +84,14 @@ const adminMenuItems: AdminMenuItem[] = [
     iconColor: '#06b6d4',
     screenName: 'Upload',
   },
+  {
+    id: '9',
+    title: '앱 설정 관리',
+    description: '스플래시 로딩 문구를 관리합니다.',
+    icon: 'settings',
+    iconColor: '#f59e0b',
+    screenName: 'AppConfig',
+  },
 ];
 
 import { AdminStackParamList } from '../navigation/types';
