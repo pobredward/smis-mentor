@@ -164,6 +164,99 @@ export const updateUser = async (db, userId, updates) => {
         throw new DatabaseError('사용자 정보 업데이트에 실패했습니다', error);
     }
 };
+/**
+ * 활성 캠프를 자동으로 설정하는 헬퍼 함수
+ * jobExperiences가 있지만 activeJobExperienceId가 없는 경우 첫 번째 캠프를 활성화
+ */
+export const ensureActiveJobExperience = async (db, user) => {
+    var _a, _b;
+    try {
+        logger.info('🔍 ensureActiveJobExperience 호출:', {
+            userId: user.userId,
+            userName: user.name,
+            activeJobExperienceId: user.activeJobExperienceId,
+            jobExperiencesCount: ((_a = user.jobExperiences) === null || _a === void 0 ? void 0 : _a.length) || 0,
+            jobExperiences: ((_b = user.jobExperiences) === null || _b === void 0 ? void 0 : _b.map(exp => exp.id)) || [],
+        });
+        // activeJobExperienceId가 이미 있는 경우 그대로 반환
+        if (user.activeJobExperienceId) {
+            logger.info('✅ 이미 활성 캠프가 설정되어 있음:', user.activeJobExperienceId);
+            return user.activeJobExperienceId;
+        }
+        // jobExperiences가 없거나 비어있는 경우 null 반환
+        if (!user.jobExperiences || user.jobExperiences.length === 0) {
+            logger.info('⚠️ jobExperiences가 없어 활성 캠프를 설정할 수 없음');
+            return null;
+        }
+        // 첫 번째 캠프를 활성 캠프로 설정
+        const firstJobExpId = user.jobExperiences[0].id;
+        const userRef = doc(db, 'users', user.userId);
+        logger.info('🔄 Firestore 업데이트 시작:', {
+            userId: user.userId,
+            firstJobExpId,
+        });
+        await updateDoc(userRef, {
+            activeJobExperienceId: firstJobExpId,
+            updatedAt: Timestamp.now(),
+        });
+        logger.info('✅ 활성 캠프 자동 설정 완료:', {
+            userId: user.userId,
+            activeJobExperienceId: firstJobExpId,
+        });
+        return firstJobExpId;
+    }
+    catch (error) {
+        logger.error('❌ 활성 캠프 자동 설정 실패:', error);
+        return null;
+    }
+};
+/**
+ * 캠프 삭제 시 활성 캠프를 다음 캠프로 자동 전환하는 헬퍼 함수
+ */
+export const updateActiveJobExperienceOnDelete = async (db, userId, deletedJobCodeId, remainingJobExperiences) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+        if (!userDoc.exists()) {
+            throw new NotFoundError('사용자', userId);
+        }
+        const userData = userDoc.data();
+        // 삭제되는 캠프가 활성 캠프가 아닌 경우 변경 불필요
+        if (userData.activeJobExperienceId !== deletedJobCodeId) {
+            logger.info('삭제되는 캠프가 활성 캠프가 아니므로 변경 불필요', {
+                userId,
+                deletedJobCodeId,
+                activeJobExperienceId: userData.activeJobExperienceId,
+            });
+            return userData.activeJobExperienceId || null;
+        }
+        // 남은 캠프가 없는 경우 activeJobExperienceId를 null로 설정
+        if (remainingJobExperiences.length === 0) {
+            await updateDoc(userRef, {
+                activeJobExperienceId: null,
+                updatedAt: Timestamp.now(),
+            });
+            logger.info('남은 캠프가 없어 활성 캠프를 null로 설정:', userId);
+            return null;
+        }
+        // 남은 캠프 중 첫 번째를 활성 캠프로 설정
+        const newActiveJobExpId = remainingJobExperiences[0].id;
+        await updateDoc(userRef, {
+            activeJobExperienceId: newActiveJobExpId,
+            updatedAt: Timestamp.now(),
+        });
+        logger.info('활성 캠프 자동 전환 완료:', {
+            userId,
+            deletedJobCodeId,
+            newActiveJobExperienceId: newActiveJobExpId,
+        });
+        return newActiveJobExpId;
+    }
+    catch (error) {
+        logger.error('활성 캠프 자동 전환 실패:', error);
+        throw new DatabaseError('활성 캠프 자동 전환에 실패했습니다', error);
+    }
+};
 export const deactivateUser = async (db, userId) => {
     try {
         const userRef = doc(db, 'users', userId);

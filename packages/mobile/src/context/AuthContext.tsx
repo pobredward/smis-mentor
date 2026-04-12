@@ -11,10 +11,11 @@ import React, {
 } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { auth } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { getUserByEmail } from '../services/authService';
 import { jobCodesService } from '../services';
 import { User, AuthContextType } from '../types';
+import { ensureActiveJobExperience } from '@smis-mentor/shared';
 import {
   registerForPushNotificationsAsync,
   savePushToken,
@@ -213,6 +214,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const userRecord = await getUserByEmail(currentUser.email);
         
         if (userRecord) {
+          // 활성 캠프 자동 선택
+          const activeJobExpId = await ensureActiveJobExperience(db, userRecord);
+          if (activeJobExpId && !userRecord.activeJobExperienceId) {
+            userRecord.activeJobExperienceId = activeJobExpId;
+          }
+          
           logger.info('✅ AuthContext: userData 새로고침 성공');
           logger.info('  - userId:', userRecord.userId);
           logger.info('  - authProviders:', userRecord.authProviders?.length || 0);
@@ -274,6 +281,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           try {
             const userRecord = await getUserByEmail(user.email || '');
             if (userRecord) {
+              // 활성 캠프 자동 선택
+              const activeJobExpId = await ensureActiveJobExperience(db, userRecord);
+              if (activeJobExpId && !userRecord.activeJobExperienceId) {
+                userRecord.activeJobExperienceId = activeJobExpId;
+              }
+              
               setUserData(userRecord);
               logger.info('사용자 데이터 로드 성공:', userRecord.name);
               

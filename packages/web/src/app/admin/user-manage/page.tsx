@@ -672,19 +672,52 @@ export default function UserManage() {
         exp.id !== jobCodeId
       ) || [];
       
+      // jobExperiences 업데이트
       await updateUser(selectedUser.userId, { jobExperiences: updatedJobExperiences });
+      
+      // 삭제되는 캠프가 활성 캠프인 경우 자동으로 다음 캠프로 전환
+      if (selectedUser.activeJobExperienceId === jobCodeId) {
+        const newActiveJobExpId = updatedJobExperiences.length > 0 
+          ? updatedJobExperiences[0].id 
+          : null;
+        
+        if (newActiveJobExpId) {
+          await updateUser(selectedUser.userId, { 
+            activeJobExperienceId: newActiveJobExpId 
+          });
+          logger.info('활성 캠프 자동 전환:', {
+            userId: selectedUser.userId,
+            deletedJobCodeId: jobCodeId,
+            newActiveJobExperienceId: newActiveJobExpId,
+          });
+        } else {
+          await updateUser(selectedUser.userId, { 
+            activeJobExperienceId: null 
+          });
+          logger.info('남은 캠프가 없어 활성 캠프를 null로 설정:', selectedUser.userId);
+        }
+      }
       
       // 사용자 목록 업데이트
       setUsers(prevUsers => prevUsers.map(user => 
         user.userId === selectedUser.userId 
-          ? { ...user, jobExperiences: updatedJobExperiences }
+          ? { 
+              ...user, 
+              jobExperiences: updatedJobExperiences,
+              activeJobExperienceId: selectedUser.activeJobExperienceId === jobCodeId
+                ? (updatedJobExperiences.length > 0 ? updatedJobExperiences[0].id : undefined)
+                : user.activeJobExperienceId
+            }
           : user
       ));
       
       // 선택된 사용자 업데이트
       setSelectedUser(prev => prev ? {
         ...prev,
-        jobExperiences: updatedJobExperiences
+        jobExperiences: updatedJobExperiences,
+        activeJobExperienceId: prev.activeJobExperienceId === jobCodeId
+          ? (updatedJobExperiences.length > 0 ? updatedJobExperiences[0].id : undefined)
+          : prev.activeJobExperienceId
       } : null);
       
       // 직무 코드 목록 새로고침

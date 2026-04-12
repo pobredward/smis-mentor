@@ -2,10 +2,10 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { getUserByEmail, updateUserActiveJobCode } from '@/lib/firebaseService';
 import { User } from '@/types';
-import { logger } from '@smis-mentor/shared';
+import { logger, ensureActiveJobExperience } from '@smis-mentor/shared';
 
 type AuthContextType = {
   currentUser: FirebaseUser | null;
@@ -63,6 +63,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       try {
         const userRecord = await getUserByEmail(currentUser.email);
         if (userRecord) {
+          // 활성 캠프 자동 선택
+          const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
+          if (activeJobExpId && !userRecord.activeJobExperienceId) {
+            userRecord.activeJobExperienceId = activeJobExpId;
+          }
           setUserData(userRecord as unknown as User);
         }
       } catch (error) {
@@ -77,6 +82,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           const socialUser = JSON.parse(socialUserStr);
           const userRecord = await getUserByEmail(socialUser.email);
           if (userRecord) {
+            // 활성 캠프 자동 선택
+            const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
+            if (activeJobExpId && !userRecord.activeJobExperienceId) {
+              userRecord.activeJobExperienceId = activeJobExpId;
+            }
             setUserData(userRecord as unknown as User);
           }
         } catch (error) {
@@ -116,6 +126,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           // Firestore에서 사용자 데이터 가져오기
           const userRecord = await getUserByEmail(socialUser.email);
           if (userRecord) {
+            // 활성 캠프 자동 선택
+            const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
+            if (activeJobExpId && !userRecord.activeJobExperienceId) {
+              userRecord.activeJobExperienceId = activeJobExpId;
+            }
             setUserData(userRecord as unknown as User);
             logger.info('✅ 네이버/카카오 사용자 데이터 로드 성공:', userRecord.name);
             setLoading(false);
@@ -171,6 +186,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           try {
             const userRecord = await getUserByEmail(user.email);
             if (userRecord) {
+              // 활성 캠프 자동 선택
+              const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
+              if (activeJobExpId && !userRecord.activeJobExperienceId) {
+                userRecord.activeJobExperienceId = activeJobExpId;
+              }
               setUserData(userRecord as unknown as User);
               logger.info('사용자 데이터 로드 성공:', userRecord.name);
             } else {
@@ -181,6 +201,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
                 try {
                   const retryUserRecord = await getUserByEmail(user.email || '');
                   if (retryUserRecord) {
+                    // 활성 캠프 자동 선택
+                    const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
+                    if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
+                      retryUserRecord.activeJobExperienceId = activeJobExpId;
+                    }
                     setUserData(retryUserRecord as unknown as User);
                     logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
                   }
@@ -196,6 +221,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               try {
                 const retryUserRecord = await getUserByEmail(user.email || '');
                 if (retryUserRecord) {
+                  // 활성 캠프 자동 선택
+                  const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
+                  if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
+                    retryUserRecord.activeJobExperienceId = activeJobExpId;
+                  }
                   setUserData(retryUserRecord as unknown as User);
                   logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
                 }

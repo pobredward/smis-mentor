@@ -213,7 +213,22 @@ export const adminRemoveUserJobCode = async (db, userId, jobCodeId) => {
         const jobExperiences = user.jobExperiences || [];
         // 해당 jobCodeId를 제외한 배열 생성
         const updatedJobExperiences = jobExperiences.filter((exp) => exp.id !== jobCodeId);
+        // jobExperiences 업데이트
         await updateDoc(userRef, { jobExperiences: updatedJobExperiences });
+        // 삭제되는 캠프가 활성 캠프인 경우 자동으로 다음 캠프로 전환
+        if (user.activeJobExperienceId === jobCodeId) {
+            const newActiveJobExpId = updatedJobExperiences.length > 0
+                ? updatedJobExperiences[0].id
+                : null;
+            await updateDoc(userRef, {
+                activeJobExperienceId: newActiveJobExpId
+            });
+            logger.info('활성 캠프 자동 전환:', {
+                userId,
+                deletedJobCodeId: jobCodeId,
+                newActiveJobExperienceId: newActiveJobExpId,
+            });
+        }
         return updatedJobExperiences;
     }
     catch (error) {
