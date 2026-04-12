@@ -5,14 +5,6 @@ const nextConfig = {
     // 실제 문제가 해결되면 제거하는 것이 좋습니다.
     ignoreBuildErrors: true,
   },
-  compiler: {
-    // 프로덕션 빌드에서 console.log, console.info, console.debug 제거
-    removeConsole: process.env.NODE_ENV === 'production' 
-      ? {
-          exclude: ['error', 'warn'], // error와 warn은 유지
-        }
-      : false,
-  },
 }
 
 module.exports = nextConfig 
