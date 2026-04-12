@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -18,17 +20,31 @@ import { useCampTab } from '../context/CampTabContext';
 import { jobCodesService, JobCode } from '../services';
 import { getTasksByCampCode } from '../services/taskService';
 import { getApplicationsByUserId } from '../services/recruitmentService';
+import { getAppConfig, updateAppConfig } from '@smis-mentor/shared';
+import { getJobBoardById } from '../services/jobBoardService';
+import { db } from '../config/firebase';
 import type { Task } from '../../../shared/src/types/camp';
 import type { ApplicationHistory } from '../../../shared/src/types';
+
+// JobBoard 정보를 포함한 지원 내역 타입
+interface ApplicationWithJobBoard extends ApplicationHistory {
+  jobBoardTitle?: string;
+}
 
 export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
   const { userData, loading: authLoading } = useAuth();
   const { setActiveTab } = useCampTab();
   const [activeJobCode, setActiveJobCode] = useState<JobCode | null>(null);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [recentApplications, setRecentApplications] = useState<ApplicationHistory[]>([]);
+  const [recentApplications, setRecentApplications] = useState<ApplicationWithJobBoard[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [mentorHomeMessage, setMentorHomeMessage] = useState('');
+  const [foreignHomeMessage, setForeignHomeMessage] = useState('');
+  const [isEditingMessage, setIsEditingMessage] = useState(false);
+  const [isEditingForeignMessage, setIsEditingForeignMessage] = useState(false);
+  const [editedMessage, setEditedMessage] = useState('');
+  const [editedForeignMessage, setEditedForeignMessage] = useState('');
 
   // 화면 포커스 시 데이터 새로고침
   useFocusEffect(
@@ -51,6 +67,15 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
 
     try {
       setLoading(true);
+
+      // 앱 설정 (멘토/외국인 홈 메시지) 로드
+      const appConfig = await getAppConfig(db);
+      if (appConfig?.mentorHomeMessage) {
+        setMentorHomeMessage(appConfig.mentorHomeMessage);
+      }
+      if (appConfig?.foreignHomeMessage) {
+        setForeignHomeMessage(appConfig.foreignHomeMessage);
+      }
 
       // 활성 캠프 코드 정보 로드
       if (userData.activeJobExperienceId) {
@@ -100,7 +125,27 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       // 최근 지원 내역 로드
       if (userData.userId) {
         const applications = await getApplicationsByUserId(userData.userId);
-        setRecentApplications(applications.slice(0, 3));
+        
+        // JobBoard 정보를 추가로 로드
+        const applicationsWithJobBoard = await Promise.all(
+          applications.slice(0, 3).map(async (app) => {
+            try {
+              const jobBoard = await getJobBoardById(app.refJobBoardId);
+              return {
+                ...app,
+                jobBoardTitle: jobBoard?.title || '알 수 없음',
+              };
+            } catch (error) {
+              logger.error(`JobBoard 정보 로드 오류 (${app.refJobBoardId}):`, error);
+              return {
+                ...app,
+                jobBoardTitle: '알 수 없음',
+              };
+            }
+          })
+        );
+        
+        setRecentApplications(applicationsWithJobBoard);
       }
     } catch (error) {
       logger.error('홈 데이터 로드 오류:', error);
@@ -142,6 +187,88 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
     }
     return `${month}/${day}(${weekday})`;
   };
+
+  const handleEditMessage = () => {
+    setEditedMessage(mentorHomeMessage);
+    setIsEditingMessage(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingMessage(false);
+    setEditedMessage('');
+  };
+
+  const handleSaveMessage = async () => {
+    if (!userData?.userId) {
+      Alert.alert('오류', '사용자 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    try {
+      // 기존 설정 불러오기
+      const currentConfig = await getAppConfig(db);
+      
+      await updateAppConfig(
+        db,
+        { 
+          loadingQuotes: currentConfig?.loadingQuotes || [],
+          mentorHomeMessage: editedMessage.trim(),
+          foreignHomeMessage: currentConfig?.foreignHomeMessage || ''
+        },
+        userData.userId
+      );
+      
+      setMentorHomeMessage(editedMessage.trim());
+      setIsEditingMessage(false);
+      Alert.alert('성공', '멘토 홈 메시지가 저장되었습니다.');
+    } catch (error) {
+      logger.error('메시지 저장 오류:', error);
+      Alert.alert('오류', '메시지 저장에 실패했습니다.');
+    }
+  };
+
+  const handleEditForeignMessage = () => {
+    setEditedForeignMessage(foreignHomeMessage);
+    setIsEditingForeignMessage(true);
+  };
+
+  const handleCancelForeignEdit = () => {
+    setIsEditingForeignMessage(false);
+    setEditedForeignMessage('');
+  };
+
+  const handleSaveForeignMessage = async () => {
+    if (!userData?.userId) {
+      Alert.alert('오류', '사용자 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    try {
+      // 기존 설정 불러오기
+      const currentConfig = await getAppConfig(db);
+      
+      await updateAppConfig(
+        db,
+        { 
+          loadingQuotes: currentConfig?.loadingQuotes || [],
+          mentorHomeMessage: currentConfig?.mentorHomeMessage || '',
+          foreignHomeMessage: editedForeignMessage.trim()
+        },
+        userData.userId
+      );
+      
+      setForeignHomeMessage(editedForeignMessage.trim());
+      setIsEditingForeignMessage(false);
+      Alert.alert('성공', '외국인 홈 메시지가 저장되었습니다.');
+    } catch (error) {
+      logger.error('메시지 저장 오류:', error);
+      Alert.alert('오류', '메시지 저장에 실패했습니다.');
+    }
+  };
+
+  const isMentor = (role: string) => role === 'mentor' || role === 'mentor_temp';
+  const isForeign = (role: string) => role === 'foreign' || role === 'foreign_temp';
+  const isAdmin = (role: string) => role === 'admin';
 
   if (authLoading || loading) {
     return (
@@ -221,50 +348,154 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
         </View>
 
         {/* 빠른 액션 버튼 */}
-        <View style={styles.quickActionsCard}>
-          <View style={styles.quickActionsRow}>
-            <TouchableOpacity
-              style={[styles.quickActionButton, { backgroundColor: '#eff6ff' }]}
-              onPress={async () => {
-                await setActiveTab('schedule');
-                navigation.navigate('Camp');
-              }}
-            >
-              <Ionicons name="calendar-outline" size={24} color="#3b82f6" />
-              <Text style={[styles.quickActionText, { color: '#1e40af' }]}>시간표</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickActionButton, { backgroundColor: '#f0fdf4' }]}
-              onPress={async () => {
-                await setActiveTab('tasks');
-                navigation.navigate('Camp');
-              }}
-            >
-              <Ionicons name="checkmark-done-outline" size={24} color="#10b981" />
-              <Text style={[styles.quickActionText, { color: '#065f46' }]}>업무</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickActionButton, { backgroundColor: '#fef3c7' }]}
-              onPress={() => navigation.navigate('Recruitment')}
-            >
-              <Ionicons name="briefcase-outline" size={24} color="#f59e0b" />
-              <Text style={[styles.quickActionText, { color: '#92400e' }]}>채용</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickActionButton, { backgroundColor: '#fae8ff' }]}
-              onPress={async () => {
-                await setActiveTab('guide');
-                navigation.navigate('Camp');
-              }}
-            >
-              <Ionicons name="map-outline" size={24} color="#a855f7" />
-              <Text style={[styles.quickActionText, { color: '#6b21a8' }]}>인솔표</Text>
-            </TouchableOpacity>
+        {/* role=mentor: 관리자 메시지 표시 (읽기 전용) */}
+        {userData.role && isMentor(userData.role) && mentorHomeMessage && (
+          <View style={styles.mentorMessageCard}>
+            <View style={styles.mentorMessageHeader}>
+              <Ionicons name="megaphone-outline" size={20} color="#3b82f6" />
+              <Text style={styles.mentorMessageTitle}>공지사항</Text>
+            </View>
+            <Text style={styles.mentorMessageText}>{mentorHomeMessage}</Text>
           </View>
-        </View>
+        )}
+
+        {/* role=foreign: 관리자 메시지 표시 (읽기 전용) */}
+        {userData.role && isForeign(userData.role) && foreignHomeMessage && (
+          <View style={styles.foreignMessageCard}>
+            <View style={styles.foreignMessageHeader}>
+              <Ionicons name="megaphone-outline" size={20} color="#8b5cf6" />
+              <Text style={styles.foreignMessageTitle}>Notice</Text>
+            </View>
+            <Text style={styles.foreignMessageText}>{foreignHomeMessage}</Text>
+          </View>
+        )}
+
+        {/* role=admin: 관리자 메시지 편집 */}
+        {userData.role && isAdmin(userData.role) && (
+          <>
+            {/* 멘토 홈 메시지 관리 */}
+            <View style={styles.adminMessageCard}>
+              <View style={styles.adminMessageHeader}>
+                <View style={styles.adminMessageTitleRow}>
+                  <Ionicons name="megaphone-outline" size={20} color="#3b82f6" />
+                  <Text style={styles.adminMessageTitle}>
+                    {activeJobCode?.code ? `[${activeJobCode.code}] ` : ''}멘토 홈 메시지 관리
+                  </Text>
+                </View>
+                {!isEditingMessage && (
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={handleEditMessage}
+                  >
+                    <Ionicons name="create-outline" size={18} color="#ffffff" />
+                    <Text style={styles.editButtonText}>편집</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              {isEditingMessage ? (
+                <View style={styles.editContainer}>
+                  <TextInput
+                    style={styles.messageInput}
+                    value={editedMessage}
+                    onChangeText={setEditedMessage}
+                    placeholder="멘토들에게 전달할 메시지를 입력하세요"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                  <View style={styles.editActions}>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={handleCancelEdit}
+                    >
+                      <Text style={styles.cancelButtonText}>취소</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.saveButton}
+                      onPress={handleSaveMessage}
+                    >
+                      <Ionicons name="checkmark" size={18} color="#ffffff" />
+                      <Text style={styles.saveButtonText}>저장</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.messagePreviewContainer}>
+                  {mentorHomeMessage ? (
+                    <Text style={styles.messagePreviewText}>{mentorHomeMessage}</Text>
+                  ) : (
+                    <Text style={styles.emptyMessageText}>
+                      멘토 홈 화면에 표시할 메시지가 없습니다.{'\n'}
+                      편집 버튼을 눌러 메시지를 작성하세요.
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* 외국인 홈 메시지 관리 */}
+            <View style={styles.adminMessageCard}>
+              <View style={styles.adminMessageHeader}>
+                <View style={styles.adminMessageTitleRow}>
+                  <Ionicons name="megaphone-outline" size={20} color="#8b5cf6" />
+                  <Text style={styles.adminMessageTitle}>
+                    {activeJobCode?.code ? `[${activeJobCode.code}] ` : ''}외국인 홈 메시지 관리
+                  </Text>
+                </View>
+                {!isEditingForeignMessage && (
+                  <TouchableOpacity
+                    style={[styles.editButton, { backgroundColor: '#8b5cf6' }]}
+                    onPress={handleEditForeignMessage}
+                  >
+                    <Ionicons name="create-outline" size={18} color="#ffffff" />
+                    <Text style={styles.editButtonText}>편집</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              {isEditingForeignMessage ? (
+                <View style={styles.editContainer}>
+                  <TextInput
+                    style={styles.messageInput}
+                    value={editedForeignMessage}
+                    onChangeText={setEditedForeignMessage}
+                    placeholder="외국인들에게 전달할 메시지를 입력하세요"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                  <View style={styles.editActions}>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={handleCancelForeignEdit}
+                    >
+                      <Text style={styles.cancelButtonText}>취소</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.saveButton, { backgroundColor: '#8b5cf6' }]}
+                      onPress={handleSaveForeignMessage}
+                    >
+                      <Ionicons name="checkmark" size={18} color="#ffffff" />
+                      <Text style={styles.saveButtonText}>저장</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.messagePreviewContainer}>
+                  {foreignHomeMessage ? (
+                    <Text style={styles.messagePreviewText}>{foreignHomeMessage}</Text>
+                  ) : (
+                    <Text style={styles.emptyMessageText}>
+                      외국인 홈 화면에 표시할 메시지가 없습니다.{'\n'}
+                      편집 버튼을 눌러 메시지를 작성하세요.
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          </>
+        )}
 
         {/* 오늘의 업무 */}
         {todayTasks.length > 0 && (
@@ -274,8 +505,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 <Ionicons name="today" size={20} color="#3b82f6" />
                 <Text style={styles.sectionTitle}>오늘의 업무</Text>
               </View>
-              <TouchableOpacity onPress={async () => {
-                await setActiveTab('tasks');
+              <TouchableOpacity onPress={() => {
+                setActiveTab('tasks');
                 navigation.navigate('Camp');
               }}>
                 <Text style={styles.sectionLink}>더보기 →</Text>
@@ -324,7 +555,12 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 <Ionicons name="document-text" size={20} color="#f59e0b" />
                 <Text style={styles.sectionTitle}>지원 현황</Text>
               </View>
-              <TouchableOpacity onPress={() => navigation.navigate('Recruitment')}>
+              <TouchableOpacity onPress={() => {
+                navigation.navigate('Recruitment', {
+                  screen: 'RecruitmentList',
+                  params: { openApplicationTab: true },
+                } as any);
+              }}>
                 <Text style={styles.sectionLink}>더보기 →</Text>
               </TouchableOpacity>
             </View>
@@ -335,7 +571,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                   <View key={application.applicationHistoryId} style={styles.applicationItem}>
                     <View style={styles.applicationContent}>
                       <Text style={styles.applicationCompany} numberOfLines={1}>
-                        {application.refJobBoardId}
+                        {application.jobBoardTitle || '알 수 없음'}
                       </Text>
                       <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
                         <Text style={styles.statusText}>{statusInfo.label}</Text>
@@ -489,11 +725,63 @@ const styles = StyleSheet.create({
     color: '#065f46',
   },
 
-  // 빠른 액션
-  quickActionsCard: {
+  // 멘토 홈 메시지 (mentor 읽기 전용)
+  mentorMessageCard: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  mentorMessageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  mentorMessageTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e40af',
+  },
+  mentorMessageText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#1e293b',
+  },
+
+  // 외국인 홈 메시지 (foreign 읽기 전용)
+  foreignMessageCard: {
+    backgroundColor: '#f5f3ff',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#ddd6fe',
+  },
+  foreignMessageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  foreignMessageTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#6b21a8',
+  },
+  foreignMessageText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#1e293b',
+  },
+
+  // 관리자 메시지 관리 (admin)
+  adminMessageCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 16,
+    padding: 18,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -501,21 +789,111 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  quickActionsRow: {
+  adminMessageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
-  },
-  quickActionButton: {
-    flex: 1,
     alignItems: 'center',
-    paddingVertical: 16,
-    borderRadius: 16,
+    marginBottom: 12,
+  },
+  adminMessageTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  quickActionText: {
-    fontSize: 12,
+  adminMessageTitle: {
+    fontSize: 16,
     fontWeight: '700',
+    color: '#1e293b',
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  editButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  editContainer: {
+    gap: 12,
+  },
+  messageInput: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    color: '#1e293b',
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-end',
+  },
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#10b981',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  messagePreviewContainer: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  messagePreviewText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#1e293b',
+  },
+  emptyMessageText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+
+  // 빠른 액션 (삭제됨)
+  quickActionsCard: {
+    display: 'none',
+  },
+  quickActionsRow: {
+    display: 'none',
+  },
+  quickActionButton: {
+    display: 'none',
+  },
+  quickActionText: {
+    display: 'none',
   },
 
   // 섹션 카드

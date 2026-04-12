@@ -24,6 +24,8 @@ export async function getAppConfig(db: any): Promise<AppConfig | null> {
     return {
       id: docSnap.id,
       loadingQuotes: data.loadingQuotes || [],
+      mentorHomeMessage: data.mentorHomeMessage || '',
+      foreignHomeMessage: data.foreignHomeMessage || '',
       updatedAt: data.updatedAt?.toDate() || new Date(),
       updatedBy: data.updatedBy,
     };
@@ -44,11 +46,21 @@ export async function updateAppConfig(
   try {
     const docRef = doc(db, 'appConfig', APP_CONFIG_DOC_ID);
     
-    await setDoc(docRef, {
+    const updateData: any = {
       loadingQuotes: input.loadingQuotes,
       updatedAt: serverTimestamp(),
       updatedBy,
-    }, { merge: true });
+    };
+    
+    if (input.mentorHomeMessage !== undefined) {
+      updateData.mentorHomeMessage = input.mentorHomeMessage;
+    }
+    
+    if (input.foreignHomeMessage !== undefined) {
+      updateData.foreignHomeMessage = input.foreignHomeMessage;
+    }
+    
+    await setDoc(docRef, updateData, { merge: true });
   } catch (error) {
     console.error('앱 설정 업데이트 실패:', error);
     throw error;
