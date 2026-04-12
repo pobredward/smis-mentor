@@ -155,6 +155,128 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
   };
 
 
+  const getStatusBadge = (
+    status: string | undefined,
+    type: 'application' | 'interview' | 'final'
+  ): { label: string; color: string } => {
+    let color = '#94a3b8'; // 기본 회색
+    let label = '미정';
+
+    if (type === 'application') {
+      switch (status) {
+        case 'pending':
+          color = '#f59e0b';
+          label = '검토중';
+          break;
+        case 'accepted':
+          color = '#10b981';
+          label = '서류합격';
+          break;
+        case 'rejected':
+          color = '#ef4444';
+          label = '서류불합격';
+          break;
+        default:
+          color = '#94a3b8';
+          label = '미정';
+      }
+    } else if (type === 'interview') {
+      switch (status) {
+        case 'pending':
+          color = '#f59e0b';
+          label = '면접예정';
+          break;
+        case 'complete':
+          color = '#8b5cf6';
+          label = '면접완료';
+          break;
+        case 'passed':
+          color = '#10b981';
+          label = '면접합격';
+          break;
+        case 'failed':
+          color = '#ef4444';
+          label = '면접불합격';
+          break;
+        case 'absent':
+          color = '#ef4444';
+          label = '불참';
+          break;
+        default:
+          color = '#94a3b8';
+          label = '미정';
+      }
+    } else if (type === 'final') {
+      switch (status) {
+        case 'finalAccepted':
+          color = '#10b981';
+          label = '최종합격';
+          break;
+        case 'finalRejected':
+          color = '#ef4444';
+          label = '최종불합격';
+          break;
+        case 'finalAbsent':
+          color = '#ef4444';
+          label = '불참';
+          break;
+        default:
+          color = '#94a3b8';
+          label = '미정';
+      }
+    }
+
+    return { label, color };
+  };
+
+  const getDetailedApplicationStatus = (application: ApplicationWithJobBoard): { label: string; color: string } => {
+    // 1단계: 서류 전형
+    if (application.applicationStatus === 'pending') {
+      return { label: '서류 대기', color: '#f59e0b' };
+    }
+    
+    if (application.applicationStatus === 'rejected') {
+      return { label: '서류 불합격', color: '#ef4444' };
+    }
+
+    // 2단계: 면접 전형 (서류 합격 후)
+    if (application.applicationStatus === 'accepted') {
+      // 최종 합격/불합격이 있으면 우선 표시
+      if (application.finalStatus === 'finalAccepted') {
+        return { label: '최종 합격', color: '#10b981' };
+      }
+      if (application.finalStatus === 'finalRejected') {
+        return { label: '최종 불합격', color: '#ef4444' };
+      }
+      if (application.finalStatus === 'finalAbsent') {
+        return { label: '최종 불참', color: '#64748b' };
+      }
+
+      // 면접 상태 확인
+      if (!application.interviewStatus || application.interviewStatus === 'pending') {
+        return { label: '면접 예정', color: '#3b82f6' };
+      }
+      if (application.interviewStatus === 'complete') {
+        return { label: '면접 완료', color: '#8b5cf6' };
+      }
+      if (application.interviewStatus === 'passed') {
+        return { label: '면접 합격', color: '#10b981' };
+      }
+      if (application.interviewStatus === 'failed') {
+        return { label: '면접 불합격', color: '#ef4444' };
+      }
+      if (application.interviewStatus === 'absent') {
+        return { label: '면접 불참', color: '#64748b' };
+      }
+
+      // 면접 상태가 없으면 서류 합격
+      return { label: '서류 합격', color: '#10b981' };
+    }
+
+    // 기본값
+    return { label: '알 수 없음', color: '#64748b' };
+  };
+
   const getApplicationStatus = (status: string): { label: string; color: string } => {
     switch (status) {
       case 'pending':
@@ -566,25 +688,46 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             </View>
             <View style={styles.applicationsList}>
               {recentApplications.map((application) => {
-                const statusInfo = getApplicationStatus(application.applicationStatus);
+                const applicationStatusBadge = getStatusBadge(application.applicationStatus, 'application');
+                const interviewStatusBadge = getStatusBadge(application.interviewStatus, 'interview');
+                const finalStatusBadge = getStatusBadge(application.finalStatus, 'final');
+                
                 return (
                   <View key={application.applicationHistoryId} style={styles.applicationItem}>
-                    <View style={styles.applicationContent}>
-                      <Text style={styles.applicationCompany} numberOfLines={1}>
+                    <View style={styles.applicationHeader}>
+                      <Text style={styles.applicationTitle} numberOfLines={1}>
                         {application.jobBoardTitle || '알 수 없음'}
                       </Text>
-                      <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
-                        <Text style={styles.statusText}>{statusInfo.label}</Text>
+                      {application.applicationDate && (
+                        <Text style={styles.applicationDate}>
+                          지원일: {new Date(application.applicationDate.seconds * 1000).toLocaleDateString('ko-KR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.statusRow}>
+                      <View style={styles.statusColumn}>
+                        <Text style={styles.statusLabel}>서류</Text>
+                        <View style={[styles.statusBadge, { backgroundColor: applicationStatusBadge.color }]}>
+                          <Text style={styles.statusText}>{applicationStatusBadge.label}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.statusColumn}>
+                        <Text style={styles.statusLabel}>면접</Text>
+                        <View style={[styles.statusBadge, { backgroundColor: interviewStatusBadge.color }]}>
+                          <Text style={styles.statusText}>{interviewStatusBadge.label}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.statusColumn}>
+                        <Text style={styles.statusLabel}>최종</Text>
+                        <View style={[styles.statusBadge, { backgroundColor: finalStatusBadge.color }]}>
+                          <Text style={styles.statusText}>{finalStatusBadge.label}</Text>
+                        </View>
                       </View>
                     </View>
-                    {application.applicationDate && (
-                      <Text style={styles.applicationDate}>
-                        {new Date(application.applicationDate.seconds * 1000).toLocaleDateString('ko-KR', {
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </Text>
-                    )}
                   </View>
                 );
               })}
@@ -982,14 +1125,60 @@ const styles = StyleSheet.create({
 
   // 지원 내역
   applicationsList: {
-    gap: 10,
+    gap: 12,
   },
   applicationItem: {
-    padding: 14,
-    backgroundColor: '#fafafa',
+    padding: 16,
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  applicationHeader: {
+    marginBottom: 12,
+  },
+  applicationTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  applicationDate: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  statusColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statusLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   applicationContent: {
     flexDirection: 'row',
@@ -1003,21 +1192,6 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     flex: 1,
     marginRight: 12,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  applicationDate: {
-    fontSize: 12,
-    color: '#94a3b8',
-    fontWeight: '500',
   },
 
   // 빈 상태
