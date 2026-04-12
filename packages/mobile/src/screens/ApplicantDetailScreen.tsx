@@ -882,7 +882,10 @@ export function ApplicantDetailScreen({
                 textStyle={styles.dropdownText}
                 dropDownContainerStyle={styles.dropdownContainer}
                 listMode="SCROLLVIEW"
-                zIndex={3000}
+                scrollViewProps={{
+                  nestedScrollEnabled: true,
+                }}
+                zIndex={9000}
                 zIndexInverse={1000}
               />
               
@@ -948,7 +951,10 @@ export function ApplicantDetailScreen({
                 ]}
                 dropDownContainerStyle={styles.dropdownContainer}
                 listMode="SCROLLVIEW"
-                zIndex={2000}
+                scrollViewProps={{
+                  nestedScrollEnabled: true,
+                }}
+                zIndex={8000}
                 zIndexInverse={2000}
                 disabled={!canChangeInterviewStatus(documentStatus as any)}
               />
@@ -1026,7 +1032,10 @@ export function ApplicantDetailScreen({
                 ]}
                 dropDownContainerStyle={styles.dropdownContainer}
                 listMode="SCROLLVIEW"
-                zIndex={1000}
+                scrollViewProps={{
+                  nestedScrollEnabled: true,
+                }}
+                zIndex={7000}
                 zIndexInverse={3000}
                 disabled={!canChangeFinalStatus(interviewStatus as any)}
               />

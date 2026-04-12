@@ -739,13 +739,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   open={generationOpen}
                   value={selectedGeneration}
                   items={generationItems}
-                  setOpen={(open) => {
-                    if (open) {
+                  setOpen={(callback) => {
+                    const newValue = typeof callback === 'function' ? callback(generationOpen) : callback;
+                    if (newValue) {
                       setJobCodeOpen(false);
                       setGroupOpen(false);
                       setGroupRoleOpen(false);
                     }
-                    setGenerationOpen(open);
+                    setGenerationOpen(newValue);
                   }}
                   setValue={setSelectedGeneration}
                   setItems={setGenerationItems}
@@ -757,7 +758,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   scrollViewProps={{
                     nestedScrollEnabled: true,
                   }}
-                  zIndex={4000}
+                  zIndex={9000}
                   zIndexInverse={1000}
                 />
               </View>
@@ -769,13 +770,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   open={jobCodeOpen}
                   value={selectedJobCodeId}
                   items={jobCodeItems}
-                  setOpen={(open) => {
-                    if (open) {
+                  setOpen={(callback) => {
+                    const newValue = typeof callback === 'function' ? callback(jobCodeOpen) : callback;
+                    if (newValue) {
                       setGenerationOpen(false);
                       setGroupOpen(false);
                       setGroupRoleOpen(false);
                     }
-                    setJobCodeOpen(open);
+                    setJobCodeOpen(newValue);
                   }}
                   setValue={setSelectedJobCodeId}
                   setItems={setJobCodeItems}
@@ -788,7 +790,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   scrollViewProps={{
                     nestedScrollEnabled: true,
                   }}
-                  zIndex={3000}
+                  zIndex={8000}
                   zIndexInverse={2000}
                 />
               </View>
@@ -800,13 +802,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   open={groupOpen}
                   value={selectedGroup}
                   items={groupItems}
-                  setOpen={(open) => {
-                    if (open) {
+                  setOpen={(callback) => {
+                    const newValue = typeof callback === 'function' ? callback(groupOpen) : callback;
+                    if (newValue) {
                       setGenerationOpen(false);
                       setJobCodeOpen(false);
                       setGroupRoleOpen(false);
                     }
-                    setGroupOpen(open);
+                    setGroupOpen(newValue);
                   }}
                   setValue={setSelectedGroup}
                   setItems={setGroupItems}
@@ -818,7 +821,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   scrollViewProps={{
                     nestedScrollEnabled: true,
                   }}
-                  zIndex={2000}
+                  zIndex={7000}
                   zIndexInverse={3000}
                 />
               </View>
@@ -830,13 +833,14 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   open={groupRoleOpen}
                   value={selectedGroupRole}
                   items={groupRoleItems}
-                  setOpen={(open) => {
-                    if (open) {
+                  setOpen={(callback) => {
+                    const newValue = typeof callback === 'function' ? callback(groupRoleOpen) : callback;
+                    if (newValue) {
                       setGenerationOpen(false);
                       setJobCodeOpen(false);
                       setGroupOpen(false);
                     }
-                    setGroupRoleOpen(open);
+                    setGroupRoleOpen(newValue);
                   }}
                   setValue={setSelectedGroupRole}
                   setItems={setGroupRoleItems}
@@ -848,7 +852,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                   scrollViewProps={{
                     nestedScrollEnabled: true,
                   }}
-                  zIndex={1000}
+                  zIndex={6000}
                   zIndexInverse={4000}
                 />
               </View>

@@ -302,7 +302,10 @@ export function UserGenerateScreen({ navigation }: any) {
                   labelStyle={styles.dropdownLabel}
                   placeholderStyle={styles.dropdownPlaceholder}
                   listMode="SCROLLVIEW"
-                  zIndex={5000}
+                  scrollViewProps={{
+                    nestedScrollEnabled: true,
+                  }}
+                  zIndex={9000}
                   zIndexInverse={1000}
                 />
               )}
@@ -373,9 +376,12 @@ export function UserGenerateScreen({ navigation }: any) {
                             labelStyle={styles.dropdownLabel}
                             placeholderStyle={styles.dropdownPlaceholder}
                             listMode="SCROLLVIEW"
+                            scrollViewProps={{
+                              nestedScrollEnabled: true,
+                            }}
                             maxHeight={200}
-                            zIndex={5000 - (index * 100)}
-                            zIndexInverse={1000 + (index * 100)}
+                            zIndex={8000 - (index * 1000)}
+                            zIndexInverse={1000 + (index * 1000)}
                           />
                       )}
                     />
@@ -424,11 +430,14 @@ export function UserGenerateScreen({ navigation }: any) {
                               labelStyle={styles.dropdownLabel}
                               placeholderStyle={styles.dropdownPlaceholder}
                               listMode="SCROLLVIEW"
+                              scrollViewProps={{
+                                nestedScrollEnabled: true,
+                              }}
                               maxHeight={250}
                               searchable={true}
                               searchPlaceholder="검색..."
-                              zIndex={4000 - (index * 100)}
-                              zIndexInverse={2000 + (index * 100)}
+                              zIndex={7000 - (index * 1000)}
+                              zIndexInverse={2000 + (index * 1000)}
                             />
                         );
                       }}
@@ -470,9 +479,12 @@ export function UserGenerateScreen({ navigation }: any) {
                               labelStyle={styles.dropdownLabel}
                               placeholderStyle={styles.dropdownPlaceholder}
                               listMode="SCROLLVIEW"
+                              scrollViewProps={{
+                                nestedScrollEnabled: true,
+                              }}
                               maxHeight={200}
-                              zIndex={3000 - (index * 100)}
-                              zIndexInverse={3000 + (index * 100)}
+                              zIndex={6000 - (index * 1000)}
+                              zIndexInverse={3000 + (index * 1000)}
                             />
                         )}
                       />
@@ -511,9 +523,12 @@ export function UserGenerateScreen({ navigation }: any) {
                               labelStyle={styles.dropdownLabel}
                               placeholderStyle={styles.dropdownPlaceholder}
                               listMode="SCROLLVIEW"
+                              scrollViewProps={{
+                                nestedScrollEnabled: true,
+                              }}
                               maxHeight={200}
-                              zIndex={2000 - (index * 100)}
-                              zIndexInverse={4000 + (index * 100)}
+                              zIndex={5000 - (index * 1000)}
+                              zIndexInverse={4000 + (index * 1000)}
                             />
                         )}
                       />

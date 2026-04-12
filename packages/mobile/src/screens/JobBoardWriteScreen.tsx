@@ -353,7 +353,10 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
                 dropDownContainerStyle={styles.dropdownContainer}
                 textStyle={styles.dropdownText}
                 listMode="SCROLLVIEW"
-                zIndex={2000}
+                scrollViewProps={{
+                  nestedScrollEnabled: true,
+                }}
+                zIndex={9000}
                 zIndexInverse={1000}
               />
             </View>
@@ -387,8 +390,11 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
                     dropDownContainerStyle={styles.dropdownContainer}
                     textStyle={styles.dropdownText}
                     listMode="SCROLLVIEW"
+                    scrollViewProps={{
+                      nestedScrollEnabled: true,
+                    }}
                     disabled={!selectedGeneration}
-                    zIndex={1000}
+                    zIndex={8000}
                     zIndexInverse={2000}
                   />
                 )}
