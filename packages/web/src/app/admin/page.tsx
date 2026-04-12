@@ -61,7 +61,7 @@ export default function AdminDashboard() {
           icon: <IoSearch className="w-5 h-5" />,
         },
         {
-          title: '수업자료 템플릿 관리',
+          title: '수업 템플릿 관리',
           href: '/admin/upload',
           iconClass: 'text-cyan-600',
           icon: <IoFolder className="w-5 h-5" />,
