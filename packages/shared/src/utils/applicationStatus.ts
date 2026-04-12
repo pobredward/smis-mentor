@@ -9,7 +9,7 @@
 
 export type ApplicationStatus = 'pending' | 'accepted' | 'rejected';
 export type InterviewStatus = '' | 'pending' | 'complete' | 'passed' | 'failed' | 'absent';
-export type FinalStatus = '' | 'finalAccepted' | 'finalRejected';
+export type FinalStatus = '' | 'finalAccepted' | 'finalRejected' | 'finalAbsent';
 
 /**
  * 면접 상태 변경이 가능한지 확인
@@ -93,4 +93,5 @@ export const FINAL_STATUS_LABELS: Record<string, string> = {
   '': '미정',
   finalAccepted: '합격',
   finalRejected: '불합격',
+  finalAbsent: '최종불참',
 };

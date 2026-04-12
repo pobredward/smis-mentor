@@ -2058,7 +2058,7 @@ export function InterviewManageClient() {
                             <option value="">선택</option>
                             <option value="finalAccepted">합격</option>
                             <option value="finalRejected">불합격</option>
-                            <option value="absent">불참</option>
+                            <option value="finalAbsent">불참</option>
                           </select>
                           
                           {/* 상태에 따라 적절한 버튼 표시 */}

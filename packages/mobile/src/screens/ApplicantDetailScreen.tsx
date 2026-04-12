@@ -129,6 +129,7 @@ export function ApplicantDetailScreen({
     { label: '미정', value: '' },
     { label: '합격', value: 'finalAccepted' },
     { label: '불합격', value: 'finalRejected' },
+    { label: '최종불참', value: 'finalAbsent' },
   ]);
 
   // 메시지 관련 상태

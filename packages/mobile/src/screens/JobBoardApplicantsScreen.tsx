@@ -543,8 +543,6 @@ export function JobBoardApplicantsScreen({
                                   ? '#f3e8ff'
                                   : app.interviewStatus === 'passed'
                                   ? '#d1fae5'
-                                  : app.interviewStatus === 'absent'
-                                  ? '#f1f5f9'
                                   : '#fee2e2',
                             },
                           ]}
@@ -560,8 +558,6 @@ export function JobBoardApplicantsScreen({
                                     ? '#7e22ce'
                                     : app.interviewStatus === 'passed'
                                     ? '#047857'
-                                    : app.interviewStatus === 'absent'
-                                    ? '#64748b'
                                     : '#dc2626',
                               },
                             ]}
@@ -573,7 +569,7 @@ export function JobBoardApplicantsScreen({
                               : app.interviewStatus === 'passed'
                               ? '합격'
                               : app.interviewStatus === 'absent'
-                              ? '면접불참'
+                              ? '불참'
                               : '불합격'}
                           </Text>
                         </View>
@@ -603,7 +599,9 @@ export function JobBoardApplicantsScreen({
                             styles.statusBadgeSmall,
                             {
                               backgroundColor:
-                                app.finalStatus === 'finalAccepted' ? '#e0e7ff' : '#fee2e2',
+                                app.finalStatus === 'finalAccepted' 
+                                  ? '#e0e7ff' 
+                                  : '#fee2e2',
                             },
                           ]}
                         >
@@ -611,11 +609,17 @@ export function JobBoardApplicantsScreen({
                             style={[
                               styles.statusBadgeSmallText,
                               {
-                                color: app.finalStatus === 'finalAccepted' ? '#4338ca' : '#dc2626',
+                                color: app.finalStatus === 'finalAccepted' 
+                                  ? '#4338ca' 
+                                  : '#dc2626',
                               },
                             ]}
                           >
-                            {app.finalStatus === 'finalAccepted' ? '합격' : '불합격'}
+                            {app.finalStatus === 'finalAccepted' 
+                              ? '합격' 
+                              : app.finalStatus === 'finalAbsent'
+                              ? '불참'
+                              : '불합격'}
                           </Text>
                         </View>
                       ) : (
