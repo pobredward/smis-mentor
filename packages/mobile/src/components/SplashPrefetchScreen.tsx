@@ -5,11 +5,6 @@ import { useCampTab } from '../context/CampTabContext';
 import { logger, getAppConfig, DEFAULT_LOADING_QUOTES } from '@smis-mentor/shared';
 import { db } from '../config/firebase';
 
-// 네이티브 스플래시 화면 유지
-SplashScreen.preventAutoHideAsync().catch(() => {
-  // 이미 숨겨진 경우 무시
-});
-
 interface SplashPrefetchScreenProps {
   onComplete: () => void;
   minDisplayTime?: number;

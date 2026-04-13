@@ -1,6 +1,7 @@
 import Sentry from './sentry.config';
 import React, { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from './src/navigation';
 import { WebViewCacheProvider } from './src/context/WebViewCacheContext';
 import { AuthProvider, registerPrefetchTrigger, unregisterPrefetchTrigger } from './src/context/AuthContext';
@@ -12,6 +13,11 @@ import { useAuth } from './src/context/AuthContext';
 import { useCampDataPrefetch } from './src/hooks/useCampDataPrefetch';
 import { useRecruitmentDataPrefetch } from './src/hooks/useRecruitmentDataPrefetch';
 import { logger } from '@smis-mentor/shared';
+
+// 네이티브 스플래시 화면 유지 (앱 최상단에서 호출)
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // 이미 숨겨진 경우 무시
+});
 
 function AppContent() {
   const { 
@@ -73,12 +79,25 @@ function AppContent() {
     };
   }, [userData?.activeJobExperienceId, prefetchCampData, prefetchRecruitmentData, hasTriggeredPrefetch]);
 
-  // 인증 완료 및 사용자 데이터가 없으면 스플래시 숨기기
+  // 인증 완료 및 사용자 데이터가 없으면 스플래시 숨기기 (비로그인 유저)
   useEffect(() => {
-    if (authReady && !loading && !userData) {
-      logger.info('⏭️  AppContent: 비로그인 상태, 스플래시 숨기기');
-      setShowSplash(false);
-    }
+    const hideNativeSplashForGuest = async () => {
+      if (authReady && !loading && !userData) {
+        logger.info('⏭️  AppContent: 비로그인 상태, 네이티브 스플래시 숨기기');
+        
+        try {
+          // 비로그인 유저는 네이티브 스플래시를 즉시 숨김
+          await SplashScreen.hideAsync();
+          logger.info('✅ 비로그인: 네이티브 스플래시 숨김 완료');
+        } catch (error) {
+          logger.error('❌ 비로그인: 네이티브 스플래시 숨기기 실패:', error);
+        }
+        
+        setShowSplash(false);
+      }
+    };
+
+    hideNativeSplashForGuest();
   }, [authReady, loading, userData]);
 
   // 프리로드할 링크가 없을 때 즉시 완료 처리
