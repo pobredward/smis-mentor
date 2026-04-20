@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { logger } from '@smis-mentor/shared';
+import { logger, updateGeocodeIfAddressChanged } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -12,8 +12,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   LogBox,
+  Modal,
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
+import Postcode from '@actbase/react-daum-postcode';
+import { getGenderFromRRN } from '../utils/userUtils';
+import Constants from 'expo-constants';
+import { Timestamp } from 'firebase/firestore';
 
 interface SignUpStep4ScreenProps {
   name: string;
@@ -35,6 +40,7 @@ interface SignUpStep4ScreenProps {
     referrerName?: string;
     otherReferralDetail?: string;
     agreedPersonal: boolean;
+    geocode?: { lat: number; lng: number; updatedAt: Timestamp };
   }) => void;
   onBack: () => void;
 }
@@ -62,6 +68,7 @@ export function SignUpStep4Screen({
   const [otherReferralDetail, setOtherReferralDetail] = useState('');
   const [agreedPersonal, setAgreedPersonal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAddressModalVisible, setIsAddressModalVisible] = useState(false);
 
   // Dropdown 상태들
   const [genderDropdownOpen, setGenderDropdownOpen] = useState(false);
@@ -99,11 +106,9 @@ export function SignUpStep4Screen({
   // 주민번호가 변경될 때마다 성별 자동 설정
   useEffect(() => {
     if (rrnFront.length === 6 && rrnLast.length === 7) {
-      const genderCode = rrnLast.charAt(0);
-      if (genderCode === '1' || genderCode === '3') {
-        setGender('M');
-      } else if (genderCode === '2' || genderCode === '4') {
-        setGender('F');
+      const detectedGender = getGenderFromRRN(rrnFront, rrnLast);
+      if (detectedGender) {
+        setGender(detectedGender);
       }
     }
   }, [rrnFront, rrnLast]);
@@ -164,6 +169,11 @@ export function SignUpStep4Screen({
 
     setIsLoading(true);
     try {
+      // 주소 좌표 변환
+      logger.info('📍 회원가입 - 주소 좌표 변환 시작:', address);
+      const kakaoApiKey = Constants.expoConfig?.extra?.kakaoRestApiKey;
+      const geocodeData = await updateGeocodeIfAddressChanged(undefined, address, kakaoApiKey);
+      
       onNext({
         address,
         addressDetail,
@@ -174,6 +184,7 @@ export function SignUpStep4Screen({
         referrerName: referralPath === '지인추천' ? referrerName : undefined,
         otherReferralDetail: referralPath === '기타' ? otherReferralDetail : undefined,
         agreedPersonal,
+        ...geocodeData, // 좌표 정보 추가
       });
     } catch (error) {
       logger.error('상세 정보 확인 오류:', error);
@@ -185,13 +196,42 @@ export function SignUpStep4Screen({
 
 
 
-  // 주소 입력 안내 (실제 주소 API 연동은 나중에 구현)
-  const handleAddressInput = () => {
-    Alert.alert(
-      '주소 입력',
-      '현재 모바일에서는 직접 주소를 입력해주세요.\n예: 서울특별시 강남구 테헤란로 123',
-      [{ text: '확인' }]
-    );
+  // 주소 검색 모달 열기
+  const handleAddressSearch = () => {
+    setIsAddressModalVisible(true);
+  };
+
+  // Daum 주소 검색 완료 처리
+  const handleAddressComplete = (data: any) => {
+    let fullAddress = data.address;
+    let extraAddress = '';
+
+    if (data.addressType === 'R') {
+      if (data.bname !== '') {
+        extraAddress += data.bname;
+      }
+      if (data.buildingName !== '') {
+        extraAddress += extraAddress !== '' ? `, ${data.buildingName}` : data.buildingName;
+      }
+      fullAddress += extraAddress !== '' ? ` (${extraAddress})` : '';
+    }
+
+    setAddress(fullAddress);
+    setIsAddressModalVisible(false);
+    
+    // 주소 선택 완료 알림
+    setTimeout(() => {
+      Alert.alert(
+        '주소 선택 완료', 
+        '주소가 선택되었습니다. 상세 주소를 입력해주세요.',
+        [{ text: '확인' }]
+      );
+    }, 500);
+  };
+
+  // 주소 검색 모달 닫기
+  const handleAddressCancel = () => {
+    setIsAddressModalVisible(false);
   };
 
   return (
@@ -218,15 +258,26 @@ export function SignUpStep4Screen({
             <View style={styles.inputGroup}>
               <Text style={styles.label}>주소</Text>
               <TouchableOpacity
-                style={styles.addressInput}
-                onPress={handleAddressInput}
+                style={[
+                  styles.addressInput,
+                  isLoading && styles.addressInputDisabled,
+                ]}
+                onPress={handleAddressSearch}
+                disabled={isLoading}
+                activeOpacity={0.7}
               >
                 <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="주소를 입력하세요"
+                  style={[
+                    styles.input, 
+                    { flex: 1 },
+                    styles.addressInputText,
+                    { color: address ? '#1e293b' : '#94a3b8' }
+                  ]}
+                  placeholder="주소 검색을 위해 터치하세요"
+                  placeholderTextColor="#94a3b8"
                   value={address}
-                  onChangeText={setAddress}
-                  editable={!isLoading}
+                  editable={false}
+                  pointerEvents="none"
                 />
                 <Text style={styles.addressButton}>📍</Text>
               </TouchableOpacity>
@@ -427,6 +478,40 @@ export function SignUpStep4Screen({
           </View>
         </View>
       </ScrollView>
+
+      {/* 주소 검색 모달 */}
+      <Modal
+        visible={isAddressModalVisible}
+        animationType="slide"
+        onRequestClose={handleAddressCancel}
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>주소 검색</Text>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={handleAddressCancel}
+            >
+              <Text style={styles.modalCloseText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+          <Postcode
+            style={styles.addressSearchWebView}
+            jsOptions={{
+              animation: true,
+              hideMapBtn: true,
+              hideEngBtn: true,
+            }}
+            onSelected={handleAddressComplete}
+            onError={(error) => {
+              logger.error('주소 검색 오류:', error);
+              Alert.alert('오류', '주소 검색 중 오류가 발생했습니다.');
+              setIsAddressModalVisible(false);
+            }}
+          />
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -504,6 +589,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  addressInputDisabled: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#cbd5e1',
+  },
+  addressInputText: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   addressButton: {
     fontSize: 18,
@@ -644,5 +739,39 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  modalCloseButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 6,
+  },
+  modalCloseText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  addressSearchWebView: {
+    flex: 1,
   },
 });

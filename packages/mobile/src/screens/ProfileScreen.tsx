@@ -447,6 +447,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     referrerName?: string;
     otherReferralDetail?: string;
     agreedPersonal: boolean;
+    geocode?: { lat: number; lng: number; updatedAt: Timestamp };
   }) => {
     try {
       setIsLoading(true);
@@ -486,6 +487,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         referrerName: data.referrerName || '',
         otherReferralDetail: data.otherReferralDetail || '',
         agreedPersonal: data.agreedPersonal,
+        geocode: data.geocode,
         photoURL: '',
         userId: firebaseUser.uid,
         id: firebaseUser.uid,
@@ -1066,6 +1068,73 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
     const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
 
+    // 상태 및 역할 표시 헬퍼 함수들
+    const getRoleColor = (role: string) => {
+      switch (role) {
+        case 'admin':
+          return '#dc2626';
+        case 'mentor':
+        case 'mentor_temp':
+          return '#3b82f6';
+        case 'foreign':
+        case 'foreign_temp':
+          return '#10b981';
+        default:
+          return '#9ca3af';
+      }
+    };
+
+    const getRoleLabel = (role: string) => {
+      switch (role) {
+        case 'admin':
+          return '관리자';
+        case 'mentor':
+        case 'mentor_temp':
+          return '멘토';
+        case 'foreign':
+        case 'foreign_temp':
+          return '원어민';
+        default:
+          return '사용자';
+      }
+    };
+
+    const getStatusColor = (status: string, role: string) => {
+      // mentor_temp나 foreign_temp인 경우 활성 상태로 간주
+      if (role === 'mentor_temp' || role === 'foreign_temp') {
+        return '#10b981'; // 활성 색상
+      }
+      
+      switch (status) {
+        case 'active':
+          return '#10b981';
+        case 'inactive':
+          return '#ef4444';
+        case 'deleted':
+          return '#9ca3af';
+        default:
+          return '#eab308';
+      }
+    };
+
+    const getStatusLabel = (status: string, role: string) => {
+      // mentor_temp나 foreign_temp인 경우 활성 상태로 표시
+      if (role === 'mentor_temp' || role === 'foreign_temp') {
+        return '활성';
+      }
+      
+      switch (status) {
+        case 'active':
+          return '활성';
+        case 'inactive':
+          return '비활성';
+        case 'deleted':
+          return '삭제됨';
+        default:
+          return '임시';
+      }
+    };
+
     return (
       <ScrollView 
         style={styles.container}
@@ -1229,6 +1298,14 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               )}
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>{userData.name}</Text>
+                <View style={styles.profileStatus}>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(userData.status, userData.role) }]}>
+                    <Text style={styles.statusBadgeText}>{getStatusLabel(userData.status, userData.role)}</Text>
+                  </View>
+                  <View style={[styles.roleBadge, { backgroundColor: getRoleColor(userData.role) }]}>
+                    <Text style={styles.roleBadgeText}>{getRoleLabel(userData.role)}</Text>
+                  </View>
+                </View>
                 <Text style={styles.profileEmail}>{userData.email}</Text>
                 {(userData.phone || userData.phoneNumber) && (
                   <Text style={styles.profilePhone}>
@@ -1494,8 +1571,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                             </View>
                           )}
                           {exp?.groupRole && (
-                            <View style={styles.roleBadge}>
-                              <Text style={styles.roleBadgeText}>{exp.groupRole}</Text>
+                            <View style={styles.jobRoleBadge}>
+                              <Text style={styles.jobRoleBadgeText}>{exp.groupRole}</Text>
                             </View>
                           )}
                           {exp?.classCode && (
@@ -2147,7 +2224,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#475569',
   },
-  roleBadge: {
+  jobRoleBadge: {
     backgroundColor: '#f1f5f9',
     borderWidth: 1,
     borderColor: '#cbd5e1',
@@ -2155,7 +2232,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 12,
   },
-  roleBadgeText: {
+  jobRoleBadgeText: {
     fontSize: 10,
     fontWeight: '500',
     color: '#64748b',
@@ -2505,5 +2582,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     marginTop: 2,
+  },
+  
+  // 프로필 상태/역할 배지 스타일
+  profileStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
