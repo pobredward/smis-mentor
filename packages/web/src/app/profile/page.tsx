@@ -96,6 +96,7 @@ export default function ProfilePage() {
     }
 
     const startTime = Date.now();
+    const isAdmin = userData?.role === 'admin';
 
     try {
       setChangingJobCode(true);
@@ -107,6 +108,7 @@ export default function ProfilePage() {
       console.log('🔄 ProfilePage: 캠프 변경 시작');
       console.log(`   현재: ${userData?.activeJobExperienceId}`);
       console.log(`   변경: ${jobCodeId}`);
+      console.log(`   관리자 모드: ${isAdmin ? '예 (임시 활성화)' : '아니오'}`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
       // 1. 기존 캐시 무효화 (0% -> 20%)
@@ -121,7 +123,20 @@ export default function ProfilePage() {
       console.log('📍 Step 2/3: 캠프 변경 중...');
       const step2Start = Date.now();
       setPrefetchStage('update');
-      await updateActiveJobCode(jobCodeId);
+      
+      if (isAdmin) {
+        // 관리자는 임시 캠프 활성화 (직무 경험에 추가하지 않음)
+        const { adminSetTemporaryCamp } = await import('@smis-mentor/shared');
+        const { db } = await import('@/lib/firebase');
+        
+        await adminSetTemporaryCamp(db, userData.userId, jobCodeId);
+        // 프론트엔드 상태도 즉시 업데이트
+        await refreshUserData();
+      } else {
+        // 일반 사용자는 기존 로직 (직무 경험에 추가)
+        await updateActiveJobCode(jobCodeId);
+      }
+      
       console.log(`   ✅ 완료 (${((Date.now() - step2Start) / 1000).toFixed(2)}초)`);
       setPrefetchProgress(40);
       
@@ -306,7 +321,7 @@ export default function ProfilePage() {
           userData.userId,
           socialData,
           getUserById,
-          updateUser,
+          updateUser as any,
           arrayUnion // ✅ 동시성 안전
         );
         
@@ -491,7 +506,7 @@ export default function ProfilePage() {
         userData.userId,
         socialData,
         getUserById,
-        updateUser,
+        updateUser as any,
         arrayUnion // ✅ Firestore arrayUnion 전달 (동시성 안전)
       );
 
@@ -597,7 +612,7 @@ export default function ProfilePage() {
         providerId,
         actualUserId, // 실제 Firestore 문서 ID 전달
         getUserById,
-        updateUser,
+        updateUser as any,
         runTransactionWrapper // ✅ Transaction 함수 전달 (동시성 안전)
       );
       
@@ -775,7 +790,7 @@ export default function ProfilePage() {
                     ) : (
                       <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                     )}
-                    <span className={`text-sm ${prefetchStage === 'cache' ? 'text-blue-600 font-semibold' : prefetchStage !== 'cache' ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                    <span className={`text-sm ${prefetchStage === 'cache' ? 'text-blue-600 font-semibold' : (prefetchStage === 'update' || prefetchStage === 'data' || prefetchStage === 'complete') ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
                       기존 캐시 정리
                     </span>
                   </div>
@@ -783,14 +798,14 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-3">
                     {prefetchStage === 'update' ? (
                       <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    ) : ['data', 'complete'].includes(prefetchStage) ? (
+                    ) : (prefetchStage === 'data' || prefetchStage === 'complete') ? (
                       <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
                     ) : (
                       <div className="w-5 h-5 border-2 border-gray-300 rounded-full" />
                     )}
-                    <span className={`text-sm ${prefetchStage === 'update' ? 'text-blue-600 font-semibold' : ['data', 'complete'].includes(prefetchStage) ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                    <span className={`text-sm ${prefetchStage === 'update' ? 'text-blue-600 font-semibold' : (prefetchStage === 'data' || prefetchStage === 'complete') ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
                       캠프 변경
                     </span>
                   </div>
@@ -1016,18 +1031,26 @@ export default function ProfilePage() {
                         <div key={generation} className="flex gap-1.5 flex-wrap">
                           {groupedByGeneration[generation].map((job) => {
                             const isActive = userData?.activeJobExperienceId === job.id;
+                            const isTemporary = userData?.role === 'admin' && isActive && (userData as any).adminTempActiveCamp === job.id;
+                            
                             return (
                               <button
                                 key={job.id}
                                 onClick={() => handleJobCodeSelect(job.id as string)}
                                 disabled={changingJobCode || isActive}
-                                className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap transition-all ${
+                                className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap transition-all relative ${
                                   isActive
-                                    ? 'bg-blue-500 text-white border border-blue-600 cursor-default'
+                                    ? isTemporary
+                                      ? 'bg-orange-500 text-white border border-orange-600 cursor-default'
+                                      : 'bg-blue-500 text-white border border-blue-600 cursor-default'
                                     : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 hover:border-gray-400 cursor-pointer'
                                 } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={isTemporary ? '임시 활성화됨 (직무 경험에 추가되지 않음)' : undefined}
                               >
                                 {job.code}
+                                {isTemporary && (
+                                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full border border-white"></span>
+                                )}
                               </button>
                             );
                           })}
@@ -1060,18 +1083,26 @@ export default function ProfilePage() {
                                 <div key={generation} className="flex gap-1.5 flex-wrap">
                                   {groupedByGeneration[generation].map((job) => {
                                     const isActive = userData?.activeJobExperienceId === job.id;
+                                    const isTemporary = userData?.role === 'admin' && isActive && (userData as any).adminTempActiveCamp === job.id;
+                                    
                                     return (
                                       <button
                                         key={job.id}
                                         onClick={() => handleJobCodeSelect(job.id as string)}
                                         disabled={changingJobCode || isActive}
-                                        className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap transition-all ${
+                                        className={`text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap transition-all relative ${
                                           isActive
-                                            ? 'bg-blue-500 text-white border border-blue-600 cursor-default'
+                                            ? isTemporary
+                                              ? 'bg-orange-500 text-white border border-orange-600 cursor-default'
+                                              : 'bg-blue-500 text-white border border-blue-600 cursor-default'
                                             : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 hover:border-gray-400 cursor-pointer'
                                         } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title={isTemporary ? '임시 활성화됨 (직무 경험에 추가되지 않음)' : undefined}
                                       >
                                         {job.code}
+                                        {isTemporary && (
+                                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full border border-white"></span>
+                                        )}
                                       </button>
                                     );
                                   })}

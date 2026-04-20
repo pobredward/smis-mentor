@@ -525,3 +525,124 @@ export const adminGetUserById = async (db: Firestore, userId: string) => {
     throw error;
   }
 };
+
+// ==================== 관리자 임시 캠프 활성화 ====================
+
+/**
+ * 관리자가 임시로 캠프를 활성화하여 조회할 수 있도록 함
+ * 실제 jobExperiences에 추가하지 않고 임시로 activeJobExperienceId만 변경
+ */
+export const adminSetTemporaryCamp = async (
+  db: Firestore,
+  userId: string,
+  jobCodeId: string
+): Promise<void> => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('사용자를 찾을 수 없습니다.');
+    }
+
+    const userData = userDoc.data() as User;
+    
+    // 관리자가 아닌 경우 에러
+    if (userData.role !== 'admin') {
+      throw new Error('관리자만 임시 캠프 활성화가 가능합니다.');
+    }
+
+    // jobCode가 실제로 존재하는지 확인
+    const jobCodeDoc = await getDoc(doc(db, 'jobCodes', jobCodeId));
+    if (!jobCodeDoc.exists()) {
+      throw new Error('존재하지 않는 캠프 코드입니다.');
+    }
+
+    // 임시 활성화 정보를 저장 (adminTempActiveCamp 필드 사용)
+    await updateDoc(userRef, {
+      activeJobExperienceId: jobCodeId,
+      adminTempActiveCamp: jobCodeId, // 관리자 임시 활성화 표시
+      updatedAt: Timestamp.now(),
+    });
+
+    logger.info('관리자 임시 캠프 활성화 성공:', {
+      userId,
+      jobCodeId,
+      isTemporary: true,
+    });
+  } catch (error) {
+    logger.error('관리자 임시 캠프 활성화 실패:', error);
+    throw error;
+  }
+};
+
+/**
+ * 관리자의 임시 캠프 활성화를 해제하고 원래 캠프로 복원
+ */
+export const adminClearTemporaryCamp = async (
+  db: Firestore,
+  userId: string
+): Promise<void> => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('사용자를 찾을 수 없습니다.');
+    }
+
+    const userData = userDoc.data() as User;
+    
+    // 관리자가 아닌 경우 에러
+    if (userData.role !== 'admin') {
+      throw new Error('관리자만 임시 캠프 해제가 가능합니다.');
+    }
+
+    // 관리자의 실제 직무 경험에서 첫 번째 캠프를 활성화
+    const originalActiveJobId = userData.jobExperiences && userData.jobExperiences.length > 0
+      ? userData.jobExperiences[0].id
+      : null;
+
+    // 임시 활성화 정보 삭제 및 원래 캠프로 복원
+    const updates: any = {
+      activeJobExperienceId: originalActiveJobId,
+      updatedAt: Timestamp.now(),
+    };
+    
+    // adminTempActiveCamp 필드 삭제
+    const { deleteField } = await import('firebase/firestore');
+    updates.adminTempActiveCamp = deleteField();
+
+    await updateDoc(userRef, updates);
+
+    logger.info('관리자 임시 캠프 활성화 해제 성공:', {
+      userId,
+      restoredJobCodeId: originalActiveJobId,
+    });
+  } catch (error) {
+    logger.error('관리자 임시 캠프 활성화 해제 실패:', error);
+    throw error;
+  }
+};
+
+/**
+ * 관리자가 현재 임시 캠프를 활성화 중인지 확인
+ */
+export const adminIsUsingTemporaryCamp = async (
+  db: Firestore,
+  userId: string
+): Promise<boolean> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    
+    if (!userDoc.exists()) {
+      return false;
+    }
+
+    const userData = userDoc.data();
+    return !!userData.adminTempActiveCamp;
+  } catch (error) {
+    logger.error('임시 캠프 사용 여부 확인 실패:', error);
+    return false;
+  }
+};

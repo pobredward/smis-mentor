@@ -169,6 +169,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     }
 
     const startTime = Date.now();
+    const isAdmin = userData?.role === 'admin';
 
     try {
       setChangingJobCode(true);
@@ -182,6 +183,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       console.log('🔄 ProfileScreen: 캠프 변경 시작');
       console.log(`   현재: ${userData?.activeJobExperienceId}`);
       console.log(`   변경: ${jobCodeId}`);
+      console.log(`   관리자 모드: ${isAdmin ? '예 (임시 활성화)' : '아니오'}`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       
       // 1. 기존 캐시 무효화 (0% -> 15%)
@@ -198,7 +200,20 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       console.log('📍 Step 2/5: 캠프 변경 중...');
       const step2Start = Date.now();
       setPrefetchStage('update');
-      await updateActiveJobCode(jobCodeId);
+      
+      if (isAdmin) {
+        // 관리자는 임시 캠프 활성화 (직무 경험에 추가하지 않음)
+        const { adminSetTemporaryCamp } = await import('@smis-mentor/shared');
+        const { db } = await import('../config/firebase');
+        
+        await adminSetTemporaryCamp(db, userData.userId, jobCodeId);
+        // 프론트엔드 상태도 즉시 업데이트
+        await refreshUserData();
+      } else {
+        // 일반 사용자는 기존 로직 (직무 경험에 추가)
+        await updateActiveJobCode(jobCodeId);
+      }
+      
       if (prefetchCancelled) return;
       console.log(`   ✅ 완료 (${((Date.now() - step2Start) / 1000).toFixed(2)}초)`);
       setPrefetchProgress(30);
@@ -624,7 +639,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         isAddressVerified: false,
         isProfileImageUploaded: true,
         jobMotivation: 'Foreign Teacher Application',
-        feedback: existingUserByPhone?.feedback || '',
+        feedback: (existingUserByPhone as any)?.feedback || '',
         // 원어민 특화 정보
         foreignTeacher: {
           firstName: signUpData.firstName,
@@ -851,8 +866,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       await linkSocialProvider(
         userData.userId,
         socialData,
-        getUserById,
-        updateUser,
+        getUserById as any,
+        updateUser as any,
         arrayUnion
       );
 
@@ -928,10 +943,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
               await unlinkSocialProvider(
                 auth,
-                providerId,
+                providerId as any,
                 userData.userId,
-                getUserById,
-                updateUser,
+                getUserById as any,
+                updateUser as any,
                 runTransactionWrapper
               );
 
@@ -1280,6 +1295,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                         <View key={generation} style={styles.badgeRow}>
                           {groupedByGeneration[generation].map((job) => {
                             const isActive = userData?.activeJobExperienceId === job.id;
+                            const isTemporary = userData?.role === 'admin' && isActive && (userData as any).adminTempActiveCamp === job.id;
+                            
                             return (
                               <TouchableOpacity
                                 key={job.id}
@@ -1287,16 +1304,19 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                                 disabled={changingJobCode || isActive}
                                 style={[
                                   styles.adminBadge,
-                                  isActive && styles.adminBadgeActive,
+                                  isActive && (isTemporary ? styles.adminBadgeTemporary : styles.adminBadgeActive),
                                   changingJobCode && !isActive && styles.adminBadgeDisabled,
                                 ]}
                               >
                                 <Text style={[
                                   styles.adminBadgeText,
-                                  isActive && styles.adminBadgeTextActive,
+                                  isActive && (isTemporary ? styles.adminBadgeTextTemporary : styles.adminBadgeTextActive),
                                 ]}>
                                   {job.code}
                                 </Text>
+                                {isTemporary && (
+                                  <View style={styles.tempIndicator} />
+                                )}
                               </TouchableOpacity>
                             );
                           })}
@@ -1324,6 +1344,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                                 <View key={generation} style={styles.badgeRow}>
                                   {groupedByGeneration[generation].map((job) => {
                                     const isActive = userData?.activeJobExperienceId === job.id;
+                                    const isTemporary = userData?.role === 'admin' && isActive && (userData as any).adminTempActiveCamp === job.id;
+                                    
                                     return (
                                       <TouchableOpacity
                                         key={job.id}
@@ -1331,16 +1353,19 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                                         disabled={changingJobCode || isActive}
                                         style={[
                                           styles.adminBadge,
-                                          isActive && styles.adminBadgeActive,
+                                          isActive && (isTemporary ? styles.adminBadgeTemporary : styles.adminBadgeActive),
                                           changingJobCode && !isActive && styles.adminBadgeDisabled,
                                         ]}
                                       >
                                         <Text style={[
                                           styles.adminBadgeText,
-                                          isActive && styles.adminBadgeTextActive,
+                                          isActive && (isTemporary ? styles.adminBadgeTextTemporary : styles.adminBadgeTextActive),
                                         ]}>
                                           {job.code}
                                         </Text>
+                                        {isTemporary && (
+                                          <View style={styles.tempIndicator} />
+                                        )}
                                       </TouchableOpacity>
                                     );
                                   })}
@@ -1528,16 +1553,16 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           )}
 
           {/* 소셜 계정 연동 관리 */}
-          {userData.authProviders && userData.authProviders.length > 0 && (
+          {userData.authProviders && userData.authProviders?.length > 0 && (
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>계정 연동 관리</Text>
               </View>
               <View style={styles.socialAccountsContainer}>
                 <Text style={styles.socialSectionLabel}>현재 연동된 계정</Text>
-                {userData.authProviders.map((provider: any) => {
+                {userData.authProviders?.map((provider: any) => {
                   const isPassword = provider.providerId === 'password';
-                  const canUnlink = userData.authProviders.length > 1 && !isPassword;
+                  const canUnlink = (userData.authProviders?.length || 0) > 1 && !isPassword;
                   
                   return (
                     <View key={provider.providerId} style={styles.socialAccountItem}>
@@ -1577,7 +1602,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 <Text style={[styles.socialSectionLabel, { marginTop: 16 }]}>추가 연동 가능</Text>
                 
                 {/* Google 연동 버튼 */}
-                {!userData.authProviders.some((p: any) => p.providerId === 'google.com') && (
+                {!userData.authProviders?.some((p: any) => p.providerId === 'google.com') && (
                   <TouchableOpacity
                     style={styles.socialLinkButton}
                     onPress={() => handleSocialLink('google.com')}
@@ -1588,7 +1613,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 )}
                 
                 {/* 네이버 연동 버튼 */}
-                {!userData.authProviders.some((p: any) => p.providerId === 'naver' || p.providerId === 'naver.com') && (
+                {!userData.authProviders?.some((p: any) => p.providerId === 'naver' || p.providerId === 'naver.com') && (
                   <TouchableOpacity
                     style={styles.socialLinkButton}
                     onPress={() => handleSocialLink('naver')}
@@ -1599,7 +1624,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 )}
                 
                 {/* Apple 연동 버튼 (iOS만) */}
-                {Platform.OS === 'ios' && !userData.authProviders.some((p: any) => p.providerId === 'apple.com' || p.providerId === 'apple') && (
+                {Platform.OS === 'ios' && !userData.authProviders?.some((p: any) => p.providerId === 'apple.com' || p.providerId === 'apple') && (
                   <TouchableOpacity
                     style={styles.socialLinkButton}
                     onPress={() => handleSocialLink('apple.com')}
@@ -1884,6 +1909,24 @@ const styles = StyleSheet.create({
   },
   adminBadgeTextActive: {
     color: '#ffffff',
+  },
+  adminBadgeTemporary: {
+    backgroundColor: '#f97316',
+    borderColor: '#ea580c',
+  },
+  adminBadgeTextTemporary: {
+    color: '#ffffff',
+  },
+  tempIndicator: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    backgroundColor: '#fbbf24',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#ffffff',
   },
   toggleButton: {
     flexDirection: 'row',
