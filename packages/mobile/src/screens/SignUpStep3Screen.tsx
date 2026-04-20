@@ -11,7 +11,9 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  LogBox,
 } from 'react-native';
+import DropDownPicker from 'react-native-dropdown-picker';
 
 interface SignUpStep3ScreenProps {
   name: string;
@@ -42,6 +44,17 @@ export function SignUpStep3Screen({
   const [major1, setMajor1] = useState('');
   const [major2, setMajor2] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Dropdown 상태
+  const [gradeDropdownOpen, setGradeDropdownOpen] = useState(false);
+  const [gradeItems, setGradeItems] = useState([
+    { label: '1학년', value: 1 },
+    { label: '2학년', value: 2 },
+    { label: '3학년', value: 3 },
+    { label: '4학년', value: 4 },
+    { label: '5학년', value: 5 },
+    { label: '졸업생', value: 6 },
+  ]);
 
   useEffect(() => {
     if (grade === 6) {
@@ -50,6 +63,13 @@ export function SignUpStep3Screen({
       setIsOnLeave(false);
     }
   }, [grade]);
+
+  useEffect(() => {
+    // VirtualizedList 경고 무시 (DropDownPicker 사용 시 발생하는 알려진 이슈)
+    LogBox.ignoreLogs([
+      'VirtualizedLists should never be nested inside plain ScrollViews',
+    ]);
+  }, []);
 
   const handleSubmit = async () => {
     if (!university) {
@@ -84,22 +104,6 @@ export function SignUpStep3Screen({
     }
   };
 
-  const handleGradeSelect = () => {
-    Alert.alert(
-      '학년 선택',
-      '',
-      [
-        { text: '1학년', onPress: () => setGrade(1) },
-        { text: '2학년', onPress: () => setGrade(2) },
-        { text: '3학년', onPress: () => setGrade(3) },
-        { text: '4학년', onPress: () => setGrade(4) },
-        { text: '5학년', onPress: () => setGrade(5) },
-        { text: '졸업생', onPress: () => setGrade(6) },
-        { text: '취소', style: 'cancel' },
-      ]
-    );
-  };
-
   const getGradeLabel = (gradeValue?: number) => {
     if (!gradeValue) return '학년을 선택하세요';
     if (gradeValue === 6) return '졸업생';
@@ -111,7 +115,12 @@ export function SignUpStep3Screen({
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        nestedScrollEnabled={true}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>회원가입</Text>
@@ -134,16 +143,41 @@ export function SignUpStep3Screen({
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>학년</Text>
-              <TouchableOpacity
-                style={styles.picker}
-                onPress={handleGradeSelect}
-                disabled={isLoading}
-              >
-                <Text style={grade ? styles.pickerText : styles.pickerPlaceholder}>
-                  {getGradeLabel(grade)}
-                </Text>
-                <Text style={styles.pickerArrow}>▼</Text>
-              </TouchableOpacity>
+              <View style={styles.dropdownContainer}>
+                <DropDownPicker
+                  open={gradeDropdownOpen}
+                  value={grade || null}
+                  items={gradeItems}
+                  setOpen={setGradeDropdownOpen}
+                  setValue={setGrade}
+                  setItems={setGradeItems}
+                  placeholder="학년을 선택하세요"
+                  disabled={isLoading}
+                  style={styles.dropdown}
+                  textStyle={styles.dropdownText}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  dropDownContainerStyle={styles.dropdownList}
+                  listItemLabelStyle={styles.dropdownItemText}
+                  selectedItemLabelStyle={styles.dropdownSelectedText}
+                  arrowIconStyle={styles.dropdownArrow}
+                  tickIconStyle={styles.dropdownTick}
+                  closeAfterSelecting={true}
+                  zIndex={1000}
+                  zIndexInverse={3000}
+                  listMode="SCROLLVIEW"
+                  scrollViewProps={{
+                    nestedScrollEnabled: true,
+                    showsVerticalScrollIndicator: true,
+                    scrollEnabled: true,
+                    contentContainerStyle: { flexGrow: 1 },
+                  }}
+                  itemSeparator={true}
+                  itemSeparatorStyle={{
+                    backgroundColor: '#f1f5f9',
+                    height: 1,
+                  }}
+                />
+              </View>
             </View>
 
             {grade !== 6 && (
@@ -281,28 +315,63 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1e293b',
   },
-  picker: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  dropdownContainer: {
+    zIndex: 1000,
+  },
+  dropdown: {
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e2e8f0',
     borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    minHeight: 48,
   },
-  pickerText: {
+  dropdownText: {
     fontSize: 16,
     color: '#1e293b',
   },
-  pickerPlaceholder: {
+  dropdownPlaceholder: {
     fontSize: 16,
     color: '#94a3b8',
   },
-  pickerArrow: {
-    fontSize: 12,
-    color: '#64748b',
+  dropdownList: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    marginTop: 2,
+    maxHeight: 280, // 학년 선택을 위한 충분한 높이
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 8,
+    // Android에서 더 잘 보이도록 설정
+    ...(Platform.OS === 'android' && {
+      elevation: 10,
+      borderWidth: 1.5,
+      borderColor: '#cbd5e1',
+      maxHeight: 300, // Android에서 더 넉넉하게
+    }),
+  },
+  dropdownItemText: {
+    fontSize: 16,
+    color: '#1e293b',
+  },
+  dropdownSelectedText: {
+    fontSize: 16,
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+  dropdownArrow: {
+    width: 20,
+    height: 20,
+  },
+  dropdownTick: {
+    width: 20,
+    height: 20,
   },
   checkboxContainer: {
     flexDirection: 'row',

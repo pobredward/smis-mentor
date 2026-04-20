@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -15,9 +19,19 @@
     "incremental": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@smis-mentor/shared": ["../shared/src"]
+      "@smis-mentor/shared": [
+        "../shared/src"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts", "../shared/src/**/*"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.d.ts",
+    "../shared/src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ],
+  "extends": "expo/tsconfig.base"
 }

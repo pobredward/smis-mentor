@@ -13,6 +13,8 @@ export * from './ProfileEditScreen';
 export * from './SignInScreen';
 export * from './SignUpStep1Screen';
 export * from './SignUpStep2Screen';
+export * from './SignUpStep3Screen';
+export * from './SignUpStep4Screen';
 export * from './SignUpFlow';
 export * from './JobBoardDetailScreen';
 export * from './JobBoardEditScreen';

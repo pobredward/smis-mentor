@@ -23,6 +23,7 @@ import { RoleSelectionScreen } from './RoleSelectionScreen';
 import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
+import { SignUpStep4Screen } from './SignUpStep4Screen';
 import { SignUpFlow } from './SignUpFlow';
 import { ForeignSignUpStep1Screen } from './ForeignSignUpStep1Screen';
 import { ForeignSignUpStep2Screen } from './ForeignSignUpStep2Screen';
@@ -39,6 +40,7 @@ import {
 import { useCampDataPrefetch } from '../hooks/useCampDataPrefetch';
 import { useRecruitmentDataPrefetch } from '../hooks/useRecruitmentDataPrefetch';
 import { useCampTab } from '../context/CampTabContext';
+// import { getUserInfoFromRRN } from '../utils/userUtils';
 import { logger } from '@smis-mentor/shared';
 
 type Screen = 
@@ -48,6 +50,7 @@ type Screen =
   | 'mentor-signup-step1' 
   | 'mentor-signup-step2' 
   | 'mentor-signup-step3'
+  | 'mentor-signup-step4'
   | 'foreign-signup-step1'
   | 'foreign-signup-step2'
   | 'social-signup'
@@ -89,6 +92,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
   const [loadingJobCodes, setLoadingJobCodes] = useState(false);
   const [changingJobCode, setChangingJobCode] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [showOlderGenerations, setShowOlderGenerations] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [prefetchingCamp, setPrefetchingCamp] = useState(false);
@@ -430,16 +434,94 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     major2?: string;
   }) => {
     setSignUpData({ ...signUpData, ...data });
-    Alert.alert(
-      '회원가입 진행',
-      '회원가입 4단계는 웹에서 진행해주세요.\n현재는 로그인 기능만 모바일에서 지원됩니다.',
-      [
-        {
-          text: '확인',
-          onPress: () => setCurrentScreen('signin'),
-        },
-      ]
-    );
+    setCurrentScreen('mentor-signup-step4');
+  };
+
+  const handleMentorSignUpStep4Next = async (data: {
+    address: string;
+    addressDetail: string;
+    rrnFront: string;
+    rrnLast: string;
+    gender: 'M' | 'F';
+    referralPath: string;
+    referrerName?: string;
+    otherReferralDetail?: string;
+    agreedPersonal: boolean;
+  }) => {
+    try {
+      setIsLoading(true);
+      
+      const completeSignUpData = { ...signUpData, ...data };
+      
+      // Firebase Auth 계정 생성
+      const { signUp } = await import('../services/authService');
+      const userCredential = await signUp(completeSignUpData.email!, completeSignUpData.password!);
+      const firebaseUser = userCredential.user;
+      
+      // 사용자 정보에서 생년월일 추출 (주민번호 기반)
+      // TODO: 나중에 주민번호에서 생년월일 추출하는 함수 구현
+      const birthDate = null;
+      
+      // Firestore에 사용자 문서 생성
+      const { doc, setDoc, Timestamp } = await import('firebase/firestore');
+      const { db } = await import('../config/firebase');
+      
+      const userData = {
+        name: completeSignUpData.name!,
+        email: completeSignUpData.email!,
+        phoneNumber: completeSignUpData.phone!,
+        role: 'mentor_temp' as const,
+        status: 'temp' as const,
+        university: completeSignUpData.university!,
+        grade: completeSignUpData.grade!,
+        isOnLeave: completeSignUpData.isOnLeave,
+        major1: completeSignUpData.major1!,
+        major2: completeSignUpData.major2 || '',
+        address: data.address,
+        addressDetail: data.addressDetail,
+        ssn: `${data.rrnFront}-${data.rrnLast}`,
+        gender: data.gender,
+        birthDate,
+        referralPath: data.referralPath,
+        referrerName: data.referrerName || '',
+        otherReferralDetail: data.otherReferralDetail || '',
+        agreedPersonal: data.agreedPersonal,
+        photoURL: '',
+        userId: firebaseUser.uid,
+        id: firebaseUser.uid,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+      
+      await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+      
+      // 이메일 인증 메일 발송
+      const { sendEmailVerification } = await import('firebase/auth');
+      await sendEmailVerification(firebaseUser);
+      
+      setIsLoading(false);
+      
+      Alert.alert(
+        '회원가입 완료!',
+        '회원가입이 완료되었습니다.\n이메일 인증을 완료한 후 관리자 승인을 기다려주세요.\n\n인증 메일을 확인해주세요.',
+        [
+          {
+            text: '확인',
+            onPress: () => {
+              setCurrentScreen('signin');
+              setSignUpData({});
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      setIsLoading(false);
+      logger.error('멘토 회원가입 실패:', error);
+      Alert.alert(
+        '회원가입 실패',
+        '회원가입 중 오류가 발생했습니다.\n다시 시도해주세요.\n\n지속적인 문제 시 관리자에게 문의하세요.\n관리자: 010-7656-7933 (신선웅)'
+      );
+    }
   };
 
   const handleForeignSignUpStep1Next = (data: {
@@ -1697,6 +1779,22 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           password={signUpData.password || ''}
           onNext={handleMentorSignUpStep3Next}
           onBack={() => setCurrentScreen('mentor-signup-step2')}
+        />
+      );
+    case 'mentor-signup-step4':
+      return (
+        <SignUpStep4Screen
+          name={signUpData.name || ''}
+          phone={signUpData.phone || ''}
+          email={signUpData.email || ''}
+          password={signUpData.password || ''}
+          university={signUpData.university || ''}
+          grade={signUpData.grade || 1}
+          isOnLeave={signUpData.isOnLeave || false}
+          major1={signUpData.major1 || ''}
+          major2={signUpData.major2 || ''}
+          onNext={handleMentorSignUpStep4Next}
+          onBack={() => setCurrentScreen('mentor-signup-step3')}
         />
       );
     case 'foreign-signup-step1':
