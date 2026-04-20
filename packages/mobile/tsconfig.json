@@ -1,13 +1,19 @@
 {
-  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "strict": true,
-    "jsx": "react-native",
-    "moduleResolution": "node",
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
     "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-native",
+    "incremental": true,
+    "allowSyntheticDefaultImports": true,
     "paths": {
       "@smis-mentor/shared": ["../shared/src"]
     }
