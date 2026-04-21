@@ -27,7 +27,7 @@ import {
 } from '../services/profileService';
 import { compressImage, uriToBlob } from '../utils';
 import * as DocumentPicker from 'expo-document-picker';
-import Postcode from '@actbase/react-daum-postcode';
+import { DaumPostcode } from '../components/DaumPostcode';
 import {
   uploadCV,
   uploadPassportPhoto,
@@ -535,22 +535,10 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
   };
 
   // 주소 검색 완료 처리
-  const handleAddressComplete = (data: any) => {
-    let fullAddress = data.address;
-    let extraAddress = '';
-
-    if (data.addressType === 'R') {
-      if (data.bname !== '') {
-        extraAddress += data.bname;
-      }
-      if (data.buildingName !== '') {
-        extraAddress += extraAddress !== '' ? `, ${data.buildingName}` : data.buildingName;
-      }
-      fullAddress += extraAddress !== '' ? ` (${extraAddress})` : '';
-    }
-
-    setValue('address', fullAddress, { shouldValidate: true });
-    setIsAddressModalVisible(false);
+  const handleAddressComplete = (data: { address: string; zonecode: string }) => {
+    logger.info('📱 주소 검색 완료 (프로필 수정):', data);
+    
+    setValue('address', data.address, { shouldValidate: true });
     
     // 주소 선택 완료 알림
     setTimeout(() => {
@@ -559,7 +547,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
         isForeign ? 'Address has been selected. Please enter detailed address.' : '주소가 선택되었습니다. 상세 주소를 입력해주세요.',
         [{ text: isForeign ? 'OK' : '확인' }]
       );
-    }, 500);
+    }, 300);
   };
 
   // 주소 검색 모달 닫기
@@ -1141,38 +1129,11 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       </ScrollView>
       
       {/* 주소 검색 모달 */}
-      <Modal
+      <DaumPostcode
         visible={isAddressModalVisible}
-        animationType="slide"
-        onRequestClose={handleAddressCancel}
-        presentationStyle="pageSheet"
-      >
-        <View style={styles.addressModalContainer}>
-          <View style={styles.addressModalHeader}>
-            <Text style={styles.addressModalTitle}>{isForeign ? 'Address Search' : '주소 검색'}</Text>
-            <TouchableOpacity
-              style={styles.addressModalCloseButton}
-              onPress={handleAddressCancel}
-            >
-              <Text style={styles.addressModalCloseText}>{isForeign ? 'Close' : '닫기'}</Text>
-            </TouchableOpacity>
-          </View>
-          <Postcode
-            style={styles.addressSearchWebView}
-            jsOptions={{
-              animation: true,
-              hideMapBtn: true,
-              hideEngBtn: true,
-            }}
-            onSelected={handleAddressComplete}
-            onError={(error) => {
-              logger.error('주소 검색 오류:', error);
-              Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'An error occurred while searching for address.' : '주소 검색 중 오류가 발생했습니다.');
-              setIsAddressModalVisible(false);
-            }}
-          />
-        </View>
-      </Modal>
+        onComplete={handleAddressComplete}
+        onClose={handleAddressCancel}
+      />
 
       {/* Country Code Picker Modal */}
       <Modal
@@ -1719,39 +1680,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // 주소 검색 모달 스타일
-  addressModalContainer: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  addressModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
-  },
-  addressModalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  addressModalCloseButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 6,
-  },
-  addressModalCloseText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748b',
-  },
-  addressSearchWebView: {
-    flex: 1,
-  },
 });

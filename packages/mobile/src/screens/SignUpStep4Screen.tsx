@@ -15,7 +15,7 @@ import {
   Modal,
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
-import Postcode from '@actbase/react-daum-postcode';
+import { DaumPostcode } from '../components/DaumPostcode';
 import { getGenderFromRRN } from '../utils/userUtils';
 import Constants from 'expo-constants';
 import { Timestamp } from 'firebase/firestore';
@@ -202,22 +202,10 @@ export function SignUpStep4Screen({
   };
 
   // Daum 주소 검색 완료 처리
-  const handleAddressComplete = (data: any) => {
-    let fullAddress = data.address;
-    let extraAddress = '';
-
-    if (data.addressType === 'R') {
-      if (data.bname !== '') {
-        extraAddress += data.bname;
-      }
-      if (data.buildingName !== '') {
-        extraAddress += extraAddress !== '' ? `, ${data.buildingName}` : data.buildingName;
-      }
-      fullAddress += extraAddress !== '' ? ` (${extraAddress})` : '';
-    }
-
-    setAddress(fullAddress);
-    setIsAddressModalVisible(false);
+  const handleAddressComplete = (data: { address: string; zonecode: string }) => {
+    logger.info('📱 주소 검색 완료:', data);
+    
+    setAddress(data.address);
     
     // 주소 선택 완료 알림
     setTimeout(() => {
@@ -226,7 +214,7 @@ export function SignUpStep4Screen({
         '주소가 선택되었습니다. 상세 주소를 입력해주세요.',
         [{ text: '확인' }]
       );
-    }, 500);
+    }, 300);
   };
 
   // 주소 검색 모달 닫기
@@ -480,38 +468,11 @@ export function SignUpStep4Screen({
       </ScrollView>
 
       {/* 주소 검색 모달 */}
-      <Modal
+      <DaumPostcode
         visible={isAddressModalVisible}
-        animationType="slide"
-        onRequestClose={handleAddressCancel}
-        presentationStyle="pageSheet"
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>주소 검색</Text>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={handleAddressCancel}
-            >
-              <Text style={styles.modalCloseText}>닫기</Text>
-            </TouchableOpacity>
-          </View>
-          <Postcode
-            style={styles.addressSearchWebView}
-            jsOptions={{
-              animation: true,
-              hideMapBtn: true,
-              hideEngBtn: true,
-            }}
-            onSelected={handleAddressComplete}
-            onError={(error) => {
-              logger.error('주소 검색 오류:', error);
-              Alert.alert('오류', '주소 검색 중 오류가 발생했습니다.');
-              setIsAddressModalVisible(false);
-            }}
-          />
-        </View>
-      </Modal>
+        onComplete={handleAddressComplete}
+        onClose={handleAddressCancel}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -739,39 +700,5 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  modalCloseButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 6,
-  },
-  modalCloseText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748b',
-  },
-  addressSearchWebView: {
-    flex: 1,
   },
 });
