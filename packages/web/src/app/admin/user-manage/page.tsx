@@ -1605,16 +1605,14 @@ export default function UserManage() {
                               >
                                 임시삭제
                               </Button>
-                              {process.env.NODE_ENV === 'development' && (
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  onClick={handlePermanentDeleteUser}
-                                  className="whitespace-nowrap bg-red-700 hover:bg-red-800"
-                                >
-                                  완전삭제
-                                </Button>
-                              )}
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={handlePermanentDeleteUser}
+                                className="whitespace-nowrap bg-red-700 hover:bg-red-800"
+                              >
+                                완전삭제
+                              </Button>
                             </>
                           )}
                           {selectedRole === 'deleted' && (
@@ -1626,16 +1624,14 @@ export default function UserManage() {
                               >
                                 사용자 복구
                               </Button>
-                              {process.env.NODE_ENV === 'development' && (
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  onClick={handlePermanentDeleteUser}
-                                  className="whitespace-nowrap bg-red-700 hover:bg-red-800"
-                                >
-                                  완전삭제
-                                </Button>
-                              )}
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={handlePermanentDeleteUser}
+                                className="whitespace-nowrap bg-red-700 hover:bg-red-800"
+                              >
+                                완전삭제
+                              </Button>
                             </>
                           )}
                         </div>
