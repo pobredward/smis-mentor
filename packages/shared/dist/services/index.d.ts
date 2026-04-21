@@ -3,6 +3,7 @@ export * from './stSheet';
 export * from './camp';
 export * from './campPageService';
 export * from './user';
+export * from './userService';
 export * from './admin';
 export * from './jobBoard';
 export * from './review';

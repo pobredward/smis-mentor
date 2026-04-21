@@ -74,9 +74,11 @@ export const INTERVIEW_STATUS_LABELS = {
     complete: '완료',
     passed: '합격',
     failed: '불합격',
+    absent: '면접불참',
 };
 export const FINAL_STATUS_LABELS = {
     '': '미정',
     finalAccepted: '합격',
     finalRejected: '불합격',
+    finalAbsent: '최종불참',
 };

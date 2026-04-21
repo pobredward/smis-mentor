@@ -64,5 +64,18 @@ export declare const adminRemoveUserJobCode: (db: Firestore, userId: string, job
 export declare const adminGetUserJobCodesInfo: (db: Firestore, jobExperiences: JobExperienceItem[] | string[]) => Promise<JobCodeWithGroup[]>;
 export declare const adminGetUsersByJobCode: (db: Firestore, generation: string, code: string) => Promise<User[]>;
 export declare const adminGetUserById: (db: Firestore, userId: string) => Promise<import("@firebase/firestore").DocumentData | null>;
+/**
+ * 관리자가 임시로 캠프를 활성화하여 조회할 수 있도록 함
+ * 실제 jobExperiences에 추가하지 않고 임시로 activeJobExperienceId만 변경
+ */
+export declare const adminSetTemporaryCamp: (db: Firestore, userId: string, jobCodeId: string) => Promise<void>;
+/**
+ * 관리자의 임시 캠프 활성화를 해제하고 원래 캠프로 복원
+ */
+export declare const adminClearTemporaryCamp: (db: Firestore, userId: string) => Promise<void>;
+/**
+ * 관리자가 현재 임시 캠프를 활성화 중인지 확인
+ */
+export declare const adminIsUsingTemporaryCamp: (db: Firestore, userId: string) => Promise<boolean>;
 export {};
 //# sourceMappingURL=index.d.ts.map

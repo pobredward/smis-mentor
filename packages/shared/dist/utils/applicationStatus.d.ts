@@ -7,8 +7,8 @@
  * 3. 면접 합격 → 최종 결정 가능
  */
 export type ApplicationStatus = 'pending' | 'accepted' | 'rejected';
-export type InterviewStatus = '' | 'pending' | 'complete' | 'passed' | 'failed';
-export type FinalStatus = '' | 'finalAccepted' | 'finalRejected';
+export type InterviewStatus = '' | 'pending' | 'complete' | 'passed' | 'failed' | 'absent';
+export type FinalStatus = '' | 'finalAccepted' | 'finalRejected' | 'finalAbsent';
 /**
  * 면접 상태 변경이 가능한지 확인
  * @param applicationStatus 서류 상태
