@@ -11,6 +11,7 @@ import React, {
 } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 import { auth, db } from '../config/firebase';
 import { getUserByEmail } from '../services/authService';
 import { jobCodesService } from '../services';
@@ -63,6 +64,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
   const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
   const hasPrefetchedRef = useRef(false); // 프리페칭 중복 방지
+  const hasShownIncompleteProfileAlert = useRef(false);
+
+  // 미완성 프로필 체크 함수
+  const checkIncompleteProfile = (user: User) => {
+    if (user.role === 'foreign' || user.role === 'foreign_temp') {
+      return false; // 원어민은 체크하지 않음
+    }
+    
+    // 멘토의 경우 프로필 이미지, 자기소개, 지원동기 체크
+    const isIncomplete = !user.profileImage || !user.selfIntroduction || !user.jobMotivation;
+    return isIncomplete;
+  };
 
   // 데이터 프리페칭 트리거 함수
   const triggerDataPrefetch = useCallback(() => {
@@ -339,6 +352,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               
               setUserData(userRecord);
               logger.info('사용자 데이터 로드 성공:', userRecord.name);
+              
+              // 미완성 프로필 체크 (한 번만)
+              if (!hasShownIncompleteProfileAlert.current && checkIncompleteProfile(userRecord)) {
+                hasShownIncompleteProfileAlert.current = true;
+                
+                setTimeout(() => {
+                  Alert.alert(
+                    '프로필 완성',
+                    '프로필을 완성해주세요. 프로필 이미지, 자기소개, 지원동기를 작성하시면 더 나은 서비스를 이용하실 수 있습니다.',
+                    [
+                      { text: '나중에', style: 'cancel' },
+                      { 
+                        text: '프로필 수정', 
+                        onPress: () => {
+                          // 프로필 수정 화면으로 이동하는 로직은 각 화면에서 처리
+                          logger.info('🔄 프로필 수정 안내 완료');
+                        }
+                      }
+                    ],
+                    { cancelable: true }
+                  );
+                }, 2000); // 로그인 후 2초 뒤에 표시
+              }
               
               // 사용자 데이터 로드 후 프리페칭 트리거 (한 번만)
               if (!hasPrefetchedRef.current && userRecord.activeJobExperienceId) {

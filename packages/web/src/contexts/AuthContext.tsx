@@ -63,6 +63,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       try {
         const userRecord = await getUserByEmail(currentUser.email);
         if (userRecord) {
+          // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
+          if ((userRecord.role === 'mentor_temp' || userRecord.role === 'foreign_temp') && userRecord.status === 'temp') {
+            try {
+              logger.info('🔄 웹 로그인 - 임시 사용자를 활성 상태로 업데이트 중:', userRecord.email);
+              
+              const { doc, updateDoc } = await import('firebase/firestore');
+              const newRole = userRecord.role === 'mentor_temp' ? 'mentor' : 'foreign';
+              
+              await updateDoc(doc(db, 'users', userRecord.userId), {
+                role: newRole,
+                status: 'active',
+                updatedAt: new Date()
+              });
+              
+              // 로컬 상태 업데이트
+              userRecord.role = newRole as any;
+              userRecord.status = 'active';
+              
+              logger.info('✅ 웹 사용자 상태 업데이트 완료:', { role: newRole, status: 'active' });
+            } catch (error) {
+              logger.error('❌ 웹 사용자 상태 업데이트 실패:', error);
+            }
+          }
+          
           // 활성 캠프 자동 선택
           const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
           if (activeJobExpId && !userRecord.activeJobExperienceId) {
@@ -82,6 +106,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           const socialUser = JSON.parse(socialUserStr);
           const userRecord = await getUserByEmail(socialUser.email);
           if (userRecord) {
+            // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
+            if ((userRecord.role === 'mentor_temp' || userRecord.role === 'foreign_temp') && userRecord.status === 'temp') {
+              try {
+                logger.info('🔄 웹 소셜 로그인 - 임시 사용자를 활성 상태로 업데이트 중:', userRecord.email);
+                
+                const { doc, updateDoc } = await import('firebase/firestore');
+                const newRole = userRecord.role === 'mentor_temp' ? 'mentor' : 'foreign';
+                
+                await updateDoc(doc(db, 'users', userRecord.userId), {
+                  role: newRole,
+                  status: 'active',
+                  updatedAt: new Date()
+                });
+                
+                // 로컬 상태 업데이트
+                userRecord.role = newRole as any;
+                userRecord.status = 'active';
+                
+                logger.info('✅ 웹 소셜 사용자 상태 업데이트 완료:', { role: newRole, status: 'active' });
+              } catch (error) {
+                logger.error('❌ 웹 소셜 사용자 상태 업데이트 실패:', error);
+              }
+            }
+            
             // 활성 캠프 자동 선택
             const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
             if (activeJobExpId && !userRecord.activeJobExperienceId) {

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserJobCodesInfo, deactivateUser, getUserById, getUserByEmail, updateUser, signIn, signInWithCustomTokenFromFunction } from '@/lib/firebaseService';
+import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import LinkedAccountsDisplay from '@/components/settings/LinkedAccountsDisplay';
@@ -187,6 +188,46 @@ export default function ProfilePage() {
     }
   };
 
+  // 재인증 함수
+  const reauthenticateUser = async (password: string): Promise<boolean> => {
+    try {
+      if (!auth.currentUser || !userData?.email) {
+        throw new Error('사용자 정보를 찾을 수 없습니다.');
+      }
+      
+      const credential = EmailAuthProvider.credential(userData.email, password);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      console.log('✅ 재인증 성공');
+      return true;
+    } catch (error: any) {
+      console.error('❌ 재인증 실패:', error);
+      
+      let errorMessage = '재인증에 실패했습니다.';
+      if (error.code === 'auth/wrong-password') {
+        errorMessage = '비밀번호가 올바르지 않습니다.';
+      } else if (error.code === 'auth/invalid-credential') {
+        errorMessage = '인증 정보가 올바르지 않습니다.';
+      }
+      
+      toast.error(errorMessage);
+      return false;
+    }
+  };
+
+  // 재인증 프롬프트 표시
+  const showReauthPrompt = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const password = window.prompt('보안을 위해 현재 비밀번호를 입력해주세요:');
+      
+      if (!password) {
+        resolve(false);
+        return;
+      }
+      
+      reauthenticateUser(password).then(resolve);
+    });
+  };
+
   const handleDeactivateAccount = async () => {
     if (!userData) return;
     
@@ -200,10 +241,27 @@ export default function ProfilePage() {
       
       // 로그인 페이지로 이동
       router.push('/sign-in');
-    } catch (error) {
+    } catch (error: any) {
       console.error('회원 탈퇴 오류:', error);
-      let errorMessage = '회원 탈퇴 중 오류가 발생했습니다.';
       
+      // 재인증이 필요한 경우
+      if (error.message?.includes('재로그인이 필요합니다') || error.message?.includes('requires-recent-login')) {
+        setDeactivating(false); // 로딩 상태 해제
+        setShowDeactivateModal(false); // 모달 닫기
+        
+        if (window.confirm('보안을 위해 재인증이 필요합니다. 계속하시겠습니까?')) {
+          const reauthSuccess = await showReauthPrompt();
+          if (reauthSuccess) {
+            // 재인증 성공 시 다시 탈퇴 시도
+            setShowDeactivateModal(true); // 모달 다시 열기
+            await handleDeactivateAccount();
+          }
+        }
+        return;
+      }
+      
+      // 다른 에러의 경우
+      let errorMessage = '회원 탈퇴 중 오류가 발생했습니다.';
       if (error instanceof Error) {
         errorMessage = error.message;
       }

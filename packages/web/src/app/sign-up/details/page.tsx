@@ -18,6 +18,7 @@ import ProgressSteps from '@/components/common/ProgressSteps';
 import { Timestamp } from 'firebase/firestore';
 import { auth } from '@/lib/firebase';
 import { FaMapMarkerAlt, FaIdCard, FaUsers, FaCheckCircle } from 'react-icons/fa';
+import { updateGeocodeIfAddressChanged } from '@/lib/geocoding';
 
 const detailsSchema = z.object({
   address: z.string().min(1, '주소를 입력해주세요.'),
@@ -270,6 +271,12 @@ export default function SignUpDetails() {
         const tempData = { ...existingUser };
         const oldTempUserId = existingUser.userId;
 
+        // ✅ 주소 좌표 생성
+        const geocodeUpdate = await updateGeocodeIfAddressChanged(
+          undefined, // 회원가입 시에는 이전 주소가 없음
+          data.address
+        );
+
         // ✅ 새 Auth UID로 Firestore 문서 생성
         await createUser({
           name,
@@ -312,6 +319,7 @@ export default function SignUpDetails() {
             authProviders: userCredential.authProviders,
             primaryAuthMethod: userCredential.primaryAuthMethod,
           }),
+          ...geocodeUpdate, // 좌표 정보 추가
         }, newUserId);
 
         // ✅ 기존 temp 문서 삭제

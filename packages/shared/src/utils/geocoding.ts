@@ -1,6 +1,6 @@
 // Geocoding 유틸리티 함수 (모바일/웹 공용)
 import { Timestamp } from 'firebase/firestore';
-import { logger } from '../services/logger';
+import { logger } from './logger';
 
 /**
  * Kakao Geocoding API를 사용하여 주소를 위도/경도로 변환

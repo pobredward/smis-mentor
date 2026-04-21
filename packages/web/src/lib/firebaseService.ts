@@ -406,6 +406,8 @@ export const updateUserActiveJobCode = async (userId: string, jobCodeId: string)
 
 export const deactivateUser = async (userId: string) => {
   try {
+    logger.info('📤 회원 탈퇴 시작:', userId);
+    
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
     
@@ -416,7 +418,7 @@ export const deactivateUser = async (userId: string) => {
     const userData = userDoc.data() as User;
     const now = Timestamp.now();
     
-    // 이메일 주소 백업을 위해 originalEmail 필드 추가
+    // Firestore 사용자 정보 업데이트
     await updateDoc(userRef, {
       status: 'inactive',
       name: `(탈퇴)${userData.name}`,
@@ -424,20 +426,30 @@ export const deactivateUser = async (userId: string) => {
       updatedAt: now
     });
     
+    logger.info('✅ Firestore 사용자 정보 업데이트 완료');
+    
     // 현재 로그인된 사용자가 탈퇴하려는 사용자인 경우 Authentication 계정 삭제
     if (auth.currentUser && auth.currentUser.email === userData.email) {
       try {
         await deleteAuthUser(auth.currentUser);
-        logger.info('Firebase Authentication 계정이 삭제되었습니다.');
-      } catch (authError) {
-        logger.error('Firebase Authentication 계정 삭제 실패:', authError);
-        // Authentication 오류는 무시하고 Firestore 업데이트는 진행
+        logger.info('✅ Firebase Authentication 계정 삭제 완료');
+      } catch (authError: any) {
+        logger.error('❌ Firebase Authentication 계정 삭제 실패:', authError);
+        
+        // 재인증이 필요한 경우 에러를 다시 throw
+        if (authError?.code === 'auth/requires-recent-login') {
+          throw new Error('보안을 위해 재로그인이 필요합니다. 다시 로그인 후 탈퇴를 진행해주세요.');
+        }
+        
+        // 다른 Authentication 오류는 무시하고 Firestore 업데이트는 성공으로 처리
+        logger.warn('⚠️ Authentication 계정 삭제에 실패했지만 Firestore 업데이트는 성공');
       }
     }
     
+    logger.info('✅ 회원 탈퇴 처리 완료:', userData.email);
     return true;
   } catch (error) {
-    logger.error('사용자 비활성화 실패:', error);
+    logger.error('❌ 회원 탈퇴 처리 실패:', error);
     throw error;
   }
 };

@@ -41,7 +41,8 @@ import { useCampDataPrefetch } from '../hooks/useCampDataPrefetch';
 import { useRecruitmentDataPrefetch } from '../hooks/useRecruitmentDataPrefetch';
 import { useCampTab } from '../context/CampTabContext';
 // import { getUserInfoFromRRN } from '../utils/userUtils';
-import { logger } from '@smis-mentor/shared';
+import { logger, deactivateUserMobile } from '@smis-mentor/shared';
+import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 
 type Screen = 
   | 'profile' 
@@ -99,6 +100,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [prefetchProgress, setPrefetchProgress] = useState(0);
   const [prefetchStage, setPrefetchStage] = useState<'cache' | 'update' | 'data' | 'recruitment' | 'webview' | 'complete'>('cache');
   const [prefetchCancelled, setPrefetchCancelled] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
 
   useEffect(() => {
     if (userData) {
@@ -839,6 +842,127 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   };
 
   /**
+   * 회원 탈퇴 처리
+   */
+  // 재인증 함수
+  const reauthenticateUser = async (password: string): Promise<boolean> => {
+    try {
+      if (!auth.currentUser || !userData?.email) {
+        throw new Error('사용자 정보를 찾을 수 없습니다.');
+      }
+      
+      const credential = EmailAuthProvider.credential(userData.email, password);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      logger.info('✅ 재인증 성공');
+      return true;
+    } catch (error: any) {
+      logger.error('❌ 재인증 실패:', error);
+      
+      let errorMessage = '재인증에 실패했습니다.';
+      if (error.code === 'auth/wrong-password') {
+        errorMessage = '비밀번호가 올바르지 않습니다.';
+      } else if (error.code === 'auth/invalid-credential') {
+        errorMessage = '인증 정보가 올바르지 않습니다.';
+      }
+      
+      Alert.alert('재인증 실패', errorMessage);
+      return false;
+    }
+  };
+
+  // 재인증 프롬프트 표시
+  const showReauthPrompt = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      Alert.prompt(
+        '재인증 필요',
+        '보안을 위해 현재 비밀번호를 입력해주세요.',
+        [
+          {
+            text: '취소',
+            style: 'cancel',
+            onPress: () => resolve(false)
+          },
+          {
+            text: '확인',
+            onPress: async (password?: string) => {
+              if (!password) {
+                Alert.alert('오류', '비밀번호를 입력해주세요.');
+                resolve(false);
+                return;
+              }
+              
+              const success = await reauthenticateUser(password);
+              resolve(success);
+            }
+          }
+        ],
+        'secure-text'
+      );
+    });
+  };
+
+  const handleDeactivateAccount = async () => {
+    if (!userData) return;
+    
+    setIsDeactivating(true);
+    try {
+      await deactivateUserMobile(userData.userId, db, auth);
+      
+      setShowDeactivateModal(false);
+      Alert.alert(
+        '회원 탈퇴 완료', 
+        '회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.',
+        [
+          {
+            text: '확인',
+            onPress: () => {
+              // 앱을 종료하거나 로그인 화면으로 이동
+              setCurrentScreen('signin');
+            }
+          }
+        ]
+      );
+      
+      logger.info('✅ 회원 탈퇴 완료:', userData.email);
+    } catch (error: any) {
+      logger.error('❌ 회원 탈퇴 실패:', error);
+      
+      // 재인증이 필요한 경우
+      if (error.message?.includes('재로그인이 필요합니다') || error.message?.includes('requires-recent-login')) {
+        setIsDeactivating(false); // 로딩 상태 해제
+        
+        Alert.alert(
+          '재인증 필요',
+          '보안을 위해 재인증이 필요합니다. 계속하시겠습니까?',
+          [
+            { text: '취소', style: 'cancel' },
+            {
+              text: '재인증',
+              onPress: async () => {
+                const reauthSuccess = await showReauthPrompt();
+                if (reauthSuccess) {
+                  // 재인증 성공 시 다시 탈퇴 시도
+                  await handleDeactivateAccount();
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+      
+      // 다른 에러의 경우
+      Alert.alert(
+        '회원 탈퇴 실패',
+        error.message || '회원 탈퇴 중 오류가 발생했습니다. 다시 시도해주세요.',
+        [{ text: '확인' }]
+      );
+    } finally {
+      setIsDeactivating(false);
+    }
+  };
+
+  /**
    * 소셜 계정 연동
    */
   const handleSocialLink = async (providerId: string) => {
@@ -1265,6 +1389,60 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               </View>
               
               <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 16 }} />
+            </View>
+          </View>
+        </Modal>
+
+        {/* 회원 탈퇴 확인 모달 */}
+        <Modal
+          visible={showDeactivateModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowDeactivateModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.deactivateModalContent}>
+              <View style={styles.deactivateModalHeader}>
+                <Ionicons name="warning" size={48} color="#ef4444" />
+                <Text style={styles.deactivateModalTitle}>
+                  {isForeign ? 'Confirm Account Deletion' : '회원 탈퇴 확인'}
+                </Text>
+                <Text style={styles.deactivateModalMessage}>
+                  {isForeign 
+                    ? 'Are you sure you want to delete your account? After deletion, you will not be able to log in with the same email, and all account information will be deactivated.'
+                    : '정말로 회원 탈퇴를 진행하시겠습니까?\n\n탈퇴 후에는 동일한 이메일로 다시 로그인할 수 없으며, 모든 계정 정보가 비활성화됩니다.'
+                  }
+                </Text>
+              </View>
+              
+              <View style={styles.deactivateModalButtons}>
+                <TouchableOpacity
+                  style={styles.deactivateModalCancelButton}
+                  onPress={() => setShowDeactivateModal(false)}
+                  disabled={isDeactivating}
+                >
+                  <Text style={styles.deactivateModalCancelText}>
+                    {isForeign ? 'Cancel' : '취소'}
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.deactivateModalConfirmButton,
+                    isDeactivating && styles.deactivateModalConfirmButtonDisabled
+                  ]}
+                  onPress={handleDeactivateAccount}
+                  disabled={isDeactivating}
+                >
+                  {isDeactivating ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Text style={styles.deactivateModalConfirmText}>
+                      {isForeign ? 'Delete' : '탈퇴하기'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -1807,6 +1985,15 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               <Text style={styles.settingsButtonText}>알림 설정</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+
+          {/* 회원 탈퇴 버튼 */}
+          <TouchableOpacity
+            style={styles.deactivateButton}
+            onPress={() => setShowDeactivateModal(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.deactivateButtonText}>{isForeign ? 'Delete Account' : '회원 탈퇴'}</Text>
           </TouchableOpacity>
 
           {/* 로그아웃 버튼 */}
@@ -2611,5 +2798,95 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#ffffff',
+  },
+
+  // 회원 탈퇴 버튼 스타일
+  deactivateButton: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  deactivateButtonText: {
+    color: '#ef4444',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // 회원 탈퇴 모달 스타일
+  deactivateModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 10,
+  },
+  deactivateModalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  deactivateModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginTop: 16,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  deactivateModalMessage: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  deactivateModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  deactivateModalCancelButton: {
+    flex: 1,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  deactivateModalCancelText: {
+    color: '#64748b',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  deactivateModalConfirmButton: {
+    flex: 1,
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  deactivateModalConfirmButtonDisabled: {
+    backgroundColor: '#fca5a5',
+  },
+  deactivateModalConfirmText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
