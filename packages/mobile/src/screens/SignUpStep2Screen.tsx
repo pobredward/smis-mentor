@@ -34,6 +34,7 @@ export function SignUpStep2Screen({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [emailExists, setEmailExists] = useState(false);
+  const [showEmailWarning, setShowEmailWarning] = useState(false);
 
   const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
@@ -44,6 +45,7 @@ export function SignUpStep2Screen({
 
   const handleEmailBlur = async () => {
     if (email && validateEmail(email)) {
+      setShowEmailWarning(true);
       try {
         const existingUser = await getUserByEmail(email);
         setEmailExists(!!existingUser);
@@ -133,6 +135,7 @@ export function SignUpStep2Screen({
                 onChangeText={(text) => {
                   setEmail(text);
                   setEmailExists(false);
+                  setShowEmailWarning(false);
                 }}
                 onBlur={handleEmailBlur}
                 autoCapitalize="none"
@@ -142,9 +145,11 @@ export function SignUpStep2Screen({
               {emailExists && (
                 <Text style={styles.errorText}>이미 사용 중인 이메일입니다.</Text>
               )}
-              <Text style={styles.warningText}>
-                이메일에 오타가 없는지 다시 한 번 확인해주세요
-              </Text>
+              {showEmailWarning && !emailExists && (
+                <Text style={styles.warningText}>
+                  이메일에 오타가 없는지 다시 한 번 확인해주세요
+                </Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
