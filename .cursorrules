@@ -8,7 +8,7 @@
 **모노레포 구조** (npm workspaces):
 ```
 packages/
-├── web/          # Next.js 15 (App Router) 웹 앱
+├── web/          # Next.js 16 (App Router) 웹 앱
 ├── mobile/       # React Native (Expo SDK 54) 모바일 앱
 └── shared/       # 공유 라이브러리 (타입, 서비스, 유틸)
 functions/        # Firebase Cloud Functions
@@ -22,16 +22,16 @@ functions/        # Firebase Cloud Functions
 - ❌ `web` ↔ `mobile` (금지)
 
 ### 기술 스택
-**공통**: TypeScript 5, React 19, Firebase (Firestore, Auth, Storage), Zod, React Hook Form  
-**웹**: Next.js 15, Tailwind CSS, React Query, Tiptap, Leaflet/Mapbox  
+**공통**: TypeScript 5, React 19.1.0, Firebase (Firestore, Auth, Storage), Zod, React Hook Form  
+**웹**: Next.js 16, Tailwind CSS, React Query, Tiptap, Leaflet/Mapbox, React Icons  
 **모바일**: Expo SDK 54, React Native 0.81.5, React Navigation 6, expo-image
 
 ### 핵심 도메인
 1. **사용자 관리**: `mentor`, `foreign`, `admin` + `*_temp` 역할 (캠프 운영진)
-2. **캠프 학생 관리**: ST시트 동기화 (별도 시스템, User 아님)
-3. **채용 시스템**: 채용 공고, 지원, 4단계 평가 (서류/면접/대면/캠프)
-4. **캠프 운영**: Task, 일정, 자료, 숙소, 환자 기록
-5. **외부 연동**: SMS(네이버 클라우드), ST시트(Google Sheets), 소셜 로그인(구글/카카오/네이버)
+2. **캠프 학생 관리**: ST시트 동기화 (Google Sheets, User와 별개 시스템)
+3. **채용 시스템**: 채용 공고, 지원서, 4단계 평가 (서류/면접/대면/캠프)
+4. **캠프 운영**: Task, 일정, 교육자료, 숙소 배정, 환자 기록
+5. **외부 연동**: SMS(네이버 클라우드), 소셜 로그인(구글/카카오/네이버/애플)
 
 ### 주요 타입 (packages/shared/src/types/)
 ```typescript
@@ -48,15 +48,41 @@ type SocialLoginAction = 'LOGIN' | 'SIGNUP' | 'LINK_ACTIVE' | 'LINK_TEMP' | 'NEE
 const MENTOR_GROUP_ROLES = ['담임', '수업', '매니저', '부매니저'] as const;
 const FOREIGN_GROUP_ROLES = ['Speaking', 'Reading', 'Writing', 'Mix', 'Manager', 'Sub Manager'] as const;
 
-// 캠프 학생 (ST시트 - User와 별개)
+// 캠프 학생 (ST시트 동기화, User와 별개 시스템)
 interface STSheetStudent {
   studentId: string;
   name: string;
   grade: string;
   classMentor: string;  // 담당 멘토
   roomNumber: string;
-  // ... 학생 정보
+  parentPhone: string;
+  medication: string;
+  // ... 200+ 필드 (Google Sheets 동기화)
 }
+```
+
+### 🛠️ 개발 워크플로
+
+```bash
+# 1. 프로젝트 초기 설정
+npm install
+npm run dev:setup  # shared 패키지 빌드
+
+# 2. 개발 서버 실행
+npm run dev:web        # 웹 (http://localhost:3000)
+npm run start:mobile   # 모바일 (Expo Dev Server)
+npm run dev:functions  # Firebase Functions
+
+# 3. 빌드 & 검증
+npm run build:all           # 전체 빌드
+npm run validate:monorepo   # 아키텍처 검증
+npm run lint               # 린트 검사
+npm run type-check         # 타입 체크
+
+# 4. 배포
+npm run deploy:web         # 웹 (Vercel)
+npm run deploy:all         # 모바일 (EAS)
+npm run deploy:functions   # Functions (Firebase)
 ```
 
 ---
@@ -86,6 +112,8 @@ interface STSheetStudent {
    - 플랫폼별 최적화 (웹: RSC, 모바일: FlatList)
 
 ### 2. 모노레포 규칙 (Critical)
+
+**🚨 중요**: 코드 작성/수정 시 반드시 `.cursor/rules/monorepo-architecture.md` 파일의 모노레포 아키텍처 규칙을 확인하고 준수해야 합니다. 이 규칙을 위반하는 코드는 절대 작성하지 마세요.
 
 #### shared 패키지 배치
 **반드시 shared에 배치**:
@@ -185,7 +213,7 @@ const user = UserSchema.parse(userDoc.data());
 
 ---
 
-## 🌐 웹 (Next.js 15) 규칙
+## 🌐 웹 (Next.js 16) 규칙
 
 ### Server Component 우선
 ```typescript
@@ -210,7 +238,7 @@ function JobApplyButton({ jobId }: { jobId: string }) {
 }
 ```
 
-### 비동기 API (Next.js 15)
+### 비동기 API (Next.js 16)
 ```typescript
 // ✅ async로 호출
 const cookieStore = await cookies();

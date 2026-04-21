@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+build
+coverage
+*.lock
+*.log
+.env*
+.vercel
+.expo
+ios
+android

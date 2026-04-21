@@ -2,7 +2,7 @@
 import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, RefreshCw, Database, Search, Download, CheckCircle, AlertTriangle } from 'lucide-react';
+import { FiArrowLeft, FiRefreshCw, FiDatabase, FiSearch, FiDownload, FiCheckCircle, FiAlertTriangle } from 'react-icons/fi';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { authenticatedGet, authenticatedPost } from '@/lib/apiClient';
@@ -123,7 +123,7 @@ export default function UserIdBackupPage() {
             onClick={() => router.push('/admin')}
             className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
           >
-            <ArrowLeft className="w-5 h-5 mr-2" />
+            <FiArrowLeft className="w-5 h-5 mr-2" />
             관리자 페이지로 돌아가기
           </button>
           <div className="flex items-center justify-between">
@@ -138,7 +138,7 @@ export default function UserIdBackupPage() {
               disabled={loading}
               className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
             >
-              <Database className={`w-5 h-5 mr-2 ${loading ? 'animate-pulse' : ''}`} />
+              <FiDatabase className={`w-5 h-5 mr-2 ${loading ? 'animate-pulse' : ''}`} />
               {loading ? '백업 중...' : '새 백업 생성'}
             </button>
           </div>
@@ -153,7 +153,7 @@ export default function UserIdBackupPage() {
                   <p className="text-sm text-gray-600">전체 사용자</p>
                   <p className="text-2xl font-bold text-gray-900">{backupStatus.metadata.totalUsers}</p>
                 </div>
-                <CheckCircle className="w-8 h-8 text-blue-600" />
+                <FiCheckCircle className="w-8 h-8 text-blue-600" />
               </div>
             </div>
 
@@ -163,7 +163,7 @@ export default function UserIdBackupPage() {
                   <p className="text-sm text-gray-600">일관성 있음</p>
                   <p className="text-2xl font-bold text-green-600">{backupStatus.metadata.statistics.totalConsistent}</p>
                 </div>
-                <CheckCircle className="w-8 h-8 text-green-600" />
+                <FiCheckCircle className="w-8 h-8 text-green-600" />
               </div>
             </div>
 
@@ -173,7 +173,7 @@ export default function UserIdBackupPage() {
                   <p className="text-sm text-gray-600">불일치</p>
                   <p className="text-2xl font-bold text-red-600">{backupStatus.metadata.statistics.totalInconsistent}</p>
                 </div>
-                <AlertTriangle className="w-8 h-8 text-red-600" />
+                <FiAlertTriangle className="w-8 h-8 text-red-600" />
               </div>
             </div>
 
@@ -183,7 +183,7 @@ export default function UserIdBackupPage() {
                   <p className="text-sm text-gray-600">Auth 없음</p>
                   <p className="text-2xl font-bold text-orange-600">{backupStatus.metadata.statistics.noAuthAccount}</p>
                 </div>
-                <AlertTriangle className="w-8 h-8 text-orange-600" />
+                <FiAlertTriangle className="w-8 h-8 text-orange-600" />
               </div>
             </div>
           </div>
@@ -224,7 +224,7 @@ export default function UserIdBackupPage() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <Database className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <FiDatabase className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-600">백업이 존재하지 않습니다.</p>
                 <p className="text-sm text-gray-500 mt-2">위의 "새 백업 생성" 버튼을 눌러 백업을 시작하세요.</p>
               </div>
@@ -240,7 +240,7 @@ export default function UserIdBackupPage() {
           <div className="p-6">
             <div className="flex gap-3 mb-6">
               <div className="flex-1 relative">
-                <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <FiSearch className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                 <input
                   type="email"
                   placeholder="이메일로 검색..."

@@ -1,24 +1,138 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SMIS Mentor
 
-## Getting Started
+멘토링 매칭 및 관리를 위한 종합 플랫폼입니다. 웹, 모바일, 서버리스 함수로 구성된 모노레포 구조로 개발되었습니다.
 
-First, run the development server:
+## 📁 프로젝트 구조
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+smis-mentor/
+├── packages/
+│   ├── web/          # Next.js 웹 애플리케이션
+│   ├── mobile/       # Expo React Native 모바일 앱
+│   └── shared/       # 공유 라이브러리 (타입, 유틸리티, 서비스)
+├── functions/        # Firebase Cloud Functions
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 빠른 시작
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. 저장소 클론 및 의존성 설치
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+git clone <repository-url>
+cd smis-mentor
+npm install
+```
+
+### 2. 환경 설정
+
+각 패키지에서 필요한 환경 변수를 설정합니다:
+
+- `packages/web/.env.local` - 웹 애플리케이션 환경 변수
+- `packages/mobile/.env` - 모바일 앱 환경 변수  
+- `functions/.env` - Firebase Functions 환경 변수
+
+### 3. 공유 패키지 빌드
+
+```bash
+npm run dev:setup
+```
+
+### 4. 개발 서버 실행
+
+**웹 애플리케이션:**
+```bash
+npm run dev:web
+```
+- 브라우저에서 http://localhost:3000 접속
+
+**모바일 애플리케이션:**
+```bash  
+npm run start:mobile
+```
+- Expo 앱으로 QR 코드 스캔
+
+**Firebase Functions:**
+```bash
+npm run dev:functions  
+```
+- Functions 에뮬레이터 실행
+
+## 🛠️ 개발 스크립트
+
+| 스크립트 | 설명 |
+|---------|------|
+| `npm run dev:setup` | 공유 패키지 빌드 (최초 실행 시 필요) |
+| `npm run dev:web` | 웹 개발 서버 시작 |
+| `npm run start:mobile` | 모바일 개발 서버 시작 |
+| `npm run dev:functions` | Functions 에뮬레이터 시작 |
+| `npm run build:all` | 모든 패키지 빌드 |
+| `npm run lint` | 모든 패키지 린트 실행 |
+| `npm run type-check` | TypeScript 타입 체크 |
+
+## 🏗️ 패키지별 상세 정보
+
+### packages/web (Next.js 웹 앱)
+- **기술 스택**: Next.js 16, React 19, TypeScript
+- **주요 기능**: 관리자 대시보드, 사용자 관리, 평가 시스템
+- **포트**: 3000
+
+### packages/mobile (Expo 모바일 앱)  
+- **기술 스택**: Expo, React Native, TypeScript
+- **주요 기능**: 멘토/멘티 매칭, 캠프 관리, 평가 입력
+- **빌드**: EAS Build 사용
+
+### packages/shared (공유 라이브러리)
+- **역할**: 공통 타입 정의, 유틸리티 함수, 서비스 로직
+- **빌드**: TypeScript 컴파일하여 `dist/` 생성
+
+### functions (Firebase Cloud Functions)
+- **기술 스택**: Node.js, TypeScript
+- **주요 기능**: 서버리스 API, 데이터 처리, 알림 발송
+- **배포**: Firebase CLI 사용
+
+## 🏗️ 모노레포 아키텍처 규칙
+
+### 📂 의존성 방향 (중요!)
+
+```mermaid
+graph TB
+    shared[packages/shared<br/>공유 라이브러리]
+    web[packages/web<br/>Next.js 웹앱]
+    mobile[packages/mobile<br/>Expo 모바일앱]
+    functions[functions<br/>Cloud Functions]
+    
+    web --> shared
+    mobile --> shared  
+    functions --> shared
+    
+    style shared fill:#e1f5fe
+    style web fill:#f3e5f5
+    style mobile fill:#e8f5e8
+    style functions fill:#fff3e0
+```
+
+### ✅ 허용되는 패턴
+- `packages/web` → `packages/shared` ✅
+- `packages/mobile` → `packages/shared` ✅  
+- `functions` → `packages/shared` ✅
+
+### ❌ 금지되는 패턴
+- `packages/shared` → `packages/web` ❌
+- `packages/shared` → `packages/mobile` ❌
+- `packages/web` ↔ `packages/mobile` ❌
+
+### 🔧 검증 도구
+
+```bash
+# 모노레포 아키텍처 규칙 검증
+npm run validate:monorepo
+
+# 전체 품질 검사
+npm run lint && npm run type-check && npm run validate:monorepo
+```
+
+자세한 규칙은 [`.cursor/rules/monorepo-architecture.md`](.cursor/rules/monorepo-architecture.md)를 참고하세요.
 
 ## Firebase Storage 설정
 

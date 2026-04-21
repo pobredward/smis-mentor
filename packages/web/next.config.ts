@@ -5,13 +5,11 @@ const nextConfig: NextConfig = {
   // Monorepo 환경을 위한 설정
   transpilePackages: ['@smis-mentor/shared'],
   
-  // TypeScript 빌드 설정
+  // TypeScript 빌드 설정 (타입 오류 해결 후 제거 예정)
   typescript: {
-    // 주의: 타입 오류를 무시하고 빌드를 진행합니다.
-    // 실제 문제가 해결되면 제거하는 것이 좋습니다.
     ignoreBuildErrors: true,
   },
-  
+
   // 외부 iframe 콘텐츠 허용을 위한 헤더 설정
   async headers() {
     return [

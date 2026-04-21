@@ -1,75 +1,74 @@
 # SMIS Mentor Mobile App
 
-SMIS Mentor 캠프 운영진을 위한 모바일 애플리케이션입니다.
+SMIS Mentor 캠프 운영진을 위한 React Native 모바일 애플리케이션입니다.
 
-## 🚀 빠른 시작
+## 📱 기술 스택
 
-### 개발 환경 실행
+- **Expo SDK 52.0** - React Native 개발 플랫폼
+- **React Native 0.81.5** - 크로스 플랫폼 모바일 프레임워크  
+- **TypeScript** - 타입 안전성
+- **React Navigation 6** - 네비게이션
+- **@smis-mentor/shared** - 공유 라이브러리
+
+## 🚀 개발 환경 설정
+
+### 1. 의존성 설치 (루트에서)
 ```bash
-npm start
+cd ../../  # 모노레포 루트로 이동
+npm install
+npm run dev:setup  # shared 패키지 빌드
 ```
 
-### 플랫폼별 실행
+### 2. 개발 서버 시작
+```bash
+cd packages/mobile
+npm start  # Expo Dev Server 시작
+```
+
+### 3. 플랫폼별 실행
 ```bash
 npm run ios      # iOS 시뮬레이터
 npm run android  # Android 에뮬레이터
+npm run web      # 웹 브라우저 (개발용)
 ```
 
----
-
-## 📦 배포 명령어
+## 📦 배포
 
 ### iOS 배포 (App Store)
 ```bash
-# 🍎 빌드 + 자동 제출
-npm run deploy:ios
-
-# 빌드만
-npm run deploy:build-only:ios
-
-# 제출만 (최신 빌드)
-npm run deploy:submit-only:ios
+npm run deploy:ios              # 빌드 + 자동 제출
+npm run deploy:build-only:ios   # 빌드만
+npm run deploy:submit-only:ios  # 제출만 (최신 빌드)
 ```
 
 ### Android 배포 (Play Store)
 ```bash
-# 🤖 빌드 + 자동 제출
-npm run deploy:android
-
-# 빌드만
-npm run deploy:build-only:android
-
-# 제출만 (최신 빌드)
-npm run deploy:submit-only:android
+npm run deploy:android              # 빌드 + 자동 제출  
+npm run deploy:build-only:android   # 빌드만
+npm run deploy:submit-only:android  # 제출만 (최신 빌드)
 ```
 
-### 양쪽 모두 배포
+### 전체 배포
 ```bash
-npm run deploy:all
+npm run deploy:all  # iOS + Android 동시 배포
 ```
-
----
 
 ## 📱 OTA 업데이트 (즉시 배포)
 
 앱 스토어 심사 없이 JavaScript 변경사항만 즉시 배포:
 
 ```bash
-# 프로덕션 환경
-npm run update:production
-
-# 프리뷰 환경
-npm run update:preview
+npm run update:production  # 프로덕션 환경
+npm run update:preview     # 프리뷰 환경
 ```
 
 **제한사항**: 네이티브 코드 변경 불가 (새 라이브러리, 권한 등은 전체 빌드 필요)
 
----
 
-## 🔧 프로젝트 설정
+## ⚙️ 설정
 
 ### 환경 변수
-`.env.local` 파일 생성 필요:
+`packages/mobile/.env.local` 파일 생성:
 ```env
 # Firebase
 EXPO_PUBLIC_WEB_API_URL=https://www.smis-mentor.com
@@ -159,47 +158,38 @@ After:  링크 클릭 → ⚡ 즉시 표시!
 packages/mobile/
 ├── src/
 │   ├── components/       # 재사용 가능한 컴포넌트
-│   ├── screens/          # 화면 컴포넌트
-│   ├── navigation/       # 네비게이션 설정
-│   ├── services/         # Firebase 서비스
-│   └── utils/            # 유틸리티 함수
-├── assets/               # 이미지, 아이콘 등
-├── scripts/              # 배포 스크립트
+│   ├── screens/          # 화면 컴포넌트  
+│   ├── navigation/       # React Navigation 설정
+│   ├── contexts/         # React Context
+│   └── hooks/            # Custom Hooks
+├── assets/               # 이미지, 아이콘, 폰트
 ├── app.config.ts         # Expo 설정
 ├── eas.json              # EAS Build 설정
-└── DEPLOYMENT.md         # 배포 가이드
+└── package.json          # 의존성 및 스크립트
 ```
+
+**공유 라이브러리**: `../../packages/shared/`
+- 타입 정의, Firebase 서비스, 유틸리티 함수
 
 ---
 
-## 🧪 테스트
+## 🔧 개발 도구
 
 ```bash
-# TypeScript 타입 체크
-npm run type-check
+# 타입 체크 (모노레포 루트에서)
+npm run type-check --workspace=packages/mobile
 
-# Linter 실행
-npm run lint
+# 린트 검사 (모노레포 루트에서) 
+npm run lint --workspace=packages/mobile
+
+# 전체 품질 검사
+npm run lint && npm run type-check && npm run validate:monorepo
 ```
 
----
+## 🔗 관련 링크
 
-## 📞 도움말
-
-### 빌드 상태 확인
-- Expo 대시보드: https://expo.dev/accounts/pobredward02/projects/smis-mentor/builds
-
-### 스토어 관리
-- App Store Connect: https://appstoreconnect.apple.com/apps/6759916856
-- Google Play Console: https://play.google.com/console
-
-### 문제 발생 시
-1. `DEPLOYMENT.md`의 문제 해결 섹션 참조
-2. Expo 대시보드에서 빌드 로그 확인
-3. Firebase 콘솔에서 에러 로그 확인
-
----
-
-## 📄 라이선스
-
-Private - SMIS Mentor
+- **모노레포 루트**: [../../README.md](../../README.md)
+- **공유 라이브러리**: [../shared/README.md](../shared/README.md)
+- **Expo 대시보드**: https://expo.dev/accounts/pobredward02/projects/smis-mentor
+- **App Store Connect**: https://appstoreconnect.apple.com  
+- **Google Play Console**: https://play.google.com/console

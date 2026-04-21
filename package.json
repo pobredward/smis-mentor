@@ -7,7 +7,8 @@
     "functions"
   ],
   "overrides": {
-    "react": "19.1.0"
+    "react": "19.1.0",
+    "typescript": "^5.3.3"
   },
   "scripts": {
     "dev:setup": "npm run build:shared",
@@ -17,7 +18,10 @@
     "build:shared": "npm run build --workspace=packages/shared",
     "build:web": "npm run build:shared && npm run build --workspace=packages/web",
     "build:functions": "npm run build:shared && npm run build --workspace=functions",
-    "build:all": "npm run build:shared && npm run build --workspace=packages/web && npm run build --workspace=functions",
+    "build:all": "npm run build:shared && npm run build:parallel",
+    "build:parallel": "npm-run-all -p build:web:only build:functions:only",
+    "build:web:only": "npm run build --workspace=packages/web",
+    "build:functions:only": "npm run build --workspace=functions",
     "deploy:functions": "firebase deploy --only functions",
     "deploy:storage": "firebase deploy --only storage",
     "deploy:web": "npm run deploy --workspace=packages/web",
@@ -45,11 +49,20 @@
     "lint": "npm run lint --workspaces --if-present",
     "type-check": "npm run type-check --workspaces --if-present",
     "lint:fix": "npm run lint --workspaces --if-present -- --fix",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
+    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
+    "validate:monorepo": "node .cursor/scripts/validate-monorepo.js",
     "clean": "rm -rf node_modules packages/*/node_modules functions/node_modules"
   },
   "devDependencies": {
-    "@types/node": "^25.3.5",
+    "@types/node": "^20.11.19",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@eslint/eslintrc": "^3.0.0",
+    "eslint": "^9.0.0",
     "firebase-admin": "^13.7.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }

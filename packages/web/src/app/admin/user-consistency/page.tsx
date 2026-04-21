@@ -2,7 +2,7 @@
 import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle, XCircle, Search, Download, Edit2, Save, X } from 'lucide-react';
+import { FiArrowLeft, FiRefreshCw, FiAlertTriangle, FiCheckCircle, FiXCircle, FiSearch, FiDownload, FiEdit2, FiSave, FiX } from 'react-icons/fi';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { authenticatedGet, authenticatedPost } from '@/lib/apiClient';
@@ -186,7 +186,7 @@ export default function UserConsistencyPage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <RefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+              <FiRefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
               <p className="text-gray-600">사용자 ID 일관성 검증 중...</p>
               <p className="text-sm text-gray-500 mt-2">440명의 사용자 데이터를 분석하고 있습니다.</p>
             </div>
@@ -205,7 +205,7 @@ export default function UserConsistencyPage() {
             onClick={() => router.push('/admin')}
             className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
           >
-            <ArrowLeft className="w-5 h-5 mr-2" />
+            <FiArrowLeft className="w-5 h-5 mr-2" />
             관리자 페이지로 돌아가기
           </button>
           <div className="flex items-center justify-between">
@@ -221,7 +221,7 @@ export default function UserConsistencyPage() {
                 disabled={!report}
                 className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
               >
-                <Download className="w-4 h-4 mr-2" />
+                <FiDownload className="w-4 h-4 mr-2" />
                 리포트 다운로드
               </button>
               <button
@@ -229,7 +229,7 @@ export default function UserConsistencyPage() {
                 disabled={loading}
                 className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                <FiRefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                 재검증
               </button>
             </div>
@@ -246,7 +246,7 @@ export default function UserConsistencyPage() {
                   <p className="text-2xl font-bold text-gray-900">{report.summary.totalFirestoreUsers}</p>
                 </div>
                 <div className="p-3 bg-blue-100 rounded-full">
-                  <CheckCircle className="w-6 h-6 text-blue-600" />
+                  <FiCheckCircle className="w-6 h-6 text-blue-600" />
                 </div>
               </div>
             </div>
@@ -261,7 +261,7 @@ export default function UserConsistencyPage() {
                   </p>
                 </div>
                 <div className="p-3 bg-green-100 rounded-full">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
+                  <FiCheckCircle className="w-6 h-6 text-green-600" />
                 </div>
               </div>
             </div>
@@ -276,7 +276,7 @@ export default function UserConsistencyPage() {
                   </p>
                 </div>
                 <div className="p-3 bg-red-100 rounded-full">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                  <FiAlertTriangle className="w-6 h-6 text-red-600" />
                 </div>
               </div>
             </div>
@@ -288,7 +288,7 @@ export default function UserConsistencyPage() {
                   <p className="text-2xl font-bold text-gray-900">{report.summary.totalAuthUsers}</p>
                 </div>
                 <div className="p-3 bg-indigo-100 rounded-full">
-                  <CheckCircle className="w-6 h-6 text-indigo-600" />
+                  <FiCheckCircle className="w-6 h-6 text-indigo-600" />
                 </div>
               </div>
             </div>
@@ -324,7 +324,7 @@ export default function UserConsistencyPage() {
           <div className="flex flex-col md:flex-row gap-4">
             {/* Search */}
             <div className="flex-1 relative">
-              <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+              <FiSearch className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="이메일, 이름, Document ID, Auth UID로 검색..."
@@ -500,14 +500,14 @@ export default function UserConsistencyPage() {
                     <td className="px-6 py-4">
                       {user.issues.length === 0 ? (
                         <span className="text-xs text-green-600 flex items-center">
-                          <CheckCircle className="w-3 h-3 mr-1" />
+                          <FiCheckCircle className="w-3 h-3 mr-1" />
                           문제 없음
                         </span>
                       ) : (
                         <div className="space-y-1">
                           {user.issues.map((issue, i) => (
                             <div key={i} className="text-xs text-gray-600 flex items-start">
-                              <AlertTriangle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0 text-orange-500" />
+                              <FiAlertTriangle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0 text-orange-500" />
                               <span>{issue}</span>
                             </div>
                           ))}
@@ -531,7 +531,7 @@ export default function UserConsistencyPage() {
                               disabled={updating || !newIdValue}
                               className="flex-1 flex items-center justify-center px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <Save className="w-3 h-3 mr-1" />
+                              <FiSave className="w-3 h-3 mr-1" />
                               {updating ? '저장 중...' : '저장'}
                             </button>
                             <button
@@ -539,7 +539,7 @@ export default function UserConsistencyPage() {
                               disabled={updating}
                               className="flex-1 flex items-center justify-center px-2 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400 disabled:opacity-50"
                             >
-                              <X className="w-3 h-3 mr-1" />
+                              <FiX className="w-3 h-3 mr-1" />
                               취소
                             </button>
                           </div>
@@ -550,7 +550,7 @@ export default function UserConsistencyPage() {
                           disabled={updating || editingUserId !== null}
                           className="flex items-center px-3 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Edit2 className="w-3 h-3 mr-1" />
+                          <FiEdit2 className="w-3 h-3 mr-1" />
                           ID 변경
                         </button>
                       )}
@@ -563,7 +563,7 @@ export default function UserConsistencyPage() {
 
           {filteredData.length === 0 && (
             <div className="text-center py-12">
-              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <FiCheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
               <p className="text-gray-600">조건에 맞는 사용자가 없습니다.</p>
             </div>
           )}
