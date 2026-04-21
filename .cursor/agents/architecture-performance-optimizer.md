@@ -386,7 +386,7 @@ function UserList({ users }: { users: User[] }) {
 // ❌ 매번 재계산
 function UserDashboard({ users }: { users: User[] }) {
   const sortedUsers = users.sort((a, b) => a.name.localeCompare(b.name));
-  const studentCount = users.filter(u => u.role === 'student').length;
+  const mentorCount = users.filter(u => u.role === 'mentor').length;
   
   const handleClick = (userId: string) => {
     console.log(userId);
@@ -412,8 +412,8 @@ function UserDashboard({ users }: { users: User[] }) {
     [users]
   );
   
-  const studentCount = useMemo(
-    () => users.filter(u => u.role === 'student').length,
+  const mentorCount = useMemo(
+    () => users.filter(u => u.role === 'mentor').length,
     [users]
   );
   
@@ -424,7 +424,7 @@ function UserDashboard({ users }: { users: User[] }) {
   
   return (
     <div>
-      <p>학생 수: {studentCount}</p>
+      <p>멘토 수: {mentorCount}</p>
       {sortedUsers.map(user => (
         <UserCard key={user.id} user={user} onClick={handleClick} />
       ))}

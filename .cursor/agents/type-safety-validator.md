@@ -27,9 +27,8 @@ description: SMIS Mentor 타입 안전성 및 런타임 검증 전문가. TypeSc
 
 **사용자 역할**:
 ```typescript
-// 7가지 역할 조합
+// 5가지 역할 (캠프 운영진만 가입 가능, 학생은 가입 불가)
 type UserRole = 
-  | 'student' | 'student_temp'
   | 'mentor' | 'mentor_temp'
   | 'foreign' | 'foreign_temp'
   | 'admin';
@@ -142,7 +141,7 @@ const parseUserData = (jsonString: string): User => {
 const UserSchema = z.object({
   id: z.string(),
   name: z.string(),
-  role: z.enum(['student', 'mentor', 'foreign', 'admin']),
+  role: z.enum(['mentor', 'foreign', 'admin']),
 });
 
 const user = UserSchema.parse(JSON.parse(jsonString));
@@ -239,8 +238,8 @@ function getJobExperiences(user: User) {
 **올바른 예**:
 ```typescript
 // ✅ Discriminated Union
-type StudentUser = {
-  role: 'student' | 'student_temp';
+type MentorUser = {
+  role: 'mentor' | 'mentor_temp';
   id: string;
   name: string;
   university: string;
@@ -332,26 +331,24 @@ const evaluation = await getDocumentById('evaluations', evalId, isEvaluation);
 ```typescript
 // ❌ 타입 추론 손실
 const ROLE_LABELS: Record<string, string> = {
-  student: '학생',
   mentor: '멘토',
   foreign: '외국인',
   admin: '관리자',
 };
 
-// ROLE_LABELS.student의 타입이 string (구체적 문자열 손실)
+// ROLE_LABELS.mentor의 타입이 string (구체적 문자열 손실)
 ```
 
 **올바른 예**:
 ```typescript
 // ✅ satisfies로 검증 + 타입 추론 유지
 const ROLE_LABELS = {
-  student: '학생',
   mentor: '멘토',
   foreign: '외국인',
   admin: '관리자',
 } satisfies Record<UserRole, string>;
 
-// ROLE_LABELS.student의 타입이 '학생' (구체적)
+// ROLE_LABELS.mentor의 타입이 '멘토' (구체적)
 
 // ✅ SMS 템플릿 설정
 const SMS_TEMPLATES = {
@@ -375,7 +372,6 @@ const SMS_TEMPLATES = {
 ```typescript
 // ❌ enum 사용
 enum UserRole {
-  Student = 'student',
   Mentor = 'mentor',
   Foreign = 'foreign',
   Admin = 'admin'
@@ -388,7 +384,6 @@ enum UserRole {
 ```typescript
 // ✅ const 객체
 const USER_ROLES = {
-  student: 'student',
   mentor: 'mentor',
   foreign: 'foreign',
   admin: 'admin',
@@ -716,7 +711,7 @@ const UserFormSchema = z.object({
   name: z.string().min(2, '이름은 2글자 이상이어야 합니다'),
   email: z.string().email('올바른 이메일을 입력하세요'),
   phone: z.string().regex(/^010-\d{4}-\d{4}$/, '010-1234-5678 형식으로 입력하세요'),
-  role: z.enum(['student', 'mentor', 'foreign', 'admin']),
+  role: z.enum(['mentor', 'foreign', 'admin']),
 });
 
 type UserFormData = z.infer<typeof UserFormSchema>;
@@ -743,7 +738,7 @@ const UserSchema = z.object({
   id: z.string(),
   name: z.string(),
   email: z.string().email(),
-  role: z.enum(['student', 'mentor', 'foreign', 'admin']),
+  role: z.enum(['mentor', 'foreign', 'admin']),
   createdAt: z.custom<Timestamp>((val) => val instanceof Timestamp),
 });
 
@@ -805,11 +800,10 @@ const BaseUserSchema = z.object({
   phone: z.string(),
 });
 
-const StudentSchema = BaseUserSchema.extend({
-  role: z.literal('student'),
-  university: z.string(),
-  major1: z.string(),
-  major2: z.string().optional(),
+const MentorSchema = BaseUserSchema.extend({
+  role: z.literal('mentor'),
+  department: z.string(),
+  expertise: z.array(z.string()),
 });
 
 const MentorSchema = BaseUserSchema.extend({
@@ -823,9 +817,9 @@ const MentorSchema = BaseUserSchema.extend({
 });
 
 const UserSchema = z.discriminatedUnion('role', [
-  StudentSchema,
   MentorSchema,
-  // ... 다른 역할들
+  ForeignSchema,
+  AdminSchema,
 ]);
 
 // ✅ 중첩된 객체 검증

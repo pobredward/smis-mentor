@@ -27,15 +27,15 @@ functions/        # Firebase Cloud Functions
 **모바일**: Expo SDK 54, React Native 0.81.5, React Navigation 6, expo-image
 
 ### 핵심 도메인
-1. **사용자 관리**: `mentor`, `foreign`, `admin` + `*_temp` 역할 (캠프 운영진)
-2. **캠프 학생 관리**: ST시트 동기화 (Google Sheets, User와 별개 시스템)
+1. **사용자 관리**: 캠프 운영진만 가입 가능 (`mentor`, `foreign`, `admin` + `*_temp` 역할)
+2. **캠프 학생 관리**: ST시트 동기화 (Google Sheets, 가입 불가, User와 별개 시스템)  
 3. **채용 시스템**: 채용 공고, 지원서, 4단계 평가 (서류/면접/대면/캠프)
 4. **캠프 운영**: Task, 일정, 교육자료, 숙소 배정, 환자 기록
 5. **외부 연동**: SMS(네이버 클라우드), 소셜 로그인(구글/카카오/네이버/애플)
 
 ### 주요 타입 (packages/shared/src/types/)
 ```typescript
-// User 역할 (캠프 운영진)
+// User 역할 (캠프 운영진만 가입 가능, 학생 가입 불가)
 type UserRole = 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp' | 'admin';
 
 // 평가 단계
@@ -204,7 +204,7 @@ const UserFormSchema = z.object({
   name: z.string().min(2, '이름은 2글자 이상이어야 합니다'),
   email: z.string().email('올바른 이메일을 입력하세요'),
   phone: z.string().regex(/^010-\d{4}-\d{4}$/, '010-1234-5678 형식으로 입력하세요'),
-  role: z.enum(['student', 'mentor', 'foreign', 'admin']),
+  role: z.enum(['mentor', 'foreign', 'admin']),
 });
 
 // ✅ Firestore 데이터 검증

@@ -350,7 +350,7 @@ if (
 ```typescript
 // ❌ 전체 컬렉션 스캔 후 필터링
 const allUsers = await getDocs(collection(db, 'users'));
-const students = allUsers.docs.filter(doc => doc.data().role === 'student');
+const mentors = allUsers.docs.filter(doc => doc.data().role === 'mentor');
 
 // ❌ 대량 데이터 한 번에 로드
 const evaluations = await getDocs(collection(db, 'evaluations'));  // 수천 개

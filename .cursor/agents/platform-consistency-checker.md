@@ -104,14 +104,14 @@ function HomeScreen() {
 export interface User {
   id: string;
   name: string;
-  role: 'student' | 'mentor';
+  role: 'mentor' | 'foreign';
 }
 
 // ❌ 모바일: packages/mobile/src/types/user.ts
 export interface User {
   id: string;
   name: string;
-  role: 'student' | 'mentor' | 'admin';  // 불일치!
+  role: 'mentor' | 'foreign' | 'admin';  // 일치!
 }
 ```
 
@@ -121,7 +121,7 @@ export interface User {
 export interface User {
   id: string;
   name: string;
-  role: 'student' | 'mentor' | 'foreign' | 'admin';
+  role: 'mentor' | 'foreign' | 'admin';
 }
 
 // ✅ 웹에서 사용
