@@ -11,7 +11,7 @@ import {
   Alert,
   BackHandler
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -32,6 +32,7 @@ export function DaumPostcode({
   const [hasError, setHasError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const webViewRef = useRef<WebView>(null);
+  const insets = useSafeAreaInsets();
 
   // Android 백버튼 처리
   useFocusEffect(
@@ -318,7 +319,8 @@ export function DaumPostcode({
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.container}>
+        <View style={[styles.statusBarSpacer, { height: insets.top }]} />
         <View style={styles.header}>
           <Text style={styles.headerTitle}>주소 검색</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -371,7 +373,7 @@ export function DaumPostcode({
             logger.warn('📱 WebView content process terminated');
           }}
         />
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -381,12 +383,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
+  statusBarSpacer: {
+    backgroundColor: '#ffffff',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
