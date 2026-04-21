@@ -17,7 +17,7 @@ import { PhoneNumber } from '@/lib/naverCloudSMS';
 import { getInterviewLinks, InterviewLinks } from '@/lib/interviewLinksService';
 import { InterviewLinksManager } from '@/components/admin/InterviewLinksManager';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
-import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@smis-mentor/shared';
 import { authenticatedPost } from '@/lib/apiClient';
 
 type JobBoardWithId = JobBoard & { id: string };

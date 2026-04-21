@@ -7,7 +7,7 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getAllJobCodes, getUsersByJobCode } from '@/lib/firebaseService';
 import { JobCodeWithId, User } from '@/types';
-import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@smis-mentor/shared';
 import { useRouter } from 'next/navigation';
 import { maskRRNLast } from '@/utils/userUtils';
 import { getLessonMaterials, getSections, LessonMaterialData, SectionData, getLessonMaterialTemplates, LessonMaterialTemplate } from '@/lib/lessonMaterialService';

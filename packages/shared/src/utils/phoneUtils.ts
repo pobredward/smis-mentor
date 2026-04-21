@@ -7,7 +7,7 @@
  * @param phoneNumber - 국가코드 포함된 전화번호 (예: +821012345678)
  * @returns 포맷팅된 전화번호 (예: +82 10-1234-5678)
  */
-export function formatPhoneNumber(phoneNumber: string | undefined): string {
+export function formatPhoneNumber(phoneNumber?: string): string {
   if (!phoneNumber) return '-';
   
   // 공백 제거
@@ -167,7 +167,7 @@ export function formatPhoneNumber(phoneNumber: string | undefined): string {
  * @param phoneNumber - 전화번호 (국가코드 포함 가능)
  * @returns 국가코드 없는 포맷팅된 전화번호 (예: 010-1234-5678)
  */
-export function formatPhoneNumberForMentor(phoneNumber: string | undefined): string {
+export function formatPhoneNumberForMentor(phoneNumber?: string): string {
   if (!phoneNumber) return '-';
   
   // 공백 제거
@@ -211,7 +211,7 @@ export function formatPhoneNumberForMentor(phoneNumber: string | undefined): str
  * @param phoneNumber - 국가코드 포함된 전화번호
  * @returns 국가 정보 객체
  */
-export function getCountryInfo(phoneNumber: string | undefined): { code: string; name: string; flag: string } | null {
+export function getCountryInfo(phoneNumber?: string): { code: string; name: string; flag: string } | null {
   if (!phoneNumber) return null;
   
   const cleaned = phoneNumber.replace(/\s/g, '');

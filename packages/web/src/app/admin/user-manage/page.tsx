@@ -9,7 +9,7 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import FormInput from '@/components/common/FormInput';
 import PhoneInput from '@/components/common/PhoneInput';
-import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@smis-mentor/shared';
 import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser, checkUserData } from '@/lib/firebaseService';
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { EvaluationSummaryCompact } from '@/components/evaluation/EvaluationSummary';

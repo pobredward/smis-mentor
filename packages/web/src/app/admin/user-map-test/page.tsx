@@ -12,7 +12,7 @@ import { format } from 'date-fns';
 import { Timestamp } from 'firebase/firestore';
 import { getGroupLabel } from '@smis-mentor/shared';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
-import { formatPhoneNumber, formatPhoneNumberForMentor } from '@/utils/phoneUtils';
+import { formatPhoneNumber, formatPhoneNumberForMentor } from '@smis-mentor/shared';
 
 // Mapbox를 dynamic import로 로드 (SSR 방지)
 const UserMapComponent = dynamic(

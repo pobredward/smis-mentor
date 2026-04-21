@@ -16,7 +16,7 @@ import Button from '@/components/common/Button';
 import ImageCropper from '@/components/common/ImageCropper';
 import toast from 'react-hot-toast';
 import { PartTimeJob, User } from '@/types';
-import { getPhonePlaceholder } from '@/utils/phoneUtils';
+import { getPhonePlaceholder } from '@smis-mentor/shared';
 
 const countryCodes = [
   { code: '+82', country: 'South Korea', flag: '🇰🇷' },

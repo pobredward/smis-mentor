@@ -13,7 +13,7 @@ import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import ProgressSteps from '@/components/common/ProgressSteps';
-import { getPhonePlaceholder } from '@/utils/phoneUtils';
+import { getPhonePlaceholder } from '@smis-mentor/shared';
 
 const countryCodes = [
   { code: '+82', country: 'South Korea', flag: '🇰🇷' },

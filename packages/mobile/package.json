@@ -29,7 +29,9 @@
     "deploy:submit-only:android": "bash scripts/deploy.sh submit-only-android",
     "update": "eas update",
     "update:preview": "eas update --branch preview",
-    "update:production": "eas update --branch production"
+    "update:production": "eas update --branch production",
+    "lint": "expo lint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@10play/tentap-editor": "^1.0.1",

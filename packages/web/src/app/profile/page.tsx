@@ -14,7 +14,7 @@ import { unlinkSocialProvider, getSocialProviderName } from '@smis-mentor/shared
 import toast from 'react-hot-toast';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { formatPhoneNumber } from '@/utils/phoneUtils';
+import { formatPhoneNumber } from '@smis-mentor/shared';
 import { useCampDataPrefetch } from '@/hooks/useCampDataPrefetch';
 
 export default function ProfilePage() {
