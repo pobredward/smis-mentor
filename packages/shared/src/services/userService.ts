@@ -2,15 +2,7 @@
 import { doc, getDoc, updateDoc, Timestamp, Firestore } from 'firebase/firestore';
 import { Auth, User as FirebaseUser, deleteUser } from 'firebase/auth';
 import { logger } from '../utils/logger';
-
-export interface User {
-  userId: string;
-  name: string;
-  email: string;
-  status: 'active' | 'inactive' | 'temp' | 'deleted';
-  originalEmail?: string;
-  updatedAt?: Timestamp;
-}
+import type { User } from '../types/legacy';
 
 /**
  * 사용자 계정을 비활성화 (회원 탈퇴) - 모바일용
