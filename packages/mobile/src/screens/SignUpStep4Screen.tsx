@@ -172,6 +172,7 @@ export function SignUpStep4Screen({
       // 주소 좌표 변환
       logger.info('📍 회원가입 - 주소 좌표 변환 시작:', address);
       const kakaoApiKey = Constants.expoConfig?.extra?.kakaoRestApiKey;
+      logger.info('🔑 카카오 API 키 확인:', kakaoApiKey ? `설정됨 (${kakaoApiKey.substring(0, 8)}...)` : '설정되지 않음');
       const geocodeData = await updateGeocodeIfAddressChanged(undefined, address, kakaoApiKey);
       
       onNext({

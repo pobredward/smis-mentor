@@ -1,6 +1,10 @@
 import { ConfigContext, ExpoConfig } from '@expo/config';
 import type { ConfigPlugin } from 'expo/config-plugins';
 import { withProjectBuildGradle } from 'expo/config-plugins';
+import * as dotenv from 'dotenv';
+
+// .env 파일 로드
+dotenv.config();
 
 /** android/ 가 gitignore → EAS prebuild 시 매번 생성되므로 여기서 루트 build.gradle을 패치합니다. */
 const withReactNativePickerMonorepo: ConfigPlugin = (cfg) =>

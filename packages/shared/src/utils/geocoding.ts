@@ -10,6 +10,7 @@ export async function geocodeAddress(address: string, apiKey?: string): Promise<
     // React Native에서는 환경변수 접근 방법이 다르므로 apiKey를 직접 받음
     const kakaoApiKey = apiKey || process.env.NEXT_PUBLIC_KAKAO_REST_API_KEY || process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
     
+    
     if (!kakaoApiKey || kakaoApiKey === 'YOUR_KAKAO_REST_API_KEY') {
       logger.warn('Kakao API 키가 설정되지 않았습니다.');
       return null;
