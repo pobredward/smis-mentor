@@ -12,6 +12,7 @@ import {
   TextInput,
   Alert,
   Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -563,6 +564,46 @@ export function InterviewManageScreen({
     setInterviewLinks(updatedLinks);
   };
 
+  // Zoom 링크 열기
+  const handleZoomClick = async () => {
+    if (!interviewLinks.zoomUrl) {
+      Alert.alert('알림', 'Zoom 링크가 설정되지 않았습니다.\n링크 관리에서 Zoom URL을 설정해주세요.');
+      return;
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(interviewLinks.zoomUrl);
+      if (supported) {
+        await Linking.openURL(interviewLinks.zoomUrl);
+      } else {
+        Alert.alert('오류', '링크를 열 수 없습니다.');
+      }
+    } catch (error) {
+      logger.error('Zoom 링크 열기 오류:', error);
+      Alert.alert('오류', 'Zoom 링크를 여는 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 캔바 링크 열기
+  const handleCanvaClick = async () => {
+    if (!interviewLinks.canvaUrl) {
+      Alert.alert('알림', '캔바 링크가 설정되지 않았습니다.\n링크 관리에서 캔바 URL을 설정해주세요.');
+      return;
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(interviewLinks.canvaUrl);
+      if (supported) {
+        await Linking.openURL(interviewLinks.canvaUrl);
+      } else {
+        Alert.alert('오류', '링크를 열 수 없습니다.');
+      }
+    } catch (error) {
+      logger.error('캔바 링크 열기 오류:', error);
+      Alert.alert('오류', '캔바 링크를 여는 중 오류가 발생했습니다.');
+    }
+  };
+
   // SMS 메시지 박스 토글
   const toggleSMSMessage = (type: TemplateType) => {
     setShowSMSMessage(prev => ({
@@ -742,17 +783,13 @@ export function InterviewManageScreen({
       <View style={styles.headerButtons}>
         <TouchableOpacity
           style={[styles.headerButton, styles.headerButtonZoom]}
-          onPress={() => {
-            // Zoom 링크 열기
-          }}
+          onPress={handleZoomClick}
         >
           <Text style={styles.headerButtonText}>Zoom</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.headerButton, styles.headerButtonCanva]}
-          onPress={() => {
-            // 캔바 링크 열기
-          }}
+          onPress={handleCanvaClick}
         >
           <Text style={styles.headerButtonText}>캔바</Text>
         </TouchableOpacity>
