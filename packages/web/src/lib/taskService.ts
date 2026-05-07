@@ -11,6 +11,7 @@ import {
   deleteDoc,
   Timestamp,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
@@ -21,7 +22,8 @@ const TASKS_COLLECTION = 'campTasks';
 // Task 생성
 export const createTask = async (
   campCode: string,
-  taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions'>
+  taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions'>,
+  groupId?: string
 ): Promise<string> => {
   try {
     // 날짜를 로컬 타임존의 자정으로 설정
@@ -36,6 +38,10 @@ export const createTask = async (
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
+
+    if (groupId) {
+      cleanedData.groupId = groupId;
+    }
 
     // taskData의 각 필드를 확인하고 undefined가 아닌 값만 추가
     Object.entries(taskData).forEach(([key, value]) => {
@@ -180,6 +186,123 @@ export const updateTask = async (
     });
   } catch (error) {
     logger.error('업무 수정 오류:', error);
+    throw error;
+  }
+};
+
+// 같은 groupId를 가진 업무 목록 조회
+export const getTasksByGroupId = async (groupId: string): Promise<Task[]> => {
+  try {
+    const groupQuery = query(
+      collection(db, TASKS_COLLECTION),
+      where('groupId', '==', groupId)
+    );
+    const snapshot = await getDocs(groupQuery);
+    const tasks = snapshot.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    })) as Task[];
+
+    return tasks.sort((a, b) => a.date.toMillis() - b.date.toMillis());
+  } catch (error) {
+    logger.error('그룹 업무 목록 가져오기 오류:', error);
+    throw error;
+  }
+};
+
+// 그룹 업무 일괄 수정
+// newDates가 없으면 내용만 일괄 업데이트, 있으면 기존 문서 삭제 후 새 날짜로 재생성
+export const updateTaskGroup = async (
+  campCode: string,
+  groupId: string,
+  updates: Partial<Omit<Task, 'id' | 'createdAt' | 'campCode' | 'date' | 'groupId' | 'completions'>>,
+  newDates?: Date[]
+): Promise<void> => {
+  try {
+    const groupTasks = await getTasksByGroupId(groupId);
+
+    if (!newDates) {
+      // 날짜 변경 없음: 모든 그룹 문서의 내용만 일괄 업데이트
+      const batch = writeBatch(db);
+      const cleanedUpdates: Record<string, any> = { updatedAt: serverTimestamp() };
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value !== undefined) {
+          cleanedUpdates[key] = value;
+        }
+      });
+
+      groupTasks.forEach(task => {
+        batch.update(doc(db, TASKS_COLLECTION, task.id), cleanedUpdates);
+      });
+
+      await batch.commit();
+    } else {
+      // 날짜 변경: 기존 그룹 문서 삭제 후 새 날짜로 재생성
+      const batch = writeBatch(db);
+
+      // 첨부파일이 있는 문서들의 Storage 파일 삭제 (병렬 처리)
+      await Promise.all(
+        groupTasks.map(async task => {
+          if (task.attachments) {
+            for (const attachment of task.attachments) {
+              if (attachment.type === 'image' || attachment.type === 'file') {
+                try {
+                  const fileRef = ref(storage, attachment.url);
+                  await deleteObject(fileRef);
+                } catch (err) {
+                  logger.warn('첨부파일 삭제 실패:', err);
+                }
+              }
+            }
+          }
+          batch.delete(doc(db, TASKS_COLLECTION, task.id));
+        })
+      );
+
+      await batch.commit();
+
+      // 기존 Task에서 공통 필드 추출 (첫 번째 문서 기준)
+      const baseTask = groupTasks[0];
+      const baseData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'date'> = {
+        campCode,
+        title: updates.title ?? baseTask.title,
+        description: updates.description ?? baseTask.description,
+        targetRoles: updates.targetRoles ?? baseTask.targetRoles,
+        targetGroups: updates.targetGroups ?? baseTask.targetGroups,
+        time: updates.time !== undefined ? updates.time : baseTask.time,
+        estimatedDuration: updates.estimatedDuration !== undefined
+          ? updates.estimatedDuration
+          : baseTask.estimatedDuration,
+        attachments: updates.attachments !== undefined
+          ? updates.attachments
+          : baseTask.attachments,
+        groupId,
+        createdBy: baseTask.createdBy,
+      };
+
+      // 새 날짜들로 재생성
+      for (const date of newDates) {
+        const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+        const cleanedData: Record<string, any> = {
+          ...baseData,
+          date: Timestamp.fromDate(localDate),
+          completions: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        // undefined 값 제거
+        Object.keys(cleanedData).forEach(key => {
+          if (cleanedData[key] === undefined) {
+            delete cleanedData[key];
+          }
+        });
+
+        await addDoc(collection(db, TASKS_COLLECTION), cleanedData);
+      }
+    }
+  } catch (error) {
+    logger.error('그룹 업무 수정 오류:', error);
     throw error;
   }
 };

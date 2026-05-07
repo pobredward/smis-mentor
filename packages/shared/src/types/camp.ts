@@ -213,6 +213,10 @@ export interface Task {
   date: Timestamp;          // 업무 날짜
   time?: string;            // 시간 (HH:mm 형식, 옵션)
   
+  // 여러 날짜에 걸쳐 생성된 업무를 묶는 그룹 ID
+  // 2개 이상의 날짜로 생성 시 UUID가 부여되며, 같은 groupId를 가진 Task들은 함께 수정됨
+  groupId?: string;
+  
   estimatedDuration?: {
     value: number;
     unit: 'minutes' | 'hours';

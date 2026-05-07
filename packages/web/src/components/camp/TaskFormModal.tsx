@@ -4,7 +4,7 @@ import { logger } from '@smis-mentor/shared';
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { createTask, updateTask, uploadTaskImage, uploadTaskFile } from '@/lib/taskService';
+import { createTask, updateTask, uploadTaskImage, uploadTaskFile, getTasksByGroupId, updateTaskGroup } from '@/lib/taskService';
 import type { 
   Task, 
   TaskAttachment, 
@@ -51,6 +51,8 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
     }
     return [selectedDate];
   });
+  // 수정 모드에서 그룹 날짜 로딩 중 여부
+  const [loadingGroupDates, setLoadingGroupDates] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [time, setTime] = useState(task?.time || '');
   const [hasTime, setHasTime] = useState(!!(task?.time));
@@ -89,6 +91,32 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
   const firstSelectedDate = selectedDates[0] || new Date();
   const [currentMonth, setCurrentMonth] = useState(firstSelectedDate.getMonth());
   const [currentYear, setCurrentYear] = useState(firstSelectedDate.getFullYear());
+
+  // 수정 모드에서 groupId가 있으면 그룹의 모든 날짜를 조회해 selectedDates에 반영
+  useEffect(() => {
+    if (!isEdit || !task?.groupId) return;
+
+    const loadGroupDates = async () => {
+      setLoadingGroupDates(true);
+      try {
+        const groupTasks = await getTasksByGroupId(task.groupId!);
+        if (groupTasks.length > 0) {
+          const groupDates = groupTasks.map(t => t.date.toDate());
+          setSelectedDates(groupDates);
+          setCurrentMonth(groupDates[0].getMonth());
+          setCurrentYear(groupDates[0].getFullYear());
+        }
+      } catch (error) {
+        logger.error('그룹 날짜 로드 오류:', error);
+      } finally {
+        setLoadingGroupDates(false);
+      }
+    };
+
+    loadGroupDates();
+  // task.id가 바뀔 때만 실행 (task 객체 전체 의존성 방지)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.id, isEdit]);
 
   // 드래그 선택을 위한 state
   const [isDragging, setIsDragging] = useState(false);
@@ -129,13 +157,6 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
 
   // 날짜 선택/해제 핸들러
   const toggleDateSelection = (dateToToggle: Date) => {
-    // 수정 모드에서는 단일 날짜만 선택 가능
-    if (isEdit) {
-      setSelectedDates([dateToToggle]);
-      setShowCalendar(false);
-      return;
-    }
-
     // 로컬 날짜로 비교
     const existingIndex = selectedDates.findIndex(
       d => d.getFullYear() === dateToToggle.getFullYear() && 
@@ -144,8 +165,10 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
     );
 
     if (existingIndex >= 0) {
-      // 이미 선택된 경우 제거
-      setSelectedDates(selectedDates.filter((_, i) => i !== existingIndex));
+      // 이미 선택된 경우 제거 (최소 1개는 유지)
+      if (selectedDates.length > 1) {
+        setSelectedDates(selectedDates.filter((_, i) => i !== existingIndex));
+      }
     } else {
       // 선택되지 않은 경우 추가
       setSelectedDates([...selectedDates, dateToToggle]);
@@ -307,66 +330,81 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
     setSubmitting(true);
 
     try {
-      if (isEdit && task) {
-        // 수정 모드: 단일 날짜만 업데이트
-        const localDate = new Date(
-          selectedDates[0].getFullYear(),
-          selectedDates[0].getMonth(),
-          selectedDates[0].getDate(),
-          0, 0, 0, 0
-        );
-        
-        const taskData = {
-          campCode,
-          title: title.trim(),
-          description: description.trim(),
-          targetRoles: selectedRoles,
-          targetGroups: selectedGroups,
-          date: Timestamp.fromDate(localDate),
-          time: hasTime && time ? time : undefined,
-          estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
-            ? {
-                value: parseFloat(durationMinutes),
-                unit: 'minutes' as const,
-              }
-            : undefined,
-          attachments: attachments.length > 0 ? attachments : undefined,
-          createdBy,
-        };
+      const commonUpdates = {
+        title: title.trim(),
+        description: description.trim(),
+        targetRoles: selectedRoles,
+        targetGroups: selectedGroups,
+        time: hasTime && time ? time : undefined,
+        estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
+          ? { value: parseFloat(durationMinutes), unit: 'minutes' as const }
+          : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
+        createdBy,
+      };
 
-        await updateTask(task.id, taskData);
-        toast.success('업무가 수정되었습니다.');
-      } else {
-        // 생성 모드: 선택된 각 날짜에 대해 업무 생성
-        for (const selectedDate of selectedDates) {
+      if (isEdit && task) {
+        if (task.groupId) {
+          // 그룹 수정: 날짜가 바뀌었는지 확인
+          const groupTasks = await getTasksByGroupId(task.groupId);
+          const originalDateStrs = new Set(
+            groupTasks.map(t => {
+              const d = t.date.toDate();
+              return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+            })
+          );
+          const newDateStrs = new Set(
+            selectedDates.map(d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`)
+          );
+          const datesChanged =
+            originalDateStrs.size !== newDateStrs.size ||
+            [...newDateStrs].some(s => !originalDateStrs.has(s));
+
+          if (datesChanged) {
+            // 날짜 변경: 기존 삭제 후 새 날짜로 재생성
+            await updateTaskGroup(campCode, task.groupId, commonUpdates, selectedDates);
+          } else {
+            // 날짜 동일: 내용만 일괄 업데이트
+            await updateTaskGroup(campCode, task.groupId, commonUpdates);
+          }
+          toast.success('그룹 업무가 수정되었습니다.');
+        } else {
+          // 그룹 없는 단일 Task 수정
           const localDate = new Date(
-            selectedDate.getFullYear(),
-            selectedDate.getMonth(),
-            selectedDate.getDate(),
+            selectedDates[0].getFullYear(),
+            selectedDates[0].getMonth(),
+            selectedDates[0].getDate(),
             0, 0, 0, 0
           );
-          
+          await updateTask(task.id, {
+            ...commonUpdates,
+            campCode,
+            date: Timestamp.fromDate(localDate),
+          });
+          toast.success('업무가 수정되었습니다.');
+        }
+      } else {
+        // 생성 모드: 날짜 2개 이상이면 공유 groupId 부여
+        const newGroupId = selectedDates.length >= 2
+          ? crypto.randomUUID()
+          : undefined;
+
+        for (const date of selectedDates) {
+          const localDate = new Date(
+            date.getFullYear(),
+            date.getMonth(),
+            date.getDate(),
+            0, 0, 0, 0
+          );
           const taskData = {
             campCode,
-            title: title.trim(),
-            description: description.trim(),
-            targetRoles: selectedRoles,
-            targetGroups: selectedGroups,
+            ...commonUpdates,
             date: Timestamp.fromDate(localDate),
-            time: hasTime && time ? time : undefined,
-            estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
-              ? {
-                  value: parseFloat(durationMinutes),
-                  unit: 'minutes' as const,
-                }
-              : undefined,
-            attachments: attachments.length > 0 ? attachments : undefined,
-            createdBy,
+            ...(newGroupId ? { groupId: newGroupId } : {}),
           };
-
-          await createTask(campCode, taskData);
+          await createTask(campCode, taskData, newGroupId);
         }
-        
+
         toast.success(`${selectedDates.length}개의 업무가 생성되었습니다.`);
       }
 
@@ -443,16 +481,22 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             <h4 className="text-xs font-semibold text-gray-900 flex items-center gap-1">
               📅 날짜 및 시간 <span className="text-red-500">*</span>
             </h4>
+            {isEdit && task?.groupId && (
+              <p className="text-xs text-blue-600 bg-blue-50 rounded px-2 py-1">
+                이 업무는 여러 날짜에 묶인 그룹 업무입니다. 날짜를 변경하면 그룹의 모든 날짜가 함께 변경됩니다.
+              </p>
+            )}
 
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowCalendar(!showCalendar)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors text-left flex items-center justify-between"
+                disabled={loadingGroupDates}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors text-left flex items-center justify-between disabled:opacity-60"
               >
                 <span className="text-gray-900">
-                  {isEdit 
-                    ? `${selectedDates[0]?.getFullYear()}년 ${selectedDates[0]?.getMonth() + 1}월 ${selectedDates[0]?.getDate()}일`
+                  {loadingGroupDates
+                    ? '날짜 불러오는 중...'
                     : `날짜 선택하기 (${selectedDates.length}개 선택됨)`}
                 </span>
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -524,6 +568,43 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                 </div>
               )}
             </div>
+
+            {/* 선택된 날짜 태그 목록 */}
+            {!loadingGroupDates && selectedDates.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {[...selectedDates]
+                  .sort((a, b) => a.getTime() - b.getTime())
+                  .map((d, sortedIdx) => (
+                    <span
+                      key={sortedIdx}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full"
+                    >
+                      {d.getMonth() + 1}/{d.getDate()}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedDates.length > 1) {
+                            setSelectedDates(prev =>
+                              prev.filter(
+                                existing =>
+                                  !(
+                                    existing.getFullYear() === d.getFullYear() &&
+                                    existing.getMonth() === d.getMonth() &&
+                                    existing.getDate() === d.getDate()
+                                  )
+                              )
+                            );
+                          }
+                        }}
+                        className="ml-0.5 text-blue-500 hover:text-blue-800 leading-none"
+                        aria-label={`${d.getMonth() + 1}월 ${d.getDate()}일 제거`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+              </div>
+            )}
 
             {/* 시간 입력 */}
             <div>

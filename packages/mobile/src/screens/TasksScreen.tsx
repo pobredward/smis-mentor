@@ -30,6 +30,8 @@ import {
   deleteTask,
   createTask,
   updateTask,
+  updateTaskGroup,
+  getTasksByGroupId,
   formatTime,
   formatDuration,
   uploadTaskImage,
@@ -733,6 +735,7 @@ function TaskAddModal({
   
   // 날짜 및 시간
   const [selectedDates, setSelectedDates] = useState<Date[]>([initialDate || new Date()]);
+  const [loadingGroupDates, setLoadingGroupDates] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(initialDate || new Date());
   const [time, setTime] = useState('');
   const [hasTime, setHasTime] = useState(false);
@@ -791,6 +794,25 @@ function TaskAddModal({
         
         // 첨부파일 설정
         setAttachments(editingTask.attachments || []);
+
+        // 수정 모드이고 groupId가 있으면 그룹의 모든 날짜 로드
+        if (isEdit && editingTask.groupId) {
+          setLoadingGroupDates(true);
+          getTasksByGroupId(editingTask.groupId)
+            .then(groupTasks => {
+              if (groupTasks.length > 0) {
+                const groupDates = groupTasks.map(t => t.date.toDate());
+                setSelectedDates(groupDates);
+                setCalendarMonth(groupDates[0]);
+              }
+            })
+            .catch(error => {
+              logger.error('그룹 날짜 로드 오류:', error);
+            })
+            .finally(() => {
+              setLoadingGroupDates(false);
+            });
+        }
       } else {
         // 추가 모드: 초기화
         if (initialDate) {
@@ -1046,59 +1068,81 @@ function TaskAddModal({
 
     setIsSubmitting(true);
     try {
+      const commonUpdates = {
+        title: title.trim(),
+        description: description.trim(),
+        time: hasTime && time ? time : undefined,
+        estimatedDuration:
+          estimatedDuration && !isNaN(Number(estimatedDuration))
+            ? { value: Number(estimatedDuration), unit: 'minutes' as const }
+            : undefined,
+        targetRoles,
+        targetGroups,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      };
+
       if (isEdit && editingTask) {
-        // 수정 모드: 기존 업무 수정
-        const localDate = new Date(
-          selectedDates[0].getFullYear(),
-          selectedDates[0].getMonth(),
-          selectedDates[0].getDate(),
-          0, 0, 0, 0
-        );
+        if (editingTask.groupId) {
+          // 그룹 수정: 날짜 변경 여부 확인
+          const groupTasks = await getTasksByGroupId(editingTask.groupId);
+          const originalDateStrs = new Set(
+            groupTasks.map(t => {
+              const d = t.date.toDate();
+              return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+            })
+          );
+          const newDateStrs = new Set(
+            selectedDates.map(d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`)
+          );
+          const datesChanged =
+            originalDateStrs.size !== newDateStrs.size ||
+            [...newDateStrs].some(s => !originalDateStrs.has(s));
 
-        const taskData: Partial<Task> = {
-          title: title.trim(),
-          description: description.trim(),
-          date: Timestamp.fromDate(localDate),
-          time: hasTime && time ? time : undefined,
-          estimatedDuration:
-            estimatedDuration && !isNaN(Number(estimatedDuration))
-              ? { value: Number(estimatedDuration), unit: 'minutes' }
-              : undefined,
-          targetRoles,
-          targetGroups,
-          attachments: attachments.length > 0 ? attachments : undefined,
-        };
-
-        await updateTask(editingTask.id, taskData);
-        Alert.alert('성공', '업무가 수정되었습니다.');
-      } else {
-        // 추가 모드: 선택된 각 날짜에 대해 업무 생성
-        for (const selectedDate of selectedDates) {
+          if (datesChanged) {
+            await updateTaskGroup(campCode, editingTask.groupId, commonUpdates, selectedDates);
+          } else {
+            await updateTaskGroup(campCode, editingTask.groupId, commonUpdates);
+          }
+          Alert.alert('성공', '그룹 업무가 수정되었습니다.');
+        } else {
+          // 그룹 없는 단일 Task 수정
           const localDate = new Date(
-            selectedDate.getFullYear(),
-            selectedDate.getMonth(),
-            selectedDate.getDate(),
+            selectedDates[0].getFullYear(),
+            selectedDates[0].getMonth(),
+            selectedDates[0].getDate(),
+            0, 0, 0, 0
+          );
+          const taskData: Partial<Task> = {
+            ...commonUpdates,
+            date: Timestamp.fromDate(localDate),
+          };
+          await updateTask(editingTask.id, taskData);
+          Alert.alert('성공', '업무가 수정되었습니다.');
+        }
+      } else {
+        // 추가 모드: 날짜 2개 이상이면 공유 groupId 부여
+        const newGroupId = selectedDates.length >= 2
+          ? `group_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+          : undefined;
+
+        for (const date of selectedDates) {
+          const localDate = new Date(
+            date.getFullYear(),
+            date.getMonth(),
+            date.getDate(),
             0, 0, 0, 0
           );
 
           const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'createdBy'> = {
             campCode,
-            title: title.trim(),
-            description: description.trim(),
+            ...commonUpdates,
             date: Timestamp.fromDate(localDate),
-            time: hasTime && time ? time : undefined,
-            estimatedDuration:
-              estimatedDuration && !isNaN(Number(estimatedDuration))
-                ? { value: Number(estimatedDuration), unit: 'minutes' }
-                : undefined,
-            targetRoles,
-            targetGroups,
-            attachments: attachments.length > 0 ? attachments : undefined,
+            ...(newGroupId ? { groupId: newGroupId } : {}),
           };
 
-          await createTask(campCode, taskData);
+          await createTask(campCode, taskData, newGroupId);
         }
-        
+
         Alert.alert('성공', `${selectedDates.length}개의 업무가 추가되었습니다.`);
       }
       
@@ -1197,13 +1241,25 @@ function TaskAddModal({
                 📅 날짜 및 시간 <Text style={styles.required}>*</Text>
               </Text>
 
+              {/* 그룹 업무 안내 */}
+              {isEdit && editingTask?.groupId && (
+                <View style={styles.groupInfoBanner}>
+                  <Text style={styles.groupInfoText}>
+                    이 업무는 여러 날짜에 묶인 그룹 업무입니다. 날짜를 변경하면 그룹의 모든 날짜가 함께 변경됩니다.
+                  </Text>
+                </View>
+              )}
+
               {/* 날짜 선택 버튼 */}
               <TouchableOpacity
-                style={styles.datePickerButton}
-                onPress={() => setShowDatePicker(!showDatePicker)}
+                style={[styles.datePickerButton, loadingGroupDates && { opacity: 0.6 }]}
+                onPress={() => !loadingGroupDates && setShowDatePicker(!showDatePicker)}
+                disabled={loadingGroupDates}
               >
                 <Text style={styles.datePickerButtonText}>
-                  날짜 선택하기 ({selectedDates.length}개 선택됨)
+                  {loadingGroupDates
+                    ? '날짜 불러오는 중...'
+                    : `날짜 선택하기 (${selectedDates.length}개 선택됨)`}
                 </Text>
                 <Ionicons 
                   name={showDatePicker ? "chevron-up" : "chevron-down"} 
@@ -1211,6 +1267,42 @@ function TaskAddModal({
                   color="#6b7280" 
                 />
               </TouchableOpacity>
+
+              {/* 선택된 날짜 태그 목록 */}
+              {!loadingGroupDates && selectedDates.length > 0 && (
+                <View style={styles.selectedDateTagsContainer}>
+                  {[...selectedDates]
+                    .sort((a, b) => a.getTime() - b.getTime())
+                    .map((d, idx) => (
+                      <View key={idx} style={styles.selectedDateTag}>
+                        <Text style={styles.selectedDateTagText}>
+                          {d.getMonth() + 1}/{d.getDate()}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (selectedDates.length > 1) {
+                              setSelectedDates(prev =>
+                                prev.filter(
+                                  existing =>
+                                    !(
+                                      existing.getFullYear() === d.getFullYear() &&
+                                      existing.getMonth() === d.getMonth() &&
+                                      existing.getDate() === d.getDate()
+                                    )
+                                )
+                              );
+                            }
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel={`${d.getMonth() + 1}월 ${d.getDate()}일 제거`}
+                          accessibilityRole="button"
+                        >
+                          <Text style={styles.selectedDateTagRemove}>×</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                </View>
+              )}
 
               {/* 인라인 달력 */}
               {showDatePicker && (
@@ -2071,6 +2163,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
     fontWeight: '500',
+  },
+  groupInfoBanner: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 6,
+  },
+  groupInfoText: {
+    fontSize: 11,
+    color: '#2563eb',
+    lineHeight: 16,
+  },
+  selectedDateTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 6,
+  },
+  selectedDateTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dbeafe',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 3,
+  },
+  selectedDateTagText: {
+    fontSize: 12,
+    color: '#1d4ed8',
+    fontWeight: '500',
+  },
+  selectedDateTagRemove: {
+    fontSize: 14,
+    color: '#3b82f6',
+    fontWeight: '600',
+    lineHeight: 16,
   },
   modalCalendarContainer: {
     backgroundColor: '#ffffff',
