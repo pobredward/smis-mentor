@@ -92,7 +92,8 @@ export const getTasksByCampCode = async (campCode: string): Promise<Task[]> => {
       if (a.time && !b.time) return -1;
       if (!a.time && b.time) return 1;
       
-      return 0;
+      // 둘 다 시간 없으면 생성일 오름차순
+      return a.createdAt.toMillis() - b.createdAt.toMillis();
     });
   } catch (error) {
     logger.error('업무 목록 가져오기 오류:', error);
@@ -136,7 +137,8 @@ export const getTasksByDate = async (
       }
       if (a.time && !b.time) return -1;
       if (!a.time && b.time) return 1;
-      return 0;
+      // 둘 다 시간 없으면 생성일 오름차순
+      return a.createdAt.toMillis() - b.createdAt.toMillis();
     });
   } catch (error) {
     logger.error('날짜별 업무 가져오기 오류:', error);
