@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "frame-src 'self' https://*.notion.site https://*.notion.so https://docs.google.com https://www.google.com;",
+            value: "frame-src 'self' https://*.notion.site https://*.notion.so https://docs.google.com https://www.google.com https://postcode.map.kakao.com http://postcode.map.kakao.com https://*.daumcdn.net http://*.daumcdn.net;",
           },
         ],
       },
