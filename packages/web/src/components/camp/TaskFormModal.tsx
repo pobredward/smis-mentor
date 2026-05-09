@@ -4,7 +4,7 @@ import { logger } from '@smis-mentor/shared';
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { createTask, updateTask, uploadTaskImage, uploadTaskFile, getTasksByGroupId, updateTaskGroup } from '@/lib/taskService';
+import { createTask, updateTask, deleteTask, uploadTaskImage, uploadTaskFile, getTasksByGroupId, updateTaskGroup } from '@/lib/taskService';
 import type { 
   Task, 
   TaskAttachment, 
@@ -370,18 +370,35 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           toast.success('그룹 업무가 수정되었습니다.');
         } else {
           // 그룹 없는 단일 Task 수정
-          const localDate = new Date(
-            selectedDates[0].getFullYear(),
-            selectedDates[0].getMonth(),
-            selectedDates[0].getDate(),
-            0, 0, 0, 0
-          );
-          await updateTask(task.id, {
-            ...commonUpdates,
-            campCode,
-            date: Timestamp.fromDate(localDate),
-          });
-          toast.success('업무가 수정되었습니다.');
+          if (selectedDates.length >= 2) {
+            // 단일 → 그룹 업그레이드: 기존 문서 삭제 후 새 groupId로 다중 생성
+            await deleteTask(task.id);
+            const newGroupId = crypto.randomUUID();
+            for (const date of selectedDates) {
+              const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+              await createTask(campCode, {
+                campCode,
+                ...commonUpdates,
+                date: Timestamp.fromDate(localDate),
+                groupId: newGroupId,
+              }, newGroupId);
+            }
+            toast.success(`${selectedDates.length}개의 그룹 업무가 생성되었습니다.`);
+          } else {
+            // 날짜 1개: 기존 방식 유지
+            const localDate = new Date(
+              selectedDates[0].getFullYear(),
+              selectedDates[0].getMonth(),
+              selectedDates[0].getDate(),
+              0, 0, 0, 0
+            );
+            await updateTask(task.id, {
+              ...commonUpdates,
+              campCode,
+              date: Timestamp.fromDate(localDate),
+            });
+            toast.success('업무가 수정되었습니다.');
+          }
         }
       } else {
         // 생성 모드: 날짜 2개 이상이면 공유 groupId 부여
