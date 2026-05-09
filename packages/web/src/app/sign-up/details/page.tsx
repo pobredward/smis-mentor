@@ -687,15 +687,15 @@ export default function SignUpDetails() {
               </div>
 
               {/* 완료 안내 */}
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+              {/* <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-center">
                   <FaCheckCircle className="w-6 h-6 text-blue-600 mr-3 flex-shrink-0" />
                   <div className="text-sm text-blue-900">
                     <p className="font-semibold mb-1">거의 다 끝났습니다!</p>
-                    <p className="text-blue-700">가입 완료 버튼을 누르면 SMIS 멘토로 활동하실 수 있습니다.</p>
+                    <p className="text-blue-700">가입 완료 버튼을 누르면 SMIS 멘토로 지원하실 수 있습니다.</p>
                   </div>
                 </div>
-              </div>
+              </div> */}
 
               {/* 버튼 그룹 */}
               <div className="flex gap-3 pt-4">
