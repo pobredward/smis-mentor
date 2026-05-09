@@ -16,10 +16,10 @@ export default async function CampPage({ searchParams }: PageProps) {
   const { date } = await searchParams;
   
   // 기본 탭인 '업무'로 리다이렉트
+  // 이제 실제 탭 선택은 네비게이션에서 처리됨
   if (date) {
     redirect(`/camp/tasks?date=${date}`);
   } else {
     redirect('/camp/tasks');
   }
-
 }

@@ -1,11 +1,13 @@
 'use client';
 
 import { logger } from '@smis-mentor/shared';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { generationResourcesService, type ResourceLinkRole, type LinkType, type ResourceLink } from '@/lib/generationResourcesService';
 import type { CampPageRole } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
+import { campQueryKeys } from '@/hooks/useCampDataPrefetch';
 
 interface CampLinkListProps {
   linkType: LinkType;
@@ -31,6 +33,16 @@ const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
   }
 };
 
+// linkType → campQueryKeys 매핑
+function getLinkQueryKey(linkType: LinkType, jobCodeId: string) {
+  switch (linkType) {
+    case 'scheduleLinks': return campQueryKeys.schedule(jobCodeId);
+    case 'guideLinks': return campQueryKeys.guide(jobCodeId);
+    case 'educationLinks': return campQueryKeys.education(jobCodeId);
+    default: return ['generationResources', jobCodeId, linkType];
+  }
+}
+
 export default function CampLinkList({
   linkType,
   categoryTitle,
@@ -39,8 +51,7 @@ export default function CampLinkList({
   emptyDescription,
 }: CampLinkListProps) {
   const { userData } = useAuth();
-  const [links, setLinks] = useState<ResourceLink[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -56,6 +67,16 @@ export default function CampLinkList({
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
+  // 프리페칭 캐시를 활용하는 useQuery 기반 데이터 로딩
+  const queryKey = activeJobCodeId ? getLinkQueryKey(linkType, activeJobCodeId) : ['generationResources', null];
+  const { data: resources, isLoading: loading } = useQuery({
+    queryKey,
+    queryFn: () => generationResourcesService.getResourcesByJobCodeId(activeJobCodeId!),
+    enabled: !!activeJobCodeId,
+  });
+
+  const links: ResourceLink[] = (resources && resources[linkType]) ? resources[linkType] : [];
+
   const filteredLinks = links.filter(link => {
     if (isAdmin) return true;
     if (!link.targetRole || link.targetRole === 'common') return true;
@@ -64,49 +85,22 @@ export default function CampLinkList({
     return false;
   });
 
-  const loadLinks = useCallback(async () => {
-    if (!activeJobCodeId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setLinks([]);
-      setSelectedLinkId(null);
-      
-      const resources = await generationResourcesService.getResourcesByJobCodeId(activeJobCodeId);
-      if (resources && resources[linkType]) {
-        const loadedLinks = resources[linkType];
-        setLinks(loadedLinks);
-        
-        const filtered = loadedLinks.filter(link => {
-          if (isAdmin) return true;
-          if (!link.targetRole || link.targetRole === 'common') return true;
-          if (userData?.role === 'mentor' && link.targetRole === 'mentor') return true;
-          if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
-          return false;
-        });
-        
-        if (filtered.length > 0) {
-          setSelectedLinkId(filtered[0].id);
-        }
-      }
-    } catch (error) {
-      logger.error(`${linkType} 로드 실패:`, error);
-      toast.error('자료를 불러오는데 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  }, [activeJobCodeId, linkType, isAdmin, userData?.role]);
-
+  // 필터된 링크가 바뀔 때 첫 번째 항목 자동 선택
   useEffect(() => {
-    if (activeJobCodeId) {
-      loadLinks();
-    } else {
-      setLoading(false);
+    if (filteredLinks.length > 0 && !selectedLinkId) {
+      setSelectedLinkId(filteredLinks[0].id);
     }
-  }, [activeJobCodeId, loadLinks]);
+    if (filteredLinks.length === 0) {
+      setSelectedLinkId(null);
+    }
+  }, [filteredLinks.length]);
+
+  // 뮤테이션 후 캐시 무효화 헬퍼
+  const invalidateCache = () => {
+    if (activeJobCodeId) {
+      queryClient.invalidateQueries({ queryKey: getLinkQueryKey(linkType, activeJobCodeId) });
+    }
+  };
 
   const selectedLink = links.find(link => link.id === selectedLinkId);
 
@@ -130,7 +124,7 @@ export default function CampLinkList({
       setNewTitle('');
       setNewUrl('');
       setNewTargetRole('common');
-      await loadLinks();
+      invalidateCache();
       toast.success('추가되었습니다.');
     } catch (error) {
       logger.error('링크 추가 실패:', error);
@@ -143,7 +137,7 @@ export default function CampLinkList({
 
     try {
       await generationResourcesService.deleteLink(activeJobCodeId, linkType, link.id);
-      await loadLinks();
+      invalidateCache();
       toast.success('삭제되었습니다.');
     } catch (error) {
       logger.error('링크 삭제 실패:', error);
@@ -237,7 +231,7 @@ export default function CampLinkList({
       [newLinks[index - 1], newLinks[index]] = [newLinks[index], newLinks[index - 1]];
       generationResourcesService.reorderLinks(activeJobCodeId, linkType, newLinks)
         .then(() => {
-          setLinks(newLinks);
+          invalidateCache();
         })
         .catch((error) => {
           logger.error('순서 변경 실패:', error);
@@ -253,7 +247,7 @@ export default function CampLinkList({
       [newLinks[index], newLinks[index + 1]] = [newLinks[index + 1], newLinks[index]];
       generationResourcesService.reorderLinks(activeJobCodeId, linkType, newLinks)
         .then(() => {
-          setLinks(newLinks);
+          invalidateCache();
         })
         .catch((error) => {
           logger.error('순서 변경 실패:', error);
@@ -286,7 +280,7 @@ export default function CampLinkList({
       const updatedLinks = links.map(l => l.id === editingLink.id ? updatedLink : l);
       await generationResourcesService.reorderLinks(activeJobCodeId, linkType, updatedLinks);
       
-      setLinks(updatedLinks);
+      invalidateCache();
       setEditingLink(null);
       toast.success('수정되었습니다.');
     } catch (error) {

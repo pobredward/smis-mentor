@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { memo } from 'react';
+import { memo, useState, useEffect } from 'react';
+import { getCampTabUrl } from '@/lib/campUtils';
 
 const BottomNavigation = () => {
   const pathname = usePathname();
@@ -17,6 +18,14 @@ const BottomNavigation = () => {
     }
     return pathname.startsWith(path);
   };
+
+  // 동적 캠프 URL 생성 (하이드레이션 안전)
+  const [campUrl, setCampUrl] = useState('/camp');
+  
+  useEffect(() => {
+    // 클라이언트 사이드에서만 실행하여 하이드레이션 불일치 방지
+    setCampUrl(getCampTabUrl(userData?.role));
+  }, [userData?.role]);
 
   const navItems = [
     // 원어민이 아닌 경우에만 '홈' 탭 표시
@@ -41,7 +50,7 @@ const BottomNavigation = () => {
     }] : []),
     {
       name: isForeign ? 'Camp' : '캠프',
-      path: '/camp',
+      path: campUrl,
       icon: (active: boolean) => (
         <svg className={`w-6 h-6 ${active ? 'text-blue-600' : 'text-gray-600'}`} fill={active ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 0 : 2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />

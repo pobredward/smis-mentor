@@ -61,6 +61,29 @@ export async function getDisplayItems(
   }
 }
 
+// jobCodeId로 모든 카테고리의 campPages를 한 번에 조회
+// useCampDataPrefetch의 prefetchCampPagesData에서 사용
+export async function getCampPagesByJobCodeId(jobCodeId: string): Promise<{
+  education: CampPage[];
+  schedule: CampPage[];
+  guide: CampPage[];
+}> {
+  try {
+    const categories: CampPageCategory[] = ['education', 'schedule', 'guide'];
+    const results = await Promise.all(
+      categories.map(category => campPageService.getPagesByCategory(jobCodeId, category))
+    );
+    return {
+      education: results[0],
+      schedule: results[1],
+      guide: results[2],
+    };
+  } catch (error) {
+    logger.error('getCampPagesByJobCodeId 실패:', error);
+    throw error;
+  }
+}
+
 // 이미지 업로드 (Firebase Storage)
 export async function uploadCampPageImage(file: File, jobCodeId: string): Promise<string> {
   const { uploadImage } = await import('@/lib/firebaseService');

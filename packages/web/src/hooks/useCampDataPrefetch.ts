@@ -14,6 +14,8 @@ export const campQueryKeys = {
   guide: (activeJobCodeId: string) => ['guide', activeJobCodeId] as const,
   education: (activeJobCodeId: string) => ['education', activeJobCodeId] as const,
   campPages: (activeJobCodeId: string) => ['campPages', activeJobCodeId] as const,
+  // fetchAll 처리 결과(materials + sections) 캐싱 — 탭 재방문 시 즉시 표시용
+  processedLesson: (userId: string) => ['processedLesson', userId] as const,
 };
 
 /**

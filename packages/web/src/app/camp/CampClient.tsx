@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Layout from '@/components/common/Layout';
 import { useAuth } from '@/contexts/AuthContext';
+import { safeGetItem, safeSetItem } from '@/lib/cacheUtils';
 import LessonContent from '@/components/camp/LessonContent';
 import EducationContent from '@/components/camp/EducationContent';
 import ScheduleContent from '@/components/camp/ScheduleContent';
@@ -13,6 +14,9 @@ import RoomContent from '@/components/camp/RoomContent';
 import TaskContent from '@/components/camp/TaskContent';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
+
+// localStorage 키 정의
+const LAST_CAMP_TAB_KEY = 'last_camp_tab';
 
 interface CampClientProps {
   initialTab?: string;
@@ -41,13 +45,28 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
     ? allTabs.filter(tab => tab.id !== 'lesson')
     : allTabs;
   
+  // 저장된 탭이 현재 사용자에게 유효한지 검증
+  const isValidTabForUser = (tabId: string): boolean => {
+    return tabs.some(tab => tab.id === tabId);
+  };
+
   // URL 기반으로 현재 탭 결정
   const getCurrentTab = (): TabName => {
+    // 1. initialTab이 있으면 우선 사용
     if (initialTab) {
       const tab = tabs.find(t => t.id === initialTab);
       if (tab) return tab.id;
     }
-    // 기본값은 '업무'
+    
+    // 2. localStorage에서 저장된 탭 확인 (initialTab이 없을 때만)
+    if (!initialTab) {
+      const savedTab = safeGetItem(LAST_CAMP_TAB_KEY);
+      if (savedTab && isValidTabForUser(savedTab)) {
+        return savedTab as TabName;
+      }
+    }
+    
+    // 3. 기본값은 '업무'
     return 'tasks';
   };
 
@@ -62,6 +81,9 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   const handleTabChange = (tabId: TabName) => {
     const tab = tabs.find(t => t.id === tabId);
     if (tab) {
+      // localStorage에 현재 탭 저장
+      safeSetItem(LAST_CAMP_TAB_KEY, tabId);
+      
       // 업무 탭이고 날짜가 있으면 날짜 파라미터 포함
       if (tabId === 'tasks' && initialDate) {
         router.push(`${tab.path}?date=${initialDate}`);

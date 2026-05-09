@@ -2,6 +2,7 @@
 import { logger } from '@smis-mentor/shared';
 
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import {
@@ -20,6 +21,7 @@ import {
 } from '@/lib/lessonMaterialService';
 import { getUserJobCodesInfo } from '@/lib/firebaseService';
 import { JobCodeWithGroup } from '@/types';
+import { campQueryKeys } from '@/hooks/useCampDataPrefetch';
 
 // SectionData 타입 확장 (관리자 links 지원)
 type SectionDataWithLinks = SectionData & {
@@ -149,7 +151,7 @@ function SectionForm({
 
 export default function LessonContent() {
   const { userData, loading: authLoading } = useAuth();
-  const [materials, setMaterials] = useState<LessonMaterialData[]>([]);
+  const queryClient = useQueryClient();
   const [sections, setSections] = useState<Record<string, SectionDataWithLinks[]>>({});
   const [loading, setLoading] = useState(true);
   const [addingSectionFor, setAddingSectionFor] = useState<string | null>(null);
@@ -164,6 +166,23 @@ export default function LessonContent() {
   const [mounted, setMounted] = useState(false);
   const [showAddMaterialForm, setShowAddMaterialForm] = useState(false);
   const [newMaterialTitle, setNewMaterialTitle] = useState('');
+
+  // 프리페칭 캐시를 활용하는 useQuery (초기 로딩 시 캐시 HIT 목적; refetch는 무한 루프를 유발하므로 사용하지 않음)
+  const { data: rawMaterials } = useQuery({
+    queryKey: userData?.userId ? campQueryKeys.lessonMaterials(userData.userId) : ['lessonMaterials', null],
+    queryFn: () => getLessonMaterials(userData!.userId),
+    enabled: !!userData?.userId,
+  });
+
+  // 뮤테이션 후 캐시 무효화 헬퍼
+  const invalidateMaterialsCache = () => {
+    if (userData?.userId) {
+      queryClient.invalidateQueries({ queryKey: campQueryKeys.lessonMaterials(userData.userId) });
+    }
+  };
+
+  // materials는 fetchAll에서 가공된 값을 사용 (useQuery는 원시 데이터 제공)
+  const [materials, setMaterials] = useState<LessonMaterialData[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -216,7 +235,8 @@ export default function LessonContent() {
       setTemplates(allTemplates);
 
       const accessibleTemplates = getAccessibleTemplates(allTemplates, activeJobCode);
-      const mats = await getLessonMaterials(userData.userId);
+      // useQuery 캐시에서 데이터를 활용하고, 없으면 직접 fetch (루프 방지를 위해 캐시만 읽고 refetch는 하지 않음)
+      const mats = rawMaterials ?? await getLessonMaterials(userData.userId);
 
       const activeCodesList = activeJobCode.map((uc) => uc.code);
       const seenTemplateIds = new Set<string>();
@@ -266,7 +286,10 @@ export default function LessonContent() {
         }
       }
 
+      // 자동 추가/업데이트 후 최신 데이터를 직접 fetch (refetchMaterials 호출 시 rawMaterials 변경 → useEffect 재트리거 → 무한 루프 발생하므로 직접 fetch 사용)
       const finalMats = await getLessonMaterials(userData.userId);
+      // 캐시도 갱신
+      invalidateMaterialsCache();
       
       // 활성화된 코드에 해당하는 자료만 필터링 + 중복 제거
       const seenTemplateIdsInFinal = new Set<string>();
@@ -293,9 +316,12 @@ export default function LessonContent() {
       
       setMaterials(filteredMats);
 
+      // 모든 자료의 섹션을 병렬로 fetch (직렬 대비 N배 빠름)
+      const allSectionResults = await Promise.all(finalMats.map((mat) => getSections(mat.id)));
+
       const allSections: Record<string, SectionDataWithLinks[]> = {};
-      for (const mat of finalMats) {
-        const matSections = await getSections(mat.id);
+      finalMats.forEach((mat, index) => {
+        const matSections = allSectionResults[index];
         const template = mat.templateId ? allTemplates.find((t) => t.id === mat.templateId) : null;
 
         const mergedSections: SectionDataWithLinks[] = [];
@@ -347,8 +373,14 @@ export default function LessonContent() {
           }));
 
         allSections[mat.id] = [...mergedSections, ...additionalUserSections];
-      }
+      });
       setSections(allSections);
+
+      // 처리 결과를 캐시에 저장 → 탭 재방문 시 로딩 없이 즉시 표시
+      queryClient.setQueryData(
+        campQueryKeys.processedLesson(userData.userId),
+        { materials: filteredMats, sections: allSections }
+      );
     } catch (error) {
       logger.error('데이터 로드 오류:', error);
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -358,7 +390,24 @@ export default function LessonContent() {
   };
 
   useEffect(() => {
+    if (!userData) return;
+
+    // 탭 재방문 시: 캐시된 처리 결과가 있으면 즉시 표시 (로딩 스킵)
+    // fetchAll은 백그라운드에서 계속 실행해 최신 데이터로 갱신
+    const cached = queryClient.getQueryData<{
+      materials: LessonMaterialData[];
+      sections: Record<string, SectionDataWithLinks[]>;
+    }>(campQueryKeys.processedLesson(userData.userId));
+
+    if (cached) {
+      setMaterials(cached.materials);
+      setSections(cached.sections);
+      setLoading(false);
+    }
+
     fetchAll();
+  // rawMaterials를 의존성에 포함하면 invalidateMaterialsCache → rawMaterials 갱신 → fetchAll 재실행 무한 루프 발생
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData]);
 
   // 코드별 필터링을 위한 materialCodeMap 생성
@@ -595,6 +644,7 @@ export default function LessonContent() {
         [materialId]: [],
       }));
 
+      invalidateMaterialsCache();
       setNewMaterialTitle('');
       setShowAddMaterialForm(false);
       toast.success(`${selectedMaterialCode}에 대주제가 추가되었습니다.`);
@@ -626,6 +676,7 @@ export default function LessonContent() {
         return newSections;
       });
 
+      invalidateMaterialsCache();
       toast.success('대주제가 삭제되었습니다.');
     } catch (error) {
       logger.error('대주제 삭제 오류:', error);

@@ -274,4 +274,7 @@ export const clearCacheCollection = async (storeName: string) => {
 export const CACHE_STORE = STORES;
 
 // 캐시 만료 시간 접근 상수
-export const CACHE_TTL = CACHE_EXPIRY; 
+export const CACHE_TTL = CACHE_EXPIRY;
+
+// localStorage 유틸리티 함수 export
+export { safeGetItem, safeSetItem, safeRemoveItem }; 

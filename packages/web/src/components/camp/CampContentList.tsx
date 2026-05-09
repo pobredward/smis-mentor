@@ -1,13 +1,15 @@
 'use client';
 
 import { logger } from '@smis-mentor/shared';
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDisplayItems, campPageService } from '@/lib/campPageService';
 import { generationResourcesService, type ResourceLinkRole, type LinkType } from '@/lib/generationResourcesService';
 import type { DisplayItem, CampPageRole, CampPageCategory } from '@smis-mentor/shared';
 import { DEFAULT_EMOJIS } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
+import { campQueryKeys } from '@/hooks/useCampDataPrefetch';
 
 interface CampContentListProps {
   category: CampPageCategory;
@@ -35,6 +37,16 @@ const getRoleLabel = (targetRole?: CampPageRole): string => {
   }
 };
 
+// category → campQueryKeys 매핑
+function getCategoryQueryKey(category: CampPageCategory, jobCodeId: string) {
+  switch (category) {
+    case 'education': return campQueryKeys.education(jobCodeId);
+    case 'schedule': return campQueryKeys.schedule(jobCodeId);
+    case 'guide': return campQueryKeys.guide(jobCodeId);
+    default: return ['displayItems', jobCodeId, category];
+  }
+}
+
 export default function CampContentList({
   category,
   linkType,
@@ -45,8 +57,7 @@ export default function CampContentList({
   allowLinks = false,
 }: CampContentListProps) {
   const { userData } = useAuth();
-  const [items, setItems] = useState<DisplayItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [addType, setAddType] = useState<'page' | 'link'>('page');
   const [newTitle, setNewTitle] = useState('');
@@ -64,7 +75,22 @@ export default function CampContentList({
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
-  const filteredItems = items.filter(item => {
+  // 프리페칭 캐시를 활용하는 useQuery 기반 데이터 로딩
+  const queryKey = activeJobCodeId ? getCategoryQueryKey(category, activeJobCodeId) : ['displayItems', null, category];
+  const { data: items = [], isLoading: loading } = useQuery({
+    queryKey,
+    queryFn: () => getDisplayItems(activeJobCodeId!, category),
+    enabled: !!activeJobCodeId,
+  });
+
+  // 뮤테이션 후 캐시 무효화 헬퍼
+  const invalidateCache = () => {
+    if (activeJobCodeId) {
+      queryClient.invalidateQueries({ queryKey: getCategoryQueryKey(category, activeJobCodeId) });
+    }
+  };
+
+  const filteredItems = items.filter((item: DisplayItem) => {
     // allowLinks가 false면 페이지만 표시
     if (!allowLinks && item.type === 'link') return false;
     
@@ -77,38 +103,10 @@ export default function CampContentList({
 
   // 관리자용 섹션별 그룹화
   const groupedItems = isAdmin ? {
-    common: filteredItems.filter(item => !item.targetRole || item.targetRole === 'common'),
-    mentor: filteredItems.filter(item => item.targetRole === 'mentor'),
-    foreign: filteredItems.filter(item => item.targetRole === 'foreign'),
+    common: filteredItems.filter((item: DisplayItem) => !item.targetRole || item.targetRole === 'common'),
+    mentor: filteredItems.filter((item: DisplayItem) => item.targetRole === 'mentor'),
+    foreign: filteredItems.filter((item: DisplayItem) => item.targetRole === 'foreign'),
   } : null;
-
-  const loadItems = useCallback(async () => {
-    if (!activeJobCodeId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setItems([]);
-      
-      const displayItems = await getDisplayItems(activeJobCodeId, category);
-      setItems(displayItems);
-    } catch (error) {
-      logger.error(`${category} 로드 실패:`, error);
-      toast.error('자료를 불러오는데 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  }, [activeJobCodeId, category]);
-
-  useEffect(() => {
-    if (activeJobCodeId) {
-      loadItems();
-    } else {
-      setLoading(false);
-    }
-  }, [activeJobCodeId, loadItems]);
 
   const handleAddItem = async () => {
     if (!activeJobCodeId || !newTitle.trim() || !userData?.userId) {
@@ -148,7 +146,7 @@ export default function CampContentList({
       setNewTargetRole('common');
       setNewEmoji('📄');
       setShowEmojiPicker(false);
-      await loadItems();
+      invalidateCache();
       toast.success('추가되었습니다.');
     } catch (error) {
       logger.error('항목 추가 실패:', error);
@@ -182,7 +180,7 @@ export default function CampContentList({
       });
 
       setEditingItem(null);
-      await loadItems();
+      invalidateCache();
       toast.success('수정되었습니다.');
     } catch (error) {
       logger.error('항목 수정 실패:', error);
@@ -200,7 +198,7 @@ export default function CampContentList({
         await generationResourcesService.deleteLink(activeJobCodeId, linkType, item.id);
       }
       
-      await loadItems();
+      invalidateCache();
       toast.success('삭제되었습니다.');
     } catch (error) {
       logger.error('항목 삭제 실패:', error);
@@ -227,7 +225,7 @@ export default function CampContentList({
       const pageIds = newItems.map(i => i.id);
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
-      await loadItems();
+      invalidateCache();
       toast.success('순서가 변경되었습니다.');
     } catch (error) {
       logger.error('순서 변경 실패:', error);
@@ -249,7 +247,7 @@ export default function CampContentList({
       const pageIds = newItems.map(i => i.id);
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
-      await loadItems();
+      invalidateCache();
       toast.success('순서가 변경되었습니다.');
     } catch (error) {
       logger.error('순서 변경 실패:', error);
