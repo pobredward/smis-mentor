@@ -150,13 +150,8 @@ export default function CampPageEditor({
 
     const html = editor.getHTML();
     
-    // iframe, oembed, youtube embed 등 체크
-    if (
-      html.includes('<iframe') || 
-      html.includes('<oembed') || 
-      html.includes('youtube.com/embed') ||
-      html.includes('youtu.be')
-    ) {
+    // iframe, oembed 임베드 태그 차단 (일반 텍스트 URL은 허용)
+    if (html.includes('<iframe') || html.includes('<oembed')) {
       toast.error('동영상 임베드는 사용할 수 없습니다. 유튜브 링크는 일반 텍스트로 입력해주세요.');
       return;
     }
