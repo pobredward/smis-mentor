@@ -28,3 +28,18 @@ export interface AppConfigUpdateInput {
   mentorHomeMessage?: string;
   foreignHomeMessage?: string;
 }
+
+/** 캠프별 홈 메시지 */
+export interface CampHomeMessage {
+  campCode: string;
+  mentorMessage: string;
+  foreignMessage: string;
+  updatedAt: Date;
+  updatedBy?: string;
+}
+
+/** 캠프별 홈 메시지 수정 DTO */
+export interface CampHomeMessageUpdateInput {
+  mentorMessage?: string;
+  foreignMessage?: string;
+}

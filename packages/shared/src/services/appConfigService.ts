@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { AppConfig, AppConfigUpdateInput } from '../types/appConfig';
+import { AppConfig, AppConfigUpdateInput, CampHomeMessage, CampHomeMessageUpdateInput } from '../types/appConfig';
 
 /**
  * 앱 설정 서비스
@@ -63,6 +63,66 @@ export async function updateAppConfig(
     await setDoc(docRef, updateData, { merge: true });
   } catch (error) {
     console.error('앱 설정 업데이트 실패:', error);
+    throw error;
+  }
+}
+
+/**
+ * 캠프별 홈 메시지 조회
+ * Firestore 경로: campHomeMessages/{campCode}
+ */
+export async function getCampHomeMessage(db: any, campCode: string): Promise<CampHomeMessage | null> {
+  try {
+    const docRef = doc(db, 'campHomeMessages', campCode);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      return null;
+    }
+
+    const data = docSnap.data();
+    return {
+      campCode,
+      mentorMessage: data.mentorMessage || '',
+      foreignMessage: data.foreignMessage || '',
+      updatedAt: data.updatedAt?.toDate() || new Date(),
+      updatedBy: data.updatedBy,
+    };
+  } catch (error) {
+    console.error('캠프 홈 메시지 조회 실패:', error);
+    throw error;
+  }
+}
+
+/**
+ * 캠프별 홈 메시지 업데이트 (관리자 전용)
+ * Firestore 경로: campHomeMessages/{campCode}
+ */
+export async function updateCampHomeMessage(
+  db: any,
+  campCode: string,
+  input: CampHomeMessageUpdateInput,
+  updatedBy: string
+): Promise<void> {
+  try {
+    const docRef = doc(db, 'campHomeMessages', campCode);
+
+    const updateData: any = {
+      updatedAt: serverTimestamp(),
+      updatedBy,
+    };
+
+    if (input.mentorMessage !== undefined) {
+      updateData.mentorMessage = input.mentorMessage;
+    }
+
+    if (input.foreignMessage !== undefined) {
+      updateData.foreignMessage = input.foreignMessage;
+    }
+
+    await setDoc(docRef, updateData, { merge: true });
+  } catch (error) {
+    console.error('캠프 홈 메시지 업데이트 실패:', error);
     throw error;
   }
 }

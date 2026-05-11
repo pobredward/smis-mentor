@@ -20,7 +20,7 @@ import { useCampTab } from '../context/CampTabContext';
 import { jobCodesService, JobCode } from '../services';
 import { getTasksByCampCode } from '../services/taskService';
 import { getApplicationsByUserId } from '../services/recruitmentService';
-import { getAppConfig, updateAppConfig } from '@smis-mentor/shared';
+import { getCampHomeMessage, updateCampHomeMessage } from '@smis-mentor/shared';
 import { getJobBoardById } from '../services/jobBoardService';
 import { db } from '../config/firebase';
 import type { Task } from '../../../shared/src/types/camp';
@@ -68,19 +68,17 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
     try {
       setLoading(true);
 
-      // 앱 설정 (멘토/외국인 홈 메시지) 로드
-      const appConfig = await getAppConfig(db);
-      if (appConfig?.mentorHomeMessage) {
-        setMentorHomeMessage(appConfig.mentorHomeMessage);
-      }
-      if (appConfig?.foreignHomeMessage) {
-        setForeignHomeMessage(appConfig.foreignHomeMessage);
-      }
-
       // 활성 캠프 코드 정보 로드
       if (userData.activeJobExperienceId) {
         const jobCode = await jobCodesService.getJobCodeById(userData.activeJobExperienceId);
         setActiveJobCode(jobCode);
+
+        // 캠프별 홈 메시지 로드
+        if (jobCode?.code) {
+          const campMessage = await getCampHomeMessage(db, jobCode.code);
+          setMentorHomeMessage(campMessage?.mentorMessage || '');
+          setForeignHomeMessage(campMessage?.foreignMessage || '');
+        }
 
         // 오늘과 다가오는 업무 로드
         if (jobCode?.code) {
@@ -326,23 +324,22 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       return;
     }
 
+    if (!activeJobCode?.code) {
+      Alert.alert('오류', '활성 캠프가 없습니다. 마이페이지에서 캠프를 선택해주세요.');
+      return;
+    }
+
     try {
-      // 기존 설정 불러오기
-      const currentConfig = await getAppConfig(db);
-      
-      await updateAppConfig(
+      await updateCampHomeMessage(
         db,
-        { 
-          loadingQuotes: currentConfig?.loadingQuotes || [],
-          mentorHomeMessage: editedMessage.trim(),
-          foreignHomeMessage: currentConfig?.foreignHomeMessage || ''
-        },
+        activeJobCode.code,
+        { mentorMessage: editedMessage.trim() },
         userData.userId
       );
       
       setMentorHomeMessage(editedMessage.trim());
       setIsEditingMessage(false);
-      Alert.alert('성공', '멘토 홈 메시지가 저장되었습니다.');
+      Alert.alert('성공', `[${activeJobCode.code}] 멘토 홈 메시지가 저장되었습니다.`);
     } catch (error) {
       logger.error('메시지 저장 오류:', error);
       Alert.alert('오류', '메시지 저장에 실패했습니다.');
@@ -365,23 +362,22 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       return;
     }
 
+    if (!activeJobCode?.code) {
+      Alert.alert('오류', '활성 캠프가 없습니다. 마이페이지에서 캠프를 선택해주세요.');
+      return;
+    }
+
     try {
-      // 기존 설정 불러오기
-      const currentConfig = await getAppConfig(db);
-      
-      await updateAppConfig(
+      await updateCampHomeMessage(
         db,
-        { 
-          loadingQuotes: currentConfig?.loadingQuotes || [],
-          mentorHomeMessage: currentConfig?.mentorHomeMessage || '',
-          foreignHomeMessage: editedForeignMessage.trim()
-        },
+        activeJobCode.code,
+        { foreignMessage: editedForeignMessage.trim() },
         userData.userId
       );
       
       setForeignHomeMessage(editedForeignMessage.trim());
       setIsEditingForeignMessage(false);
-      Alert.alert('성공', '외국인 홈 메시지가 저장되었습니다.');
+      Alert.alert('성공', `[${activeJobCode.code}] 외국인 홈 메시지가 저장되었습니다.`);
     } catch (error) {
       logger.error('메시지 저장 오류:', error);
       Alert.alert('오류', '메시지 저장에 실패했습니다.');
