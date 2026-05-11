@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import * as functionsV2 from 'firebase-functions/v2';
 import * as admin from 'firebase-admin';
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
@@ -280,27 +280,29 @@ export const sendTestNotification = functions
   });
 
 // 관리자가 특정 업무의 미완료자에게 푸시 알림 보내기
-export const sendTaskReminderToUsers = functions
-  .region('asia-northeast3')
-  .https.onCall(async (data: { taskId: string }, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError('unauthenticated', '인증이 필요합니다.');
+export const sendTaskReminderToUsers = functionsV2.https.onCall(
+  { region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com' },
+  async (request: functionsV2.https.CallableRequest<{ taskId: string }>) => {
+    if (!request.auth) {
+      throw new functionsV2.https.HttpsError('unauthenticated', '인증이 필요합니다.');
     }
+
+    const data = request.data;
 
     try {
       // 관리자 권한 확인
-      const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+      const adminDoc = await db.collection('users').doc(request.auth.uid).get();
       const adminData = adminDoc.data();
       
       if (!adminData || adminData.role !== 'admin') {
-        throw new functions.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
+        throw new functionsV2.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
       }
 
       // 업무 정보 조회 (클라이언트와 동일한 campTasks 컬렉션)
       const taskDoc = await db.collection('campTasks').doc(data.taskId).get();
       
       if (!taskDoc.exists) {
-        throw new functions.https.HttpsError('not-found', '업무를 찾을 수 없습니다.');
+        throw new functionsV2.https.HttpsError('not-found', '업무를 찾을 수 없습니다.');
       }
 
       const task = { id: taskDoc.id, ...taskDoc.data() } as Task;
@@ -312,7 +314,7 @@ export const sendTaskReminderToUsers = functions
         .get();
 
       if (jobCodesSnapshot.empty) {
-        throw new functions.https.HttpsError('not-found', '캠프 코드를 찾을 수 없습니다.');
+        throw new functionsV2.https.HttpsError('not-found', '캠프 코드를 찾을 수 없습니다.');
       }
 
       const jobCodeId = jobCodesSnapshot.docs[0].id;
@@ -371,13 +373,14 @@ export const sendTaskReminderToUsers = functions
     } catch (error) {
       console.error('업무 알림 전송 실패:', error);
       
-      if (error instanceof functions.https.HttpsError) {
+      if (error instanceof functionsV2.https.HttpsError) {
         throw error;
       }
       
-      throw new functions.https.HttpsError('internal', '알림 전송에 실패했습니다.');
+      throw new functionsV2.https.HttpsError('internal', '알림 전송에 실패했습니다.');
     }
-  });
+  }
+);
 
 // Custom Token 생성 함수 (소셜 로그인용)
 export const createCustomToken = functions
