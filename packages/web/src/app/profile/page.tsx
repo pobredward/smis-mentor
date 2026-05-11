@@ -1251,6 +1251,28 @@ export default function ProfilePage() {
         </div>
         )}
 
+        {/* 소셜 계정 연동 관리 */}
+        {userData.authProviders && userData.authProviders.length > 0 ? (
+          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+            <div className="px-4 sm:px-6 py-4">
+              <LinkedAccountsDisplay
+                authProviders={userData.authProviders}
+                onUnlink={handleUnlink}
+                onLink={handleLink}
+                isUnlinking={isUnlinking}
+                isLinking={isLinking}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+            <div className="px-4 sm:px-6 py-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">현재 연동된 계정</h3>
+              <p className="text-sm text-gray-500">연동된 소셜 계정이 없습니다.</p>
+            </div>
+          </div>
+        )}
+
         {/* 개인 정보 */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="border-b px-4 sm:px-6 py-3">
@@ -1377,28 +1399,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* 소셜 계정 연동 관리 */}
-        {userData.authProviders && userData.authProviders.length > 0 ? (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-            <div className="px-4 sm:px-6 py-4">
-              <LinkedAccountsDisplay
-                authProviders={userData.authProviders}
-                onUnlink={handleUnlink}
-                onLink={handleLink}
-                isUnlinking={isUnlinking}
-                isLinking={isLinking}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-            <div className="px-4 sm:px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">현재 연동된 계정</h3>
-              <p className="text-sm text-gray-500">연동된 소셜 계정이 없습니다.</p>
-            </div>
-          </div>
-        )}
-        
         {/* 회원 탈퇴 섹션 */}
         <div className="mt-8 mb-12 text-center">
           <button

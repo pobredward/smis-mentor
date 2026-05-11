@@ -1768,6 +1768,109 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           </View>
           )}
 
+          {/* 소셜 계정 연동 관리 */}
+          {userData.authProviders && userData.authProviders?.length > 0 && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>계정 연동 관리</Text>
+              </View>
+              <View style={styles.socialAccountsContainer}>
+                <Text style={styles.socialSectionLabel}>현재 연동된 계정</Text>
+                {userData.authProviders?.map((provider: any) => {
+                  const isPassword = provider.providerId === 'password';
+                  const canUnlink = (userData.authProviders?.length || 0) > 1 && !isPassword;
+                  
+                  return (
+                    <View key={provider.providerId} style={styles.socialAccountItem}>
+                      <View style={styles.socialAccountInfo}>
+                        <Text style={styles.socialAccountIcon}>
+                          {provider.providerId === 'google.com' ? '🔵' :
+                           provider.providerId === 'naver' || provider.providerId === 'naver.com' ? '🟢' :
+                           provider.providerId === 'kakao' ? '💬' :
+                           provider.providerId === 'apple.com' ? '🍎' : '🔐'}
+                        </Text>
+                        <View style={styles.socialAccountDetails}>
+                          <Text style={styles.socialAccountName}>
+                            {provider.providerId === 'google.com' ? 'Google' :
+                             provider.providerId === 'naver' || provider.providerId === 'naver.com' ? '네이버' :
+                             provider.providerId === 'kakao' ? '카카오' :
+                             provider.providerId === 'apple.com' ? 'Apple' : '이메일/비밀번호'}
+                          </Text>
+                          {provider.email && (
+                            <Text style={styles.socialAccountEmail}>{provider.email}</Text>
+                          )}
+                        </View>
+                      </View>
+                      {canUnlink ? (
+                        <TouchableOpacity
+                          onPress={() => handleSocialUnlink(provider.providerId)}
+                          style={styles.unlinkButton}
+                        >
+                          <Text style={styles.unlinkButtonText}>해제</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.socialAccountRequiredText}>기본</Text>
+                      )}
+                    </View>
+                  );
+                })}
+                
+                <Text style={[styles.socialSectionLabel, { marginTop: 16 }]}>추가 연동 가능</Text>
+                
+                {/* Google 연동 버튼 */}
+                {!userData.authProviders?.some((p: any) => p.providerId === 'google.com') && (
+                  <TouchableOpacity
+                    style={styles.socialLinkButton}
+                    onPress={() => handleSocialLink('google.com')}
+                  >
+                    <Text style={styles.socialLinkIcon}>🔵</Text>
+                    <Text style={styles.socialLinkText}>Google 연동</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* 네이버 연동 버튼 */}
+                {!userData.authProviders?.some((p: any) => p.providerId === 'naver' || p.providerId === 'naver.com') && (
+                  <TouchableOpacity
+                    style={styles.socialLinkButton}
+                    onPress={() => handleSocialLink('naver')}
+                  >
+                    <Text style={styles.socialLinkIcon}>🟢</Text>
+                    <Text style={styles.socialLinkText}>네이버 연동</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Apple 연동 버튼 (iOS만) */}
+                {Platform.OS === 'ios' && !userData.authProviders?.some((p: any) => p.providerId === 'apple.com' || p.providerId === 'apple') && (
+                  <TouchableOpacity
+                    style={styles.socialLinkButton}
+                    onPress={() => handleSocialLink('apple.com')}
+                  >
+                    <Text style={styles.socialLinkIcon}>🍎</Text>
+                    <Text style={styles.socialLinkText}>Apple 연동</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* 설정 섹션 */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{isForeign ? 'Settings' : '설정'}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.settingsMenuItem}
+              onPress={() => navigation.navigate('Settings' as any)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingsMenuItemContent}>
+                <Ionicons name="notifications-outline" size={20} color="#3b82f6" />
+                <Text style={styles.settingsMenuItemText}>{isForeign ? 'Notification Settings' : '알림 설정'}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+            </TouchableOpacity>
+          </View>
+
           {/* 개인 정보 */}
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
@@ -1889,121 +1992,47 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             </View>
           )}
 
-          {/* 소셜 계정 연동 관리 */}
-          {userData.authProviders && userData.authProviders?.length > 0 && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>계정 연동 관리</Text>
-              </View>
-              <View style={styles.socialAccountsContainer}>
-                <Text style={styles.socialSectionLabel}>현재 연동된 계정</Text>
-                {userData.authProviders?.map((provider: any) => {
-                  const isPassword = provider.providerId === 'password';
-                  const canUnlink = (userData.authProviders?.length || 0) > 1 && !isPassword;
-                  
-                  return (
-                    <View key={provider.providerId} style={styles.socialAccountItem}>
-                      <View style={styles.socialAccountInfo}>
-                        <Text style={styles.socialAccountIcon}>
-                          {provider.providerId === 'google.com' ? '🔵' :
-                           provider.providerId === 'naver' || provider.providerId === 'naver.com' ? '🟢' :
-                           provider.providerId === 'kakao' ? '💬' :
-                           provider.providerId === 'apple.com' ? '🍎' : '🔐'}
-                        </Text>
-                        <View style={styles.socialAccountDetails}>
-                          <Text style={styles.socialAccountName}>
-                            {provider.providerId === 'google.com' ? 'Google' :
-                             provider.providerId === 'naver' || provider.providerId === 'naver.com' ? '네이버' :
-                             provider.providerId === 'kakao' ? '카카오' :
-                             provider.providerId === 'apple.com' ? 'Apple' : '이메일/비밀번호'}
-                          </Text>
-                          {provider.email && (
-                            <Text style={styles.socialAccountEmail}>{provider.email}</Text>
-                          )}
-                        </View>
-                      </View>
-                      {canUnlink ? (
-                        <TouchableOpacity
-                          onPress={() => handleSocialUnlink(provider.providerId)}
-                          style={styles.unlinkButton}
-                        >
-                          <Text style={styles.unlinkButtonText}>해제</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <Text style={styles.socialAccountRequiredText}>기본</Text>
-                      )}
-                    </View>
-                  );
-                })}
-                
-                <Text style={[styles.socialSectionLabel, { marginTop: 16 }]}>추가 연동 가능</Text>
-                
-                {/* Google 연동 버튼 */}
-                {!userData.authProviders?.some((p: any) => p.providerId === 'google.com') && (
-                  <TouchableOpacity
-                    style={styles.socialLinkButton}
-                    onPress={() => handleSocialLink('google.com')}
-                  >
-                    <Text style={styles.socialLinkIcon}>🔵</Text>
-                    <Text style={styles.socialLinkText}>Google 연동</Text>
-                  </TouchableOpacity>
-                )}
-                
-                {/* 네이버 연동 버튼 */}
-                {!userData.authProviders?.some((p: any) => p.providerId === 'naver' || p.providerId === 'naver.com') && (
-                  <TouchableOpacity
-                    style={styles.socialLinkButton}
-                    onPress={() => handleSocialLink('naver')}
-                  >
-                    <Text style={styles.socialLinkIcon}>🟢</Text>
-                    <Text style={styles.socialLinkText}>네이버 연동</Text>
-                  </TouchableOpacity>
-                )}
-                
-                {/* Apple 연동 버튼 (iOS만) */}
-                {Platform.OS === 'ios' && !userData.authProviders?.some((p: any) => p.providerId === 'apple.com' || p.providerId === 'apple') && (
-                  <TouchableOpacity
-                    style={styles.socialLinkButton}
-                    onPress={() => handleSocialLink('apple.com')}
-                  >
-                    <Text style={styles.socialLinkIcon}>🍎</Text>
-                    <Text style={styles.socialLinkText}>Apple 연동</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          )}
+          {/* 개인정보처리방침 / 서비스 이용약관 */}
+          <View style={styles.legalButtonsRow}>
+            <TouchableOpacity
+              style={styles.legalButton}
+              onPress={() => navigation.navigate('PrivacyPolicy' as any)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="shield-checkmark-outline" size={16} color="#64748b" />
+              <Text style={styles.legalButtonText}>개인정보처리방침</Text>
+            </TouchableOpacity>
+            <View style={styles.legalButtonDivider} />
+            <TouchableOpacity
+              style={styles.legalButton}
+              onPress={() => navigation.navigate('TermsOfService' as any)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="document-text-outline" size={16} color="#64748b" />
+              <Text style={styles.legalButtonText}>서비스 이용약관</Text>
+            </TouchableOpacity>
+          </View>
 
-          {/* 설정 버튼 */}
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => navigation.navigate('Settings' as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.settingsButtonContent}>
-              <Ionicons name="settings-outline" size={20} color="#3b82f6" />
-              <Text style={styles.settingsButtonText}>알림 설정</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-          </TouchableOpacity>
+          {/* 회원 탈퇴 / 로그아웃 */}
+          <View style={styles.accountActionsRow}>
+            <TouchableOpacity
+              style={styles.deactivateButton}
+              onPress={() => setShowDeactivateModal(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="person-remove-outline" size={15} color="#ef4444" />
+              <Text style={styles.deactivateButtonText}>{isForeign ? 'Delete Account' : '회원 탈퇴'}</Text>
+            </TouchableOpacity>
 
-          {/* 회원 탈퇴 버튼 */}
-          <TouchableOpacity
-            style={styles.deactivateButton}
-            onPress={() => setShowDeactivateModal(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.deactivateButtonText}>{isForeign ? 'Delete Account' : '회원 탈퇴'}</Text>
-          </TouchableOpacity>
-
-          {/* 로그아웃 버튼 */}
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.logoutButtonText}>{isForeign ? 'Logout' : '로그아웃'}</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="log-out-outline" size={15} color="#ffffff" />
+              <Text style={styles.logoutButtonText}>{isForeign ? 'Logout' : '로그아웃'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     );
@@ -2627,41 +2656,66 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   
-  // 로그아웃 버튼
-  settingsButton: {
+  // 법적 고지 버튼 (병렬 배치)
+  legalButtonsRow: {
+    flexDirection: 'row',
     backgroundColor: '#ffffff',
     borderRadius: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginTop: 8,
+    marginTop: 0,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  legalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+  },
+  legalButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  legalButtonDivider: {
+    width: 1,
+    backgroundColor: '#e5e7eb',
+  },
+
+  // 설정 섹션 메뉴 아이템
+  settingsMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
   },
-  settingsButtonContent: {
+  settingsMenuItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  settingsButtonText: {
-    color: '#3b82f6',
+  settingsMenuItemText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '500',
+    color: '#1e293b',
   },
   logoutButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     backgroundColor: '#ef4444',
     borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 24,
+    paddingVertical: 11,
   },
   logoutButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
   },
   
@@ -2801,26 +2855,27 @@ const styles = StyleSheet.create({
   },
 
   // 회원 탈퇴 버튼 스타일
+  accountActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 24,
+  },
   deactivateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#ef4444',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    borderColor: '#fca5a5',
+    borderRadius: 8,
+    paddingVertical: 11,
   },
   deactivateButtonText: {
     color: '#ef4444',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
   },
 

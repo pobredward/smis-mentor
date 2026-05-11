@@ -133,42 +133,35 @@ export default function LinkedAccountsDisplay({
         </div>
       </div>
 
-      {/* 추가 연동 가능한 계정 */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">추가 연동 가능</h3>
-        <div className="space-y-2">
-          {allProviders.map((provider) => {
-            const isLinked = linkedProviderIds.includes(provider.id);
-
-            return (
-              <div
-                key={provider.id}
-                className={`flex items-center justify-between py-3 px-4 rounded-lg ${
-                  isLinked ? 'bg-gray-100 opacity-50' : 'bg-white border border-gray-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{provider.icon}</span>
-                  <div>
-                    <p className="font-medium text-gray-900">{provider.name}</p>
-                    {isLinked && (
-                      <p className="text-xs text-gray-500">이미 연동됨</p>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => onLink?.(provider.id)}
-                  disabled={isLinked || !onLink || isLinking}
-                  className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-300 whitespace-nowrap"
+      {/* 추가 연동 가능한 계정 — 미연동 항목만 표시 */}
+      {allProviders.some((p) => !linkedProviderIds.includes(p.id)) && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">추가 연동 가능</h3>
+          <div className="space-y-2">
+            {allProviders
+              .filter((provider) => !linkedProviderIds.includes(provider.id))
+              .map((provider) => (
+                <div
+                  key={provider.id}
+                  className="flex items-center justify-between py-3 px-4 rounded-lg bg-white border border-gray-200"
                 >
-                  {isLinked ? '연동됨' : isLinking ? '연동 중...' : '연동하기'}
-                </button>
-              </div>
-            );
-          })}
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{provider.icon}</span>
+                    <p className="font-medium text-gray-900">{provider.name}</p>
+                  </div>
+
+                  <button
+                    onClick={() => onLink?.(provider.id)}
+                    disabled={!onLink || isLinking}
+                    className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    {isLinking ? '연동 중...' : '연동하기'}
+                  </button>
+                </div>
+              ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 안내 메시지 */}
       {!canUnlink && (
