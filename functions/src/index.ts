@@ -168,12 +168,14 @@ async function sendTaskReminderNotifications(task: Task, userIds: string[]): Pro
         messages.push({
           to: token,
           sound: 'default',
-          title: '📌 업무 알림',
-          body: `"${task.title}" 업무 확인이 필요합니다.`,
+          title: '🔔 업무 알림',
+          body: `"${task.title}" 업무를 확인해주세요.`,
           data: {
             type: 'task-reminder',
             taskId: task.id,
             taskDate: task.date.toDate().toISOString().split('T')[0],
+            screen: 'Camp',
+            tab: 'tasks',
           },
           priority: 'high',
           channelId: 'task-reminders',

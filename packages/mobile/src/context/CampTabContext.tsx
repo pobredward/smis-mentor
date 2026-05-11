@@ -36,6 +36,21 @@ const CampTabContext = createContext<CampTabContextType>({
 
 export const useCampTab = () => useContext(CampTabContext);
 
+// 알림 클릭 시 외부(AuthContext 등)에서 업무 탭으로 이동하기 위한 싱글톤 콜백
+let navigateToTasksTabCallback: (() => void) | null = null;
+
+export const registerNavigateToTasksTab = (callback: () => void) => {
+  navigateToTasksTabCallback = callback;
+};
+
+export const unregisterNavigateToTasksTab = () => {
+  navigateToTasksTabCallback = null;
+};
+
+export const navigateToTasksTab = () => {
+  navigateToTasksTabCallback?.();
+};
+
 export const CampTabProvider = ({ children }: { children: ReactNode }) => {
   const [activeTab, setActiveTabState] = useState<TabName>('schedule');
   const [preloadLinks, setPreloadLinksState] = useState<PreloadLink[]>([]);

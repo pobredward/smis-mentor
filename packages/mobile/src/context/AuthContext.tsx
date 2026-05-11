@@ -23,8 +23,12 @@ import {
   addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
 } from '../services/notificationService';
+import { navigateToTasksTab } from './CampTabContext';
 import * as Notifications from 'expo-notifications';
-import { useNavigation } from '@react-navigation/native';
+import { createNavigationContainerRef } from '@react-navigation/native';
+import { RootStackParamList } from '../navigation/types';
+
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 import Constants from 'expo-constants';
 
 const AuthContext = createContext<AuthContextType>({
@@ -187,8 +191,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       logger.info('알림 응답:', response);
       const data = response.notification.request.content.data;
       
-      if (data?.type === 'task-reminder' && data?.taskId) {
-        // TasksScreen으로 이동하는 로직은 RootNavigator에서 처리
+      if (data?.type === 'task-reminder') {
+        // Camp 탭으로 이동 후 업무 탭 전환
+        try {
+          navigationRef.navigate('MainTabs' as any, { screen: 'Camp' } as any);
+        } catch (e) {
+          logger.warn('Camp 탭 네비게이션 실패:', e);
+        }
+        // 약간의 딜레이 후 업무 탭 전환 (화면 마운트 대기)
+        setTimeout(() => navigateToTasksTab(), 300);
       }
     });
 
@@ -252,7 +263,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           }
           
           // 활성 캠프 자동 선택
-          const activeJobExpId = await ensureActiveJobExperience(db, userRecord);
+          const activeJobExpId = await ensureActiveJobExperience(db, userRecord as any);
           if (activeJobExpId && !userRecord.activeJobExperienceId) {
             userRecord.activeJobExperienceId = activeJobExpId;
           }
@@ -345,7 +356,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               }
               
               // 활성 캠프 자동 선택
-              const activeJobExpId = await ensureActiveJobExperience(db, userRecord);
+              const activeJobExpId = await ensureActiveJobExperience(db, userRecord as any);
               if (activeJobExpId && !userRecord.activeJobExperienceId) {
                 userRecord.activeJobExperienceId = activeJobExpId;
               }

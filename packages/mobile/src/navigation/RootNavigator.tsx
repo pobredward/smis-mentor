@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { navigationRef } from '../context/AuthContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import { MainTabs } from './MainTabs';
@@ -46,7 +47,7 @@ const linking = {
 
 export function RootNavigator() {
   return (
-    <NavigationContainer theme={CustomLightTheme} linking={linking}>
+    <NavigationContainer ref={navigationRef} theme={CustomLightTheme} linking={linking}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
