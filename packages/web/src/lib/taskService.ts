@@ -496,29 +496,34 @@ export const formatDuration = (duration?: { value: number; unit: 'minutes' | 'ho
   return `${duration.value}${unitText}`;
 };
 
-// 월별 업무가 있는 날짜 가져오기
+// 월별 업무가 있는 날짜 가져오기 (현재 사용자의 역할에 해당하는 업무만 포함)
 export const getTaskDatesInMonth = async (
   campCode: string,
   year: number,
-  month: number
+  month: number,
+  groupRole: JobExperienceGroupRole | null,
+  isAdmin: boolean
 ): Promise<Set<string>> => {
   try {
-    // 모든 업무를 가져와서 클라이언트에서 필터링
     const allTasks = await getTasksByCampCode(campCode);
-    
+
     const dates = new Set<string>();
 
     allTasks.forEach(task => {
       const taskDate = new Date(task.date.toDate());
       // 로컬 타임존으로 날짜 비교
-      if (taskDate.getFullYear() === year && taskDate.getMonth() === month) {
-        // YYYY-MM-DD 형식으로 저장 (로컬 타임존 기준)
-        const year = taskDate.getFullYear();
-        const month = String(taskDate.getMonth() + 1).padStart(2, '0');
-        const day = String(taskDate.getDate()).padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
-        dates.add(dateStr);
+      if (taskDate.getFullYear() !== year || taskDate.getMonth() !== month) return;
+
+      // admin은 모든 업무 날짜 표시, 일반 사용자는 자신의 역할이 포함된 업무만 표시
+      if (!isAdmin) {
+        if (!groupRole || !task.targetRoles.includes(groupRole)) return;
       }
+
+      // YYYY-MM-DD 형식으로 저장 (로컬 타임존 기준)
+      const y = taskDate.getFullYear();
+      const m = String(taskDate.getMonth() + 1).padStart(2, '0');
+      const d = String(taskDate.getDate()).padStart(2, '0');
+      dates.add(`${y}-${m}-${d}`);
     });
 
     return dates;

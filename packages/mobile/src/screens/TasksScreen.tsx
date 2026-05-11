@@ -160,10 +160,16 @@ export function TasksScreen() {
     }
   }, [route.params, tasks.length]);
 
+  type JobCodeInfo = { id: string; generation: string; code: string; name: string };
+
   // 활성화된 캠프 정보 가져오기
-  const fetchActiveJobCode = async () => {
+  // groupRole을 함께 반환해 state 비동기 업데이트 이전에 즉시 사용할 수 있도록 함
+  const fetchActiveJobCode = async (): Promise<{
+    jobCode: JobCodeInfo | null;
+    groupRole: JobExperienceGroupRole | null;
+  }> => {
     if (!userData?.activeJobExperienceId) {
-      return null;
+      return { jobCode: null, groupRole: null };
     }
 
     try {
@@ -171,13 +177,14 @@ export function TasksScreen() {
       const activeExp = userData.jobExperiences?.find(
         exp => exp.id === userData.activeJobExperienceId
       );
-      if (activeExp && activeExp.groupRole) {
-        setCurrentGroupRole(activeExp.groupRole as JobExperienceGroupRole);
+      const resolvedGroupRole = (activeExp?.groupRole as JobExperienceGroupRole) ?? null;
+      if (resolvedGroupRole) {
+        setCurrentGroupRole(resolvedGroupRole);
       }
-      return jobCodesInfo[0] || null;
+      return { jobCode: jobCodesInfo[0] || null, groupRole: resolvedGroupRole };
     } catch (error) {
       logger.error('활성화된 직무 코드 정보 가져오기 오류:', error);
-      return null;
+      return { jobCode: null, groupRole: null };
     }
   };
 
@@ -191,7 +198,7 @@ export function TasksScreen() {
 
     setLoading(true);
     try {
-      const activeJobCode = await fetchActiveJobCode();
+      const { jobCode: activeJobCode, groupRole: resolvedGroupRole } = await fetchActiveJobCode();
       if (!activeJobCode) {
         setTasks([]);
         return;
@@ -210,8 +217,8 @@ export function TasksScreen() {
       const fetchedTasks = await getTasksByCampCode(activeJobCode.code);
       setTasks(fetchedTasks);
 
-      // 월별 업무 날짜 가져오기
-      await fetchTaskDatesInMonth();
+      // 월별 업무 날짜 가져오기 (resolvedGroupRole을 직접 전달해 state race condition 방지)
+      await fetchTaskDatesInMonth(resolvedGroupRole, isAdmin);
 
       // 선택된 날짜의 업무 로드
       await loadTasksForDate(selectedDate, activeJobCode.code);
@@ -224,14 +231,20 @@ export function TasksScreen() {
   };
 
   // 월별 업무 날짜 가져오기
-  const fetchTaskDatesInMonth = async () => {
+  // groupRole, adminFlag를 직접 받아서 state 비동기 업데이트로 인한 race condition 방지
+  const fetchTaskDatesInMonth = async (
+    groupRole: JobExperienceGroupRole | null = currentGroupRole,
+    adminFlag: boolean = isAdmin,
+  ) => {
     if (!currentCampCode) return;
 
     try {
       const dates = await getTaskDatesInMonth(
         currentCampCode,
         currentDate.getFullYear(),
-        currentDate.getMonth()
+        currentDate.getMonth(),
+        groupRole,
+        adminFlag,
       );
       setTaskDates(dates);
     } catch (error) {
