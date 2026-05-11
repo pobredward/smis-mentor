@@ -43,9 +43,22 @@ interface UserData {
   jobExperiences?: Array<{
     id: string;
     groupRole?: string;
+    group?: string;
   }>;
   activeJobExperienceId?: string;
 }
+
+// shared의 LEGACY_GROUP_MAP과 동일한 매핑 (영문 그룹명 → 한글)
+const LEGACY_GROUP_MAP: Record<string, string> = {
+  'junior': '주니어',
+  'middle': '미들',
+  'senior': '시니어',
+  'spring': '스프링',
+  'summer': '서머',
+  'autumn': '어텀',
+  'winter': '윈터',
+  'common': '공통',
+};
 
 export const checkOverdueTasks = functions
   .region('asia-northeast3')
@@ -283,8 +296,8 @@ export const sendTaskReminderToUsers = functions
         throw new functions.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
       }
 
-      // 업무 정보 조회
-      const taskDoc = await db.collection('tasks').doc(data.taskId).get();
+      // 업무 정보 조회 (클라이언트와 동일한 campTasks 컬렉션)
+      const taskDoc = await db.collection('campTasks').doc(data.taskId).get();
       
       if (!taskDoc.exists) {
         throw new functions.https.HttpsError('not-found', '업무를 찾을 수 없습니다.');
@@ -317,11 +330,14 @@ export const sendTaskReminderToUsers = functions
         const campExperience = userData.jobExperiences.find(exp => exp.id === jobCodeId);
         if (!campExperience || !campExperience.groupRole) continue;
 
-        // 대상 역할 확인
+        // 대상 역할 확인 (targetRoles)
         if (!task.targetRoles.includes(campExperience.groupRole)) continue;
 
-        // 대상 그룹 확인 (공통 또는 해당 그룹)
-        // Note: UserData에 group 정보가 있다면 추가 확인 필요
+        // 대상 그룹 확인 (targetGroups) — shared의 getTaskTargetUsers와 동일한 로직
+        // 영문 레거시 그룹명을 한글로 변환
+        const userGroupKorean = LEGACY_GROUP_MAP[campExperience.group ?? ''] || campExperience.group;
+        // '공통'이 포함된 경우 모든 그룹 통과, 아니면 사용자 그룹이 targetGroups에 있어야 함
+        if (!task.targetGroups.includes('공통') && !task.targetGroups.includes(userGroupKorean ?? '')) continue;
 
         // 완료 여부 확인
         const isCompleted = task.completions?.some(c => c.userId === userData.userId);

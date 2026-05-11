@@ -31,6 +31,8 @@ import {
   formatTime,
   formatDuration,
 } from '../services/taskService';
+import { functions } from '../config/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { RootStackParamList } from '../navigation/types';
 
 type TaskDetailRouteProp = RouteProp<RootStackParamList, 'TaskDetail'>;
@@ -102,11 +104,7 @@ export default function TaskDetailScreen() {
           text: '전송',
           onPress: async () => {
             try {
-              // Firebase Functions 호출
-              const { getFunctions, httpsCallable } = await import('firebase/functions');
-              const functions = getFunctions();
               const sendTaskReminder = httpsCallable(functions, 'sendTaskReminderToUsers');
-              
               const result = await sendTaskReminder({ taskId: task.id });
               const data = result.data as { success: boolean; message: string; sentCount: number };
               

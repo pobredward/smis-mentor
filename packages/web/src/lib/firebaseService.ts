@@ -1038,9 +1038,6 @@ export const signInWithCustomTokenFromFunction = async (
     
     // Firebase Functions를 통해 Custom Token 생성
     const functionsModule = await import('firebase/functions');
-    const functions = functionsModule.getFunctions();
-    
-      // 🔥 리전 설정: Cloud Function이 배포된 리전과 일치해야 함
     const functionsRegion = functionsModule.getFunctions(undefined, 'asia-northeast3');
     
     // 개발 환경에서는 emulator 사용

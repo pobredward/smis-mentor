@@ -4,6 +4,8 @@ import { useState } from 'react';
 import type { Task, User } from '@smis-mentor/shared';
 import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
+import { functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import toast from 'react-hot-toast';
 
 interface TaskDetailModalProps {
@@ -59,10 +61,7 @@ export default function TaskDetailModal({
   const handleSendReminder = async () => {
     setIsSendingReminder(true);
     try {
-      const { getFunctions, httpsCallable } = await import('firebase/functions');
-      const functions = getFunctions();
       const sendTaskReminder = httpsCallable(functions, 'sendTaskReminderToUsers');
-      
       const result = await sendTaskReminder({ taskId: task.id });
       const data = result.data as { success: boolean; message: string; sentCount: number };
       
