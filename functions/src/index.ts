@@ -281,7 +281,7 @@ export const sendTestNotification = functions
 
 // 관리자가 특정 업무의 미완료자에게 푸시 알림 보내기
 export const sendTaskReminderToUsers = functionsV2.https.onCall(
-  { region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com' },
+  { region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', cors: true },
   async (request: functionsV2.https.CallableRequest<{ taskId: string }>) => {
     if (!request.auth) {
       throw new functionsV2.https.HttpsError('unauthenticated', '인증이 필요합니다.');
