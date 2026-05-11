@@ -178,8 +178,8 @@ export async function scheduleTaskReminderNotification(
 ): Promise<string> {
   const identifier = await Notifications.scheduleNotificationAsync({
     content: {
-      title: '📌 업무 알림',
-      body: `"${title}" 업무 확인이 필요합니다.`,
+      title: '🔔 업무 알림',
+      body: `"${title}" 업무를 확인해주세요.`,
       data: { taskId, type: 'task-reminder' },
       sound: true,
       priority: Notifications.AndroidNotificationPriority.HIGH,

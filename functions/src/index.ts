@@ -283,7 +283,7 @@ export const sendTestNotification = functions
 
 // 관리자가 특정 업무의 미완료자에게 푸시 알림 보내기
 export const sendTaskReminderToUsers = functionsV2.https.onCall(
-  { region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', cors: true },
+  { region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', cors: true, minInstances: 1 },
   async (request: functionsV2.https.CallableRequest<{ taskId: string }>) => {
     if (!request.auth) {
       throw new functionsV2.https.HttpsError('unauthenticated', '인증이 필요합니다.');
@@ -309,7 +309,6 @@ export const sendTaskReminderToUsers = functionsV2.https.onCall(
 
       const task = { id: taskDoc.id, ...taskDoc.data() } as Task;
 
-      // campCode로 jobCode 문서 ID 찾기
       const jobCodesSnapshot = await db
         .collection('jobCodes')
         .where('code', '==', task.campCode)
@@ -321,14 +320,16 @@ export const sendTaskReminderToUsers = functionsV2.https.onCall(
 
       const jobCodeId = jobCodesSnapshot.docs[0].id;
 
-      // 모든 사용자 조회하여 대상자 필터링
-      const usersSnapshot = await db.collection('users').get();
+      // activeJobExperienceId로 현재 캠프 소속 유저만 조회 (전체 스캔 방지)
+      const usersSnapshot = await db.collection('users')
+        .where('activeJobExperienceId', '==', jobCodeId)
+        .get();
       const incompleteUsers: string[] = [];
 
       for (const userDoc of usersSnapshot.docs) {
         const userData = userDoc.data() as UserData;
 
-        // jobExperiences에서 해당 캠프 코드가 있는지 확인
+        // jobExperiences에서 해당 캠프 코드의 상세 정보 조회
         if (!userData.jobExperiences) continue;
 
         const campExperience = userData.jobExperiences.find(exp => exp.id === jobCodeId);

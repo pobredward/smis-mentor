@@ -1,0 +1,12 @@
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:btn_click","message":"알림버튼_클릭","data":{"taskId":"OQB36J7ts5VE5FhVlyE2"},"timestamp":1778509556712,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:fn_response","message":"함수_응답_수신","data":{"elapsed_ms":5609,"data":{"success":true,"message":"3명에게 알림을 전송했습니다.","sentCount":3}},"timestamp":1778509562321,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:btn_click","message":"알림버튼_클릭","data":{"taskId":"OQB36J7ts5VE5FhVlyE2"},"timestamp":1778510060761,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:fn_response","message":"함수_응답_수신","data":{"elapsed_ms":12677,"data":{"success":true,"message":"3명에게 알림을 전송했습니다.","sentCount":3}},"timestamp":1778510073438,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:btn_click","message":"알림버튼_클릭","data":{"taskId":"OQB36J7ts5VE5FhVlyE2"},"timestamp":1778510318957,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:fn_response","message":"함수_응답_수신","data":{"elapsed_ms":13506,"data":{"success":true,"message":"3명에게 알림을 전송했습니다.","sentCount":3}},"timestamp":1778510332463,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:btn_click","message":"알림버튼_클릭","data":{"taskId":"OQB36J7ts5VE5FhVlyE2"},"timestamp":1778510338139,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:fn_response","message":"함수_응답_수신","data":{"elapsed_ms":7277,"data":{"success":true,"message":"3명에게 알림을 전송했습니다.","sentCount":3}},"timestamp":1778510345416,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:btn_click","message":"알림버튼_클릭","data":{"taskId":"OQB36J7ts5VE5FhVlyE2"},"timestamp":1778510551691,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:fn_response","message":"함수_응답_수신","data":{"elapsed_ms":6596,"data":{"success":true,"message":"1명에게 알림을 전송했습니다.","sentCount":1}},"timestamp":1778510558287,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:btn_click","message":"알림버튼_클릭","data":{"taskId":"OQB36J7ts5VE5FhVlyE2"},"timestamp":1778510565789,"hypothesisId":"C"}
+{"sessionId":"4aaf80","location":"TaskDetailModal.tsx:fn_response","message":"함수_응답_수신","data":{"elapsed_ms":1807,"data":{"success":true,"message":"1명에게 알림을 전송했습니다.","sentCount":1}},"timestamp":1778510567596,"hypothesisId":"C"}
