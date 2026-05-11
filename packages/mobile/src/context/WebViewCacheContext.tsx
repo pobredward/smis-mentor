@@ -96,8 +96,8 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
 
         const allSheets = [...(resources.scheduleLinks || []), ...(resources.guideLinks || [])];
         const initialLoadingStates = allSheets.reduce((acc, sheet) => ({ ...acc, [sheet.id]: true }), {});
-        // Android는 1.0, iOS는 0.6 기본 줌
-        const defaultZoom = Platform.OS === 'android' ? 1.0 : 0.6;
+        // Android는 0.8, iOS는 0.6 기본 줌
+        const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
         const initialZoomLevels = allSheets.reduce((acc, sheet) => ({ ...acc, [sheet.id]: defaultZoom }), {});
         
         setLoadingStates(initialLoadingStates);
@@ -133,30 +133,56 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
   };
 
   const applyZoom = (id: string, zoom: number) => {
-    const zoomScript = `
-      (function() {
-        document.body.style.zoom = "${zoom}";
-        document.documentElement.style.zoom = "${zoom}";
-        
-        const iframes = document.getElementsByTagName('iframe');
-        for (let i = 0; i < iframes.length; i++) {
-          try {
-            iframes[i].style.transform = "scale(${zoom})";
-            iframes[i].style.transformOrigin = "0 0";
-            iframes[i].style.width = (100 / ${zoom}) + "%";
-            iframes[i].style.height = (100 / ${zoom}) + "%";
-          } catch(e) {
-            logger.info('iframe access error:', e);
+    // #region agent log
+    fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:applyZoom',message:'applyZoom 호출됨',data:{id,zoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
+    // iOS: zoom CSS 속성이 WebView 프레임 자체 크기를 바꾸므로 사용 금지
+    // meta viewport initial-scale을 동적으로 변경하는 방식 사용
+    // Android: zoom CSS 속성이 정상 동작하므로 그대로 사용
+    const zoomScript = Platform.OS === 'ios'
+      ? `
+        (function() {
+          const z = ${zoom};
+          
+          // viewport meta의 initial-scale만 변경 → 프레임 크기 고정된 채 내용만 줌
+          const existingMeta = document.querySelector('meta[name="viewport"]');
+          if (existingMeta) {
+            existingMeta.setAttribute('content',
+              'width=device-width, initial-scale=' + z + ', minimum-scale=' + z + ', maximum-scale=5.0, user-scalable=yes'
+            );
+          } else {
+            const meta = document.createElement('meta');
+            meta.setAttribute('name', 'viewport');
+            meta.setAttribute('content',
+              'width=device-width, initial-scale=' + z + ', minimum-scale=' + z + ', maximum-scale=5.0, user-scalable=yes'
+            );
+            document.getElementsByTagName('head')[0].appendChild(meta);
           }
-        }
-        
-        const allElements = document.querySelectorAll('div, table, tbody, tr, td');
-        allElements.forEach(el => {
-          el.style.zoom = "${zoom}";
-        });
-      })();
-      true;
-    `;
+          
+          // zoom CSS 완전 제거 (이전 값 초기화)
+          document.documentElement.style.zoom = '';
+          document.body.style.zoom = '';
+          
+          // wrapper 방식 제거 (이전 시도 정리)
+          const oldWrapper = document.getElementById('__smis_zoom_wrapper__');
+          if (oldWrapper) {
+            while (oldWrapper.firstChild) {
+              oldWrapper.parentNode.insertBefore(oldWrapper.firstChild, oldWrapper);
+            }
+            oldWrapper.parentNode.removeChild(oldWrapper);
+          }
+        })();
+        true;
+      `
+      : `
+        (function() {
+          const z = ${zoom};
+          document.body.style.zoom = z;
+          document.documentElement.style.zoom = z;
+        })();
+        true;
+      `;
     webViewRefs.current[id]?.injectJavaScript(zoomScript);
   };
 
@@ -165,10 +191,13 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
     const sheet = allSheets.find(s => s.id === id);
     if (!sheet) return null;
 
-    // Android는 1.0, iOS는 0.6 기본 줌
-    const defaultZoom = Platform.OS === 'android' ? 1.0 : 0.6;
+    // Android는 0.8, iOS는 0.6 기본 줌
+    const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
     const initialZoom = zoomLevels[id] || defaultZoom;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:renderWebView',message:'renderWebView 호출됨',data:{id,visible,initialZoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     return (
       <WebView
         key={id}
@@ -177,6 +206,9 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         style={[styles.webView, !visible && styles.hiddenWebView]}
         onLoadEnd={() => {
           setLoadingState(id, false);
+          // #region agent log
+          fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:onLoadEnd',message:'onLoadEnd - applyZoom 예정',data:{id,initialZoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           setTimeout(() => {
             applyZoom(id, initialZoom);
           }, 300);
@@ -184,7 +216,7 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         onLoadStart={() => {
           setLoadingState(id, true);
         }}
-        scalesPageToFit={true}
+        scalesPageToFit={Platform.OS !== 'ios'}
         showsVerticalScrollIndicator={true}
         showsHorizontalScrollIndicator={true}
         scrollEnabled={true}
@@ -193,36 +225,60 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         cacheMode="LOAD_CACHE_ELSE_NETWORK"
         incognito={false}
         androidLayerType="hardware"
-        injectedJavaScript={`
-          (function() {
-            // 초기 zoom 적용 (구글 시트용)
-            const initialZoom = ${initialZoom};
-            
-            const meta = document.createElement('meta');
-            meta.setAttribute('content', 'width=device-width, initial-scale=' + initialZoom + ', maximum-scale=5.0, user-scalable=yes');
-            meta.setAttribute('name', 'viewport');
-            document.getElementsByTagName('head')[0].appendChild(meta);
-            
-            const style = document.createElement('style');
-            style.textContent = \`
-              * { 
-                max-width: none !important;
-                overflow-x: auto !important;
+        injectedJavaScript={Platform.OS === 'ios'
+          ? `
+            (function() {
+              const z = ${initialZoom};
+              
+              // iOS: viewport meta의 initial-scale로 줌 조절
+              // zoom CSS 속성은 WebView 프레임 자체를 변경하므로 사용 금지
+              const existingMeta = document.querySelector('meta[name="viewport"]');
+              if (existingMeta) {
+                existingMeta.setAttribute('content',
+                  'width=device-width, initial-scale=' + z + ', minimum-scale=' + z + ', maximum-scale=5.0, user-scalable=yes'
+                );
+              } else {
+                const meta = document.createElement('meta');
+                meta.setAttribute('name', 'viewport');
+                meta.setAttribute('content',
+                  'width=device-width, initial-scale=' + z + ', minimum-scale=' + z + ', maximum-scale=5.0, user-scalable=yes'
+                );
+                document.getElementsByTagName('head')[0].appendChild(meta);
               }
-              body, html {
-                overflow: auto !important;
-                position: relative !important;
-                zoom: \${initialZoom} !important;
-              }
-            \`;
-            document.head.appendChild(style);
-            
-            // 초기 zoom 즉시 적용
-            document.body.style.zoom = initialZoom;
-            document.documentElement.style.zoom = initialZoom;
-          })();
-          true;
-        `}
+              
+              const style = document.createElement('style');
+              style.textContent = \`
+                * { max-width: none !important; }
+                body, html { overflow: auto !important; }
+              \`;
+              document.head.appendChild(style);
+            })();
+            true;
+          `
+          : `
+            (function() {
+              const z = ${initialZoom};
+              
+              const existingMeta = document.querySelector('meta[name="viewport"]');
+              if (existingMeta) existingMeta.remove();
+              const meta = document.createElement('meta');
+              meta.setAttribute('name', 'viewport');
+              meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
+              document.getElementsByTagName('head')[0].appendChild(meta);
+              
+              const style = document.createElement('style');
+              style.textContent = \`
+                * { max-width: none !important; overflow-x: auto !important; }
+                body, html { overflow: auto !important; position: relative !important; }
+              \`;
+              document.head.appendChild(style);
+              
+              document.body.style.zoom = z;
+              document.documentElement.style.zoom = z;
+            })();
+            true;
+          `
+        }
       />
     );
   };

@@ -66,8 +66,8 @@ export function GuideScreen() {
   }, [filteredGuides.length, filteredGuides.map(g => g.id).join(','), selectedGuideId]);
 
   const selectedGuide = filteredGuides.find(g => g.id === selectedGuideId) || filteredGuides[0];
-  // Android는 1.0, iOS는 0.6 기본 줌
-  const defaultZoom = Platform.OS === 'android' ? 1.0 : 0.6;
+  // Android는 0.8, iOS는 0.6 기본 줌
+  const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
   const currentZoom = selectedGuideId ? (zoomLevels[selectedGuideId] || defaultZoom) : defaultZoom;
   const isLoading = selectedGuideId ? (loadingStates[selectedGuideId] ?? true) : true;
 

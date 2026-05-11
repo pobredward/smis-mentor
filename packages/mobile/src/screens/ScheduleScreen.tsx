@@ -77,7 +77,7 @@ export function ScheduleScreen() {
   
   // 구글 시트가 아닌 경우 기본 줌을 1.0(100%)로 설정, 구글 시트는 플랫폼별로 설정
   const defaultZoom = isSelectedScheduleGoogleSheet 
-    ? (Platform.OS === 'android' ? 1.0 : 0.6)
+    ? (Platform.OS === 'android' ? 0.8 : 0.6)
     : 1.0;
   const currentZoom = selectedScheduleId ? (zoomLevels[selectedScheduleId] || defaultZoom) : defaultZoom;
   const isLoading = selectedScheduleId ? (loadingStates[selectedScheduleId] ?? true) : true;
