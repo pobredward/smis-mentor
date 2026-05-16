@@ -1097,17 +1097,20 @@ function TaskCard({
       onPress={onPress}
       activeOpacity={0.7}
     >
+      {/* 시간이 있는 경우 상단 시간 배너 (관리자/일반 유저 공통) */}
+      {timeStr ? (
+        <View style={styles.taskTimeBanner}>
+          <Ionicons name="time-outline" size={13} color="#3b82f6" />
+          <Text style={styles.taskTimeBannerText}>{timeStr}</Text>
+          {durationStr ? (
+            <Text style={styles.taskTimeBannerDuration}>({durationStr})</Text>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.taskCardContent}>
-        {/* 왼쪽: 업무 정보 (1/3) */}
+        {/* 왼쪽: 업무 정보 */}
         <View style={[styles.taskInfo, isAdmin && adminCompletionStatus && styles.taskInfoWithAdmin]}>
-          <View style={styles.taskMeta}>
-            {timeStr && (
-              <Text style={styles.taskTime}>{timeStr}</Text>
-            )}
-            {durationStr && (
-              <Text style={styles.taskDuration}>{durationStr}</Text>
-            )}
-          </View>
           
           <Text
             style={[
@@ -1156,9 +1159,9 @@ function TaskCard({
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons
-              name={isCompleted ? 'checkbox' : 'square-outline'}
+              name={isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
               size={28}
-              color={isCompleted ? '#3b82f6' : '#9ca3af'}
+              color={isCompleted ? '#3b82f6' : '#d1d5db'}
             />
           </TouchableOpacity>
         )}
@@ -2392,17 +2395,37 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    padding: 12,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
+  taskTimeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#eff6ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbeafe',
+  },
+  taskTimeBannerText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+  taskTimeBannerDuration: {
+    fontSize: 11,
+    color: '#60a5fa',
+  },
   taskCardContent: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
+    padding: 12,
   },
   taskCheckbox: {
     marginTop: 4,
