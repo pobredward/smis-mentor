@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -14,11 +13,15 @@ import {
   Platform,
   KeyboardAvoidingView,
   RefreshControl,
+  Animated,
+  Dimensions,
+  Pressable,
 } from 'react-native';
+import { ScrollView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import Holidays from 'date-holidays';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { Timestamp } from 'firebase/firestore';
@@ -26,6 +29,7 @@ import {
   getTasksByCampCode,
   getTasksByDate,
   getTaskDatesInMonth,
+  getTasksInMonth,
   toggleTaskCompletion,
   deleteTask,
   createTask,
@@ -39,7 +43,7 @@ import {
 import { getUserJobCodesInfo } from '../services/authService';
 import { getUsersByJobCode } from '../services/userService';
 import type { Task, JobExperienceGroupRole, TaskAttachment, User } from '../../../shared/src/types';
-import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames } from '@smis-mentor/shared';
+import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames, isKoreanHoliday } from '@smis-mentor/shared';
 import {
   MENTOR_GROUP_ROLES,
   FOREIGN_GROUP_ROLES,
@@ -57,16 +61,6 @@ interface JobCodeWithGroup {
 
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
-const hd = new Holidays('KR');
-
-// 대체휴무 및 임시공휴일 등 추가 공휴일 정의
-const ADDITIONAL_HOLIDAYS: Record<string, string> = {
-  '2026-03-02': '삼일절 대체휴일',
-  '2026-05-06': '어린이날 대체휴일',
-  '2026-08-17': '광복절 대체휴일',
-  '2026-10-05': '개천절 대체휴일',
-  // 필요에 따라 추가
-};
 
 export function TasksScreen() {
   const navigation = useNavigation();
@@ -85,14 +79,123 @@ export function TasksScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [taskDates, setTaskDates] = useState<Set<string>>(new Set());
   const [selectedDateTasks, setSelectedDateTasks] = useState<Task[]>([]);
+  const [calendarView, setCalendarView] = useState<'compact' | 'full'>('compact');
+
+  // 앱 시작 시 저장된 뷰 모드 복원
+  useEffect(() => {
+    AsyncStorage.getItem('calendarView').then(saved => {
+      if (saved === 'compact' || saved === 'full') {
+        setCalendarView(saved);
+      }
+    });
+  }, []);
+
+  const handleCalendarViewChange = (v: 'compact' | 'full') => {
+    setCalendarView(v);
+    AsyncStorage.setItem('calendarView', v);
+  };
+  const [monthTasks, setMonthTasks] = useState<Map<string, Task[]>>(new Map());
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
+  // 풀 캘린더 날짜 클릭 바텀시트
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const [sheetVisible, setSheetVisible] = useState(false);
+  // date/tasks는 ref로 관리해 setState 횟수 최소화
+  const sheetDateRef = useRef<Date | null>(null);
+  const sheetTasksRef = useRef<Task[]>([]);
+  const [sheetRenderKey, setSheetRenderKey] = useState(0);
+  const sheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const sheetDragY = useRef(new Animated.Value(0)).current;
+
+  // ref 기반 접근자 (렌더 내에서 사용)
+  const sheetDate = sheetDateRef.current;
+  const sheetTasks = sheetTasksRef.current;
+
+  const openSheet = useCallback((date: Date, dayTasks: Task[]) => {
+    // ref 업데이트 (리렌더 없음)
+    sheetDateRef.current = date;
+    sheetTasksRef.current = dayTasks;
+    // 애니메이션 초기 위치 세팅
+    sheetAnim.setValue(SCREEN_HEIGHT);
+    sheetDragY.setValue(0);
+    // visible + renderKey를 한 번에 배치 업데이트
+    setSheetVisible(true);
+    setSheetRenderKey(k => k + 1);
+    // 애니메이션은 visible이 true가 된 직후 바로 시작
+    Animated.timing(sheetAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [sheetAnim, sheetDragY, SCREEN_HEIGHT]);
+
+  const closeSheet = useCallback(() => {
+    sheetDragY.setValue(0);
+    Animated.timing(sheetAnim, {
+      toValue: SCREEN_HEIGHT,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => setSheetVisible(false));
+  }, [sheetAnim, sheetDragY, SCREEN_HEIGHT]);
+  const sheetScrollOffsetY = useRef(0);
+
+  const sheetPanGesture = Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetY([6, 6])
+    .failOffsetX([-20, 20])
+    .onUpdate((e) => {
+      // 스크롤이 맨 위이고 아래로 드래그할 때만 시트 이동
+      if (e.translationY > 0 && sheetScrollOffsetY.current <= 0) {
+        sheetDragY.setValue(e.translationY);
+      }
+    })
+    .onEnd((e) => {
+      if (
+        sheetScrollOffsetY.current <= 0 &&
+        (e.translationY > 80 || e.velocityY > 600)
+      ) {
+        // 현재 드래그 위치를 sheetAnim에 흡수시키고 sheetDragY 리셋 후 닫기
+        // → 튀어오르는 현상 없이 현재 위치에서 자연스럽게 이어서 내려감
+        const currentDrag = e.translationY > 0 ? e.translationY : 0;
+        sheetAnim.setValue(currentDrag);
+        sheetDragY.setValue(0);
+        Animated.timing(sheetAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 260,
+          useNativeDriver: true,
+        }).start(() => setSheetVisible(false));
+      } else {
+        Animated.spring(sheetDragY, {
+          toValue: 0,
+          useNativeDriver: true,
+          damping: 20,
+          stiffness: 300,
+        }).start();
+      }
+    });
+
   const isAdmin = userData?.role === 'admin';
   const isManager = currentGroupRole === '매니저' || currentGroupRole === 'Manager';
   const canAddTask = isAdmin || isManager;
+
+  // 달력 좌우 스와이프로 월 이동 — gesture-handler로 ScrollView와 네이티브 레벨에서 협력
+  const swipeGesture = Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetX([-10, 10])   // 수평 10px 이상 이동 시 이 제스처 활성화
+    .failOffsetY([-15, 15])     // 수직 15px 이상이면 실패 → ScrollView가 처리
+    .onEnd((event) => {
+      // translationX(누적 이동량) 대신 velocityX(손을 뗄 때 속도)로 방향 판단
+      // → 수평으로 가다가 방향을 틀어도 마지막 속도 방향으로만 결정
+      const VELOCITY_THRESHOLD = 300;
+      if (event.velocityX < -VELOCITY_THRESHOLD) {
+        setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1));
+      } else if (event.velocityX > VELOCITY_THRESHOLD) {
+        setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1));
+      }
+    });
 
   // route params에서 selectedDate 및 refresh, editTaskId 가져오기
   useEffect(() => {
@@ -217,8 +320,8 @@ export function TasksScreen() {
       const fetchedTasks = await getTasksByCampCode(activeJobCode.code);
       setTasks(fetchedTasks);
 
-      // 월별 업무 날짜 가져오기 (resolvedGroupRole을 직접 전달해 state race condition 방지)
-      await fetchTaskDatesInMonth(resolvedGroupRole, isAdmin);
+      // 월별 업무 Map 가져오기 (resolvedGroupRole을 직접 전달해 state race condition 방지)
+      await fetchMonthTasks(resolvedGroupRole, isAdmin, activeJobCode.code);
 
       // 선택된 날짜의 업무 로드
       await loadTasksForDate(selectedDate, activeJobCode.code);
@@ -249,6 +352,32 @@ export function TasksScreen() {
       setTaskDates(dates);
     } catch (error) {
       logger.error('월별 업무 날짜 가져오기 오류:', error);
+    }
+  };
+
+  // 월별 전체 업무 Map 가져오기 (풀 캘린더 뷰 및 컴팩트 뷰 뱃지용)
+  const fetchMonthTasks = async (
+    groupRole: JobExperienceGroupRole | null = currentGroupRole,
+    adminFlag: boolean = isAdmin,
+    campCode?: string,
+  ) => {
+    const code = campCode || currentCampCode;
+    if (!code) return;
+
+    try {
+      const taskMap = await getTasksInMonth(
+        code,
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        groupRole,
+        adminFlag,
+      );
+      setMonthTasks(taskMap);
+
+      // taskDates도 Map에서 파생
+      setTaskDates(new Set(taskMap.keys()));
+    } catch (error) {
+      logger.error('월별 업무 목록 가져오기 오류:', error);
     }
   };
 
@@ -304,16 +433,16 @@ export function TasksScreen() {
 
   useEffect(() => {
     if (currentCampCode) {
-      fetchTaskDatesInMonth();
+      fetchMonthTasks();
     }
   }, [currentDate, currentCampCode]);
 
-  // selectedDate가 변경될 때 해당 날짜의 업무 로드
+  // selectedDate가 변경될 때 해당 날짜의 업무 로드 (컴팩트 뷰에서만)
   useEffect(() => {
-    if (currentCampCode && selectedDate) {
+    if (currentCampCode && selectedDate && calendarView === 'compact') {
       loadTasksForDate(selectedDate);
     }
-  }, [selectedDate, currentCampCode]);
+  }, [selectedDate, currentCampCode, calendarView]);
 
   // 화면 포커스 시 업무 새로고침 (다른 화면에서 돌아올 때)
   useEffect(() => {
@@ -321,15 +450,39 @@ export function TasksScreen() {
       if (currentCampCode && selectedDate) {
         loadTasksForDate(selectedDate);
       }
+      // 세부 페이지에서 돌아올 때 시트 업무 목록 갱신
+      const cachedDate = sheetDateRef.current;
+      if (sheetVisible && cachedDate) {
+        const year = cachedDate.getFullYear();
+        const mm = String(cachedDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(cachedDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${mm}-${dd}`;
+        getTasksByDate(currentCampCode, cachedDate).then(refreshed => {
+          sheetTasksRef.current = refreshed;
+          setSheetRenderKey(k => k + 1);
+        }).catch(() => {
+          sheetTasksRef.current = monthTasks.get(dateStr) ?? [];
+          setSheetRenderKey(k => k + 1);
+        });
+      }
     });
 
     return unsubscribe;
-  }, [navigation, currentCampCode, selectedDate]);
+  }, [navigation, currentCampCode, selectedDate, openSheet, monthTasks]);
 
   // 날짜 클릭 핸들러
   const handleDateClick = (date: Date) => {
-    setSelectedDate(date);
-    loadTasksForDate(date);
+    if (calendarView === 'full') {
+      // full 뷰: selectedDate 업데이트 없이 바로 시트 열기 (Firebase 호출 차단 방지)
+      const year = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${mm}-${dd}`;
+      const dayTasks = monthTasks.get(dateStr) ?? [];
+      openSheet(date, dayTasks);
+    } else {
+      setSelectedDate(date);
+    }
   };
 
   // 업무 완료 토글
@@ -339,98 +492,242 @@ export function TasksScreen() {
       return;
     }
 
-    // 관리자이거나 currentGroupRole이 있는 경우 처리
-    const role = currentGroupRole || '담임' as JobExperienceGroupRole; // 관리자는 기본 역할 사용
+    const role = currentGroupRole || '담임' as JobExperienceGroupRole;
 
     try {
       await toggleTaskCompletion(taskId, userData.userId, userData.name, role);
-      await loadTasksForDate(selectedDate);
+      await Promise.all([
+        loadTasksForDate(selectedDate),
+        fetchMonthTasks(),
+      ]);
     } catch (error) {
       logger.error('업무 완료 토글 오류:', error);
       Alert.alert('오류', '업무 상태 변경 중 오류가 발생했습니다.');
     }
   };
 
-  // 공휴일 확인 함수
-  const isHoliday = useMemo(() => {
-    return (date: Date) => {
-      // date-holidays 라이브러리 체크
-      const holidays = hd.isHoliday(date);
-      if (holidays !== false) return true;
-      
-      // 추가 공휴일 체크 (대체휴무 등)
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
-      
-      return dateStr in ADDITIONAL_HOLIDAYS;
-    };
-  }, []);
+  // 바텀시트 전용 토글: optimistic update로 즉시 UI 반영 후 서버 동기화
+  const handleSheetToggle = async (taskId: string) => {
+    if (!userData) return;
+    const userId = userData.userId;
+    const role = currentGroupRole || '담임' as JobExperienceGroupRole;
 
-  // 캘린더 렌더링
-  const renderCalendar = () => {
+    // optimistic: ref 직접 변경 후 renderKey로 리렌더 유발
+    const prev = sheetTasksRef.current;
+    sheetTasksRef.current = prev.map(t => {
+      if (t.id !== taskId) return t;
+      const alreadyDone = t.completions.some(c => c.userId === userId);
+      const newCompletions = alreadyDone
+        ? t.completions.filter(c => c.userId !== userId)
+        : [...t.completions, {
+            userId,
+            userName: userData.name,
+            userRole: role,
+            completedAt: null as unknown as import('firebase/firestore').Timestamp,
+          }];
+      return { ...t, completions: newCompletions };
+    });
+    setSheetRenderKey(k => k + 1);
+
+    try {
+      await toggleTaskCompletion(taskId, userId, userData.name, role);
+      await fetchMonthTasks();
+    } catch (error) {
+      logger.error('업무 완료 토글 오류:', error);
+      // 실패 시 원복
+      const date = sheetDateRef.current;
+      if (date) {
+        const year = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const updated = monthTasks.get(`${year}-${mm}-${dd}`) ?? [];
+        sheetTasksRef.current = [...updated];
+        setSheetRenderKey(k => k + 1);
+      }
+      Alert.alert('오류', '업무 상태 변경 중 오류가 발생했습니다.');
+    }
+  };
+
+
+  // 컴팩트 뷰 렌더링: 큰 박스(숫자/체크) + 아래에 작은 날짜
+  const renderCompactCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const startDayOfWeek = firstDay.getDay();
     const daysInMonth = lastDay.getDate();
 
     const days: React.ReactElement[] = [];
+    const currentUserId = userData?.userId ?? '';
 
-    // 빈 칸 추가
     for (let i = 0; i < startDayOfWeek; i++) {
-      days.push(<View key={`empty-${i}`} style={styles.calendarCell} />);
+      days.push(<View key={`empty-${i}`} style={styles.compactCell} />);
     }
 
-    // 날짜 추가
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
       const dateYear = date.getFullYear();
       const dateMonth = String(date.getMonth() + 1).padStart(2, '0');
       const dateDay = String(date.getDate()).padStart(2, '0');
       const dateStr = `${dateYear}-${dateMonth}-${dateDay}`;
-      
-      const hasTask = taskDates.has(dateStr);
+
+      const dayTasks = monthTasks.get(dateStr) ?? [];
+      const hasTask = dayTasks.length > 0;
       const isSelected = selectedDate.toDateString() === date.toDateString();
       const isToday = new Date().toDateString() === date.toDateString();
       const dayOfWeek = date.getDay();
       const isSunday = dayOfWeek === 0;
       const isSaturday = dayOfWeek === 6;
-      const isHolidayDate = isHoliday(date);
+      const isHolidayDate = isKoreanHoliday(date);
+
+      const pendingCount = dayTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
+      const allCompleted = hasTask && pendingCount === 0;
+
+      // 박스 색상 결정 (선택 여부와 무관하게 업무 상태만 반영)
+      const boxStyle = (() => {
+        if (allCompleted) return styles.compactBoxCompleted;
+        if (hasTask) return styles.compactBoxPending;
+        return styles.compactBoxEmpty;
+      })();
+
+      // 날짜 라벨 색상 (선택 시 크고 굵은 검정 원형 배경으로 강조)
+      const dayLabelStyle = (() => {
+        if (isSelected && isToday) return styles.compactDayLabelTodaySelected;
+        if (isSelected) return styles.compactDayLabelSelected;
+        // 오늘이면서 일요일/공휴일이면 빨간색+굵게 (파란색에 덮이지 않도록 먼저 처리)
+        if (isToday && (isSunday || isHolidayDate)) return styles.compactDayLabelTodaySunday;
+        if (isToday) return styles.compactDayLabelToday;
+        if (isSunday || isHolidayDate) return styles.compactDayLabelSunday;
+        if (isSaturday) return styles.compactDayLabelSaturday;
+        return null;
+      })();
 
       days.push(
         <TouchableOpacity
           key={day}
           onPress={() => handleDateClick(date)}
-          style={[
-            styles.calendarCell,
-            isSelected && styles.calendarCellSelected,
-            isToday && !isSelected && styles.calendarCellToday,
-            hasTask && !isSelected && styles.calendarCellHasTask,
-          ]}
+          style={styles.compactCell}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`${month + 1}월 ${day}일${hasTask ? `, 업무 ${dayTasks.length}개` : ''}`}
         >
-          <Text
-            style={[
-              styles.calendarDayText,
-              (isSunday || isHolidayDate) && !isSelected && styles.calendarDayTextSundayHoliday,
-              isSaturday && !isSelected && styles.calendarDayTextSaturday,
-              isSelected && styles.calendarDayTextSelected,
-              isToday && !isSelected && styles.calendarDayTextToday,
-            ]}
-          >
-            {day}
-          </Text>
-          {hasTask && !isSelected && (
-            <View style={styles.taskDot} />
-          )}
+          {/* 큰 박스 */}
+          <View style={[styles.compactBox, boxStyle]}>
+            {allCompleted ? (
+              <Ionicons name="checkmark" size={14} color="#ffffff" />
+            ) : hasTask ? (
+              <Text style={styles.compactBoxNumber}>{pendingCount}</Text>
+            ) : null}
+          </View>
+          {/* 날짜 숫자 — 선택 시 원형 배경으로 강조 */}
+          <View style={[
+            styles.compactDayLabelWrap,
+            isSelected && (isToday ? styles.compactDayLabelWrapTodaySelected : styles.compactDayLabelWrapSelected),
+          ]}>
+            <Text style={[styles.compactDayLabel, dayLabelStyle]}>
+              {day}
+            </Text>
+          </View>
         </TouchableOpacity>
       );
     }
 
     return days;
+  };
+
+  // 풀 캘린더 뷰 렌더링: 날짜 셀에 업무 제목/시간 직접 표시
+  const renderFullCalendar = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDayOfWeek = firstDay.getDay();
+    const daysInMonth = lastDay.getDate();
+
+    // 주 단위 행으로 구성
+    const totalCells = startDayOfWeek + daysInMonth;
+    const totalRows = Math.ceil(totalCells / 7);
+    const rows: React.ReactElement[] = [];
+
+    for (let row = 0; row < totalRows; row++) {
+      const cells: React.ReactElement[] = [];
+
+      for (let col = 0; col < 7; col++) {
+        const cellIndex = row * 7 + col;
+        const day = cellIndex - startDayOfWeek + 1;
+
+        if (day < 1 || day > daysInMonth) {
+          cells.push(<View key={`empty-${cellIndex}`} style={styles.fullCalendarCell} />);
+          continue;
+        }
+
+        const date = new Date(year, month, day);
+        const dateYear = date.getFullYear();
+        const dateMonth = String(date.getMonth() + 1).padStart(2, '0');
+        const dateDay = String(date.getDate()).padStart(2, '0');
+        const dateStr = `${dateYear}-${dateMonth}-${dateDay}`;
+
+        const dayTasks = monthTasks.get(dateStr) ?? [];
+        const isToday = new Date().toDateString() === date.toDateString();
+        const dayOfWeek = date.getDay();
+        const isSunday = dayOfWeek === 0;
+        const isSaturday = dayOfWeek === 6;
+        const isHolidayDate = isKoreanHoliday(date);
+        const currentUserId = userData?.userId ?? '';
+
+        const visibleTasks = dayTasks;
+        const hiddenCount = 0;
+
+        cells.push(
+          <TouchableOpacity
+            key={day}
+            onPress={() => handleDateClick(date)}
+            style={[
+              styles.fullCalendarCell,
+              isToday && styles.fullCalendarCellToday,
+            ]}
+            activeOpacity={0.7}
+          >
+            {/* 날짜 숫자 */}
+            <Text style={[
+              styles.fullCalendarDayNum,
+              (isSunday || isHolidayDate) && styles.calendarDayTextSundayHoliday,
+              isSaturday && styles.calendarDayTextSaturday,
+              isToday && !(isSunday || isHolidayDate) && styles.calendarDayTextToday,
+            ]}>
+              {day}
+            </Text>
+            {/* 업무 칩 */}
+            {visibleTasks.map(task => {
+              const isDone = task.completions.some(c => c.userId === currentUserId);
+              const timeLabel = task.time ? task.time.slice(0, 5) : null;
+              return (
+                <View key={task.id} style={[
+                  styles.fullCalendarChip,
+                  isDone ? styles.fullCalendarChipDone : styles.fullCalendarChipPending,
+                ]}>
+                  <Text style={styles.fullCalendarChipText} numberOfLines={1}>
+                    {timeLabel ? `${timeLabel} ` : ''}{task.title}
+                  </Text>
+                </View>
+              );
+            })}
+            {hiddenCount > 0 && (
+              <Text style={styles.fullCalendarMore}>+{hiddenCount}개</Text>
+            )}
+          </TouchableOpacity>
+        );
+      }
+
+      rows.push(
+        <View key={`row-${row}`} style={styles.fullCalendarRow}>
+          {cells}
+        </View>
+      );
+    }
+
+    return rows;
   };
 
   if (authLoading) {
@@ -493,15 +790,28 @@ export function TasksScreen() {
       >
         {/* 캘린더 헤더 */}
         <View style={styles.calendarHeaderSection}>
+          <Text style={styles.calendarTitle}>
+            {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
+          </Text>
+          {/* 뷰 전환 토글 버튼 */}
+          <TouchableOpacity
+            onPress={() => handleCalendarViewChange(calendarView === 'compact' ? 'full' : 'compact')}
+            style={styles.viewToggleButton}
+            accessibilityLabel={calendarView === 'compact' ? '풀 캘린더 뷰로 전환' : '컴팩트 뷰로 전환'}
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name={calendarView === 'compact' ? 'calendar-outline' : 'grid-outline'}
+              size={20}
+              color="#3b82f6"
+            />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
             style={styles.navButton}
           >
             <Ionicons name="chevron-back" size={20} color="#6b7280" />
           </TouchableOpacity>
-          <Text style={styles.calendarTitle}>
-            {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
-          </Text>
           <TouchableOpacity
             onPress={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
             style={styles.navButton}
@@ -510,8 +820,11 @@ export function TasksScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 달력 */}
-        <View style={styles.calendarContainer}>
+        {/* 달력 — 좌우 스와이프로 월 이동 (GestureDetector가 ScrollView와 네이티브 레벨 협력) */}
+        <GestureDetector gesture={swipeGesture}>
+        <View
+          style={calendarView === 'full' ? styles.fullCalendarContainer : styles.calendarContainer}
+        >
           {/* 요일 헤더 */}
           <View style={styles.weekDaysRow}>
             {DAYS_OF_WEEK.map((day, i) => (
@@ -529,51 +842,59 @@ export function TasksScreen() {
           </View>
 
           {/* 날짜 그리드 */}
-          <View style={styles.calendarGrid}>
-            {renderCalendar()}
-          </View>
-        </View>
-
-        {/* 선택된 날짜의 업무 목록 */}
-        <View style={styles.taskListContainer}>
-          <View style={styles.taskListHeader}>
-            <Text style={styles.taskListTitle}>
-              {selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일 ({DAYS_OF_WEEK[selectedDate.getDay()]})
-            </Text>
-            <Text style={styles.taskCount}>
-              {selectedDateTasks.length}개 업무
-            </Text>
-          </View>
-
-          {selectedDateTasks.length === 0 ? (
-            <View style={styles.emptyTaskContainer}>
-              <Ionicons name="calendar-outline" size={48} color="#cbd5e1" />
-              <Text style={styles.emptyTaskText}>이 날짜에 등록된 업무가 없습니다</Text>
+          {calendarView === 'compact' ? (
+            <View style={styles.compactGrid}>
+              {renderCompactCalendar()}
             </View>
           ) : (
-            <View style={styles.taskList}>
-              {selectedDateTasks.map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  isAdmin={isAdmin}
-                  currentUserId={userData.userId}
-                  campUsers={campUsers}
-                  campCodeId={currentCampCodeId}
-                  onToggle={handleToggleComplete}
-                  onPress={() => {
-                    // TaskDetailScreen으로 이동
-                    const taskDate = selectedDate.toISOString().split('T')[0];
-                    (navigation as any).navigate('TaskDetail', {
-                      taskId: task.id,
-                      taskDate,
-                    });
-                  }}
-                />
-              ))}
+            <View style={styles.fullCalendarGrid}>
+              {renderFullCalendar()}
             </View>
           )}
         </View>
+        </GestureDetector>
+
+        {/* 컴팩트 뷰: 선택된 날짜의 업무 목록 */}
+        {calendarView === 'compact' && (
+          <View style={styles.taskListContainer}>
+            <View style={styles.taskListHeader}>
+              <Text style={styles.taskListTitle}>
+                {selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일 ({DAYS_OF_WEEK[selectedDate.getDay()]})
+              </Text>
+              <Text style={styles.taskCount}>
+                {selectedDateTasks.length}개 업무
+              </Text>
+            </View>
+
+            {selectedDateTasks.length === 0 ? (
+              <View style={styles.emptyTaskContainer}>
+                <Ionicons name="calendar-outline" size={48} color="#cbd5e1" />
+                <Text style={styles.emptyTaskText}>이 날짜에 등록된 업무가 없습니다</Text>
+              </View>
+            ) : (
+              <View style={styles.taskList}>
+                {selectedDateTasks.map(task => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    isAdmin={isAdmin}
+                    currentUserId={userData.userId}
+                    campUsers={campUsers}
+                    campCodeId={currentCampCodeId}
+                    onToggle={handleToggleComplete}
+                    onPress={() => {
+                      const taskDate = selectedDate.toISOString().split('T')[0];
+                      (navigation as any).navigate('TaskDetail', {
+                        taskId: task.id,
+                        taskDate,
+                      });
+                    }}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* 업무 추가 FAB */}
@@ -602,6 +923,128 @@ export function TasksScreen() {
           fetchTasks();
         }}
       />
+
+      {/* 풀 캘린더 날짜 클릭 바텀시트 */}
+      {sheetVisible && (
+        <Animated.View
+          style={[
+            styles.sheetOverlay,
+            {
+              opacity: sheetAnim.interpolate({
+                inputRange: [0, SCREEN_HEIGHT],
+                outputRange: [1, 0],
+                extrapolate: 'clamp',
+              }),
+            },
+          ]}
+          pointerEvents="box-none"
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
+          <GestureDetector gesture={sheetPanGesture}>
+          <Animated.View
+            style={[
+              styles.sheetContainer,
+              {
+                transform: [
+                  {
+                    translateY: Animated.add(sheetAnim, sheetDragY),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Pressable onPress={() => {}}>
+              {/* 핸들 */}
+              <View style={styles.sheetHandleArea}>
+                <View style={styles.sheetHandle} />
+              </View>
+
+              {/* 헤더 */}
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>
+                  {sheetDate
+                    ? `${sheetDate.getMonth() + 1}월 ${sheetDate.getDate()}일 (${DAYS_OF_WEEK[sheetDate.getDay()]})`
+                    : ''}
+                </Text>
+                <Text style={styles.sheetCount}>{sheetTasks.length}개 업무</Text>
+              </View>
+
+              {/* 업무 목록 — key로 ref 변경 시 리렌더 보장 */}
+              <ScrollView
+                key={sheetRenderKey}
+                style={styles.sheetScrollView}
+                contentContainerStyle={styles.sheetScrollContent}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                scrollEventThrottle={16}
+                onScroll={(e) => {
+                  sheetScrollOffsetY.current = e.nativeEvent.contentOffset.y;
+                }}
+              >
+                {sheetTasks.length === 0 ? (
+                  <View style={styles.sheetEmpty}>
+                    <Ionicons name="calendar-outline" size={40} color="#cbd5e1" />
+                    <Text style={styles.sheetEmptyText}>등록된 업무가 없습니다</Text>
+                  </View>
+                ) : (
+                  sheetTasks.map(task => {
+                    const isDone = task.completions.some(c => c.userId === userData.userId);
+                    const timeStr = formatTime(task.time);
+                    const taskDate = sheetDate
+                      ? sheetDate.toISOString().split('T')[0]
+                      : selectedDate.toISOString().split('T')[0];
+                    return (
+                      <TouchableOpacity
+                        key={task.id}
+                        style={styles.sheetTaskRow}
+                        onPress={() => {
+                          (navigation as any).navigate('TaskDetail', { taskId: task.id, taskDate });
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        {/* 체크박스 */}
+                        <TouchableOpacity
+                          onPress={(e) => { e.stopPropagation(); handleSheetToggle(task.id); }}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          style={styles.sheetTaskCheck}
+                        >
+                          <Ionicons
+                            name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={26}
+                            color={isDone ? '#3b82f6' : '#d1d5db'}
+                          />
+                        </TouchableOpacity>
+
+                        {/* 업무 정보 */}
+                        <View style={styles.sheetTaskInfo}>
+                          <Text
+                            style={[styles.sheetTaskTitle, isDone && styles.sheetTaskTitleDone]}
+                            numberOfLines={2}
+                          >
+                            {task.title}
+                          </Text>
+                          <View style={styles.sheetTaskMeta}>
+                            {timeStr ? (
+                              <Text style={styles.sheetTaskTime}>{timeStr}</Text>
+                            ) : null}
+                            <Text style={styles.sheetTaskRoles} numberOfLines={1}>
+                              {task.targetRoles.join(' · ')}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* 상세 화살표 */}
+                        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </Pressable>
+          </Animated.View>
+          </GestureDetector>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -939,13 +1382,7 @@ function TaskAddModal({
       const isSunday = dayOfWeek === 0;
       const isSaturday = dayOfWeek === 6;
       
-      // 공휴일 체크 (라이브러리 + 추가 공휴일)
-      const holidays = hd.isHoliday(currentDate);
-      const yearStr = currentDate.getFullYear();
-      const monthStr = String(currentDate.getMonth() + 1).padStart(2, '0');
-      const dayStr = String(currentDate.getDate()).padStart(2, '0');
-      const holidayDateStr = `${yearStr}-${monthStr}-${dayStr}`;
-      const isHolidayDate = holidays !== false || holidayDateStr in ADDITIONAL_HOLIDAYS;
+      const isHolidayDate = isKoreanHoliday(currentDate);
 
       days.push(
         <View
@@ -969,7 +1406,8 @@ function TaskAddModal({
                 (isSunday || isHolidayDate) && !isSelected && styles.calendarDayTextSundayHoliday,
                 isSaturday && !isSelected && styles.calendarDayTextSaturday,
                 isSelected && styles.calendarDayTextSelected,
-                isToday && !isSelected && styles.calendarDayTextToday,
+                // 오늘이면서 일요일/공휴일이면 빨간색이 유지되어야 하므로 파란색 적용 안 함
+                isToday && !isSelected && !(isSunday || isHolidayDate) && styles.calendarDayTextToday,
               ]}
             >
               {day}
@@ -1670,25 +2108,182 @@ const styles = StyleSheet.create({
   },
   navButton: {
     padding: 6,
+    marginLeft: 4,
   },
   calendarTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: '#111827',
+    flex: 1,
+    textAlign: 'left',
+  },
+  viewToggleButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#eff6ff',
+    marginLeft: 8,
+  },
+  // 컴팩트 뷰 그리드
+  compactGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 0,
+    paddingBottom: 6,
+  },
+  compactCell: {
+    flexBasis: '14.285714%',
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  // 큰 박스
+  compactBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  compactBoxEmpty: {
+    backgroundColor: '#e5e7eb',
+  },
+  compactBoxPending: {
+    backgroundColor: '#e9ebee',
+  },
+  compactBoxCompleted: {
+    backgroundColor: '#10b981',
+  },
+  compactBoxSelected: {
+    backgroundColor: '#1d4ed8',
+  },
+  compactBoxTodaySelected: {
+    backgroundColor: '#111827',
+  },
+  compactBoxNumber: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6b7280',
+    lineHeight: 14,
+  },
+  compactBoxNumberSelected: {
+    color: '#ffffff',
+  },
+  // 아주 작은 날짜 라벨
+  compactDayLabel: {
+    fontSize: 9,
+    color: '#9ca3af',
+    fontWeight: '400',
+  },
+  compactDayLabelToday: {
+    color: '#3b82f6',
+    fontWeight: '700',
+  },
+  compactDayLabelTodaySunday: {
+    color: '#ef4444',
+    fontWeight: '700',
+  },
+  compactDayLabelSelected: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  compactDayLabelSunday: {
+    color: '#ef4444',
+  },
+  compactDayLabelSaturday: {
+    color: '#60a5fa',
+  },
+  compactDayLabelWrap: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+  },
+  compactDayLabelWrapSelected: {
+    backgroundColor: '#1d4ed8',
+  },
+  compactDayLabelWrapTodaySelected: {
+    backgroundColor: '#111827',
+  },
+  compactDayLabelTodaySelected: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  // 풀 캘린더 컨테이너
+  fullCalendarContainer: {
+    backgroundColor: '#ffffff',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingVertical: 8,
+  },
+  fullCalendarGrid: {
+    paddingHorizontal: 0,
+  },
+  fullCalendarRow: {
+    flexDirection: 'row',
+  },
+  fullCalendarCell: {
+    flex: 1,
+    minHeight: 72,
+    paddingTop: 4,
+    paddingHorizontal: 1,
+    paddingBottom: 4,
+    backgroundColor: '#ffffff',
+  },
+  fullCalendarCellSelected: {
+    backgroundColor: '#ffffff',
+  },
+  fullCalendarCellToday: {
+    backgroundColor: '#ffffff',
+  },
+  fullCalendarDayNum: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#374151',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  fullCalendarDayNumSelected: {
+    color: '#1d4ed8',
+    fontWeight: '700',
+  },
+  fullCalendarChip: {
+    borderRadius: 2,
+    paddingHorizontal: 2,
+    paddingVertical: 0,
+    marginBottom: 1,
+  },
+  fullCalendarChipPending: {
+    backgroundColor: '#e5e7eb',
+  },
+  fullCalendarChipDone: {
+    backgroundColor: '#d1fae5',
+  },
+  fullCalendarChipText: {
+    fontSize: 8,
+    color: '#374151',
+    lineHeight: 11,
+  },
+  fullCalendarMore: {
+    fontSize: 8,
+    color: '#6b7280',
+    paddingHorizontal: 3,
+    marginTop: 1,
   },
   calendarContainer: {
     backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
     paddingVertical: 8,
   },
   weekDaysRow: {
     flexDirection: 'row',
     marginBottom: 4,
-    paddingHorizontal: 4,
+    paddingHorizontal: 0,
   },
   weekDayCell: {
     flex: 1,
@@ -2503,5 +3098,109 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#ffffff',
+  },
+
+  // 풀 캘린더 바텀시트
+  sheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    justifyContent: 'flex-end',
+    zIndex: 100,
+  },
+  sheetContainer: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: Dimensions.get('window').height * 0.88,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+  },
+  sheetHandleArea: {
+    paddingTop: 10,
+    paddingBottom: 6,
+    alignItems: 'center',
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#d1d5db',
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  sheetCount: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  sheetScrollView: {
+    flexShrink: 1,
+  },
+  sheetScrollContent: {
+    paddingVertical: 8,
+  },
+  sheetEmpty: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 10,
+  },
+  sheetEmptyText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+
+  // 바텀시트 업무 행
+  sheetTaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    gap: 12,
+  },
+  sheetTaskCheck: {
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetTaskInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  sheetTaskTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#111827',
+    lineHeight: 20,
+  },
+  sheetTaskTitleDone: {
+    textDecorationLine: 'line-through',
+    color: '#9ca3af',
+  },
+  sheetTaskMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sheetTaskTime: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  sheetTaskRoles: {
+    fontSize: 12,
+    color: '#9ca3af',
+    flex: 1,
   },
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Task, User } from '@smis-mentor/shared';
 import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
@@ -33,6 +33,14 @@ export default function TaskDetailModal({
 }: TaskDetailModalProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isSendingReminder, setIsSendingReminder] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
   
   const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -76,8 +84,11 @@ export default function TaskDetailModal({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-        <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8">
+      <div
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+        onClick={onClose}
+      >
+        <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8" onClick={e => e.stopPropagation()}>
           {/* 헤더 - 더 작게 */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">업무 상세</h3>

@@ -7,3 +7,4 @@ export * from './applicationStatus';
 export * from './phoneUtils';
 export * from './logger';
 export * from './geocoding';
+export * from './holidayUtils';

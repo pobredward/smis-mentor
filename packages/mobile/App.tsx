@@ -1,5 +1,6 @@
 import Sentry from './sentry.config';
 import React, { useCallback, useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from './src/navigation';
@@ -157,15 +158,17 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider>
-      <AuthProvider>
-        <WebViewCacheProvider>
-          <CampTabProvider>
-            <AppContent />
-          </CampTabProvider>
-        </WebViewCacheProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider>
+        <AuthProvider>
+          <WebViewCacheProvider>
+            <CampTabProvider>
+              <AppContent />
+            </CampTabProvider>
+          </WebViewCacheProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
 

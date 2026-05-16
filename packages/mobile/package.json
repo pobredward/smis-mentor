@@ -71,6 +71,7 @@
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
     "firebase": "^11.5.0",
+    "korean-holidays": "^1.0.0",
     "react": "19.1.0",
     "react-hook-form": "^7.71.2",
     "react-native": "0.81.5",

@@ -457,6 +457,43 @@ export const formatDuration = (duration?: { value: number; unit: 'minutes' | 'ho
   return `${duration.value}${unitText}`;
 };
 
+// 월별 업무 목록을 날짜별 Map으로 가져오기 (YYYY-MM-DD → Task[])
+export const getTasksInMonth = async (
+  campCode: string,
+  year: number,
+  month: number,
+  groupRole: JobExperienceGroupRole | null,
+  isAdmin: boolean
+): Promise<Map<string, Task[]>> => {
+  try {
+    const allTasks = await getTasksByCampCode(campCode);
+    const taskMap = new Map<string, Task[]>();
+
+    allTasks.forEach(task => {
+      const taskDate = new Date(task.date.toDate());
+      if (taskDate.getFullYear() !== year || taskDate.getMonth() !== month) return;
+
+      if (!isAdmin) {
+        if (!groupRole || !task.targetRoles.includes(groupRole)) return;
+      }
+
+      const y = taskDate.getFullYear();
+      const m = String(taskDate.getMonth() + 1).padStart(2, '0');
+      const d = String(taskDate.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+
+      const existing = taskMap.get(dateStr) ?? [];
+      existing.push(task);
+      taskMap.set(dateStr, existing);
+    });
+
+    return taskMap;
+  } catch (error) {
+    logger.error('월별 업무 목록 가져오기 오류:', error);
+    throw error;
+  }
+};
+
 // 월별 업무가 있는 날짜 가져오기 (현재 사용자의 역할에 해당하는 업무만 포함)
 export const getTaskDatesInMonth = async (
   campCode: string,

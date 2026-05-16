@@ -38,6 +38,14 @@ const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
 export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = false, selectedDate, onClose, onSuccess }: TaskFormProps) {
   const isEdit = !!task && !isCopyMode;
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   // 타겟 role 타입 (멘토용/원어민용) - default는 mentor
   const [targetRoleType, setTargetRoleType] = useState<TargetRoleType>('mentor');
   
@@ -439,8 +447,11 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 pb-20 sm:pb-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 pb-20 sm:pb-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8" onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">
