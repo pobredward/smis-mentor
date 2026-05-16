@@ -12,6 +12,7 @@ import {
   Timestamp,
   serverTimestamp,
   writeBatch,
+  deleteField,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
@@ -174,10 +175,12 @@ export const updateTask = async (
   try {
     const docRef = doc(db, TASKS_COLLECTION, taskId);
     
-    // undefined 값 제거
+    // null은 Firestore 필드 삭제(deleteField), undefined는 업데이트 제외
     const cleanedUpdates: Record<string, any> = {};
     Object.entries(updates).forEach(([key, value]) => {
-      if (value !== undefined) {
+      if (value === null) {
+        cleanedUpdates[key] = deleteField();
+      } else if (value !== undefined) {
         cleanedUpdates[key] = value;
       }
     });
@@ -226,9 +229,12 @@ export const updateTaskGroup = async (
     if (!newDates) {
       // 날짜 변경 없음: 모든 그룹 문서의 내용만 일괄 업데이트
       const batch = writeBatch(db);
+      // null은 Firestore 필드 삭제(deleteField), undefined는 업데이트 제외
       const cleanedUpdates: Record<string, any> = { updatedAt: serverTimestamp() };
       Object.entries(updates).forEach(([key, value]) => {
-        if (value !== undefined) {
+        if (value === null) {
+          cleanedUpdates[key] = deleteField();
+        } else if (value !== undefined) {
           cleanedUpdates[key] = value;
         }
       });
@@ -264,23 +270,31 @@ export const updateTaskGroup = async (
       await batch.commit();
 
       // 기존 Task에서 공통 필드 추출 (첫 번째 문서 기준)
+      // null이 전달된 경우 해당 필드를 명시적으로 제거(새 문서에는 포함하지 않음)
       const baseTask = groupTasks[0];
-      const baseData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'date'> = {
+      const resolvedTime = updates.time !== undefined
+        ? (updates.time === null ? undefined : updates.time)
+        : baseTask.time;
+      const resolvedDuration = updates.estimatedDuration !== undefined
+        ? (updates.estimatedDuration === null ? undefined : updates.estimatedDuration)
+        : baseTask.estimatedDuration;
+      const resolvedAttachments = updates.attachments !== undefined
+        ? (updates.attachments === null ? undefined : updates.attachments)
+        : baseTask.attachments;
+
+      const baseData: Record<string, any> = {
         campCode,
         title: updates.title ?? baseTask.title,
         description: updates.description ?? baseTask.description,
         targetRoles: updates.targetRoles ?? baseTask.targetRoles,
         targetGroups: updates.targetGroups ?? baseTask.targetGroups,
-        time: updates.time !== undefined ? updates.time : baseTask.time,
-        estimatedDuration: updates.estimatedDuration !== undefined
-          ? updates.estimatedDuration
-          : baseTask.estimatedDuration,
-        attachments: updates.attachments !== undefined
-          ? updates.attachments
-          : baseTask.attachments,
         groupId,
         createdBy: baseTask.createdBy,
       };
+
+      if (resolvedTime !== undefined) baseData.time = resolvedTime;
+      if (resolvedDuration !== undefined) baseData.estimatedDuration = resolvedDuration;
+      if (resolvedAttachments !== undefined) baseData.attachments = resolvedAttachments;
 
       // 새 날짜들로 재생성
       for (const date of newDates) {
@@ -292,13 +306,6 @@ export const updateTaskGroup = async (
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         };
-
-        // undefined 값 제거
-        Object.keys(cleanedData).forEach(key => {
-          if (cleanedData[key] === undefined) {
-            delete cleanedData[key];
-          }
-        });
 
         await addDoc(collection(db, TASKS_COLLECTION), cleanedData);
       }

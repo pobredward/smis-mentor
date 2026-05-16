@@ -343,10 +343,12 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
         description: description.trim(),
         targetRoles: selectedRoles,
         targetGroups: selectedGroups,
-        time: hasTime && time ? time : undefined,
+        // 시간이 없는 경우 수정 모드에서 기존 값을 삭제하기 위해 null 전달
+        time: hasTime && time ? time : (isEdit ? null : undefined),
+        // 소요시간이 없는 경우 수정 모드에서 기존 값을 삭제하기 위해 null 전달
         estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
           ? { value: parseFloat(durationMinutes), unit: 'minutes' as const }
-          : undefined,
+          : (isEdit ? null : undefined),
         attachments: attachments.length > 0 ? attachments : undefined,
         createdBy,
       };
