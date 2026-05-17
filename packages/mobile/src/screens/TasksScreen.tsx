@@ -53,7 +53,7 @@ import {
   deletePersonalTaskGroup,
   togglePersonalTaskCompletion,
 } from '../services/personalTaskService';
-import { getTaskCategories } from '../services/taskCategoryService';
+import { getTaskCategories, createTaskCategory, updateTaskCategory, deleteTaskCategory } from '../services/taskCategoryService';
 import { getUserJobCodesInfo } from '../services/authService';
 import { getUsersByJobCode } from '../services/userService';
 import type { Task, JobExperienceGroupRole, TaskAttachment, User, PersonalTask, TaskCategory } from '../../../shared/src/types';
@@ -245,6 +245,7 @@ export function TasksScreen() {
 
   // 카테고리 상태
   const [categories, setCategories] = useState<TaskCategory[]>([]);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
 
   // categoryId → TaskCategory 빠른 조회 맵
   const categoryMap = useMemo(
@@ -1316,14 +1317,30 @@ export function TasksScreen() {
         )}
       </ScrollView>
 
-      {/* 업무 추가 FAB */}
+      {/* 업무 추가 FAB + 카테고리 관리 버튼 */}
       {canAddTask && currentCampCode && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => setShowAddModal(true)}
-        >
-          <Ionicons name="add" size={28} color="#ffffff" />
-        </TouchableOpacity>
+        <View style={{ position: 'absolute', right: 20, bottom: 20, alignItems: 'center', gap: 12 }}>
+          {/* 카테고리 관리 버튼 (관리자 전용) */}
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.categoryFab}
+              onPress={() => setShowCategoryManager(true)}
+              accessibilityLabel="카테고리 관리"
+              accessibilityRole="button"
+            >
+              <Ionicons name="pricetag-outline" size={20} color="#6b7280" />
+            </TouchableOpacity>
+          )}
+          {/* 업무 추가 FAB */}
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={() => setShowAddModal(true)}
+            accessibilityLabel="업무 추가"
+            accessibilityRole="button"
+          >
+            <Ionicons name="add" size={28} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* 업무 추가/수정 모달 */}
@@ -1332,6 +1349,7 @@ export function TasksScreen() {
         campCode={currentCampCode}
         initialDate={selectedDate}
         editingTask={editingTask}
+        categories={categories}
         onClose={() => {
           setShowAddModal(false);
           setEditingTask(null);
@@ -1342,6 +1360,20 @@ export function TasksScreen() {
           fetchTasks();
         }}
       />
+
+      {/* 카테고리 관리 모달 (관리자 전용) */}
+      {isAdmin && userData && currentCampCode && (
+        <CategoryManagerModal
+          visible={showCategoryManager}
+          campCode={currentCampCode}
+          adminUserId={userData.userId}
+          onCategoriesChange={async () => {
+            const updated = await getTaskCategories(currentCampCode);
+            setCategories(updated);
+          }}
+          onClose={() => setShowCategoryManager(false)}
+        />
+      )}
 
       {/* 개인 업무 추가/수정 모달 */}
       <Modal
@@ -2092,12 +2124,307 @@ function TaskCard({
   );
 }
 
+// 프리셋 색상 (웹과 동일)
+const PRESET_COLORS = [
+  '#fca5a5', '#f87171', '#ef4444', '#dc2626', '#b91c1c',
+  '#fdba74', '#fb923c', '#f97316', '#ea580c', '#c2410c',
+  '#fcd34d', '#fbbf24', '#f59e0b', '#d97706', '#b45309',
+  '#86efac', '#4ade80', '#22c55e', '#16a34a', '#15803d',
+  '#5eead4', '#2dd4bf', '#14b8a6', '#0d9488', '#0f766e',
+  '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb', '#1d4ed8',
+  '#c4b5fd', '#a78bfa', '#8b5cf6', '#7c3aed', '#6d28d9',
+  '#f9a8d4', '#f472b6', '#ec4899', '#db2777', '#be185d',
+];
+
+// 카테고리 관리 모달 컴포넌트
+function CategoryManagerModal({
+  visible,
+  campCode,
+  adminUserId,
+  onCategoriesChange,
+  onClose,
+}: {
+  visible: boolean;
+  campCode: string;
+  adminUserId: string;
+  onCategoriesChange: () => void;
+  onClose: () => void;
+}) {
+  const [categories, setCategories] = useState<TaskCategory[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState(PRESET_COLORS[27]);
+  const [isAdding, setIsAdding] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    const load = async () => {
+      try {
+        setLoadingCategories(true);
+        const list = await getTaskCategories(campCode);
+        setCategories(list);
+      } catch (error) {
+        logger.error('카테고리 로드 오류:', error);
+        Alert.alert('오류', '카테고리를 불러오는 중 오류가 발생했습니다.');
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+    load();
+  }, [visible, campCode]);
+
+  const refreshCategories = async () => {
+    try {
+      const list = await getTaskCategories(campCode);
+      setCategories(list);
+      onCategoriesChange();
+    } catch (error) {
+      logger.error('카테고리 갱신 오류:', error);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!newName.trim()) {
+      Alert.alert('오류', '카테고리 이름을 입력해주세요.');
+      return;
+    }
+    setIsAdding(true);
+    try {
+      await createTaskCategory(campCode, { name: newName, color: newColor, createdBy: adminUserId });
+      Alert.alert('완료', `"${newName}" 카테고리가 추가되었습니다.`);
+      setNewName('');
+      setNewColor(PRESET_COLORS[27]);
+      await refreshCategories();
+    } catch (error) {
+      logger.error('카테고리 추가 오류:', error);
+      Alert.alert('오류', '카테고리 추가 중 오류가 발생했습니다.');
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editName.trim()) {
+      Alert.alert('오류', '카테고리 이름을 입력해주세요.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateTaskCategory(editingId, { name: editName, color: editColor });
+      Alert.alert('완료', '카테고리가 수정되었습니다.');
+      setEditingId(null);
+      await refreshCategories();
+    } catch (error) {
+      logger.error('카테고리 수정 오류:', error);
+      Alert.alert('오류', '카테고리 수정 중 오류가 발생했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = (cat: TaskCategory) => {
+    Alert.alert(
+      '카테고리 삭제',
+      `"${cat.name}" 카테고리를 삭제할까요?\n해당 카테고리가 지정된 기존 업무는 카테고리 없음으로 표시됩니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTaskCategory(cat.id);
+              Alert.alert('완료', `"${cat.name}" 카테고리가 삭제되었습니다.`);
+              await refreshCategories();
+            } catch (error) {
+              logger.error('카테고리 삭제 오류:', error);
+              Alert.alert('오류', '카테고리 삭제 중 오류가 발생했습니다.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ width: '100%', maxHeight: '90%' }}
+        >
+          <Pressable
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: 16,
+              width: '100%',
+              maxHeight: '100%',
+              flexDirection: 'column',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 8,
+              elevation: 5,
+            }}
+            onPress={() => {}}
+          >
+            {/* 헤더 */}
+            <View style={[styles.modalHeader, { flexShrink: 0 }]}>
+              <View>
+                <Text style={styles.modalTitle}>카테고리 관리</Text>
+                <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>공통/개인 업무 모두 적용됩니다</Text>
+              </View>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton} accessibilityLabel="닫기" accessibilityRole="button">
+                <Ionicons name="close" size={24} color="#9ca3af" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 카테고리 목록 — flex: 1로 남은 공간 차지, 스크롤 가능 */}
+            <ScrollView
+              style={{ flexGrow: 1, flexShrink: 1, paddingHorizontal: 16, paddingTop: 8 }}
+              contentContainerStyle={{ paddingBottom: 8 }}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
+              {loadingCategories ? (
+                <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 14, paddingVertical: 24 }}>불러오는 중...</Text>
+              ) : categories.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 14, paddingVertical: 24 }}>등록된 카테고리가 없습니다.</Text>
+              ) : null}
+
+              {categories.map(cat => (
+                <View key={cat.id} style={{ marginBottom: 8 }}>
+                  {editingId === cat.id ? (
+                    // 수정 폼
+                    <View style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, gap: 10 }}>
+                      <TextInput
+                        style={[styles.formInput, { marginBottom: 0 }]}
+                        value={editName}
+                        onChangeText={setEditName}
+                        autoFocus
+                        placeholder="카테고리 이름"
+                        placeholderTextColor="#9ca3af"
+                      />
+                      {/* 색상 선택 */}
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {PRESET_COLORS.map(c => (
+                          <TouchableOpacity
+                            key={c}
+                            style={[
+                              { width: 28, height: 28, borderRadius: 14, backgroundColor: c },
+                              editColor === c && { borderWidth: 2.5, borderColor: '#374151' },
+                            ]}
+                            onPress={() => setEditColor(c)}
+                            accessibilityLabel={c}
+                          />
+                        ))}
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                          style={{ flex: 1, paddingVertical: 9, backgroundColor: '#f3f4f6', borderRadius: 8, alignItems: 'center' }}
+                          onPress={() => setEditingId(null)}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#6b7280' }}>취소</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[{ flex: 1, paddingVertical: 9, backgroundColor: '#3b82f6', borderRadius: 8, alignItems: 'center' }, isSaving && { opacity: 0.5 }]}
+                          onPress={handleSaveEdit}
+                          disabled={isSaving}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#fff' }}>{isSaving ? '저장 중...' : '저장'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    // 카테고리 행
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 12, borderWidth: 1, borderColor: '#f3f4f6', borderRadius: 12 }}>
+                      <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: cat.color, flexShrink: 0 }} />
+                      <Text style={{ flex: 1, fontSize: 14, fontWeight: '500', color: '#1f2937' }} numberOfLines={1}>{cat.name}</Text>
+                      <TouchableOpacity
+                        style={{ padding: 8 }}
+                        onPress={() => { setEditingId(cat.id); setEditName(cat.name); setEditColor(cat.color); }}
+                        accessibilityLabel="수정"
+                        accessibilityRole="button"
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Ionicons name="pencil-outline" size={17} color="#9ca3af" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ padding: 8 }}
+                        onPress={() => handleDelete(cat)}
+                        accessibilityLabel="삭제"
+                        accessibilityRole="button"
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Ionicons name="trash-outline" size={17} color="#9ca3af" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* 새 카테고리 추가 — 항상 하단에 고정 */}
+            <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#f3f4f6', gap: 10, flexShrink: 0 }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>새 카테고리 추가</Text>
+              <TextInput
+                style={styles.formInput}
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="카테고리 이름 (예: 수업 준비)"
+                placeholderTextColor="#9ca3af"
+                returnKeyType="done"
+                onSubmitEditing={handleAdd}
+              />
+              {/* 색상 선택 */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {PRESET_COLORS.map(c => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[
+                      { width: 28, height: 28, borderRadius: 14, backgroundColor: c },
+                      newColor === c && { borderWidth: 2.5, borderColor: '#374151' },
+                    ]}
+                    onPress={() => setNewColor(c)}
+                    accessibilityLabel={c}
+                  />
+                ))}
+              </View>
+              {/* 미리보기 */}
+              {newName.trim() !== '' && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: `${newColor}18` }}>
+                  <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: newColor }} />
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: newColor }}>{newName}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[{ paddingVertical: 12, backgroundColor: '#3b82f6', borderRadius: 12, alignItems: 'center' }, (isAdding || !newName.trim()) && { opacity: 0.5 }]}
+                onPress={handleAdd}
+                disabled={isAdding || !newName.trim()}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>{isAdding ? '추가 중...' : '카테고리 추가'}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // 업무 추가/수정 모달 컴포넌트
 function TaskAddModal({
   visible,
   campCode,
   initialDate,
   editingTask,
+  categories = [],
   onClose,
   onSuccess,
 }: {
@@ -2105,6 +2432,7 @@ function TaskAddModal({
   campCode: string;
   initialDate?: Date;
   editingTask?: Task | null;
+  categories?: TaskCategory[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -2120,7 +2448,9 @@ function TaskAddModal({
   const [calendarMonth, setCalendarMonth] = useState(initialDate || new Date());
   const [time, setTime] = useState('');
   const [hasTime, setHasTime] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // 카테고리
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   
   // 대상 역할
   const [targetRoles, setTargetRoles] = useState<JobExperienceGroupRole[]>([]);
@@ -2176,6 +2506,9 @@ function TaskAddModal({
         // 첨부파일 설정
         setAttachments(editingTask.attachments || []);
 
+        // 카테고리 설정
+        setSelectedCategoryId(editingTask.categoryId ?? '');
+
         // 수정 모드이고 groupId가 있으면 그룹의 모든 날짜 로드
         if (isEdit && editingTask.groupId) {
           setLoadingGroupDates(true);
@@ -2211,6 +2544,7 @@ function TaskAddModal({
         setAttachments([]);
         setLinkLabel('');
         setLinkUrl('');
+        setSelectedCategoryId('');
       }
     }
   }, [visible, editingTask, initialDate]);
@@ -2454,6 +2788,7 @@ function TaskAddModal({
             : undefined,
         targetRoles,
         targetGroups,
+        categoryId: selectedCategoryId || undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
       };
 
@@ -2509,8 +2844,9 @@ function TaskAddModal({
             0, 0, 0, 0
           );
 
-          const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions' | 'createdBy'> = {
+          const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions'> = {
             campCode,
+            createdBy: '',
             ...commonUpdates,
             date: Timestamp.fromDate(localDate),
             ...(newGroupId ? { groupId: newGroupId } : {}),
@@ -2534,6 +2870,7 @@ function TaskAddModal({
       setDescription('');
       setEstimatedDuration('');
       setAttachments([]);
+      setSelectedCategoryId('');
       
       onSuccess();
     } catch (error) {
@@ -2626,24 +2963,6 @@ function TaskAddModal({
                 </View>
               )}
 
-              {/* 날짜 선택 버튼 */}
-              <TouchableOpacity
-                style={[styles.datePickerButton, loadingGroupDates && { opacity: 0.6 }]}
-                onPress={() => !loadingGroupDates && setShowDatePicker(!showDatePicker)}
-                disabled={loadingGroupDates}
-              >
-                <Text style={styles.datePickerButtonText}>
-                  {loadingGroupDates
-                    ? '날짜 불러오는 중...'
-                    : `날짜 선택하기 (${selectedDates.length}개 선택됨)`}
-                </Text>
-                <Ionicons 
-                  name={showDatePicker ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color="#6b7280" 
-                />
-              </TouchableOpacity>
-
               {/* 선택된 날짜 태그 목록 */}
               {!loadingGroupDates && selectedDates.length > 0 && (
                 <View style={styles.selectedDateTagsContainer}>
@@ -2680,57 +2999,60 @@ function TaskAddModal({
                 </View>
               )}
 
-              {/* 인라인 달력 */}
-              {showDatePicker && (
-                <View style={styles.modalCalendarContainer}>
-                  {/* 월 네비게이션 */}
-                  <View style={styles.modalCalendarHeader}>
-                    <TouchableOpacity
-                      style={styles.modalCalendarNavButton}
-                      onPress={() => {
-                        const newDate = new Date(calendarMonth);
-                        newDate.setMonth(calendarMonth.getMonth() - 1);
-                        setCalendarMonth(newDate);
-                      }}
-                    >
-                      <Ionicons name="chevron-back" size={20} color="#6b7280" />
-                    </TouchableOpacity>
-                    <Text style={styles.modalCalendarTitle}>
-                      {calendarMonth.getFullYear()}년 {calendarMonth.getMonth() + 1}월
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.modalCalendarNavButton}
-                      onPress={() => {
-                        const newDate = new Date(calendarMonth);
-                        newDate.setMonth(calendarMonth.getMonth() + 1);
-                        setCalendarMonth(newDate);
-                      }}
-                    >
-                      <Ionicons name="chevron-forward" size={20} color="#6b7280" />
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* 요일 헤더 */}
-                  <View style={styles.modalCalendarWeekDays}>
-                    {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
-                      <Text
-                        key={day}
-                        style={[
-                          styles.modalCalendarWeekDayText,
-                          (i === 0 || i === 6) && styles.weekDayTextWeekend,
-                        ]}
-                      >
-                        {day}
-                      </Text>
-                    ))}
-                  </View>
-
-                  {/* 날짜 그리드 */}
-                  <View style={styles.modalCalendarGrid}>
-                    {renderCalendar()}
-                  </View>
+              {/* 인라인 달력 - 항상 표시 */}
+              <View style={styles.modalCalendarContainer}>
+                {/* 월 네비게이션 */}
+                <View style={styles.modalCalendarHeader}>
+                  <TouchableOpacity
+                    style={styles.modalCalendarNavButton}
+                    onPress={() => {
+                      const newDate = new Date(calendarMonth);
+                      newDate.setMonth(calendarMonth.getMonth() - 1);
+                      setCalendarMonth(newDate);
+                    }}
+                  >
+                    <Ionicons name="chevron-back" size={20} color="#6b7280" />
+                  </TouchableOpacity>
+                  <Text style={styles.modalCalendarTitle}>
+                    {calendarMonth.getFullYear()}년 {calendarMonth.getMonth() + 1}월
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.modalCalendarNavButton}
+                    onPress={() => {
+                      const newDate = new Date(calendarMonth);
+                      newDate.setMonth(calendarMonth.getMonth() + 1);
+                      setCalendarMonth(newDate);
+                    }}
+                  >
+                    <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+                  </TouchableOpacity>
                 </View>
-              )}
+
+                {/* 요일 헤더 */}
+                <View style={styles.modalCalendarWeekDays}>
+                  {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
+                    <Text
+                      key={day}
+                      style={[
+                        styles.modalCalendarWeekDayText,
+                        (i === 0 || i === 6) && styles.weekDayTextWeekend,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  ))}
+                </View>
+
+                {/* 날짜 그리드 */}
+                <View style={[styles.modalCalendarGrid, loadingGroupDates && { opacity: 0.5 }]}>
+                  {renderCalendar()}
+                </View>
+                {loadingGroupDates ? (
+                  <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>날짜 불러오는 중...</Text>
+                ) : (
+                  <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>탭 또는 드래그로 여러 날짜를 선택할 수 있습니다</Text>
+                )}
+              </View>
 
               {/* 시간 지정 체크박스 */}
               <View style={styles.timeCheckboxContainer}>
@@ -2758,7 +3080,47 @@ function TaskAddModal({
               )}
             </View>
 
-            {/* 2. 대상 역할 */}
+            {/* 2. 카테고리 (선택) */}
+            {categories.length > 0 && (
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>🏷️ 카테고리 (선택)</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <TouchableOpacity
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: selectedCategoryId === '' ? '#374151' : '#d1d5db',
+                      backgroundColor: selectedCategoryId === '' ? '#374151' : '#fff',
+                    }}
+                    onPress={() => setSelectedCategoryId('')}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: selectedCategoryId === '' ? '#fff' : '#6b7280' }}>없음</Text>
+                  </TouchableOpacity>
+                  {categories.map(cat => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: selectedCategoryId === cat.id ? cat.color : `${cat.color}60`,
+                        backgroundColor: selectedCategoryId === cat.id ? cat.color : `${cat.color}18`,
+                      }}
+                      onPress={() => setSelectedCategoryId(cat.id)}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: selectedCategoryId === cat.id ? '#fff' : cat.color }}>
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* 3. 대상 역할 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>
                 👥 대상 역할 <Text style={styles.required}>*</Text>
@@ -3615,9 +3977,6 @@ const styles = StyleSheet.create({
   },
   // FAB 스타일
   fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -3629,6 +3988,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 8,
+  },
+  categoryFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 4,
   },
   // 업무 추가 모달 스타일
   addModalContainer: {
