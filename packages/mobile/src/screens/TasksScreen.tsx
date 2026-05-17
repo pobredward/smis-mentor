@@ -16,6 +16,7 @@ import {
   Animated,
   Dimensions,
   Pressable,
+  BackHandler,
 } from 'react-native';
 import { ScrollView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
@@ -140,12 +141,16 @@ export function TasksScreen() {
     // visible + renderKey를 한 번에 배치 업데이트
     setSheetVisible(true);
     setSheetRenderKey(k => k + 1);
-    // 애니메이션은 visible이 true가 된 직후 바로 시작
-    Animated.timing(sheetAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    // Android에서 Animated.View가 마운트되기 전에 애니메이션이 시작되면
+    // 뷰가 이미 최종 위치에 도달한 채로 팍 뜨는 현상이 발생함.
+    // requestAnimationFrame으로 다음 프레임까지 미뤄 Native 뷰 마운트 후 시작.
+    requestAnimationFrame(() => {
+      Animated.timing(sheetAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    });
   }, [sheetAnim, sheetDragY, SCREEN_HEIGHT]);
 
   const closeSheet = useCallback(() => {
@@ -156,6 +161,17 @@ export function TasksScreen() {
       useNativeDriver: true,
     }).start(() => setSheetVisible(false));
   }, [sheetAnim, sheetDragY, SCREEN_HEIGHT]);
+
+  // Android 뒤로가기 버튼으로 바텀시트 닫기
+  useEffect(() => {
+    if (!sheetVisible) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      closeSheet();
+      return true; // 기본 뒤로가기 동작(화면 이탈) 차단
+    });
+    return () => subscription.remove();
+  }, [sheetVisible, closeSheet]);
+
   const sheetScrollOffsetY = useRef(0);
 
   const sheetPanGesture = Gesture.Pan()
@@ -912,7 +928,8 @@ export function TasksScreen() {
   };
 
   // 풀 캘린더 뷰 렌더링: 날짜 셀에 업무 제목/시간 직접 표시
-  const renderFullCalendar = () => {
+  // sheetVisible 등 바텀시트 상태가 바뀌어도 달력 재계산을 막기 위해 useMemo로 캐싱
+  const fullCalendarRows = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1);
@@ -1025,7 +1042,8 @@ export function TasksScreen() {
     }
 
     return rows;
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, monthTasks, personalMonthTasks, categoryMap, userData]);
 
   if (authLoading) {
     return (
@@ -1145,7 +1163,7 @@ export function TasksScreen() {
             </View>
           ) : (
             <View style={styles.fullCalendarGrid}>
-              {renderFullCalendar()}
+              {fullCalendarRows}
             </View>
           )}
         </View>
@@ -1705,7 +1723,6 @@ export function TasksScreen() {
           pointerEvents="box-none"
         >
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
-          <GestureDetector gesture={sheetPanGesture}>
           <Animated.View
             style={[
               styles.sheetContainer,
@@ -1718,46 +1735,51 @@ export function TasksScreen() {
               },
             ]}
           >
-              {/* 핸들 — 드래그 영역 */}
-              <View style={styles.sheetHandleArea}>
-                <View style={styles.sheetHandle} />
-              </View>
-
-              {/* 헤더 */}
-              <View style={styles.sheetHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sheetTitle}>
-                    {sheetDate
-                      ? `${sheetDate.getMonth() + 1}월 ${sheetDate.getDate()}일 (${DAYS_OF_WEEK[sheetDate.getDay()]})`
-                      : ''}
-                  </Text>
-                  <Text style={styles.sheetCount}>{sheetTasks.length + sheetPersonalTasks.length}개 업무</Text>
+              {/* 핸들+헤더 — GestureDetector를 이 영역으로만 제한해 Android에서 카드 탭이 Pan에 선점되지 않도록 함 */}
+              <GestureDetector gesture={sheetPanGesture}>
+              <View>
+                {/* 핸들 — 드래그 영역 */}
+                <View style={styles.sheetHandleArea}>
+                  <View style={styles.sheetHandle} />
                 </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (sheetDate) {
-                      setEditingPersonalTask(null);
-                      setPersonalTaskTitle('');
-                      setPersonalTaskDesc('');
-                      setPersonalTaskHasTime(false);
-                      setPersonalTaskTime('');
-                      setPersonalTaskDuration('');
-                      setPersonalTaskSelectedDates([sheetDate]);
-                      setPersonalTaskCalMonth(sheetDate.getMonth());
-                      setPersonalTaskCalYear(sheetDate.getFullYear());
-                      setPersonalTaskCategoryId('');
-                      setShowPersonalTaskModal(true);
-                    }
-                  }}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#faf5ff', borderWidth: 1, borderColor: '#d8b4fe', borderRadius: 8 }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add" size={13} color="#7c3aed" />
-                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#7c3aed' }}>내 업무</Text>
-                </TouchableOpacity>
-              </View>
 
-              {/* 업무 목록 — 공통+개인 시간순 병합, 업무카드 UI */}
+                {/* 헤더 */}
+                <View style={styles.sheetHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sheetTitle}>
+                      {sheetDate
+                        ? `${sheetDate.getMonth() + 1}월 ${sheetDate.getDate()}일 (${DAYS_OF_WEEK[sheetDate.getDay()]})`
+                        : ''}
+                    </Text>
+                    <Text style={styles.sheetCount}>{sheetTasks.length + sheetPersonalTasks.length}개 업무</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (sheetDate) {
+                        setEditingPersonalTask(null);
+                        setPersonalTaskTitle('');
+                        setPersonalTaskDesc('');
+                        setPersonalTaskHasTime(false);
+                        setPersonalTaskTime('');
+                        setPersonalTaskDuration('');
+                        setPersonalTaskSelectedDates([sheetDate]);
+                        setPersonalTaskCalMonth(sheetDate.getMonth());
+                        setPersonalTaskCalYear(sheetDate.getFullYear());
+                        setPersonalTaskCategoryId('');
+                        setShowPersonalTaskModal(true);
+                      }
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#faf5ff', borderWidth: 1, borderColor: '#d8b4fe', borderRadius: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add" size={13} color="#7c3aed" />
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#7c3aed' }}>내 업무</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              </GestureDetector>
+
+              {/* 업무 목록 — GestureDetector 범위 밖이므로 Android에서도 터치 이벤트가 정상 전달됨 */}
               <ScrollView
                 key={sheetRenderKey}
                 style={styles.sheetScrollView}
@@ -1798,7 +1820,6 @@ export function TasksScreen() {
                 />
               </ScrollView>
           </Animated.View>
-          </GestureDetector>
         </Animated.View>
       )}
     </View>
