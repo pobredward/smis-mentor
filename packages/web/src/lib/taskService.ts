@@ -4,6 +4,7 @@ import {
   doc,
   query,
   where,
+  orderBy,
   getDocs,
   getDoc,
   addDoc,
@@ -102,43 +103,33 @@ export const getTasksByCampCode = async (campCode: string): Promise<Task[]> => {
   }
 };
 
-// 특정 날짜의 업무 목록 가져오기
+// 특정 날짜의 업무 목록 가져오기 (날짜 범위 쿼리로 최적화)
 export const getTasksByDate = async (
   campCode: string,
   date: Date
 ): Promise<Task[]> => {
   try {
-    // 모든 업무를 가져와서 클라이언트에서 필터링
-    const allTasks = await getTasksByCampCode(campCode);
-    
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
-    const targetTime = targetDate.getTime();
-    
-    const filtered = allTasks.filter(task => {
-      const taskDate = new Date(task.date.toDate());
-      taskDate.setHours(0, 0, 0, 0);
-      return taskDate.getTime() === targetTime;
-    });
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(date);
+    dayEnd.setHours(23, 59, 59, 999);
 
-    logger.info('날짜별 업무 필터링:', {
-      targetDate: {
-        year: targetDate.getFullYear(),
-        month: targetDate.getMonth() + 1,
-        date: targetDate.getDate()
-      },
-      totalTasks: allTasks.length,
-      filteredTasks: filtered.length
-    });
+    const q = query(
+      collection(db, TASKS_COLLECTION),
+      where('campCode', '==', campCode),
+      where('date', '>=', Timestamp.fromDate(dayStart)),
+      where('date', '<=', Timestamp.fromDate(dayEnd)),
+      orderBy('date', 'asc')
+    );
 
-    // 시간 순으로 정렬
-    return filtered.sort((a, b) => {
-      if (a.time && b.time) {
-        return a.time.localeCompare(b.time);
-      }
+    const snapshot = await getDocs(q);
+    const tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Task[];
+
+    // 같은 날짜 내에서 시간 → createdAt 순 정렬
+    return tasks.sort((a, b) => {
+      if (a.time && b.time) return a.time.localeCompare(b.time);
       if (a.time && !b.time) return -1;
       if (!a.time && b.time) return 1;
-      // 둘 다 시간 없으면 생성일 오름차순
       return a.createdAt.toMillis() - b.createdAt.toMillis();
     });
   } catch (error) {
@@ -504,6 +495,7 @@ export const formatDuration = (duration?: { value: number; unit: 'minutes' | 'ho
 };
 
 // 월별 업무 목록을 날짜별 Map으로 가져오기 (YYYY-MM-DD → Task[])
+// 월 시작/끝 범위 쿼리로 해당 월 데이터만 읽음
 export const getTasksInMonth = async (
   campCode: string,
   year: number,
@@ -512,12 +504,23 @@ export const getTasksInMonth = async (
   isAdmin: boolean
 ): Promise<Map<string, Task[]>> => {
   try {
-    const allTasks = await getTasksByCampCode(campCode);
+    const monthStart = new Date(year, month, 1, 0, 0, 0, 0);
+    const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    const q = query(
+      collection(db, TASKS_COLLECTION),
+      where('campCode', '==', campCode),
+      where('date', '>=', Timestamp.fromDate(monthStart)),
+      where('date', '<=', Timestamp.fromDate(monthEnd)),
+      orderBy('date', 'asc')
+    );
+
+    const snapshot = await getDocs(q);
     const taskMap = new Map<string, Task[]>();
 
-    allTasks.forEach(task => {
+    snapshot.docs.forEach(d => {
+      const task = { id: d.id, ...d.data() } as Task;
       const taskDate = new Date(task.date.toDate());
-      if (taskDate.getFullYear() !== year || taskDate.getMonth() !== month) return;
 
       if (!isAdmin) {
         if (!groupRole || !task.targetRoles.includes(groupRole)) return;
@@ -525,8 +528,8 @@ export const getTasksInMonth = async (
 
       const y = taskDate.getFullYear();
       const m = String(taskDate.getMonth() + 1).padStart(2, '0');
-      const d = String(taskDate.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${d}`;
+      const day = String(taskDate.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${day}`;
 
       const existing = taskMap.get(dateStr) ?? [];
       existing.push(task);
@@ -541,6 +544,7 @@ export const getTasksInMonth = async (
 };
 
 // 월별 업무가 있는 날짜 가져오기 (현재 사용자의 역할에 해당하는 업무만 포함)
+// getTasksInMonth와 동일한 범위 쿼리 사용 — 필요 시 getTasksInMonth 결과에서 파생 가능
 export const getTaskDatesInMonth = async (
   campCode: string,
   year: number,
@@ -549,28 +553,8 @@ export const getTaskDatesInMonth = async (
   isAdmin: boolean
 ): Promise<Set<string>> => {
   try {
-    const allTasks = await getTasksByCampCode(campCode);
-
-    const dates = new Set<string>();
-
-    allTasks.forEach(task => {
-      const taskDate = new Date(task.date.toDate());
-      // 로컬 타임존으로 날짜 비교
-      if (taskDate.getFullYear() !== year || taskDate.getMonth() !== month) return;
-
-      // admin은 모든 업무 날짜 표시, 일반 사용자는 자신의 역할이 포함된 업무만 표시
-      if (!isAdmin) {
-        if (!groupRole || !task.targetRoles.includes(groupRole)) return;
-      }
-
-      // YYYY-MM-DD 형식으로 저장 (로컬 타임존 기준)
-      const y = taskDate.getFullYear();
-      const m = String(taskDate.getMonth() + 1).padStart(2, '0');
-      const d = String(taskDate.getDate()).padStart(2, '0');
-      dates.add(`${y}-${m}-${d}`);
-    });
-
-    return dates;
+    const taskMap = await getTasksInMonth(campCode, year, month, groupRole, isAdmin);
+    return new Set(taskMap.keys());
   } catch (error) {
     logger.error('월별 업무 날짜 가져오기 오류:', error);
     throw error;

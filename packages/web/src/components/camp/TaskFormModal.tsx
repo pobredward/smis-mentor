@@ -10,6 +10,7 @@ import type {
   TaskAttachment, 
   JobExperienceGroupRole,
   JobExperienceGroup,
+  TaskCategory,
 } from '@smis-mentor/shared';
 import {
   JOB_EXPERIENCE_GROUP_ROLES,
@@ -29,13 +30,14 @@ interface TaskFormProps {
   task?: Task | null;
   isCopyMode?: boolean;
   selectedDate: Date;
+  categories?: TaskCategory[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
 const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
 
-export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = false, selectedDate, onClose, onSuccess }: TaskFormProps) {
+export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = false, selectedDate, categories = [], onClose, onSuccess }: TaskFormProps) {
   const isEdit = !!task && !isCopyMode;
 
   useEffect(() => {
@@ -61,7 +63,6 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
   });
   // 수정 모드에서 그룹 날짜 로딩 중 여부
   const [loadingGroupDates, setLoadingGroupDates] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
   const [time, setTime] = useState(task?.time || '');
   const [hasTime, setHasTime] = useState(!!(task?.time));
 
@@ -83,6 +84,9 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           : task.estimatedDuration.value).toString()
       : ''
   );
+
+  // 카테고리
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(task?.categoryId ?? '');
 
   // 첨부파일
   const [attachments, setAttachments] = useState<TaskAttachment[]>(task?.attachments || []);
@@ -349,6 +353,8 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
         estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
           ? { value: parseFloat(durationMinutes), unit: 'minutes' as const }
           : (isEdit ? null : undefined),
+        // 카테고리 (없으면 null로 필드 제거)
+        categoryId: selectedCategoryId || (isEdit ? null : undefined),
         attachments: attachments.length > 0 ? attachments : undefined,
         createdBy,
       };
@@ -517,87 +523,70 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
               </p>
             )}
 
-            <div className="relative">
+            {/* 월/년 네비게이션 */}
+            <div className="flex items-center justify-between mb-1">
               <button
                 type="button"
-                onClick={() => setShowCalendar(!showCalendar)}
-                disabled={loadingGroupDates}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors text-left flex items-center justify-between disabled:opacity-60"
+                onClick={() => {
+                  if (currentMonth === 0) {
+                    setCurrentMonth(11);
+                    setCurrentYear(currentYear - 1);
+                  } else {
+                    setCurrentMonth(currentMonth - 1);
+                  }
+                }}
+                className="p-1 hover:bg-gray-100 rounded"
               >
-                <span className="text-gray-900">
-                  {loadingGroupDates
-                    ? '날짜 불러오는 중...'
-                    : `날짜 선택하기 (${selectedDates.length}개 선택됨)`}
-                </span>
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-
-              {/* 달력 드롭다운 */}
-              {showCalendar && (
-                <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg z-10 p-3">
-                  {/* 월/년 네비게이션 */}
-                  <div className="flex items-center justify-between mb-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (currentMonth === 0) {
-                          setCurrentMonth(11);
-                          setCurrentYear(currentYear - 1);
-                        } else {
-                          setCurrentMonth(currentMonth - 1);
-                        }
-                      }}
-                      className="p-1 hover:bg-gray-100 rounded"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="text-sm font-semibold">
-                      {currentYear}년 {monthNames[currentMonth]}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (currentMonth === 11) {
-                          setCurrentMonth(0);
-                          setCurrentYear(currentYear + 1);
-                        } else {
-                          setCurrentMonth(currentMonth + 1);
-                        }
-                      }}
-                      className="p-1 hover:bg-gray-100 rounded"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {/* 요일 헤더 */}
-                  <div className="flex mb-1">
-                    {weekDays.map((day, i) => (
-                      <div 
-                        key={day} 
-                        style={{ width: `${100 / 7}%` }}
-                        className={`text-xs text-center font-medium ${
-                          i === 0 || i === 6 ? 'text-red-500' : 'text-gray-600'
-                        }`}
-                      >
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 날짜 그리드 */}
-                  <div className="flex flex-wrap">
-                    {renderCalendar()}
-                  </div>
-                </div>
-              )}
+              <span className="text-sm font-semibold text-gray-800">
+                {currentYear}년 {monthNames[currentMonth]}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentMonth === 11) {
+                    setCurrentMonth(0);
+                    setCurrentYear(currentYear + 1);
+                  } else {
+                    setCurrentMonth(currentMonth + 1);
+                  }
+                }}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
+
+            {/* 요일 헤더 */}
+            <div className="flex mb-1">
+              {weekDays.map((day, i) => (
+                <div
+                  key={day}
+                  style={{ width: `${100 / 7}%` }}
+                  className={`text-xs text-center font-medium ${
+                    i === 0 || i === 6 ? 'text-red-500' : 'text-gray-600'
+                  }`}
+                >
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* 날짜 그리드 */}
+            <div className={`flex flex-wrap ${loadingGroupDates ? 'pointer-events-none opacity-50' : ''}`}>
+              {renderCalendar()}
+            </div>
+
+            {loadingGroupDates ? (
+              <p className="text-[10px] text-gray-400 text-center">날짜 불러오는 중...</p>
+            ) : (
+              <p className="text-[10px] text-gray-400 text-center">클릭 또는 드래그로 여러 날짜를 선택할 수 있습니다</p>
+            )}
 
             {/* 선택된 날짜 태그 목록 */}
             {!loadingGroupDates && selectedDates.length > 0 && (
@@ -661,7 +650,46 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             </div>
           </div>
 
-          {/* 2. 대상 역할 */}
+          {/* 2. 카테고리 (선택) — 날짜 및 시간 바로 아래 */}
+          {categories.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">🏷️ 카테고리 (선택)</label>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryId('')}
+                  className={`px-2.5 py-1.5 border rounded-lg transition-all text-xs ${
+                    selectedCategoryId === ''
+                      ? 'bg-gray-700 border-gray-700 text-white font-medium'
+                      : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  없음
+                </button>
+                {categories.map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedCategoryId(cat.id)}
+                    className={`px-2.5 py-1.5 border rounded-lg transition-all text-xs font-medium ${
+                      selectedCategoryId === cat.id
+                        ? 'text-white'
+                        : 'bg-white text-gray-700 hover:opacity-80'
+                    }`}
+                    style={
+                      selectedCategoryId === cat.id
+                        ? { backgroundColor: cat.color, borderColor: cat.color }
+                        : { borderColor: `${cat.color}60`, color: cat.color, backgroundColor: `${cat.color}12` }
+                    }
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 3. 대상 역할 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               👥 대상 역할 <span className="text-red-500">*</span>
@@ -684,25 +712,25 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             </div>
           </div>
 
-          {/* 2-1. 대상 그룹 */}
+          {/* 3-1. 대상 그룹 — "공통"을 맨 앞에 배치 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               🎯 대상 그룹 <span className="text-red-500">*</span>
             </label>
             <div className="flex flex-wrap gap-1.5">
-              {groupOptions.map(group => (
+              {['공통', ...groupOptions.filter(g => g !== '공통')].map(group => (
                 <button
                   key={group}
                   type="button"
                   onClick={() => {
                     setSelectedGroups(prev =>
-                      prev.includes(group)
+                      prev.includes(group as typeof groupOptions[number])
                         ? prev.filter(g => g !== group)
-                        : [...prev, group]
+                        : [...prev, group as typeof groupOptions[number]]
                     );
                   }}
                   className={`px-2.5 py-1.5 border rounded-lg transition-all text-xs ${
-                    selectedGroups.includes(group)
+                    selectedGroups.includes(group as typeof groupOptions[number])
                       ? 'bg-green-600 border-green-600 text-white'
                       : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                   }`}
@@ -713,34 +741,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             </div>
           </div>
 
-          {/* 3. 업무 제목 */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              ✏️ 업무 제목 <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="예: 학생 명단 확인"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
-          </div>
-
-          {/* 4. 업무 설명 */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">📝 업무 설명</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="업무에 대한 상세 설명"
-              rows={8}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            />
-          </div>
-
-          {/* 5. 소요 시간 (옵션) */}
+          {/* 4. 예상 소요시간 (선택) */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">⏱️ 예상 소요시간 (선택)</label>
             <div className="flex items-center gap-2">
@@ -755,6 +756,33 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
               />
               <span className="text-xs text-gray-600">분</span>
             </div>
+          </div>
+
+          {/* 5. 업무 제목 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              ✏️ 업무 제목 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="예: 학생 명단 확인"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          {/* 6. 업무 설명 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">📝 업무 설명</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="업무에 대한 상세 설명"
+              rows={8}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            />
           </div>
 
           {/* 6. 첨부파일 및 링크 */}

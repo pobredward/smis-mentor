@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import { MainTabs } from './MainTabs';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
+import PersonalTaskDetailScreen from '../screens/PersonalTaskDetailScreen';
 import { CampDetailScreen } from '../screens/CampDetailScreen';
 import { CampEditorScreen } from '../screens/CampEditorScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -57,6 +58,14 @@ export function RootNavigator() {
         <Stack.Screen 
           name="TaskDetail" 
           component={TaskDetailScreen}
+          options={{
+            presentation: 'card',
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen
+          name="PersonalTaskDetail"
+          component={PersonalTaskDetailScreen}
           options={{
             presentation: 'card',
             animation: 'slide_from_right',

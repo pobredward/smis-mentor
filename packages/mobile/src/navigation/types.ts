@@ -9,6 +9,7 @@ export type RootStackParamList = {
   MainTabs: undefined;
   StudentDetail: { studentId: string };
   TaskDetail: { taskId: string; taskDate?: string };
+  PersonalTaskDetail: { taskId: string; taskDate?: string };
   CampDetail: { category: CampPageCategory; itemId: string; itemTitle: string };
   CampEditor: {
     category: CampPageCategory;

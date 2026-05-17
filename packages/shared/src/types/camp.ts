@@ -200,6 +200,38 @@ export interface TaskCompletion {
   completedAt: Timestamp;
 }
 
+// 업무 카테고리 (관리자가 캠프별로 사전 등록, 유저는 읽기 전용)
+export interface TaskCategory {
+  id: string;
+  campCode: string;     // 캠프별 카테고리
+  name: string;         // 예: "수업 준비", "행정", "개인 루틴"
+  color: string;        // hex 색상 (예: "#3b82f6")
+  createdBy: string;    // admin userId
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// 개인 커스텀 업무 (본인만 열람 가능, 관리자 노출 없음)
+export interface PersonalTask {
+  id: string;
+  ownerId: string;      // 작성자 userId
+  campCode: string;     // 캠프 컨텍스트
+  // 복수 날짜로 생성 시 UUID가 부여되며, 같은 groupId를 가진 PersonalTask들은 함께 수정/삭제됨
+  groupId?: string;
+  title: string;
+  description: string;
+  date: Timestamp;
+  time?: string;        // HH:mm 형식
+  estimatedDuration?: {
+    value: number;
+    unit: 'minutes';    // 분 단위 고정
+  };
+  categoryId?: string;  // 카테고리 ID (taskCategories/{campCode}/{categoryId})
+  isCompleted: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 // 캘린더 기반 업무
 export interface Task {
   id: string;
@@ -222,6 +254,7 @@ export interface Task {
     unit: 'minutes' | 'hours';
   };
   
+  categoryId?: string;  // 카테고리 ID
   attachments?: TaskAttachment[];
   completions: TaskCompletion[];
   

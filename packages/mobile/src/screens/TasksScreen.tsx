@@ -26,10 +26,10 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { Timestamp } from 'firebase/firestore';
 import {
-  getTasksByCampCode,
   getTasksByDate,
   getTaskDatesInMonth,
   getTasksInMonth,
+  getTaskById,
   toggleTaskCompletion,
   deleteTask,
   createTask,
@@ -40,9 +40,22 @@ import {
   formatDuration,
   uploadTaskImage,
 } from '../services/taskService';
+import {
+  getPersonalTasksByDate,
+  getPersonalTaskDatesInMonth,
+  getPersonalTasksInMonth,
+  getPersonalTaskById,
+  getPersonalTasksByGroupId,
+  createPersonalTask,
+  updatePersonalTaskGroup,
+  deletePersonalTask,
+  deletePersonalTaskGroup,
+  togglePersonalTaskCompletion,
+} from '../services/personalTaskService';
+import { getTaskCategories } from '../services/taskCategoryService';
 import { getUserJobCodesInfo } from '../services/authService';
 import { getUsersByJobCode } from '../services/userService';
-import type { Task, JobExperienceGroupRole, TaskAttachment, User } from '../../../shared/src/types';
+import type { Task, JobExperienceGroupRole, TaskAttachment, User, PersonalTask, TaskCategory } from '../../../shared/src/types';
 import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames, isKoreanHoliday } from '@smis-mentor/shared';
 import {
   MENTOR_GROUP_ROLES,
@@ -66,7 +79,7 @@ export function TasksScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { userData, loading: authLoading } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // campTasks 전체 캐시는 사용하지 않음 — 날짜/월 범위 쿼리로 필요한 데이터만 읽음
   const [loading, setLoading] = useState(true);
   const [currentGroupRole, setCurrentGroupRole] = useState<JobExperienceGroupRole | null>(null);
   const [currentCampCode, setCurrentCampCode] = useState<string>(''); // code (E27)
@@ -106,6 +119,7 @@ export function TasksScreen() {
   // date/tasks는 ref로 관리해 setState 횟수 최소화
   const sheetDateRef = useRef<Date | null>(null);
   const sheetTasksRef = useRef<Task[]>([]);
+  const sheetPersonalTasksRef = useRef<PersonalTask[]>([]);
   const [sheetRenderKey, setSheetRenderKey] = useState(0);
   const sheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const sheetDragY = useRef(new Animated.Value(0)).current;
@@ -113,11 +127,13 @@ export function TasksScreen() {
   // ref 기반 접근자 (렌더 내에서 사용)
   const sheetDate = sheetDateRef.current;
   const sheetTasks = sheetTasksRef.current;
+  const sheetPersonalTasks = sheetPersonalTasksRef.current;
 
-  const openSheet = useCallback((date: Date, dayTasks: Task[]) => {
+  const openSheet = useCallback((date: Date, dayTasks: Task[], dayPersonalTasks: PersonalTask[] = []) => {
     // ref 업데이트 (리렌더 없음)
     sheetDateRef.current = date;
     sheetTasksRef.current = dayTasks;
+    sheetPersonalTasksRef.current = dayPersonalTasks;
     // 애니메이션 초기 위치 세팅
     sheetAnim.setValue(SCREEN_HEIGHT);
     sheetDragY.setValue(0);
@@ -144,35 +160,44 @@ export function TasksScreen() {
 
   const sheetPanGesture = Gesture.Pan()
     .runOnJS(true)
-    .activeOffsetY([6, 6])
-    .failOffsetX([-20, 20])
+    // 아래로 10px 이상 이동할 때만 시트 드래그 활성화 (위 스크롤과 구분)
+    .activeOffsetY([10, 10])
+    .failOffsetX([-25, 25])
+    .onStart(() => {
+      // 스크롤이 맨 위가 아니면 제스처 즉시 실패 처리 → ScrollView가 처리
+      if (sheetScrollOffsetY.current > 2) {
+        // Pan 제스처를 실패시켜 ScrollView가 스크롤을 처리하도록 위임
+        return;
+      }
+    })
     .onUpdate((e) => {
       // 스크롤이 맨 위이고 아래로 드래그할 때만 시트 이동
-      if (e.translationY > 0 && sheetScrollOffsetY.current <= 0) {
+      if (e.translationY > 0 && sheetScrollOffsetY.current <= 2) {
         sheetDragY.setValue(e.translationY);
       }
     })
     .onEnd((e) => {
       if (
-        sheetScrollOffsetY.current <= 0 &&
-        (e.translationY > 80 || e.velocityY > 600)
+        sheetScrollOffsetY.current <= 2 &&
+        (e.translationY > 60 || e.velocityY > 500)
       ) {
-        // 현재 드래그 위치를 sheetAnim에 흡수시키고 sheetDragY 리셋 후 닫기
-        // → 튀어오르는 현상 없이 현재 위치에서 자연스럽게 이어서 내려감
-        const currentDrag = e.translationY > 0 ? e.translationY : 0;
+        // 현재 드래그 위치를 sheetAnim에 흡수해 튀어오름 없이 자연스럽게 닫기
+        const currentDrag = Math.max(e.translationY, 0);
         sheetAnim.setValue(currentDrag);
         sheetDragY.setValue(0);
         Animated.timing(sheetAnim, {
           toValue: SCREEN_HEIGHT,
-          duration: 260,
+          duration: 240,
           useNativeDriver: true,
         }).start(() => setSheetVisible(false));
       } else {
+        // 임계값 미달 → 원위치 복귀
         Animated.spring(sheetDragY, {
           toValue: 0,
           useNativeDriver: true,
-          damping: 20,
-          stiffness: 300,
+          damping: 18,
+          stiffness: 280,
+          mass: 0.8,
         }).start();
       }
     });
@@ -180,6 +205,36 @@ export function TasksScreen() {
   const isAdmin = userData?.role === 'admin';
   const isManager = currentGroupRole === '매니저' || currentGroupRole === 'Manager';
   const canAddTask = isAdmin || isManager;
+
+  // 개인 업무 상태
+  const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
+  const [personalTaskDates, setPersonalTaskDates] = useState<Map<string, number>>(new Map());
+  const [personalMonthTasks, setPersonalMonthTasks] = useState<Map<string, PersonalTask[]>>(new Map());
+  const [showPersonalTaskModal, setShowPersonalTaskModal] = useState(false);
+  const [editingPersonalTask, setEditingPersonalTask] = useState<PersonalTask | null>(null);
+  const [personalTaskTitle, setPersonalTaskTitle] = useState('');
+  const [personalTaskDesc, setPersonalTaskDesc] = useState('');
+  const [personalTaskHasTime, setPersonalTaskHasTime] = useState(false);
+  const [personalTaskTime, setPersonalTaskTime] = useState('');
+  // 소요시간 — 분 단위 고정
+  const [personalTaskDuration, setPersonalTaskDuration] = useState('');
+  // 날짜 — 복수 선택 지원
+  const [personalTaskSelectedDates, setPersonalTaskSelectedDates] = useState<Date[]>([selectedDate]);
+  // 달력 월 탐색용
+  const [personalTaskCalMonth, setPersonalTaskCalMonth] = useState(selectedDate.getMonth());
+  const [personalTaskCalYear, setPersonalTaskCalYear] = useState(selectedDate.getFullYear());
+  const [personalTaskCategoryId, setPersonalTaskCategoryId] = useState('');
+  const [isSubmittingPersonal, setIsSubmittingPersonal] = useState(false);
+  const [loadingPersonalGroupDates, setLoadingPersonalGroupDates] = useState(false);
+
+  // 카테고리 상태
+  const [categories, setCategories] = useState<TaskCategory[]>([]);
+
+  // categoryId → TaskCategory 빠른 조회 맵
+  const categoryMap = useMemo(
+    () => new Map(categories.map(c => [c.id, c])),
+    [categories]
+  );
 
   // 달력 좌우 스와이프로 월 이동 — gesture-handler로 ScrollView와 네이티브 레벨에서 협력
   const swipeGesture = Gesture.Pan()
@@ -217,51 +272,54 @@ export function TasksScreen() {
       }
     }
     
-    // editTaskId 처리 (한 번만 실행)
-    if (actualParams?.editTaskId && tasks.length > 0) {
+    // editTaskId 처리 (getTaskById로 직접 조회)
+    if (actualParams?.editTaskId && !editingTask) {
       logger.info('editTaskId found:', actualParams.editTaskId);
-      const taskToEdit = tasks.find(t => t.id === actualParams.editTaskId);
-      logger.info('taskToEdit:', taskToEdit);
-      if (taskToEdit && !editingTask) {
-        setEditingTask(taskToEdit);
-        setShowAddModal(true);
-        
-        // params 초기화 (무한 루프 방지)
-        navigation.setParams({ 
-          params: { 
-            ...actualParams, 
-            editTaskId: undefined 
-          } 
-        } as any);
-      }
+      getTaskById(actualParams.editTaskId).then(taskToEdit => {
+        logger.info('taskToEdit:', taskToEdit);
+        if (taskToEdit) {
+          setEditingTask(taskToEdit);
+          setShowAddModal(true);
+        }
+      });
+      navigation.setParams({ 
+        params: { ...actualParams, editTaskId: undefined } 
+      } as any);
     }
     
-    // copyTaskId 처리 (한 번만 실행)
-    if (actualParams?.copyTaskId && tasks.length > 0) {
+    // copyTaskId 처리 (getTaskById로 직접 조회)
+    if (actualParams?.copyTaskId && !editingTask) {
       logger.info('copyTaskId found:', actualParams.copyTaskId);
-      const taskToCopy = tasks.find(t => t.id === actualParams.copyTaskId);
-      logger.info('taskToCopy:', taskToCopy);
-      if (taskToCopy && !editingTask) {
-        // 복사할 업무의 데이터를 editingTask에 설정하되, id는 제거
-        const { id, createdAt, updatedAt, createdBy, completions, ...taskDataWithoutId } = taskToCopy;
-        setEditingTask(taskDataWithoutId as any);
-        setShowAddModal(true);
-        
-        // params 초기화 (무한 루프 방지)
-        navigation.setParams({ 
-          params: { 
-            ...actualParams, 
-            copyTaskId: undefined 
-          } 
-        } as any);
-      }
+      getTaskById(actualParams.copyTaskId).then(taskToCopy => {
+        logger.info('taskToCopy:', taskToCopy);
+        if (taskToCopy) {
+          const { id, createdAt, updatedAt, createdBy, completions, ...taskDataWithoutId } = taskToCopy;
+          setEditingTask(taskDataWithoutId as any);
+          setShowAddModal(true);
+        }
+      });
+      navigation.setParams({ 
+        params: { ...actualParams, copyTaskId: undefined } 
+      } as any);
     }
     
+    // editPersonalTaskId 처리 — 파라미터를 먼저 지워 중복 실행 방지
+    if (actualParams?.editPersonalTaskId) {
+      const targetId = actualParams.editPersonalTaskId;
+      navigation.setParams({
+        params: { ...actualParams, editPersonalTaskId: undefined },
+      } as any);
+      getPersonalTaskById(targetId).then(personalTask => {
+        if (personalTask) {
+          openPersonalTaskModal(personalTask);
+        }
+      });
+    }
+
     if (actualParams?.refresh) {
-      // refresh 파라미터가 있으면 업무 다시 불러오기
       fetchTasks();
     }
-  }, [route.params, tasks.length]);
+  }, [route.params]);
 
   type JobCodeInfo = { id: string; generation: string; code: string; name: string };
 
@@ -295,17 +353,13 @@ export function TasksScreen() {
   const fetchTasks = async () => {
     if (!userData?.activeJobExperienceId) {
       setLoading(false);
-      setTasks([]);
       return;
     }
 
     setLoading(true);
     try {
       const { jobCode: activeJobCode, groupRole: resolvedGroupRole } = await fetchActiveJobCode();
-      if (!activeJobCode) {
-        setTasks([]);
-        return;
-      }
+      if (!activeJobCode) return;
 
       setCurrentCampCode(activeJobCode.code);
       setCurrentCampCodeId(activeJobCode.id);
@@ -317,11 +371,13 @@ export function TasksScreen() {
         setCampUsers(users);
       }
 
-      const fetchedTasks = await getTasksByCampCode(activeJobCode.code);
-      setTasks(fetchedTasks);
-
-      // 월별 업무 Map 가져오기 (resolvedGroupRole을 직접 전달해 state race condition 방지)
-      await fetchMonthTasks(resolvedGroupRole, isAdmin, activeJobCode.code);
+      // 월별 업무 Map + 개인 업무 날짜 + 카테고리 동시 로드 (각각 필요한 범위만 읽음)
+      const [, , fetchedCategories] = await Promise.all([
+        fetchMonthTasks(resolvedGroupRole, isAdmin, activeJobCode.code),
+        loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth(), activeJobCode.code),
+        getTaskCategories(activeJobCode.code),
+      ]);
+      setCategories(fetchedCategories);
 
       // 선택된 날짜의 업무 로드
       await loadTasksForDate(selectedDate, activeJobCode.code);
@@ -387,8 +443,11 @@ export function TasksScreen() {
     if (!code) return;
 
     try {
-      const dateTasks = await getTasksByDate(code, date);
-      
+      const [dateTasks, personalDateTasks] = await Promise.all([
+        getTasksByDate(code, date),
+        userData ? getPersonalTasksByDate(userData.userId, code, date) : Promise.resolve([]),
+      ]);
+
       // 역할 필터링
       const filtered = dateTasks.filter(task => {
         if (isAdmin) return true;
@@ -397,8 +456,25 @@ export function TasksScreen() {
       });
 
       setSelectedDateTasks(filtered);
+      setPersonalTasks(personalDateTasks);
     } catch (error) {
       logger.error('날짜별 업무 가져오기 오류:', error);
+    }
+  };
+
+  // 개인 업무 월별 날짜 + 풀 캘린더용 Map 로드
+  const loadPersonalTaskDates = async (year: number, month: number, campCode?: string) => {
+    const code = campCode || currentCampCode;
+    if (!code || !userData) return;
+    try {
+      const [dates, taskMap] = await Promise.all([
+        getPersonalTaskDatesInMonth(userData.userId, code, year, month),
+        getPersonalTasksInMonth(userData.userId, code, year, month),
+      ]);
+      setPersonalTaskDates(dates);
+      setPersonalMonthTasks(taskMap);
+    } catch (error) {
+      logger.error('개인 업무 월별 날짜 가져오기 오류:', error);
     }
   };
 
@@ -434,6 +510,7 @@ export function TasksScreen() {
   useEffect(() => {
     if (currentCampCode) {
       fetchMonthTasks();
+      loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth());
     }
   }, [currentDate, currentCampCode]);
 
@@ -457,11 +534,16 @@ export function TasksScreen() {
         const mm = String(cachedDate.getMonth() + 1).padStart(2, '0');
         const dd = String(cachedDate.getDate()).padStart(2, '0');
         const dateStr = `${year}-${mm}-${dd}`;
-        getTasksByDate(currentCampCode, cachedDate).then(refreshed => {
+        Promise.all([
+          getTasksByDate(currentCampCode, cachedDate),
+          userData ? getPersonalTasksByDate(userData.userId, currentCampCode, cachedDate) : Promise.resolve([]),
+        ]).then(([refreshed, refreshedPersonal]) => {
           sheetTasksRef.current = refreshed;
+          sheetPersonalTasksRef.current = refreshedPersonal;
           setSheetRenderKey(k => k + 1);
         }).catch(() => {
           sheetTasksRef.current = monthTasks.get(dateStr) ?? [];
+          sheetPersonalTasksRef.current = personalMonthTasks.get(dateStr) ?? [];
           setSheetRenderKey(k => k + 1);
         });
       }
@@ -479,7 +561,8 @@ export function TasksScreen() {
       const dd = String(date.getDate()).padStart(2, '0');
       const dateStr = `${year}-${mm}-${dd}`;
       const dayTasks = monthTasks.get(dateStr) ?? [];
-      openSheet(date, dayTasks);
+      const dayPersonalTasks = personalMonthTasks.get(dateStr) ?? [];
+      openSheet(date, dayTasks, dayPersonalTasks);
     } else {
       setSelectedDate(date);
     }
@@ -504,6 +587,162 @@ export function TasksScreen() {
       logger.error('업무 완료 토글 오류:', error);
       Alert.alert('오류', '업무 상태 변경 중 오류가 발생했습니다.');
     }
+  };
+
+  // 개인 업무 핸들러
+  const openPersonalTaskModal = (task?: PersonalTask) => {
+    if (task) {
+      const taskDate = task.date.toDate();
+      setEditingPersonalTask(task);
+      setPersonalTaskTitle(task.title);
+      setPersonalTaskDesc(task.description);
+      setPersonalTaskHasTime(!!task.time);
+      setPersonalTaskTime(task.time ?? '');
+      setPersonalTaskDuration(
+        task.estimatedDuration ? String(task.estimatedDuration.value) : ''
+      );
+      setPersonalTaskSelectedDates([taskDate]);
+      setPersonalTaskCalMonth(taskDate.getMonth());
+      setPersonalTaskCalYear(taskDate.getFullYear());
+      setPersonalTaskCategoryId(task.categoryId ?? '');
+      setShowPersonalTaskModal(true);
+
+      // groupId가 있으면 그룹의 모든 날짜를 비동기로 로드
+      if (task.groupId) {
+        setLoadingPersonalGroupDates(true);
+        getPersonalTasksByGroupId(task.groupId)
+          .then(groupTasks => {
+            if (groupTasks.length > 0) {
+              const groupDates = groupTasks.map(t => t.date.toDate());
+              setPersonalTaskSelectedDates(groupDates);
+              setPersonalTaskCalMonth(groupDates[0].getMonth());
+              setPersonalTaskCalYear(groupDates[0].getFullYear());
+            }
+          })
+          .catch(err => logger.error('그룹 날짜 로드 오류:', err))
+          .finally(() => setLoadingPersonalGroupDates(false));
+      }
+    } else {
+      setEditingPersonalTask(null);
+      setPersonalTaskTitle('');
+      setPersonalTaskDesc('');
+      setPersonalTaskHasTime(false);
+      setPersonalTaskTime('');
+      setPersonalTaskDuration('');
+      setPersonalTaskSelectedDates([selectedDate]);
+      setPersonalTaskCalMonth(selectedDate.getMonth());
+      setPersonalTaskCalYear(selectedDate.getFullYear());
+      setPersonalTaskCategoryId('');
+      setShowPersonalTaskModal(true);
+    }
+  };
+
+  const handlePersonalTaskSubmit = async () => {
+    if (!personalTaskTitle.trim()) {
+      Alert.alert('오류', '업무 제목을 입력해주세요.');
+      return;
+    }
+    if (personalTaskSelectedDates.length === 0) {
+      Alert.alert('오류', '날짜를 선택해주세요.');
+      return;
+    }
+
+    const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (personalTaskHasTime && personalTaskTime && !timePattern.test(personalTaskTime)) {
+      Alert.alert('오류', '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
+      return;
+    }
+
+    if (!userData || !currentCampCode) return;
+
+    // 분 단위 고정
+    const parsedDuration =
+      personalTaskDuration && !isNaN(Number(personalTaskDuration)) && Number(personalTaskDuration) > 0
+        ? { value: Number(personalTaskDuration), unit: 'minutes' as const }
+        : undefined;
+
+    setIsSubmittingPersonal(true);
+    try {
+      if (editingPersonalTask) {
+        // 모든 업무는 groupId를 가지므로 항상 그룹 수정 API 사용
+        const originalDates = await getPersonalTasksByGroupId(editingPersonalTask.groupId!)
+          .then(tasks => tasks.map(t => t.date.toDate()));
+        const datesChanged =
+          originalDates.length !== personalTaskSelectedDates.length ||
+          !originalDates.every(od =>
+            personalTaskSelectedDates.some(
+              nd =>
+                nd.getFullYear() === od.getFullYear() &&
+                nd.getMonth() === od.getMonth() &&
+                nd.getDate() === od.getDate()
+            )
+          );
+        await updatePersonalTaskGroup(
+          editingPersonalTask.groupId!,
+          userData.userId,
+          currentCampCode,
+          {
+            title: personalTaskTitle.trim(),
+            description: personalTaskDesc.trim(),
+            time: personalTaskHasTime && personalTaskTime ? personalTaskTime : null,
+            estimatedDuration: parsedDuration ?? null,
+            categoryId: personalTaskCategoryId || null,
+          },
+          datesChanged ? personalTaskSelectedDates : undefined
+        );
+      } else {
+        await createPersonalTask(userData.userId, currentCampCode, {
+          title: personalTaskTitle.trim(),
+          description: personalTaskDesc.trim(),
+          dates: personalTaskSelectedDates,
+          time: personalTaskHasTime && personalTaskTime ? personalTaskTime : undefined,
+          estimatedDuration: parsedDuration,
+          categoryId: personalTaskCategoryId || undefined,
+        });
+      }
+      setShowPersonalTaskModal(false);
+      await Promise.all([
+        loadTasksForDate(selectedDate),
+        loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth()),
+      ]);
+    } catch (error) {
+      logger.error('개인 업무 저장 오류:', error);
+      Alert.alert('오류', '저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmittingPersonal(false);
+    }
+  };
+
+  const handlePersonalTaskToggle = async (task: PersonalTask) => {
+    try {
+      await togglePersonalTaskCompletion(task.id, task.isCompleted);
+      await loadTasksForDate(selectedDate);
+    } catch (error) {
+      logger.error('개인 업무 완료 토글 오류:', error);
+      Alert.alert('오류', '상태 변경 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handlePersonalTaskDelete = (taskId: string) => {
+    Alert.alert('삭제 확인', '이 개인 업무를 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePersonalTask(taskId);
+            await Promise.all([
+              loadTasksForDate(selectedDate),
+              loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth()),
+            ]);
+          } catch (error) {
+            logger.error('개인 업무 삭제 오류:', error);
+            Alert.alert('오류', '삭제 중 오류가 발생했습니다.');
+          }
+        },
+      },
+    ]);
   };
 
   // 바텀시트 전용 토글: optimistic update로 즉시 UI 반영 후 서버 동기화
@@ -548,6 +787,38 @@ export function TasksScreen() {
     }
   };
 
+  // 바텀시트 전용 개인 업무 토글 (optimistic update)
+  const handleSheetPersonalToggle = async (task: PersonalTask) => {
+    // optimistic: ref 직접 변경
+    sheetPersonalTasksRef.current = sheetPersonalTasksRef.current.map(t =>
+      t.id === task.id ? { ...t, isCompleted: !t.isCompleted } : t
+    );
+    setSheetRenderKey(k => k + 1);
+
+    try {
+      await togglePersonalTaskCompletion(task.id, task.isCompleted);
+      // 갱신: 해당 날짜 개인 업무 재조회
+      const date = sheetDateRef.current;
+      if (date && userData) {
+        const refreshed = await getPersonalTasksByDate(userData.userId, currentCampCode, date);
+        sheetPersonalTasksRef.current = refreshed;
+        setSheetRenderKey(k => k + 1);
+        loadPersonalTaskDates(date.getFullYear(), date.getMonth());
+      }
+    } catch (error) {
+      logger.error('시트 개인 업무 토글 오류:', error);
+      // 실패 시 원복
+      const date = sheetDateRef.current;
+      if (date) {
+        const year = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        sheetPersonalTasksRef.current = personalMonthTasks.get(`${year}-${mm}-${dd}`) ?? [];
+        setSheetRenderKey(k => k + 1);
+      }
+      Alert.alert('오류', '상태 변경 중 오류가 발생했습니다.');
+    }
+  };
 
   // 컴팩트 뷰 렌더링: 큰 박스(숫자/체크) + 아래에 작은 날짜
   const renderCompactCalendar = () => {
@@ -583,11 +854,14 @@ export function TasksScreen() {
 
       const pendingCount = dayTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
       const allCompleted = hasTask && pendingCount === 0;
+      const personalPendingCount = personalTaskDates.get(dateStr) ?? 0;
+      const totalPendingCount = pendingCount + personalPendingCount;
+      const allDone = allCompleted && personalPendingCount === 0;
 
-      // 박스 색상 결정 (선택 여부와 무관하게 업무 상태만 반영)
+      // 박스 색상 결정 (공통+개인 합산 기준)
       const boxStyle = (() => {
-        if (allCompleted) return styles.compactBoxCompleted;
-        if (hasTask) return styles.compactBoxPending;
+        if (allDone) return styles.compactBoxCompleted;
+        if (totalPendingCount > 0) return styles.compactBoxPending;
         return styles.compactBoxEmpty;
       })();
 
@@ -610,20 +884,21 @@ export function TasksScreen() {
           style={styles.compactCell}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel={`${month + 1}월 ${day}일${hasTask ? `, 업무 ${dayTasks.length}개` : ''}`}
+          accessibilityLabel={`${month + 1}월 ${day}일${totalPendingCount > 0 ? `, 남은 업무 ${totalPendingCount}개` : allDone ? ', 모든 업무 완료' : ''}`}
         >
           {/* 큰 박스 */}
           <View style={[styles.compactBox, boxStyle]}>
-            {allCompleted ? (
+            {allDone ? (
               <Ionicons name="checkmark" size={14} color="#ffffff" />
-            ) : hasTask ? (
-              <Text style={styles.compactBoxNumber}>{pendingCount}</Text>
+            ) : totalPendingCount > 0 ? (
+              <Text style={styles.compactBoxNumber}>{totalPendingCount}</Text>
             ) : null}
           </View>
           {/* 날짜 숫자 — 선택 시 원형 배경으로 강조 */}
           <View style={[
             styles.compactDayLabelWrap,
             isSelected && (isToday ? styles.compactDayLabelWrapTodaySelected : styles.compactDayLabelWrapSelected),
+            !isSelected && isToday && styles.compactDayLabelWrapToday,
           ]}>
             <Text style={[styles.compactDayLabel, dayLabelStyle]}>
               {day}
@@ -669,15 +944,13 @@ export function TasksScreen() {
         const dateStr = `${dateYear}-${dateMonth}-${dateDay}`;
 
         const dayTasks = monthTasks.get(dateStr) ?? [];
+        const dayPersonalTasks = personalMonthTasks.get(dateStr) ?? [];
         const isToday = new Date().toDateString() === date.toDateString();
         const dayOfWeek = date.getDay();
         const isSunday = dayOfWeek === 0;
         const isSaturday = dayOfWeek === 6;
         const isHolidayDate = isKoreanHoliday(date);
         const currentUserId = userData?.userId ?? '';
-
-        const visibleTasks = dayTasks;
-        const hiddenCount = 0;
 
         cells.push(
           <TouchableOpacity
@@ -689,33 +962,57 @@ export function TasksScreen() {
             ]}
             activeOpacity={0.7}
           >
-            {/* 날짜 숫자 */}
-            <Text style={[
-              styles.fullCalendarDayNum,
-              (isSunday || isHolidayDate) && styles.calendarDayTextSundayHoliday,
-              isSaturday && styles.calendarDayTextSaturday,
-              isToday && !(isSunday || isHolidayDate) && styles.calendarDayTextToday,
+            {/* 날짜 숫자 — 오늘은 회색 원형 배경 */}
+            <View style={[
+              styles.fullCalendarDayNumWrap,
+              isToday && styles.fullCalendarDayNumWrapToday,
             ]}>
-              {day}
-            </Text>
-            {/* 업무 칩 */}
-            {visibleTasks.map(task => {
+              <Text style={[
+                styles.fullCalendarDayNum,
+                (isSunday || isHolidayDate) && styles.calendarDayTextSundayHoliday,
+                isSaturday && styles.calendarDayTextSaturday,
+                isToday && !(isSunday || isHolidayDate) && styles.calendarDayTextTodayDark,
+                isToday && (isSunday || isHolidayDate) && styles.calendarDayTextTodaySunday,
+              ]}>
+                {day}
+              </Text>
+            </View>
+            {/* 공통 업무 칩 */}
+            {dayTasks.map(task => {
               const isDone = task.completions.some(c => c.userId === currentUserId);
               const timeLabel = task.time ? task.time.slice(0, 5) : null;
+              const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
+              const chipBg = isDone
+                ? (cat ? `${cat.color}55` : '#6ee7b7')
+                : '#e5e7eb';
+              const chipTextColor = isDone
+                ? (cat ? cat.color : '#065f46')
+                : '#6b7280';
               return (
-                <View key={task.id} style={[
-                  styles.fullCalendarChip,
-                  isDone ? styles.fullCalendarChipDone : styles.fullCalendarChipPending,
-                ]}>
-                  <Text style={styles.fullCalendarChipText} numberOfLines={1}>
+                <View key={task.id} style={[styles.fullCalendarChip, { backgroundColor: chipBg }]}>
+                  <Text style={[styles.fullCalendarChipText, { color: chipTextColor }]} numberOfLines={1}>
                     {timeLabel ? `${timeLabel} ` : ''}{task.title}
                   </Text>
                 </View>
               );
             })}
-            {hiddenCount > 0 && (
-              <Text style={styles.fullCalendarMore}>+{hiddenCount}개</Text>
-            )}
+            {/* 개인 업무 칩 */}
+            {dayPersonalTasks.map(task => {
+              const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
+              const chipBg = task.isCompleted
+                ? (cat ? `${cat.color}55` : '#6ee7b7')
+                : '#e5e7eb';
+              const chipTextColor = task.isCompleted
+                ? (cat ? cat.color : '#065f46')
+                : '#6b7280';
+              return (
+                <View key={task.id} style={[styles.fullCalendarChip, { backgroundColor: chipBg }]}>
+                  <Text style={[styles.fullCalendarChipText, { color: chipTextColor }]} numberOfLines={1}>
+                    {task.time ? `${task.time.slice(0, 5)} ` : ''}{task.title}
+                  </Text>
+                </View>
+              );
+            })}
           </TouchableOpacity>
         );
       }
@@ -854,45 +1151,149 @@ export function TasksScreen() {
         </View>
         </GestureDetector>
 
-        {/* 컴팩트 뷰: 선택된 날짜의 업무 목록 */}
+        {/* 컴팩트 뷰: 통합 업무 목록 (공통 + 개인 시간순) */}
         {calendarView === 'compact' && (
           <View style={styles.taskListContainer}>
+            {/* 헤더 */}
             <View style={styles.taskListHeader}>
               <Text style={styles.taskListTitle}>
                 {selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일 ({DAYS_OF_WEEK[selectedDate.getDay()]})
               </Text>
-              <Text style={styles.taskCount}>
-                {selectedDateTasks.length}개 업무
-              </Text>
+              <TouchableOpacity
+                onPress={() => openPersonalTaskModal()}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#faf5ff', borderWidth: 1, borderColor: '#d8b4fe', borderRadius: 8 }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={13} color="#7c3aed" />
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#7c3aed' }}>내 업무</Text>
+              </TouchableOpacity>
             </View>
 
-            {selectedDateTasks.length === 0 ? (
-              <View style={styles.emptyTaskContainer}>
-                <Ionicons name="calendar-outline" size={48} color="#cbd5e1" />
-                <Text style={styles.emptyTaskText}>이 날짜에 등록된 업무가 없습니다</Text>
-              </View>
-            ) : (
-              <View style={styles.taskList}>
-                {selectedDateTasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    isAdmin={isAdmin}
-                    currentUserId={userData.userId}
-                    campUsers={campUsers}
-                    campCodeId={currentCampCodeId}
-                    onToggle={handleToggleComplete}
-                    onPress={() => {
-                      const taskDate = selectedDate.toISOString().split('T')[0];
-                      (navigation as any).navigate('TaskDetail', {
-                        taskId: task.id,
-                        taskDate,
-                      });
-                    }}
-                  />
-                ))}
-              </View>
-            )}
+            {/* 시간순 병합 목록 */}
+            {(() => {
+              type MergedItem =
+                | { kind: 'shared'; task: Task }
+                | { kind: 'personal'; task: PersonalTask };
+
+              const merged: MergedItem[] = [
+                ...selectedDateTasks.map(t => ({ kind: 'shared' as const, task: t })),
+                ...personalTasks.map(t => ({ kind: 'personal' as const, task: t })),
+              ].sort((a, b) => {
+                const tA = a.task.time ?? '';
+                const tB = b.task.time ?? '';
+                if (tA && tB) return tA.localeCompare(tB);
+                if (tA && !tB) return -1;
+                if (!tA && tB) return 1;
+                return a.task.createdAt.toMillis() - b.task.createdAt.toMillis();
+              });
+
+              if (merged.length === 0) {
+                return (
+                  <View style={styles.emptyTaskContainer}>
+                    <Ionicons name="calendar-outline" size={48} color="#cbd5e1" />
+                    <Text style={styles.emptyTaskText}>이 날짜에 등록된 업무가 없습니다</Text>
+                  </View>
+                );
+              }
+
+              return (
+                <View style={styles.taskList}>
+                  {merged.map(item => {
+                    if (item.kind === 'shared') {
+                      const sharedCat = item.task.categoryId
+                        ? categoryMap.get(item.task.categoryId)
+                        : undefined;
+                      return (
+                        <TaskCard
+                          key={`shared-${item.task.id}`}
+                          task={item.task}
+                          isAdmin={isAdmin}
+                          currentUserId={userData.userId}
+                          campUsers={campUsers}
+                          campCodeId={currentCampCodeId}
+                          category={sharedCat}
+                          onToggle={handleToggleComplete}
+                          onPress={() => {
+                            const taskDate = selectedDate.toISOString().split('T')[0];
+                            (navigation as any).navigate('TaskDetail', { taskId: item.task.id, taskDate });
+                          }}
+                        />
+                      );
+                    }
+                    // 개인 업무 카드 — 공통 업무 카드(TaskCard)와 동일한 구조
+                    const p = item.task;
+                    const personalCat = p.categoryId ? categoryMap.get(p.categoryId) : undefined;
+                    const timeStr = formatTime(p.time);
+                    const durationStr = formatDuration(p.estimatedDuration);
+                    return (
+                      <TouchableOpacity
+                        key={`personal-${p.id}`}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          const taskDate = selectedDate.toISOString().split('T')[0];
+                          (navigation as any).navigate('PersonalTaskDetail', { taskId: p.id, taskDate });
+                        }}
+                        accessibilityLabel={`개인 업무: ${p.title}`}
+                        accessibilityRole="button"
+                        style={[
+                          styles.taskCard,
+                          { opacity: p.isCompleted ? 0.6 : 1 },
+                        ]}
+                      >
+                        {/* 시간 배너 */}
+                        {timeStr ? (
+                          <View style={[styles.taskTimeBanner, styles.taskTimeBannerPurple]}>
+                            <Ionicons name="time-outline" size={13} color="#a855f7" />
+                            <Text style={[styles.taskTimeBannerText, styles.taskTimeBannerTextPurple]}>{timeStr}</Text>
+                            {durationStr ? (
+                              <Text style={[styles.taskTimeBannerDuration, styles.taskTimeBannerDurationPurple]}>({durationStr})</Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+
+                        <View style={styles.taskCardContent}>
+                          {/* 왼쪽: 체크박스 */}
+                          <TouchableOpacity
+                            onPress={e => { e.stopPropagation?.(); handlePersonalTaskToggle(p); }}
+                            style={styles.taskCheckbox}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            accessibilityLabel={p.isCompleted ? '완료 취소' : '완료 처리'}
+                            accessibilityRole="checkbox"
+                          >
+                            <Ionicons
+                              name={p.isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
+                              size={26}
+                              color={p.isCompleted ? '#a855f7' : '#d1d5db'}
+                            />
+                          </TouchableOpacity>
+
+                          {/* 가운데: 업무 정보 */}
+                          <View style={styles.taskInfo}>
+                            {personalCat && (
+                              <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${personalCat.color}22`, marginBottom: 4, alignSelf: 'flex-start' }}>
+                                <Text style={{ fontSize: 9, fontWeight: '700', color: personalCat.color }}>{personalCat.name}</Text>
+                              </View>
+                            )}
+                            <Text
+                              style={[styles.taskTitle, p.isCompleted && styles.taskTitleCompleted]}
+                              numberOfLines={2}
+                            >
+                              {p.title}
+                            </Text>
+                            {p.description ? (
+                              <Text style={[styles.taskRoles, { marginTop: 1 }]} numberOfLines={1}>{p.description}</Text>
+                            ) : null}
+                          </View>
+
+                          {/* 오른쪽: 화살표 */}
+                          <Ionicons name="chevron-forward" size={16} color="#d1d5db" style={{ flexShrink: 0 }} />
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              );
+            })()}
           </View>
         )}
       </ScrollView>
@@ -924,6 +1325,370 @@ export function TasksScreen() {
         }}
       />
 
+      {/* 개인 업무 추가/수정 모달 */}
+      <Modal
+        visible={showPersonalTaskModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowPersonalTaskModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingView}
+          >
+            <View style={styles.addModalContainer}>
+              {/* 헤더 */}
+              <View style={styles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={styles.modalTitle}>
+                    {editingPersonalTask ? '개인 업무 수정' : '개인 업무 추가'}
+                  </Text>
+                  <View style={{ backgroundColor: '#f3e8ff', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 11, color: '#7c3aed', fontWeight: '600' }}>나만 보임</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowPersonalTaskModal(false)}
+                  style={styles.closeButton}
+                  accessibilityLabel="닫기"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="close" size={24} color="#9ca3af" />
+                </TouchableOpacity>
+              </View>
+
+              {/* 폼 */}
+              <ScrollView style={styles.addModalContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={true}>
+
+                {/* 1. 날짜 및 시간 */}
+                <View style={{ marginBottom: 14, borderWidth: 1, borderColor: '#e9d5ff', backgroundColor: 'rgba(245,240,255,0.4)', borderRadius: 10, padding: 12 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827', marginBottom: (editingPersonalTask && !editingPersonalTask.groupId) ? 4 : 10 }}>
+                    📅 날짜 및 시간 <Text style={{ color: '#ef4444' }}>*</Text>
+                  </Text>
+                  {editingPersonalTask && !editingPersonalTask.groupId && (
+                    <Text style={{ fontSize: 11, color: '#7c3aed', marginBottom: 10 }}>
+                      수정 시 날짜는 하나만 선택할 수 있습니다
+                    </Text>
+                  )}
+                  {loadingPersonalGroupDates && (
+                    <Text style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10 }}>
+                      그룹 날짜 불러오는 중...
+                    </Text>
+                  )}
+
+                  {/* 달력 헤더 — 월 탐색 */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (personalTaskCalMonth === 0) {
+                          setPersonalTaskCalMonth(11);
+                          setPersonalTaskCalYear(y => y - 1);
+                        } else {
+                          setPersonalTaskCalMonth(m => m - 1);
+                        }
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="chevron-back" size={18} color="#6b7280" />
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151' }}>
+                      {personalTaskCalYear}년 {personalTaskCalMonth + 1}월
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (personalTaskCalMonth === 11) {
+                          setPersonalTaskCalMonth(0);
+                          setPersonalTaskCalYear(y => y + 1);
+                        } else {
+                          setPersonalTaskCalMonth(m => m + 1);
+                        }
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="chevron-forward" size={18} color="#6b7280" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* 요일 헤더 */}
+                  <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                    {DAYS_OF_WEEK.map((d, i) => (
+                      <Text
+                        key={d}
+                        style={{
+                          width: `${100 / 7}%` as unknown as number,
+                          textAlign: 'center',
+                          fontSize: 11,
+                          fontWeight: '600',
+                          color: i === 0 ? '#ef4444' : i === 6 ? '#3b82f6' : '#9ca3af',
+                        }}
+                      >
+                        {d}
+                      </Text>
+                    ))}
+                  </View>
+
+                  {/* 날짜 그리드 */}
+                  {(() => {
+                    const daysInMonth = new Date(personalTaskCalYear, personalTaskCalMonth + 1, 0).getDate();
+                    const firstDayOfMonth = new Date(personalTaskCalYear, personalTaskCalMonth, 1).getDay();
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const cells: React.ReactElement[] = [];
+
+                    // 빈 칸
+                    for (let i = 0; i < firstDayOfMonth; i++) {
+                      cells.push(<View key={`e${i}`} style={{ width: `${100 / 7}%` as unknown as number, height: 32 }} />);
+                    }
+
+                    for (let day = 1; day <= daysInMonth; day++) {
+                      const date = new Date(personalTaskCalYear, personalTaskCalMonth, day);
+                      const isSelected = personalTaskSelectedDates.some(
+                        d =>
+                          d.getFullYear() === date.getFullYear() &&
+                          d.getMonth() === date.getMonth() &&
+                          d.getDate() === date.getDate()
+                      );
+                      const isToday =
+                        today.getFullYear() === date.getFullYear() &&
+                        today.getMonth() === date.getMonth() &&
+                        today.getDate() === date.getDate();
+                      const dayOfWeek = date.getDay();
+                      const isSunday = dayOfWeek === 0;
+                      const isSaturday = dayOfWeek === 6;
+
+                      cells.push(
+                        <TouchableOpacity
+                          key={day}
+                          style={{ width: `${100 / 7}%` as unknown as number, height: 32, alignItems: 'center', justifyContent: 'center' }}
+                          disabled={loadingPersonalGroupDates}
+                          onPress={() => {
+                            // 그룹 날짜 로드 중에는 날짜 선택 불가 (로드 완료 후 덮어씌워짐 방지)
+                            if (loadingPersonalGroupDates) return;
+                            const idx = personalTaskSelectedDates.findIndex(
+                              d =>
+                                d.getFullYear() === date.getFullYear() &&
+                                d.getMonth() === date.getMonth() &&
+                                d.getDate() === date.getDate()
+                            );
+                            if (idx >= 0) {
+                              if (personalTaskSelectedDates.length > 1) {
+                                setPersonalTaskSelectedDates(prev => prev.filter((_, i) => i !== idx));
+                              }
+                            } else {
+                              setPersonalTaskSelectedDates(prev => [...prev, date]);
+                            }
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 6,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              opacity: loadingPersonalGroupDates ? 0.35 : 1,
+                              backgroundColor: isSelected ? '#7c3aed' : isToday ? '#f3e8ff' : 'transparent',
+                              borderWidth: isToday && !isSelected ? 1 : 0,
+                              borderColor: '#a78bfa',
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: isSelected || isToday ? '700' : '400',
+                                color: isSelected
+                                  ? '#fff'
+                                  : isToday
+                                  ? '#7c3aed'
+                                  : isSunday
+                                  ? '#ef4444'
+                                  : isSaturday
+                                  ? '#3b82f6'
+                                  : '#374151',
+                              }}
+                            >
+                              {day}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    }
+
+                    return (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                        {cells}
+                      </View>
+                    );
+                  })()}
+
+                  {/* 선택된 날짜 태그 */}
+                  {personalTaskSelectedDates.length > 0 && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                      {[...personalTaskSelectedDates]
+                        .sort((a, b) => a.getTime() - b.getTime())
+                        .map((d, i) => (
+                          <TouchableOpacity
+                            key={i}
+                            onPress={() => {
+                              if (personalTaskSelectedDates.length > 1) {
+                                setPersonalTaskSelectedDates(prev =>
+                                  prev.filter(
+                                    existing =>
+                                      !(
+                                        existing.getFullYear() === d.getFullYear() &&
+                                        existing.getMonth() === d.getMonth() &&
+                                        existing.getDate() === d.getDate()
+                                      )
+                                  )
+                                );
+                              }
+                            }}
+                            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ede9fe', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, gap: 4 }}
+                          >
+                            <Text style={{ fontSize: 11, color: '#7c3aed', fontWeight: '600' }}>
+                              {d.getMonth() + 1}/{d.getDate()} ({DAYS_OF_WEEK[d.getDay()]})
+                            </Text>
+                            <Text style={{ fontSize: 12, color: '#a78bfa' }}>×</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  )}
+
+                  {/* 시간 지정 */}
+                  <View style={{ marginTop: 10 }}>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}
+                      onPress={() => {
+                        setPersonalTaskHasTime(prev => !prev);
+                        if (personalTaskHasTime) setPersonalTaskTime('');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: personalTaskHasTime ? '#7c3aed' : '#d1d5db', backgroundColor: personalTaskHasTime ? '#7c3aed' : '#fff', alignItems: 'center', justifyContent: 'center' }}>
+                        {personalTaskHasTime && <Ionicons name="checkmark" size={12} color="#fff" />}
+                      </View>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>시간 지정</Text>
+                    </TouchableOpacity>
+                    {personalTaskHasTime && (
+                      <TextInput
+                        style={{ paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, fontSize: 14, color: '#111827' }}
+                        value={personalTaskTime}
+                        onChangeText={setPersonalTaskTime}
+                        placeholder="24시간 형식 (예: 14:30)"
+                        placeholderTextColor="#9ca3af"
+                        keyboardType="numbers-and-punctuation"
+                      />
+                    )}
+                  </View>
+                </View>
+
+                {/* 3. 예상 소요시간 — 분 단위 고정 */}
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>⏱️ 예상 소요시간 (선택)</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TextInput
+                      style={{ width: 80, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, fontSize: 14, color: '#111827', textAlign: 'center' }}
+                      value={personalTaskDuration}
+                      onChangeText={setPersonalTaskDuration}
+                      placeholder="0"
+                      placeholderTextColor="#9ca3af"
+                      keyboardType="numeric"
+                    />
+                    <Text style={{ fontSize: 13, color: '#6b7280', fontWeight: '600' }}>분</Text>
+                  </View>
+                </View>
+
+                {/* 4. 카테고리 선택 (카테고리 있는 경우만) */}
+                {categories.length > 0 && (
+                  <View style={{ marginBottom: 14 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>🏷️ 카테고리 (선택)</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {/* 없음 버튼 */}
+                      <TouchableOpacity
+                        onPress={() => setPersonalTaskCategoryId('')}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: personalTaskCategoryId === '' ? '#374151' : '#d1d5db',
+                          backgroundColor: personalTaskCategoryId === '' ? '#374151' : '#fff',
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: personalTaskCategoryId === '' ? '#fff' : '#6b7280' }}>없음</Text>
+                      </TouchableOpacity>
+                      {categories.map(cat => (
+                        <TouchableOpacity
+                          key={cat.id}
+                          onPress={() => setPersonalTaskCategoryId(cat.id)}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: personalTaskCategoryId === cat.id ? cat.color : `${cat.color}60`,
+                            backgroundColor: personalTaskCategoryId === cat.id ? cat.color : `${cat.color}18`,
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: personalTaskCategoryId === cat.id ? '#fff' : cat.color }}>
+                            {cat.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* 4-1. 업무 제목 */}
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>
+                    ✏️ 업무 제목 <Text style={{ color: '#ef4444' }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={{ paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, fontSize: 14, color: '#111827' }}
+                    value={personalTaskTitle}
+                    onChangeText={setPersonalTaskTitle}
+                    placeholder="예: 학생 피드백 정리"
+                    placeholderTextColor="#9ca3af"
+                  />
+                </View>
+
+                {/* 5. 업무 설명 */}
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>📝 업무 설명</Text>
+                  <TextInput
+                    style={{ paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, fontSize: 14, color: '#111827', minHeight: 72, textAlignVertical: 'top' }}
+                    value={personalTaskDesc}
+                    onChangeText={setPersonalTaskDesc}
+                    placeholder="업무에 대한 상세 설명"
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                {/* 저장 버튼 */}
+                <TouchableOpacity
+                  onPress={handlePersonalTaskSubmit}
+                  disabled={isSubmittingPersonal}
+                  style={{ paddingVertical: 14, backgroundColor: isSubmittingPersonal ? '#c4b5fd' : '#7c3aed', borderRadius: 12, alignItems: 'center', marginBottom: 8 }}
+                  activeOpacity={0.8}
+                >
+                  {isSubmittingPersonal ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff' }}>
+                      {editingPersonalTask ? '수정하기' : '추가하기'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
       {/* 풀 캘린더 날짜 클릭 바텀시트 */}
       {sheetVisible && (
         <Animated.View
@@ -953,99 +1718,226 @@ export function TasksScreen() {
               },
             ]}
           >
-            <Pressable onPress={() => {}}>
-              {/* 핸들 */}
+              {/* 핸들 — 드래그 영역 */}
               <View style={styles.sheetHandleArea}>
                 <View style={styles.sheetHandle} />
               </View>
 
               {/* 헤더 */}
               <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>
-                  {sheetDate
-                    ? `${sheetDate.getMonth() + 1}월 ${sheetDate.getDate()}일 (${DAYS_OF_WEEK[sheetDate.getDay()]})`
-                    : ''}
-                </Text>
-                <Text style={styles.sheetCount}>{sheetTasks.length}개 업무</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sheetTitle}>
+                    {sheetDate
+                      ? `${sheetDate.getMonth() + 1}월 ${sheetDate.getDate()}일 (${DAYS_OF_WEEK[sheetDate.getDay()]})`
+                      : ''}
+                  </Text>
+                  <Text style={styles.sheetCount}>{sheetTasks.length + sheetPersonalTasks.length}개 업무</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (sheetDate) {
+                      setEditingPersonalTask(null);
+                      setPersonalTaskTitle('');
+                      setPersonalTaskDesc('');
+                      setPersonalTaskHasTime(false);
+                      setPersonalTaskTime('');
+                      setPersonalTaskDuration('');
+                      setPersonalTaskSelectedDates([sheetDate]);
+                      setPersonalTaskCalMonth(sheetDate.getMonth());
+                      setPersonalTaskCalYear(sheetDate.getFullYear());
+                      setPersonalTaskCategoryId('');
+                      setShowPersonalTaskModal(true);
+                    }
+                  }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#faf5ff', borderWidth: 1, borderColor: '#d8b4fe', borderRadius: 8 }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={13} color="#7c3aed" />
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#7c3aed' }}>내 업무</Text>
+                </TouchableOpacity>
               </View>
 
-              {/* 업무 목록 — key로 ref 변경 시 리렌더 보장 */}
+              {/* 업무 목록 — 공통+개인 시간순 병합, 업무카드 UI */}
               <ScrollView
                 key={sheetRenderKey}
                 style={styles.sheetScrollView}
-                contentContainerStyle={styles.sheetScrollContent}
+                contentContainerStyle={styles.sheetScrollContentCard}
                 showsVerticalScrollIndicator={false}
-                bounces={false}
+                bounces={true}
                 scrollEventThrottle={16}
                 onScroll={(e) => {
                   sheetScrollOffsetY.current = e.nativeEvent.contentOffset.y;
                 }}
+                onScrollBeginDrag={() => {
+                  sheetScrollOffsetY.current = Math.max(sheetScrollOffsetY.current, 1);
+                }}
+                onScrollEndDrag={(e) => {
+                  sheetScrollOffsetY.current = e.nativeEvent.contentOffset.y;
+                }}
               >
-                {sheetTasks.length === 0 ? (
-                  <View style={styles.sheetEmpty}>
-                    <Ionicons name="calendar-outline" size={40} color="#cbd5e1" />
-                    <Text style={styles.sheetEmptyText}>등록된 업무가 없습니다</Text>
-                  </View>
-                ) : (
-                  sheetTasks.map(task => {
-                    const isDone = task.completions.some(c => c.userId === userData.userId);
-                    const timeStr = formatTime(task.time);
-                    const taskDate = sheetDate
-                      ? sheetDate.toISOString().split('T')[0]
-                      : selectedDate.toISOString().split('T')[0];
-                    return (
-                      <TouchableOpacity
-                        key={task.id}
-                        style={styles.sheetTaskRow}
-                        onPress={() => {
-                          (navigation as any).navigate('TaskDetail', { taskId: task.id, taskDate });
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        {/* 체크박스 */}
-                        <TouchableOpacity
-                          onPress={(e) => { e.stopPropagation(); handleSheetToggle(task.id); }}
-                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                          style={styles.sheetTaskCheck}
-                        >
-                          <Ionicons
-                            name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
-                            size={26}
-                            color={isDone ? '#3b82f6' : '#d1d5db'}
-                          />
-                        </TouchableOpacity>
-
-                        {/* 업무 정보 */}
-                        <View style={styles.sheetTaskInfo}>
-                          <Text
-                            style={[styles.sheetTaskTitle, isDone && styles.sheetTaskTitleDone]}
-                            numberOfLines={2}
-                          >
-                            {task.title}
-                          </Text>
-                          <View style={styles.sheetTaskMeta}>
-                            {timeStr ? (
-                              <Text style={styles.sheetTaskTime}>{timeStr}</Text>
-                            ) : null}
-                            <Text style={styles.sheetTaskRoles} numberOfLines={1}>
-                              {task.targetRoles.join(' · ')}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {/* 상세 화살표 */}
-                        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
+                <SheetTaskList
+                  sheetTasks={sheetTasks}
+                  sheetPersonalTasks={sheetPersonalTasks}
+                  isAdmin={isAdmin}
+                  userData={userData}
+                  campUsers={campUsers}
+                  currentCampCodeId={currentCampCodeId}
+                  categoryMap={categoryMap}
+                  sheetDate={sheetDate}
+                  selectedDate={selectedDate}
+                  onSheetToggle={handleSheetToggle}
+                  onSheetPersonalToggle={handleSheetPersonalToggle}
+                  onNavigateTask={(taskId, taskDate) => {
+                    closeSheet();
+                    (navigation as any).navigate('TaskDetail', { taskId, taskDate });
+                  }}
+                  onNavigatePersonal={(taskId, taskDate) => {
+                    closeSheet();
+                    (navigation as any).navigate('PersonalTaskDetail', { taskId, taskDate });
+                  }}
+                />
               </ScrollView>
-            </Pressable>
           </Animated.View>
           </GestureDetector>
         </Animated.View>
       )}
     </View>
+  );
+}
+
+// 바텀시트 업무 목록 컴포넌트 — 별도 컴포넌트로 분리해 렌더 격리
+function SheetTaskList({
+  sheetTasks,
+  sheetPersonalTasks,
+  isAdmin,
+  userData,
+  campUsers,
+  currentCampCodeId,
+  categoryMap,
+  sheetDate,
+  selectedDate,
+  onSheetToggle,
+  onSheetPersonalToggle,
+  onNavigateTask,
+  onNavigatePersonal,
+}: {
+  sheetTasks: Task[];
+  sheetPersonalTasks: PersonalTask[];
+  isAdmin: boolean;
+  userData: { userId: string; name: string } | null;
+  campUsers: User[];
+  currentCampCodeId: string;
+  categoryMap: Map<string, TaskCategory>;
+  sheetDate: Date | null;
+  selectedDate: Date;
+  onSheetToggle: (taskId: string) => void;
+  onSheetPersonalToggle: (task: PersonalTask) => void;
+  onNavigateTask: (taskId: string, taskDate: string) => void;
+  onNavigatePersonal: (taskId: string, taskDate: string) => void;
+}) {
+  type MergedItem =
+    | { kind: 'shared'; task: Task }
+    | { kind: 'personal'; task: PersonalTask };
+
+  const merged: MergedItem[] = [
+    ...sheetTasks.map(t => ({ kind: 'shared' as const, task: t })),
+    ...sheetPersonalTasks.map(t => ({ kind: 'personal' as const, task: t })),
+  ].sort((a, b) => {
+    const tA = a.task.time ?? '';
+    const tB = b.task.time ?? '';
+    if (tA && tB) return tA.localeCompare(tB);
+    if (tA && !tB) return -1;
+    if (!tA && tB) return 1;
+    return a.task.createdAt.toMillis() - b.task.createdAt.toMillis();
+  });
+
+  if (merged.length === 0) {
+    return (
+      <View style={styles.sheetEmpty}>
+        <Ionicons name="calendar-outline" size={40} color="#cbd5e1" />
+        <Text style={styles.sheetEmptyText}>등록된 업무가 없습니다</Text>
+      </View>
+    );
+  }
+
+  const baseDateStr = sheetDate
+    ? sheetDate.toISOString().split('T')[0]
+    : selectedDate.toISOString().split('T')[0];
+
+  return (
+    <>
+      {merged.map((item, idx) => {
+        if (item.kind === 'shared') {
+          const task = item.task;
+          const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
+          return (
+            <View key={`sheet-shared-${task.id}`} style={idx > 0 ? { marginTop: 8 } : undefined}>
+              <TaskCard
+                task={task}
+                isAdmin={isAdmin}
+                currentUserId={userData?.userId ?? ''}
+                campUsers={campUsers}
+                campCodeId={currentCampCodeId}
+                category={cat}
+                onToggle={onSheetToggle}
+                onPress={() => onNavigateTask(task.id, baseDateStr)}
+              />
+            </View>
+          );
+        }
+        const p = item.task;
+        const cat = p.categoryId ? categoryMap.get(p.categoryId) : undefined;
+        const timeStr = formatTime(p.time);
+        const durationStr = formatDuration(p.estimatedDuration);
+        return (
+          <TouchableOpacity
+            key={`sheet-personal-${p.id}`}
+            style={[styles.taskCard, idx > 0 ? { marginTop: 8 } : undefined, { opacity: p.isCompleted ? 0.6 : 1 }]}
+            onPress={() => onNavigatePersonal(p.id, baseDateStr)}
+            activeOpacity={0.7}
+          >
+            {timeStr ? (
+              <View style={[styles.taskTimeBanner, styles.taskTimeBannerPurple]}>
+                <Ionicons name="time-outline" size={13} color="#a855f7" />
+                <Text style={[styles.taskTimeBannerText, styles.taskTimeBannerTextPurple]}>{timeStr}</Text>
+                {durationStr ? (
+                  <Text style={[styles.taskTimeBannerDuration, styles.taskTimeBannerDurationPurple]}>({durationStr})</Text>
+                ) : null}
+              </View>
+            ) : null}
+            <View style={styles.taskCardContent}>
+              <TouchableOpacity
+                onPress={() => onSheetPersonalToggle(p)}
+                style={styles.taskCheckbox}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel={p.isCompleted ? '완료 취소' : '완료 처리'}
+                accessibilityRole="checkbox"
+              >
+                <Ionicons
+                  name={p.isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={26}
+                  color={p.isCompleted ? '#a855f7' : '#d1d5db'}
+                />
+              </TouchableOpacity>
+              <View style={styles.taskInfo}>
+                {cat && (
+                  <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${cat.color}22`, marginBottom: 4, alignSelf: 'flex-start' }}>
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: cat.color }}>{cat.name}</Text>
+                  </View>
+                )}
+                <Text style={[styles.taskTitle, p.isCompleted && styles.taskTitleCompleted]} numberOfLines={2}>
+                  {p.title}
+                </Text>
+                {p.description ? (
+                  <Text style={styles.taskRoles} numberOfLines={1}>{p.description}</Text>
+                ) : null}
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </>
   );
 }
 
@@ -1056,6 +1948,7 @@ function TaskCard({
   currentUserId,
   campUsers,
   campCodeId,
+  category,
   onToggle,
   onPress,
 }: {
@@ -1064,6 +1957,7 @@ function TaskCard({
   currentUserId: string;
   campUsers: User[];
   campCodeId: string;
+  category?: TaskCategory;
   onToggle: (taskId: string) => void;
   onPress: () => void;
 }) {
@@ -1093,11 +1987,18 @@ function TaskCard({
 
   return (
     <TouchableOpacity
-      style={styles.taskCard}
+      style={[
+        styles.taskCard,
+        {
+          borderLeftWidth: 4,
+          borderLeftColor: '#3b82f6',
+          opacity: isCompleted ? 0.6 : 1,
+        },
+      ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      {/* 시간이 있는 경우 상단 시간 배너 (관리자/일반 유저 공통) */}
+      {/* 시간 배너 — 항상 파란색 고정 */}
       {timeStr ? (
         <View style={styles.taskTimeBanner}>
           <Ionicons name="time-outline" size={13} color="#3b82f6" />
@@ -1109,31 +2010,44 @@ function TaskCard({
       ) : null}
 
       <View style={styles.taskCardContent}>
-        {/* 왼쪽: 업무 정보 */}
+        {/* 왼쪽: 체크박스 */}
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation();
+            onToggle(task.id);
+          }}
+          style={styles.taskCheckbox}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel={isCompleted ? '완료 취소' : '완료 처리'}
+          accessibilityRole="checkbox"
+        >
+          <Ionicons
+            name={isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
+            size={26}
+            color={isCompleted ? '#3b82f6' : '#d1d5db'}
+          />
+        </TouchableOpacity>
+
+        {/* 가운데: 업무 정보 */}
         <View style={[styles.taskInfo, isAdmin && adminCompletionStatus && styles.taskInfoWithAdmin]}>
-          
-          <Text
-            style={[
-              styles.taskTitle,
-              isCompleted && styles.taskTitleCompleted,
-            ]}
-          >
+          {/* 카테고리 배지 */}
+          {category && (
+            <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${category.color}22`, marginBottom: 4, alignSelf: 'flex-start' }}>
+              <Text style={{ fontSize: 9, fontWeight: '700', color: category.color }}>{category.name}</Text>
+            </View>
+          )}
+          <Text style={[styles.taskTitle, isCompleted && styles.taskTitleCompleted]}>
             {task.title}
           </Text>
-          
           <View style={styles.taskFooter}>
-            <Text style={styles.taskRoles}>
-              {task.targetRoles.join(', ')}
-            </Text>
+            <Text style={styles.taskRoles}>{task.targetRoles.join(', ')}</Text>
             {task.attachments && task.attachments.length > 0 && (
-              <Text style={styles.taskAttachments}>
-                📎 {task.attachments.length}
-              </Text>
+              <Text style={styles.taskAttachments}>📎 {task.attachments.length}</Text>
             )}
           </View>
         </View>
 
-        {/* 오른쪽: 관리자용 완료 현황 또는 체크박스 */}
+        {/* 오른쪽: 관리자용 완료 현황 또는 화살표 */}
         {isAdmin && adminCompletionStatus ? (
           <View style={styles.adminCompletionArea}>
             <View style={styles.adminCompletionNames}>
@@ -1150,20 +2064,7 @@ function TaskCard({
             </View>
           </View>
         ) : (
-          <TouchableOpacity
-            onPress={(e) => {
-              e.stopPropagation();
-              onToggle(task.id);
-            }}
-            style={styles.taskCheckbox}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons
-              name={isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
-              size={28}
-              color={isCompleted ? '#3b82f6' : '#d1d5db'}
-            />
-          </TouchableOpacity>
+          <Ionicons name="chevron-forward" size={16} color="#d1d5db" style={{ flexShrink: 0 }} />
         )}
       </View>
     </TouchableOpacity>
@@ -2180,12 +3081,15 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   compactDayLabelToday: {
-    color: '#3b82f6',
+    color: '#111827',
     fontWeight: '700',
   },
   compactDayLabelTodaySunday: {
     color: '#ef4444',
     fontWeight: '700',
+  },
+  compactDayLabelWrapToday: {
+    backgroundColor: '#e5e7eb',
   },
   compactDayLabelSelected: {
     color: '#ffffff',
@@ -2247,7 +3151,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#374151',
     textAlign: 'center',
-    marginBottom: 2,
   },
   fullCalendarDayNumSelected: {
     color: '#1d4ed8',
@@ -2259,15 +3162,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     marginBottom: 1,
   },
-  fullCalendarChipPending: {
-    backgroundColor: '#e5e7eb',
-  },
-  fullCalendarChipDone: {
-    backgroundColor: '#d1fae5',
-  },
   fullCalendarChipText: {
     fontSize: 8,
-    color: '#374151',
     lineHeight: 11,
   },
   fullCalendarMore: {
@@ -2345,6 +3241,26 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
     fontWeight: '600',
   },
+  calendarDayTextTodayDark: {
+    color: '#111827',
+    fontWeight: '700',
+  },
+  calendarDayTextTodaySunday: {
+    color: '#ef4444',
+    fontWeight: '700',
+  },
+  fullCalendarDayNumWrap: {
+    alignSelf: 'center',
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    marginBottom: 2,
+  },
+  fullCalendarDayNumWrapToday: {
+    backgroundColor: '#e5e7eb',
+  },
   taskDot: {
     position: 'absolute',
     bottom: 4,
@@ -2420,6 +3336,16 @@ const styles = StyleSheet.create({
   taskTimeBannerDuration: {
     fontSize: 11,
     color: '#60a5fa',
+  },
+  taskTimeBannerPurple: {
+    backgroundColor: '#faf5ff',
+    borderBottomColor: '#e9d5ff',
+  },
+  taskTimeBannerTextPurple: {
+    color: '#9333ea',
+  },
+  taskTimeBannerDurationPurple: {
+    color: '#c084fc',
   },
   taskCardContent: {
     flexDirection: 'row',
@@ -3167,10 +4093,15 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   sheetScrollView: {
-    flexShrink: 1,
+    maxHeight: Dimensions.get('window').height * 0.65,
   },
   sheetScrollContent: {
     paddingVertical: 8,
+  },
+  sheetScrollContentCard: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 20,
   },
   sheetEmpty: {
     alignItems: 'center',
