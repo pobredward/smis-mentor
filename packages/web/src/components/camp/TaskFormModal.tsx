@@ -315,8 +315,8 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
       return;
     }
 
-    // 시간 형식 검증 (24시간 형식: HH:mm)
-    if (hasTime && time) {
+    // 시간 형식 검증 — 값이 있을 때만 (24시간 HH:mm)
+    if (time) {
       const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timePattern.test(time)) {
         toast.error('시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
@@ -348,7 +348,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
         targetRoles: selectedRoles,
         targetGroups: selectedGroups,
         // 시간이 없는 경우 수정 모드에서 기존 값을 삭제하기 위해 null 전달
-        time: hasTime && time ? time : (isEdit ? null : undefined),
+        time: time || (isEdit ? null : undefined),
         // 소요시간이 없는 경우 수정 모드에서 기존 값을 삭제하기 위해 null 전달
         estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
           ? { value: parseFloat(durationMinutes), unit: 'minutes' as const }
@@ -641,28 +641,43 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
               </div>
             )}
 
-            {/* 시간 입력 */}
-            <div>
-              <label className="flex items-center gap-2 mb-1.5">
-                <input
-                  type="checkbox"
-                  checked={hasTime}
-                  onChange={e => setHasTime(e.target.checked)}
-                  className="w-3 h-3"
-                />
-                <span className="text-xs font-medium text-gray-700">시간 지정</span>
-              </label>
-
-              {hasTime && (
+            {/* 시간 지정 & 예상 소요시간 (선택) */}
+            <div className="flex gap-3">
+              {/* 시간 지정 */}
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  🕐 시간 지정 <span className="font-normal">(선택)</span>
+                </label>
                 <input
                   type="text"
                   value={time}
-                  onChange={e => setTime(e.target.value)}
-                  placeholder="24시간 형식 (예: 14:30)"
+                  onChange={e => {
+                    setTime(e.target.value);
+                    setHasTime(e.target.value.length > 0);
+                  }}
+                  placeholder="예: 14:30"
                   pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-              )}
+              </div>
+              {/* 예상 소요시간 */}
+              <div className="w-28">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  ⏱️ 소요시간 <span className="font-normal">(선택)</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={durationMinutes}
+                    onChange={e => setDurationMinutes(e.target.value)}
+                    placeholder="0"
+                    className="w-16 px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <span className="text-xs text-gray-500 shrink-0">분</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -757,24 +772,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             </div>
           </div>
 
-          {/* 4. 예상 소요시간 (선택) */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">⏱️ 예상 소요시간 (선택)</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                step="1"
-                min="0"
-                value={durationMinutes}
-                onChange={e => setDurationMinutes(e.target.value)}
-                placeholder="0"
-                className="w-20 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <span className="text-xs text-gray-600">분</span>
-            </div>
-          </div>
-
-          {/* 5. 업무 제목 */}
+          {/* 4. 업무 제목 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               ✏️ 업무 제목 <span className="text-red-500">*</span>
@@ -789,7 +787,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             />
           </div>
 
-          {/* 6. 업무 설명 */}
+          {/* 5. 업무 설명 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">📝 업무 설명</label>
             <textarea
@@ -801,7 +799,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             />
           </div>
 
-          {/* 6. 첨부파일 및 링크 */}
+          {/* 6. 첨부파일 및 링크 (번호 유지) */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">📎 첨부파일 및 링크</label>
             <div className="space-y-2">

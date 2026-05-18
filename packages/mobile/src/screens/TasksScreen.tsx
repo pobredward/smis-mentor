@@ -2767,8 +2767,8 @@ function TaskAddModal({
       return;
     }
 
-    // 시간 형식 검증
-    if (hasTime && time) {
+    // 시간 형식 검증 — 값이 있을 때만
+    if (time) {
       const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timePattern.test(time)) {
         Alert.alert('오류', '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
@@ -2781,7 +2781,7 @@ function TaskAddModal({
       const commonUpdates = {
         title: title.trim(),
         description: description.trim(),
-        time: hasTime && time ? time : undefined,
+        time: time || undefined,
         estimatedDuration:
           estimatedDuration && !isNaN(Number(estimatedDuration))
             ? { value: Number(estimatedDuration), unit: 'minutes' as const }
@@ -3054,30 +3054,43 @@ function TaskAddModal({
                 )}
               </View>
 
-              {/* 시간 지정 체크박스 */}
-              <View style={styles.timeCheckboxContainer}>
-                <TouchableOpacity
-                  style={styles.checkboxButton}
-                  onPress={() => setHasTime(!hasTime)}
-                >
-                  <View style={[styles.timeCheckbox, hasTime && styles.checkboxChecked]}>
-                    {hasTime && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+              {/* 시간 지정 & 예상 소요시간 (선택) */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                {/* 시간 지정 */}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#9ca3af', marginBottom: 5 }}>
+                    🕐 시간 지정 (선택)
+                  </Text>
+                  <TextInput
+                    style={[styles.formInput, { marginBottom: 0 }]}
+                    value={time}
+                    onChangeText={val => {
+                      setTime(val);
+                      setHasTime(val.length > 0);
+                    }}
+                    placeholder="예: 14:30"
+                    placeholderTextColor="#9ca3af"
+                    keyboardType="numbers-and-punctuation"
+                  />
+                </View>
+                {/* 예상 소요시간 */}
+                <View style={{ width: 100 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#9ca3af', marginBottom: 5 }}>
+                    ⏱️ 소요시간 (선택)
+                  </Text>
+                  <View style={styles.durationContainer}>
+                    <TextInput
+                      style={[styles.formInput, styles.durationInput, { marginBottom: 0 }]}
+                      value={estimatedDuration}
+                      onChangeText={setEstimatedDuration}
+                      placeholder="0"
+                      placeholderTextColor="#9ca3af"
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.durationUnitLabel}>분</Text>
                   </View>
-                  <Text style={styles.checkboxLabel}>시간 지정</Text>
-                </TouchableOpacity>
+                </View>
               </View>
-
-              {/* 시간 입력 */}
-              {hasTime && (
-                <TextInput
-                  style={styles.formInput}
-                  value={time}
-                  onChangeText={setTime}
-                  placeholder="24시간 형식 (예: 14:30)"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="numbers-and-punctuation"
-                />
-              )}
             </View>
 
             {/* 2. 카테고리 (선택) */}
@@ -3211,23 +3224,7 @@ function TaskAddModal({
               />
             </View>
 
-            {/* 6. 소요 시간 (옵션) */}
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>⏱️ 예상 소요시간 (선택)</Text>
-              <View style={styles.durationContainer}>
-                <TextInput
-                  style={[styles.formInput, styles.durationInput]}
-                  value={estimatedDuration}
-                  onChangeText={setEstimatedDuration}
-                  placeholder="0"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="numeric"
-                />
-                <Text style={styles.durationUnitLabel}>분</Text>
-              </View>
-            </View>
-
-            {/* 7. 첨부파일 및 링크 */}
+            {/* 6. 첨부파일 및 링크 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>📎 첨부파일 및 링크</Text>
               
