@@ -1,7 +1,7 @@
 'use client';
 import { logger } from '@smis-mentor/shared';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { createTask, updateTask, deleteTask, uploadTaskImage, uploadTaskFile, getTasksByGroupId, updateTaskGroup } from '@/lib/taskService';
@@ -454,10 +454,26 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
   const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
+  // 드래그 중 오버레이로 마우스가 넘어가도 모달이 닫히지 않도록
+  // mousedown이 오버레이에서 시작되고 mouseup도 오버레이에서 끝난 경우에만 닫힘
+  const mouseDownOnOverlay = useRef(false);
+
+  const handleOverlayMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    mouseDownOnOverlay.current = e.target === e.currentTarget;
+  }, []);
+
+  const handleOverlayMouseUp = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (mouseDownOnOverlay.current && e.target === e.currentTarget) {
+      onClose();
+    }
+    mouseDownOnOverlay.current = false;
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 pb-20 sm:pb-4 overflow-y-auto"
-      onClick={onClose}
+      onMouseDown={handleOverlayMouseDown}
+      onMouseUp={handleOverlayMouseUp}
     >
       <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8" onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
