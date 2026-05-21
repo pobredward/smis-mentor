@@ -23,12 +23,14 @@ interface StudentListProps {
   filterType: 'class' | 'room';
   onStudentPress: (student: STSheetStudent, index: number, students: STSheetStudent[]) => void;
   onCampTypeChange?: (campType: CampType) => void;
+  isForeign?: boolean;
 }
 
 export const StudentList: React.FC<StudentListProps> = ({
   filterType,
   onStudentPress,
   onCampTypeChange,
+  isForeign,
 }) => {
   const { userData } = useAuth();
   const queryClient = useQueryClient();
@@ -269,8 +271,8 @@ export const StudentList: React.FC<StudentListProps> = ({
     return (
       <View style={styles.centerContainer}>
         <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
-        <Text style={styles.loginRequiredTitle}>로그인 필요</Text>
-        <Text style={styles.emptyText}>로그인 후 이용 가능합니다.</Text>
+        <Text style={styles.loginRequiredTitle}>{isForeign ? 'Login Required' : '로그인 필요'}</Text>
+        <Text style={styles.emptyText}>{isForeign ? 'Please log in to access this page.' : '로그인 후 이용 가능합니다.'}</Text>
       </View>
     );
   }
@@ -279,7 +281,7 @@ export const StudentList: React.FC<StudentListProps> = ({
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>학생 목록 로딩 중...</Text>
+        <Text style={styles.loadingText}>{isForeign ? 'Loading student list...' : '학생 목록 로딩 중...'}</Text>
       </View>
     );
   }
@@ -289,14 +291,16 @@ export const StudentList: React.FC<StudentListProps> = ({
       {/* 헤더 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {filterType === 'class' ? '반 명단' : '방 명단'}
+          {filterType === 'class'
+            ? (isForeign ? 'Class Roster' : '반 명단')
+            : (isForeign ? 'Room Roster' : '방 명단')}
         </Text>
         <View style={styles.headerActions}>
           {isSearchExpanded ? (
             <View style={styles.searchContainer}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="이름 검색..."
+                placeholder={isForeign ? 'Search by name...' : '이름 검색...'}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus
@@ -328,7 +332,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                 disabled={syncing}
               >
                 <Text style={styles.syncButtonText}>
-                  {syncing ? '동기화 중...' : '동기화'}
+                  {syncing ? (isForeign ? 'Syncing...' : '동기화 중...') : (isForeign ? 'Sync' : '동기화')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -339,7 +343,9 @@ export const StudentList: React.FC<StudentListProps> = ({
                 onPress={handleToggleTemporaryData}
               >
                 <Text style={styles.toggleButtonText}>
-                  {useTemporaryDataSetting ? '임시OFF' : '임시ON'}
+                  {useTemporaryDataSetting
+                    ? (isForeign ? 'Temp OFF' : '임시OFF')
+                    : (isForeign ? 'Temp ON' : '임시ON')}
                 </Text>
               </TouchableOpacity>
             </>
@@ -352,12 +358,12 @@ export const StudentList: React.FC<StudentListProps> = ({
         <View style={styles.warningBanner}>
           <Ionicons name="information-circle" size={16} color="#d97706" />
           <Text style={styles.warningText}>
-            <Text style={styles.warningBold}>임시 데이터입니다. </Text>
-            {hasRealData 
-              ? '관리자가 임시 데이터 표시를 활성화했습니다.'
-              : filterType === 'class' 
-                ? '반 배정이 완료되면 실제 명단으로 표기됩니다.'
-                : '방 배정이 완료되면 실제 명단으로 표기됩니다.'}
+            <Text style={styles.warningBold}>{isForeign ? 'Temporary data. ' : '임시 데이터입니다. '}</Text>
+            {hasRealData
+              ? (isForeign ? 'Temporary data display is enabled by an administrator.' : '관리자가 임시 데이터 표시를 활성화했습니다.')
+              : filterType === 'class'
+                ? (isForeign ? 'The actual roster will be shown once class assignments are complete.' : '반 배정이 완료되면 실제 명단으로 표기됩니다.')
+                : (isForeign ? 'The actual roster will be shown once room assignments are complete.' : '방 배정이 완료되면 실제 명단으로 표기됩니다.')}
           </Text>
         </View>
       )}
@@ -464,7 +470,9 @@ export const StudentList: React.FC<StudentListProps> = ({
       {searchQuery.trim() && (
         <View style={styles.searchResultHeader}>
           <Text style={styles.searchResultText}>
-            "{searchQuery}" 검색 결과: {filteredStudents.length}명
+            {isForeign
+              ? `"${searchQuery}" results: ${filteredStudents.length} student${filteredStudents.length !== 1 ? 's' : ''}`
+              : `"${searchQuery}" 검색 결과: ${filteredStudents.length}명`}
           </Text>
         </View>
       )}
@@ -480,7 +488,7 @@ export const StudentList: React.FC<StudentListProps> = ({
         >
           {displayStudents.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>유닛을 선택해주세요.</Text>
+              <Text style={styles.emptyText}>{isForeign ? 'Please select a unit.' : '유닛을 선택해주세요.'}</Text>
             </View>
           ) : (() => {
             // 호수별로 그룹화
@@ -488,7 +496,7 @@ export const StudentList: React.FC<StudentListProps> = ({
               displayStudents
                 .sort((a, b) => (a.roomNumber || '').localeCompare(b.roomNumber || ''))
                 .reduce((acc, student) => {
-                  const room = student.roomNumber || '미배정';
+                  const room = student.roomNumber || (isForeign ? 'Unassigned' : '미배정');
                   if (!acc[room]) acc[room] = [];
                   acc[room].push(student);
                   return acc;

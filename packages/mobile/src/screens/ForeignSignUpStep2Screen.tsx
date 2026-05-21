@@ -11,10 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Image,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { getUserByEmail } from '../services/authService';
 
@@ -27,10 +24,6 @@ interface ForeignSignUpStep2ScreenProps {
   onNext: (data: {
     email: string;
     password: string;
-    profileImage?: string;
-    cvFile?: any;
-    passportPhoto?: string;
-    foreignIdCard?: string;
   }) => void;
   onBack: () => void;
 }
@@ -52,11 +45,6 @@ export function ForeignSignUpStep2Screen({
   const [isLoading, setIsLoading] = useState(false);
   const [emailExists, setEmailExists] = useState(false);
 
-  const [profileImage, setProfileImage] = useState<string | undefined>(undefined);
-  const [cvFile, setCvFile] = useState<any>(undefined);
-  const [passportPhoto, setPassportPhoto] = useState<string | undefined>(undefined);
-  const [foreignIdCard, setForeignIdCard] = useState<string | undefined>(undefined);
-
   const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
   const validateEmail = (email: string) => {
@@ -72,77 +60,6 @@ export function ForeignSignUpStep2Screen({
       } catch (error) {
         logger.error('Email duplicate check error:', error);
       }
-    }
-  };
-
-  const pickProfileImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Gallery access permission is required.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri);
-    }
-  };
-
-  const pickCVFile = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-      });
-
-      if (!result.canceled) {
-        setCvFile(result.assets[0]);
-      }
-    } catch (error) {
-      logger.error('CV file selection error:', error);
-      Alert.alert('Error', 'An error occurred while selecting the CV file.');
-    }
-  };
-
-  const pickPassportPhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Gallery access permission is required.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setPassportPhoto(result.assets[0].uri);
-    }
-  };
-
-  const pickForeignIdCard = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Gallery access permission is required.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setForeignIdCard(result.assets[0].uri);
     }
   };
 
@@ -180,21 +97,6 @@ export function ForeignSignUpStep2Screen({
       return;
     }
 
-    if (!profileImage) {
-      Alert.alert('Input Error', 'Please upload a profile photo.');
-      return;
-    }
-
-    if (!cvFile) {
-      Alert.alert('Input Error', 'Please upload your CV (PDF).');
-      return;
-    }
-
-    if (!passportPhoto) {
-      Alert.alert('Input Error', 'Please upload your Passport Photo.');
-      return;
-    }
-
     setIsLoading(true);
     try {
       const existingUser = await getUserByEmail(email);
@@ -205,14 +107,7 @@ export function ForeignSignUpStep2Screen({
         return;
       }
 
-      onNext({
-        email,
-        password,
-        profileImage,
-        cvFile,
-        passportPhoto,
-        foreignIdCard,
-      });
+      onNext({ email, password });
     } catch (error) {
       logger.error('Account information verification error:', error);
       Alert.alert('Error', 'An error occurred while verifying account information.');
@@ -230,11 +125,11 @@ export function ForeignSignUpStep2Screen({
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Foreign Teacher Sign Up</Text>
-            <Text style={styles.subtitle}>Please upload your account information and documents</Text>
+            <Text style={styles.subtitle}>Set up your account credentials</Text>
           </View>
 
           <View style={styles.form}>
-            <Text style={styles.stepIndicator}>Step 2/2: Account Information & Documents</Text>
+            <Text style={styles.stepIndicator}>Step 2/2: Account Information</Text>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
@@ -308,72 +203,19 @@ export function ForeignSignUpStep2Screen({
 
             <View style={styles.divider} />
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Profile Photo *</Text>
-              <TouchableOpacity
-                style={styles.uploadButton}
-                onPress={pickProfileImage}
-                disabled={isLoading}
-              >
-                <Ionicons name="image-outline" size={24} color="#3b82f6" />
-                <Text style={styles.uploadButtonText}>
-                  {profileImage ? 'Change Profile Photo' : 'Upload Profile Photo'}
+            {/* 서류 업로드 안내 */}
+            <View style={styles.infoBox}>
+              <Ionicons name="information-circle-outline" size={20} color="#3b82f6" style={styles.infoIcon} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoTitle}>Document Upload Required After Registration</Text>
+                <Text style={styles.infoText}>
+                  After completing registration, please upload the following documents in <Text style={styles.infoTextBold}>Profile Edit</Text>:
                 </Text>
-              </TouchableOpacity>
-              {profileImage && (
-                <Image source={{ uri: profileImage }} style={styles.previewImage} />
-              )}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>CV (PDF) *</Text>
-              <TouchableOpacity
-                style={styles.uploadButton}
-                onPress={pickCVFile}
-                disabled={isLoading}
-              >
-                <Ionicons name="document-text-outline" size={24} color="#3b82f6" />
-                <Text style={styles.uploadButtonText}>
-                  {cvFile ? cvFile.name : 'Upload CV (PDF Format)'}
-                </Text>
-              </TouchableOpacity>
-              {cvFile && (
-                <Text style={styles.fileInfo}>Selected file: {cvFile.name}</Text>
-              )}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Passport Photo *</Text>
-              <TouchableOpacity
-                style={styles.uploadButton}
-                onPress={pickPassportPhoto}
-                disabled={isLoading}
-              >
-                <Ionicons name="card-outline" size={24} color="#3b82f6" />
-                <Text style={styles.uploadButtonText}>
-                  {passportPhoto ? 'Change Passport Photo' : 'Upload Passport Photo'}
-                </Text>
-              </TouchableOpacity>
-              {passportPhoto && (
-                <Image source={{ uri: passportPhoto }} style={styles.previewImage} />
-              )}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Alien Registration Card (Optional)</Text>
-              <TouchableOpacity
-                style={styles.uploadButton}
-                onPress={pickForeignIdCard}
-                disabled={isLoading}
-              >
-                <Ionicons name="card-outline" size={24} color="#64748b" />
-                <Text style={[styles.uploadButtonText, styles.uploadButtonTextOptional]}>
-                  {foreignIdCard ? 'Change Alien Registration Card' : 'Upload Alien Registration Card'}
-                </Text>
-              </TouchableOpacity>
-              {foreignIdCard && (
-                <Image source={{ uri: foreignIdCard }} style={styles.previewImage} />
-              )}
+                <Text style={styles.infoItem}>• Profile Photo</Text>
+                <Text style={styles.infoItem}>• CV (PDF)</Text>
+                <Text style={styles.infoItem}>• Passport Photo</Text>
+                <Text style={styles.infoItem}>• Alien Registration Card (if applicable)</Text>
+              </View>
             </View>
 
             <View style={styles.buttonGroup}>
@@ -515,36 +357,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#e2e8f0',
     marginVertical: 20,
   },
-  uploadButton: {
+  infoBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#eff6ff',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#bfdbfe',
     borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 14,
+    marginBottom: 24,
   },
-  uploadButtonText: {
-    fontSize: 14,
-    color: '#3b82f6',
-    fontWeight: '500',
+  infoIcon: {
+    marginRight: 10,
+    marginTop: 1,
   },
-  uploadButtonTextOptional: {
-    color: '#64748b',
+  infoContent: {
+    flex: 1,
   },
-  previewImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginTop: 12,
-    resizeMode: 'cover',
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e40af',
+    marginBottom: 6,
   },
-  fileInfo: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 8,
+  infoText: {
+    fontSize: 13,
+    color: '#1d4ed8',
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  infoTextBold: {
+    fontWeight: '700',
+  },
+  infoItem: {
+    fontSize: 13,
+    color: '#1d4ed8',
+    lineHeight: 20,
   },
   buttonGroup: {
     flexDirection: 'row',

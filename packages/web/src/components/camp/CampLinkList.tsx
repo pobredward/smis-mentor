@@ -15,6 +15,7 @@ interface CampLinkListProps {
   emptyIcon: React.ReactNode;
   emptyTitle: string;
   emptyDescription: string[];
+  isForeign?: boolean;
 }
 
 const getRoleBgColor = (targetRole?: ResourceLinkRole): string => {
@@ -49,6 +50,7 @@ export default function CampLinkList({
   emptyIcon,
   emptyTitle,
   emptyDescription,
+  isForeign = false,
 }: CampLinkListProps) {
   const { userData } = useAuth();
   const queryClient = useQueryClient();
@@ -161,7 +163,7 @@ export default function CampLinkList({
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-        <p className="mt-4 text-gray-600">자료 로딩 중...</p>
+        <p className="mt-4 text-gray-600">{isForeign ? 'Loading...' : '자료 로딩 중...'}</p>
       </div>
     );
   }
@@ -174,7 +176,7 @@ export default function CampLinkList({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
         </div>
-        <p className="text-center">로그인 후 이용 가능합니다.</p>
+        <p className="text-center">{isForeign ? 'Please sign in to continue.' : '로그인 후 이용 가능합니다.'}</p>
       </div>
     );
   }
@@ -183,7 +185,9 @@ export default function CampLinkList({
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
         {emptyIcon}
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">활성 캠프를 선택해주세요</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          {isForeign ? 'No active camp selected' : '활성 캠프를 선택해주세요'}
+        </h3>
         {emptyDescription.map((line, i) => (
           <p key={i} className="text-sm text-gray-600">{line}</p>
         ))}

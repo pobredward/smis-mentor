@@ -91,3 +91,43 @@ export async function uploadForeignIdCard(
     throw new Error('외국인 등록증 업로드에 실패했습니다.');
   }
 }
+
+/**
+ * 통장사본 업로드
+ */
+export async function uploadBankBook(
+  userId: string,
+  uri: string,
+  fileName: string
+): Promise<string> {
+  try {
+    const blob = await uriToBlob(uri);
+    const storageRef = ref(storage, `foreignTeachers/${userId}/bankBook/${Date.now()}-${fileName}`);
+    await uploadBytes(storageRef, blob);
+    const downloadURL = await getDownloadURL(storageRef);
+    return downloadURL;
+  } catch (error) {
+    logger.error('통장사본 업로드 실패:', error);
+    throw new Error('통장사본 업로드에 실패했습니다.');
+  }
+}
+
+/**
+ * ESL 자격증 업로드 (TESOL/TEFL/CELTA 등)
+ */
+export async function uploadEslCert(
+  userId: string,
+  uri: string,
+  fileName: string
+): Promise<string> {
+  try {
+    const blob = await uriToBlob(uri);
+    const storageRef = ref(storage, `foreignTeachers/${userId}/eslCert/${Date.now()}-${fileName}`);
+    await uploadBytes(storageRef, blob);
+    const downloadURL = await getDownloadURL(storageRef);
+    return downloadURL;
+  } catch (error) {
+    logger.error('ESL 자격증 업로드 실패:', error);
+    throw new Error('ESL 자격증 업로드에 실패했습니다.');
+  }
+}

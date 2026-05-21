@@ -3,6 +3,7 @@ import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/context/AuthContext';
 import {
   createPersonalTask,
   updatePersonalTaskGroup,
@@ -11,7 +12,8 @@ import {
 import { isKoreanHoliday } from '@smis-mentor/shared';
 import type { PersonalTask, TaskCategory } from '@smis-mentor/shared';
 
-const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+const DAYS_OF_WEEK_KO = ['일', '월', '화', '수', '목', '금', '토'];
+const DAYS_OF_WEEK_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 interface PersonalTaskFormModalProps {
   ownerId: string;
@@ -32,6 +34,9 @@ export default function PersonalTaskFormModal({
   onClose,
   onSuccess,
 }: PersonalTaskFormModalProps) {
+  const { userData } = useAuth();
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  const DAYS_OF_WEEK = isForeign ? DAYS_OF_WEEK_EN : DAYS_OF_WEEK_KO;
   const isEdit = !!task;
 
   const [title, setTitle] = useState(task?.title ?? '');
@@ -198,17 +203,17 @@ export default function PersonalTaskFormModal({
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      toast.error('업무 제목을 입력해주세요.');
+      toast.error(isForeign ? 'Please enter a task title.' : '업무 제목을 입력해주세요.');
       return;
     }
     if (selectedDates.length === 0) {
-      toast.error('날짜를 선택해주세요.');
+      toast.error(isForeign ? 'Please select a date.' : '날짜를 선택해주세요.');
       return;
     }
 
     const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
     if (hasTime && time && !timePattern.test(time)) {
-      toast.error('시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
+      toast.error(isForeign ? 'Please enter time in 24-hour format (e.g. 14:30)' : '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
       return;
     }
 
@@ -246,7 +251,7 @@ export default function PersonalTaskFormModal({
           },
           datesChanged ? selectedDates : undefined
         );
-        toast.success('개인 업무가 수정되었습니다.');
+        toast.success(isForeign ? 'Personal task updated.' : '개인 업무가 수정되었습니다.');
       } else {
         await createPersonalTask(ownerId, campCode, {
           title: title.trim(),
@@ -258,14 +263,14 @@ export default function PersonalTaskFormModal({
         });
         toast.success(
           selectedDates.length > 1
-            ? `개인 업무가 ${selectedDates.length}개 날짜에 추가되었습니다.`
-            : '개인 업무가 추가되었습니다.'
+            ? (isForeign ? `Personal task added to ${selectedDates.length} dates.` : `개인 업무가 ${selectedDates.length}개 날짜에 추가되었습니다.`)
+            : (isForeign ? 'Personal task added.' : '개인 업무가 추가되었습니다.')
         );
       }
       onSuccess();
     } catch (error) {
       logger.error('개인 업무 저장 오류:', error);
-      toast.error('저장 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to save task.' : '저장 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -284,9 +289,11 @@ export default function PersonalTaskFormModal({
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-semibold text-gray-900">
-              {isEdit ? '개인 업무 수정' : '개인 업무 추가'}
+              {isForeign
+                ? (isEdit ? 'Edit Personal Task' : 'Add Personal Task')
+                : (isEdit ? '개인 업무 수정' : '개인 업무 추가')}
             </h3>
-            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">나만 보임</span>
+            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">{isForeign ? 'Only you' : '나만 보임'}</span>
           </div>
           <button
             type="button"
@@ -303,7 +310,7 @@ export default function PersonalTaskFormModal({
           {/* 1. 날짜 및 시간 — 달력 항상 펼쳐서 표시 */}
           <div className="border border-purple-200 bg-purple-50/30 rounded-lg p-3 space-y-2">
             <h4 className="text-xs font-semibold text-gray-900 flex items-center gap-1">
-              📅 날짜 및 시간 <span className="text-red-500">*</span>
+              📅 {isForeign ? 'Date & Time' : '날짜 및 시간'} <span className="text-red-500">*</span>
             </h4>
 
             {/* 월/년 네비게이션 */}
@@ -321,7 +328,9 @@ export default function PersonalTaskFormModal({
                 </svg>
               </button>
               <span className="text-sm font-semibold text-gray-800">
-                {calYear}년 {calMonth + 1}월
+                {isForeign
+                  ? `${new Date(calYear, calMonth).toLocaleString('en-US', { month: 'long' })} ${calYear}`
+                  : `${calYear}년 ${calMonth + 1}월`}
               </span>
               <button
                 type="button"
@@ -358,9 +367,9 @@ export default function PersonalTaskFormModal({
             </div>
 
             {loadingGroupDates ? (
-              <p className="text-[10px] text-gray-400 text-center">날짜 불러오는 중...</p>
+              <p className="text-[10px] text-gray-400 text-center">{isForeign ? 'Loading dates...' : '날짜 불러오는 중...'}</p>
             ) : (
-              <p className="text-[10px] text-gray-400 text-center">클릭 또는 드래그로 여러 날짜를 선택할 수 있습니다</p>
+              <p className="text-[10px] text-gray-400 text-center">{isForeign ? 'Click or drag to select multiple dates' : '클릭 또는 드래그로 여러 날짜를 선택할 수 있습니다'}</p>
             )}
 
             {/* 선택된 날짜 태그 목록 */}
@@ -373,7 +382,9 @@ export default function PersonalTaskFormModal({
                       key={i}
                       className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full"
                     >
-                      {d.getMonth() + 1}/{d.getDate()} ({DAYS_OF_WEEK[d.getDay()]})
+                      {isForeign
+                        ? d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', weekday: 'short' })
+                        : `${d.getMonth() + 1}/${d.getDate()} (${DAYS_OF_WEEK_KO[d.getDay()]})`}
                       <button
                         type="button"
                         onClick={() => {
@@ -391,7 +402,7 @@ export default function PersonalTaskFormModal({
                           }
                         }}
                         className="ml-0.5 text-purple-500 hover:text-purple-800 leading-none"
-                        aria-label={`${d.getMonth() + 1}월 ${d.getDate()}일 제거`}
+                        aria-label={isForeign ? `Remove ${d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}` : `${d.getMonth() + 1}월 ${d.getDate()}일 제거`}
                       >
                         ×
                       </button>
@@ -409,14 +420,14 @@ export default function PersonalTaskFormModal({
                   onChange={e => { setHasTime(e.target.checked); if (!e.target.checked) setTime(''); }}
                   className="w-3 h-3"
                 />
-                <span className="text-xs font-medium text-gray-700">시간 지정</span>
+                <span className="text-xs font-medium text-gray-700">{isForeign ? 'Set time' : '시간 지정'}</span>
               </label>
               {hasTime && (
                 <input
                   type="text"
                   value={time}
                   onChange={e => setTime(e.target.value)}
-                  placeholder="24시간 형식 (예: 14:30)"
+                  placeholder={isForeign ? '24h format (e.g. 14:30)' : '24시간 형식 (예: 14:30)'}
                   pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
                 />
@@ -427,7 +438,7 @@ export default function PersonalTaskFormModal({
           {/* 2. 카테고리 (선택) — 날짜 및 시간 바로 아래 */}
           {categories.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">🏷️ 카테고리 (선택)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">🏷️ {isForeign ? 'Category (optional)' : '카테고리 (선택)'}</label>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
@@ -438,7 +449,7 @@ export default function PersonalTaskFormModal({
                       : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  없음
+                  {isForeign ? 'None' : '없음'}
                 </button>
                 {categories.map(cat => (
                   <button
@@ -463,7 +474,7 @@ export default function PersonalTaskFormModal({
 
           {/* 3. 예상 소요시간 */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">⏱️ 예상 소요시간 (선택)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">⏱️ {isForeign ? 'Estimated duration (optional)' : '예상 소요시간 (선택)'}</label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -474,21 +485,21 @@ export default function PersonalTaskFormModal({
                 placeholder="0"
                 className="w-20 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
               />
-              <span className="text-xs text-gray-600">분</span>
+              <span className="text-xs text-gray-600">{isForeign ? 'min' : '분'}</span>
             </div>
           </div>
 
           {/* 4. 업무 제목 */}
           <div>
             <label htmlFor="personal-task-title" className="block text-xs font-medium text-gray-700 mb-1">
-              ✏️ 업무 제목 <span className="text-red-500">*</span>
+              ✏️ {isForeign ? 'Task title' : '업무 제목'} <span className="text-red-500">*</span>
             </label>
             <input
               id="personal-task-title"
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="예: 학생 피드백 정리"
+              placeholder={isForeign ? 'e.g. Student feedback review' : '예: 학생 피드백 정리'}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
               autoFocus
             />
@@ -497,13 +508,13 @@ export default function PersonalTaskFormModal({
           {/* 5. 업무 설명 */}
           <div>
             <label htmlFor="personal-task-desc" className="block text-xs font-medium text-gray-700 mb-1">
-              📝 업무 설명
+              📝 {isForeign ? 'Description' : '업무 설명'}
             </label>
             <textarea
               id="personal-task-desc"
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="업무에 대한 상세 설명"
+              placeholder={isForeign ? 'Detailed description of the task' : '업무에 대한 상세 설명'}
               rows={4}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none"
             />
@@ -518,7 +529,7 @@ export default function PersonalTaskFormModal({
             disabled={isSubmitting}
             className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
           >
-            취소
+            {isForeign ? 'Cancel' : '취소'}
           </button>
           <button
             type="button"
@@ -532,10 +543,10 @@ export default function PersonalTaskFormModal({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
-                저장 중...
+                {isForeign ? 'Saving...' : '저장 중...'}
               </>
             ) : (
-              isEdit ? '수정하기' : '추가하기'
+              isForeign ? (isEdit ? 'Save' : 'Add') : (isEdit ? '수정하기' : '추가하기')
             )}
           </button>
         </div>

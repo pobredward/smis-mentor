@@ -31,18 +31,18 @@ import { ProfileEditScreen } from './ProfileEditScreen';
 import { signUp } from '../services/authService';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
-import {
-  uploadForeignProfileImage,
-  uploadCV,
-  uploadPassportPhoto,
-  uploadForeignIdCard,
-} from '../services/foreignSignUpService';
 import { useCampDataPrefetch } from '../hooks/useCampDataPrefetch';
 import { useRecruitmentDataPrefetch } from '../hooks/useRecruitmentDataPrefetch';
 import { useCampTab } from '../context/CampTabContext';
 // import { getUserInfoFromRRN } from '../utils/userUtils';
 import { logger, deactivateUserMobile } from '@smis-mentor/shared';
 import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadCV, uploadPassportPhoto, uploadForeignIdCard, uploadBankBook, uploadEslCert } from '../services/foreignSignUpService';
+import { updateUserProfile } from '../services/profileService';
+import { ref as storageRef, deleteObject } from 'firebase/storage';
+import { storage } from '../config/firebase';
 
 type Screen = 
   | 'profile' 
@@ -83,10 +83,6 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     isOnLeave?: boolean | null;
     major1?: string;
     major2?: string;
-    profileImage?: string;
-    cvFile?: any;
-    passportPhoto?: string;
-    foreignIdCard?: string;
     socialData?: any;
     tempUserId?: string;
   }>({});
@@ -102,6 +98,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [prefetchCancelled, setPrefetchCancelled] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
+
+  // 문서 업로드/삭제 상태
+  const [uploadingDoc, setUploadingDoc] = useState<'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert' | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert' | null>(null);
 
   useEffect(() => {
     if (userData) {
@@ -559,195 +559,92 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const handleForeignSignUpStep2Next = async (data: {
     email: string;
     password: string;
-    profileImage?: string;
-    cvFile?: any;
-    passportPhoto?: string;
-    foreignIdCard?: string;
   }) => {
     setSignUpData({ ...signUpData, ...data });
-    
-    // 입력 데이터 검증
+
     if (!signUpData.firstName || !signUpData.lastName || !signUpData.phone || !data.email || !data.password) {
       Alert.alert('오류', '필수 정보가 누락되었습니다.');
       return;
     }
 
-    // 필수 파일 검증
-    if (!data.profileImage) {
-      Alert.alert('오류', '프로필 사진을 업로드해주세요.');
-      return;
-    }
-    if (!data.cvFile) {
-      Alert.alert('오류', 'CV (PDF)를 업로드해주세요.');
-      return;
-    }
-    if (!data.passportPhoto) {
-      Alert.alert('오류', '여권 사진을 업로드해주세요.');
-      return;
-    }
-
-    // 로딩 시작
-    Alert.alert(
-      'Sign Up in Progress',
-      'Uploading files and creating your account.\nPlease wait...',
-      [],
-      { cancelable: false }
-    );
-
     try {
-      // 전화번호에 국가코드 추가
       let phoneWithoutLeadingZero = signUpData.phone || '';
-      
-      // 한국 번호의 경우 맨 앞 0 제거 (010 -> 10)
+
       if (signUpData.countryCode === '+82' && phoneWithoutLeadingZero.startsWith('0')) {
         phoneWithoutLeadingZero = phoneWithoutLeadingZero.substring(1);
       }
-      
+
       const fullPhone = `${signUpData.countryCode}${phoneWithoutLeadingZero}`;
-      const fullName = signUpData.middleName 
+      const fullName = signUpData.middleName
         ? `${signUpData.firstName} ${signUpData.middleName} ${signUpData.lastName}`
         : `${signUpData.firstName} ${signUpData.lastName}`;
 
-      // 전화번호로 기존 사용자 확인
       const existingUserByPhone = await getUserByPhone(fullPhone);
-      
+
       let userId: string;
       let isUpdatingExistingUser = false;
 
-      // Case 1: 전화번호로 임시 원어민(foreign_temp) 계정이 존재하는 경우
       if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
-        console.log('📋 기존 foreign_temp 사용자 발견, 계정 업데이트 진행...');
-        
-        // 기존 계정의 userId 사용
         userId = existingUserByPhone.userId;
         isUpdatingExistingUser = true;
-        
-        // Firebase Authentication 계정이 이미 있을 수 있으므로 체크
-        console.log('🔐 Firebase Authentication 계정 생성/확인 시작:', data.email);
+
         try {
-          const userCredential = await signUp(data.email, data.password);
-          console.log('✅ Firebase Authentication 계정 생성 완료');
+          await signUp(data.email, data.password);
         } catch (authError: any) {
-          if (authError.code === 'auth/email-already-in-use') {
-            console.log('⚠️ Firebase Auth 이미 존재, Firestore만 업데이트');
-          } else {
+          if (authError.code !== 'auth/email-already-in-use') {
             throw authError;
           }
         }
-      }
-      // Case 2: 완전히 새로운 사용자
-      else {
-        console.log('🔐 Firebase Authentication 계정 생성 시작:', data.email);
+      } else {
         const userCredential = await signUp(data.email, data.password);
         userId = userCredential.user.uid;
-        console.log('✅ Firebase Authentication 계정 생성 완료, UID:', userId);
       }
 
-      // 2. 파일 업로드
-      console.log('📤 파일 업로드 시작...');
-      let profileImageUrl = '';
-      let cvUrl = '';
-      let passportPhotoUrl = '';
-      let foreignIdCardUrl = '';
-      const uploadedFiles: string[] = []; // 업로드된 파일 경로 추적
-
-      try {
-        // 프로필 이미지 업로드
-        console.log('  - 프로필 이미지 업로드 중...');
-        profileImageUrl = await uploadForeignProfileImage(userId, data.profileImage);
-        uploadedFiles.push(`foreign-teachers/${userId}/profile.jpg`);
-        console.log('  ✅ 프로필 이미지 업로드 완료');
-
-        // CV 업로드
-        console.log('  - CV 업로드 중...');
-        cvUrl = await uploadCV(userId, data.cvFile.uri, data.cvFile.name);
-        uploadedFiles.push(`foreign-teachers/${userId}/cv_${data.cvFile.name}`);
-        console.log('  ✅ CV 업로드 완료');
-
-        // 여권 사진 업로드
-        console.log('  - 여권 사진 업로드 중...');
-        passportPhotoUrl = await uploadPassportPhoto(userId, data.passportPhoto);
-        uploadedFiles.push(`foreign-teachers/${userId}/passport.jpg`);
-        console.log('  ✅ 여권 사진 업로드 완료');
-
-        // 외국인 등록증 업로드 (선택사항)
-        if (data.foreignIdCard) {
-          console.log('  - 외국인 등록증 업로드 중...');
-          foreignIdCardUrl = await uploadForeignIdCard(userId, data.foreignIdCard);
-          uploadedFiles.push(`foreign-teachers/${userId}/foreign_id.jpg`);
-          console.log('  ✅ 외국인 등록증 업로드 완료');
-        }
-
-        console.log('✅ 모든 파일 업로드 완료');
-      } catch (uploadError) {
-        console.error('❌ 파일 업로드 실패:', uploadError);
-        
-        // 이미 업로드된 파일 정리
-        const { getStorage, ref, deleteObject } = await import('firebase/storage');
-        const storage = getStorage();
-        
-        for (const filePath of uploadedFiles) {
-          try {
-            console.log(`🗑️ 업로드된 파일 삭제 중: ${filePath}`);
-            await deleteObject(ref(storage, filePath));
-            console.log(`✅ 파일 삭제 완료: ${filePath}`);
-          } catch (deleteError) {
-            console.error(`파일 삭제 실패: ${filePath}`, deleteError);
-          }
-        }
-        
-        throw new Error('파일 업로드에 실패했습니다. 다시 시도해주세요.');
-      }
-
-      // 3. Firestore에 사용자 문서 생성 또는 업데이트
       const userData = {
-        userId: userId,
+        userId,
         name: fullName,
         email: data.email,
         phone: fullPhone,
         phoneNumber: fullPhone,
-        password: '', // 보안상 저장하지 않음
+        password: '',
         address: existingUserByPhone?.address || '',
         addressDetail: existingUserByPhone?.addressDetail || '',
-        role: 'foreign', // 원어민은 바로 활성화
+        role: 'foreign',
         jobExperiences: existingUserByPhone?.jobExperiences || [],
         partTimeJobs: existingUserByPhone?.partTimeJobs || [],
         createdAt: existingUserByPhone?.createdAt || Timestamp.now(),
         updatedAt: Timestamp.now(),
         agreedTerms: true,
         agreedPersonal: true,
-        profileImage: profileImageUrl,
-        status: 'active' as const, // 원어민은 바로 활성 상태
+        profileImage: '',
+        status: 'active' as const,
         isEmailVerified: false,
         isPhoneVerified: false,
-        isProfileCompleted: true, // 모든 정보 입력 완료
+        isProfileCompleted: false,
         isTermsAgreed: true,
         isPersonalAgreed: true,
         isAddressVerified: false,
-        isProfileImageUploaded: true,
+        isProfileImageUploaded: false,
         jobMotivation: 'Foreign Teacher Application',
         feedback: (existingUserByPhone as any)?.feedback || '',
-        // 원어민 특화 정보
         foreignTeacher: {
           firstName: signUpData.firstName,
           lastName: signUpData.lastName,
           middleName: signUpData.middleName || '',
           countryCode: signUpData.countryCode,
-          cvUrl: cvUrl,
-          passportPhotoUrl: passportPhotoUrl,
-          foreignIdCardUrl: foreignIdCardUrl || '',
+          cvUrl: '',
+          passportPhotoUrl: '',
+          foreignIdCardUrl: '',
           applicationDate: Timestamp.now(),
-        }
+        },
       };
 
       if (isUpdatingExistingUser) {
-        console.log('📝 Firestore 사용자 문서 업데이트 시작');
         await setDoc(doc(db, 'users', userId), userData, { merge: true });
-        console.log('✅ Firestore 사용자 문서 업데이트 완료 (foreign_temp → foreign)');
-        
+
         Alert.alert(
           'Account Activated',
-          `Welcome, ${fullName}!\n\n✅ Your account has been activated.\n✅ All documents have been uploaded.\n\nYou can now log in to the platform.`,
+          `Welcome, ${fullName}!\n\nYour account has been activated.\nPlease upload your documents (Profile Photo, CV, Passport Photo) in Profile Edit.`,
           [
             {
               text: 'OK',
@@ -760,13 +657,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           ]
         );
       } else {
-        console.log('📝 Firestore 사용자 문서 생성 시작');
         await setDoc(doc(db, 'users', userId), userData);
-        console.log('✅ Firestore 사용자 문서 생성 완료');
-        
+
         Alert.alert(
           'Sign Up Complete',
-          `Welcome, ${fullName}!\n\n✅ Your account has been successfully created.\n✅ All documents have been uploaded.\n\nYou can now log in to the platform.`,
+          `Welcome, ${fullName}!\n\nYour account has been successfully created.\nPlease upload your documents (Profile Photo, CV, Passport Photo) in Profile Edit.`,
           [
             {
               text: 'OK',
@@ -781,7 +676,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       }
     } catch (error: any) {
       console.error('❌ 원어민 회원가입 오류:', error);
-      
+
       let errorMessage = error.message || 'An error occurred during sign up.';
       if (error.code === 'auth/email-already-in-use') {
         errorMessage = 'This email is already in use.';
@@ -1100,6 +995,205 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   };
 
   /**
+   * 문서 업로드 (CV - PDF/DOC)
+   */
+  const handleUploadCV = async () => {
+    if (!userData) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setUploadingDoc('cv');
+      const file = result.assets[0];
+      const downloadURL = await uploadCV(userData.userId, file.uri, file.name || 'cv.pdf');
+      await updateUserProfile(userData.userId, {
+        foreignTeacher: { ...((userData as any).foreignTeacher || {}), cvUrl: downloadURL },
+      });
+      await refreshUserData();
+      Alert.alert('Success', 'CV uploaded successfully.');
+    } catch (error) {
+      logger.error('CV 업로드 오류:', error);
+      Alert.alert('Error', 'Failed to upload CV.');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  /**
+   * 문서 업로드 (Passport Photo - 이미지)
+   */
+  const handleUploadPassportPhoto = async () => {
+    if (!userData) return;
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Photo library access is required.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setUploadingDoc('passport');
+      const downloadURL = await uploadPassportPhoto(userData.userId, result.assets[0].uri);
+      await updateUserProfile(userData.userId, {
+        foreignTeacher: { ...((userData as any).foreignTeacher || {}), passportPhotoUrl: downloadURL },
+      });
+      await refreshUserData();
+      Alert.alert('Success', 'Passport photo uploaded successfully.');
+    } catch (error) {
+      logger.error('여권 사진 업로드 오류:', error);
+      Alert.alert('Error', 'Failed to upload passport photo.');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  /**
+   * 문서 업로드 (Foreign Resident ID Card - 이미지 또는 PDF)
+   */
+  const handleUploadIdCard = async () => {
+    if (!userData) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/jpeg', 'image/png', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setUploadingDoc('idCard');
+      const file = result.assets[0];
+      const downloadURL = await uploadForeignIdCard(userData.userId, file.uri);
+      await updateUserProfile(userData.userId, {
+        foreignTeacher: { ...((userData as any).foreignTeacher || {}), foreignIdCardUrl: downloadURL },
+      });
+      await refreshUserData();
+      Alert.alert('Success', 'Foreign Resident ID Card uploaded successfully.');
+    } catch (error) {
+      logger.error('외국인 등록증 업로드 오류:', error);
+      Alert.alert('Error', 'Failed to upload ID card.');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  /**
+   * 문서 업로드 (Bank Book - 이미지 또는 PDF)
+   */
+  const handleUploadBankBook = async () => {
+    if (!userData) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/jpeg', 'image/png', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setUploadingDoc('bankBook');
+      const file = result.assets[0];
+      const downloadURL = await uploadBankBook(userData.userId, file.uri, file.name || 'bankbook.pdf');
+      await updateUserProfile(userData.userId, {
+        foreignTeacher: { ...((userData as any).foreignTeacher || {}), bankBookUrl: downloadURL },
+      });
+      await refreshUserData();
+      Alert.alert('Success', 'Bank Book uploaded successfully.');
+    } catch (error) {
+      logger.error('통장사본 업로드 오류:', error);
+      Alert.alert('Error', 'Failed to upload bank book.');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  /**
+   * 문서 업로드 (ESL Certificate - PDF 또는 이미지)
+   */
+  const handleUploadEslCert = async () => {
+    if (!userData) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/jpeg', 'image/png', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setUploadingDoc('eslCert');
+      const file = result.assets[0];
+      const downloadURL = await uploadEslCert(userData.userId, file.uri, file.name || 'esl_cert.pdf');
+      await updateUserProfile(userData.userId, {
+        foreignTeacher: { ...((userData as any).foreignTeacher || {}), eslCertUrl: downloadURL },
+      });
+      await refreshUserData();
+      Alert.alert('Success', 'ESL Certificate uploaded successfully.');
+    } catch (error) {
+      logger.error('ESL 자격증 업로드 오류:', error);
+      Alert.alert('Error', 'Failed to upload ESL Certificate.');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  /**
+   * 문서 삭제 (Storage 파일 삭제 + Firestore URL null 처리)
+   */
+  const handleDeleteDoc = (
+    type: 'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert',
+    url: string
+  ) => {
+    if (!userData) return;
+
+    const labelMap = {
+      cv: 'CV',
+      passport: 'Passport Photo',
+      idCard: 'Foreign Resident ID Card',
+      bankBook: 'Bank Book',
+      eslCert: 'ESL Certificate',
+    };
+    const fieldMap = {
+      cv: 'cvUrl',
+      passport: 'passportPhotoUrl',
+      idCard: 'foreignIdCardUrl',
+      bankBook: 'bankBookUrl',
+      eslCert: 'eslCertUrl',
+    } as const;
+
+    Alert.alert(
+      'Delete Document',
+      `Are you sure you want to delete the ${labelMap[type]}? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingDoc(type);
+              // Storage 파일 삭제
+              const fileRef = storageRef(storage, url);
+              await deleteObject(fileRef).catch(() => {});
+              // Firestore URL null 처리
+              await updateUserProfile(userData.userId, {
+                foreignTeacher: {
+                  ...((userData as any).foreignTeacher || {}),
+                  [fieldMap[type]]: null,
+                },
+              });
+              await refreshUserData();
+              Alert.alert('Deleted', `${labelMap[type]} has been deleted.`);
+            } catch (error) {
+              logger.error('문서 삭제 오류:', error);
+              Alert.alert('Error', 'Failed to delete document. Please try again.');
+            } finally {
+              setDeletingDoc(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  /**
    * 소셜 계정 연동 해제
    */
   const handleSocialUnlink = async (providerId: string) => {
@@ -1107,32 +1201,31 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
     const providerName = 
       providerId === 'google.com' ? 'Google' :
-      providerId === 'naver' || providerId === 'naver.com' ? '네이버' :
-      providerId === 'kakao' ? '카카오' :
-      providerId === 'apple.com' ? 'Apple' : '소셜';
+      providerId === 'naver' || providerId === 'naver.com' ? (isForeign ? 'Naver' : '네이버') :
+      providerId === 'kakao' ? (isForeign ? 'Kakao' : '카카오') :
+      providerId === 'apple.com' ? 'Apple' : (isForeign ? 'Social' : '소셜');
 
     Alert.alert(
-      '연동 해제',
-      `${providerName} 계정 연동을 해제하시겠습니까?`,
+      isForeign ? 'Unlink Account' : '연동 해제',
+      isForeign
+        ? `Are you sure you want to unlink your ${providerName} account?`
+        : `${providerName} 계정 연동을 해제하시겠습니까?`,
       [
-        { text: '취소', style: 'cancel' },
+        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
         {
-          text: '해제',
+          text: isForeign ? 'Unlink' : '해제',
           style: 'destructive',
           onPress: async () => {
             try {
-              // 1. 캐시 무효화
               console.log('🗑️ 사용자 캐시 무효화:', userData.userId);
               const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
               await removeCache(CACHE_STORE.USERS, userData.userId);
 
-              // 2. Firestore에서 연동 해제
               const { unlinkSocialProvider } = await import('@smis-mentor/shared');
               const { getUserById, updateUser, getUserByEmail } = await import('../services/authService');
               const { runTransaction, doc } = await import('firebase/firestore');
               const { db } = await import('../config/firebase');
 
-              // Transaction wrapper
               const runTransactionWrapper = async (updateFn: (user: any) => any) => {
                 await runTransaction(db, async (transaction) => {
                   const userRef = doc(db, 'users', userData.userId);
@@ -1158,15 +1251,22 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 runTransactionWrapper
               );
 
-              Alert.alert('성공', `${providerName} 계정 연동이 해제되었습니다.`);
+              Alert.alert(
+                isForeign ? 'Success' : '성공',
+                isForeign
+                  ? `${providerName} account has been unlinked.`
+                  : `${providerName} 계정 연동이 해제되었습니다.`
+              );
 
-              // 사용자 데이터 새로고침 (UI 즉시 반영)
               console.log('🔄 사용자 데이터 새로고침 시작');
               await refreshUserData();
               console.log('✅ 사용자 데이터 새로고침 완료');
             } catch (error: any) {
               console.error('연동 해제 오류:', error);
-              Alert.alert('오류', error.message || '연동 해제 중 오류가 발생했습니다.');
+              Alert.alert(
+                isForeign ? 'Error' : '오류',
+                error.message || (isForeign ? 'Failed to unlink account.' : '연동 해제 중 오류가 발생했습니다.')
+              );
             }
           },
         },
@@ -1209,17 +1309,20 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     };
 
     const getRoleLabel = (role: string) => {
+      if (isForeign) {
+        switch (role) {
+          case 'foreign': return 'Foreign Teacher';
+          case 'foreign_temp': return 'Foreign Teacher (Temp)';
+          default: return 'User';
+        }
+      }
       switch (role) {
-        case 'admin':
-          return '관리자';
-        case 'mentor':
-        case 'mentor_temp':
-          return '멘토';
-        case 'foreign':
-        case 'foreign_temp':
-          return '원어민';
-        default:
-          return '사용자';
+        case 'admin': return '관리자';
+        case 'mentor': return '멘토';
+        case 'mentor_temp': return '멘토';
+        case 'foreign': return '원어민';
+        case 'foreign_temp': return '원어민';
+        default: return '사용자';
       }
     };
 
@@ -1242,20 +1345,21 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     };
 
     const getStatusLabel = (status: string, role: string) => {
-      // mentor_temp나 foreign_temp인 경우 활성 상태로 표시
-      if (role === 'mentor_temp' || role === 'foreign_temp') {
-        return '활성';
+      if (isForeign) {
+        if (role === 'foreign_temp') return 'Active';
+        switch (status) {
+          case 'active': return 'Active';
+          case 'inactive': return 'Inactive';
+          case 'deleted': return 'Deleted';
+          default: return 'Temporary';
+        }
       }
-      
+      if (role === 'mentor_temp' || role === 'foreign_temp') return '활성';
       switch (status) {
-        case 'active':
-          return '활성';
-        case 'inactive':
-          return '비활성';
-        case 'deleted':
-          return '삭제됨';
-        default:
-          return '임시';
+        case 'active': return '활성';
+        case 'inactive': return '비활성';
+        case 'deleted': return '삭제됨';
+        default: return '임시';
       }
     };
 
@@ -1494,97 +1598,15 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             </View>
           </View>
 
-          {/* 원어민 교사 정보 및 제출 서류 */}
-          {isForeign && userData.foreignTeacher && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Teacher Information & Submitted Documents</Text>
-              </View>
-              <View style={styles.infoGrid}>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>First Name</Text>
-                  <Text style={styles.infoValue}>{userData.foreignTeacher.firstName}</Text>
-                </View>
-                {userData.foreignTeacher.middleName && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Middle Name</Text>
-                    <Text style={styles.infoValue}>{userData.foreignTeacher.middleName}</Text>
-                  </View>
-                )}
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Last Name</Text>
-                  <Text style={styles.infoValue}>{userData.foreignTeacher.lastName}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Country Code</Text>
-                  <Text style={styles.infoValue}>{userData.foreignTeacher.countryCode}</Text>
-                </View>
-                {userData.foreignTeacher.applicationDate && (
-                  <View style={[styles.infoItem, { flex: 1, width: '100%' }]}>
-                    <Text style={styles.infoLabel}>Application Date</Text>
-                    <Text style={styles.infoValue}>
-                      {userData.foreignTeacher.applicationDate.toDate
-                        ? userData.foreignTeacher.applicationDate.toDate().toLocaleDateString('en-US')
-                        : new Date((userData.foreignTeacher.applicationDate as any).seconds * 1000).toLocaleDateString('en-US')}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              
-              <View style={styles.divider} />
-              <Text style={styles.subsectionTitle}>Submitted Documents</Text>
-              
-              {userData.foreignTeacher.cvUrl && (
-                <TouchableOpacity
-                  style={[styles.fileLink, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' }]}
-                  onPress={() => userData.foreignTeacher?.cvUrl && Linking.openURL(userData.foreignTeacher.cvUrl)}
-                >
-                  <View style={styles.fileLinkContent}>
-                    <Text style={[styles.fileLinkTitle, { color: '#3730A3' }]}>CV (Curriculum Vitae)</Text>
-                    <Text style={[styles.fileLinkSubtitle, { color: '#4F46E5' }]}>Click to view</Text>
-                  </View>
-                  <Text style={{ color: '#4F46E5', fontSize: 18 }}>→</Text>
-                </TouchableOpacity>
-              )}
-              
-              {userData.foreignTeacher.passportPhotoUrl && (
-                <TouchableOpacity
-                  style={[styles.fileLink, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}
-                  onPress={() => userData.foreignTeacher?.passportPhotoUrl && Linking.openURL(userData.foreignTeacher.passportPhotoUrl)}
-                >
-                  <View style={styles.fileLinkContent}>
-                    <Text style={[styles.fileLinkTitle, { color: '#14532D' }]}>Passport Photo</Text>
-                    <Text style={[styles.fileLinkSubtitle, { color: '#16A34A' }]}>Click to view</Text>
-                  </View>
-                  <Text style={{ color: '#16A34A', fontSize: 18 }}>→</Text>
-                </TouchableOpacity>
-              )}
-              
-              {userData.foreignTeacher.foreignIdCardUrl && (
-                <TouchableOpacity
-                  style={[styles.fileLink, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}
-                  onPress={() => userData.foreignTeacher?.foreignIdCardUrl && Linking.openURL(userData.foreignTeacher.foreignIdCardUrl)}
-                >
-                  <View style={styles.fileLinkContent}>
-                    <Text style={[styles.fileLinkTitle, { color: '#78350F' }]}>Foreign Resident ID Card</Text>
-                    <Text style={[styles.fileLinkSubtitle, { color: '#D97706' }]}>Click to view</Text>
-                  </View>
-                  <Text style={{ color: '#D97706', fontSize: 18 }}>→</Text>
-                </TouchableOpacity>
-              )}
-              
-              {!userData.foreignTeacher.cvUrl && !userData.foreignTeacher.passportPhotoUrl && !userData.foreignTeacher.foreignIdCardUrl && (
-                <Text style={styles.emptyText}>No documents submitted.</Text>
-              )}
-            </View>
-          )}
-
-          {/* SMIS 캠프 참여 이력 - 기수 선택 - 원어민은 숨기기 */}
-          {!isForeign && (
+          {/* SMIS 캠프 참여 이력 - 기수 선택 */}
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>
-                {userData.role === 'admin' ? '전체 캠프 코드' : 'SMIS 캠프 참여 이력'}
+                {userData.role === 'admin'
+                  ? '전체 캠프 코드'
+                  : isForeign
+                    ? 'SMIS Camp History'
+                    : 'SMIS 캠프 참여 이력'}
               </Text>
             </View>
             
@@ -1593,7 +1615,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 <ActivityIndicator size="small" color="#3b82f6" />
               </View>
             ) : jobCodes.length === 0 ? (
-              <Text style={styles.emptyText}>등록된 참여 이력이 없습니다.</Text>
+              <Text style={styles.emptyText}>
+                {isForeign
+                  ? 'No camp history registered. Camp codes will appear here once assigned by an administrator.'
+                  : '등록된 참여 이력이 없습니다.'}
+              </Text>
             ) : userData.role === 'admin' ? (
               // Admin: generation별 뱃지 형태 (27기 이상만 표시, 26기 이하는 더보기)
               <View style={styles.adminBadgesContainer}>
@@ -1740,7 +1766,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                         <View style={styles.jobCodeBadges}>
                           {isActive && (
                             <View style={styles.activeBadge}>
-                              <Text style={styles.activeBadgeText}>활성</Text>
+                              <Text style={styles.activeBadgeText}>{isForeign ? 'Active' : '활성'}</Text>
                             </View>
                           )}
                           {jobCode.code && (
@@ -1766,16 +1792,160 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               </View>
             )}
           </View>
+
+          {/* 원어민 교사 정보 (Teacher Information + Personal Information 통합) */}
+          {isForeign && userData.foreignTeacher && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Teacher Information</Text>
+              </View>
+              <View style={styles.infoGrid}>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>First Name</Text>
+                  <Text style={styles.infoValue}>{userData.foreignTeacher.firstName}</Text>
+                </View>
+                {userData.foreignTeacher.middleName && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Middle Name</Text>
+                    <Text style={styles.infoValue}>{userData.foreignTeacher.middleName}</Text>
+                  </View>
+                )}
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Last Name</Text>
+                  <Text style={styles.infoValue}>{userData.foreignTeacher.lastName}</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Country</Text>
+                  <Text style={styles.infoValue}>{userData.foreignTeacher.countryCode}</Text>
+                </View>
+                {userData.age && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Age</Text>
+                    <Text style={styles.infoValue}>{userData.age} years old</Text>
+                  </View>
+                )}
+                {userData.gender && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Gender</Text>
+                    <Text style={styles.infoValue}>{userData.gender === 'M' ? 'Male' : 'Female'}</Text>
+                  </View>
+                )}
+                {userData.phoneNumber && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Phone Number</Text>
+                    <Text style={styles.infoValue}>{formatPhoneNumber(userData.phoneNumber)}</Text>
+                  </View>
+                )}
+                {userData.address && (
+                  <View style={[styles.infoItem, { flex: 1, width: '100%' }]}>
+                    <Text style={styles.infoLabel}>Address</Text>
+                    <Text style={styles.infoValue}>
+                      {userData.address}{userData.addressDetail ? ` ${userData.addressDetail}` : ''}
+                    </Text>
+                  </View>
+                )}
+                {userData.foreignTeacher.applicationDate && (
+                  <View style={[styles.infoItem, { flex: 1, width: '100%' }]}>
+                    <Text style={styles.infoLabel}>Application Date</Text>
+                    <Text style={styles.infoValue}>
+                      {userData.foreignTeacher.applicationDate.toDate
+                        ? userData.foreignTeacher.applicationDate.toDate().toLocaleDateString('en-US')
+                        : new Date((userData.foreignTeacher.applicationDate as any).seconds * 1000).toLocaleDateString('en-US')}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* 원어민 제출 서류 (별도 섹션) */}
+          {isForeign && userData.foreignTeacher && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Submitted Documents</Text>
+              </View>
+              <View style={{ paddingHorizontal: 20, paddingBottom: 16, gap: 10 }}>
+                <DocRow
+                  label="CV (Curriculum Vitae)"
+                  hint="PDF or Word"
+                  url={userData.foreignTeacher.cvUrl}
+                  isUploading={uploadingDoc === 'cv'}
+                  isDeleting={deletingDoc === 'cv'}
+                  accentColor="#4F46E5"
+                  uploadedBg="#EEF2FF"
+                  uploadedBorder="#C7D2FE"
+                  onView={() => userData.foreignTeacher?.cvUrl && Linking.openURL(userData.foreignTeacher.cvUrl)}
+                  onUpload={handleUploadCV}
+                  onDelete={() => userData.foreignTeacher?.cvUrl && handleDeleteDoc('cv', userData.foreignTeacher.cvUrl)}
+                />
+                <DocRow
+                  label="Passport Photo"
+                  hint="JPG / PNG"
+                  url={userData.foreignTeacher.passportPhotoUrl}
+                  isUploading={uploadingDoc === 'passport'}
+                  isDeleting={deletingDoc === 'passport'}
+                  accentColor="#16A34A"
+                  uploadedBg="#F0FDF4"
+                  uploadedBorder="#BBF7D0"
+                  onView={() => userData.foreignTeacher?.passportPhotoUrl && Linking.openURL(userData.foreignTeacher.passportPhotoUrl)}
+                  onUpload={handleUploadPassportPhoto}
+                  onDelete={() => userData.foreignTeacher?.passportPhotoUrl && handleDeleteDoc('passport', userData.foreignTeacher.passportPhotoUrl)}
+                />
+                <DocRow
+                  label="Foreign Resident ID Card"
+                  hint="JPG / PNG / PDF"
+                  url={userData.foreignTeacher.foreignIdCardUrl}
+                  isUploading={uploadingDoc === 'idCard'}
+                  isDeleting={deletingDoc === 'idCard'}
+                  accentColor="#D97706"
+                  uploadedBg="#FFFBEB"
+                  uploadedBorder="#FDE68A"
+                  onView={() => userData.foreignTeacher?.foreignIdCardUrl && Linking.openURL(userData.foreignTeacher.foreignIdCardUrl)}
+                  onUpload={handleUploadIdCard}
+                  onDelete={() => userData.foreignTeacher?.foreignIdCardUrl && handleDeleteDoc('idCard', userData.foreignTeacher.foreignIdCardUrl)}
+                />
+                <DocRow
+                  label="Bank Book (통장사본)"
+                  hint="JPG / PNG / PDF"
+                  url={userData.foreignTeacher.bankBookUrl}
+                  isUploading={uploadingDoc === 'bankBook'}
+                  isDeleting={deletingDoc === 'bankBook'}
+                  accentColor="#0D9488"
+                  uploadedBg="#F0FDFA"
+                  uploadedBorder="#99F6E4"
+                  onView={() => userData.foreignTeacher?.bankBookUrl && Linking.openURL(userData.foreignTeacher.bankBookUrl)}
+                  onUpload={handleUploadBankBook}
+                  onDelete={() => userData.foreignTeacher?.bankBookUrl && handleDeleteDoc('bankBook', userData.foreignTeacher.bankBookUrl)}
+                />
+                <DocRow
+                  label="ESL Certificate (TESOL/TEFL/CELTA)"
+                  hint="JPG / PNG / PDF"
+                  url={(userData.foreignTeacher as any).eslCertUrl}
+                  isUploading={uploadingDoc === 'eslCert'}
+                  isDeleting={deletingDoc === 'eslCert'}
+                  accentColor="#7C3AED"
+                  uploadedBg="#F5F3FF"
+                  uploadedBorder="#DDD6FE"
+                  onView={() => (userData.foreignTeacher as any).eslCertUrl && Linking.openURL((userData.foreignTeacher as any).eslCertUrl)}
+                  onUpload={handleUploadEslCert}
+                  onDelete={() => (userData.foreignTeacher as any).eslCertUrl && handleDeleteDoc('eslCert', (userData.foreignTeacher as any).eslCertUrl)}
+                />
+              </View>
+            </View>
           )}
 
           {/* 소셜 계정 연동 관리 */}
           {userData.authProviders && userData.authProviders?.length > 0 && (
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>계정 연동 관리</Text>
+                <Text style={styles.sectionTitle}>
+                  {isForeign ? 'Linked Accounts' : '계정 연동 관리'}
+                </Text>
               </View>
               <View style={styles.socialAccountsContainer}>
-                <Text style={styles.socialSectionLabel}>현재 연동된 계정</Text>
+                <Text style={styles.socialSectionLabel}>
+                  {isForeign ? 'Currently linked accounts' : '현재 연동된 계정'}
+                </Text>
                 {userData.authProviders?.map((provider: any) => {
                   const isPassword = provider.providerId === 'password';
                   const canUnlink = (userData.authProviders?.length || 0) > 1 && !isPassword;
@@ -1792,9 +1962,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                         <View style={styles.socialAccountDetails}>
                           <Text style={styles.socialAccountName}>
                             {provider.providerId === 'google.com' ? 'Google' :
-                             provider.providerId === 'naver' || provider.providerId === 'naver.com' ? '네이버' :
-                             provider.providerId === 'kakao' ? '카카오' :
-                             provider.providerId === 'apple.com' ? 'Apple' : '이메일/비밀번호'}
+                             provider.providerId === 'naver' || provider.providerId === 'naver.com'
+                               ? (isForeign ? 'Naver' : '네이버') :
+                             provider.providerId === 'kakao'
+                               ? (isForeign ? 'Kakao' : '카카오') :
+                             provider.providerId === 'apple.com' ? 'Apple'
+                               : (isForeign ? 'Email / Password' : '이메일/비밀번호')}
                           </Text>
                           {provider.email && (
                             <Text style={styles.socialAccountEmail}>{provider.email}</Text>
@@ -1806,16 +1979,18 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                           onPress={() => handleSocialUnlink(provider.providerId)}
                           style={styles.unlinkButton}
                         >
-                          <Text style={styles.unlinkButtonText}>해제</Text>
+                          <Text style={styles.unlinkButtonText}>{isForeign ? 'Unlink' : '해제'}</Text>
                         </TouchableOpacity>
                       ) : (
-                        <Text style={styles.socialAccountRequiredText}>기본</Text>
+                        <Text style={styles.socialAccountRequiredText}>{isForeign ? 'Primary' : '기본'}</Text>
                       )}
                     </View>
                   );
                 })}
                 
-                <Text style={[styles.socialSectionLabel, { marginTop: 16 }]}>추가 연동 가능</Text>
+                <Text style={[styles.socialSectionLabel, { marginTop: 16 }]}>
+                  {isForeign ? 'Available to link' : '추가 연동 가능'}
+                </Text>
                 
                 {/* Google 연동 버튼 */}
                 {!userData.authProviders?.some((p: any) => p.providerId === 'google.com') && (
@@ -1824,12 +1999,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     onPress={() => handleSocialLink('google.com')}
                   >
                     <Text style={styles.socialLinkIcon}>🔵</Text>
-                    <Text style={styles.socialLinkText}>Google 연동</Text>
+                    <Text style={styles.socialLinkText}>{isForeign ? 'Link Google' : 'Google 연동'}</Text>
                   </TouchableOpacity>
                 )}
                 
-                {/* 네이버 연동 버튼 */}
-                {!userData.authProviders?.some((p: any) => p.providerId === 'naver' || p.providerId === 'naver.com') && (
+                {/* 네이버 연동 버튼 - 원어민에게는 숨김 (외국인은 네이버 계정이 없음) */}
+                {!isForeign && !userData.authProviders?.some((p: any) => p.providerId === 'naver' || p.providerId === 'naver.com') && (
                   <TouchableOpacity
                     style={styles.socialLinkButton}
                     onPress={() => handleSocialLink('naver')}
@@ -1846,7 +2021,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     onPress={() => handleSocialLink('apple.com')}
                   >
                     <Text style={styles.socialLinkIcon}>🍎</Text>
-                    <Text style={styles.socialLinkText}>Apple 연동</Text>
+                    <Text style={styles.socialLinkText}>{isForeign ? 'Link Apple' : 'Apple 연동'}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1871,45 +2046,43 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             </TouchableOpacity>
           </View>
 
-          {/* 개인 정보 */}
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{isForeign ? 'Personal Information' : '개인 정보'}</Text>
+          {/* 개인 정보 - 멘토만 표시 (원어민은 Teacher Information에 통합) */}
+          {!isForeign && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>개인 정보</Text>
+              </View>
+              <View style={styles.infoGrid}>
+                {userData.age && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>나이</Text>
+                    <Text style={styles.infoValue}>{userData.age}세</Text>
+                  </View>
+                )}
+                {userData.gender && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>성별</Text>
+                    <Text style={styles.infoValue}>{userData.gender === 'M' ? '남성' : '여성'}</Text>
+                  </View>
+                )}
+                {userData.phoneNumber && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>연락처</Text>
+                    <Text style={styles.infoValue}>{formatPhoneNumber(userData.phoneNumber)}</Text>
+                  </View>
+                )}
+                {userData.address && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>주소</Text>
+                    <Text style={styles.infoValue}>
+                      {userData.address}
+                      {userData.addressDetail ? ` ${userData.addressDetail}` : ''}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
-            <View style={styles.infoGrid}>
-              {userData.age && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>{isForeign ? 'Age' : '나이'}</Text>
-                  <Text style={styles.infoValue}>{userData.age}{isForeign ? ' years old' : '세'}</Text>
-                </View>
-              )}
-              {userData.gender && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>{isForeign ? 'Gender' : '성별'}</Text>
-                  <Text style={styles.infoValue}>
-                    {isForeign
-                      ? (userData.gender === 'M' ? 'Male' : 'Female')
-                      : (userData.gender === 'M' ? '남성' : '여성')}
-                  </Text>
-                </View>
-              )}
-              {userData.phoneNumber && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>{isForeign ? 'Phone Number' : '연락처'}</Text>
-                  <Text style={styles.infoValue}>{formatPhoneNumber(userData.phoneNumber)}</Text>
-                </View>
-              )}
-              {userData.address && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>{isForeign ? 'Address' : '주소'}</Text>
-                  <Text style={styles.infoValue}>
-                    {userData.address}
-                    {userData.addressDetail ? ` ${userData.addressDetail}` : ''}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
+          )}
 
           {/* 학교 정보 - 원어민은 숨기기 */}
           {!isForeign && (userData.school || userData.university) && (
@@ -2000,7 +2173,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               activeOpacity={0.7}
             >
               <Ionicons name="shield-checkmark-outline" size={16} color="#64748b" />
-              <Text style={styles.legalButtonText}>개인정보처리방침</Text>
+              <Text style={styles.legalButtonText}>
+                {isForeign ? 'Privacy Policy' : '개인정보처리방침'}
+              </Text>
             </TouchableOpacity>
             <View style={styles.legalButtonDivider} />
             <TouchableOpacity
@@ -2009,7 +2184,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               activeOpacity={0.7}
             >
               <Ionicons name="document-text-outline" size={16} color="#64748b" />
-              <Text style={styles.legalButtonText}>서비스 이용약관</Text>
+              <Text style={styles.legalButtonText}>
+                {isForeign ? 'Terms of Service' : '서비스 이용약관'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -2943,5 +3120,157 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+});
+
+// ────────────────────────────────────────────────────────────
+// DocRow: Submitted Documents 행 컴포넌트 (보기 + 업로드)
+// ────────────────────────────────────────────────────────────
+interface DocRowProps {
+  label: string;
+  hint: string;
+  url?: string | null;
+  isUploading: boolean;
+  isDeleting: boolean;
+  accentColor: string;
+  uploadedBg: string;
+  uploadedBorder: string;
+  onView: () => void;
+  onUpload: () => void;
+  onDelete: () => void;
+}
+
+function DocRow({ label, hint, url, isUploading, isDeleting, accentColor, uploadedBg, uploadedBorder, onView, onUpload, onDelete }: DocRowProps) {
+  if (isUploading || isDeleting) {
+    return (
+      <View style={[docStyles.row, { backgroundColor: '#F9FAFB', borderColor: '#E5E7EB' }]}>
+        <View style={docStyles.info}>
+          <ActivityIndicator size="small" color={isDeleting ? '#EF4444' : accentColor} />
+          <View style={{ marginLeft: 10 }}>
+            <Text style={[docStyles.label, { color: '#374151' }]}>{label}</Text>
+            <Text style={[docStyles.sub, { color: '#6B7280' }]}>{isDeleting ? 'Deleting...' : 'Uploading...'}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (url) {
+    return (
+      <View style={[docStyles.row, { backgroundColor: uploadedBg, borderColor: uploadedBorder }]}>
+        {/* 왼쪽: 파일 정보 */}
+        <TouchableOpacity style={docStyles.info} onPress={onView} activeOpacity={0.7}>
+          <Ionicons name="document-text-outline" size={20} color={accentColor} />
+          <View style={{ marginLeft: 10, flex: 1 }}>
+            <Text style={[docStyles.label, { color: accentColor }]}>{label}</Text>
+            <Text style={[docStyles.sub, { color: accentColor }]}>Tap to view →</Text>
+          </View>
+        </TouchableOpacity>
+        {/* 오른쪽: 재업로드 + 삭제 버튼 */}
+        <TouchableOpacity style={[docStyles.uploadBtn, { borderColor: accentColor }]} onPress={onUpload} activeOpacity={0.7}>
+          <Ionicons name="cloud-upload-outline" size={14} color={accentColor} />
+          <Text style={[docStyles.uploadBtnText, { color: accentColor }]}>Replace</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={docStyles.deleteBtn} onPress={onDelete} activeOpacity={0.7}>
+          <Ionicons name="trash-outline" size={14} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      style={[docStyles.row, docStyles.rowEmpty]}
+      onPress={onUpload}
+      activeOpacity={0.7}
+    >
+      <View style={docStyles.info}>
+        <Ionicons name="cloud-upload-outline" size={20} color="#9CA3AF" />
+        <View style={{ marginLeft: 10, flex: 1 }}>
+          <Text style={docStyles.labelEmpty}>{label}</Text>
+          <Text style={docStyles.subEmpty}>{hint} · Tap to upload</Text>
+        </View>
+      </View>
+      <View style={docStyles.uploadBadge}>
+        <Text style={docStyles.uploadBadgeText}>Upload</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const docStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  rowEmpty: {
+    backgroundColor: '#F9FAFB',
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  info: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  labelEmpty: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  sub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  subEmpty: {
+    fontSize: 11,
+    marginTop: 2,
+    color: '#9CA3AF',
+  },
+  uploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
+    marginLeft: 8,
+  },
+  uploadBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  uploadBadge: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  uploadBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  deleteBtn: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+    marginLeft: 6,
   },
 });

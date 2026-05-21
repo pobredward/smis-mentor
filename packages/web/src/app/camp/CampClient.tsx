@@ -32,13 +32,13 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   
   // 원어민 유저는 '수업' 탭 제외
   const allTabs: { id: TabName; title: string; path: string }[] = [
-    { id: 'education', title: '교육', path: '/camp/education' },
+    { id: 'education', title: isForeign ? 'Education' : '교육', path: '/camp/education' },
     { id: 'lesson', title: '수업', path: '/camp/lesson' },
-    { id: 'tasks', title: '업무', path: '/camp/tasks' },
-    { id: 'schedule', title: '시간표', path: '/camp/schedule' },
-    { id: 'guide', title: '인솔표', path: '/camp/guide' },
-    { id: 'class', title: '반명단', path: '/camp/class' },
-    { id: 'room', title: '방명단', path: '/camp/room' },
+    { id: 'tasks', title: isForeign ? 'Tasks' : '업무', path: '/camp/tasks' },
+    { id: 'schedule', title: isForeign ? 'Schedule' : '시간표', path: '/camp/schedule' },
+    { id: 'guide', title: isForeign ? 'Guide' : '인솔표', path: '/camp/guide' },
+    { id: 'class', title: isForeign ? 'Class' : '반명단', path: '/camp/class' },
+    { id: 'room', title: isForeign ? 'Room' : '방명단', path: '/camp/room' },
   ];
   
   const tabs = isForeign 

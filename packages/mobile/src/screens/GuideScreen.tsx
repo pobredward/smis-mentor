@@ -44,6 +44,7 @@ export function GuideScreen() {
   const [editTargetRole, setEditTargetRole] = useState<ResourceLinkRole>('common');
 
   const isAdmin = userData?.role === 'admin';
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
   // 사용자 role에 따라 인솔표 링크 필터링
@@ -95,24 +96,24 @@ export function GuideScreen() {
     if (!activeJobCodeId) return;
 
     Alert.alert(
-      '삭제 확인',
-      '이 인솔표를 삭제하시겠습니까?',
+      isForeign ? 'Confirm Delete' : '삭제 확인',
+      isForeign ? 'Are you sure you want to delete this guide?' : '이 인솔표를 삭제하시겠습니까?',
       [
-        { text: '취소', style: 'cancel' },
+        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
         {
-          text: '삭제',
+          text: isForeign ? 'Delete' : '삭제',
           style: 'destructive',
           onPress: async () => {
             try {
               await generationResourcesService.deleteLink(activeJobCodeId, 'guideLinks', guideId);
               await refreshResources();
-              Alert.alert('성공', '인솔표가 삭제되었습니다.');
+              Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Guide deleted.' : '인솔표가 삭제되었습니다.');
               if (selectedGuideId === guideId && guides.length > 1) {
                 setSelectedGuideId(guides[0].id);
               }
             } catch (error) {
               logger.error('인솔표 삭제 실패:', error);
-              Alert.alert('오류', '인솔표 삭제에 실패했습니다.');
+              Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to delete guide.' : '인솔표 삭제에 실패했습니다.');
             }
           },
         },
@@ -135,7 +136,7 @@ export function GuideScreen() {
       await refreshResources();
     } catch (error) {
       logger.error('순서 변경 실패:', error);
-      Alert.alert('오류', '순서 변경에 실패했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update order.' : '순서 변경에 실패했습니다.');
     }
   };
 
@@ -149,7 +150,7 @@ export function GuideScreen() {
 
   const handleEditGuide = async () => {
     if (!activeJobCodeId || !editingGuide || !editTitle.trim() || !editUrl.trim()) {
-      Alert.alert('오류', '제목과 URL을 모두 입력해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a title and URL.' : '제목과 URL을 모두 입력해주세요.');
       return;
     }
 
@@ -163,10 +164,10 @@ export function GuideScreen() {
       await generationResourcesService.reorderLinks(activeJobCodeId, 'guideLinks', updatedGuides);
       await refreshResources();
       setShowEditModal(false);
-      Alert.alert('성공', '인솔표가 수정되었습니다.');
+      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Guide updated.' : '인솔표가 수정되었습니다.');
     } catch (error) {
       logger.error('인솔표 수정 실패:', error);
-      Alert.alert('오류', '인솔표 수정에 실패했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update guide.' : '인솔표 수정에 실패했습니다.');
     }
   };
 
@@ -174,8 +175,8 @@ export function GuideScreen() {
     return (
       <View style={styles.centerContainer}>
         <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
-        <Text style={styles.loginRequiredTitle}>로그인 필요</Text>
-        <Text style={styles.emptyText}>로그인 후 이용 가능합니다.</Text>
+        <Text style={styles.loginRequiredTitle}>{isForeign ? 'Login Required' : '로그인 필요'}</Text>
+        <Text style={styles.emptyText}>{isForeign ? 'Please log in to access this page.' : '로그인 후 이용 가능합니다.'}</Text>
       </View>
     );
   }
@@ -184,7 +185,7 @@ export function GuideScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>인솔표 로딩 중...</Text>
+        <Text style={styles.loadingText}>{isForeign ? 'Loading guides...' : '인솔표 로딩 중...'}</Text>
       </View>
     );
   }
@@ -192,13 +193,13 @@ export function GuideScreen() {
   if (filteredGuides.length === 0) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>등록된 인솔표가 없습니다.</Text>
+        <Text style={styles.emptyText}>{isForeign ? 'No guides registered.' : '등록된 인솔표가 없습니다.'}</Text>
         {isAdmin && (
           <TouchableOpacity
             style={styles.addButtonLarge}
             onPress={() => setShowAddModal(true)}
           >
-            <Text style={styles.addButtonLargeText}>+ 첫 인솔표 추가하기</Text>
+            <Text style={styles.addButtonLargeText}>+ {isForeign ? 'Add first guide' : '첫 인솔표 추가하기'}</Text>
           </TouchableOpacity>
         )}
         {isAdmin && (

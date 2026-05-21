@@ -115,6 +115,8 @@ export interface User {
     cvUrl?: string;
     passportPhotoUrl?: string;
     foreignIdCardUrl?: string;
+    bankBookUrl?: string;
+    eslCertUrl?: string;
     applicationDate?: Timestamp;
   };
 

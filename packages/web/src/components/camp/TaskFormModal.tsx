@@ -2,6 +2,7 @@
 import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { createTask, updateTask, deleteTask, uploadTaskImage, uploadTaskFile, getTasksByGroupId, updateTaskGroup } from '@/lib/taskService';
@@ -37,7 +38,20 @@ interface TaskFormProps {
 
 const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
 
+const GROUP_LABEL_EN: Record<string, string> = {
+  '주니어': 'Junior',
+  '미들': 'Middle',
+  '시니어': 'Senior',
+  '스프링': 'Spring',
+  '서머': 'Summer',
+  '어텀': 'Autumn',
+  '윈터': 'Winter',
+  '공통': 'All',
+};
+
 export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = false, selectedDate, categories = [], onClose, onSuccess }: TaskFormProps) {
+  const { userData: formUser } = useAuth();
+  const isForeign = formUser?.role === 'foreign' || formUser?.role === 'foreign_temp';
   const isEdit = !!task && !isCopyMode;
 
   useEffect(() => {
@@ -270,10 +284,10 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
 
       const uploadedAttachments = await Promise.all(uploadPromises);
       setAttachments(prev => [...prev, ...uploadedAttachments]);
-      toast.success('파일이 업로드되었습니다.');
+      toast.success(isForeign ? 'File uploaded.' : '파일이 업로드되었습니다.');
     } catch (error) {
       logger.error('파일 업로드 오류:', error);
-      toast.error('파일 업로드 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to upload file.' : '파일 업로드 중 오류가 발생했습니다.');
     } finally {
       setUploadingFiles(false);
     }
@@ -282,7 +296,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
   // 링크 추가
   const handleAddLink = () => {
     if (!linkLabel.trim() || !linkUrl.trim()) {
-      toast.error('라벨과 URL을 모두 입력해주세요.');
+      toast.error(isForeign ? 'Please enter both a label and a URL.' : '라벨과 URL을 모두 입력해주세요.');
       return;
     }
 
@@ -298,7 +312,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
     setLinkLabel('');
     setLinkUrl('');
     setShowLinkModal(false);
-    toast.success('링크가 추가되었습니다.');
+    toast.success(isForeign ? 'Link added.' : '링크가 추가되었습니다.');
   };
 
   // 첨부파일 제거
@@ -311,7 +325,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
     e.preventDefault();
 
     if (selectedDates.length === 0) {
-      toast.error('날짜를 하나 이상 선택해주세요.');
+      toast.error(isForeign ? 'Please select at least one date.' : '날짜를 하나 이상 선택해주세요.');
       return;
     }
 
@@ -319,23 +333,23 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
     if (time) {
       const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timePattern.test(time)) {
-        toast.error('시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
+        toast.error(isForeign ? 'Please enter time in 24-hour format (e.g. 14:30)' : '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
         return;
       }
     }
 
     if (selectedRoles.length === 0) {
-      toast.error('대상 역할을 최소 1개 선택해주세요.');
+      toast.error(isForeign ? 'Please select at least one target role.' : '대상 역할을 최소 1개 선택해주세요.');
       return;
     }
 
     if (selectedGroups.length === 0) {
-      toast.error('대상 그룹을 최소 1개 선택해주세요.');
+      toast.error(isForeign ? 'Please select at least one target group.' : '대상 그룹을 최소 1개 선택해주세요.');
       return;
     }
 
     if (!title.trim()) {
-      toast.error('업무 제목을 입력해주세요.');
+      toast.error(isForeign ? 'Please enter a task title.' : '업무 제목을 입력해주세요.');
       return;
     }
 
@@ -383,7 +397,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             // 날짜 동일: 내용만 일괄 업데이트
             await updateTaskGroup(campCode, task.groupId, commonUpdates);
           }
-          toast.success('그룹 업무가 수정되었습니다.');
+          toast.success(isForeign ? 'Group task updated.' : '그룹 업무가 수정되었습니다.');
         } else {
           // 그룹 없는 단일 Task 수정
           if (selectedDates.length >= 2) {
@@ -413,7 +427,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
               campCode,
               date: Timestamp.fromDate(localDate),
             });
-            toast.success('업무가 수정되었습니다.');
+            toast.success(isForeign ? 'Task updated.' : '업무가 수정되었습니다.');
           }
         }
       } else {
@@ -438,21 +452,23 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           await createTask(campCode, taskData, newGroupId);
         }
 
-        toast.success(`${selectedDates.length}개의 업무가 생성되었습니다.`);
+        toast.success(isForeign ? `${selectedDates.length} task(s) created.` : `${selectedDates.length}개의 업무가 생성되었습니다.`);
       }
 
       onSuccess();
       onClose();
     } catch (error) {
       logger.error('업무 저장 오류:', error);
-      toast.error('업무 저장 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to save task.' : '업무 저장 중 오류가 발생했습니다.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
-  const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+  const monthNames = isForeign
+    ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    : ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+  const weekDays = isForeign ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['일', '월', '화', '수', '목', '금', '토'];
 
   // 드래그 중 오버레이로 마우스가 넘어가도 모달이 닫히지 않도록
   // mousedown이 오버레이에서 시작되고 mouseup도 오버레이에서 끝난 경우에만 닫힘
@@ -479,7 +495,9 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
         {/* 헤더 */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">
-            {isEdit ? '업무 수정' : isCopyMode ? '업무 복사' : '새 업무 추가'}
+            {isForeign
+              ? (isEdit ? 'Edit Task' : isCopyMode ? 'Copy Task' : 'Add New Task')
+              : (isEdit ? '업무 수정' : isCopyMode ? '업무 복사' : '새 업무 추가')}
           </h3>
           <button
             onClick={onClose}
@@ -494,7 +512,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           {/* 0. 타겟 역할 타입 선택 (mentor/foreign) */}
           <div className="border border-purple-200 bg-purple-50/30 rounded-lg p-3">
             <label className="block text-xs font-medium text-gray-700 mb-2">
-              🎯 업무 대상 선택 (멘토/원어민)
+              🎯 {isForeign ? 'Target (Mentor/Foreign)' : '업무 대상 선택 (멘토/원어민)'}
             </label>
             <div className="flex gap-2">
               <button
@@ -509,7 +527,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                멘토용
+                {isForeign ? 'Mentor' : '멘토용'}
               </button>
               <button
                 type="button"
@@ -523,7 +541,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                원어민용
+                {isForeign ? 'Foreign' : '원어민용'}
               </button>
             </div>
           </div>
@@ -531,11 +549,13 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           {/* 1. 날짜 및 시간 */}
           <div className="border border-blue-200 bg-blue-50/30 rounded-lg p-3 space-y-2">
             <h4 className="text-xs font-semibold text-gray-900 flex items-center gap-1">
-              📅 날짜 및 시간 <span className="text-red-500">*</span>
+              📅 {isForeign ? 'Date & Time' : '날짜 및 시간'} <span className="text-red-500">*</span>
             </h4>
             {isEdit && task?.groupId && (
               <p className="text-xs text-blue-600 bg-blue-50 rounded px-2 py-1">
-                이 업무는 여러 날짜에 묶인 그룹 업무입니다. 날짜를 변경하면 그룹의 모든 날짜가 함께 변경됩니다.
+                {isForeign
+                  ? 'This is a grouped task. Changing dates will update all dates in the group.'
+                  : '이 업무는 여러 날짜에 묶인 그룹 업무입니다. 날짜를 변경하면 그룹의 모든 날짜가 함께 변경됩니다.'}
               </p>
             )}
 
@@ -558,7 +578,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                 </svg>
               </button>
               <span className="text-sm font-semibold text-gray-800">
-                {currentYear}년 {monthNames[currentMonth]}
+                {isForeign ? `${monthNames[currentMonth]} ${currentYear}` : `${currentYear}년 ${monthNames[currentMonth]}`}
               </span>
               <button
                 type="button"
@@ -601,7 +621,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             {loadingGroupDates ? (
               <p className="text-[10px] text-gray-400 text-center">날짜 불러오는 중...</p>
             ) : (
-              <p className="text-[10px] text-gray-400 text-center">클릭 또는 드래그로 여러 날짜를 선택할 수 있습니다</p>
+              <p className="text-[10px] text-gray-400 text-center">{isForeign ? 'Click or drag to select multiple dates' : '클릭 또는 드래그로 여러 날짜를 선택할 수 있습니다'}</p>
             )}
 
             {/* 선택된 날짜 태그 목록 */}
@@ -632,7 +652,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                           }
                         }}
                         className="ml-0.5 text-blue-500 hover:text-blue-800 leading-none"
-                        aria-label={`${d.getMonth() + 1}월 ${d.getDate()}일 제거`}
+                        aria-label={isForeign ? `Remove ${d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}` : `${d.getMonth() + 1}월 ${d.getDate()}일 제거`}
                       >
                         ×
                       </button>
@@ -646,7 +666,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
               {/* 시간 지정 */}
               <div className="flex-1">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  🕐 시간 지정 <span className="font-normal">(선택)</span>
+                  🕐 {isForeign ? 'Set time' : '시간 지정'} <span className="font-normal">({isForeign ? 'optional' : '선택'})</span>
                 </label>
                 <input
                   type="text"
@@ -655,7 +675,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                     setTime(e.target.value);
                     setHasTime(e.target.value.length > 0);
                   }}
-                  placeholder="예: 14:30"
+                  placeholder={isForeign ? 'e.g. 14:30' : '예: 14:30'}
                   pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -663,7 +683,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
               {/* 예상 소요시간 */}
               <div className="w-28">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  ⏱️ 소요시간 <span className="font-normal">(선택)</span>
+                  ⏱️ {isForeign ? 'Duration' : '소요시간'} <span className="font-normal">({isForeign ? 'optional' : '선택'})</span>
                 </label>
                 <div className="flex items-center gap-1.5">
                   <input
@@ -675,7 +695,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                     placeholder="0"
                     className="w-16 px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                  <span className="text-xs text-gray-500 shrink-0">분</span>
+                  <span className="text-xs text-gray-500 shrink-0">{isForeign ? 'min' : '분'}</span>
                 </div>
               </div>
             </div>
@@ -684,7 +704,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           {/* 2. 카테고리 (선택) — 날짜 및 시간 바로 아래 */}
           {categories.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">🏷️ 카테고리 (선택)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">🏷️ {isForeign ? 'Category (optional)' : '카테고리 (선택)'}</label>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
@@ -695,7 +715,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                       : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  없음
+                  {isForeign ? 'None' : '없음'}
                 </button>
                 {categories.map(cat => (
                   <button
@@ -723,7 +743,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           {/* 3. 대상 역할 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              👥 대상 역할 <span className="text-red-500">*</span>
+              👥 {isForeign ? 'Target Role' : '대상 역할'} <span className="text-red-500">*</span>
             </label>
             <div className="flex flex-wrap gap-1.5">
               {roleOptions.map(role => (
@@ -746,7 +766,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           {/* 3-1. 대상 그룹 — "공통"을 맨 앞에 배치 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              🎯 대상 그룹 <span className="text-red-500">*</span>
+              🎯 {isForeign ? 'Target Group' : '대상 그룹'} <span className="text-red-500">*</span>
             </label>
             <div className="flex flex-wrap gap-1.5">
               {['공통', ...groupOptions.filter(g => g !== '공통')].map(group => (
@@ -766,7 +786,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                       : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  {group}
+                  {isForeign ? (GROUP_LABEL_EN[group] ?? group) : group}
                 </button>
               ))}
             </div>
@@ -775,13 +795,13 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
           {/* 4. 업무 제목 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              ✏️ 업무 제목 <span className="text-red-500">*</span>
+              ✏️ {isForeign ? 'Task Title' : '업무 제목'} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="예: 학생 명단 확인"
+              placeholder={isForeign ? 'e.g. Check student list' : '예: 학생 명단 확인'}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             />
@@ -789,11 +809,11 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
 
           {/* 5. 업무 설명 */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">📝 업무 설명</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">📝 {isForeign ? 'Description' : '업무 설명'}</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="업무에 대한 상세 설명"
+              placeholder={isForeign ? 'Detailed description of the task' : '업무에 대한 상세 설명'}
               rows={8}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             />
@@ -801,7 +821,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
 
           {/* 6. 첨부파일 및 링크 (번호 유지) */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">📎 첨부파일 및 링크</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">📎 {isForeign ? 'Attachments & Links' : '첨부파일 및 링크'}</label>
             <div className="space-y-2">
               {/* 업로드 버튼 */}
               <div className="flex gap-2">
@@ -810,7 +830,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                     <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <span className="text-gray-700">파일</span>
+                    <span className="text-gray-700">{isForeign ? 'File' : '파일'}</span>
                   </div>
                   <input
                     type="file"
@@ -827,14 +847,14 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                   onClick={() => setShowLinkModal(true)}
                   className="flex items-center justify-center gap-2 px-3 py-2 text-xs bg-blue-100 border border-blue-300 rounded-lg hover:bg-blue-200 transition-all"
                 >
-                  <span className="text-blue-700">링크</span>
+                  <span className="text-blue-700">{isForeign ? 'Link' : '링크'}</span>
                 </button>
               </div>
 
               {uploadingFiles && (
                 <div className="text-xs text-gray-600 flex items-center gap-2">
                   <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-500 border-t-transparent"></div>
-                  업로드 중...
+                  {isForeign ? 'Uploading...' : '업로드 중...'}
                 </div>
               )}
 
@@ -877,14 +897,20 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             onClick={onClose}
             className="flex-1 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
           >
-            취소
+            {isForeign ? 'Cancel' : '취소'}
           </button>
           <button
             onClick={handleSubmit}
             disabled={submitting || uploadingFiles}
             className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? '저장 중...' : isEdit ? '수정하기' : isCopyMode ? '복사하기' : '추가하기'}
+            {submitting
+              ? (isForeign ? 'Saving...' : '저장 중...')
+              : isEdit
+                ? (isForeign ? 'Save' : '수정하기')
+                : isCopyMode
+                  ? (isForeign ? 'Copy' : '복사하기')
+                  : (isForeign ? 'Add' : '추가하기')}
           </button>
         </div>
       </div>
@@ -893,15 +919,15 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
       {showLinkModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full m-4 p-4">
-            <h4 className="text-base font-semibold text-gray-900 mb-3">링크 추가</h4>
+            <h4 className="text-base font-semibold text-gray-900 mb-3">{isForeign ? 'Add Link' : '링크 추가'}</h4>
             <div className="space-y-2">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">라벨</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isForeign ? 'Label' : '라벨'}</label>
                 <input
                   type="text"
                   value={linkLabel}
                   onChange={e => setLinkLabel(e.target.value)}
-                  placeholder="예: 구글 드라이브"
+                  placeholder={isForeign ? 'e.g. Google Drive' : '예: 구글 드라이브'}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -921,13 +947,13 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                 onClick={() => setShowLinkModal(false)}
                 className="flex-1 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
               >
-                취소
+                {isForeign ? 'Cancel' : '취소'}
               </button>
               <button
                 onClick={handleAddLink}
                 className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                추가
+                {isForeign ? 'Add' : '추가'}
               </button>
             </div>
           </div>

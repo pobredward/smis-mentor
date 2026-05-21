@@ -31,7 +31,8 @@ import {
   getDownloadURL, 
   deleteObject,
   getStorage,
-  uploadBytes
+  uploadBytes,
+  listAll
 } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
 import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup, Review, JobExperienceGroupRole } from '@/types';
@@ -404,6 +405,35 @@ export const updateUserActiveJobCode = async (userId: string, jobCodeId: string)
   }
 };
 
+const deleteUserStorageFiles = async (userId: string): Promise<void> => {
+  const prefixes = [
+    `profileImages/${userId}`,
+    `foreignTeachers/${userId}`,
+  ];
+
+  for (const prefix of prefixes) {
+    try {
+      const folderRef = ref(storage, prefix);
+      const result = await listAll(folderRef);
+
+      if (result.items.length === 0 && result.prefixes.length === 0) continue;
+
+      // 하위 폴더까지 재귀 삭제
+      const allItems = [...result.items];
+      for (const subFolder of result.prefixes) {
+        const subResult = await listAll(subFolder);
+        allItems.push(...subResult.items);
+      }
+
+      await Promise.all(allItems.map(item => deleteObject(item)));
+      logger.info(`✅ Storage 파일 ${allItems.length}개 삭제: ${prefix}`);
+    } catch (error) {
+      // Storage 정리 실패가 탈퇴 전체를 막지 않도록 오류만 기록
+      logger.error(`⚠️ Storage 파일 삭제 실패 (${prefix}):`, error);
+    }
+  }
+};
+
 export const deactivateUser = async (userId: string) => {
   try {
     logger.info('📤 회원 탈퇴 시작:', userId);
@@ -417,12 +447,29 @@ export const deactivateUser = async (userId: string) => {
     
     const userData = userDoc.data() as User;
     const now = Timestamp.now();
+
+    // Storage 파일 먼저 삭제 (개인정보보호법 준수)
+    // Auth 삭제 전에 처리하여 권한 문제 방지
+    await deleteUserStorageFiles(userId);
+    logger.info('✅ Storage 파일 정리 완료');
     
-    // Firestore 사용자 정보 업데이트
+    // Firestore 사용자 정보 업데이트 (URL 필드도 null 처리)
+    const isForeignUser = userData.role === 'foreign' || userData.role === 'foreign_temp';
     await updateDoc(userRef, {
       status: 'inactive',
       name: `(탈퇴)${userData.name}`,
-      originalEmail: userData.email, // 원본 이메일 저장
+      originalEmail: userData.email,
+      profileImage: '',
+      ...(isForeignUser && userData.foreignTeacher ? {
+        foreignTeacher: {
+          ...userData.foreignTeacher,
+          cvUrl: null,
+          passportPhotoUrl: null,
+          foreignIdCardUrl: null,
+          bankBookUrl: null,
+          eslCertUrl: null,
+        },
+      } : {}),
       updatedAt: now
     });
     
@@ -1253,6 +1300,99 @@ export const uploadForeignIdCard = async (
     });
   } catch (error) {
     logger.error('외국인 ID 카드 업로드 실패:', error);
+    throw error;
+  }
+};
+
+export const uploadForeignBankBook = async (
+  userId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<string> => {
+  try {
+    const filePath = `foreignTeachers/${userId}/bankBook/${Date.now()}-${file.name}`;
+    const storageRef = ref(storage, filePath);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) {
+            onProgress(progress);
+          }
+        },
+        (error) => {
+          logger.error('통장사본 업로드 오류:', error);
+          reject(error);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(storageRef);
+          resolve(downloadURL);
+        }
+      );
+    });
+  } catch (error) {
+    logger.error('통장사본 업로드 실패:', error);
+    throw error;
+  }
+};
+
+export const uploadForeignEslCert = async (
+  userId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<string> => {
+  try {
+    const filePath = `foreignTeachers/${userId}/eslCert/${Date.now()}-${file.name}`;
+    const storageRef = ref(storage, filePath);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) onProgress(progress);
+        },
+        (error) => {
+          logger.error('ESL 자격증 업로드 오류:', error);
+          reject(error);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(storageRef);
+          resolve(downloadURL);
+        }
+      );
+    });
+  } catch (error) {
+    logger.error('ESL 자격증 업로드 실패:', error);
+    throw error;
+  }
+};
+
+// 원어민 문서 URL을 Firestore에서 null로 처리 + Storage 파일 삭제
+export const deleteForeignDocUrl = async (
+  userId: string,
+  field: 'cvUrl' | 'passportPhotoUrl' | 'foreignIdCardUrl' | 'bankBookUrl' | 'eslCertUrl',
+  fileUrl: string
+): Promise<void> => {
+  try {
+    // Storage 파일 삭제
+    const fileRef = ref(storage, fileUrl);
+    await deleteObject(fileRef).catch((err) => {
+      // 파일이 이미 없어도 Firestore는 업데이트
+      logger.warn('Storage 파일 삭제 실패 (무시):', err);
+    });
+
+    // Firestore URL 필드 null 처리
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      [`foreignTeacher.${field}`]: null,
+    });
+  } catch (error) {
+    logger.error(`원어민 문서 삭제 실패 (${field}):`, error);
     throw error;
   }
 };

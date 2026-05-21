@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 
 /**
  * Firebase Admin SDK 초기화 (런타임에만 실행)
@@ -40,12 +41,14 @@ function initializeFirebaseAdmin() {
   }
 
   try {
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
     const app = admin.initializeApp({
       credential: admin.credential.cert({
         projectId,
         clientEmail,
         privateKey,
       }),
+      storageBucket,
     });
     
     // Firestore settings는 초기화 직후 한 번만 설정
@@ -83,6 +86,14 @@ export function getAdminAuth() {
  */
 export function getAdminApp() {
   return initializeFirebaseAdmin();
+}
+
+/**
+ * Storage 버킷 인스턴스 가져오기 (lazy initialization)
+ */
+export function getAdminStorage() {
+  initializeFirebaseAdmin();
+  return getStorage().bucket();
 }
 
 /**

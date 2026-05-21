@@ -1,7 +1,33 @@
 import { logger } from '@smis-mentor/shared';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminFirestore, getAdminAuth, adminFieldValue } from '@/lib/firebase-admin';
+import { getAdminFirestore, getAdminAuth, getAdminStorage, adminFieldValue } from '@/lib/firebase-admin';
 import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
+
+const USER_STORAGE_PATHS = (userId: string) => [
+  `profileImages/${userId}`,
+  `foreignTeachers/${userId}`,
+];
+
+async function deleteUserStorageFiles(userId: string): Promise<number> {
+  try {
+    const bucket = getAdminStorage();
+    const paths = USER_STORAGE_PATHS(userId);
+    let totalDeleted = 0;
+
+    for (const prefix of paths) {
+      const [files] = await bucket.getFiles({ prefix });
+      if (files.length === 0) continue;
+      await Promise.all(files.map(file => file.delete()));
+      totalDeleted += files.length;
+      logger.info(`✅ Storage 파일 ${files.length}개 삭제: ${prefix}`);
+    }
+
+    return totalDeleted;
+  } catch (error) {
+    logger.error('⚠️ Storage 파일 삭제 실패 (삭제 진행은 계속):', error);
+    return 0;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,9 +100,10 @@ export async function POST(request: NextRequest) {
     // 4. 삭제 처리 (Soft Delete vs Hard Delete)
     let authDeleted = false;
     let authError = null;
+    let storageDeletedCount = 0;
 
     if (isHardDelete) {
-      // Hard Delete: Firebase Auth + Firestore 완전 삭제
+      // Hard Delete: Firebase Auth + Firestore + Storage 완전 삭제
       logger.info('🔴 Hard Delete 진행 중...');
       
       try {
@@ -108,9 +135,13 @@ export async function POST(request: NextRequest) {
       // Firestore 문서 완전 삭제
       await db.collection('users').doc(userId).delete();
       logger.info('✅ Firestore 사용자 문서 삭제 완료 (Hard Delete)');
+
+      // Storage 파일 삭제 (개인정보보호법 준수 - onUserDeleted 트리거와 이중 보호)
+      storageDeletedCount = await deleteUserStorageFiles(userId);
+      logger.info(`✅ Storage 파일 삭제 완료: ${storageDeletedCount}개 (Hard Delete)`);
       
     } else {
-      // Soft Delete: Firebase Auth만 삭제, Firestore는 status만 변경
+      // Soft Delete: Firebase Auth만 삭제, Firestore는 status만 변경, Storage는 삭제
       logger.info('🟡 Soft Delete 진행 중...');
       
       // Firebase Auth 삭제 (재가입 가능하게)
@@ -136,13 +167,27 @@ export async function POST(request: NextRequest) {
         status: 'deleted',
         name: deletedName,
         email: deletedEmail,
-        originalEmail: userData?.email, // 원본 이메일 백업
-        originalName: userData?.name, // 원본 이름 백업
+        originalEmail: userData?.email,
+        originalName: userData?.name,
+        // Storage 삭제 후 URL 필드도 null 처리 (개인정보보호)
+        profileImage: null,
+        foreignTeacher: userData?.foreignTeacher ? {
+          ...userData.foreignTeacher,
+          cvUrl: null,
+          passportPhotoUrl: null,
+          foreignIdCardUrl: null,
+          bankBookUrl: null,
+          eslCertUrl: null,
+        } : null,
         deletedAt: now,
         deletedBy: adminUserId,
         updatedAt: now,
       });
       logger.info('✅ Firestore 사용자 status 변경 완료 (Soft Delete)');
+
+      // Storage 파일 삭제 (개인정보보호법 준수 - URL 무효화와 함께 실제 파일도 삭제)
+      storageDeletedCount = await deleteUserStorageFiles(userId);
+      logger.info(`✅ Storage 파일 삭제 완료: ${storageDeletedCount}개 (Soft Delete)`);
     }
 
     // 5. 감사 로그 기록
@@ -191,13 +236,14 @@ export async function POST(request: NextRequest) {
       deleteType: isHardDelete ? 'hard' : 'soft',
       authDeleted,
       authError,
+      storageDeletedCount,
       message: isHardDelete
         ? authDeleted 
-          ? '사용자가 Firebase Auth 및 Firestore에서 영구 삭제되었습니다.'
-          : '사용자가 Firestore에서 영구 삭제되었습니다. (Firebase Auth는 이미 없었습니다.)'
+          ? `사용자가 Firebase Auth, Firestore, Storage(${storageDeletedCount}개 파일)에서 영구 삭제되었습니다.`
+          : `사용자가 Firestore, Storage(${storageDeletedCount}개 파일)에서 영구 삭제되었습니다. (Firebase Auth는 이미 없었습니다.)`
         : authDeleted
-          ? '사용자가 일반 삭제되었습니다. Firebase Auth는 삭제되었으며, 데이터는 보존됩니다.'
-          : '사용자가 일반 삭제되었습니다. 데이터는 보존됩니다.',
+          ? `사용자가 일반 삭제되었습니다. Firebase Auth와 Storage(${storageDeletedCount}개 파일)는 삭제되었으며, 이력 데이터는 보존됩니다.`
+          : `사용자가 일반 삭제되었습니다. Storage(${storageDeletedCount}개 파일)는 삭제되었으며, 이력 데이터는 보존됩니다.`,
       deletedUser: {
         id: userId,
         name: userData?.name,

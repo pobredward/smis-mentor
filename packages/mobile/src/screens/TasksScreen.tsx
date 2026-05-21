@@ -73,13 +73,17 @@ interface JobCodeWithGroup {
   name: string;
 }
 
-const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+const DAYS_OF_WEEK_KO = ['일', '월', '화', '수', '목', '금', '토'];
+const DAYS_OF_WEEK_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAYS_OF_WEEK = DAYS_OF_WEEK_KO; // 기본값 — 컴포넌트 내부에서 isForeign에 따라 분기
 
 
 export function TasksScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { userData, loading: authLoading } = useAuth();
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  const daysOfWeek = isForeign ? DAYS_OF_WEEK_EN : DAYS_OF_WEEK_KO;
   // campTasks 전체 캐시는 사용하지 않음 — 날짜/월 범위 쿼리로 필요한 데이터만 읽음
   const [loading, setLoading] = useState(true);
   const [currentGroupRole, setCurrentGroupRole] = useState<JobExperienceGroupRole | null>(null);
@@ -588,7 +592,7 @@ export function TasksScreen() {
   // 업무 완료 토글
   const handleToggleComplete = async (taskId: string) => {
     if (!userData) {
-      Alert.alert('오류', '사용자 정보를 불러올 수 없습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Unable to load user information.' : '사용자 정보를 불러올 수 없습니다.');
       return;
     }
 
@@ -602,7 +606,7 @@ export function TasksScreen() {
       ]);
     } catch (error) {
       logger.error('업무 완료 토글 오류:', error);
-      Alert.alert('오류', '업무 상태 변경 중 오류가 발생했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update task status.' : '업무 상태 변경 중 오류가 발생했습니다.');
     }
   };
 
@@ -656,17 +660,17 @@ export function TasksScreen() {
 
   const handlePersonalTaskSubmit = async () => {
     if (!personalTaskTitle.trim()) {
-      Alert.alert('오류', '업무 제목을 입력해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a task title.' : '업무 제목을 입력해주세요.');
       return;
     }
     if (personalTaskSelectedDates.length === 0) {
-      Alert.alert('오류', '날짜를 선택해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please select a date.' : '날짜를 선택해주세요.');
       return;
     }
 
     const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
     if (personalTaskHasTime && personalTaskTime && !timePattern.test(personalTaskTime)) {
-      Alert.alert('오류', '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter time in 24-hour format (e.g. 14:30)' : '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
       return;
     }
 
@@ -724,7 +728,7 @@ export function TasksScreen() {
       ]);
     } catch (error) {
       logger.error('개인 업무 저장 오류:', error);
-      Alert.alert('오류', '저장 중 오류가 발생했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to save task.' : '저장 중 오류가 발생했습니다.');
     } finally {
       setIsSubmittingPersonal(false);
     }
@@ -736,15 +740,15 @@ export function TasksScreen() {
       await loadTasksForDate(selectedDate);
     } catch (error) {
       logger.error('개인 업무 완료 토글 오류:', error);
-      Alert.alert('오류', '상태 변경 중 오류가 발생했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update status.' : '상태 변경 중 오류가 발생했습니다.');
     }
   };
 
   const handlePersonalTaskDelete = (taskId: string) => {
-    Alert.alert('삭제 확인', '이 개인 업무를 삭제하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
+    Alert.alert(isForeign ? 'Confirm Delete' : '삭제 확인', isForeign ? 'Delete this personal task?' : '이 개인 업무를 삭제하시겠습니까?', [
+      { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
       {
-        text: '삭제',
+        text: isForeign ? 'Delete' : '삭제',
         style: 'destructive',
         onPress: async () => {
           try {
@@ -755,7 +759,7 @@ export function TasksScreen() {
             ]);
           } catch (error) {
             logger.error('개인 업무 삭제 오류:', error);
-            Alert.alert('오류', '삭제 중 오류가 발생했습니다.');
+            Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to delete task.' : '삭제 중 오류가 발생했습니다.');
           }
         },
       },
@@ -1080,7 +1084,7 @@ export function TasksScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>업무를 불러오는 중...</Text>
+        <Text style={styles.loadingText}>{isForeign ? 'Loading tasks...' : '업무를 불러오는 중...'}</Text>
       </View>
     );
   }
@@ -1099,7 +1103,7 @@ export function TasksScreen() {
             onRefresh={onRefresh}
             tintColor="#3b82f6"
             colors={["#3b82f6"]}
-            title="새로고침 중..."
+            title={isForeign ? 'Refreshing...' : '새로고침 중...'}
             titleColor="#6b7280"
           />
         }
@@ -1107,13 +1111,17 @@ export function TasksScreen() {
         {/* 캘린더 헤더 */}
         <View style={styles.calendarHeaderSection}>
           <Text style={styles.calendarTitle}>
-            {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
+            {isForeign
+              ? `${new Date(currentDate.getFullYear(), currentDate.getMonth()).toLocaleString('en-US', { month: 'long' })} ${currentDate.getFullYear()}`
+              : `${currentDate.getFullYear()}년 ${currentDate.getMonth() + 1}월`}
           </Text>
           {/* 뷰 전환 토글 버튼 */}
           <TouchableOpacity
             onPress={() => handleCalendarViewChange(calendarView === 'compact' ? 'full' : 'compact')}
             style={styles.viewToggleButton}
-            accessibilityLabel={calendarView === 'compact' ? '풀 캘린더 뷰로 전환' : '컴팩트 뷰로 전환'}
+            accessibilityLabel={isForeign
+              ? (calendarView === 'compact' ? 'Switch to full calendar' : 'Switch to compact view')
+              : (calendarView === 'compact' ? '풀 캘린더 뷰로 전환' : '컴팩트 뷰로 전환')}
             accessibilityRole="button"
           >
             <Ionicons
@@ -1143,7 +1151,7 @@ export function TasksScreen() {
         >
           {/* 요일 헤더 */}
           <View style={styles.weekDaysRow}>
-            {DAYS_OF_WEEK.map((day, i) => (
+            {daysOfWeek.map((day, i) => (
               <View key={day} style={styles.weekDayCell}>
                 <Text
                   style={[
@@ -1176,7 +1184,9 @@ export function TasksScreen() {
             {/* 헤더 */}
             <View style={styles.taskListHeader}>
               <Text style={styles.taskListTitle}>
-                {selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일 ({DAYS_OF_WEEK[selectedDate.getDay()]})
+                {isForeign
+                  ? selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', weekday: 'short' })
+                  : `${selectedDate.getMonth() + 1}월 ${selectedDate.getDate()}일 (${DAYS_OF_WEEK_KO[selectedDate.getDay()]})`}
               </Text>
               <TouchableOpacity
                 onPress={() => openPersonalTaskModal()}
@@ -1184,7 +1194,7 @@ export function TasksScreen() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="add" size={13} color="#7c3aed" />
-                <Text style={{ fontSize: 11, fontWeight: '600', color: '#7c3aed' }}>내 업무</Text>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#7c3aed' }}>{isForeign ? 'My Task' : '내 업무'}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1210,7 +1220,7 @@ export function TasksScreen() {
                 return (
                   <View style={styles.emptyTaskContainer}>
                     <Ionicons name="calendar-outline" size={48} color="#cbd5e1" />
-                    <Text style={styles.emptyTaskText}>이 날짜에 등록된 업무가 없습니다</Text>
+                    <Text style={styles.emptyTaskText}>{isForeign ? 'No tasks for this date' : '이 날짜에 등록된 업무가 없습니다'}</Text>
                   </View>
                 );
               }
@@ -1252,7 +1262,7 @@ export function TasksScreen() {
                           const taskDate = selectedDate.toISOString().split('T')[0];
                           (navigation as any).navigate('PersonalTaskDetail', { taskId: p.id, taskDate });
                         }}
-                        accessibilityLabel={`개인 업무: ${p.title}`}
+                        accessibilityLabel={isForeign ? `Personal task: ${p.title}` : `개인 업무: ${p.title}`}
                         accessibilityRole="button"
                         style={[
                           styles.taskCard,
@@ -1276,7 +1286,9 @@ export function TasksScreen() {
                             onPress={e => { e.stopPropagation?.(); handlePersonalTaskToggle(p); }}
                             style={styles.taskCheckbox}
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            accessibilityLabel={p.isCompleted ? '완료 취소' : '완료 처리'}
+                            accessibilityLabel={isForeign
+                              ? (p.isCompleted ? 'Mark incomplete' : 'Mark complete')
+                              : (p.isCompleted ? '완료 취소' : '완료 처리')}
                             accessibilityRole="checkbox"
                           >
                             <Ionicons
@@ -1325,7 +1337,7 @@ export function TasksScreen() {
             <TouchableOpacity
               style={styles.categoryFab}
               onPress={() => setShowCategoryManager(true)}
-              accessibilityLabel="카테고리 관리"
+              accessibilityLabel={isForeign ? 'Manage categories' : '카테고리 관리'}
               accessibilityRole="button"
             >
               <Ionicons name="pricetag-outline" size={20} color="#6b7280" />
@@ -1335,7 +1347,7 @@ export function TasksScreen() {
           <TouchableOpacity
             style={styles.fab}
             onPress={() => setShowAddModal(true)}
-            accessibilityLabel="업무 추가"
+            accessibilityLabel={isForeign ? 'Add task' : '업무 추가'}
             accessibilityRole="button"
           >
             <Ionicons name="add" size={28} color="#ffffff" />
@@ -1392,16 +1404,18 @@ export function TasksScreen() {
               <View style={styles.modalHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={styles.modalTitle}>
-                    {editingPersonalTask ? '개인 업무 수정' : '개인 업무 추가'}
+                    {isForeign
+                      ? (editingPersonalTask ? 'Edit Personal Task' : 'Add Personal Task')
+                      : (editingPersonalTask ? '개인 업무 수정' : '개인 업무 추가')}
                   </Text>
                   <View style={{ backgroundColor: '#f3e8ff', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
-                    <Text style={{ fontSize: 11, color: '#7c3aed', fontWeight: '600' }}>나만 보임</Text>
+                    <Text style={{ fontSize: 11, color: '#7c3aed', fontWeight: '600' }}>{isForeign ? 'Only you' : '나만 보임'}</Text>
                   </View>
                 </View>
                 <TouchableOpacity
                   onPress={() => setShowPersonalTaskModal(false)}
                   style={styles.closeButton}
-                  accessibilityLabel="닫기"
+                  accessibilityLabel={isForeign ? 'Close' : '닫기'}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Ionicons name="close" size={24} color="#9ca3af" />
@@ -1414,16 +1428,16 @@ export function TasksScreen() {
                 {/* 1. 날짜 및 시간 */}
                 <View style={{ marginBottom: 14, borderWidth: 1, borderColor: '#e9d5ff', backgroundColor: 'rgba(245,240,255,0.4)', borderRadius: 10, padding: 12 }}>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827', marginBottom: (editingPersonalTask && !editingPersonalTask.groupId) ? 4 : 10 }}>
-                    📅 날짜 및 시간 <Text style={{ color: '#ef4444' }}>*</Text>
+                    📅 {isForeign ? 'Date & Time' : '날짜 및 시간'} <Text style={{ color: '#ef4444' }}>*</Text>
                   </Text>
                   {editingPersonalTask && !editingPersonalTask.groupId && (
                     <Text style={{ fontSize: 11, color: '#7c3aed', marginBottom: 10 }}>
-                      수정 시 날짜는 하나만 선택할 수 있습니다
+                      {isForeign ? 'Only one date can be selected when editing.' : '수정 시 날짜는 하나만 선택할 수 있습니다'}
                     </Text>
                   )}
                   {loadingPersonalGroupDates && (
                     <Text style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10 }}>
-                      그룹 날짜 불러오는 중...
+                      {isForeign ? 'Loading group dates...' : '그룹 날짜 불러오는 중...'}
                     </Text>
                   )}
 
@@ -1443,7 +1457,9 @@ export function TasksScreen() {
                       <Ionicons name="chevron-back" size={18} color="#6b7280" />
                     </TouchableOpacity>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151' }}>
-                      {personalTaskCalYear}년 {personalTaskCalMonth + 1}월
+                      {isForeign
+                        ? `${new Date(personalTaskCalYear, personalTaskCalMonth).toLocaleString('en-US', { month: 'long' })} ${personalTaskCalYear}`
+                        : `${personalTaskCalYear}년 ${personalTaskCalMonth + 1}월`}
                     </Text>
                     <TouchableOpacity
                       onPress={() => {
@@ -1462,7 +1478,7 @@ export function TasksScreen() {
 
                   {/* 요일 헤더 */}
                   <View style={{ flexDirection: 'row', marginBottom: 4 }}>
-                    {DAYS_OF_WEEK.map((d, i) => (
+                    {daysOfWeek.map((d, i) => (
                       <Text
                         key={d}
                         style={{
@@ -1597,7 +1613,9 @@ export function TasksScreen() {
                             style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ede9fe', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, gap: 4 }}
                           >
                             <Text style={{ fontSize: 11, color: '#7c3aed', fontWeight: '600' }}>
-                              {d.getMonth() + 1}/{d.getDate()} ({DAYS_OF_WEEK[d.getDay()]})
+                              {isForeign
+                                ? d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', weekday: 'short' })
+                                : `${d.getMonth() + 1}/${d.getDate()} (${DAYS_OF_WEEK_KO[d.getDay()]})`}
                             </Text>
                             <Text style={{ fontSize: 12, color: '#a78bfa' }}>×</Text>
                           </TouchableOpacity>
@@ -1618,14 +1636,14 @@ export function TasksScreen() {
                       <View style={{ width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: personalTaskHasTime ? '#7c3aed' : '#d1d5db', backgroundColor: personalTaskHasTime ? '#7c3aed' : '#fff', alignItems: 'center', justifyContent: 'center' }}>
                         {personalTaskHasTime && <Ionicons name="checkmark" size={12} color="#fff" />}
                       </View>
-                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>시간 지정</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>{isForeign ? 'Set time' : '시간 지정'}</Text>
                     </TouchableOpacity>
                     {personalTaskHasTime && (
                       <TextInput
                         style={{ paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, fontSize: 14, color: '#111827' }}
                         value={personalTaskTime}
                         onChangeText={setPersonalTaskTime}
-                        placeholder="24시간 형식 (예: 14:30)"
+                        placeholder={isForeign ? '24h format (e.g. 14:30)' : '24시간 형식 (예: 14:30)'}
                         placeholderTextColor="#9ca3af"
                         keyboardType="numbers-and-punctuation"
                       />
@@ -1635,7 +1653,7 @@ export function TasksScreen() {
 
                 {/* 3. 예상 소요시간 — 분 단위 고정 */}
                 <View style={{ marginBottom: 14 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>⏱️ 예상 소요시간 (선택)</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>⏱️ {isForeign ? 'Estimated duration (optional)' : '예상 소요시간 (선택)'}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <TextInput
                       style={{ width: 80, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, fontSize: 14, color: '#111827', textAlign: 'center' }}
@@ -1645,14 +1663,14 @@ export function TasksScreen() {
                       placeholderTextColor="#9ca3af"
                       keyboardType="numeric"
                     />
-                    <Text style={{ fontSize: 13, color: '#6b7280', fontWeight: '600' }}>분</Text>
+                    <Text style={{ fontSize: 13, color: '#6b7280', fontWeight: '600' }}>{isForeign ? 'min' : '분'}</Text>
                   </View>
                 </View>
 
                 {/* 4. 카테고리 선택 (카테고리 있는 경우만) */}
                 {categories.length > 0 && (
                   <View style={{ marginBottom: 14 }}>
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>🏷️ 카테고리 (선택)</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>🏷️ {isForeign ? 'Category (optional)' : '카테고리 (선택)'}</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                       {/* 없음 버튼 */}
                       <TouchableOpacity
@@ -1666,7 +1684,7 @@ export function TasksScreen() {
                           backgroundColor: personalTaskCategoryId === '' ? '#374151' : '#fff',
                         }}
                       >
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: personalTaskCategoryId === '' ? '#fff' : '#6b7280' }}>없음</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: personalTaskCategoryId === '' ? '#fff' : '#6b7280' }}>{isForeign ? 'None' : '없음'}</Text>
                       </TouchableOpacity>
                       {categories.map(cat => (
                         <TouchableOpacity
@@ -1693,25 +1711,25 @@ export function TasksScreen() {
                 {/* 4-1. 업무 제목 */}
                 <View style={{ marginBottom: 14 }}>
                   <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>
-                    ✏️ 업무 제목 <Text style={{ color: '#ef4444' }}>*</Text>
+                    ✏️ {isForeign ? 'Task title' : '업무 제목'} <Text style={{ color: '#ef4444' }}>*</Text>
                   </Text>
                   <TextInput
                     style={{ paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, fontSize: 14, color: '#111827' }}
                     value={personalTaskTitle}
                     onChangeText={setPersonalTaskTitle}
-                    placeholder="예: 학생 피드백 정리"
+                    placeholder={isForeign ? 'e.g. Student feedback review' : '예: 학생 피드백 정리'}
                     placeholderTextColor="#9ca3af"
                   />
                 </View>
 
                 {/* 5. 업무 설명 */}
                 <View style={{ marginBottom: 20 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>📝 업무 설명</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 }}>📝 {isForeign ? 'Description' : '업무 설명'}</Text>
                   <TextInput
                     style={{ paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, fontSize: 14, color: '#111827', minHeight: 72, textAlignVertical: 'top' }}
                     value={personalTaskDesc}
                     onChangeText={setPersonalTaskDesc}
-                    placeholder="업무에 대한 상세 설명"
+                    placeholder={isForeign ? 'Detailed description of the task' : '업무에 대한 상세 설명'}
                     placeholderTextColor="#9ca3af"
                     multiline
                     numberOfLines={3}
@@ -1729,7 +1747,9 @@ export function TasksScreen() {
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff' }}>
-                      {editingPersonalTask ? '수정하기' : '추가하기'}
+                      {isForeign
+                        ? (editingPersonalTask ? 'Save' : 'Add')
+                        : (editingPersonalTask ? '수정하기' : '추가하기')}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -1780,10 +1800,12 @@ export function TasksScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.sheetTitle}>
                       {sheetDate
-                        ? `${sheetDate.getMonth() + 1}월 ${sheetDate.getDate()}일 (${DAYS_OF_WEEK[sheetDate.getDay()]})`
+                        ? (isForeign
+                            ? sheetDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', weekday: 'short' })
+                            : `${sheetDate.getMonth() + 1}월 ${sheetDate.getDate()}일 (${DAYS_OF_WEEK_KO[sheetDate.getDay()]})`)
                         : ''}
                     </Text>
-                    <Text style={styles.sheetCount}>{sheetTasks.length + sheetPersonalTasks.length}개 업무</Text>
+                    <Text style={styles.sheetCount}>{isForeign ? `${sheetTasks.length + sheetPersonalTasks.length} task(s)` : `${sheetTasks.length + sheetPersonalTasks.length}개 업무`}</Text>
                   </View>
                   <TouchableOpacity
                     onPress={() => {
@@ -1805,7 +1827,7 @@ export function TasksScreen() {
                     activeOpacity={0.7}
                   >
                     <Ionicons name="add" size={13} color="#7c3aed" />
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#7c3aed' }}>내 업무</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#7c3aed' }}>{isForeign ? 'My Task' : '내 업무'}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1877,7 +1899,7 @@ function SheetTaskList({
   sheetTasks: Task[];
   sheetPersonalTasks: PersonalTask[];
   isAdmin: boolean;
-  userData: { userId: string; name: string } | null;
+  userData: { userId: string; name: string; role?: string } | null;
   campUsers: User[];
   currentCampCodeId: string;
   categoryMap: Map<string, TaskCategory>;
@@ -1888,6 +1910,7 @@ function SheetTaskList({
   onNavigateTask: (taskId: string, taskDate: string) => void;
   onNavigatePersonal: (taskId: string, taskDate: string) => void;
 }) {
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   type MergedItem =
     | { kind: 'shared'; task: Task }
     | { kind: 'personal'; task: PersonalTask };
@@ -1908,7 +1931,7 @@ function SheetTaskList({
     return (
       <View style={styles.sheetEmpty}>
         <Ionicons name="calendar-outline" size={40} color="#cbd5e1" />
-        <Text style={styles.sheetEmptyText}>등록된 업무가 없습니다</Text>
+        <Text style={styles.sheetEmptyText}>{isForeign ? 'No tasks registered' : '등록된 업무가 없습니다'}</Text>
       </View>
     );
   }
@@ -1963,7 +1986,9 @@ function SheetTaskList({
                 onPress={() => onSheetPersonalToggle(p)}
                 style={styles.taskCheckbox}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityLabel={p.isCompleted ? '완료 취소' : '완료 처리'}
+                accessibilityLabel={isForeign
+                  ? (p.isCompleted ? 'Mark incomplete' : 'Mark complete')
+                  : (p.isCompleted ? '완료 취소' : '완료 처리')}
                 accessibilityRole="checkbox"
               >
                 <Ionicons
@@ -2150,6 +2175,8 @@ function CategoryManagerModal({
   onCategoriesChange: () => void;
   onClose: () => void;
 }) {
+  const { userData: authUser } = useAuth();
+  const isForeign = authUser?.role === 'foreign' || authUser?.role === 'foreign_temp';
   const [categories, setCategories] = useState<TaskCategory[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
 
@@ -2191,19 +2218,19 @@ function CategoryManagerModal({
 
   const handleAdd = async () => {
     if (!newName.trim()) {
-      Alert.alert('오류', '카테고리 이름을 입력해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a category name.' : '카테고리 이름을 입력해주세요.');
       return;
     }
     setIsAdding(true);
     try {
       await createTaskCategory(campCode, { name: newName, color: newColor, createdBy: adminUserId });
-      Alert.alert('완료', `"${newName}" 카테고리가 추가되었습니다.`);
+      Alert.alert(isForeign ? 'Done' : '완료', isForeign ? `Category "${newName}" has been added.` : `"${newName}" 카테고리가 추가되었습니다.`);
       setNewName('');
       setNewColor(PRESET_COLORS[27]);
       await refreshCategories();
     } catch (error) {
       logger.error('카테고리 추가 오류:', error);
-      Alert.alert('오류', '카테고리 추가 중 오류가 발생했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to add category.' : '카테고리 추가 중 오류가 발생했습니다.');
     } finally {
       setIsAdding(false);
     }
@@ -2211,18 +2238,18 @@ function CategoryManagerModal({
 
   const handleSaveEdit = async () => {
     if (!editingId || !editName.trim()) {
-      Alert.alert('오류', '카테고리 이름을 입력해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a category name.' : '카테고리 이름을 입력해주세요.');
       return;
     }
     setIsSaving(true);
     try {
       await updateTaskCategory(editingId, { name: editName, color: editColor });
-      Alert.alert('완료', '카테고리가 수정되었습니다.');
+      Alert.alert(isForeign ? 'Done' : '완료', isForeign ? 'Category has been updated.' : '카테고리가 수정되었습니다.');
       setEditingId(null);
       await refreshCategories();
     } catch (error) {
       logger.error('카테고리 수정 오류:', error);
-      Alert.alert('오류', '카테고리 수정 중 오류가 발생했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update category.' : '카테고리 수정 중 오류가 발생했습니다.');
     } finally {
       setIsSaving(false);
     }
@@ -2230,21 +2257,23 @@ function CategoryManagerModal({
 
   const handleDelete = (cat: TaskCategory) => {
     Alert.alert(
-      '카테고리 삭제',
-      `"${cat.name}" 카테고리를 삭제할까요?\n해당 카테고리가 지정된 기존 업무는 카테고리 없음으로 표시됩니다.`,
+      isForeign ? 'Delete Category' : '카테고리 삭제',
+      isForeign
+        ? `Delete "${cat.name}"?\nExisting tasks using this category will be shown without a category.`
+        : `"${cat.name}" 카테고리를 삭제할까요?\n해당 카테고리가 지정된 기존 업무는 카테고리 없음으로 표시됩니다.`,
       [
-        { text: '취소', style: 'cancel' },
+        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
         {
-          text: '삭제',
+          text: isForeign ? 'Delete' : '삭제',
           style: 'destructive',
           onPress: async () => {
             try {
               await deleteTaskCategory(cat.id);
-              Alert.alert('완료', `"${cat.name}" 카테고리가 삭제되었습니다.`);
+              Alert.alert(isForeign ? 'Done' : '완료', isForeign ? `Category "${cat.name}" has been deleted.` : `"${cat.name}" 카테고리가 삭제되었습니다.`);
               await refreshCategories();
             } catch (error) {
               logger.error('카테고리 삭제 오류:', error);
-              Alert.alert('오류', '카테고리 삭제 중 오류가 발생했습니다.');
+              Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to delete category.' : '카테고리 삭제 중 오류가 발생했습니다.');
             }
           },
         },
@@ -2277,10 +2306,10 @@ function CategoryManagerModal({
             {/* 헤더 */}
             <View style={[styles.modalHeader, { flexShrink: 0 }]}>
               <View>
-                <Text style={styles.modalTitle}>카테고리 관리</Text>
-                <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>공통/개인 업무 모두 적용됩니다</Text>
+                <Text style={styles.modalTitle}>{isForeign ? 'Manage Categories' : '카테고리 관리'}</Text>
+                <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{isForeign ? 'Applies to both shared and personal tasks' : '공통/개인 업무 모두 적용됩니다'}</Text>
               </View>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton} accessibilityLabel="닫기" accessibilityRole="button">
+              <TouchableOpacity onPress={onClose} style={styles.closeButton} accessibilityLabel={isForeign ? 'Close' : '닫기'} accessibilityRole="button">
                 <Ionicons name="close" size={24} color="#9ca3af" />
               </TouchableOpacity>
             </View>
@@ -2293,9 +2322,9 @@ function CategoryManagerModal({
               keyboardShouldPersistTaps="handled"
             >
               {loadingCategories ? (
-                <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 14, paddingVertical: 24 }}>불러오는 중...</Text>
+                <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 14, paddingVertical: 24 }}>{isForeign ? 'Loading...' : '불러오는 중...'}</Text>
               ) : categories.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 14, paddingVertical: 24 }}>등록된 카테고리가 없습니다.</Text>
+                <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 14, paddingVertical: 24 }}>{isForeign ? 'No categories registered.' : '등록된 카테고리가 없습니다.'}</Text>
               ) : null}
 
               {categories.map(cat => (
@@ -2308,7 +2337,7 @@ function CategoryManagerModal({
                         value={editName}
                         onChangeText={setEditName}
                         autoFocus
-                        placeholder="카테고리 이름"
+                        placeholder={isForeign ? 'Category name' : '카테고리 이름'}
                         placeholderTextColor="#9ca3af"
                       />
                       {/* 색상 선택 */}
@@ -2330,14 +2359,14 @@ function CategoryManagerModal({
                           style={{ flex: 1, paddingVertical: 9, backgroundColor: '#f3f4f6', borderRadius: 8, alignItems: 'center' }}
                           onPress={() => setEditingId(null)}
                         >
-                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#6b7280' }}>취소</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#6b7280' }}>{isForeign ? 'Cancel' : '취소'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[{ flex: 1, paddingVertical: 9, backgroundColor: '#3b82f6', borderRadius: 8, alignItems: 'center' }, isSaving && { opacity: 0.5 }]}
                           onPress={handleSaveEdit}
                           disabled={isSaving}
                         >
-                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#fff' }}>{isSaving ? '저장 중...' : '저장'}</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#fff' }}>{isSaving ? (isForeign ? 'Saving...' : '저장 중...') : (isForeign ? 'Save' : '저장')}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -2349,7 +2378,7 @@ function CategoryManagerModal({
                       <TouchableOpacity
                         style={{ padding: 8 }}
                         onPress={() => { setEditingId(cat.id); setEditName(cat.name); setEditColor(cat.color); }}
-                        accessibilityLabel="수정"
+                        accessibilityLabel={isForeign ? 'Edit' : '수정'}
                         accessibilityRole="button"
                         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
@@ -2358,7 +2387,7 @@ function CategoryManagerModal({
                       <TouchableOpacity
                         style={{ padding: 8 }}
                         onPress={() => handleDelete(cat)}
-                        accessibilityLabel="삭제"
+                        accessibilityLabel={isForeign ? 'Delete' : '삭제'}
                         accessibilityRole="button"
                         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
@@ -2372,12 +2401,12 @@ function CategoryManagerModal({
 
             {/* 새 카테고리 추가 — 항상 하단에 고정 */}
             <View style={{ paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#f3f4f6', gap: 10, flexShrink: 0 }}>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>새 카테고리 추가</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#6b7280' }}>{isForeign ? 'Add New Category' : '새 카테고리 추가'}</Text>
               <TextInput
                 style={styles.formInput}
                 value={newName}
                 onChangeText={setNewName}
-                placeholder="카테고리 이름 (예: 수업 준비)"
+                placeholder={isForeign ? 'Category name (e.g. Class Prep)' : '카테고리 이름 (예: 수업 준비)'}
                 placeholderTextColor="#9ca3af"
                 returnKeyType="done"
                 onSubmitEditing={handleAdd}
@@ -2408,7 +2437,7 @@ function CategoryManagerModal({
                 onPress={handleAdd}
                 disabled={isAdding || !newName.trim()}
               >
-                <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>{isAdding ? '추가 중...' : '카테고리 추가'}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#fff' }}>{isAdding ? (isForeign ? 'Adding...' : '추가 중...') : (isForeign ? 'Add Category' : '카테고리 추가')}</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -2436,6 +2465,8 @@ function TaskAddModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { userData: authUser } = useAuth();
+  const isForeign = authUser?.role === 'foreign' || authUser?.role === 'foreign_temp';
   const isEdit = !!editingTask?.id;
   const isCopy = !!editingTask && !editingTask.id;
   
@@ -2685,7 +2716,7 @@ function TaskAddModal({
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (!permissionResult.granted) {
-        Alert.alert('권한 필요', '사진 라이브러리 접근 권한이 필요합니다.');
+        Alert.alert(isForeign ? 'Permission Required' : '권한 필요', isForeign ? 'Photo library access permission is required.' : '사진 라이브러리 접근 권한이 필요합니다.');
         return;
       }
 
@@ -2704,23 +2735,23 @@ function TaskAddModal({
             const uploadedAttachment = await uploadTaskImage('temp', asset.uri, fileName);
             setAttachments((prev) => [...prev, uploadedAttachment]);
           }
-          Alert.alert('성공', '이미지가 업로드되었습니다.');
+          Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Image uploaded successfully.' : '이미지가 업로드되었습니다.');
         } catch (error) {
           logger.error('이미지 업로드 오류:', error);
-          Alert.alert('오류', '이미지 업로드 중 오류가 발생했습니다.');
+          Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to upload image.' : '이미지 업로드 중 오류가 발생했습니다.');
         } finally {
           setUploadingImage(false);
         }
       }
     } catch (error) {
       logger.error('이미지 선택 오류:', error);
-      Alert.alert('오류', '이미지 선택 중 오류가 발생했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to select image.' : '이미지 선택 중 오류가 발생했습니다.');
     }
   };
 
   const handleAddLink = () => {
     if (!linkLabel.trim() || !linkUrl.trim()) {
-      Alert.alert('오류', '링크 이름과 URL을 모두 입력해주세요.');
+      Alert.alert(isForeign ? 'Notice' : '알림', isForeign ? 'Please enter both a link label and URL below before pressing the button.' : '아래 링크 정보를 입력한 후 버튼을 눌러주세요.');
       return;
     }
 
@@ -2748,22 +2779,22 @@ function TaskAddModal({
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert('오류', '업무 제목을 입력해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a task title.' : '업무 제목을 입력해주세요.');
       return;
     }
 
     if (targetRoles.length === 0) {
-      Alert.alert('오류', '대상 역할을 하나 이상 선택해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please select at least one target role.' : '대상 역할을 하나 이상 선택해주세요.');
       return;
     }
 
     if (targetGroups.length === 0) {
-      Alert.alert('오류', '대상 그룹을 하나 이상 선택해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please select at least one target group.' : '대상 그룹을 하나 이상 선택해주세요.');
       return;
     }
 
     if (selectedDates.length === 0) {
-      Alert.alert('오류', '날짜를 하나 이상 선택해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please select at least one date.' : '날짜를 하나 이상 선택해주세요.');
       return;
     }
 
@@ -2771,7 +2802,7 @@ function TaskAddModal({
     if (time) {
       const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timePattern.test(time)) {
-        Alert.alert('오류', '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
+        Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter time in 24-hour format (e.g. 14:30)' : '시간을 24시간 형식으로 입력해주세요 (예: 14:30)');
         return;
       }
     }
@@ -2814,7 +2845,7 @@ function TaskAddModal({
           } else {
             await updateTaskGroup(campCode, editingTask.groupId, commonUpdates);
           }
-          Alert.alert('성공', '그룹 업무가 수정되었습니다.');
+          Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Group task has been updated.' : '그룹 업무가 수정되었습니다.');
         } else {
           // 그룹 없는 단일 Task 수정
           const localDate = new Date(
@@ -2828,7 +2859,7 @@ function TaskAddModal({
             date: Timestamp.fromDate(localDate),
           };
           await updateTask(editingTask.id, taskData);
-          Alert.alert('성공', '업무가 수정되었습니다.');
+          Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Task has been updated.' : '업무가 수정되었습니다.');
         }
       } else {
         // 추가 모드: 날짜 2개 이상이면 공유 groupId 부여
@@ -2855,7 +2886,7 @@ function TaskAddModal({
           await createTask(campCode, taskData, newGroupId);
         }
 
-        Alert.alert('성공', `${selectedDates.length}개의 업무가 추가되었습니다.`);
+        Alert.alert(isForeign ? 'Success' : '성공', isForeign ? `${selectedDates.length} task(s) have been added.` : `${selectedDates.length}개의 업무가 추가되었습니다.`);
       }
       
       // 폼 초기화
@@ -2875,7 +2906,7 @@ function TaskAddModal({
       onSuccess();
     } catch (error) {
       logger.error('업무 처리 오류:', error);
-      Alert.alert('오류', `업무 ${isEdit ? '수정' : '추가'} 중 오류가 발생했습니다.`);
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? `Failed to ${isEdit ? 'update' : 'add'} task.` : `업무 ${isEdit ? '수정' : '추가'} 중 오류가 발생했습니다.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -2891,7 +2922,9 @@ function TaskAddModal({
           <View style={styles.addModalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {isEdit ? '업무 수정' : isCopy ? '업무 복사' : '새 업무 추가'}
+                {isForeign
+                  ? (isEdit ? 'Edit Task' : isCopy ? 'Copy Task' : 'Add New Task')
+                  : (isEdit ? '업무 수정' : isCopy ? '업무 복사' : '새 업무 추가')}
               </Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                 <Ionicons name="close" size={24} color="#9ca3af" />
@@ -2905,7 +2938,7 @@ function TaskAddModal({
             >
             {/* 0. 타겟 역할 타입 선택 (mentor/foreign) - 보라색 테두리 */}
             <View style={[styles.formGroup, styles.sectionBorderPurple]}>
-              <Text style={styles.formLabel}>🎯 업무 대상 선택 (멘토/원어민)</Text>
+              <Text style={styles.formLabel}>🎯 {isForeign ? 'Target (Mentor/Foreign)' : '업무 대상 선택 (멘토/원어민)'}</Text>
               <View style={styles.roleTypeButtons}>
                 <TouchableOpacity
                   style={[
@@ -2923,7 +2956,7 @@ function TaskAddModal({
                       targetRoleType === 'mentor' && styles.roleTypeButtonTextActive,
                     ]}
                   >
-                    멘토용
+                    {isForeign ? 'Mentor' : '멘토용'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -2942,7 +2975,7 @@ function TaskAddModal({
                       targetRoleType === 'foreign' && styles.roleTypeButtonTextActive,
                     ]}
                   >
-                    원어민용
+                    {isForeign ? 'Foreign' : '원어민용'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -2951,14 +2984,16 @@ function TaskAddModal({
             {/* 1. 날짜 및 시간 - 파란색 테두리 */}
             <View style={[styles.formGroup, styles.sectionBorderBlue]}>
               <Text style={styles.formLabel}>
-                📅 날짜 및 시간 <Text style={styles.required}>*</Text>
+                📅 {isForeign ? 'Date & Time' : '날짜 및 시간'} <Text style={styles.required}>*</Text>
               </Text>
 
               {/* 그룹 업무 안내 */}
               {isEdit && editingTask?.groupId && (
                 <View style={styles.groupInfoBanner}>
                   <Text style={styles.groupInfoText}>
-                    이 업무는 여러 날짜에 묶인 그룹 업무입니다. 날짜를 변경하면 그룹의 모든 날짜가 함께 변경됩니다.
+                    {isForeign
+                      ? 'This is a grouped task. Changing dates will update all dates in the group.'
+                      : '이 업무는 여러 날짜에 묶인 그룹 업무입니다. 날짜를 변경하면 그룹의 모든 날짜가 함께 변경됩니다.'}
                   </Text>
                 </View>
               )}
@@ -3014,7 +3049,9 @@ function TaskAddModal({
                     <Ionicons name="chevron-back" size={20} color="#6b7280" />
                   </TouchableOpacity>
                   <Text style={styles.modalCalendarTitle}>
-                    {calendarMonth.getFullYear()}년 {calendarMonth.getMonth() + 1}월
+                    {isForeign
+                      ? `${new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()).toLocaleString('en-US', { month: 'long' })} ${calendarMonth.getFullYear()}`
+                      : `${calendarMonth.getFullYear()}년 ${calendarMonth.getMonth() + 1}월`}
                   </Text>
                   <TouchableOpacity
                     style={styles.modalCalendarNavButton}
@@ -3030,7 +3067,7 @@ function TaskAddModal({
 
                 {/* 요일 헤더 */}
                 <View style={styles.modalCalendarWeekDays}>
-                  {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
+                  {(isForeign ? DAYS_OF_WEEK_EN : DAYS_OF_WEEK_KO).map((day, i) => (
                     <Text
                       key={day}
                       style={[
@@ -3048,9 +3085,9 @@ function TaskAddModal({
                   {renderCalendar()}
                 </View>
                 {loadingGroupDates ? (
-                  <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>날짜 불러오는 중...</Text>
+                  <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>{isForeign ? 'Loading dates...' : '날짜 불러오는 중...'}</Text>
                 ) : (
-                  <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>탭 또는 드래그로 여러 날짜를 선택할 수 있습니다</Text>
+                  <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>{isForeign ? 'Tap or drag to select multiple dates' : '탭 또는 드래그로 여러 날짜를 선택할 수 있습니다'}</Text>
                 )}
               </View>
 
@@ -3059,7 +3096,7 @@ function TaskAddModal({
                 {/* 시간 지정 */}
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 11, fontWeight: '600', color: '#9ca3af', marginBottom: 5 }}>
-                    🕐 시간 지정 (선택)
+                    🕐 {isForeign ? 'Set time (optional)' : '시간 지정 (선택)'}
                   </Text>
                   <TextInput
                     style={[styles.formInput, { marginBottom: 0 }]}
@@ -3068,7 +3105,7 @@ function TaskAddModal({
                       setTime(val);
                       setHasTime(val.length > 0);
                     }}
-                    placeholder="예: 14:30"
+                    placeholder={isForeign ? 'e.g. 14:30' : '예: 14:30'}
                     placeholderTextColor="#9ca3af"
                     keyboardType="numbers-and-punctuation"
                   />
@@ -3076,7 +3113,7 @@ function TaskAddModal({
                 {/* 예상 소요시간 */}
                 <View style={{ width: 100 }}>
                   <Text style={{ fontSize: 11, fontWeight: '600', color: '#9ca3af', marginBottom: 5 }}>
-                    ⏱️ 소요시간 (선택)
+                    ⏱️ {isForeign ? 'Duration (optional)' : '소요시간 (선택)'}
                   </Text>
                   <View style={styles.durationContainer}>
                     <TextInput
@@ -3087,7 +3124,7 @@ function TaskAddModal({
                       placeholderTextColor="#9ca3af"
                       keyboardType="numeric"
                     />
-                    <Text style={styles.durationUnitLabel}>분</Text>
+                    <Text style={styles.durationUnitLabel}>{isForeign ? 'min' : '분'}</Text>
                   </View>
                 </View>
               </View>
@@ -3096,7 +3133,7 @@ function TaskAddModal({
             {/* 2. 카테고리 (선택) */}
             {categories.length > 0 && (
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>🏷️ 카테고리 (선택)</Text>
+                <Text style={styles.formLabel}>🏷️ {isForeign ? 'Category (optional)' : '카테고리 (선택)'}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   <TouchableOpacity
                     style={{
@@ -3109,7 +3146,7 @@ function TaskAddModal({
                     }}
                     onPress={() => setSelectedCategoryId('')}
                   >
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: selectedCategoryId === '' ? '#fff' : '#6b7280' }}>없음</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: selectedCategoryId === '' ? '#fff' : '#6b7280' }}>{isForeign ? 'None' : '없음'}</Text>
                   </TouchableOpacity>
                   {categories.map(cat => (
                     <TouchableOpacity
@@ -3136,7 +3173,7 @@ function TaskAddModal({
             {/* 3. 대상 역할 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>
-                👥 대상 역할 <Text style={styles.required}>*</Text>
+                👥 {isForeign ? 'Target role' : '대상 역할'} <Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.roleButtons}>
                 {roleOptions.map((role) => (
@@ -3164,7 +3201,7 @@ function TaskAddModal({
             {/* 3. 대상 그룹 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>
-                🎯 대상 그룹 <Text style={styles.required}>*</Text>
+                🎯 {isForeign ? 'Target group' : '대상 그룹'} <Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.roleButtons}>
                 {groupOptions.map((group) => (
@@ -3198,25 +3235,25 @@ function TaskAddModal({
             {/* 4. 업무 제목 */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>
-                ✏️ 업무 제목 <Text style={styles.required}>*</Text>
+                ✏️ {isForeign ? 'Task title' : '업무 제목'} <Text style={styles.required}>*</Text>
               </Text>
               <TextInput
                 style={styles.formInput}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="예: 학생 명단 확인"
+                placeholder={isForeign ? 'e.g. Check student list' : '예: 학생 명단 확인'}
                 placeholderTextColor="#9ca3af"
               />
             </View>
 
             {/* 5. 업무 설명 */}
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>📝 업무 설명</Text>
+              <Text style={styles.formLabel}>📝 {isForeign ? 'Description' : '업무 설명'}</Text>
               <TextInput
                 style={[styles.formInput, styles.formTextArea]}
                 value={description}
                 onChangeText={setDescription}
-                placeholder="업무에 대한 상세 설명"
+                placeholder={isForeign ? 'Detailed description of the task' : '업무에 대한 상세 설명'}
                 placeholderTextColor="#9ca3af"
                 multiline
                 numberOfLines={3}
@@ -3226,7 +3263,7 @@ function TaskAddModal({
 
             {/* 6. 첨부파일 및 링크 */}
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>📎 첨부파일 및 링크</Text>
+              <Text style={styles.formLabel}>📎 {isForeign ? 'Attachments & Links' : '첨부파일 및 링크'}</Text>
               
               {/* 업로드 버튼들 */}
               <View style={styles.uploadButtonsContainer}>
@@ -3236,7 +3273,7 @@ function TaskAddModal({
                   disabled={uploadingImage}
                 >
                   <Ionicons name="image-outline" size={16} color="#6b7280" />
-                  <Text style={styles.uploadButtonText}>이미지</Text>
+                  <Text style={styles.uploadButtonText}>{isForeign ? 'Image' : '이미지'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -3259,14 +3296,14 @@ function TaskAddModal({
                   }}
                 >
                   <Ionicons name="link-outline" size={16} color="#1e40af" />
-                  <Text style={[styles.uploadButtonText, styles.uploadButtonTextLink]}>링크</Text>
+                  <Text style={[styles.uploadButtonText, styles.uploadButtonTextLink]}>{isForeign ? 'Link' : '링크'}</Text>
                 </TouchableOpacity>
               </View>
 
               {uploadingImage && (
                 <View style={styles.uploadingContainer}>
                   <ActivityIndicator size="small" color="#3b82f6" />
-                  <Text style={styles.uploadingText}>업로드 중...</Text>
+                  <Text style={styles.uploadingText}>{isForeign ? 'Uploading...' : '업로드 중...'}</Text>
                 </View>
               )}
 
@@ -3276,7 +3313,7 @@ function TaskAddModal({
                   style={[styles.formInput, styles.linkInput]}
                   value={linkLabel}
                   onChangeText={setLinkLabel}
-                  placeholder="링크 이름 (예: 구글 드라이브)"
+                  placeholder={isForeign ? 'Link label (e.g. Google Drive)' : '링크 이름 (예: 구글 드라이브)'}
                   placeholderTextColor="#9ca3af"
                 />
                 <TextInput
@@ -3323,7 +3360,7 @@ function TaskAddModal({
               onPress={onClose}
               disabled={isSubmitting}
             >
-              <Text style={styles.cancelModalButtonText}>취소</Text>
+              <Text style={styles.cancelModalButtonText}>{isForeign ? 'Cancel' : '취소'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.submitModalButton, isSubmitting && styles.submitModalButtonDisabled]}
@@ -3334,7 +3371,9 @@ function TaskAddModal({
                 <ActivityIndicator color="#ffffff" />
               ) : (
                 <Text style={styles.submitModalButtonText}>
-                  {isEdit ? '수정하기' : isCopy ? '복사하기' : '추가하기'}
+                  {isForeign
+                    ? (isEdit ? 'Save' : isCopy ? 'Copy' : 'Add')
+                    : (isEdit ? '수정하기' : isCopy ? '복사하기' : '추가하기')}
                 </Text>
               )}
             </TouchableOpacity>

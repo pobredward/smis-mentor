@@ -64,7 +64,7 @@ export function MainTabs() {
           name="Camp"
           component={CampScreen}
           options={{
-            title: '캠프',
+            title: isForeign ? 'Camp' : '캠프',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="school" size={size} color={color} />
             ),
@@ -74,7 +74,7 @@ export function MainTabs() {
           name="Profile"
           component={ProfileScreen}
           options={{
-            title: '마이페이지',
+            title: isForeign ? 'My Page' : '마이페이지',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="person" size={size} color={color} />
             ),

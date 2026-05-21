@@ -808,6 +808,52 @@ export const deleteOrphanedSocialAccount = functionsV2.https.onCall({
 });
 
 /**
+ * Firebase Auth 계정 삭제 시 해당 유저의 Storage 파일 자동 정리
+ * 본인 탈퇴 / 관리자 soft·hard 삭제 모든 경로를 커버
+ *
+ * 삭제 대상 경로:
+ *   profileImages/{userId}/
+ *   foreignTeachers/{userId}/
+ */
+export const cleanupUserStorageOnDelete = functions
+  .region('asia-northeast3')
+  .auth.user()
+  .onDelete(async (user) => {
+    const userId = user.uid;
+    console.log(`🗑️ Auth 계정 삭제 감지 → Storage 정리 시작: ${userId}`);
+
+    const storage = admin.storage();
+    const bucket = storage.bucket();
+
+    const pathsToDelete = [
+      `profileImages/${userId}`,
+      `foreignTeachers/${userId}`,
+    ];
+
+    let totalDeleted = 0;
+
+    for (const prefix of pathsToDelete) {
+      try {
+        const [files] = await bucket.getFiles({ prefix });
+
+        if (files.length === 0) {
+          console.log(`ℹ️ 삭제할 파일 없음: ${prefix}`);
+          continue;
+        }
+
+        await Promise.all(files.map(file => file.delete()));
+        totalDeleted += files.length;
+        console.log(`✅ Storage 파일 ${files.length}개 삭제 완료: ${prefix}`);
+      } catch (error) {
+        // Storage 정리 실패가 전체 플로우를 막지 않도록 오류만 기록
+        console.error(`❌ Storage 파일 삭제 실패 (${prefix}):`, error);
+      }
+    }
+
+    console.log(`✅ Storage 정리 완료: 총 ${totalDeleted}개 파일 삭제 (userId: ${userId})`);
+  });
+
+/**
  * 매일 자동으로 고아 소셜 계정 정리
  * Firestore authProviders에 없는 Firebase Auth 계정 삭제
  */

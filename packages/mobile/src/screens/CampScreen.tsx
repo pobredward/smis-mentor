@@ -22,21 +22,27 @@ export function CampScreen() {
   }, [setActiveTab]);
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
-  
-  // 원어민 유저는 '수업' 탭 제외
-  const allTabs: { id: TabName; title: string }[] = [
-    { id: 'education', title: '교육' },
-    { id: 'lesson', title: '수업' },
-    { id: 'tasks', title: '업무' },
-    { id: 'schedule', title: '시간표' },
-    { id: 'guide', title: '인솔표' },
-    { id: 'class', title: '반명단' },
-    { id: 'room', title: '방명단' },
-  ];
-  
-  const tabs = isForeign 
-    ? allTabs.filter(tab => tab.id !== 'lesson')
-    : allTabs;
+
+  const allTabs: { id: TabName; title: string }[] = isForeign
+    ? [
+        { id: 'education', title: 'Edu' },
+        { id: 'tasks', title: 'Tasks' },
+        { id: 'schedule', title: 'Schedule' },
+        { id: 'guide', title: 'Guide' },
+        { id: 'class', title: 'Class' },
+        { id: 'room', title: 'Room' },
+      ]
+    : [
+        { id: 'education', title: '교육' },
+        { id: 'lesson', title: '수업' },
+        { id: 'tasks', title: '업무' },
+        { id: 'schedule', title: '시간표' },
+        { id: 'guide', title: '인솔표' },
+        { id: 'class', title: '반명단' },
+        { id: 'room', title: '방명단' },
+      ];
+
+  const tabs = allTabs;
 
   return (
     <View style={styles.container}>

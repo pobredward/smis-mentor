@@ -35,7 +35,8 @@ import PersonalTaskFormModal from './PersonalTaskFormModal';
 import PersonalTaskDetailModal from './PersonalTaskDetailModal';
 import TaskCategoryManager from './TaskCategoryManager';
 
-const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+const DAYS_OF_WEEK_KO = ['일', '월', '화', '수', '목', '금', '토'];
+const DAYS_OF_WEEK_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 
 export default function TaskContent() {
@@ -74,6 +75,8 @@ export default function TaskContent() {
   const [isCopyMode, setIsCopyMode] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  const DAYS_OF_WEEK = isForeign ? DAYS_OF_WEEK_EN : DAYS_OF_WEEK_KO;
 
   // 개인 업무 상태
   const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
@@ -204,7 +207,7 @@ export default function TaskContent() {
       await loadTasksForDate(selectedDate, activeJobCode.code);
     } catch (error) {
       logger.error('업무 목록 가져오기 오류:', error);
-      toast.error('업무 목록을 불러오는 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to load tasks.' : '업무 목록을 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -321,10 +324,10 @@ export default function TaskContent() {
         loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth()),
       ]);
 
-      toast.success('새로고침 완료');
+      toast.success(isForeign ? 'Refreshed' : '새로고침 완료');
     } catch (error) {
       logger.error('새로고침 오류:', error);
-      toast.error('새로고침에 실패했습니다.');
+      toast.error(isForeign ? 'Refresh failed.' : '새로고침에 실패했습니다.');
     } finally {
       setIsRefreshing(false);
     }
@@ -397,7 +400,7 @@ export default function TaskContent() {
   // 업무 완료 토글
   const handleToggleComplete = async (taskId: string) => {
     if (!userData) {
-      toast.error('사용자 정보를 불러올 수 없습니다.');
+      toast.error(isForeign ? 'Unable to load user information.' : '사용자 정보를 불러올 수 없습니다.');
       return;
     }
 
@@ -409,10 +412,10 @@ export default function TaskContent() {
         loadTasksForDate(selectedDate),
         fetchMonthTasks(),
       ]);
-      toast.success('업무 상태가 변경되었습니다.');
+      toast.success(isForeign ? 'Task status updated.' : '업무 상태가 변경되었습니다.');
     } catch (error) {
       logger.error('업무 완료 토글 오류:', error);
-      toast.error('업무 상태 변경 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to update task status.' : '업무 상태 변경 중 오류가 발생했습니다.');
     }
   };
 
@@ -448,7 +451,7 @@ export default function TaskContent() {
       }
     } catch (error) {
       logger.error('업무 완료 토글 오류:', error);
-      toast.error('업무 상태 변경 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to update task status.' : '업무 상태 변경 중 오류가 발생했습니다.');
     }
   };
 
@@ -466,7 +469,7 @@ export default function TaskContent() {
       }
     } catch (error) {
       logger.error('패널 개인 업무 토글 오류:', error);
-      toast.error('상태 변경 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to update status.' : '상태 변경 중 오류가 발생했습니다.');
     }
   };
 
@@ -477,7 +480,7 @@ export default function TaskContent() {
       loadTasksForDate(selectedDate);
     } catch (error) {
       logger.error('개인 업무 완료 토글 오류:', error);
-      toast.error('상태 변경 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to update status.' : '상태 변경 중 오류가 발생했습니다.');
     }
   };
 
@@ -485,7 +488,9 @@ export default function TaskContent() {
   const handlePersonalDelete = async (task: PersonalTask) => {
     if (task.groupId) {
       const choice = confirm(
-        '이 업무는 여러 날짜에 묶인 그룹 업무입니다.\n\n[확인] 그룹 전체 삭제\n[취소] 이 날짜만 삭제'
+        isForeign
+          ? 'This is a grouped task spanning multiple dates.\n\n[OK] Delete entire group\n[Cancel] Delete only this date'
+          : '이 업무는 여러 날짜에 묶인 그룹 업무입니다.\n\n[확인] 그룹 전체 삭제\n[취소] 이 날짜만 삭제'
       );
       try {
         if (choice) {
@@ -493,47 +498,47 @@ export default function TaskContent() {
         } else {
           await deletePersonalTask(task.id);
         }
-        toast.success('개인 업무가 삭제되었습니다.');
+        toast.success(isForeign ? 'Personal task deleted.' : '개인 업무가 삭제되었습니다.');
         loadTasksForDate(selectedDate);
         loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth());
       } catch (error) {
         logger.error('개인 업무 삭제 오류:', error);
-        toast.error('삭제 중 오류가 발생했습니다.');
+        toast.error(isForeign ? 'Failed to delete task.' : '삭제 중 오류가 발생했습니다.');
       }
     } else {
-      if (!confirm('이 개인 업무를 삭제하시겠습니까?')) return;
+      if (!confirm(isForeign ? 'Delete this personal task?' : '이 개인 업무를 삭제하시겠습니까?')) return;
       try {
         await deletePersonalTask(task.id);
-        toast.success('개인 업무가 삭제되었습니다.');
+        toast.success(isForeign ? 'Personal task deleted.' : '개인 업무가 삭제되었습니다.');
         loadTasksForDate(selectedDate);
         loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth());
       } catch (error) {
         logger.error('개인 업무 삭제 오류:', error);
-        toast.error('삭제 중 오류가 발생했습니다.');
+        toast.error(isForeign ? 'Failed to delete task.' : '삭제 중 오류가 발생했습니다.');
       }
     }
   };
 
   // 업무 삭제
   const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('정말 이 업무를 삭제하시겠습니까?')) return;
+    if (!confirm(isForeign ? 'Are you sure you want to delete this task?' : '정말 이 업무를 삭제하시겠습니까?')) return;
 
     try {
       await deleteTask(taskId);
       setShowTaskDetail(false); // 모달 닫기
       setSelectedTask(null);
       await fetchTasks();
-      toast.success('업무가 삭제되었습니다.');
+      toast.success(isForeign ? 'Task deleted.' : '업무가 삭제되었습니다.');
     } catch (error) {
       logger.error('업무 삭제 오류:', error);
-      toast.error('업무 삭제 중 오류가 발생했습니다.');
+      toast.error(isForeign ? 'Failed to delete task.' : '업무 삭제 중 오류가 발생했습니다.');
     }
   };
 
   // 업무 복사
   const handleCopyTask = async (task: Task) => {
     if (!userData || !currentCampCode) {
-      toast.error('사용자 정보를 불러올 수 없습니다.');
+      toast.error(isForeign ? 'Unable to load user information.' : '사용자 정보를 불러올 수 없습니다.');
       return;
     }
 
@@ -555,10 +560,10 @@ export default function TaskContent() {
       try {
         await navigator.share({
           title: task.title,
-          text: task.description || '업무를 확인해주세요',
+          text: task.description || (isForeign ? 'Please check this task.' : '업무를 확인해주세요'),
           url: url,
         });
-        toast.success('공유되었습니다.');
+        toast.success(isForeign ? 'Shared successfully.' : '공유되었습니다.');
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
           logger.error('공유 오류:', error);
@@ -567,10 +572,10 @@ export default function TaskContent() {
     } else {
       try {
         await navigator.clipboard.writeText(url);
-        toast.success('링크가 클립보드에 복사되었습니다.');
+        toast.success(isForeign ? 'Link copied to clipboard.' : '링크가 클립보드에 복사되었습니다.');
       } catch (error) {
         logger.error('클립보드 복사 오류:', error);
-        toast.error('링크 복사에 실패했습니다.');
+        toast.error(isForeign ? 'Failed to copy link.' : '링크 복사에 실패했습니다.');
       }
     }
   };
@@ -773,7 +778,7 @@ export default function TaskContent() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
-        <p className="mt-3 text-sm">로딩 중...</p>
+        <p className="mt-3 text-sm">{isForeign ? 'Loading...' : '로딩 중...'}</p>
       </div>
     );
   }
@@ -781,7 +786,7 @@ export default function TaskContent() {
   if (!userData) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
-        <p className="text-center">로그인 후 이용 가능합니다.</p>
+        <p className="text-center">{isForeign ? 'Please sign in to continue.' : '로그인 후 이용 가능합니다.'}</p>
       </div>
     );
   }
@@ -789,9 +794,18 @@ export default function TaskContent() {
   if (!userData.activeJobExperienceId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
-        <p className="text-center font-medium mb-1">캠프를 선택해주세요</p>
-        <p className="text-center text-sm text-gray-500">마이페이지에서 활성화할 캠프를 선택하면</p>
-        <p className="text-center text-sm text-gray-500">해당 캠프의 업무를 확인할 수 있습니다.</p>
+        <p className="text-center font-medium mb-1">{isForeign ? 'No active camp selected' : '캠프를 선택해주세요'}</p>
+        {isForeign ? (
+          <>
+            <p className="text-center text-sm text-gray-500">Go to My Page and activate a camp</p>
+            <p className="text-center text-sm text-gray-500">to view tasks for that camp.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-center text-sm text-gray-500">마이페이지에서 활성화할 캠프를 선택하면</p>
+            <p className="text-center text-sm text-gray-500">해당 캠프의 업무를 확인할 수 있습니다.</p>
+          </>
+        )}
       </div>
     );
   }
@@ -800,7 +814,7 @@ export default function TaskContent() {
     return (
       <div className="text-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mx-auto"></div>
-        <p className="mt-3 text-gray-500 text-sm">업무를 불러오는 중...</p>
+        <p className="mt-3 text-gray-500 text-sm">{isForeign ? 'Loading tasks...' : '업무를 불러오는 중...'}</p>
       </div>
     );
   }
@@ -810,14 +824,20 @@ export default function TaskContent() {
       {/* 캘린더 헤더 */}
       <div className="flex items-center px-4 py-2 mb-1">
         <h2 className="flex-1 text-base font-semibold text-gray-900">
-          {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
+          {isForeign
+            ? currentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+            : `${currentDate.getFullYear()}년 ${currentDate.getMonth() + 1}월`}
         </h2>
         {/* 뷰 전환 토글 */}
         <button
           onClick={() => handleCalendarViewChange(calendarView === 'compact' ? 'full' : 'compact')}
           className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors mr-1"
-          title={calendarView === 'compact' ? '풀 캘린더 뷰로 전환' : '컴팩트 뷰로 전환'}
-          aria-label={calendarView === 'compact' ? '풀 캘린더 뷰로 전환' : '컴팩트 뷰로 전환'}
+          title={isForeign
+            ? (calendarView === 'compact' ? 'Switch to full calendar' : 'Switch to compact view')
+            : (calendarView === 'compact' ? '풀 캘린더 뷰로 전환' : '컴팩트 뷰로 전환')}
+          aria-label={isForeign
+            ? (calendarView === 'compact' ? 'Switch to full calendar' : 'Switch to compact view')
+            : (calendarView === 'compact' ? '풀 캘린더 뷰로 전환' : '컴팩트 뷰로 전환')}
         >
           {calendarView === 'compact' ? (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -896,7 +916,9 @@ export default function TaskContent() {
                   {/* 헤더 */}
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 flex-shrink-0">
                     <span className="text-base font-bold text-gray-900">
-                      {panelDate.getMonth() + 1}월 {panelDate.getDate()}일 ({DAYS_OF_WEEK[panelDate.getDay()]})
+                      {isForeign
+                        ? panelDate.toLocaleString('en-US', { month: 'long', day: 'numeric', weekday: 'short' })
+                        : `${panelDate.getMonth() + 1}월 ${panelDate.getDate()}일 (${DAYS_OF_WEEK[panelDate.getDay()]})`}
                     </span>
                     <div className="flex items-center gap-2">
                       {userData && currentCampCode && (
@@ -912,7 +934,7 @@ export default function TaskContent() {
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                           </svg>
-                          내 업무
+                          {isForeign ? 'My Tasks' : '내 업무'}
                         </button>
                       )}
                       <button
@@ -951,7 +973,7 @@ export default function TaskContent() {
                             <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            <p className="text-sm">등록된 업무가 없습니다</p>
+                            <p className="text-sm">{isForeign ? 'No tasks for this day' : '등록된 업무가 없습니다'}</p>
                           </div>
                         );
                       }
@@ -1001,7 +1023,7 @@ export default function TaskContent() {
                                   type="button"
                                   onClick={e => { e.stopPropagation(); handlePanelPersonalToggle(p); }}
                                   className="focus:outline-none"
-                                  aria-label={p.isCompleted ? '완료 취소' : '완료 처리'}
+                                  aria-label={isForeign ? (p.isCompleted ? 'Mark incomplete' : 'Mark complete') : (p.isCompleted ? '완료 취소' : '완료 처리')}
                                 >
                                   {p.isCompleted ? (
                                     <svg className="w-6 h-6 text-purple-500" fill="currentColor" viewBox="0 0 24 24">
@@ -1061,7 +1083,7 @@ export default function TaskContent() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            업무 추가
+            {isForeign ? 'Add Task' : '업무 추가'}
           </button>
           <button
             onClick={() => setShowCategoryManager(true)}
@@ -1070,7 +1092,7 @@ export default function TaskContent() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
             </svg>
-            카테고리
+            {isForeign ? 'Categories' : '카테고리'}
           </button>
         </div>
       )}
@@ -1081,7 +1103,9 @@ export default function TaskContent() {
           {/* 날짜 헤더 + 개인 업무 추가 버튼 */}
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-base font-semibold text-gray-900">
-              {selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일 ({DAYS_OF_WEEK[selectedDate.getDay()]})
+              {isForeign
+                ? selectedDate.toLocaleString('en-US', { month: 'long', day: 'numeric', weekday: 'short' })
+                : `${selectedDate.getMonth() + 1}월 ${selectedDate.getDate()}일 (${DAYS_OF_WEEK[selectedDate.getDay()]})`}
             </h3>
             {userData && currentCampCode && (
               <button
@@ -1092,7 +1116,7 @@ export default function TaskContent() {
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                내 업무
+                {isForeign ? 'My Tasks' : '내 업무'}
               </button>
             )}
           </div>
@@ -1119,7 +1143,7 @@ export default function TaskContent() {
             if (merged.length === 0) {
               return (
                 <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                  <p className="text-gray-500">이 날짜에 등록된 업무가 없습니다</p>
+                  <p className="text-gray-500">{isForeign ? 'No tasks for this day' : '이 날짜에 등록된 업무가 없습니다'}</p>
                 </div>
               );
             }
@@ -1177,7 +1201,7 @@ export default function TaskContent() {
                             type="button"
                             onClick={e => { e.stopPropagation(); handlePersonalToggle(p); }}
                             className="focus:outline-none"
-                            aria-label={p.isCompleted ? '완료 취소' : '완료 처리'}
+                            aria-label={isForeign ? (p.isCompleted ? 'Mark incomplete' : 'Mark complete') : (p.isCompleted ? '완료 취소' : '완료 처리')}
                           >
                             {p.isCompleted ? (
                               <svg className="w-6 h-6 text-purple-500" fill="currentColor" viewBox="0 0 24 24">
@@ -1351,6 +1375,8 @@ function TaskCard({
   onToggle: (taskId: string) => void;
   onClick: () => void;
 }) {
+  const { userData: cardUser } = useAuth();
+  const isForeign = cardUser?.role === 'foreign' || cardUser?.role === 'foreign_temp';
   const isCompleted = task.completions.some((c: { userId: string }) => c.userId === currentUserId);
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
@@ -1414,7 +1440,7 @@ function TaskCard({
             type="button"
             onClick={e => { e.stopPropagation(); onToggle(task.id); }}
             className="focus:outline-none"
-            aria-label={isCompleted ? '완료 취소' : '완료 처리'}
+            aria-label={isForeign ? (isCompleted ? 'Mark incomplete' : 'Mark complete') : (isCompleted ? '완료 취소' : '완료 처리')}
           >
             {isCompleted ? (
               <svg className="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 24 24">

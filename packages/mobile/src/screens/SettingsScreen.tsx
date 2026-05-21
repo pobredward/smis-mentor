@@ -33,6 +33,8 @@ export function SettingsScreen() {
     generalNotifications: true,
   });
 
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+
   useEffect(() => {
     loadSettings();
   }, [userData?.userId]);
@@ -46,7 +48,10 @@ export function SettingsScreen() {
       setSettings(userSettings);
     } catch (error) {
       logger.error('알림 설정 로드 실패:', error);
-      Alert.alert('오류', '알림 설정을 불러오는데 실패했습니다.');
+      Alert.alert(
+        isForeign ? 'Error' : '오류',
+        isForeign ? 'Failed to load notification settings.' : '알림 설정을 불러오는데 실패했습니다.'
+      );
     } finally {
       setLoading(false);
     }
@@ -66,7 +71,10 @@ export function SettingsScreen() {
     } catch (error) {
       logger.error('알림 설정 업데이트 실패:', error);
       setSettings({ ...settings, [key]: !newValue });
-      Alert.alert('오류', '알림 설정 변경에 실패했습니다.');
+      Alert.alert(
+        isForeign ? 'Error' : '오류',
+        isForeign ? 'Failed to update notification settings.' : '알림 설정 변경에 실패했습니다.'
+      );
     } finally {
       setSaving(false);
     }
@@ -76,8 +84,12 @@ export function SettingsScreen() {
     return (
       <View style={styles.centerContainer}>
         <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
-        <Text style={styles.emptyTitle}>로그인 필요</Text>
-        <Text style={styles.emptyText}>로그인 후 이용 가능합니다.</Text>
+        <Text style={styles.emptyTitle}>
+          {isForeign ? 'Login Required' : '로그인 필요'}
+        </Text>
+        <Text style={styles.emptyText}>
+          {isForeign ? 'Please log in to access this page.' : '로그인 후 이용 가능합니다.'}
+        </Text>
       </View>
     );
   }
@@ -86,7 +98,9 @@ export function SettingsScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>설정을 불러오는 중...</Text>
+        <Text style={styles.loadingText}>
+          {isForeign ? 'Loading settings...' : '설정을 불러오는 중...'}
+        </Text>
       </View>
     );
   }
@@ -96,23 +110,31 @@ export function SettingsScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="notifications-outline" size={24} color="#3b82f6" />
-          <Text style={styles.sectionTitle}>알림 설정</Text>
+          <Text style={styles.sectionTitle}>
+            {isForeign ? 'Notification Settings' : '알림 설정'}
+          </Text>
         </View>
         <Text style={styles.sectionDescription}>
-          받고 싶은 알림을 선택하세요. 알림을 끄면 해당 유형의 푸시 알림을 받지 않습니다.
+          {isForeign
+            ? 'Select the notifications you want to receive. Turning off a notification will stop push notifications of that type.'
+            : '받고 싶은 알림을 선택하세요. 알림을 끄면 해당 유형의 푸시 알림을 받지 않습니다.'}
         </Text>
 
         <View style={styles.settingsList}>
-          {/* 업무 알림 */}
+          {/* 업무 알림 / Task Notifications */}
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
               <View style={styles.settingIconContainer}>
                 <Ionicons name="checkmark-circle-outline" size={24} color="#3b82f6" />
               </View>
               <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>업무 알림</Text>
+                <Text style={styles.settingLabel}>
+                  {isForeign ? 'Task Notifications' : '업무 알림'}
+                </Text>
                 <Text style={styles.settingDescription}>
-                  업무 마감 시간이 지났을 때 독촉 알림을 받습니다.
+                  {isForeign
+                    ? 'Receive reminders when a task deadline has passed.'
+                    : '업무 마감 시간이 지났을 때 독촉 알림을 받습니다.'}
                 </Text>
               </View>
             </View>
@@ -125,16 +147,20 @@ export function SettingsScreen() {
             />
           </View>
 
-          {/* 일반 알림 */}
+          {/* 일반 알림 / General Notifications */}
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
               <View style={styles.settingIconContainer}>
                 <Ionicons name="megaphone-outline" size={24} color="#10b981" />
               </View>
               <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>일반 알림</Text>
+                <Text style={styles.settingLabel}>
+                  {isForeign ? 'General Notifications' : '일반 알림'}
+                </Text>
                 <Text style={styles.settingDescription}>
-                  공지사항, 업데이트 등 일반적인 알림을 받습니다.
+                  {isForeign
+                    ? 'Receive general notifications such as announcements and updates.'
+                    : '공지사항, 업데이트 등 일반적인 알림을 받습니다.'}
                 </Text>
               </View>
             </View>
@@ -153,14 +179,17 @@ export function SettingsScreen() {
         <View style={styles.infoCard}>
           <Ionicons name="information-circle-outline" size={20} color="#6b7280" />
           <Text style={styles.infoText}>
-            알림 설정은 언제든지 변경할 수 있습니다. 시스템 설정에서 알림 권한이 거부된 경우,
-            설정을 변경하더라도 알림을 받을 수 없습니다.
+            {isForeign
+              ? 'You can change your notification settings at any time. If notification permission has been denied in your system settings, you will not receive notifications even after enabling them here.'
+              : '알림 설정은 언제든지 변경할 수 있습니다. 시스템 설정에서 알림 권한이 거부된 경우, 설정을 변경하더라도 알림을 받을 수 없습니다.'}
           </Text>
         </View>
       </View>
 
       <View style={styles.footerSection}>
-        <Text style={styles.footerTitle}>법률 문서</Text>
+        <Text style={styles.footerTitle}>
+          {isForeign ? 'Legal' : '법률 문서'}
+        </Text>
         
         <TouchableOpacity 
           style={styles.footerLink}
@@ -168,7 +197,9 @@ export function SettingsScreen() {
         >
           <View style={styles.footerLinkContent}>
             <Ionicons name="shield-checkmark-outline" size={20} color="#6b7280" />
-            <Text style={styles.footerLinkText}>개인정보처리방침</Text>
+            <Text style={styles.footerLinkText}>
+              {isForeign ? 'Privacy Policy' : '개인정보처리방침'}
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
         </TouchableOpacity>
@@ -179,7 +210,9 @@ export function SettingsScreen() {
         >
           <View style={styles.footerLinkContent}>
             <Ionicons name="document-text-outline" size={20} color="#6b7280" />
-            <Text style={styles.footerLinkText}>서비스 이용약관</Text>
+            <Text style={styles.footerLinkText}>
+              {isForeign ? 'Terms of Service' : '서비스 이용약관'}
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
         </TouchableOpacity>

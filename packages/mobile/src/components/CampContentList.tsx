@@ -27,6 +27,7 @@ interface CampContentListProps {
   category: CampPageCategory;
   linkType: LinkType;
   categoryTitle: string;
+  isForeign?: boolean;
 }
 
 const getRoleBadgeColor = (targetRole?: CampPageRole) => {
@@ -40,7 +41,14 @@ const getRoleBadgeColor = (targetRole?: CampPageRole) => {
   }
 };
 
-const getRoleLabel = (targetRole?: CampPageRole): string => {
+const getRoleLabel = (targetRole?: CampPageRole, isForeign?: boolean): string => {
+  if (isForeign) {
+    switch (targetRole) {
+      case 'mentor': return 'Mentor';
+      case 'foreign': return 'Foreign';
+      default: return 'Common';
+    }
+  }
   switch (targetRole) {
     case 'mentor': return '멘토';
     case 'foreign': return '원어민';
@@ -48,7 +56,7 @@ const getRoleLabel = (targetRole?: CampPageRole): string => {
   }
 };
 
-export function CampContentList({ category, linkType, categoryTitle }: CampContentListProps) {
+export function CampContentList({ category, linkType, categoryTitle, isForeign }: CampContentListProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { userData } = useAuth();
   const [items, setItems] = useState<DisplayItem[]>([]);
@@ -98,7 +106,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
       setItems(displayItems);
     } catch (error) {
       logger.error(`${category} 로드 실패:`, error);
-      Alert.alert('오류', '자료를 불러오는데 실패했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to load materials.' : '자료를 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -128,7 +136,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
 
   const handleAddItem = async () => {
     if (!activeJobCodeId || !newTitle.trim() || !userData?.userId) {
-      Alert.alert('오류', '제목을 입력해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a title.' : '제목을 입력해주세요.');
       return;
     }
 
@@ -149,10 +157,10 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
       setNewEmoji('📄');
       setShowEmojiPicker(false);
       await loadItems();
-      Alert.alert('성공', '추가되었습니다.');
+      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Added successfully.' : '추가되었습니다.');
     } catch (error) {
       logger.error('항목 추가 실패:', error);
-      Alert.alert('오류', '추가에 실패했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to add.' : '추가에 실패했습니다.');
     }
   };
 
@@ -160,12 +168,12 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
     if (!activeJobCodeId) return;
 
     Alert.alert(
-      '삭제 확인',
-      `"${item.title}"을(를) 삭제하시겠습니까?`,
+      isForeign ? 'Confirm Delete' : '삭제 확인',
+      isForeign ? `Are you sure you want to delete "${item.title}"?` : `"${item.title}"을(를) 삭제하시겠습니까?`,
       [
-        { text: '취소', style: 'cancel' },
+        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
         {
-          text: '삭제',
+          text: isForeign ? 'Delete' : '삭제',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -176,10 +184,10 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
               }
               
               await loadItems();
-              Alert.alert('성공', '삭제되었습니다.');
+              Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Deleted successfully.' : '삭제되었습니다.');
             } catch (error) {
               logger.error('항목 삭제 실패:', error);
-              Alert.alert('오류', '삭제에 실패했습니다.');
+              Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to delete.' : '삭제에 실패했습니다.');
             }
           },
         },
@@ -198,7 +206,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
 
   const handleSaveEditItem = async () => {
     if (!editingItem || !activeJobCodeId || !editTitle.trim() || !userData?.userId) {
-      Alert.alert('오류', '제목을 입력해주세요.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a title.' : '제목을 입력해주세요.');
       return;
     }
 
@@ -214,10 +222,10 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
 
       setEditingItem(null);
       await loadItems();
-      Alert.alert('성공', '수정되었습니다.');
+      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Updated successfully.' : '수정되었습니다.');
     } catch (error) {
       logger.error('항목 수정 실패:', error);
-      Alert.alert('오류', '수정에 실패했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update.' : '수정에 실패했습니다.');
     }
   };
 
@@ -226,22 +234,22 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
       // 링크 타입: 브라우저에서 열기 또는 앱에서 열기 선택
       Alert.alert(
         item.title,
-        '링크를 어떻게 여시겠습니까?',
+        isForeign ? 'How would you like to open this link?' : '링크를 어떻게 여시겠습니까?',
         [
           {
-            text: '브라우저에서 열기',
+            text: isForeign ? 'Open in Browser' : '브라우저에서 열기',
             onPress: async () => {
               const url = item.url || '';
               const canOpen = await Linking.canOpenURL(url);
               if (canOpen) {
                 await Linking.openURL(url);
               } else {
-                Alert.alert('오류', '링크를 열 수 없습니다.');
+                Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Cannot open this link.' : '링크를 열 수 없습니다.');
               }
             },
           },
           {
-            text: '앱에서 열기',
+            text: isForeign ? 'Open in App' : '앱에서 열기',
             onPress: () => {
               navigation.navigate('CampDetail', {
                 category,
@@ -250,7 +258,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
               });
             },
           },
-          { text: '취소', style: 'cancel' },
+          { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
         ]
       );
     } else {
@@ -278,10 +286,10 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
       await loadItems();
-      Alert.alert('성공', '순서가 변경되었습니다.');
+      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Order updated.' : '순서가 변경되었습니다.');
     } catch (error) {
       logger.error('순서 변경 실패:', error);
-      Alert.alert('오류', '순서 변경에 실패했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update order.' : '순서 변경에 실패했습니다.');
     }
   };
 
@@ -300,10 +308,10 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
       await loadItems();
-      Alert.alert('성공', '순서가 변경되었습니다.');
+      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Order updated.' : '순서가 변경되었습니다.');
     } catch (error) {
       logger.error('순서 변경 실패:', error);
-      Alert.alert('오류', '순서 변경에 실패했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update order.' : '순서 변경에 실패했습니다.');
     }
   };
 
@@ -311,7 +319,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>자료 로딩 중...</Text>
+        <Text style={styles.loadingText}>{isForeign ? 'Loading materials...' : '자료 로딩 중...'}</Text>
       </View>
     );
   }
@@ -319,7 +327,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
   if (!userData || !activeJobCodeId) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>활성 캠프를 선택해주세요</Text>
+        <Text style={styles.emptyText}>{isForeign ? 'Please select an active camp.' : '활성 캠프를 선택해주세요'}</Text>
       </View>
     );
   }
@@ -337,13 +345,13 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
           />
         }
       >
-        <Text style={styles.emptyTitle}>등록된 자료가 없습니다</Text>
+        <Text style={styles.emptyTitle}>{isForeign ? 'No materials registered.' : '등록된 자료가 없습니다'}</Text>
         {isAdmin && (
           <TouchableOpacity
             style={styles.addButtonLarge}
             onPress={() => setShowAddModal(true)}
           >
-            <Text style={styles.addButtonLargeText}>+ 첫 자료 추가하기</Text>
+            <Text style={styles.addButtonLargeText}>+ {isForeign ? 'Add first material' : '첫 자료 추가하기'}</Text>
           </TouchableOpacity>
         )}
 
@@ -395,14 +403,16 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
           <View style={styles.header}>
             <View>
               <Text style={styles.headerTitle}>{categoryTitle}</Text>
-              <Text style={styles.headerSubtitle}>총 {filteredItems.length}개의 자료</Text>
+              <Text style={styles.headerSubtitle}>
+                {isForeign ? `${filteredItems.length} materials` : `총 ${filteredItems.length}개의 자료`}
+              </Text>
             </View>
             
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => setShowAddModal(true)}
             >
-              <Text style={styles.addButtonText}>+ 자료 추가</Text>
+              <Text style={styles.addButtonText}>+ {isForeign ? 'Add' : '자료 추가'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -411,7 +421,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionDot, { backgroundColor: '#9ca3af' }]} />
-                <Text style={styles.sectionTitle}>공통 자료</Text>
+                <Text style={styles.sectionTitle}>{isForeign ? 'Common' : '공통 자료'}</Text>
                 <Text style={styles.sectionCount}>({groupedItems.common.length})</Text>
               </View>
               <View style={styles.sectionContent}>
@@ -436,7 +446,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionDot, { backgroundColor: '#3b82f6' }]} />
-                <Text style={styles.sectionTitle}>멘토 전용 자료</Text>
+                <Text style={styles.sectionTitle}>{isForeign ? 'Mentor Only' : '멘토 전용 자료'}</Text>
                 <Text style={styles.sectionCount}>({groupedItems.mentor.length})</Text>
               </View>
               <View style={styles.sectionContent}>
@@ -461,7 +471,7 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionDot, { backgroundColor: '#a855f7' }]} />
-                <Text style={styles.sectionTitle}>원어민 전용 자료</Text>
+                <Text style={styles.sectionTitle}>{isForeign ? 'Foreign Teacher Only' : '원어민 전용 자료'}</Text>
                 <Text style={styles.sectionCount}>({groupedItems.foreign.length})</Text>
               </View>
               <View style={styles.sectionContent}>
@@ -531,7 +541,9 @@ export function CampContentList({ category, linkType, categoryTitle }: CampConte
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>{categoryTitle}</Text>
-          <Text style={styles.headerSubtitle}>총 {filteredItems.length}개의 자료</Text>
+          <Text style={styles.headerSubtitle}>
+            {isForeign ? `${filteredItems.length} materials` : `총 ${filteredItems.length}개의 자료`}
+          </Text>
         </View>
       </View>
 

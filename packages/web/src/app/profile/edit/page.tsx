@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import DaumPostcode, { Address } from 'react-daum-postcode';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateUser, getUserByEmail, getUserByPhone, uploadProfileImage, uploadForeignCV, uploadForeignPassportPhoto, uploadForeignIdCard } from '@/lib/firebaseService';
+import { updateUser, getUserByEmail, getUserByPhone, uploadProfileImage } from '@/lib/firebaseService';
 import { updateGeocodeIfAddressChanged } from '@/lib/geocoding';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
@@ -35,7 +35,7 @@ const partTimeJobSchema = z.object({
   description: z.string().min(1, '업무 내용을 입력해주세요.'),
 });
 
-const profileSchema = z.object({
+const profileSchemaBase = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
   age: z.number({
     required_error: '나이를 입력해주세요.',
@@ -43,20 +43,20 @@ const profileSchema = z.object({
   }).min(15, '최소 15세 이상이어야 합니다.').max(100, '유효한 나이를 입력해주세요.'),
   phoneNumber: z.string().min(8, '유효한 휴대폰 번호를 입력해주세요.'),
   email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
-  address: z.string().min(1, '주소를 입력해주세요.'),
-  addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
+  address: z.string().optional(),
+  addressDetail: z.string().optional(),
   gender: z.enum(['M', 'F'], {
     errorMap: () => ({ message: '성별을 선택해주세요.' }),
   }),
   selfIntroduction: z.string().max(500, '자기소개는 500자 이내로 작성해주세요.').optional(),
   jobMotivation: z.string().max(500, '지원 동기는 500자 이내로 작성해주세요.').optional(),
-  university: z.string().min(1, '학교명을 입력해주세요.'),
+  university: z.string().optional(),
   grade: z.number({
     required_error: '학년을 선택해주세요.',
     invalid_type_error: '학년을 선택해주세요.',
-  }).min(1, '학년을 선택해주세요.').max(6, '유효한 학년을 선택해주세요.'),
+  }).min(1, '학년을 선택해주세요.').max(6, '유효한 학년을 선택해주세요.').optional(),
   isOnLeave: z.boolean(),
-  major1: z.string().min(1, '전공을 입력해주세요.'),
+  major1: z.string().optional(),
   major2: z.string().optional(),
   partTimeJobs: z.array(partTimeJobSchema).optional(),
   referralPath: z.string().optional(),
@@ -64,7 +64,24 @@ const profileSchema = z.object({
   otherReferralDetail: z.string().optional(),
 });
 
-type ProfileFormValues = z.infer<typeof profileSchema>;
+// 멘토용: 주소·학교·학년·전공 필수
+const profileSchemaMentor = profileSchemaBase.extend({
+  address: z.string().min(1, '주소를 입력해주세요.'),
+  addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
+  university: z.string().min(1, '학교명을 입력해주세요.'),
+  grade: z.number({
+    required_error: '학년을 선택해주세요.',
+    invalid_type_error: '학년을 선택해주세요.',
+  }).min(1, '학년을 선택해주세요.').max(6, '유효한 학년을 선택해주세요.'),
+  major1: z.string().min(1, '전공을 입력해주세요.'),
+});
+
+// 원어민용: 주소·학교·학년·전공 선택사항
+const profileSchemaForeign = profileSchemaBase;
+
+const profileSchema = profileSchemaMentor;
+
+type ProfileFormValues = z.infer<typeof profileSchemaMentor>;
 
 export default function EditProfilePage() {
   const { userData, refreshUserData } = useAuth();
@@ -84,11 +101,6 @@ export default function EditProfilePage() {
   const [partTimeJobs, setPartTimeJobs] = useState<PartTimeJob[]>([]);
   const [countryCode, setCountryCode] = useState('+82');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
-  
-  // 원어민 파일 관련 상태
-  const [cvUrl, setCvUrl] = useState<string>('');
-  const [passportPhotoUrl, setPassportPhotoUrl] = useState<string>('');
-  const [foreignIdCardUrl, setForeignIdCardUrl] = useState<string>('');
 
   const {
     register,
@@ -98,7 +110,7 @@ export default function EditProfilePage() {
     reset,
     formState: { errors },
   } = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileSchema),
+    resolver: zodResolver(isForeign ? profileSchemaForeign : profileSchemaMentor),
     defaultValues: {
       name: '',
       age: undefined,
@@ -227,13 +239,6 @@ export default function EditProfilePage() {
       // 알바 & 멘토링 경력 설정
       setPartTimeJobs(userData.partTimeJobs || []);
       
-      // 원어민 파일 URL 초기화
-      if (userData.foreignTeacher) {
-        setCvUrl(userData.foreignTeacher.cvUrl || '');
-        setPassportPhotoUrl(userData.foreignTeacher.passportPhotoUrl || '');
-        setForeignIdCardUrl(userData.foreignTeacher.foreignIdCardUrl || '');
-      }
-      
       // 중복 상태 초기화
       setEmailExists(false);
       setPhoneExists(false);
@@ -313,129 +318,6 @@ export default function EditProfilePage() {
       toast.success('프로필 이미지가 업로드되었습니다.');
     } catch {
       toast.error('이미지 업로드 중 오류가 발생했습니다.');
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-    }
-  };
-  
-  // 원어민 CV 파일 업로드
-  const handleCvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!userData || !e.target.files || e.target.files.length === 0) return;
-    
-    const file = e.target.files[0];
-    const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    
-    if (!validTypes.includes(file.type)) {
-      toast.error('Please upload a PDF or Word document.');
-      return;
-    }
-    
-    try {
-      setIsUploading(true);
-      const downloadURL = await uploadForeignCV(userData.userId, file, (progress) => {
-        setUploadProgress(progress);
-      });
-      
-      await updateUser(userData.userId, {
-        foreignTeacher: {
-          ...(userData.foreignTeacher || {
-            firstName: '',
-            lastName: '',
-            countryCode: '',
-          }),
-          cvUrl: downloadURL,
-        },
-      });
-      
-      setCvUrl(downloadURL);
-      await refreshUserData();
-      toast.success('CV has been updated.');
-    } catch (error) {
-      logger.error('CV 업로드 오류:', error);
-      toast.error('An error occurred while uploading CV.');
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-    }
-  };
-  
-  // 원어민 여권 사진 업로드
-  const handlePassportPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!userData || !e.target.files || e.target.files.length === 0) return;
-    
-    const file = e.target.files[0];
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-    
-    if (!validTypes.includes(file.type)) {
-      toast.error('Please upload a JPEG or PNG image.');
-      return;
-    }
-    
-    try {
-      setIsUploading(true);
-      const downloadURL = await uploadForeignPassportPhoto(userData.userId, file, (progress) => {
-        setUploadProgress(progress);
-      });
-      
-      await updateUser(userData.userId, {
-        foreignTeacher: {
-          ...(userData.foreignTeacher || {
-            firstName: '',
-            lastName: '',
-            countryCode: '',
-          }),
-          passportPhotoUrl: downloadURL,
-        },
-      });
-      
-      setPassportPhotoUrl(downloadURL);
-      await refreshUserData();
-      toast.success('Passport photo has been updated.');
-    } catch (error) {
-      logger.error('여권 사진 업로드 오류:', error);
-      toast.error('An error occurred while uploading passport photo.');
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-    }
-  };
-  
-  // 원어민 ID 카드 업로드
-  const handleForeignIdCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!userData || !e.target.files || e.target.files.length === 0) return;
-    
-    const file = e.target.files[0];
-    const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-    
-    if (!validTypes.includes(file.type)) {
-      toast.error('Please upload a JPEG or PNG image.');
-      return;
-    }
-    
-    try {
-      setIsUploading(true);
-      const downloadURL = await uploadForeignIdCard(userData.userId, file, (progress) => {
-        setUploadProgress(progress);
-      });
-      
-      await updateUser(userData.userId, {
-        foreignTeacher: {
-          ...(userData.foreignTeacher || {
-            firstName: '',
-            lastName: '',
-            countryCode: '',
-          }),
-          foreignIdCardUrl: downloadURL,
-        },
-      });
-      
-      setForeignIdCardUrl(downloadURL);
-      await refreshUserData();
-      toast.success('Foreign ID card has been updated.');
-    } catch (error) {
-      logger.error('외국인 ID 카드 업로드 오류:', error);
-      toast.error('An error occurred while uploading foreign ID card.');
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -601,16 +483,16 @@ export default function EditProfilePage() {
         
         updateData.phoneNumber = finalPhoneNumber;
         updateData.email = data.email;
-        updateData.address = data.address;
-        updateData.addressDetail = data.addressDetail;
+        updateData.address = data.address || '';
+        updateData.addressDetail = data.addressDetail || '';
         updateData.gender = data.gender;
         updateData.selfIntroduction = data.selfIntroduction || '';
         updateData.jobMotivation = data.jobMotivation || '';
         updateData.referralPath = data.referralPath || '';
         updateData.referrerName = data.referrerName || '';
         
-        // 주소가 변경되었으면 자동으로 좌표 업데이트
-        if (data.address !== userData.address) {
+        // 주소가 변경되었으면 자동으로 좌표 업데이트 (원어민은 주소가 비어있을 수 있음)
+        if (data.address && data.address !== userData.address) {
           const geocodeUpdate = await updateGeocodeIfAddressChanged(
             userData.address,
             data.address
@@ -752,108 +634,6 @@ export default function EditProfilePage() {
                 </div>
               )}
 
-              {/* 원어민 교사 제출 서류 */}
-              {isForeign && (section === 'all' || section === 'personal') && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold mb-4">Submitted Documents</h3>
-                  
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      CV (Curriculum Vitae)
-                    </label>
-                    {cvUrl ? (
-                      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-md">
-                        <span className="text-green-700 text-sm flex-1">✓ Uploaded</span>
-                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600">
-                          Change
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx"
-                            onChange={handleCvUpload}
-                            disabled={isUploading}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer block w-full p-3 bg-blue-50 border border-blue-500 text-blue-600 text-sm font-medium rounded-md text-center hover:bg-blue-100">
-                        Upload CV
-                        <input
-                          type="file"
-                          accept=".pdf,.doc,.docx"
-                          onChange={handleCvUpload}
-                          disabled={isUploading}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      Passport Photo
-                    </label>
-                    {passportPhotoUrl ? (
-                      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-md">
-                        <span className="text-green-700 text-sm flex-1">✓ Uploaded</span>
-                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600">
-                          Change
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/jpg"
-                            onChange={handlePassportPhotoUpload}
-                            disabled={isUploading}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer block w-full p-3 bg-blue-50 border border-blue-500 text-blue-600 text-sm font-medium rounded-md text-center hover:bg-blue-100">
-                        Upload Photo
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/jpg"
-                          onChange={handlePassportPhotoUpload}
-                          disabled={isUploading}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      Foreign ID Card
-                    </label>
-                    {foreignIdCardUrl ? (
-                      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-md">
-                        <span className="text-green-700 text-sm flex-1">✓ Uploaded</span>
-                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600">
-                          Change
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/jpg"
-                            onChange={handleForeignIdCardUpload}
-                            disabled={isUploading}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer block w-full p-3 bg-blue-50 border border-blue-500 text-blue-600 text-sm font-medium rounded-md text-center hover:bg-blue-100">
-                        Upload ID Card
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/jpg"
-                          onChange={handleForeignIdCardUpload}
-                          disabled={isUploading}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* 개인 정보 섹션 */}
               {(section === 'all' || section === 'personal') && (
@@ -960,7 +740,9 @@ export default function EditProfilePage() {
 
                   <div className="w-full mb-4">
                     <label className="block text-gray-700 text-sm font-medium mb-1">
-                      {isForeign ? 'Address' : '주소'}
+                      {isForeign ? (
+                        <span>Address <span className="text-gray-400 font-normal">(optional)</span></span>
+                      ) : '주소'}
                     </label>
                     <div className="flex mb-2">
                       <input
@@ -987,7 +769,7 @@ export default function EditProfilePage() {
                   </div>
 
                   <FormInput
-                    label={isForeign ? 'Detailed Address' : '상세 주소'}
+                    label={isForeign ? 'Detailed Address (optional)' : '상세 주소'}
                     type="text"
                     placeholder={isForeign ? 'Enter detailed address' : '상세 주소를 입력하세요'}
                     error={errors.addressDetail?.message}

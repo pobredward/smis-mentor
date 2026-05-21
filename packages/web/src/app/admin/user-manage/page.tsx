@@ -1640,80 +1640,303 @@ export default function UserManage() {
                       {/* 직무 경험 섹션 - 모바일 최적화 */}
                       {renderJobExperiencesSection()}
 
+                      {/* 원어민 교사 정보 및 제출 서류 - 직무 경험 바로 다음 배치 */}
+                      {(selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp') && (
+                        <div className="mt-4 border-t pt-4">
+                          <div className="flex items-center gap-2 mb-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                              Foreign Teacher
+                            </span>
+                            <h3 className="text-base font-semibold text-gray-900">Teacher Profile & Documents</h3>
+                          </div>
+
+                          {selectedUser.foreignTeacher ? (
+                            <>
+                              {/* Teacher 기본 정보 카드 */}
+                              <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                  <div>
+                                    <p className="text-xs text-teal-600 font-medium mb-0.5">Full Name</p>
+                                    <p className="text-gray-900 font-semibold">
+                                      {[
+                                        selectedUser.foreignTeacher.firstName,
+                                        selectedUser.foreignTeacher.middleName,
+                                        selectedUser.foreignTeacher.lastName,
+                                      ].filter(Boolean).join(' ') || '-'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-teal-600 font-medium mb-0.5">Country Code</p>
+                                    <p className="text-gray-900">{selectedUser.foreignTeacher.countryCode || '-'}</p>
+                                  </div>
+                                  {selectedUser.foreignTeacher.applicationDate && (
+                                    <div>
+                                      <p className="text-xs text-teal-600 font-medium mb-0.5">Application Date</p>
+                                      <p className="text-gray-900">{formatDate(selectedUser.foreignTeacher.applicationDate)}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* 제출 서류 */}
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Submitted Documents</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  {/* CV */}
+                                  {selectedUser.foreignTeacher.cvUrl ? (
+                                    <a href={selectedUser.foreignTeacher.cvUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-indigo-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-indigo-900">CV</p>
+                                        <p className="text-xs text-indigo-500">Submitted ✓</p>
+                                      </div>
+                                      <svg className="w-3.5 h-3.5 text-indigo-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-200 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-400">CV</p>
+                                        <p className="text-xs text-gray-300">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Passport Photo */}
+                                  {selectedUser.foreignTeacher.passportPhotoUrl ? (
+                                    <a href={selectedUser.foreignTeacher.passportPhotoUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-green-900">Passport Photo</p>
+                                        <p className="text-xs text-green-500">Submitted ✓</p>
+                                      </div>
+                                      <svg className="w-3.5 h-3.5 text-green-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-200 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-400">Passport Photo</p>
+                                        <p className="text-xs text-gray-300">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Foreign ID Card */}
+                                  {selectedUser.foreignTeacher.foreignIdCardUrl ? (
+                                    <a href={selectedUser.foreignTeacher.foreignIdCardUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-amber-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-amber-900">Foreign ID Card</p>
+                                        <p className="text-xs text-amber-500">Submitted ✓</p>
+                                      </div>
+                                      <svg className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-200 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-400">Foreign ID Card</p>
+                                        <p className="text-xs text-gray-300">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Bank Book */}
+                                  {selectedUser.foreignTeacher.bankBookUrl ? (
+                                    <a href={selectedUser.foreignTeacher.bankBookUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-teal-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-teal-900">Bank Book</p>
+                                        <p className="text-xs text-teal-500">Submitted ✓</p>
+                                      </div>
+                                      <svg className="w-3.5 h-3.5 text-teal-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-200 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-400">Bank Book</p>
+                                        <p className="text-xs text-gray-300">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* ESL Certificate */}
+                                  {(selectedUser.foreignTeacher as any).eslCertUrl ? (
+                                    <a href={(selectedUser.foreignTeacher as any).eslCertUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-violet-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-violet-900">ESL Certificate</p>
+                                        <p className="text-xs text-violet-500">Submitted ✓</p>
+                                      </div>
+                                      <svg className="w-3.5 h-3.5 text-violet-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-200 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-400">ESL Certificate</p>
+                                        <p className="text-xs text-gray-300">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4 text-center">
+                              <p className="text-sm text-gray-500">Teacher profile not yet completed.</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* 기본 정보 */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 mt-4 gap-3 text-sm border-t pt-4">
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">이메일</p>
-                          <p className="text-gray-900 break-words">{selectedUser.email || '-'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">전화번호</p>
-                          <p className="text-gray-900">
-                            {selectedUser.phoneNumber ? (
-                              selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp' 
-                                ? formatPhoneNumber(selectedUser.phoneNumber) 
-                                : formatPhoneNumberForMentor(selectedUser.phoneNumber)
-                            ) : '-'}
-                          </p>
-                        </div>
-                        <div className="md:col-span-2">
-                          <p className="text-xs text-gray-500 mb-0.5">주소</p>
-                          <p className="text-gray-900 break-words">
-                            {selectedUser.address ? `${selectedUser.address} ${selectedUser.addressDetail || ''}` : '-'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">성별</p>
-                          <p className="text-gray-900">
-                            {selectedUser.gender === 'M' ? '남성' : selectedUser.gender === 'F' ? '여성' : '-'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">나이</p>
-                          <p className="text-gray-900">
-                            {selectedUser.age ? `${selectedUser.age}세` : '-'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">지원 경로</p>
-                          <p className="text-gray-900">
-                            {selectedUser.referralPath ? (
-                              selectedUser.referralPath.startsWith('기타: ') ? (
-                                selectedUser.referralPath
-                              ) : selectedUser.referralPath === '지인 소개' && selectedUser.referrerName ? (
-                                `${selectedUser.referralPath} (${selectedUser.referrerName})`
-                              ) : (
-                                selectedUser.referralPath
-                              )
-                            ) : '-'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">주민등록번호</p>
-                          <p className="text-gray-900">
-                            {selectedUser.rrnFront && selectedUser.rrnLast ? 
-                              `${selectedUser.rrnFront}-${selectedUser.rrnLast}` : '-'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">이메일 인증</p>
-                          <p className="text-gray-900">
-                            {selectedUser.isEmailVerified ? '인증됨' : '미인증'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">가입일</p>
-                          <p className="text-gray-900">{formatDate(selectedUser.createdAt)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">정보 업데이트</p>
-                          <p className="text-gray-900">{formatDate(selectedUser.updatedAt)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-0.5">DB 아이디</p>
-                          <p className="text-gray-900">{selectedUser.id}</p>
-                        </div>
-                      </div>
+                      {(() => {
+                        const isForeignUser = selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp';
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-2 mt-4 gap-3 text-sm border-t pt-4">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">이메일</p>
+                              <p className="text-gray-900 break-words">{selectedUser.email || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">전화번호</p>
+                              <p className="text-gray-900">
+                                {selectedUser.phoneNumber ? (
+                                  isForeignUser
+                                    ? formatPhoneNumber(selectedUser.phoneNumber)
+                                    : formatPhoneNumberForMentor(selectedUser.phoneNumber)
+                                ) : '-'}
+                              </p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-gray-500 mb-0.5">주소</p>
+                              <p className="text-gray-900 break-words">
+                                {selectedUser.address ? `${selectedUser.address} ${selectedUser.addressDetail || ''}` : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">성별</p>
+                              <p className="text-gray-900">
+                                {selectedUser.gender === 'M' ? '남성' : selectedUser.gender === 'F' ? '여성' : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">나이</p>
+                              <p className="text-gray-900">
+                                {selectedUser.age ? `${selectedUser.age}세` : '-'}
+                              </p>
+                            </div>
+                            {/* 지원 경로 - 멘토/관리자만 */}
+                            {!isForeignUser && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-0.5">지원 경로</p>
+                                <p className="text-gray-900">
+                                  {selectedUser.referralPath ? (
+                                    selectedUser.referralPath.startsWith('기타: ') ? (
+                                      selectedUser.referralPath
+                                    ) : selectedUser.referralPath === '지인 소개' && selectedUser.referrerName ? (
+                                      `${selectedUser.referralPath} (${selectedUser.referrerName})`
+                                    ) : (
+                                      selectedUser.referralPath
+                                    )
+                                  ) : '-'}
+                                </p>
+                              </div>
+                            )}
+                            {/* 주민등록번호 - 멘토/관리자만 */}
+                            {!isForeignUser && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-0.5">주민등록번호</p>
+                                <p className="text-gray-900">
+                                  {selectedUser.rrnFront && selectedUser.rrnLast ?
+                                    `${selectedUser.rrnFront}-${selectedUser.rrnLast}` : '-'}
+                                </p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">이메일 인증</p>
+                              <p className="text-gray-900">
+                                {selectedUser.isEmailVerified ? '인증됨' : '미인증'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">가입일</p>
+                              <p className="text-gray-900">{formatDate(selectedUser.createdAt)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">정보 업데이트</p>
+                              <p className="text-gray-900">{formatDate(selectedUser.updatedAt)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">DB 아이디</p>
+                              <p className="text-gray-900">{selectedUser.id}</p>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* 평가 점수 섹션 */}
                       <div className="mt-4 border-t pt-4">
@@ -1732,51 +1955,65 @@ export default function UserManage() {
                         )}
                       </div>
 
-                      {/* 알바 & 멘토링 경력 섹션 */}
-                      <div className="mt-4 border-t pt-4">
-                        <h3 className="text-base font-semibold mb-2">알바 & 멘토링 경력</h3>
-                        {!selectedUser.partTimeJobs || selectedUser.partTimeJobs.length === 0 ? (
-                          <p className="text-sm text-gray-500">등록된 알바 & 멘토링 경력이 없습니다.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {selectedUser.partTimeJobs.map((job, index) => (
-                              <div key={index} className="bg-gray-50 p-2 rounded border border-gray-200 text-sm">
-                                <div className="flex justify-between mb-1">
-                                  <span className="font-medium">{job.companyName}</span>
-                                  <span className="text-xs text-gray-500">{job.period}</span>
+                      {/* 알바 & 멘토링 경력 섹션 - 멘토/관리자만 */}
+                      {(selectedUser.role !== 'foreign' && selectedUser.role !== 'foreign_temp') && (
+                        <div className="mt-4 border-t pt-4">
+                          <h3 className="text-base font-semibold mb-2">알바 & 멘토링 경력</h3>
+                          {!selectedUser.partTimeJobs || selectedUser.partTimeJobs.length === 0 ? (
+                            <p className="text-sm text-gray-500">등록된 알바 & 멘토링 경력이 없습니다.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {selectedUser.partTimeJobs.map((job, index) => (
+                                <div key={index} className="bg-gray-50 p-2 rounded border border-gray-200 text-sm">
+                                  <div className="flex justify-between mb-1">
+                                    <span className="font-medium">{job.companyName}</span>
+                                    <span className="text-xs text-gray-500">{job.period}</span>
+                                  </div>
+                                  <div className="mb-1 text-xs">
+                                    <span className="text-gray-500 mr-1">담당:</span>
+                                    <span>{job.position}</span>
+                                  </div>
+                                  <div className="text-xs">
+                                    <span className="text-gray-500 mr-1">업무 내용:</span>
+                                    <span className="text-gray-700">{job.description}</span>
+                                  </div>
                                 </div>
-                                <div className="mb-1 text-xs">
-                                  <span className="text-gray-500 mr-1">담당:</span>
-                                  <span>{job.position}</span>
-                                </div>
-                                <div className="text-xs">
-                                  <span className="text-gray-500 mr-1">업무 내용:</span>
-                                  <span className="text-gray-700">{job.description}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* 자기소개/지원동기 섹션 */}
-                      <div className="mt-4 border-t pt-4">
-                        <h3 className="text-base font-semibold mb-2">자기소개 및 지원동기</h3>
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">자기소개</p>
-                            <p className="text-sm text-gray-900 whitespace-pre-line bg-gray-50 p-2 rounded min-h-[60px]">
-                              {selectedUser.selfIntroduction || '-'}
-                            </p>
+                      {(() => {
+                        const isForeignUser = selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp';
+                        return (
+                          <div className="mt-4 border-t pt-4">
+                            <h3 className="text-base font-semibold mb-2">
+                              {isForeignUser ? 'Self Introduction' : '자기소개 및 지원동기'}
+                            </h3>
+                            <div className="space-y-2">
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">
+                                  {isForeignUser ? 'Self Introduction' : '자기소개'}
+                                </p>
+                                <p className="text-sm text-gray-900 whitespace-pre-line bg-gray-50 p-2 rounded min-h-[60px]">
+                                  {selectedUser.selfIntroduction || '-'}
+                                </p>
+                              </div>
+                              {/* 지원 동기 - 멘토/관리자만 */}
+                              {!isForeignUser && (
+                                <div>
+                                  <p className="text-xs text-gray-500 mb-1">지원 동기</p>
+                                  <p className="text-sm text-gray-900 whitespace-pre-line bg-gray-50 p-2 rounded min-h-[60px]">
+                                    {selectedUser.jobMotivation || '-'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">지원 동기</p>
-                            <p className="text-sm text-gray-900 whitespace-pre-line bg-gray-50 p-2 rounded min-h-[60px]">
-                              {selectedUser.jobMotivation || '-'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* 학교 정보 섹션 - 멘토만 */}
                       {(selectedUser.role === 'mentor' || selectedUser.role === 'mentor_temp' || selectedUser.role === 'admin') && (
@@ -1807,91 +2044,215 @@ export default function UserManage() {
                         </div>
                       )}
 
-                      {/* 원어민 교사 정보 및 제출 서류 섹션 */}
-                      {(selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp') && selectedUser.foreignTeacher && (
+                      {/* 원어민 교사 정보 및 제출 서류 섹션 - foreignTeacher가 없어도 원어민이면 표시 */}
+                      {(selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp') && (
                         <div className="mt-4 border-t pt-4">
-                          <h3 className="text-base font-semibold mb-3">원어민 교사 정보 및 제출 서류</h3>
-                          
-                          {/* 기본 정보 */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
-                            <div>
-                              <p className="text-xs text-gray-500 mb-0.5">이름 (Full Name)</p>
-                              <p className="text-gray-900 font-medium">
-                                {`${selectedUser.foreignTeacher.firstName} ${selectedUser.foreignTeacher.middleName ? selectedUser.foreignTeacher.middleName + ' ' : ''}${selectedUser.foreignTeacher.lastName}`}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-0.5">국가 코드</p>
-                              <p className="text-gray-900">{selectedUser.foreignTeacher.countryCode || '-'}</p>
-                            </div>
-                            {selectedUser.foreignTeacher.applicationDate && (
-                              <div>
-                                <p className="text-xs text-gray-500 mb-0.5">지원일</p>
-                                <p className="text-gray-900">{formatDate(selectedUser.foreignTeacher.applicationDate)}</p>
+                          <div className="flex items-center gap-2 mb-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                              Foreign Teacher
+                            </span>
+                            <h3 className="text-base font-semibold text-gray-900">Teacher Profile & Documents</h3>
+                          </div>
+
+                          {selectedUser.foreignTeacher ? (
+                            <>
+                              {/* Teacher 기본 정보 카드 */}
+                              <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                  <div>
+                                    <p className="text-xs text-teal-600 font-medium mb-0.5">Full Name</p>
+                                    <p className="text-gray-900 font-semibold">
+                                      {[
+                                        selectedUser.foreignTeacher.firstName,
+                                        selectedUser.foreignTeacher.middleName,
+                                        selectedUser.foreignTeacher.lastName,
+                                      ].filter(Boolean).join(' ') || '-'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-teal-600 font-medium mb-0.5">Country Code</p>
+                                    <p className="text-gray-900">{selectedUser.foreignTeacher.countryCode || '-'}</p>
+                                  </div>
+                                  {selectedUser.foreignTeacher.applicationDate && (
+                                    <div>
+                                      <p className="text-xs text-teal-600 font-medium mb-0.5">Application Date</p>
+                                      <p className="text-gray-900">{formatDate(selectedUser.foreignTeacher.applicationDate)}</p>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            )}
-                          </div>
 
-                          {/* 제출 서류 */}
-                          <div className="border-t pt-3">
-                            <h4 className="text-sm font-semibold mb-3 text-gray-700">제출 서류</h4>
-                            <div className="space-y-2">
-                              {selectedUser.foreignTeacher.cvUrl && (
-                                <a
-                                  href={selectedUser.foreignTeacher.cvUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-3 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors group"
-                                >
-                                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                  <span className="flex-1 text-sm font-medium text-gray-700">CV (이력서)</span>
-                                  <svg className="w-4 h-4 text-indigo-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                </a>
-                              )}
+                              {/* 제출 서류 */}
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Submitted Documents</p>
+                                <div className="space-y-2">
+                                  {/* CV */}
+                                  {selectedUser.foreignTeacher.cvUrl ? (
+                                    <a href={selectedUser.foreignTeacher.cvUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-indigo-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-indigo-900">CV (Curriculum Vitae)</p>
+                                        <p className="text-xs text-indigo-500">Click to open</p>
+                                      </div>
+                                      <svg className="w-4 h-4 text-indigo-400 group-hover:translate-x-1 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-500">CV (Curriculum Vitae)</p>
+                                        <p className="text-xs text-gray-400">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
 
-                              {selectedUser.foreignTeacher.passportPhotoUrl && (
-                                <a
-                                  href={selectedUser.foreignTeacher.passportPhotoUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-colors group"
-                                >
-                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                                  </svg>
-                                  <span className="flex-1 text-sm font-medium text-gray-700">여권 사진</span>
-                                  <svg className="w-4 h-4 text-green-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                </a>
-                              )}
+                                  {/* Passport Photo */}
+                                  {selectedUser.foreignTeacher.passportPhotoUrl ? (
+                                    <a href={selectedUser.foreignTeacher.passportPhotoUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-green-900">Passport Photo</p>
+                                        <p className="text-xs text-green-500">Click to open</p>
+                                      </div>
+                                      <svg className="w-4 h-4 text-green-400 group-hover:translate-x-1 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-500">Passport Photo</p>
+                                        <p className="text-xs text-gray-400">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
 
-                              {selectedUser.foreignTeacher.foreignIdCardUrl && (
-                                <a
-                                  href={selectedUser.foreignTeacher.foreignIdCardUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-3 p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors group"
-                                >
-                                  <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                                  </svg>
-                                  <span className="flex-1 text-sm font-medium text-gray-700">외국인 등록증</span>
-                                  <svg className="w-4 h-4 text-amber-600 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                </a>
-                              )}
+                                  {/* Foreign ID Card */}
+                                  {selectedUser.foreignTeacher.foreignIdCardUrl ? (
+                                    <a href={selectedUser.foreignTeacher.foreignIdCardUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-amber-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-amber-900">Foreign Resident ID Card</p>
+                                        <p className="text-xs text-amber-500">Click to open</p>
+                                      </div>
+                                      <svg className="w-4 h-4 text-amber-400 group-hover:translate-x-1 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-500">Foreign Resident ID Card</p>
+                                        <p className="text-xs text-gray-400">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
 
-                              {!selectedUser.foreignTeacher.cvUrl && !selectedUser.foreignTeacher.passportPhotoUrl && !selectedUser.foreignTeacher.foreignIdCardUrl && (
-                                <p className="text-sm text-gray-500 py-2">제출된 서류가 없습니다.</p>
-                              )}
+                                  {/* Bank Book */}
+                                  {selectedUser.foreignTeacher.bankBookUrl ? (
+                                    <a href={selectedUser.foreignTeacher.bankBookUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-teal-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-teal-900">Bank Book (통장사본)</p>
+                                        <p className="text-xs text-teal-500">Click to open</p>
+                                      </div>
+                                      <svg className="w-4 h-4 text-teal-400 group-hover:translate-x-1 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-500">Bank Book (통장사본)</p>
+                                        <p className="text-xs text-gray-400">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* ESL Certificate */}
+                                  {(selectedUser.foreignTeacher as any).eslCertUrl ? (
+                                    <a href={(selectedUser.foreignTeacher as any).eslCertUrl} target="_blank" rel="noopener noreferrer"
+                                      className="flex items-center gap-3 p-3 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg transition-colors group"
+                                    >
+                                      <div className="flex-shrink-0 w-8 h-8 bg-violet-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-violet-900">ESL Certificate (TESOL/TEFL/CELTA)</p>
+                                        <p className="text-xs text-violet-500">Click to open</p>
+                                      </div>
+                                      <svg className="w-4 h-4 text-violet-400 group-hover:translate-x-1 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  ) : (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                                      <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                                        </svg>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-500">ESL Certificate (TESOL/TEFL/CELTA)</p>
+                                        <p className="text-xs text-gray-400">Not submitted</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4 text-center">
+                              <p className="text-sm text-gray-500">Teacher profile not yet completed.</p>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )}
                     </div>

@@ -72,6 +72,7 @@ export default function ClassContent() {
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
   const isAdmin = userData?.role === 'admin';
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);
   const groupRole = activeJobExp?.groupRole;
 
@@ -235,7 +236,7 @@ export default function ClassContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600">반명단 로딩 중...</p>
+          <p className="text-sm text-gray-600">{isForeign ? 'Loading class roster...' : '반명단 로딩 중...'}</p>
         </div>
       </div>
     );
@@ -259,7 +260,7 @@ export default function ClassContent() {
             />
           </svg>
         </div>
-        <p className="text-center">로그인 후 이용 가능합니다.</p>
+        <p className="text-center">{isForeign ? 'Please sign in to continue.' : '로그인 후 이용 가능합니다.'}</p>
       </div>
     );
   }
@@ -270,9 +271,18 @@ export default function ClassContent() {
         <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">활성 캠프를 선택해주세요</h3>
-        <p className="text-sm text-gray-600">마이페이지에서 참여 중인 캠프를 활성화하면</p>
-        <p className="text-sm text-gray-600">해당 캠프의 반명단을 확인할 수 있습니다.</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">{isForeign ? 'No active camp selected' : '활성 캠프를 선택해주세요'}</h3>
+        {isForeign ? (
+          <>
+            <p className="text-sm text-gray-600">Activate a camp on My Page to</p>
+            <p className="text-sm text-gray-600">view the class roster for that camp.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-600">마이페이지에서 참여 중인 캠프를 활성화하면</p>
+            <p className="text-sm text-gray-600">해당 캠프의 반명단을 확인할 수 있습니다.</p>
+          </>
+        )}
       </div>
     );
   }
@@ -281,7 +291,7 @@ export default function ClassContent() {
     <div className="flex flex-col h-full bg-gray-50">
       {/* 헤더 */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">반 명단</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{isForeign ? 'Class Roster' : '반 명단'}</h1>
         <div className="flex items-center gap-2">
           {isSearchExpanded ? (
             <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
@@ -289,7 +299,7 @@ export default function ClassContent() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="이름 검색..."
+                placeholder={isForeign ? 'Search by name...' : '이름 검색...'}
                 className="bg-transparent border-none outline-none text-sm w-40"
                 autoFocus
               />
@@ -344,11 +354,11 @@ export default function ClassContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="text-xs text-amber-800">
-              <span className="font-semibold">임시 데이터입니다.</span>
+              <span className="font-semibold">{isForeign ? 'This is temporary data.' : '임시 데이터입니다.'}</span>
               <span className="ml-1">
                 {hasRealData 
-                  ? '관리자가 임시 데이터 표시를 활성화했습니다.'
-                  : '반 배정이 완료되면 실제 명단으로 표기됩니다.'}
+                  ? (isForeign ? 'Temporary data display has been enabled by the administrator.' : '관리자가 임시 데이터 표시를 활성화했습니다.')
+                  : (isForeign ? 'The actual roster will be shown once class assignments are complete.' : '반 배정이 완료되면 실제 명단으로 표기됩니다.')}
               </span>
             </p>
           </div>
@@ -387,7 +397,9 @@ export default function ClassContent() {
       {searchQuery.trim() && (
         <div className="bg-white border-b border-gray-200 px-4 py-2">
           <p className="text-sm text-gray-600">
-            "{searchQuery}" 검색 결과: {displayStudents.length}명
+            {isForeign
+              ? `Search results for "${searchQuery}": ${displayStudents.length} students`
+              : `"${searchQuery}" 검색 결과: ${displayStudents.length}명`}
           </p>
         </div>
       )}
@@ -396,7 +408,7 @@ export default function ClassContent() {
       <div className="flex-1 overflow-y-auto p-4">
         {displayStudents.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">반을 선택해주세요.</p>
+            <p className="text-gray-500">{isForeign ? 'Please select a class.' : '반을 선택해주세요.'}</p>
           </div>
         ) : (
           <div className="grid grid-cols-4 gap-1">
@@ -422,12 +434,12 @@ export default function ClassContent() {
                 <div className="space-y-0.5 text-[10px] text-gray-600">
                   <p className="truncate">{student.englishName || '-'}</p>
                   <p className="truncate">
-                    <span>{student.gender === 'M' ? '남' : '여'}</span>
+                    <span>{student.gender === 'M' ? (isForeign ? 'M' : '남') : (isForeign ? 'F' : '여')}</span>
                     <span className="mx-1">•</span>
                     <span>{student.grade}</span>
                   </p>
-                  <p className="truncate text-[9px]">반: {student.classMentor || '-'}</p>
-                  <p className="truncate text-[9px]">유닛: {student.unitMentor || '-'}</p>
+                  <p className="truncate text-[9px]">{isForeign ? 'Class' : '반'}: {student.classMentor || '-'}</p>
+                  <p className="truncate text-[9px]">{isForeign ? 'Unit' : '유닛'}: {student.unitMentor || '-'}</p>
                 </div>
               </button>
             ))}
@@ -498,27 +510,27 @@ export default function ClassContent() {
             <div className="flex-1 overflow-y-auto px-6 py-4">
               {/* 캠프 정보 */}
               <div className="mb-5">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">캠프 정보</h4>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Camp Info' : '캠프 정보'}</h4>
                 <div className="space-y-2">
                   {selectedStudent.studentId && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">고유번호</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Student ID' : '고유번호'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.studentId}</span>
                     </div>
                   )}
                   {(selectedStudent.classNumber || selectedStudent.className || selectedStudent.classMentor) && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">반 정보</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Class Info' : '반 정보'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {selectedStudent.classNumber || '-'} | {selectedStudent.className || '-'}반 | {selectedStudent.classMentor || '-'} 멘토
+                        {selectedStudent.classNumber || '-'} | {selectedStudent.className || '-'}{isForeign ? ' class' : '반'} | {selectedStudent.classMentor || '-'} {isForeign ? 'mentor' : '멘토'}
                       </span>
                     </div>
                   )}
                   {(selectedStudent.unit || selectedStudent.unitMentor || selectedStudent.roomNumber) && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">유닛 정보</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Unit Info' : '유닛 정보'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {selectedStudent.unit || selectedStudent.unitMentor || '-'} 유닛 | {selectedStudent.roomNumber || '-'}호
+                        {selectedStudent.unit || selectedStudent.unitMentor || '-'} {isForeign ? 'unit' : '유닛'} | {isForeign ? 'Room' : ''}{selectedStudent.roomNumber || '-'}{isForeign ? '' : '호'}
                       </span>
                     </div>
                   )}
@@ -527,49 +539,51 @@ export default function ClassContent() {
 
               {/* 기본 정보 */}
               <div className="mb-5">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">기본 정보</h4>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Basic Info' : '기본 정보'}</h4>
                 <div className="space-y-2">
                   <div className="flex py-2 border-b border-gray-100">
-                    <span className="flex-1 text-xs text-gray-500">신상</span>
+                    <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Profile' : '신상'}</span>
                     <span className="flex-[2] text-xs text-gray-900 font-medium">
-                      {selectedStudent.name} | {selectedStudent.englishName || '-'} | {selectedStudent.grade} | {selectedStudent.gender === 'M' ? '남' : '여'}
+                      {selectedStudent.name} | {selectedStudent.englishName || '-'} | {selectedStudent.grade} | {selectedStudent.gender === 'M' ? (isForeign ? 'M' : '남') : (isForeign ? 'F' : '여')}
                     </span>
                   </div>
                   {selectedStudent.ssn && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">주민등록번호</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'ID Number' : '주민등록번호'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{maskSSN(selectedStudent.ssn, isAdmin, groupRole)}</span>
                     </div>
                   )}
                   {selectedStudent.address && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">도로명 주소</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Address' : '도로명 주소'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.address}</span>
                     </div>
                   )}
                   {selectedStudent.addressDetail && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">세부 주소</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Address Detail' : '세부 주소'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.addressDetail}</span>
                     </div>
                   )}
                   {campType === 'EJ' && (selectedStudent.departureRoute || selectedStudent.arrivalRoute) && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">입퇴소공항</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Airport' : '입퇴소공항'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {selectedStudent.departureRoute || '-'} 입소 | {selectedStudent.arrivalRoute || '-'} 퇴소
+                        {isForeign
+                          ? `Arrival: ${selectedStudent.departureRoute || '-'} | Departure: ${selectedStudent.arrivalRoute || '-'}`
+                          : `${selectedStudent.departureRoute || '-'} 입소 | ${selectedStudent.arrivalRoute || '-'} 퇴소`}
                       </span>
                     </div>
                   )}
                   {campType === 'S' && selectedStudent.shirtSize && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">단체티 사이즈</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Shirt Size' : '단체티 사이즈'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.shirtSize}</span>
                     </div>
                   )}
                   {campType === 'S' && (selectedStudent.passportName || selectedStudent.passportNumber || selectedStudent.passportExpiry) && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">여권정보</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Passport' : '여권정보'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">
                         {selectedStudent.passportName || '-'} | {selectedStudent.passportNumber || '-'} | {selectedStudent.passportExpiry || '-'}
                       </span>
@@ -580,11 +594,11 @@ export default function ClassContent() {
 
               {/* 보호자 정보 */}
               <div className="mb-5">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">보호자 정보</h4>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Guardian Info' : '보호자 정보'}</h4>
                 <div className="space-y-2">
                   {(selectedStudent.parentPhone || selectedStudent.parentName) && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">대표 보호자</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Primary Guardian' : '대표 보호자'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">
                         {selectedStudent.parentPhone || '-'} | {selectedStudent.parentName || '-'}
                       </span>
@@ -592,13 +606,13 @@ export default function ClassContent() {
                   )}
                   {selectedStudent.email && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">대표 이메일</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Primary Email' : '대표 이메일'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.email}</span>
                     </div>
                   )}
                   {(selectedStudent.otherPhone || selectedStudent.otherName) && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">기타 보호자</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Other Guardian' : '기타 보호자'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">
                         {selectedStudent.otherPhone || '-'} | {selectedStudent.otherName || '-'}
                       </span>
@@ -609,23 +623,23 @@ export default function ClassContent() {
 
               {/* 상세 정보 */}
               <div className="mb-5">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">상세 정보</h4>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Additional Info' : '상세 정보'}</h4>
                 <div className="space-y-2">
                   {selectedStudent.medication && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">복용약 & 알레르기</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Medication & Allergies' : '복용약 & 알레르기'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.medication}</span>
                     </div>
                   )}
                   {selectedStudent.notes && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">특이사항</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Special Notes' : '특이사항'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.notes}</span>
                     </div>
                   )}
                   {selectedStudent.etc && (
                     <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">기타</span>
+                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Other' : '기타'}</span>
                       <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.etc}</span>
                     </div>
                   )}
@@ -639,7 +653,7 @@ export default function ClassContent() {
                 onClick={() => setSelectedStudent(null)}
                 className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
               >
-                닫기
+                {isForeign ? 'Close' : '닫기'}
               </button>
             </div>
           </div>

@@ -12,6 +12,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { NotificationTestScreen } from '../screens/NotificationTestScreen';
 import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from '../screens/TermsOfServiceScreen';
+import { useAuth } from '../context/AuthContext';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -46,92 +47,101 @@ const linking = {
   },
 };
 
+function AppStack() {
+  const { userData } = useAuth();
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen
+        name="TaskDetail"
+        component={TaskDetailScreen}
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="PersonalTaskDetail"
+        component={PersonalTaskDetailScreen}
+        options={{
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="CampDetail"
+        component={CampDetailScreen}
+        options={({ route }) => ({
+          headerShown: true,
+          title: route.params?.itemTitle || (isForeign ? 'Detail' : '자료 상세'),
+          presentation: 'card',
+          animation: 'slide_from_right',
+        })}
+      />
+      <Stack.Screen
+        name="CampEditor"
+        component={CampEditorScreen}
+        options={{
+          headerShown: true,
+          title: isForeign ? 'Edit Page' : '페이지 편집',
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          headerShown: true,
+          title: isForeign ? 'Notification Settings' : '설정',
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="NotificationTest"
+        component={NotificationTestScreen}
+        options={{
+          headerShown: true,
+          title: '푸시 알림 테스트',
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="PrivacyPolicy"
+        component={PrivacyPolicyScreen}
+        options={{
+          headerShown: true,
+          title: isForeign ? 'Privacy Policy' : '개인정보처리방침',
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="TermsOfService"
+        component={TermsOfServiceScreen}
+        options={{
+          headerShown: true,
+          title: isForeign ? 'Terms of Service' : '서비스 이용약관',
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 export function RootNavigator() {
   return (
     <NavigationContainer ref={navigationRef} theme={CustomLightTheme} linking={linking}>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen name="MainTabs" component={MainTabs} />
-        <Stack.Screen 
-          name="TaskDetail" 
-          component={TaskDetailScreen}
-          options={{
-            presentation: 'card',
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen
-          name="PersonalTaskDetail"
-          component={PersonalTaskDetailScreen}
-          options={{
-            presentation: 'card',
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen 
-          name="CampDetail" 
-          component={CampDetailScreen}
-          options={({ route }) => ({
-            headerShown: true,
-            title: route.params?.itemTitle || '자료 상세',
-            presentation: 'card',
-            animation: 'slide_from_right',
-          })}
-        />
-        <Stack.Screen 
-          name="CampEditor" 
-          component={CampEditorScreen}
-          options={{
-            headerShown: true,
-            title: '페이지 편집',
-            presentation: 'card',
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen 
-          name="Settings" 
-          component={SettingsScreen}
-          options={{
-            headerShown: true,
-            title: '설정',
-            presentation: 'card',
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen 
-          name="NotificationTest" 
-          component={NotificationTestScreen}
-          options={{
-            headerShown: true,
-            title: '푸시 알림 테스트',
-            presentation: 'card',
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen 
-          name="PrivacyPolicy" 
-          component={PrivacyPolicyScreen}
-          options={{
-            headerShown: true,
-            title: '개인정보처리방침',
-            presentation: 'card',
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen 
-          name="TermsOfService" 
-          component={TermsOfServiceScreen}
-          options={{
-            headerShown: true,
-            title: '서비스 이용약관',
-            presentation: 'card',
-            animation: 'slide_from_right',
-          }}
-        />
-      </Stack.Navigator>
+      <AppStack />
     </NavigationContainer>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getUserJobCodesInfo, deactivateUser, getUserById, getUserByEmail, updateUser, signIn, signInWithCustomTokenFromFunction } from '@/lib/firebaseService';
+import { getUserJobCodesInfo, deactivateUser, getUserById, getUserByEmail, updateUser, signIn, signInWithCustomTokenFromFunction, uploadForeignCV, uploadForeignPassportPhoto, uploadForeignIdCard, uploadForeignBankBook, uploadForeignEslCert, deleteForeignDocUrl } from '@/lib/firebaseService';
 import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
@@ -33,6 +33,10 @@ export default function ProfilePage() {
   const [prefetchingCamp, setPrefetchingCamp] = useState(false);
   const [prefetchProgress, setPrefetchProgress] = useState(0);
   const [prefetchStage, setPrefetchStage] = useState<'cache' | 'update' | 'data' | 'complete'>('cache');
+
+  // 문서 업로드/삭제 상태
+  const [uploadingDoc, setUploadingDoc] = useState<'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert' | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert' | null>(null);
 
   useEffect(() => {
     const checkAuthAndLoadData = async () => {
@@ -66,7 +70,7 @@ export default function ProfilePage() {
             const { getAllJobCodes } = await import('@/lib/firebaseService');
             jobCodesInfo = await getAllJobCodes();
           } 
-          // 일반 사용자는 자신의 캠프 코드만 조회
+          // 일반 사용자(멘토, 원어민)는 자신의 캠프 코드만 조회
           else if (userData.jobExperiences && userData.jobExperiences.length > 0) {
             jobCodesInfo = await getUserJobCodesInfo(userData.jobExperiences);
           }
@@ -595,6 +599,101 @@ export default function ProfilePage() {
     }
   };
 
+  // 원어민 문서 업로드 핸들러 (in-place)
+  const handleDocUpload = async (
+    type: 'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    if (!userData || !e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    // input 초기화 (같은 파일 재선택 허용)
+    e.target.value = '';
+
+    const imageTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    const docTypes = [...imageTypes, 'application/pdf'];
+    const wordTypes = [...imageTypes, 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+
+    const allowedTypes = type === 'cv' ? wordTypes : docTypes;
+    if (!allowedTypes.includes(file.type)) {
+      toast.error(type === 'cv' ? 'Please upload a PDF, Word, or image file.' : 'Please upload a JPEG, PNG, or PDF file.');
+      return;
+    }
+
+    try {
+      setUploadingDoc(type);
+      let downloadURL = '';
+      const progress = () => {};
+
+      if (type === 'cv') downloadURL = await uploadForeignCV(userData.userId, file, progress);
+      else if (type === 'passport') downloadURL = await uploadForeignPassportPhoto(userData.userId, file, progress);
+      else if (type === 'idCard') downloadURL = await uploadForeignIdCard(userData.userId, file, progress);
+      else if (type === 'bankBook') downloadURL = await uploadForeignBankBook(userData.userId, file, progress);
+      else if (type === 'eslCert') downloadURL = await uploadForeignEslCert(userData.userId, file, progress);
+
+      const fieldMap = {
+        cv: 'cvUrl',
+        passport: 'passportPhotoUrl',
+        idCard: 'foreignIdCardUrl',
+        bankBook: 'bankBookUrl',
+        eslCert: 'eslCertUrl',
+      } as const;
+
+      await updateUser(userData.userId, {
+        foreignTeacher: {
+          ...(userData.foreignTeacher || { firstName: '', lastName: '', countryCode: '' }),
+          [fieldMap[type]]: downloadURL,
+        },
+      });
+
+      await refreshUserData();
+      toast.success('Document uploaded successfully.');
+    } catch (error) {
+      console.error('문서 업로드 오류:', error);
+      toast.error('Failed to upload document. Please try again.');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  // 원어민 문서 삭제 핸들러
+  const handleDocDelete = async (
+    type: 'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert',
+    url: string
+  ) => {
+    if (!userData) return;
+
+    const labelMap = {
+      cv: 'CV',
+      passport: 'Passport Photo',
+      idCard: 'Foreign Resident ID Card',
+      bankBook: 'Bank Book',
+      eslCert: 'ESL Certificate',
+    };
+
+    const confirmed = window.confirm(`Are you sure you want to delete the ${labelMap[type]}? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    const fieldMap = {
+      cv: 'cvUrl',
+      passport: 'passportPhotoUrl',
+      idCard: 'foreignIdCardUrl',
+      bankBook: 'bankBookUrl',
+      eslCert: 'eslCertUrl',
+    } as const;
+
+    try {
+      setDeletingDoc(type);
+      await deleteForeignDocUrl(userData.userId, fieldMap[type], url);
+      await refreshUserData();
+      toast.success(`${labelMap[type]} has been deleted.`);
+    } catch (error) {
+      console.error('문서 삭제 오류:', error);
+      toast.error('Failed to delete document. Please try again.');
+    } finally {
+      setDeletingDoc(null);
+    }
+  };
+
   // 소셜 계정 연동 해제 핸들러
   const handleUnlink = async (providerId: SocialProvider) => {
     console.log('🔓 연동 해제 시작:', {
@@ -928,119 +1027,15 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* 원어민 교사 정보 및 제출 서류 */}
-        {isForeign && userData.foreignTeacher && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-            <div className="border-b px-4 sm:px-6 py-3">
-              <h2 className="text-lg font-semibold">Teacher Information & Submitted Documents</h2>
-            </div>
-            <div className="px-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-sm text-gray-500">First Name</p>
-                  <p>{userData.foreignTeacher.firstName}</p>
-                </div>
-                {userData.foreignTeacher.middleName && (
-                  <div>
-                    <p className="text-sm text-gray-500">Middle Name</p>
-                    <p>{userData.foreignTeacher.middleName}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-sm text-gray-500">Last Name</p>
-                  <p>{userData.foreignTeacher.lastName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Country Code</p>
-                  <p>{userData.foreignTeacher.countryCode}</p>
-                </div>
-                {userData.foreignTeacher.applicationDate && (
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-500">Application Date</p>
-                    <p>
-                      {userData.foreignTeacher.applicationDate.toDate
-                        ? userData.foreignTeacher.applicationDate.toDate().toLocaleDateString('en-US')
-                        : new Date((userData.foreignTeacher.applicationDate as any).seconds * 1000).toLocaleDateString('en-US')}
-                    </p>
-                  </div>
-                )}
-              </div>
-              
-              <div className="border-t pt-4">
-                <h3 className="text-sm font-semibold mb-3 text-gray-700">Submitted Documents</h3>
-                <div className="space-y-2">
-                  {userData.foreignTeacher.cvUrl && (
-                    <a
-                      href={userData.foreignTeacher.cvUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
-                    >
-                      <svg className="w-5 h-5 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <div className="flex-grow min-w-0">
-                        <p className="text-sm font-medium text-indigo-900">CV (Curriculum Vitae)</p>
-                        <p className="text-xs text-indigo-600">Click to view</p>
-                      </div>
-                      <svg className="w-4 h-4 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
-                  )}
-                  {userData.foreignTeacher.passportPhotoUrl && (
-                    <a
-                      href={userData.foreignTeacher.passportPhotoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors border border-green-200"
-                    >
-                      <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <div className="flex-grow min-w-0">
-                        <p className="text-sm font-medium text-green-900">Passport Photo</p>
-                        <p className="text-xs text-green-600">Click to view</p>
-                      </div>
-                      <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
-                  )}
-                  {userData.foreignTeacher.foreignIdCardUrl && (
-                    <a
-                      href={userData.foreignTeacher.foreignIdCardUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-200"
-                    >
-                      <svg className="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                      </svg>
-                      <div className="flex-grow min-w-0">
-                        <p className="text-sm font-medium text-amber-900">Foreign Resident ID Card</p>
-                        <p className="text-xs text-amber-600">Click to view</p>
-                      </div>
-                      <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
-                  )}
-                  {!userData.foreignTeacher.cvUrl && !userData.foreignTeacher.passportPhotoUrl && !userData.foreignTeacher.foreignIdCardUrl && (
-                    <p className="text-sm text-gray-500 py-2">No documents submitted.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* SMIS 캠프 참여 이력 - 원어민은 숨기기 */}
-        {!isForeign && (
+        {/* SMIS 캠프 참여 이력 */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
           <div className="border-b px-4 sm:px-6 py-3">
             <h2 className="text-lg font-semibold">
-              {userData.role === 'admin' ? '전체 캠프 코드' : 'SMIS 캠프 참여 이력'}
+              {userData.role === 'admin'
+                ? '전체 캠프 코드'
+                : isForeign
+                  ? 'SMIS Camp History'
+                  : 'SMIS 캠프 참여 이력'}
             </h2>
           </div>
           
@@ -1050,7 +1045,11 @@ export default function ProfilePage() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
               </div>
             ) : jobCodes.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">등록된 참여 이력이 없습니다.</p>
+              <p className="text-gray-500 text-center py-4">
+                {isForeign
+                  ? 'No camp history registered. Camp codes will appear here once assigned by an administrator.'
+                  : '등록된 참여 이력이 없습니다.'}
+              </p>
             ) : userData.role === 'admin' ? (
               // Admin: generation별 뱃지 형태 (27기 이상만 표시, 26기 이하는 더보기)
               <div className="space-y-3">
@@ -1215,7 +1214,7 @@ export default function ProfilePage() {
                         </div>
                         {isActive && (
                           <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
-                            활성
+                            {isForeign ? 'Active' : '활성'}
                           </span>
                         )}
                       </div>
@@ -1223,7 +1222,7 @@ export default function ProfilePage() {
                       <div className="hidden sm:flex items-center gap-x-1.5 flex-wrap">
                         {isActive && (
                           <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
-                            활성
+                            {isForeign ? 'Active' : '활성'}
                           </span>
                         )}
                         {job.code && (
@@ -1249,6 +1248,149 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
+
+        {/* 원어민 교사 정보 (Teacher Information + Personal Information 통합) */}
+        {isForeign && userData.foreignTeacher && (
+          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+            <div className="border-b px-4 sm:px-6 py-3">
+              <h2 className="text-lg font-semibold">Teacher Information</h2>
+            </div>
+            <div className="px-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">First Name</p>
+                  <p>{userData.foreignTeacher.firstName}</p>
+                </div>
+                {userData.foreignTeacher.middleName && (
+                  <div>
+                    <p className="text-sm text-gray-500">Middle Name</p>
+                    <p>{userData.foreignTeacher.middleName}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-gray-500">Last Name</p>
+                  <p>{userData.foreignTeacher.lastName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Country</p>
+                  <p>{userData.foreignTeacher.countryCode}</p>
+                </div>
+                {userData.age && (
+                  <div>
+                    <p className="text-sm text-gray-500">Age</p>
+                    <p>{userData.age} years old</p>
+                  </div>
+                )}
+                {userData.gender && (
+                  <div>
+                    <p className="text-sm text-gray-500">Gender</p>
+                    <p>{userData.gender === 'M' ? 'Male' : 'Female'}</p>
+                  </div>
+                )}
+                {userData.phoneNumber && (
+                  <div>
+                    <p className="text-sm text-gray-500">Phone Number</p>
+                    <p>{formatPhoneNumber(userData.phoneNumber)}</p>
+                  </div>
+                )}
+                {userData.address && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-500">Address</p>
+                    <p>{userData.address} {userData.addressDetail}</p>
+                  </div>
+                )}
+                {userData.foreignTeacher.applicationDate && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-500">Application Date</p>
+                    <p>
+                      {userData.foreignTeacher.applicationDate.toDate
+                        ? userData.foreignTeacher.applicationDate.toDate().toLocaleDateString('en-US')
+                        : new Date((userData.foreignTeacher.applicationDate as any).seconds * 1000).toLocaleDateString('en-US')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 원어민 제출 서류 (in-place 업로드) */}
+        {isForeign && userData.foreignTeacher && (
+          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+            <div className="border-b px-4 sm:px-6 py-3">
+              <h2 className="text-lg font-semibold">Submitted Documents</h2>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              {(
+                [
+                  { type: 'cv', label: 'CV (Curriculum Vitae)', hint: 'PDF / Word', url: userData.foreignTeacher.cvUrl, accept: '.pdf,.doc,.docx,image/jpeg,image/png', accent: 'indigo' },
+                  { type: 'passport', label: 'Passport Photo', hint: 'JPG / PNG', url: userData.foreignTeacher.passportPhotoUrl, accept: 'image/jpeg,image/png', accent: 'green' },
+                  { type: 'idCard', label: 'Foreign Resident ID Card', hint: 'JPG / PNG / PDF', url: userData.foreignTeacher.foreignIdCardUrl, accept: 'image/jpeg,image/png,application/pdf', accent: 'amber' },
+                  { type: 'bankBook', label: 'Bank Book (통장사본)', hint: 'JPG / PNG / PDF', url: userData.foreignTeacher.bankBookUrl, accept: 'image/jpeg,image/png,application/pdf', accent: 'teal' },
+                  { type: 'eslCert', label: 'ESL Certificate (TESOL/TEFL/CELTA)', hint: 'JPG / PNG / PDF', url: userData.foreignTeacher.eslCertUrl, accept: 'image/jpeg,image/png,application/pdf', accent: 'violet' },
+                ] as const
+              ).map(({ type, label, hint, url, accept, accent }) => {
+                const isUploading = uploadingDoc === type;
+                const colorMap = {
+                  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', hover: 'hover:bg-indigo-100', text: 'text-indigo-900', sub: 'text-indigo-600', btnBg: 'bg-indigo-500 hover:bg-indigo-600', emptyBorder: 'border-indigo-300', emptyText: 'text-indigo-500' },
+                  green:  { bg: 'bg-green-50',  border: 'border-green-200',  hover: 'hover:bg-green-100',  text: 'text-green-900',  sub: 'text-green-600',  btnBg: 'bg-green-500 hover:bg-green-600',  emptyBorder: 'border-green-300',  emptyText: 'text-green-500' },
+                  amber:  { bg: 'bg-amber-50',  border: 'border-amber-200',  hover: 'hover:bg-amber-100',  text: 'text-amber-900',  sub: 'text-amber-600',  btnBg: 'bg-amber-500 hover:bg-amber-600',  emptyBorder: 'border-amber-300',  emptyText: 'text-amber-500' },
+                  teal:   { bg: 'bg-teal-50',   border: 'border-teal-200',   hover: 'hover:bg-teal-100',   text: 'text-teal-900',   sub: 'text-teal-600',   btnBg: 'bg-teal-500 hover:bg-teal-600',   emptyBorder: 'border-teal-300',   emptyText: 'text-teal-500' },
+                  violet: { bg: 'bg-violet-50', border: 'border-violet-200', hover: 'hover:bg-violet-100', text: 'text-violet-900', sub: 'text-violet-600', btnBg: 'bg-violet-500 hover:bg-violet-600', emptyBorder: 'border-violet-300', emptyText: 'text-violet-500' },
+                } as const;
+                const c = colorMap[accent];
+
+                const isDeleting = deletingDoc === type;
+
+                if (isUploading || isDeleting) {
+                  return (
+                    <div key={type} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 flex-shrink-0"></div>
+                      <div className="flex-grow">
+                        <p className="text-sm font-medium text-gray-700">{label}</p>
+                        <p className="text-xs text-gray-500">{isDeleting ? 'Deleting...' : 'Uploading...'}</p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (url) {
+                  return (
+                    <div key={type} className={`flex items-center gap-3 p-3 ${c.bg} ${c.border} border rounded-lg`}>
+                      <a href={url} target="_blank" rel="noopener noreferrer" className={`flex-grow flex items-center gap-2 min-w-0 ${c.hover} rounded transition-colors`}>
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium ${c.text}`}>{label}</p>
+                          <p className={`text-xs ${c.sub}`}>Click to view →</p>
+                        </div>
+                      </a>
+                      <label className={`cursor-pointer flex-shrink-0 px-3 py-1.5 ${c.btnBg} text-white text-xs font-medium rounded-md transition-colors`}>
+                        Replace
+                        <input type="file" accept={accept} onChange={(e) => handleDocUpload(type, e)} disabled={!!(uploadingDoc || deletingDoc)} className="hidden" />
+                      </label>
+                      <button
+                        onClick={() => handleDocDelete(type, url)}
+                        disabled={!!(uploadingDoc || deletingDoc)}
+                        className="flex-shrink-0 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-md border border-red-200 transition-colors disabled:opacity-40"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <label key={type} className={`flex items-center gap-3 p-3 bg-gray-50 border border-dashed ${c.emptyBorder} rounded-lg cursor-pointer hover:bg-gray-100 transition-colors`}>
+                    <div className="flex-grow">
+                      <p className={`text-sm font-medium ${c.emptyText}`}>{label}</p>
+                      <p className="text-xs text-gray-400">{hint} · Click to upload</p>
+                    </div>
+                    <span className="flex-shrink-0 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-600 text-xs font-medium rounded-md transition-colors">Upload</span>
+                    <input type="file" accept={accept} onChange={(e) => handleDocUpload(type, e)} disabled={!!uploadingDoc} className="hidden" />
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {/* 소셜 계정 연동 관리 */}
@@ -1261,52 +1403,59 @@ export default function ProfilePage() {
                 onLink={handleLink}
                 isUnlinking={isUnlinking}
                 isLinking={isLinking}
+                isForeign={isForeign}
               />
             </div>
           </div>
         ) : (
           <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
             <div className="px-4 sm:px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">현재 연동된 계정</h3>
-              <p className="text-sm text-gray-500">연동된 소셜 계정이 없습니다.</p>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                {isForeign ? 'Linked Accounts' : '현재 연동된 계정'}
+              </h3>
+              <p className="text-sm text-gray-500">
+                {isForeign ? 'No linked social accounts.' : '연동된 소셜 계정이 없습니다.'}
+              </p>
             </div>
           </div>
         )}
 
-        {/* 개인 정보 */}
-        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-          <div className="border-b px-4 sm:px-6 py-3">
-            <h2 className="text-lg font-semibold">{isForeign ? 'Personal Information' : '개인 정보'}</h2>
-          </div>
-          <div className="px-6 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {userData.age && (
-                <div>
-                  <p className="text-sm text-gray-500">{isForeign ? 'Age' : '나이'}</p>
-                  <p>{userData.age}{isForeign ? ' years old' : '세'}</p>
-                </div>
-              )}
-              {userData.gender && (
-                <div>
-                  <p className="text-sm text-gray-500">{isForeign ? 'Gender' : '성별'}</p>
-                  <p>{isForeign ? (userData.gender === 'M' ? 'Male' : 'Female') : (userData.gender === 'M' ? '남성' : '여성')}</p>
-                </div>
-              )}
-              {userData.phoneNumber && (
-                <div>
-                  <p className="text-sm text-gray-500">{isForeign ? 'Phone Number' : '연락처'}</p>
-                  <p>{formatPhoneNumber(userData.phoneNumber)}</p>
-                </div>
-              )}
-              {userData.address && (
-                <div className="md:col-span-2">
-                  <p className="text-sm text-gray-500">{isForeign ? 'Address' : '주소'}</p>
-                  <p>{userData.address} {userData.addressDetail}</p>
-                </div>
-              )}
+        {/* 개인 정보 - 멘토만 표시 (원어민은 Teacher Information에 통합) */}
+        {!isForeign && (
+          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+            <div className="border-b px-4 sm:px-6 py-3">
+              <h2 className="text-lg font-semibold">개인 정보</h2>
+            </div>
+            <div className="px-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {userData.age && (
+                  <div>
+                    <p className="text-sm text-gray-500">나이</p>
+                    <p>{userData.age}세</p>
+                  </div>
+                )}
+                {userData.gender && (
+                  <div>
+                    <p className="text-sm text-gray-500">성별</p>
+                    <p>{userData.gender === 'M' ? '남성' : '여성'}</p>
+                  </div>
+                )}
+                {userData.phoneNumber && (
+                  <div>
+                    <p className="text-sm text-gray-500">연락처</p>
+                    <p>{formatPhoneNumber(userData.phoneNumber)}</p>
+                  </div>
+                )}
+                {userData.address && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-500">주소</p>
+                    <p>{userData.address} {userData.addressDetail}</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* 학교 정보 섹션 - 원어민은 숨기기 */}
         {!isForeign && userData.university && (
