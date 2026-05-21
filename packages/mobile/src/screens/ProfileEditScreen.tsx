@@ -14,6 +14,10 @@ import {
   Platform,
   Modal,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/types';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -26,15 +30,11 @@ import {
   checkPhoneExists,
 } from '../services/profileService';
 import { compressImage, uriToBlob } from '../utils';
-import * as DocumentPicker from 'expo-document-picker';
 import { DaumPostcode } from '../components/DaumPostcode';
-import {
-  uploadCV,
-  uploadPassportPhoto,
-  uploadForeignIdCard,
-} from '../services/foreignSignUpService';
 import { getPhonePlaceholder } from '../utils/phoneUtils';
 import Constants from 'expo-constants';
+
+type ProfileEditNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProfileEdit'>;
 
 const countryCodes = [
   { code: '+82', country: 'South Korea', flag: '🇰🇷' },
@@ -46,30 +46,34 @@ const countryCodes = [
   { code: '+27', country: 'South Africa', flag: '🇿🇦' },
 ];
 
-const profileSchema = z.object({
-  name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
-  age: z.number({
-    required_error: '나이를 입력해주세요.',
-    invalid_type_error: '유효한 숫자를 입력해주세요.',
-  }).min(15, '최소 15세 이상이어야 합니다.').max(100, '유효한 나이를 입력해주세요.'),
-  phoneNumber: z.string().min(8, '유효한 휴대폰 번호를 입력해주세요.'),
-  email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
-  address: z.string().min(1, '주소를 입력해주세요.'),
-  addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
-  gender: z.enum(['M', 'F'], {
-    errorMap: () => ({ message: '성별을 선택해주세요.' }),
-  }),
-  selfIntroduction: z.string().max(500, '자기소개는 500자 이내로 작성해주세요.').optional(),
-  jobMotivation: z.string().max(500, '지원 동기는 500자 이내로 작성해주세요.').optional(),
-  university: z.string().min(1, '학교명을 입력해주세요.'),
-  grade: z.number({
-    required_error: '학년을 선택해주세요.',
-    invalid_type_error: '학년을 선택해주세요.',
-  }).min(1, '학년을 선택해주세요.').max(6, '유효한 학년을 선택해주세요.'),
-  isOnLeave: z.boolean(),
-  major1: z.string().min(1, '전공을 입력해주세요.'),
-  major2: z.string().optional(),
-});
+function buildProfileSchema(isForeignUser: boolean) {
+  return z.object({
+    name: z.string().min(2, isForeignUser ? 'Name must be at least 2 characters.' : '이름은 최소 2자 이상이어야 합니다.'),
+    age: z.number({
+      required_error: isForeignUser ? 'Please enter your age.' : '나이를 입력해주세요.',
+      invalid_type_error: isForeignUser ? 'Please enter a valid number.' : '유효한 숫자를 입력해주세요.',
+    }).min(15, isForeignUser ? 'Must be at least 15 years old.' : '최소 15세 이상이어야 합니다.').max(100, isForeignUser ? 'Please enter a valid age.' : '유효한 나이를 입력해주세요.'),
+    phoneNumber: z.string().min(8, isForeignUser ? 'Please enter a valid phone number.' : '유효한 휴대폰 번호를 입력해주세요.'),
+    email: z.string().email(isForeignUser ? 'Please enter a valid email address.' : '유효한 이메일 주소를 입력해주세요.'),
+    address: z.string().min(1, isForeignUser ? 'Please enter your address.' : '주소를 입력해주세요.'),
+    addressDetail: z.string().min(1, isForeignUser ? 'Please enter detailed address.' : '상세 주소를 입력해주세요.'),
+    gender: z.enum(['M', 'F'], {
+      errorMap: () => ({ message: isForeignUser ? 'Please select your gender.' : '성별을 선택해주세요.' }),
+    }),
+    selfIntroduction: z.string().max(500, isForeignUser ? 'Self-introduction must be 500 characters or less.' : '자기소개는 500자 이내로 작성해주세요.').optional(),
+    jobMotivation: z.string().max(500, isForeignUser ? 'Application motivation must be 500 characters or less.' : '지원 동기는 500자 이내로 작성해주세요.').optional(),
+    university: z.string().min(1, isForeignUser ? 'Please enter your school name.' : '학교명을 입력해주세요.'),
+    grade: z.number({
+      required_error: isForeignUser ? 'Please select your grade.' : '학년을 선택해주세요.',
+      invalid_type_error: isForeignUser ? 'Please select your grade.' : '학년을 선택해주세요.',
+    }).min(1, isForeignUser ? 'Please select your grade.' : '학년을 선택해주세요.').max(6, isForeignUser ? 'Please select a valid grade.' : '유효한 학년을 선택해주세요.'),
+    isOnLeave: z.boolean(),
+    major1: z.string().min(1, isForeignUser ? 'Please enter your major.' : '전공을 입력해주세요.'),
+    major2: z.string().optional(),
+  });
+}
+
+const profileSchema = buildProfileSchema(false);
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
@@ -80,11 +84,9 @@ interface PartTimeJob {
   description: string;
 }
 
-interface ProfileEditScreenProps {
-  onBack: () => void;
-}
-
-export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
+export function ProfileEditScreen() {
+  const navigation = useNavigation<ProfileEditNavigationProp>();
+  const insets = useSafeAreaInsets();
   const { userData, refreshUserData } = useAuth();
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const [isLoading, setIsLoading] = useState(false);
@@ -98,10 +100,6 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
   const [countryCode, setCountryCode] = useState('+82');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   
-  // 원어민 파일 관련 상태
-  const [cvUrl, setCvUrl] = useState<string>('');
-  const [passportPhotoUrl, setPassportPhotoUrl] = useState<string>('');
-  const [foreignIdCardUrl, setForeignIdCardUrl] = useState<string>('');
 
   const {
     control,
@@ -111,7 +109,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
     reset,
     formState: { errors },
   } = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileSchema),
+    resolver: zodResolver(buildProfileSchema(isForeign)),
     defaultValues: {
       name: '',
       age: undefined,
@@ -184,13 +182,6 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
         setProfileImageUrl(userData.profileImage);
       }
 
-      // 원어민 파일 URL 초기화
-      if ((userData as any).foreignTeacher) {
-        setCvUrl((userData as any).foreignTeacher.cvUrl || '');
-        setPassportPhotoUrl((userData as any).foreignTeacher.passportPhotoUrl || '');
-        setForeignIdCardUrl((userData as any).foreignTeacher.foreignIdCardUrl || '');
-      }
-
       setPartTimeJobs(userData.partTimeJobs || []);
     }
   }, [userData, reset]);
@@ -202,7 +193,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (!permissionResult.granted) {
-        Alert.alert('권한 필요', '사진 라이브러리 접근 권한이 필요합니다.');
+        Alert.alert(isForeign ? 'Permission Required' : '권한 필요', isForeign ? 'Photo library access permission is required.' : '사진 라이브러리 접근 권한이 필요합니다.');
         return;
       }
 
@@ -258,129 +249,6 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
-    }
-  };
-
-  // CV 파일 선택 및 업로드
-  const handleCvUpload = async () => {
-    if (!userData) return;
-
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled || !result.assets?.[0]) {
-        return;
-      }
-
-      setIsUploading(true);
-      const file = result.assets[0];
-      const fileName = file.name || 'cv.pdf';
-      const downloadURL = await uploadCV(userData.userId, file.uri, fileName);
-
-      await updateUserProfile(userData.userId, {
-        foreignTeacher: {
-          ...((userData as any).foreignTeacher || {}),
-          cvUrl: downloadURL,
-        } as any,
-      });
-
-      setCvUrl(downloadURL);
-      await refreshUserData();
-      Alert.alert('Success', 'CV has been updated.');
-    } catch (error) {
-      logger.error('CV 업로드 오류:', error);
-      Alert.alert('Error', 'An error occurred while uploading CV.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  // 여권 사진 선택 및 업로드
-  const handlePassportPhotoUpload = async () => {
-    if (!userData) return;
-
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Photo library access permission is required.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8,
-      });
-
-      if (result.canceled || !result.assets?.[0]) {
-        return;
-      }
-
-      setIsUploading(true);
-      const uri = result.assets[0].uri;
-      const downloadURL = await uploadPassportPhoto(userData.userId, uri);
-
-      await updateUserProfile(userData.userId, {
-        foreignTeacher: {
-          ...((userData as any).foreignTeacher || {}),
-          passportPhotoUrl: downloadURL,
-        } as any,
-      });
-
-      setPassportPhotoUrl(downloadURL);
-      await refreshUserData();
-      Alert.alert('Success', 'Passport photo has been updated.');
-    } catch (error) {
-      logger.error('여권 사진 업로드 오류:', error);
-      Alert.alert('Error', 'An error occurred while uploading passport photo.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  // 외국인 ID 카드 선택 및 업로드
-  const handleForeignIdCardUpload = async () => {
-    if (!userData) return;
-
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Photo library access permission is required.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8,
-      });
-
-      if (result.canceled || !result.assets?.[0]) {
-        return;
-      }
-
-      setIsUploading(true);
-      const uri = result.assets[0].uri;
-      const downloadURL = await uploadForeignIdCard(userData.userId, uri);
-
-      await updateUserProfile(userData.userId, {
-        foreignTeacher: {
-          ...((userData as any).foreignTeacher || {}),
-          foreignIdCardUrl: downloadURL,
-        } as any,
-      });
-
-      setForeignIdCardUrl(downloadURL);
-      await refreshUserData();
-      Alert.alert('Success', 'Foreign ID card has been updated.');
-    } catch (error) {
-      logger.error('외국인 ID 카드 업로드 오류:', error);
-      Alert.alert('Error', 'An error occurred while uploading foreign ID card.');
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -520,15 +388,14 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
       await updateUserProfile(userData.userId, updateData);
       await refreshUserData();
 
-      Alert.alert('성공', '프로필이 성공적으로 업데이트되었습니다.', [
-        {
-          text: '확인',
-          onPress: onBack,
-        },
-      ]);
+      Alert.alert(
+        isForeign ? 'Success' : '성공',
+        isForeign ? 'Profile has been updated successfully.' : '프로필이 성공적으로 업데이트되었습니다.',
+        [{ text: isForeign ? 'OK' : '확인', onPress: () => navigation.goBack() }]
+      );
     } catch (error) {
       logger.error('프로필 업데이트 오류:', error);
-      Alert.alert('오류', '프로필 업데이트 중 오류가 발생했습니다.');
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'An error occurred while updating profile.' : '프로필 업데이트 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -558,7 +425,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
   if (!userData) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>사용자 정보를 불러올 수 없습니다.</Text>
+        <Text style={styles.errorText}>{isForeign ? 'Unable to load user information.' : '사용자 정보를 불러올 수 없습니다.'}</Text>
       </View>
     );
   }
@@ -571,17 +438,28 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
     >
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         {/* 헤더 */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           <Text style={styles.title}>{isForeign ? 'Edit Profile' : '프로필 수정'}</Text>
+          <TouchableOpacity
+            style={[styles.headerSaveButton, (isLoading || emailExists || phoneExists) && styles.headerSaveButtonDisabled]}
+            onPress={handleSubmit(onSubmit)}
+            disabled={isLoading || emailExists || phoneExists}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={styles.headerSaveButtonText}>{isForeign ? 'Save' : '저장'}</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         <View style={styles.content}>
           {/* 프로필 이미지 */}
           <View style={styles.imageSection}>
-            <Text style={styles.label}>프로필 이미지</Text>
+            <Text style={styles.label}>{isForeign ? 'Profile Image' : '프로필 이미지'}</Text>
             <View style={styles.imageContainer}>
               {profileImageUrl ? (
                 <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
@@ -602,94 +480,10 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
               onPress={handleImagePick}
               disabled={isUploading}
             >
-              <Text style={styles.changeImageButtonText}>이미지 변경</Text>
+              <Text style={styles.changeImageButtonText}>{isForeign ? 'Change Image' : '이미지 변경'}</Text>
             </TouchableOpacity>
           </View>
 
-          {/* 원어민 교사 제출 서류 */}
-          {isForeign && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Submitted Documents</Text>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>CV (Curriculum Vitae)</Text>
-                {cvUrl ? (
-                  <View style={styles.filePreview}>
-                    <Text style={styles.filePreviewText} numberOfLines={1}>
-                      ✓ Uploaded
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.changeFileButton}
-                      onPress={handleCvUpload}
-                      disabled={isUploading}
-                    >
-                      <Text style={styles.changeFileButtonText}>Change</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.uploadButton}
-                    onPress={handleCvUpload}
-                    disabled={isUploading}
-                  >
-                    <Text style={styles.uploadButtonText}>Upload CV</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Passport Photo</Text>
-                {passportPhotoUrl ? (
-                  <View style={styles.filePreview}>
-                    <Text style={styles.filePreviewText} numberOfLines={1}>
-                      ✓ Uploaded
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.changeFileButton}
-                      onPress={handlePassportPhotoUpload}
-                      disabled={isUploading}
-                    >
-                      <Text style={styles.changeFileButtonText}>Change</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.uploadButton}
-                    onPress={handlePassportPhotoUpload}
-                    disabled={isUploading}
-                  >
-                    <Text style={styles.uploadButtonText}>Upload Photo</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Foreign ID Card</Text>
-                {foreignIdCardUrl ? (
-                  <View style={styles.filePreview}>
-                    <Text style={styles.filePreviewText} numberOfLines={1}>
-                      ✓ Uploaded
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.changeFileButton}
-                      onPress={handleForeignIdCardUpload}
-                      disabled={isUploading}
-                    >
-                      <Text style={styles.changeFileButtonText}>Change</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.uploadButton}
-                    onPress={handleForeignIdCardUpload}
-                    disabled={isUploading}
-                  >
-                    <Text style={styles.uploadButtonText}>Upload ID Card</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          )}
 
           {/* 개인 정보 */}
           <View style={styles.section}>
@@ -706,7 +500,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                     onBlur={onBlur}
                     onChangeText={onChange}
                     value={value}
-                    placeholder="이름을 입력하세요"
+                    placeholder={isForeign ? 'Enter your name' : '이름을 입력하세요'}
                   />
                 )}
               />
@@ -714,7 +508,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>나이 *</Text>
+              <Text style={styles.label}>{isForeign ? 'Age *' : '나이 *'}</Text>
               <Controller
                 control={control}
                 name="age"
@@ -724,7 +518,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                     onBlur={onBlur}
                     onChangeText={(text) => onChange(text ? parseInt(text, 10) : undefined)}
                     value={value?.toString() || ''}
-                    placeholder="나이를 입력하세요"
+                    placeholder={isForeign ? 'Enter your age' : '나이를 입력하세요'}
                     keyboardType="number-pad"
                   />
                 )}
@@ -733,7 +527,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>이메일 *</Text>
+              <Text style={styles.label}>{isForeign ? 'Email *' : '이메일 *'}</Text>
               <Controller
                 control={control}
                 name="email"
@@ -749,13 +543,13 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                     }}
                     onChangeText={onChange}
                     value={value}
-                    placeholder="이메일 주소를 입력하세요"
+                    placeholder={isForeign ? 'Enter your email' : '이메일 주소를 입력하세요'}
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
                 )}
               />
-              {emailExists && <Text style={styles.errorMessage}>이미 사용 중인 이메일입니다.</Text>}
+              {emailExists && <Text style={styles.errorMessage}>{isForeign ? 'This email is already in use.' : '이미 사용 중인 이메일입니다.'}</Text>}
               {errors.email && <Text style={styles.errorMessage}>{errors.email.message}</Text>}
             </View>
 
@@ -817,7 +611,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                   )}
                 />
               )}
-              {phoneExists && <Text style={styles.errorMessage}>이미 사용 중인 휴대폰 번호입니다.</Text>}
+              {phoneExists && <Text style={styles.errorMessage}>{isForeign ? 'This phone number is already in use.' : '이미 사용 중인 휴대폰 번호입니다.'}</Text>}
               {errors.phoneNumber && <Text style={styles.errorMessage}>{errors.phoneNumber.message}</Text>}
             </View>
 
@@ -865,7 +659,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>성별 *</Text>
+              <Text style={styles.label}>{isForeign ? 'Gender *' : '성별 *'}</Text>
               <Controller
                 control={control}
                 name="gender"
@@ -878,7 +672,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                       <View style={[styles.radioCircle, value === 'M' && styles.radioCircleSelected]}>
                         {value === 'M' && <View style={styles.radioDot} />}
                       </View>
-                      <Text style={styles.radioLabel}>남성</Text>
+                      <Text style={styles.radioLabel}>{isForeign ? 'Male' : '남성'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.radioButton}
@@ -887,7 +681,7 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
                       <View style={[styles.radioCircle, value === 'F' && styles.radioCircleSelected]}>
                         {value === 'F' && <View style={styles.radioDot} />}
                       </View>
-                      <Text style={styles.radioLabel}>여성</Text>
+                      <Text style={styles.radioLabel}>{isForeign ? 'Female' : '여성'}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1110,21 +904,6 @@ export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
           </View>
           )}
 
-          {/* 저장 버튼 */}
-          <TouchableOpacity
-            style={[
-              styles.submitButton,
-              (isLoading || emailExists || phoneExists) && styles.submitButtonDisabled,
-            ]}
-            onPress={handleSubmit(onSubmit)}
-            disabled={isLoading || emailExists || phoneExists}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.submitButtonText}>{isForeign ? 'Save' : '저장하기'}</Text>
-            )}
-          </TouchableOpacity>
         </View>
       </ScrollView>
       
@@ -1195,15 +974,33 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 12,
+    minWidth: 32,
   },
   backButtonText: {
     fontSize: 24,
     color: '#3b82f6',
   },
   title: {
-    fontSize: 20,
+    flex: 1,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#1e293b',
+  },
+  headerSaveButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 8,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  headerSaveButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  headerSaveButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   content: {
     padding: 16,

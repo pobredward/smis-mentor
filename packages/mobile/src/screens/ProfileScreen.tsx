@@ -27,7 +27,6 @@ import { SignUpStep4Screen } from './SignUpStep4Screen';
 import { SignUpFlow } from './SignUpFlow';
 import { ForeignSignUpStep1Screen } from './ForeignSignUpStep1Screen';
 import { ForeignSignUpStep2Screen } from './ForeignSignUpStep2Screen';
-import { ProfileEditScreen } from './ProfileEditScreen';
 import { signUp } from '../services/authService';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
@@ -54,8 +53,7 @@ type Screen =
   | 'mentor-signup-step4'
   | 'foreign-signup-step1'
   | 'foreign-signup-step2'
-  | 'social-signup'
-  | 'profile-edit';
+  | 'social-signup';
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const { isAuthenticated, userData, loading, updateActiveJobCode, refreshUserData } = useAuth();
@@ -1285,11 +1283,6 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
   // 로그인된 상태
   if (isAuthenticated && userData) {
-    // 프로필 수정 화면
-    if (currentScreen === 'profile-edit') {
-      return <ProfileEditScreen onBack={() => setCurrentScreen('profile')} />;
-    }
-
     const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
 
     // 상태 및 역할 표시 헬퍼 함수들
@@ -1556,7 +1549,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           <View style={styles.header}>
             <Text style={styles.title}>{isForeign ? 'My Profile' : '내 프로필'}</Text>
             <TouchableOpacity
-              onPress={() => setCurrentScreen('profile-edit')}
+              onPress={() => navigation.navigate('ProfileEdit')}
               style={styles.editButton}
             >
               <Text style={styles.editButtonText}>{isForeign ? 'Edit' : '수정'}</Text>
@@ -1864,7 +1857,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Submitted Documents</Text>
               </View>
-              <View style={{ paddingHorizontal: 20, paddingBottom: 16, gap: 10 }}>
+              <View style={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 10 }}>
                 <DocRow
                   label="CV (Curriculum Vitae)"
                   hint="PDF or Word"

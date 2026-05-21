@@ -7,6 +7,7 @@ import type { CampPageCategory } from '@smis-mentor/shared';
 // Root Stack (전체 네비게이션)
 export type RootStackParamList = {
   MainTabs: undefined;
+  ProfileEdit: undefined;
   StudentDetail: { studentId: string };
   TaskDetail: { taskId: string; taskDate?: string };
   PersonalTaskDetail: { taskId: string; taskDate?: string };
