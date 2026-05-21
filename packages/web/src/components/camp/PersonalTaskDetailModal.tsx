@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import type { PersonalTask, TaskCategory } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface PersonalTaskDetailModalProps {
   task: PersonalTask;

@@ -3,7 +3,7 @@ import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   createPersonalTask,
   updatePersonalTaskGroup,
