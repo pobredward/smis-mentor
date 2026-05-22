@@ -45,7 +45,7 @@ const extractNotionPageId = (url: string): string | null => {
 
 export default function CampDetailView({ category, itemId }: CampDetailViewProps) {
   const router = useRouter();
-  const { userData } = useAuth();
+  const { userData, loading: authLoading } = useAuth();
   const [item, setItem] = useState<DisplayItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -57,6 +57,9 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
 
   useEffect(() => {
     const loadItem = async () => {
+      // auth가 아직 로딩 중이면 대기
+      if (authLoading) return;
+
       if (!activeJobCodeId) {
         setLoading(false);
         return;
@@ -100,7 +103,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
     };
 
     loadItem();
-  }, [activeJobCodeId, category, itemId, isAdmin, userData?.role, router]);
+  }, [authLoading, activeJobCodeId, category, itemId, isAdmin, userData?.role, router]);
 
   const handleStartEdit = () => {
     if (item?.type === 'page') {
@@ -159,7 +162,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>

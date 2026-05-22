@@ -2,6 +2,7 @@
 
 import { logger } from '@smis-mentor/shared';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDisplayItems, campPageService } from '@/lib/campPageService';
@@ -58,6 +59,7 @@ export default function CampContentList({
   allowLinks = false,
   isForeign = false,
 }: CampContentListProps) {
+  const router = useRouter();
   const { userData } = useAuth();
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -209,8 +211,7 @@ export default function CampContentList({
   };
 
   const handleNavigateToDetail = (item: DisplayItem) => {
-    // 세부 페이지로 이동
-    window.location.href = `/camp/${category}/${item.id}`;
+    router.push(`/camp/${category}/${item.id}`);
   };
 
   const handleMoveItemUp = async (item: DisplayItem, sectionItems: DisplayItem[]) => {
