@@ -99,7 +99,6 @@ export function SignInScreen({
       await signIn(email, password);
       await persistLoginRememberEmail(email);
 
-      Alert.alert('로그인 성공', '환영합니다!');
       onSignInSuccess();
     } catch (error: any) {
       // 인증 실패는 Alert로만 표시 (logger.error 제거)
@@ -194,7 +193,6 @@ export function SignInScreen({
             await persistLoginRememberEmail(result.user.email);
 
             logger.info('✅ Firebase Auth 로그인 완료');
-            Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
           } catch (authError: any) {
             logger.error('❌ Firebase Auth 로그인 실패:', authError);
@@ -271,7 +269,6 @@ export function SignInScreen({
             await persistLoginRememberEmail(result.user.email);
 
             logger.info('✅ Firebase Auth 로그인 완료');
-            Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
           } catch (authError: any) {
             logger.error('❌ Firebase Auth 로그인 실패:', authError);
@@ -348,7 +345,6 @@ export function SignInScreen({
             await persistLoginRememberEmail(result.user.email);
 
             logger.info('✅ Firebase Auth 로그인 완료');
-            Alert.alert('로그인 성공', '환영합니다!');
             onSignInSuccess();
           } catch (authError: any) {
             logger.error('❌ Firebase Auth 로그인 실패:', authError);
