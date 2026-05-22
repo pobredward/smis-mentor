@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Constants from 'expo-constants';
 import { logger } from '@smis-mentor/shared';
 import {
@@ -10,10 +10,15 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Linking,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as Notifications from 'expo-notifications';
 import { useAuth } from '../context/AuthContext';
 import {
   getNotificationSettings,
@@ -24,17 +29,53 @@ import { RootStackParamList } from '../navigation/types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
+type PermissionStatus = 'granted' | 'denied' | 'undetermined';
+
 export function SettingsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { userData } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>('undetermined');
+  const [requestingPermission, setRequestingPermission] = useState(false);
   const [settings, setSettings] = useState<NotificationSettings>({
     taskReminders: true,
     generalNotifications: true,
   });
 
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+
+  const checkPermissionStatus = useCallback(async () => {
+    try {
+      const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
+      if (granted) {
+        setPermissionStatus('granted');
+      } else if (canAskAgain) {
+        setPermissionStatus('undetermined');
+      } else {
+        setPermissionStatus('denied');
+      }
+    } catch (error) {
+      logger.error('알림 권한 상태 확인 실패:', error);
+    }
+  }, []);
+
+  // 화면 포커스 시마다 권한 상태 재확인 (설정 앱에서 돌아왔을 때 반영)
+  useFocusEffect(
+    useCallback(() => {
+      checkPermissionStatus();
+    }, [checkPermissionStatus])
+  );
+
+  // 앱이 포그라운드로 돌아올 때 권한 상태 재확인
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        checkPermissionStatus();
+      }
+    });
+    return () => subscription.remove();
+  }, [checkPermissionStatus]);
 
   useEffect(() => {
     loadSettings();
@@ -56,6 +97,61 @@ export function SettingsScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleNotificationPermission = async () => {
+    if (permissionStatus === 'granted') {
+      Alert.alert(
+        isForeign ? 'Notifications Enabled' : '알림 허용됨',
+        isForeign
+          ? 'Notifications are already enabled for this app.'
+          : '이미 알림이 허용되어 있습니다.'
+      );
+      return;
+    }
+
+    if (permissionStatus === 'undetermined') {
+      try {
+        setRequestingPermission(true);
+        const { granted } = await Notifications.requestPermissionsAsync();
+        setPermissionStatus(granted ? 'granted' : 'denied');
+        if (!granted) {
+          Alert.alert(
+            isForeign ? 'Permission Denied' : '알림 권한 거부됨',
+            isForeign
+              ? 'You can enable notifications in your device settings.'
+              : '기기 설정에서 알림을 허용할 수 있습니다.',
+            [
+              { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+              {
+                text: isForeign ? 'Open Settings' : '설정 열기',
+                onPress: () => Linking.openSettings(),
+              },
+            ]
+          );
+        }
+      } catch (error) {
+        logger.error('알림 권한 요청 실패:', error);
+      } finally {
+        setRequestingPermission(false);
+      }
+      return;
+    }
+
+    // 이미 거부된 경우 → 시스템 설정으로 이동
+    Alert.alert(
+      isForeign ? 'Enable Notifications' : '알림 허용하기',
+      isForeign
+        ? 'Notifications are currently blocked. Please enable them in your device settings.'
+        : '알림이 차단되어 있습니다. 기기 설정에서 알림을 허용해 주세요.',
+      [
+        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+        {
+          text: isForeign ? 'Open Settings' : '설정 열기',
+          onPress: () => Linking.openSettings(),
+        },
+      ]
+    );
   };
 
   const handleToggleSetting = async (key: keyof NotificationSettings) => {
@@ -106,8 +202,77 @@ export function SettingsScreen() {
     );
   }
 
+  const permissionBannerConfig = (() => {
+    if (permissionStatus === 'granted') return null;
+    return {
+      icon: permissionStatus === 'denied' ? 'notifications-off-outline' : 'notifications-outline',
+      color: permissionStatus === 'denied' ? '#ef4444' : '#f59e0b',
+      bg: permissionStatus === 'denied' ? '#fef2f2' : '#fffbeb',
+      border: permissionStatus === 'denied' ? '#fecaca' : '#fde68a',
+      title: isForeign
+        ? permissionStatus === 'denied' ? 'Notifications Blocked' : 'Enable Notifications'
+        : permissionStatus === 'denied' ? '알림이 차단되어 있습니다' : '알림 허용이 필요합니다',
+      description: isForeign
+        ? permissionStatus === 'denied'
+          ? 'Tap below to open settings and enable notifications.'
+          : 'Tap below to allow notifications for this app.'
+        : permissionStatus === 'denied'
+          ? '아래 버튼을 눌러 설정에서 알림을 허용해 주세요.'
+          : '아래 버튼을 눌러 알림을 허용해 주세요.',
+      buttonText: isForeign
+        ? permissionStatus === 'denied' ? 'Open Settings' : 'Allow Notifications'
+        : permissionStatus === 'denied' ? '설정 열기' : '알림 허용하기',
+    };
+  })();
+
   return (
     <ScrollView style={styles.container}>
+      {/* 알림 권한 배너 */}
+      {permissionBannerConfig && (
+        <View style={[
+          styles.permissionBanner,
+          { backgroundColor: permissionBannerConfig.bg, borderColor: permissionBannerConfig.border }
+        ]}>
+          <View style={styles.permissionBannerContent}>
+            <Ionicons
+              name={permissionBannerConfig.icon as any}
+              size={24}
+              color={permissionBannerConfig.color}
+            />
+            <View style={styles.permissionBannerText}>
+              <Text style={[styles.permissionBannerTitle, { color: permissionBannerConfig.color }]}>
+                {permissionBannerConfig.title}
+              </Text>
+              <Text style={styles.permissionBannerDescription}>
+                {permissionBannerConfig.description}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.permissionButton, { backgroundColor: permissionBannerConfig.color }]}
+            onPress={handleNotificationPermission}
+            disabled={requestingPermission}
+            accessibilityLabel={permissionBannerConfig.buttonText}
+            accessibilityRole="button"
+          >
+            {requestingPermission ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <>
+                <Ionicons
+                  name={permissionStatus === 'denied' ? 'settings-outline' : 'checkmark-circle-outline'}
+                  size={16}
+                  color="#ffffff"
+                />
+                <Text style={styles.permissionButtonText}>
+                  {permissionBannerConfig.buttonText}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="notifications-outline" size={24} color="#3b82f6" />
@@ -185,6 +350,24 @@ export function SettingsScreen() {
               : '알림 설정은 언제든지 변경할 수 있습니다. 시스템 설정에서 알림 권한이 거부된 경우, 설정을 변경하더라도 알림을 받을 수 없습니다.'}
           </Text>
         </View>
+        {permissionStatus === 'granted' && (
+          <TouchableOpacity
+            style={styles.permissionGrantedBadge}
+            onPress={() => Alert.alert(
+              isForeign ? 'Notifications Enabled' : '알림 허용됨',
+              isForeign
+                ? 'Notifications are enabled for this app.'
+                : '이 앱의 알림이 허용되어 있습니다.'
+            )}
+            accessibilityLabel={isForeign ? 'Notifications enabled' : '알림 허용됨'}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+            <Text style={styles.permissionGrantedText}>
+              {isForeign ? 'Notifications enabled' : '알림 허용됨'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.footerSection}>
@@ -332,6 +515,58 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     lineHeight: 16,
+  },
+  permissionBanner: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    gap: 12,
+  },
+  permissionBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  permissionBannerText: {
+    flex: 1,
+  },
+  permissionBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  permissionBannerDescription: {
+    fontSize: 13,
+    color: '#374151',
+    lineHeight: 18,
+  },
+  permissionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  permissionButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  permissionGrantedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  permissionGrantedText: {
+    fontSize: 12,
+    color: '#10b981',
+    fontWeight: '500',
   },
   infoSection: {
     marginHorizontal: 16,
