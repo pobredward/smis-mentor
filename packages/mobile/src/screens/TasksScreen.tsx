@@ -113,6 +113,7 @@ export function TasksScreen() {
     AsyncStorage.setItem('calendarView', v);
   };
   const [monthTasks, setMonthTasks] = useState<Map<string, Task[]>>(new Map());
+  const monthTasksRef = useRef<Map<string, Task[]>>(new Map());
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
@@ -230,6 +231,7 @@ export function TasksScreen() {
   const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
   const [personalTaskDates, setPersonalTaskDates] = useState<Map<string, number>>(new Map());
   const [personalMonthTasks, setPersonalMonthTasks] = useState<Map<string, PersonalTask[]>>(new Map());
+  const personalMonthTasksRef = useRef<Map<string, PersonalTask[]>>(new Map());
   const [showPersonalTaskModal, setShowPersonalTaskModal] = useState(false);
   const [editingPersonalTask, setEditingPersonalTask] = useState<PersonalTask | null>(null);
   const [personalTaskTitle, setPersonalTaskTitle] = useState('');
@@ -449,6 +451,7 @@ export function TasksScreen() {
         groupRole,
         adminFlag,
       );
+      monthTasksRef.current = taskMap;
       setMonthTasks(taskMap);
 
       // taskDates도 Map에서 파생
@@ -493,6 +496,7 @@ export function TasksScreen() {
         getPersonalTasksInMonth(userData.userId, code, year, month),
       ]);
       setPersonalTaskDates(dates);
+      personalMonthTasksRef.current = taskMap;
       setPersonalMonthTasks(taskMap);
     } catch (error) {
       logger.error('개인 업무 월별 날짜 가져오기 오류:', error);
@@ -574,20 +578,20 @@ export function TasksScreen() {
   }, [navigation, currentCampCode, selectedDate, openSheet, monthTasks]);
 
   // 날짜 클릭 핸들러
-  const handleDateClick = (date: Date) => {
+  // monthTasks/personalMonthTasks는 useMemo 클로저 stale 문제를 피하기 위해 ref로 참조
+  const handleDateClick = useCallback((date: Date) => {
     if (calendarView === 'full') {
-      // full 뷰: selectedDate 업데이트 없이 바로 시트 열기 (Firebase 호출 차단 방지)
       const year = date.getFullYear();
       const mm = String(date.getMonth() + 1).padStart(2, '0');
       const dd = String(date.getDate()).padStart(2, '0');
       const dateStr = `${year}-${mm}-${dd}`;
-      const dayTasks = monthTasks.get(dateStr) ?? [];
-      const dayPersonalTasks = personalMonthTasks.get(dateStr) ?? [];
+      const dayTasks = monthTasksRef.current.get(dateStr) ?? [];
+      const dayPersonalTasks = personalMonthTasksRef.current.get(dateStr) ?? [];
       openSheet(date, dayTasks, dayPersonalTasks);
     } else {
       setSelectedDate(date);
     }
-  };
+  }, [calendarView, openSheet]);
 
   // 업무 완료 토글
   const handleToggleComplete = async (taskId: string) => {
@@ -1047,8 +1051,7 @@ export function TasksScreen() {
     }
 
     return rows;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDate, monthTasks, personalMonthTasks, categoryMap, userData]);
+  }, [currentDate, monthTasks, personalMonthTasks, categoryMap, userData, handleDateClick]);
 
   if (authLoading) {
     return (
