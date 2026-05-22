@@ -21,6 +21,9 @@ import { useAuth } from '../context/AuthContext';
 export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig'>) {
   const { user } = useAuth();
   const [loadingQuotes, setLoadingQuotes] = useState<string[]>([]);
+  const [minVersion, setMinVersion] = useState('');
+  const [iosStoreUrl, setIosStoreUrl] = useState('');
+  const [androidStoreUrl, setAndroidStoreUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newQuote, setNewQuote] = useState('');
@@ -39,6 +42,10 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
       } else {
         setLoadingQuotes(DEFAULT_LOADING_QUOTES);
       }
+
+      setMinVersion(config?.minVersion ?? '');
+      setIosStoreUrl(config?.iosStoreUrl ?? '');
+      setAndroidStoreUrl(config?.androidStoreUrl ?? '');
       
       logger.info('✅ 앱 설정 불러오기 성공');
     } catch (error) {
@@ -102,11 +109,22 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
       return;
     }
     
+    const trimmedMinVersion = minVersion.trim();
+    if (trimmedMinVersion && !/^\d+\.\d+\.\d+$/.test(trimmedMinVersion)) {
+      Alert.alert('알림', '최소 버전은 1.0.0 형식으로 입력해주세요.');
+      return;
+    }
+
     try {
       setSaving(true);
       await updateAppConfig(
         db,
-        { loadingQuotes },
+        {
+          loadingQuotes,
+          minVersion: trimmedMinVersion || undefined,
+          iosStoreUrl: iosStoreUrl.trim() || undefined,
+          androidStoreUrl: androidStoreUrl.trim() || undefined,
+        },
         user.uid
       );
       logger.info('✅ 앱 설정 저장 성공');
@@ -242,6 +260,53 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
             </TouchableOpacity>
           </View>
 
+          {/* 강제 업데이트 설정 */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>강제 업데이트 설정</Text>
+            </View>
+            <Text style={styles.sectionDescription}>
+              이 버전 미만의 앱에서는 스토어 업데이트 화면이 표시됩니다.{'\n'}
+              비워두면 강제 업데이트를 사용하지 않습니다.
+            </Text>
+
+            <Text style={styles.fieldLabel}>최소 허용 버전 (예: 1.5.0)</Text>
+            <TextInput
+              style={styles.input}
+              value={minVersion}
+              onChangeText={setMinVersion}
+              placeholder="예: 1.5.0"
+              placeholderTextColor="#9ca3af"
+              editable={!saving}
+              keyboardType="default"
+              autoCapitalize="none"
+            />
+
+            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>iOS App Store URL</Text>
+            <TextInput
+              style={styles.input}
+              value={iosStoreUrl}
+              onChangeText={setIosStoreUrl}
+              placeholder="https://apps.apple.com/kr/app/..."
+              placeholderTextColor="#9ca3af"
+              editable={!saving}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+
+            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Android Google Play URL</Text>
+            <TextInput
+              style={styles.input}
+              value={androidStoreUrl}
+              onChangeText={setAndroidStoreUrl}
+              placeholder="https://play.google.com/store/apps/details?id=..."
+              placeholderTextColor="#9ca3af"
+              editable={!saving}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+          </View>
+
           {/* 안내 */}
           <View style={styles.infoBox}>
             <View style={styles.infoHeader}>
@@ -257,6 +322,12 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
               </Text>
               <Text style={styles.infoText}>
                 • 최소 1개 이상의 문구가 필요합니다.
+              </Text>
+              <Text style={styles.infoText}>
+                • 강제 업데이트는 최소 버전을 설정해야 활성화됩니다.
+              </Text>
+              <Text style={styles.infoText}>
+                • 스토어 URL을 비워두면 기본 URL이 사용됩니다.
               </Text>
             </View>
           </View>
@@ -327,7 +398,14 @@ const styles = StyleSheet.create({
   sectionDescription: {
     fontSize: 13,
     color: '#6b7280',
+    lineHeight: 20,
     marginBottom: 12,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 6,
   },
   countBadge: {
     fontSize: 13,

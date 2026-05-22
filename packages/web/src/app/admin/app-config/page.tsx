@@ -11,6 +11,9 @@ import toast from 'react-hot-toast';
 export default function AppConfigPage() {
   const { userData } = useAuth();
   const [loadingQuotes, setLoadingQuotes] = useState<string[]>([]);
+  const [minVersion, setMinVersion] = useState('');
+  const [iosStoreUrl, setIosStoreUrl] = useState('');
+  const [androidStoreUrl, setAndroidStoreUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newQuote, setNewQuote] = useState('');
@@ -29,6 +32,10 @@ export default function AppConfigPage() {
       } else {
         setLoadingQuotes(DEFAULT_LOADING_QUOTES);
       }
+
+      setMinVersion(config?.minVersion ?? '');
+      setIosStoreUrl(config?.iosStoreUrl ?? '');
+      setAndroidStoreUrl(config?.androidStoreUrl ?? '');
     } catch (error) {
       console.error('앱 설정 불러오기 실패:', error);
       toast.error('설정을 불러오는데 실패했습니다.');
@@ -76,12 +83,23 @@ export default function AppConfigPage() {
       toast.error('최소 1개의 로딩 문구가 필요합니다.');
       return;
     }
+
+    const trimmedMinVersion = minVersion.trim();
+    if (trimmedMinVersion && !/^\d+\.\d+\.\d+$/.test(trimmedMinVersion)) {
+      toast.error('최소 버전은 1.0.0 형식으로 입력해주세요.');
+      return;
+    }
     
     try {
       setSaving(true);
       await updateAppConfig(
         db,
-        { loadingQuotes },
+        {
+          loadingQuotes,
+          minVersion: trimmedMinVersion || undefined,
+          iosStoreUrl: iosStoreUrl.trim() || undefined,
+          androidStoreUrl: androidStoreUrl.trim() || undefined,
+        },
         userData.userId
       );
       toast.success('설정이 저장되었습니다!');
@@ -116,9 +134,9 @@ export default function AppConfigPage() {
     <Layout requireAuth requireAdmin>
       <div className="max-w-4xl mx-auto lg:px-4 px-0">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">로딩 문구 관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900">앱 설정 관리</h1>
           <p className="mt-1 text-sm text-gray-600">
-            모바일 앱 실행 시 표시되는 로딩 문구를 관리합니다.
+            모바일 앱의 로딩 문구와 강제 업데이트 정책을 관리합니다.
           </p>
         </div>
 
@@ -190,6 +208,60 @@ export default function AppConfigPage() {
           </div>
         </div>
 
+        {/* 강제 업데이트 설정 */}
+        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+          <div className="border-b px-4 sm:px-6 py-3">
+            <h2 className="text-lg font-semibold">강제 업데이트 설정</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              최소 버전 미만의 앱 사용자에게 스토어 업데이트 화면이 표시됩니다. 비워두면 강제 업데이트를 사용하지 않습니다.
+            </p>
+          </div>
+          <div className="px-4 sm:px-6 py-4 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                최소 허용 버전
+                <span className="ml-1 text-xs text-gray-400 font-normal">(예: 1.5.0)</span>
+              </label>
+              <input
+                type="text"
+                value={minVersion}
+                onChange={(e) => setMinVersion(e.target.value)}
+                placeholder="예: 1.5.0  (비워두면 강제 업데이트 비활성화)"
+                className="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                disabled={saving}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                iOS App Store URL
+                <span className="ml-1 text-xs text-gray-400 font-normal">(비워두면 기본값 사용)</span>
+              </label>
+              <input
+                type="url"
+                value={iosStoreUrl}
+                onChange={(e) => setIosStoreUrl(e.target.value)}
+                placeholder="https://apps.apple.com/kr/app/..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                disabled={saving}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Android Google Play URL
+                <span className="ml-1 text-xs text-gray-400 font-normal">(비워두면 기본값 사용)</span>
+              </label>
+              <input
+                type="url"
+                value={androidStoreUrl}
+                onChange={(e) => setAndroidStoreUrl(e.target.value)}
+                placeholder="https://play.google.com/store/apps/details?id=..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                disabled={saving}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* 저장 버튼 */}
         <div className="flex gap-3">
           <Button
@@ -222,6 +294,8 @@ export default function AppConfigPage() {
                 <li>• 로딩 문구는 모바일 앱 실행 시 랜덤으로 1개가 표시됩니다.</li>
                 <li>• 변경사항은 즉시 반영되며, 다음 앱 실행부터 적용됩니다.</li>
                 <li>• 최소 1개 이상의 문구가 필요합니다.</li>
+                <li>• 강제 업데이트는 최소 버전을 설정해야 활성화되며, 스토어 배포 후 적용하세요.</li>
+                <li>• 스토어 URL을 비워두면 기본 스토어 URL(com.smis.smismentor)이 사용됩니다.</li>
               </ul>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { AppConfig, AppConfigUpdateInput, CampHomeMessage, CampHomeMessageUpdateInput } from '../types/appConfig';
+import { AppConfig, AppConfigUpdateInput, CampHomeMessage, CampHomeMessageUpdateInput, VersionCheckResult } from '../types/appConfig';
 
 /**
  * 앱 설정 서비스
@@ -26,6 +26,9 @@ export async function getAppConfig(db: any): Promise<AppConfig | null> {
       loadingQuotes: data.loadingQuotes || [],
       mentorHomeMessage: data.mentorHomeMessage || '',
       foreignHomeMessage: data.foreignHomeMessage || '',
+      minVersion: data.minVersion || undefined,
+      iosStoreUrl: data.iosStoreUrl || undefined,
+      androidStoreUrl: data.androidStoreUrl || undefined,
       updatedAt: data.updatedAt?.toDate() || new Date(),
       updatedBy: data.updatedBy,
     };
@@ -58,6 +61,18 @@ export async function updateAppConfig(
     
     if (input.foreignHomeMessage !== undefined) {
       updateData.foreignHomeMessage = input.foreignHomeMessage;
+    }
+
+    if (input.minVersion !== undefined) {
+      updateData.minVersion = input.minVersion;
+    }
+
+    if (input.iosStoreUrl !== undefined) {
+      updateData.iosStoreUrl = input.iosStoreUrl;
+    }
+
+    if (input.androidStoreUrl !== undefined) {
+      updateData.androidStoreUrl = input.androidStoreUrl;
     }
     
     await setDoc(docRef, updateData, { merge: true });
@@ -124,6 +139,58 @@ export async function updateCampHomeMessage(
   } catch (error) {
     console.error('캠프 홈 메시지 업데이트 실패:', error);
     throw error;
+  }
+}
+
+/**
+ * 시맨틱 버전 비교 (major.minor.patch)
+ * @returns 음수: a < b, 0: a == b, 양수: a > b
+ */
+function compareVersions(a: string, b: string): number {
+  const parse = (v: string) =>
+    v.split('.').map((n) => parseInt(n, 10) || 0);
+  const [aMajor, aMinor, aPatch] = parse(a);
+  const [bMajor, bMinor, bPatch] = parse(b);
+
+  if (aMajor !== bMajor) return aMajor - bMajor;
+  if (aMinor !== bMinor) return aMinor - bMinor;
+  return aPatch - bPatch;
+}
+
+const DEFAULT_IOS_STORE_URL =
+  'https://apps.apple.com/kr/app/smis-mentor/id6748606030';
+const DEFAULT_ANDROID_STORE_URL =
+  'https://play.google.com/store/apps/details?id=com.smis.smismentor';
+
+/**
+ * 현재 앱 버전과 Firestore minVersion을 비교하여 강제 업데이트 여부를 반환
+ * @param db Firestore 인스턴스
+ * @param currentVersion 현재 앱 버전 (예: "1.5.0")
+ */
+export async function checkForceUpdate(
+  db: any,
+  currentVersion: string,
+): Promise<VersionCheckResult> {
+  try {
+    const config = await getAppConfig(db);
+
+    const iosStoreUrl = config?.iosStoreUrl || DEFAULT_IOS_STORE_URL;
+    const androidStoreUrl = config?.androidStoreUrl || DEFAULT_ANDROID_STORE_URL;
+
+    if (!config?.minVersion) {
+      return { needsUpdate: false, iosStoreUrl, androidStoreUrl };
+    }
+
+    const needsUpdate = compareVersions(currentVersion, config.minVersion) < 0;
+    return { needsUpdate, iosStoreUrl, androidStoreUrl };
+  } catch (error) {
+    // 네트워크 오류 등으로 체크 실패 시 업데이트 강제하지 않음
+    console.error('버전 체크 실패:', error);
+    return {
+      needsUpdate: false,
+      iosStoreUrl: DEFAULT_IOS_STORE_URL,
+      androidStoreUrl: DEFAULT_ANDROID_STORE_URL,
+    };
   }
 }
 

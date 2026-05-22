@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Constants from 'expo-constants';
 import { logger } from '@smis-mentor/shared';
 import {
   View,
@@ -219,7 +220,7 @@ export function SettingsScreen() {
       </View>
 
       <View style={styles.appInfo}>
-        <Text style={styles.appVersion}>SMIS Mentor v1.0.0</Text>
+        <Text style={styles.appVersion}>SMIS Mentor v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
         <Text style={styles.copyright}>© 2026 (주)에스엠아이에스. All rights reserved.</Text>
       </View>
     </ScrollView>

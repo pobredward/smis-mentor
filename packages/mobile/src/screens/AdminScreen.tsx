@@ -74,7 +74,7 @@ const adminSections: AdminSection[] = [
     items: [
       {
         id: '6',
-        title: '로딩문구 관리',
+        title: '앱 설정 관리',
         icon: 'settings',
         iconColor: '#f59e0b',
         screenName: 'AppConfig',

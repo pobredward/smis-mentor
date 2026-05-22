@@ -72,7 +72,7 @@ export default function AdminDashboard() {
       title: '기타',
       items: [
         {
-          title: '로딩문구 관리',
+          title: '앱 설정 관리',
           href: '/admin/app-config',
           iconClass: 'text-orange-600',
           icon: <IoSettings className="w-5 h-5" />,

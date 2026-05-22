@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import Constants from 'expo-constants';
 import { RootNavigator } from './src/navigation';
 import { WebViewCacheProvider } from './src/context/WebViewCacheContext';
 import { AuthProvider, registerPrefetchTrigger, unregisterPrefetchTrigger } from './src/context/AuthContext';
@@ -10,10 +11,12 @@ import { QueryClientProvider } from './src/context/QueryClientProvider';
 import { CampTabProvider, useCampTab } from './src/context/CampTabContext';
 import { WebViewPreloader } from './src/components/WebViewPreloader';
 import { SplashPrefetchScreen } from './src/components/SplashPrefetchScreen';
+import { ForceUpdateModal } from './src/components/ForceUpdateModal';
 import { useAuth } from './src/context/AuthContext';
 import { useCampDataPrefetch } from './src/hooks/useCampDataPrefetch';
 import { useRecruitmentDataPrefetch } from './src/hooks/useRecruitmentDataPrefetch';
-import { logger } from '@smis-mentor/shared';
+import { logger, checkForceUpdate } from '@smis-mentor/shared';
+import { db } from './src/config/firebase';
 
 // 네이티브 스플래시 화면 유지 (앱 최상단에서 호출)
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -157,6 +160,34 @@ function AppContent() {
 }
 
 function App() {
+  const [forceUpdateVisible, setForceUpdateVisible] = useState(false);
+  const [storeUrls, setStoreUrls] = useState({
+    iosStoreUrl: '',
+    androidStoreUrl: '',
+  });
+
+  useEffect(() => {
+    const runVersionCheck = async () => {
+      try {
+        const currentVersion = Constants.expoConfig?.version ?? '0.0.0';
+        const result = await checkForceUpdate(db, currentVersion);
+
+        if (result.needsUpdate) {
+          logger.info(`🔄 강제 업데이트 필요: 현재 ${currentVersion} → 스토어 이동`);
+          setStoreUrls({
+            iosStoreUrl: result.iosStoreUrl,
+            androidStoreUrl: result.androidStoreUrl,
+          });
+          setForceUpdateVisible(true);
+        }
+      } catch (error) {
+        logger.error('버전 체크 오류:', error);
+      }
+    };
+
+    runVersionCheck();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider>
@@ -168,6 +199,11 @@ function App() {
           </WebViewCacheProvider>
         </AuthProvider>
       </QueryClientProvider>
+      <ForceUpdateModal
+        visible={forceUpdateVisible}
+        iosStoreUrl={storeUrls.iosStoreUrl}
+        androidStoreUrl={storeUrls.androidStoreUrl}
+      />
     </GestureHandlerRootView>
   );
 }
