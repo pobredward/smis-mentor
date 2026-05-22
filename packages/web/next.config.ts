@@ -41,14 +41,6 @@ export default withSentryConfig(nextConfig, {
   // 브라우저 요청을 Sentry로 라우팅하여 광고 차단기 우회
   tunnelRoute: "/monitoring",
   
-  // webpack 설정
-  webpack: {
-    // Vercel Cron Monitors 자동 계측 활성화
-    automaticVercelMonitors: true,
-    
-    // 번들 크기 축소를 위한 Tree-shaking 옵션
-    treeshake: {
-      removeDebugLogging: true,
-    },
-  },
+  // Vercel Cron Monitors 자동 계측 활성화
+  automaticVercelMonitors: true,
 });
