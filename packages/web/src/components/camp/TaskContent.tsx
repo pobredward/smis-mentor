@@ -738,8 +738,9 @@ export default function TaskContent() {
           </button>
         );
 
-        // 업무 칩 셀 — 업무 수만큼 높이가 늘어남
-        const allChips = [
+        // 업무 칩 셀 — 업무 수만큼 높이가 늘어남, 목록 뷰와 동일하게 시간순 → createdAt 순 정렬
+        type ChipItem = { key: string; bg: string; color: string; label: string; time: string; createdAtMs: number };
+        const allChips: ChipItem[] = [
           ...dayTasks.map(task => {
             const isDone = task.completions.some((c: { userId: string }) => c.userId === currentUserId);
             const timeLabel = task.time ? task.time.slice(0, 5) : null;
@@ -750,7 +751,7 @@ export default function TaskContent() {
             const chipColor = isDone
               ? (cat ? cat.color : '#065f46')
               : '#6b7280';
-            return { key: task.id, bg: chipBg, color: chipColor, label: `${timeLabel ? `${timeLabel} ` : ''}${task.title}` };
+            return { key: task.id, bg: chipBg, color: chipColor, label: `${timeLabel ? `${timeLabel} ` : ''}${task.title}`, time: task.time ?? '', createdAtMs: task.createdAt.toMillis() };
           }),
           ...dayPersonalTasks.map(task => {
             const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
@@ -760,9 +761,14 @@ export default function TaskContent() {
             const chipColor = task.isCompleted
               ? (cat ? cat.color : '#065f46')
               : '#6b7280';
-            return { key: task.id, bg: chipBg, color: chipColor, label: `${task.time ? `${task.time.slice(0, 5)} ` : ''}${task.title}` };
+            return { key: task.id, bg: chipBg, color: chipColor, label: `${task.time ? `${task.time.slice(0, 5)} ` : ''}${task.title}`, time: task.time ?? '', createdAtMs: task.createdAt.toMillis() };
           }),
-        ];
+        ].sort((a, b) => {
+          if (a.time && b.time) return a.time.localeCompare(b.time);
+          if (a.time && !b.time) return -1;
+          if (!a.time && b.time) return 1;
+          return a.createdAtMs - b.createdAtMs;
+        });
 
         chipCells.push(
           <button

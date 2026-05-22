@@ -1204,42 +1204,34 @@ export function TasksScreen() {
                 {day}
               </Text>
             </View>
-            {/* 공통 업무 칩 */}
-            {dayTasks.map(task => {
-              const isDone = task.completions.some(c => c.userId === currentUserId);
-              const timeLabel = task.time ? task.time.slice(0, 5) : null;
-              const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
-              const chipBg = isDone
-                ? (cat ? `${cat.color}55` : '#6ee7b7')
-                : '#e5e7eb';
-              const chipTextColor = isDone
-                ? (cat ? cat.color : '#065f46')
-                : '#6b7280';
-              return (
-                <View key={task.id} style={[styles.fullCalendarChip, { backgroundColor: chipBg }]}>
-                  <Text style={[styles.fullCalendarChipText, { color: chipTextColor }]} numberOfLines={1}>
-                    {timeLabel ? `${timeLabel} ` : ''}{task.title}
-                  </Text>
-                </View>
-              );
-            })}
-            {/* 개인 업무 칩 */}
-            {dayPersonalTasks.map(task => {
-              const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
-              const chipBg = task.isCompleted
-                ? (cat ? `${cat.color}55` : '#6ee7b7')
-                : '#e5e7eb';
-              const chipTextColor = task.isCompleted
-                ? (cat ? cat.color : '#065f46')
-                : '#6b7280';
-              return (
-                <View key={task.id} style={[styles.fullCalendarChip, { backgroundColor: chipBg }]}>
-                  <Text style={[styles.fullCalendarChipText, { color: chipTextColor }]} numberOfLines={1}>
-                    {task.time ? `${task.time.slice(0, 5)} ` : ''}{task.title}
-                  </Text>
-                </View>
-              );
-            })}
+            {/* 공통+개인 업무 칩 — 목록 뷰와 동일하게 시간순 → createdAt 순 정렬 */}
+            {[
+              ...dayTasks.map(task => {
+                const isDone = task.completions.some(c => c.userId === currentUserId);
+                const timeLabel = task.time ? task.time.slice(0, 5) : null;
+                const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
+                const chipBg = isDone ? (cat ? `${cat.color}55` : '#6ee7b7') : '#e5e7eb';
+                const chipTextColor = isDone ? (cat ? cat.color : '#065f46') : '#6b7280';
+                return { key: task.id, bg: chipBg, textColor: chipTextColor, label: `${timeLabel ? `${timeLabel} ` : ''}${task.title}`, time: task.time ?? '', createdAtMs: task.createdAt.toMillis() };
+              }),
+              ...dayPersonalTasks.map(task => {
+                const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
+                const chipBg = task.isCompleted ? (cat ? `${cat.color}55` : '#6ee7b7') : '#e5e7eb';
+                const chipTextColor = task.isCompleted ? (cat ? cat.color : '#065f46') : '#6b7280';
+                return { key: task.id, bg: chipBg, textColor: chipTextColor, label: `${task.time ? `${task.time.slice(0, 5)} ` : ''}${task.title}`, time: task.time ?? '', createdAtMs: task.createdAt.toMillis() };
+              }),
+            ].sort((a, b) => {
+              if (a.time && b.time) return a.time.localeCompare(b.time);
+              if (a.time && !b.time) return -1;
+              if (!a.time && b.time) return 1;
+              return a.createdAtMs - b.createdAtMs;
+            }).map(chip => (
+              <View key={chip.key} style={[styles.fullCalendarChip, { backgroundColor: chip.bg }]}>
+                <Text style={[styles.fullCalendarChipText, { color: chip.textColor }]} numberOfLines={1}>
+                  {chip.label}
+                </Text>
+              </View>
+            ))}
           </TouchableOpacity>
         );
       }
