@@ -17,6 +17,7 @@ import {
   Dimensions,
   Pressable,
   BackHandler,
+  unstable_batchedUpdates,
 } from 'react-native';
 import { ScrollView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
@@ -57,7 +58,7 @@ import { getTaskCategories, createTaskCategory, updateTaskCategory, deleteTaskCa
 import { getUserJobCodesInfo } from '../services/authService';
 import { getUsersByJobCode } from '../services/userService';
 import type { Task, JobExperienceGroupRole, TaskAttachment, User, PersonalTask, TaskCategory } from '../../../shared/src/types';
-import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames, isKoreanHoliday } from '@smis-mentor/shared';
+import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames, isKoreanHoliday, getKoreanHolidaySet } from '@smis-mentor/shared';
 import {
   MENTOR_GROUP_ROLES,
   FOREIGN_GROUP_ROLES,
@@ -95,6 +96,14 @@ export function TasksScreen() {
   // 캘린더 상태
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+  // selectedDate를 ref로도 유지 — useMemo 의존성 없이 최신 선택 날짜 참조
+  const selectedDateRef = useRef(new Date());
+  // 선택된 날짜 문자열 — compactCalendarCells useMemo의 의존성으로 사용
+  // selectedDate(Date 객체) 대신 문자열을 의존성으로 써서 동일한 날짜 재선택 시 리렌더 방지
+  const [selectedDateStr, setSelectedDateStr] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
   const [taskDates, setTaskDates] = useState<Set<string>>(new Set());
   const [selectedDateTasks, setSelectedDateTasks] = useState<Task[]>([]);
   const [calendarView, setCalendarView] = useState<'compact' | 'full'>('compact');
@@ -114,6 +123,38 @@ export function TasksScreen() {
   };
   const [monthTasks, setMonthTasks] = useState<Map<string, Task[]>>(new Map());
   const monthTasksRef = useRef<Map<string, Task[]>>(new Map());
+
+  // 월 데이터 메모리 캐시 — 스와이프 시 즉시 표시를 위해 인접 달을 미리 저장
+  const MONTH_CACHE_TTL_MS = 5 * 60 * 1000; // 5분
+  interface MonthCacheEntry {
+    tasks: Map<string, Task[]>;
+    personalDates: Map<string, number>;
+    personalTasks: Map<string, PersonalTask[]>;
+    fetchedAt: number;
+  }
+  const monthCacheRef = useRef<Map<string, MonthCacheEntry>>(new Map());
+
+  // selectedDate, selectedDateStr, selectedDateRef를 함께 업데이트하는 헬퍼
+  const applySelectedDate = useCallback((date: Date) => {
+    const str = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+    selectedDateRef.current = date;
+    unstable_batchedUpdates(() => {
+      setSelectedDate(date);
+      setSelectedDateStr(str);
+    });
+  }, []);
+
+  // 4개 달력 state를 한 번의 렌더로 일괄 업데이트 — unstable_batchedUpdates 보장
+  const applyMonthData = (data: MonthCacheEntry) => {
+    unstable_batchedUpdates(() => {
+      monthTasksRef.current = data.tasks;
+      setMonthTasks(data.tasks);
+      setTaskDates(new Set(data.tasks.keys()));
+      setPersonalTaskDates(data.personalDates);
+      personalMonthTasksRef.current = data.personalTasks;
+      setPersonalMonthTasks(data.personalTasks);
+    });
+  };
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
@@ -269,9 +310,25 @@ export function TasksScreen() {
       // → 수평으로 가다가 방향을 틀어도 마지막 속도 방향으로만 결정
       const VELOCITY_THRESHOLD = 300;
       if (event.velocityX < -VELOCITY_THRESHOLD) {
-        setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1));
+        setCurrentDate(prev => {
+          const next = new Date(prev.getFullYear(), prev.getMonth() + 1);
+          // useEffect를 기다리지 않고 캐시 데이터를 즉시 동기 적용 — 체감 딜레이 제거
+          const key = `${next.getFullYear()}-${next.getMonth()}-${currentCampCode}`;
+          const cached = monthCacheRef.current.get(key);
+          if (cached && Date.now() - cached.fetchedAt < MONTH_CACHE_TTL_MS) applyMonthData(cached);
+          applySelectedDate(next);
+          return next;
+        });
       } else if (event.velocityX > VELOCITY_THRESHOLD) {
-        setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1));
+        setCurrentDate(prev => {
+          const next = new Date(prev.getFullYear(), prev.getMonth() - 1);
+          // useEffect를 기다리지 않고 캐시 데이터를 즉시 동기 적용 — 체감 딜레이 제거
+          const key = `${next.getFullYear()}-${next.getMonth()}-${currentCampCode}`;
+          const cached = monthCacheRef.current.get(key);
+          if (cached && Date.now() - cached.fetchedAt < MONTH_CACHE_TTL_MS) applyMonthData(cached);
+          applySelectedDate(next);
+          return next;
+        });
       }
     });
 
@@ -287,7 +344,7 @@ export function TasksScreen() {
       try {
         const date = new Date(actualParams.selectedDate);
         if (!isNaN(date.getTime())) {
-          setSelectedDate(date);
+          applySelectedDate(date);
           setCurrentDate(date);
         }
       } catch (error) {
@@ -380,6 +437,9 @@ export function TasksScreen() {
     }
 
     setLoading(true);
+    // 캠프 코드가 변경될 수 있으므로 기존 월 캐시 전체 초기화
+    monthCacheRef.current.clear();
+
     try {
       const { jobCode: activeJobCode, groupRole: resolvedGroupRole } = await fetchActiveJobCode();
       if (!activeJobCode) return;
@@ -394,16 +454,34 @@ export function TasksScreen() {
         setCampUsers(users);
       }
 
-      // 월별 업무 Map + 개인 업무 날짜 + 카테고리 동시 로드 (각각 필요한 범위만 읽음)
-      const [, , fetchedCategories] = await Promise.all([
-        fetchMonthTasks(resolvedGroupRole, isAdmin, activeJobCode.code),
-        loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth(), activeJobCode.code),
+      // 월별 업무 + 개인 업무 + 카테고리 동시 로드 (loadMonthData로 캐시에 저장)
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const commonOpts = {
+        force: true,
+        campCode: activeJobCode.code,
+        groupRole: resolvedGroupRole,
+        adminFlag: isAdmin,
+      };
+      const [data, , fetchedCategories] = await Promise.all([
+        loadMonthData(year, month, commonOpts),
+        Promise.resolve(), // 자리 맞춤
         getTaskCategories(activeJobCode.code),
       ]);
       setCategories(fetchedCategories);
 
+      if (data) applyMonthData(data);
+
       // 선택된 날짜의 업무 로드
       await loadTasksForDate(selectedDate, activeJobCode.code);
+
+      // 인접 달 백그라운드 프리패치 — campCode/groupRole을 직접 전달해 state 반영 대기 없이 즉시 시작
+      const prevMonth = month === 0 ? 11 : month - 1;
+      const prevYear = month === 0 ? year - 1 : year;
+      const nextMonth = month === 11 ? 0 : month + 1;
+      const nextYear = month === 11 ? year + 1 : year;
+      loadMonthData(prevYear, prevMonth, { ...commonOpts, force: false }).catch(() => {});
+      loadMonthData(nextYear, nextMonth, { ...commonOpts, force: false }).catch(() => {});
     } catch (error) {
       logger.error('업무 목록 가져오기 오류:', error);
       Alert.alert('오류', '업무 목록을 불러오는 중 오류가 발생했습니다.');
@@ -503,10 +581,55 @@ export function TasksScreen() {
     }
   };
 
+  // 월 데이터를 캐시에서 즉시 반환하거나 Firestore에서 조회 후 캐시에 저장
+  // force=true 이면 캐시를 무시하고 항상 재조회 (업무 추가/수정/삭제 후 호출)
+  const loadMonthData = async (
+    year: number,
+    month: number,
+    options?: { force?: boolean; campCode?: string; groupRole?: JobExperienceGroupRole | null; adminFlag?: boolean }
+  ): Promise<MonthCacheEntry | null> => {
+    const code = options?.campCode ?? currentCampCode;
+    const role = options?.groupRole !== undefined ? options.groupRole : currentGroupRole;
+    const admin = options?.adminFlag !== undefined ? options.adminFlag : isAdmin;
+
+    if (!code || !userData) return null;
+
+    const key = `${year}-${month}-${code}`;
+    const cached = monthCacheRef.current.get(key);
+    const now = Date.now();
+
+    if (!options?.force && cached && now - cached.fetchedAt < MONTH_CACHE_TTL_MS) {
+      return cached;
+    }
+
+    try {
+      const [taskMap, personalDates, personalTaskMap] = await Promise.all([
+        getTasksInMonth(code, year, month, role, admin),
+        getPersonalTaskDatesInMonth(userData.userId, code, year, month),
+        getPersonalTasksInMonth(userData.userId, code, year, month),
+      ]);
+
+      const entry: MonthCacheEntry = {
+        tasks: taskMap,
+        personalDates,
+        personalTasks: personalTaskMap,
+        fetchedAt: Date.now(),
+      };
+      monthCacheRef.current.set(key, entry);
+      return entry;
+    } catch (error) {
+      logger.error(`월 데이터 로드 오류 (${year}-${month + 1}):`, error);
+      return null;
+    }
+  };
+
   // Pull to refresh 핸들러
   const onRefresh = async () => {
     setRefreshing(true);
     try {
+      // 전체 월 캐시 초기화 → 강제 재조회
+      monthCacheRef.current.clear();
+
       // 캠프 사용자 목록 다시 가져오기 (관리자만)
       if (isAdmin && userData?.activeJobExperienceId) {
         const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
@@ -519,8 +642,13 @@ export function TasksScreen() {
         }
       }
       
-      // 선택된 날짜의 업무 다시 로드
-      await loadTasksForDate(selectedDate);
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const [data] = await Promise.all([
+        loadMonthData(year, month, { force: true }),
+        loadTasksForDate(selectedDate),
+      ]);
+      if (data) applyMonthData(data);
     } catch (error) {
       logger.error('새로고침 오류:', error);
     } finally {
@@ -532,11 +660,35 @@ export function TasksScreen() {
     fetchTasks();
   }, [userData]);
 
+  // 달력 월 변경 시: 캐시 히트면 즉시 표시, 이후 최신 데이터로 갱신 + 인접 달 백그라운드 프리패치
   useEffect(() => {
-    if (currentCampCode) {
-      fetchMonthTasks();
-      loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth());
+    if (!currentCampCode) return;
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const key = `${year}-${month}-${currentCampCode}`;
+    const cached = monthCacheRef.current.get(key);
+    const now = Date.now();
+
+    const isCacheValid = !!(cached && now - cached.fetchedAt < MONTH_CACHE_TTL_MS);
+
+    // 유효한 캐시가 있으면 즉시 상태에 반영 — applyMonthData로 단일 리렌더 보장
+    if (isCacheValid && cached) {
+      applyMonthData(cached);
+    } else {
+      // 캐시 만료 시 Firestore 재조회 후 반영
+      loadMonthData(year, month).then(data => {
+        if (data) applyMonthData(data);
+      });
     }
+
+    // 인접 달(이전/다음) 백그라운드 프리패치 — 에러는 무시
+    const prevMonth = month === 0 ? 11 : month - 1;
+    const prevYear = month === 0 ? year - 1 : year;
+    const nextMonth = month === 11 ? 0 : month + 1;
+    const nextYear = month === 11 ? year + 1 : year;
+    loadMonthData(prevYear, prevMonth).catch(() => {});
+    loadMonthData(nextYear, nextMonth).catch(() => {});
   }, [currentDate, currentCampCode]);
 
   // selectedDate가 변경될 때 해당 날짜의 업무 로드 (컴팩트 뷰에서만)
@@ -550,7 +702,16 @@ export function TasksScreen() {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       if (currentCampCode && selectedDate) {
+        // TaskDetail/PersonalTaskDetail 에서 수정·삭제 후 돌아올 수 있으므로 현재 달 캐시 무효화
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const key = `${year}-${month}-${currentCampCode}`;
+        monthCacheRef.current.delete(key);
+
         loadTasksForDate(selectedDate);
+        loadMonthData(year, month).then(data => {
+          if (data) applyMonthData(data);
+        });
       }
       // 세부 페이지에서 돌아올 때 시트 업무 목록 갱신
       const cachedDate = sheetDateRef.current;
@@ -575,7 +736,7 @@ export function TasksScreen() {
     });
 
     return unsubscribe;
-  }, [navigation, currentCampCode, selectedDate, openSheet, monthTasks]);
+  }, [navigation, currentCampCode, selectedDate, openSheet, monthTasks, currentDate]);
 
   // 날짜 클릭 핸들러
   // monthTasks/personalMonthTasks는 useMemo 클로저 stale 문제를 피하기 위해 ref로 참조
@@ -589,9 +750,9 @@ export function TasksScreen() {
       const dayPersonalTasks = personalMonthTasksRef.current.get(dateStr) ?? [];
       openSheet(date, dayTasks, dayPersonalTasks);
     } else {
-      setSelectedDate(date);
+      applySelectedDate(date);
     }
-  }, [calendarView, openSheet]);
+  }, [calendarView, openSheet, applySelectedDate]);
 
   // 업무 완료 토글
   const handleToggleComplete = async (taskId: string) => {
@@ -604,10 +765,13 @@ export function TasksScreen() {
 
     try {
       await toggleTaskCompletion(taskId, userData.userId, userData.name, role);
-      await Promise.all([
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const [data] = await Promise.all([
+        loadMonthData(year, month, { force: true }),
         loadTasksForDate(selectedDate),
-        fetchMonthTasks(),
       ]);
+      if (data) applyMonthData(data);
     } catch (error) {
       logger.error('업무 완료 토글 오류:', error);
       Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update task status.' : '업무 상태 변경 중 오류가 발생했습니다.');
@@ -726,10 +890,13 @@ export function TasksScreen() {
         });
       }
       setShowPersonalTaskModal(false);
-      await Promise.all([
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const [data] = await Promise.all([
+        loadMonthData(year, month, { force: true }),
         loadTasksForDate(selectedDate),
-        loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth()),
       ]);
+      if (data) applyMonthData(data);
     } catch (error) {
       logger.error('개인 업무 저장 오류:', error);
       Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to save task.' : '저장 중 오류가 발생했습니다.');
@@ -757,10 +924,13 @@ export function TasksScreen() {
         onPress: async () => {
           try {
             await deletePersonalTask(taskId);
-            await Promise.all([
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const [data] = await Promise.all([
+              loadMonthData(year, month, { force: true }),
               loadTasksForDate(selectedDate),
-              loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth()),
             ]);
+            if (data) applyMonthData(data);
           } catch (error) {
             logger.error('개인 업무 삭제 오류:', error);
             Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to delete task.' : '삭제 중 오류가 발생했습니다.');
@@ -795,7 +965,10 @@ export function TasksScreen() {
 
     try {
       await toggleTaskCompletion(taskId, userId, userData.name, role);
-      await fetchMonthTasks();
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const data = await loadMonthData(year, month, { force: true });
+      if (data) applyMonthData(data);
     } catch (error) {
       logger.error('업무 완료 토글 오류:', error);
       // 실패 시 원복
@@ -822,13 +995,16 @@ export function TasksScreen() {
 
     try {
       await togglePersonalTaskCompletion(task.id, task.isCompleted);
-      // 갱신: 해당 날짜 개인 업무 재조회
+      // 갱신: 해당 날짜 개인 업무 재조회 + 월 캐시 무효화
       const date = sheetDateRef.current;
       if (date && userData) {
-        const refreshed = await getPersonalTasksByDate(userData.userId, currentCampCode, date);
+        const [refreshed, data] = await Promise.all([
+          getPersonalTasksByDate(userData.userId, currentCampCode, date),
+          loadMonthData(date.getFullYear(), date.getMonth(), { force: true }),
+        ]);
         sheetPersonalTasksRef.current = refreshed;
         setSheetRenderKey(k => k + 1);
-        loadPersonalTaskDates(date.getFullYear(), date.getMonth());
+        if (data) applyMonthData(data);
       }
     } catch (error) {
       logger.error('시트 개인 업무 토글 오류:', error);
@@ -846,7 +1022,7 @@ export function TasksScreen() {
   };
 
   // 컴팩트 뷰 렌더링: 큰 박스(숫자/체크) + 아래에 작은 날짜
-  const renderCompactCalendar = () => {
+  const compactCalendarCells = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1);
@@ -856,6 +1032,9 @@ export function TasksScreen() {
 
     const days: React.ReactElement[] = [];
     const currentUserId = userData?.userId ?? '';
+
+    // 31번 isKoreanHoliday 호출 대신 월 전체 Set을 한 번만 생성
+    const holidaySet = getKoreanHolidaySet(year, month);
 
     for (let i = 0; i < startDayOfWeek; i++) {
       days.push(<View key={`empty-${i}`} style={styles.compactCell} />);
@@ -870,12 +1049,13 @@ export function TasksScreen() {
 
       const dayTasks = monthTasks.get(dateStr) ?? [];
       const hasTask = dayTasks.length > 0;
-      const isSelected = selectedDate.toDateString() === date.toDateString();
+      // selectedDateStr(문자열 비교)으로 동일 객체 참조 없이 선택 상태 판단
+      const isSelected = selectedDateStr === dateStr;
       const isToday = new Date().toDateString() === date.toDateString();
       const dayOfWeek = date.getDay();
       const isSunday = dayOfWeek === 0;
       const isSaturday = dayOfWeek === 6;
-      const isHolidayDate = isKoreanHoliday(date);
+      const isHolidayDate = holidaySet.has(dateStr);
 
       const pendingCount = dayTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
       const allCompleted = hasTask && pendingCount === 0;
@@ -934,7 +1114,8 @@ export function TasksScreen() {
     }
 
     return days;
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, monthTasks, selectedDateStr, personalTaskDates, userData?.userId]);
 
   // 풀 캘린더 뷰 렌더링: 날짜 셀에 업무 제목/시간 직접 표시
   // sheetVisible 등 바텀시트 상태가 바뀌어도 달력 재계산을 막기 위해 useMemo로 캐싱
@@ -945,6 +1126,9 @@ export function TasksScreen() {
     const lastDay = new Date(year, month + 1, 0);
     const startDayOfWeek = firstDay.getDay();
     const daysInMonth = lastDay.getDate();
+
+    // 31번 isKoreanHoliday 호출 대신 월 전체 Set을 한 번만 생성
+    const holidaySet = getKoreanHolidaySet(year, month);
 
     // 주 단위 행으로 구성
     const totalCells = startDayOfWeek + daysInMonth;
@@ -975,7 +1159,7 @@ export function TasksScreen() {
         const dayOfWeek = date.getDay();
         const isSunday = dayOfWeek === 0;
         const isSaturday = dayOfWeek === 6;
-        const isHolidayDate = isKoreanHoliday(date);
+        const isHolidayDate = holidaySet.has(dateStr);
         const currentUserId = userData?.userId ?? '';
 
         cells.push(
@@ -1134,13 +1318,27 @@ export function TasksScreen() {
             />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
+            onPress={() => setCurrentDate(prev => {
+              const next = new Date(prev.getFullYear(), prev.getMonth() - 1);
+              const key = `${next.getFullYear()}-${next.getMonth()}-${currentCampCode}`;
+              const cached = monthCacheRef.current.get(key);
+              if (cached && Date.now() - cached.fetchedAt < MONTH_CACHE_TTL_MS) applyMonthData(cached);
+              applySelectedDate(next);
+              return next;
+            })}
             style={styles.navButton}
           >
             <Ionicons name="chevron-back" size={20} color="#6b7280" />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
+            onPress={() => setCurrentDate(prev => {
+              const next = new Date(prev.getFullYear(), prev.getMonth() + 1);
+              const key = `${next.getFullYear()}-${next.getMonth()}-${currentCampCode}`;
+              const cached = monthCacheRef.current.get(key);
+              if (cached && Date.now() - cached.fetchedAt < MONTH_CACHE_TTL_MS) applyMonthData(cached);
+              applySelectedDate(next);
+              return next;
+            })}
             style={styles.navButton}
           >
             <Ionicons name="chevron-forward" size={20} color="#6b7280" />
@@ -1171,7 +1369,7 @@ export function TasksScreen() {
           {/* 날짜 그리드 */}
           {calendarView === 'compact' ? (
             <View style={styles.compactGrid}>
-              {renderCompactCalendar()}
+              {compactCalendarCells}
             </View>
           ) : (
             <View style={styles.fullCalendarGrid}>

@@ -1,4 +1,4 @@
-import { isHoliday } from 'korean-holidays';
+import { isHoliday, getHolidays } from 'korean-holidays';
 
 /**
  * korean-holidays 라이브러리에 아직 반영되지 않은 공휴일을 수동으로 관리합니다.
@@ -32,4 +32,36 @@ export function isKoreanHoliday(date: Date): boolean {
  */
 export function getKoreanHolidayName(date: Date): string | null {
   return isHoliday(date)?.nameKo ?? LIBRARY_MISSING_HOLIDAYS[toDateKey(date)] ?? null;
+}
+
+// 연도별 getHolidays 결과를 메모이제이션 — 같은 연도를 여러 달 조회할 때 반복 호출 방지
+const _yearHolidaysCache = new Map<number, ReturnType<typeof getHolidays>>();
+
+/**
+ * 특정 연·월의 공휴일 날짜 문자열('YYYY-MM-DD') Set을 반환합니다.
+ * getHolidays를 연도별로 1회만 호출하고 월 필터링만 수행해 달력 렌더 비용을 최소화합니다.
+ */
+export function getKoreanHolidaySet(year: number, month: number): Set<string> {
+  if (!_yearHolidaysCache.has(year)) {
+    _yearHolidaysCache.set(year, getHolidays(year));
+  }
+  const holidays = _yearHolidaysCache.get(year)!;
+  const set = new Set<string>();
+
+  for (const h of holidays) {
+    const d = new Date(h.date);
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      set.add(toDateKey(d));
+    }
+  }
+
+  // 라이브러리 미반영 공휴일 추가
+  for (const key of Object.keys(LIBRARY_MISSING_HOLIDAYS)) {
+    const [y, m] = key.split('-').map(Number);
+    if (y === year && m - 1 === month) {
+      set.add(key);
+    }
+  }
+
+  return set;
 }
