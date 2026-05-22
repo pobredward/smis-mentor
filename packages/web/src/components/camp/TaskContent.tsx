@@ -53,9 +53,20 @@ export default function TaskContent() {
   const [mounted, setMounted] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // 캘린더 상태
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  // 캘린더 상태 — URL date 파라미터가 있으면 초기값으로 사용 (F5 새로고침 대응)
+  const getInitialDate = () => {
+    const dateParam = searchParams?.get('date');
+    if (dateParam) {
+      const [year, month, day] = dateParam.split('-').map(Number);
+      if (year && month && day) {
+        const date = new Date(year, month - 1, day);
+        if (!isNaN(date.getTime())) return date;
+      }
+    }
+    return new Date();
+  };
+  const [currentDate, setCurrentDate] = useState(getInitialDate);
+  const [selectedDate, setSelectedDate] = useState(getInitialDate);
   const [taskDates, setTaskDates] = useState<Set<string>>(new Set());
   const [selectedDateTasks, setSelectedDateTasks] = useState<Task[]>([]);
   const [calendarView, setCalendarView] = useState<'compact' | 'full'>('compact');
@@ -300,7 +311,17 @@ export default function TaskContent() {
     }
   };
 
-  // Pull to refresh 핸들러
+  // 로딩 스피너 없이 현재 월·날짜 데이터를 조용히 갱신 (업무 생성/삭제 후 호출)
+  const refreshCurrentData = async () => {
+    if (!currentCampCode) return;
+    await Promise.all([
+      fetchMonthTasks(),
+      loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth()),
+      loadTasksForDate(selectedDate),
+    ]);
+  };
+
+  // Pull to refresh 핸들러 (헤더 새로고침 버튼)
   const handleRefresh = async () => {
     if (isRefreshing) return;
     
@@ -318,12 +339,7 @@ export default function TaskContent() {
         }
       }
       
-      // 선택된 날짜의 업무 다시 로드
-      await Promise.all([
-        loadTasksForDate(selectedDate),
-        loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth()),
-      ]);
-
+      await refreshCurrentData();
       toast.success(isForeign ? 'Refreshed' : '새로고침 완료');
     } catch (error) {
       logger.error('새로고침 오류:', error);
@@ -528,7 +544,7 @@ export default function TaskContent() {
       await deleteTask(taskId);
       setShowTaskDetail(false); // 모달 닫기
       setSelectedTask(null);
-      await fetchTasks();
+      await refreshCurrentData();
       toast.success(isForeign ? 'Task deleted.' : '업무가 삭제되었습니다.');
     } catch (error) {
       logger.error('업무 삭제 오류:', error);
@@ -865,7 +881,17 @@ export default function TaskContent() {
         </button>
         {/* 이전 월 */}
         <button
-          onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
+          onClick={() => {
+            const next = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1);
+            setCurrentDate(next);
+            // 오늘이 포함된 월이면 오늘 날짜, 이전 월이므로 마지막 날 선택
+            const today = new Date();
+            const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0);
+            const dateToSelect = (next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth())
+              ? today
+              : lastDay;
+            setSelectedDate(dateToSelect);
+          }}
           className="p-1 hover:bg-gray-100 rounded text-gray-600"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -874,7 +900,16 @@ export default function TaskContent() {
         </button>
         {/* 다음 월 */}
         <button
-          onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
+          onClick={() => {
+            const next = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1);
+            setCurrentDate(next);
+            // 오늘이 포함된 월이면 오늘 날짜, 다음 월이므로 1일 선택
+            const today = new Date();
+            const dateToSelect = (next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth())
+              ? today
+              : next; // next = new Date(year, month) → 1일
+            setSelectedDate(dateToSelect);
+          }}
           className="p-1 hover:bg-gray-100 rounded text-gray-600"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1268,7 +1303,7 @@ export default function TaskContent() {
             setIsCopyMode(false);
           }}
           onSuccess={() => {
-            fetchTasks();
+            refreshCurrentData();
           }}
         />
       )}

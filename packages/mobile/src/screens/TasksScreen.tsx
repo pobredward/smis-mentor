@@ -316,7 +316,12 @@ export function TasksScreen() {
           const key = `${next.getFullYear()}-${next.getMonth()}-${currentCampCode}`;
           const cached = monthCacheRef.current.get(key);
           if (cached && Date.now() - cached.fetchedAt < MONTH_CACHE_TTL_MS) applyMonthData(cached);
-          applySelectedDate(next);
+          // 오늘이 포함된 월이면 오늘 날짜, 다음 월이므로 1일 선택
+          const today = new Date();
+          const dateToSelect = (next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth())
+            ? today
+            : next; // next = new Date(year, month) → 1일
+          applySelectedDate(dateToSelect);
           return next;
         });
       } else if (event.velocityX > VELOCITY_THRESHOLD) {
@@ -326,7 +331,13 @@ export function TasksScreen() {
           const key = `${next.getFullYear()}-${next.getMonth()}-${currentCampCode}`;
           const cached = monthCacheRef.current.get(key);
           if (cached && Date.now() - cached.fetchedAt < MONTH_CACHE_TTL_MS) applyMonthData(cached);
-          applySelectedDate(next);
+          // 오늘이 포함된 월이면 오늘 날짜, 이전 월이므로 마지막 날 선택
+          const today = new Date();
+          const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0);
+          const dateToSelect = (next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth())
+            ? today
+            : lastDay;
+          applySelectedDate(dateToSelect);
           return next;
         });
       }
@@ -1329,7 +1340,13 @@ export function TasksScreen() {
               const key = `${next.getFullYear()}-${next.getMonth()}-${currentCampCode}`;
               const cached = monthCacheRef.current.get(key);
               if (cached && Date.now() - cached.fetchedAt < MONTH_CACHE_TTL_MS) applyMonthData(cached);
-              applySelectedDate(next);
+              // 오늘이 포함된 월이면 오늘 날짜, 이전 월이므로 마지막 날 선택
+              const today = new Date();
+              const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0);
+              const dateToSelect = (next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth())
+                ? today
+                : lastDay;
+              applySelectedDate(dateToSelect);
               return next;
             })}
             style={styles.navButton}
@@ -1342,7 +1359,12 @@ export function TasksScreen() {
               const key = `${next.getFullYear()}-${next.getMonth()}-${currentCampCode}`;
               const cached = monthCacheRef.current.get(key);
               if (cached && Date.now() - cached.fetchedAt < MONTH_CACHE_TTL_MS) applyMonthData(cached);
-              applySelectedDate(next);
+              // 오늘이 포함된 월이면 오늘 날짜, 다음 월이므로 1일 선택
+              const today = new Date();
+              const dateToSelect = (next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth())
+                ? today
+                : next; // next = new Date(year, month) → 1일
+              applySelectedDate(dateToSelect);
               return next;
             })}
             style={styles.navButton}
