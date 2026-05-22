@@ -20,11 +20,17 @@ import { useAuth } from '../context/AuthContext';
 import { useCampTab } from '../context/CampTabContext';
 import { jobCodesService, JobCode } from '../services';
 import { getTasksByCampCode } from '../services/taskService';
+import { getPersonalTasksByDate } from '../services/personalTaskService';
+import {
+  getHiddenOverdueTasks,
+  hideOverdueTask,
+  clearHiddenOverdueTasks,
+} from '../services/cacheUtils';
 import { getApplicationsByUserId } from '../services/recruitmentService';
 import { getCampHomeMessage, updateCampHomeMessage } from '@smis-mentor/shared';
 import { getJobBoardById } from '../services/jobBoardService';
 import { db } from '../config/firebase';
-import type { Task } from '../../../shared/src/types/camp';
+import type { Task, PersonalTask } from '../../../shared/src/types/camp';
 import type { ApplicationHistory } from '../../../shared/src/types';
 
 // JobBoard 정보를 포함한 지원 내역 타입
@@ -45,6 +51,10 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
 
   const [activeJobCode, setActiveJobCode] = useState<JobCode | null>(null);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
+  const [todayPersonalTasks, setTodayPersonalTasks] = useState<PersonalTask[]>([]);
+  const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
+  const [hiddenTaskIds, setHiddenTaskIds] = useState<Set<string>>(new Set());
+  const [showHiddenOverdue, setShowHiddenOverdue] = useState(false);
   const [recentApplications, setRecentApplications] = useState<ApplicationWithJobBoard[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -109,23 +119,45 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             return task.targetRoles.includes(userRole as any);
           });
 
+          const sortByTime = (a: Task, b: Task) => {
+            if (a.time && b.time) return a.time.localeCompare(b.time);
+            if (a.time && !b.time) return -1;
+            if (!a.time && b.time) return 1;
+            return 0;
+          };
+
           // 오늘의 업무
           const todayTasksList = userTasks.filter(task => {
             const taskDate = new Date(task.date.toDate());
             taskDate.setHours(0, 0, 0, 0);
             return taskDate.getTime() === today;
+          }).sort(sortByTime);
+
+          // 연체 업무: 오늘 이전 날짜 중 본인이 미완료한 업무
+          const overdueTasksList = userTasks.filter(task => {
+            const taskDate = new Date(task.date.toDate());
+            taskDate.setHours(0, 0, 0, 0);
+            if (taskDate.getTime() >= today) return false;
+            return !task.completions.some(c => c.userId === userData.userId);
           }).sort((a, b) => {
-            // 시간 순으로 정렬
-            if (a.time && b.time) {
-              return a.time.localeCompare(b.time);
-            }
-            // 시간이 있는 것이 우선
-            if (a.time && !b.time) return -1;
-            if (!a.time && b.time) return 1;
-            return 0;
+            // 날짜 오름차순, 같은 날짜면 시간순
+            const dateA = new Date(a.date.toDate()).setHours(0, 0, 0, 0);
+            const dateB = new Date(b.date.toDate()).setHours(0, 0, 0, 0);
+            if (dateA !== dateB) return dateA - dateB;
+            return sortByTime(a, b);
           });
 
+          const [hidden, personalToday] = await Promise.all([
+            getHiddenOverdueTasks(),
+            userData.userId
+              ? getPersonalTasksByDate(userData.userId, jobCode.code, new Date())
+              : Promise.resolve([] as PersonalTask[]),
+          ]);
+
+          setHiddenTaskIds(hidden);
           setTodayTasks(todayTasksList);
+          setTodayPersonalTasks(personalToday);
+          setOverdueTasks(overdueTasksList);
         }
       }
 
@@ -299,12 +331,14 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
 
   const getCurrentTimeGreeting = (): string => {
     const hour = new Date().getHours();
+    if (hour < 6) return '늦은 밤이에요';
     if (hour < 12) return '좋은 아침이에요';
     if (hour < 18) return '좋은 오후에요';
-    return '좋은 저녁이에요';
+    if (hour < 22) return '좋은 저녁이에요';
+    return '늦은 밤이에요';
   };
 
-  const formatTaskDateTime = (task: Task): string => {
+  const formatTaskDateTime = (task: Pick<Task, 'date' | 'time'>): string => {
     const date = task.date.toDate();
     const month = date.getMonth() + 1;
     const day = date.getDate();
@@ -420,9 +454,41 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
     );
   }
 
-  const completedTodayCount = todayTasks.filter(task => 
+  const handleHideOverdueTask = async (taskId: string) => {
+    await hideOverdueTask(taskId);
+    setHiddenTaskIds(prev => new Set([...prev, taskId]));
+  };
+
+  const handleClearHiddenOverdue = async () => {
+    await clearHiddenOverdueTasks();
+    setHiddenTaskIds(new Set());
+    setShowHiddenOverdue(false);
+  };
+
+  const visibleOverdueTasks = overdueTasks.filter(t => !hiddenTaskIds.has(t.id));
+  const hiddenOverdueTasks = overdueTasks.filter(t => hiddenTaskIds.has(t.id));
+
+  type MergedTodayItem =
+    | { kind: 'shared'; task: Task }
+    | { kind: 'personal'; task: PersonalTask };
+
+  const mergedTodayItems: MergedTodayItem[] = [
+    ...todayTasks.map(t => ({ kind: 'shared' as const, task: t })),
+    ...todayPersonalTasks.map(t => ({ kind: 'personal' as const, task: t })),
+  ].sort((a, b) => {
+    const timeA = a.task.time ?? '';
+    const timeB = b.task.time ?? '';
+    if (timeA && timeB) return timeA.localeCompare(timeB);
+    if (timeA && !timeB) return -1;
+    if (!timeA && timeB) return 1;
+    return 0;
+  });
+
+  const completedSharedCount = todayTasks.filter(task =>
     task.completions.some(c => c.userId === userData.userId)
   ).length;
+  const completedPersonalCount = todayPersonalTasks.filter(t => t.isCompleted).length;
+  const completedTodayCount = completedSharedCount + completedPersonalCount;
 
   return (
     <ScrollView 
@@ -490,6 +556,20 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           </TouchableOpacity>
         )}
 
+        {/* 공지사항 (mentor/foreign 읽기 전용) */}
+        {userData.role && isMentor(userData.role) && mentorHomeMessage && (
+          <View style={styles.mentorMessageCard}>
+            <Ionicons name="megaphone-outline" size={18} color="#3b82f6" style={styles.messageIcon} />
+            <Text style={styles.mentorMessageText}>{mentorHomeMessage}</Text>
+          </View>
+        )}
+        {userData.role && isForeign(userData.role) && foreignHomeMessage && (
+          <View style={styles.foreignMessageCard}>
+            <Ionicons name="megaphone-outline" size={18} color="#8b5cf6" style={styles.messageIcon} />
+            <Text style={styles.foreignMessageText}>{foreignHomeMessage}</Text>
+          </View>
+        )}
+
         {/* 환영 헤더 */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeContent}>
@@ -520,40 +600,25 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 </Text>
               </View>
               
-              {todayTasks.length > 0 && (
+              {mergedTodayItems.length > 0 && (
                 <View style={styles.todayProgressBadge}>
                   <Ionicons name="checkmark-circle" size={14} color="#10b981" />
                   <Text style={styles.todayProgressText}>
-                    {completedTodayCount}/{todayTasks.length} 완료
+                    {completedTodayCount}/{mergedTodayItems.length} 완료
+                  </Text>
+                </View>
+              )}
+              {visibleOverdueTasks.length > 0 && (
+                <View style={styles.overdueProgressBadge}>
+                  <Ionicons name="alert-circle" size={14} color="#ef4444" />
+                  <Text style={styles.overdueProgressText}>
+                    {visibleOverdueTasks.length}건
                   </Text>
                 </View>
               )}
             </View>
           )}
         </View>
-
-        {/* 빠른 액션 버튼 */}
-        {/* role=mentor: 관리자 메시지 표시 (읽기 전용) */}
-        {userData.role && isMentor(userData.role) && mentorHomeMessage && (
-          <View style={styles.mentorMessageCard}>
-            <View style={styles.mentorMessageHeader}>
-              <Ionicons name="megaphone-outline" size={20} color="#3b82f6" />
-              <Text style={styles.mentorMessageTitle}>공지사항</Text>
-            </View>
-            <Text style={styles.mentorMessageText}>{mentorHomeMessage}</Text>
-          </View>
-        )}
-
-        {/* role=foreign: 관리자 메시지 표시 (읽기 전용) */}
-        {userData.role && isForeign(userData.role) && foreignHomeMessage && (
-          <View style={styles.foreignMessageCard}>
-            <View style={styles.foreignMessageHeader}>
-              <Ionicons name="megaphone-outline" size={20} color="#8b5cf6" />
-              <Text style={styles.foreignMessageTitle}>Notice</Text>
-            </View>
-            <Text style={styles.foreignMessageText}>{foreignHomeMessage}</Text>
-          </View>
-        )}
 
         {/* role=admin: 관리자 메시지 편집 */}
         {userData.role && isAdmin(userData.role) && (
@@ -682,8 +747,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           </>
         )}
 
-        {/* 오늘의 업무 */}
-        {todayTasks.length > 0 && (
+        {/* 오늘의 업무 (공통 + 개인 병합) */}
+        {mergedTodayItems.length > 0 && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleRow}>
@@ -698,37 +763,159 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
               </TouchableOpacity>
             </View>
             <View style={styles.tasksList}>
-              {todayTasks.map((task) => {
-                const isCompleted = task.completions.some(c => c.userId === userData.userId);
+              {mergedTodayItems.map((item) => {
+                const isCompleted = item.kind === 'shared'
+                  ? item.task.completions.some(c => c.userId === userData.userId)
+                  : item.task.isCompleted;
                 return (
-                  <View key={task.id} style={styles.simpleTaskItem}>
+                  <View key={`${item.kind}-${item.task.id}`} style={styles.simpleTaskItem}>
                     <View style={styles.taskLeftSection}>
                       <View style={[
                         styles.taskBullet,
-                        isCompleted && styles.taskBulletCompleted
+                        isCompleted && styles.taskBulletCompleted,
+                        item.kind === 'personal' && !isCompleted && styles.taskBulletPersonal,
                       ]} />
-                      <Text 
+                      <Text
                         style={[
                           styles.simpleTaskTitle,
-                          isCompleted && styles.simpleTaskTitleCompleted
-                        ]} 
+                          isCompleted && styles.simpleTaskTitleCompleted,
+                        ]}
                         numberOfLines={2}
                       >
-                        {task.title}
+                        {item.task.title}
                       </Text>
                     </View>
-                    <Text 
+                    <Text
                       style={[
                         styles.simpleTaskDateTime,
-                        isCompleted && styles.simpleTaskDateTimeCompleted
+                        isCompleted && styles.simpleTaskDateTimeCompleted,
                       ]}
                     >
-                      {formatTaskDateTime(task)}
+                      {formatTaskDateTime(item.task)}
                     </Text>
                   </View>
                 );
               })}
             </View>
+          </View>
+        )}
+
+        {/* 연체(미완료) 업무 */}
+        {(visibleOverdueTasks.length > 0 || hiddenOverdueTasks.length > 0) && (
+          <View style={styles.overdueCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons name="alert-circle" size={20} color="#ef4444" />
+                <Text style={styles.overdueTitle}>미완료 업무</Text>
+                {visibleOverdueTasks.length > 0 && (
+                  <View style={styles.overdueBadge}>
+                    <Text style={styles.overdueBadgeText}>{visibleOverdueTasks.length}</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => {
+                setActiveTab('tasks');
+                navigation.navigate('Camp');
+              }}>
+                <Text style={styles.overdueSectionLink}>확인하기 →</Text>
+              </TouchableOpacity>
+            </View>
+
+            {visibleOverdueTasks.length > 0 ? (
+              <View style={styles.tasksList}>
+                {visibleOverdueTasks.map((task) => {
+                  const taskDate = task.date.toDate();
+                  const month = taskDate.getMonth() + 1;
+                  const day = taskDate.getDate();
+                  const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+                  const weekday = weekdays[taskDate.getDay()];
+                  const dateLabel = task.time
+                    ? `${month}/${day}(${weekday}) ${task.time}`
+                    : `${month}/${day}(${weekday})`;
+                  return (
+                    <View key={task.id} style={styles.overdueTaskItem}>
+                      <View style={styles.taskLeftSection}>
+                        <View style={styles.overdueTaskBullet} />
+                        <Text style={styles.overdueTaskTitle} numberOfLines={2}>
+                          {task.title}
+                        </Text>
+                      </View>
+                      <View style={styles.overdueTaskRight}>
+                        <Text style={styles.overdueTaskDateTime}>{dateLabel}</Text>
+                        <TouchableOpacity
+                          onPress={() => handleHideOverdueTask(task.id)}
+                          style={styles.hideButton}
+                          accessibilityLabel="이 업무 숨기기"
+                          accessibilityRole="button"
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="eye-off-outline" size={16} color="#f87171" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.overdueAllHiddenText}>
+                모든 미완료 업무를 숨겼습니다.
+              </Text>
+            )}
+
+            {/* 숨긴 업무 표시/해제 */}
+            {hiddenOverdueTasks.length > 0 && (
+              <View style={styles.hiddenOverdueFooter}>
+                <TouchableOpacity
+                  onPress={() => setShowHiddenOverdue(prev => !prev)}
+                  style={styles.hiddenToggleButton}
+                  accessibilityRole="button"
+                >
+                  <Ionicons
+                    name={showHiddenOverdue ? 'eye-outline' : 'eye-off-outline'}
+                    size={14}
+                    color="#94a3b8"
+                  />
+                  <Text style={styles.hiddenToggleText}>
+                    {showHiddenOverdue
+                      ? `숨긴 업무 접기`
+                      : `숨긴 업무 ${hiddenOverdueTasks.length}건`}
+                  </Text>
+                </TouchableOpacity>
+
+                {showHiddenOverdue && (
+                  <>
+                    <View style={styles.hiddenTasksList}>
+                      {hiddenOverdueTasks.map((task) => {
+                        const taskDate = task.date.toDate();
+                        const month = taskDate.getMonth() + 1;
+                        const day = taskDate.getDate();
+                        const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+                        const weekday = weekdays[taskDate.getDay()];
+                        const dateLabel = task.time
+                          ? `${month}/${day}(${weekday}) ${task.time}`
+                          : `${month}/${day}(${weekday})`;
+                        return (
+                          <View key={task.id} style={styles.hiddenTaskItem}>
+                            <Text style={styles.hiddenTaskTitle} numberOfLines={1}>
+                              {task.title}
+                            </Text>
+                            <Text style={styles.hiddenTaskDate}>{dateLabel}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                    <TouchableOpacity
+                      onPress={handleClearHiddenOverdue}
+                      style={styles.clearHiddenButton}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="refresh-outline" size={14} color="#94a3b8" />
+                      <Text style={styles.clearHiddenText}>숨김 전체 해제</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
           </View>
         )}
 
@@ -975,28 +1162,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#065f46',
   },
+  overdueProgressBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff5f5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  overdueProgressText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
 
   // 멘토 홈 메시지 (mentor 읽기 전용)
   mentorMessageCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
     backgroundColor: '#eff6ff',
     borderRadius: 16,
-    padding: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#bfdbfe',
   },
-  mentorMessageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  mentorMessageTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1e40af',
-  },
   mentorMessageText: {
+    flex: 1,
     fontSize: 14,
     lineHeight: 22,
     color: '#1e293b',
@@ -1004,28 +1201,25 @@ const styles = StyleSheet.create({
 
   // 외국인 홈 메시지 (foreign 읽기 전용)
   foreignMessageCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
     backgroundColor: '#f5f3ff',
     borderRadius: 16,
-    padding: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#ddd6fe',
   },
-  foreignMessageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  foreignMessageTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#6b21a8',
-  },
   foreignMessageText: {
+    flex: 1,
     fontSize: 14,
     lineHeight: 22,
     color: '#1e293b',
+  },
+  messageIcon: {
+    marginTop: 2,
   },
 
   // 관리자 메시지 관리 (admin)
@@ -1210,6 +1404,9 @@ const styles = StyleSheet.create({
   taskBulletCompleted: {
     backgroundColor: '#94a3b8',
   },
+  taskBulletPersonal: {
+    backgroundColor: '#8b5cf6',
+  },
   simpleTaskTitle: {
     fontSize: 14,
     fontWeight: '500',
@@ -1229,6 +1426,143 @@ const styles = StyleSheet.create({
   },
   simpleTaskDateTimeCompleted: {
     color: '#94a3b8',
+  },
+
+  // 연체 업무
+  overdueCard: {
+    backgroundColor: '#fff5f5',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  overdueTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  overdueBadge: {
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  overdueBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  overdueSectionLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ef4444',
+  },
+  overdueTaskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    backgroundColor: '#fee2e2',
+    borderRadius: 10,
+    gap: 12,
+  },
+  overdueTaskBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ef4444',
+    flexShrink: 0,
+  },
+  overdueTaskTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#7f1d1d',
+    flex: 1,
+  },
+  overdueTaskDateTime: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ef4444',
+    marginLeft: 8,
+    flexShrink: 0,
+  },
+  overdueTaskRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  hideButton: {
+    padding: 2,
+  },
+  overdueAllHiddenText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  hiddenOverdueFooter: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#fecaca',
+    paddingTop: 10,
+    gap: 8,
+  },
+  hiddenToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+  },
+  hiddenToggleText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  hiddenTasksList: {
+    gap: 6,
+  },
+  hiddenTaskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff1f2',
+    borderRadius: 8,
+    gap: 8,
+    opacity: 0.6,
+  },
+  hiddenTaskTitle: {
+    fontSize: 13,
+    color: '#9ca3af',
+    flex: 1,
+    textDecorationLine: 'line-through',
+  },
+  hiddenTaskDate: {
+    fontSize: 11,
+    color: '#9ca3af',
+    flexShrink: 0,
+  },
+  clearHiddenButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-end',
+    paddingVertical: 4,
+  },
+  clearHiddenText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
   },
 
   // 지원 내역

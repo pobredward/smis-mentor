@@ -127,6 +127,47 @@ export async function clearCacheCollection(storeName: string): Promise<void> {
   }
 }
 
+// ─── 연체 업무 숨김 관리 ─────────────────────────────────────────────────────
+
+const HIDDEN_OVERDUE_KEY = '@hidden_overdue_tasks';
+
+/**
+ * 숨긴 연체 업무 ID 목록 불러오기
+ */
+export async function getHiddenOverdueTasks(): Promise<Set<string>> {
+  try {
+    const stored = await AsyncStorage.getItem(HIDDEN_OVERDUE_KEY);
+    if (!stored) return new Set();
+    return new Set(JSON.parse(stored) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * 특정 연체 업무를 숨김 목록에 추가
+ */
+export async function hideOverdueTask(taskId: string): Promise<void> {
+  try {
+    const hidden = await getHiddenOverdueTasks();
+    hidden.add(taskId);
+    await AsyncStorage.setItem(HIDDEN_OVERDUE_KEY, JSON.stringify([...hidden]));
+  } catch (error) {
+    logger.error('연체 업무 숨김 저장 실패:', error);
+  }
+}
+
+/**
+ * 모든 숨김 연체 업무 해제
+ */
+export async function clearHiddenOverdueTasks(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(HIDDEN_OVERDUE_KEY);
+  } catch (error) {
+    logger.error('연체 업무 숨김 해제 실패:', error);
+  }
+}
+
 /**
  * 모든 캐시 제거
  */
