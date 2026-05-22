@@ -270,12 +270,12 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
               비워두면 강제 업데이트를 사용하지 않습니다.
             </Text>
 
-            <Text style={styles.fieldLabel}>최소 허용 버전 (예: 1.5.0)</Text>
+            <Text style={styles.fieldLabel}>최소 허용 버전 (예: 1.0.0)</Text>
             <TextInput
               style={styles.input}
               value={minVersion}
               onChangeText={setMinVersion}
-              placeholder="예: 1.5.0"
+              placeholder="예: 1.0.0"
               placeholderTextColor="#9ca3af"
               editable={!saving}
               keyboardType="default"

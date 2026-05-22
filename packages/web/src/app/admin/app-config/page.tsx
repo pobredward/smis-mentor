@@ -220,13 +220,13 @@ export default function AppConfigPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 최소 허용 버전
-                <span className="ml-1 text-xs text-gray-400 font-normal">(예: 1.5.0)</span>
+                <span className="ml-1 text-xs text-gray-400 font-normal">(예: 1.0.0)</span>
               </label>
               <input
                 type="text"
                 value={minVersion}
                 onChange={(e) => setMinVersion(e.target.value)}
-                placeholder="예: 1.5.0  (비워두면 강제 업데이트 비활성화)"
+                placeholder="예: 1.0.0 (비워두면 강제 업데이트 비활성화)"
                 className="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 disabled={saving}
               />

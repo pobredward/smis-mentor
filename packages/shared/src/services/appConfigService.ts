@@ -165,7 +165,7 @@ const DEFAULT_ANDROID_STORE_URL =
 /**
  * 현재 앱 버전과 Firestore minVersion을 비교하여 강제 업데이트 여부를 반환
  * @param db Firestore 인스턴스
- * @param currentVersion 현재 앱 버전 (예: "1.5.0")
+ * @param currentVersion 현재 앱 버전 (예: "1.0.0")
  */
 export async function checkForceUpdate(
   db: any,
