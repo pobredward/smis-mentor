@@ -908,7 +908,13 @@ export function TasksScreen() {
   const handlePersonalTaskToggle = async (task: PersonalTask) => {
     try {
       await togglePersonalTaskCompletion(task.id, task.isCompleted);
-      await loadTasksForDate(selectedDate);
+      const year = selectedDate.getFullYear();
+      const month = selectedDate.getMonth();
+      const [, monthData] = await Promise.all([
+        loadTasksForDate(selectedDate),
+        loadMonthData(year, month, { force: true }),
+      ]);
+      if (monthData) applyMonthData(monthData);
     } catch (error) {
       logger.error('개인 업무 완료 토글 오류:', error);
       Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update status.' : '상태 변경 중 오류가 발생했습니다.');

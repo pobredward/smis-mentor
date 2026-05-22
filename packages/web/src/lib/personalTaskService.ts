@@ -138,6 +138,8 @@ export const getPersonalTaskDatesInMonth = async (
 
     snapshot.docs.forEach(d => {
       const task = d.data() as Omit<PersonalTask, 'id'>;
+      // 완료된 업무는 미완료 카운트에서 제외
+      if (task.isCompleted) return;
       const taskDate = task.date.toDate();
       const y = taskDate.getFullYear();
       const m = String(taskDate.getMonth() + 1).padStart(2, '0');

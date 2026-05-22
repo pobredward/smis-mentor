@@ -478,6 +478,7 @@ export default function TaskContent() {
     try {
       await togglePersonalTaskCompletion(task.id, task.isCompleted);
       loadTasksForDate(selectedDate);
+      loadPersonalTaskDates(selectedDate.getFullYear(), selectedDate.getMonth());
     } catch (error) {
       logger.error('개인 업무 완료 토글 오류:', error);
       toast.error(isForeign ? 'Failed to update status.' : '상태 변경 중 오류가 발생했습니다.');
