@@ -40,7 +40,7 @@ export default withSentryConfig(nextConfig, {
   
   // 브라우저 요청을 Sentry로 라우팅하여 광고 차단기 우회
   tunnelRoute: "/monitoring",
-  
-  // Vercel Cron Monitors 자동 계측 활성화
-  automaticVercelMonitors: true,
+
+  // 모노레포 환경에서 Vercel 빌드 시 path 에러 방지 (basePath undefined 문제)
+  routeManifestInjection: false,
 });
