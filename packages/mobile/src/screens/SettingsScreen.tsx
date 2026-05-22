@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import Constants from 'expo-constants';
 import { logger } from '@smis-mentor/shared';
 import {
@@ -10,15 +10,10 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Linking,
-  AppState,
-  AppStateStatus,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import * as Notifications from 'expo-notifications';
 import { useAuth } from '../context/AuthContext';
 import {
   getNotificationSettings,
@@ -26,18 +21,15 @@ import {
   NotificationSettings,
 } from '../services/notificationService';
 import { RootStackParamList } from '../navigation/types';
+import { useNotificationPermission } from '../hooks/useNotificationPermission';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
-
-type PermissionStatus = 'granted' | 'denied' | 'undetermined';
 
 export function SettingsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { userData } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>('undetermined');
-  const [requestingPermission, setRequestingPermission] = useState(false);
   const [settings, setSettings] = useState<NotificationSettings>({
     taskReminders: true,
     generalNotifications: true,
@@ -45,37 +37,11 @@ export function SettingsScreen() {
 
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
-  const checkPermissionStatus = useCallback(async () => {
-    try {
-      const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
-      if (granted) {
-        setPermissionStatus('granted');
-      } else if (canAskAgain) {
-        setPermissionStatus('undetermined');
-      } else {
-        setPermissionStatus('denied');
-      }
-    } catch (error) {
-      logger.error('알림 권한 상태 확인 실패:', error);
-    }
-  }, []);
-
-  // 화면 포커스 시마다 권한 상태 재확인 (설정 앱에서 돌아왔을 때 반영)
-  useFocusEffect(
-    useCallback(() => {
-      checkPermissionStatus();
-    }, [checkPermissionStatus])
-  );
-
-  // 앱이 포그라운드로 돌아올 때 권한 상태 재확인
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      if (nextState === 'active') {
-        checkPermissionStatus();
-      }
-    });
-    return () => subscription.remove();
-  }, [checkPermissionStatus]);
+  const {
+    permissionStatus,
+    requesting: requestingPermission,
+    requestPermission: handleNotificationPermission,
+  } = useNotificationPermission({ isForeign });
 
   useEffect(() => {
     loadSettings();
@@ -97,61 +63,6 @@ export function SettingsScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleNotificationPermission = async () => {
-    if (permissionStatus === 'granted') {
-      Alert.alert(
-        isForeign ? 'Notifications Enabled' : '알림 허용됨',
-        isForeign
-          ? 'Notifications are already enabled for this app.'
-          : '이미 알림이 허용되어 있습니다.'
-      );
-      return;
-    }
-
-    if (permissionStatus === 'undetermined') {
-      try {
-        setRequestingPermission(true);
-        const { granted } = await Notifications.requestPermissionsAsync();
-        setPermissionStatus(granted ? 'granted' : 'denied');
-        if (!granted) {
-          Alert.alert(
-            isForeign ? 'Permission Denied' : '알림 권한 거부됨',
-            isForeign
-              ? 'You can enable notifications in your device settings.'
-              : '기기 설정에서 알림을 허용할 수 있습니다.',
-            [
-              { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
-              {
-                text: isForeign ? 'Open Settings' : '설정 열기',
-                onPress: () => Linking.openSettings(),
-              },
-            ]
-          );
-        }
-      } catch (error) {
-        logger.error('알림 권한 요청 실패:', error);
-      } finally {
-        setRequestingPermission(false);
-      }
-      return;
-    }
-
-    // 이미 거부된 경우 → 시스템 설정으로 이동
-    Alert.alert(
-      isForeign ? 'Enable Notifications' : '알림 허용하기',
-      isForeign
-        ? 'Notifications are currently blocked. Please enable them in your device settings.'
-        : '알림이 차단되어 있습니다. 기기 설정에서 알림을 허용해 주세요.',
-      [
-        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
-        {
-          text: isForeign ? 'Open Settings' : '설정 열기',
-          onPress: () => Linking.openSettings(),
-        },
-      ]
-    );
   };
 
   const handleToggleSetting = async (key: keyof NotificationSettings) => {

@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { MainTabScreenProps } from '../navigation/types';
+import { useNotificationPermission } from '../hooks/useNotificationPermission';
 import { useAuth } from '../context/AuthContext';
 import { useCampTab } from '../context/CampTabContext';
 import { jobCodesService, JobCode } from '../services';
@@ -34,6 +35,14 @@ interface ApplicationWithJobBoard extends ApplicationHistory {
 export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
   const { userData, loading: authLoading } = useAuth();
   const { setActiveTab } = useCampTab();
+
+  const isHomeForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  const {
+    permissionStatus,
+    requesting: requestingPermission,
+    requestPermission: handleNotificationPermission,
+  } = useNotificationPermission({ isForeign: isHomeForeign });
+
   const [activeJobCode, setActiveJobCode] = useState<JobCode | null>(null);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [recentApplications, setRecentApplications] = useState<ApplicationWithJobBoard[]>([]);
@@ -423,6 +432,64 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       }
     >
       <View style={styles.content}>
+        {/* 알림 권한 배너 */}
+        {permissionStatus !== 'granted' && (
+          <TouchableOpacity
+            style={[
+              styles.notificationBanner,
+              permissionStatus === 'denied'
+                ? styles.notificationBannerDenied
+                : styles.notificationBannerUndetermined,
+            ]}
+            onPress={handleNotificationPermission}
+            disabled={requestingPermission}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isHomeForeign
+                ? permissionStatus === 'denied' ? 'Enable notifications in settings' : 'Allow notifications'
+                : permissionStatus === 'denied' ? '설정에서 알림 허용하기' : '알림 허용하기'
+            }
+          >
+            <View style={styles.notificationBannerLeft}>
+              <Ionicons
+                name={permissionStatus === 'denied' ? 'notifications-off-outline' : 'notifications-outline'}
+                size={20}
+                color={permissionStatus === 'denied' ? '#ef4444' : '#f59e0b'}
+              />
+              <View style={styles.notificationBannerTextWrap}>
+                <Text style={[
+                  styles.notificationBannerTitle,
+                  permissionStatus === 'denied'
+                    ? styles.notificationBannerTitleDenied
+                    : styles.notificationBannerTitleUndetermined,
+                ]}>
+                  {isHomeForeign
+                    ? permissionStatus === 'denied' ? 'Notifications Blocked' : 'Allow Notifications'
+                    : permissionStatus === 'denied' ? '알림이 차단되어 있습니다' : '알림을 허용해 주세요'}
+                </Text>
+                <Text style={styles.notificationBannerDesc}>
+                  {isHomeForeign
+                    ? permissionStatus === 'denied'
+                      ? 'Tap to open settings and enable notifications.'
+                      : 'Tap to allow notifications for important updates.'
+                    : permissionStatus === 'denied'
+                      ? '탭하여 설정에서 알림을 허용하세요.'
+                      : '업무 알림 등 중요한 알림을 받으려면 허용해 주세요.'}
+                </Text>
+              </View>
+            </View>
+            {requestingPermission ? (
+              <ActivityIndicator size="small" color={permissionStatus === 'denied' ? '#ef4444' : '#f59e0b'} />
+            ) : (
+              <Ionicons
+                name={permissionStatus === 'denied' ? 'settings-outline' : 'chevron-forward'}
+                size={18}
+                color={permissionStatus === 'denied' ? '#ef4444' : '#f59e0b'}
+              />
+            )}
+          </TouchableOpacity>
+        )}
+
         {/* 환영 헤더 */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeContent}>
@@ -773,6 +840,51 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 32,
+  },
+
+  // 알림 권한 배너
+  notificationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  notificationBannerDenied: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  notificationBannerUndetermined: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  notificationBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginRight: 8,
+  },
+  notificationBannerTextWrap: {
+    flex: 1,
+  },
+  notificationBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  notificationBannerTitleDenied: {
+    color: '#b91c1c',
+  },
+  notificationBannerTitleUndetermined: {
+    color: '#92400e',
+  },
+  notificationBannerDesc: {
+    fontSize: 12,
+    color: '#374151',
+    lineHeight: 16,
   },
 
   // 환영 카드
