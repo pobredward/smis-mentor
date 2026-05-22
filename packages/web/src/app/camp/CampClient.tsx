@@ -29,6 +29,10 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   const { userData } = useAuth();
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+
+  // 관리자가 캠프를 아직 배정하지 않은 경우
+  const hasNoCampAssigned =
+    userData && (!userData.jobExperiences || userData.jobExperiences.length === 0);
   
   // 원어민 유저는 '수업' 탭 제외
   const allTabs: { id: TabName; title: string; path: string }[] = [
@@ -92,6 +96,24 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
       }
     }
   };
+
+  if (hasNoCampAssigned) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-6">
+          <div className="text-5xl">⏳</div>
+          <h2 className="text-xl font-semibold text-gray-800">
+            Waiting for camp access
+          </h2>
+          <p className="text-gray-500 text-sm max-w-xs leading-relaxed">
+            You have not been assigned to a camp yet.
+            <br />
+            Please wait until an administrator grants you access.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

@@ -23,6 +23,10 @@ export function CampScreen() {
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
+  // 관리자가 캠프를 아직 배정하지 않은 경우
+  const hasNoCampAssigned =
+    userData && (!userData.jobExperiences || userData.jobExperiences.length === 0);
+
   const allTabs: { id: TabName; title: string }[] = isForeign
     ? [
         { id: 'education', title: 'Edu' },
@@ -43,6 +47,19 @@ export function CampScreen() {
       ];
 
   const tabs = allTabs;
+
+  if (hasNoCampAssigned) {
+    return (
+      <View style={styles.noCampContainer}>
+        <Text style={styles.noCampIcon}>⏳</Text>
+        <Text style={styles.noCampTitle}>Waiting for camp access</Text>
+        <Text style={styles.noCampDescription}>
+          You have not been assigned to a camp yet.{'\n'}
+          Please wait until an administrator grants you access.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -101,6 +118,30 @@ export function CampScreen() {
 }
 
 const styles = StyleSheet.create({
+  noCampContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  noCampIcon: {
+    fontSize: 48,
+    marginBottom: 4,
+  },
+  noCampTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+    textAlign: 'center',
+  },
+  noCampDescription: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
