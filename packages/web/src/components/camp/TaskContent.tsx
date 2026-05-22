@@ -669,16 +669,18 @@ export default function TaskContent() {
     const currentUserId = userData?.userId ?? '';
 
     for (let row = 0; row < totalRows; row++) {
-      const cells = [];
+      // 날짜 숫자 행과 업무 칩 행을 분리해서 렌더링
+      // → 날짜 숫자는 항상 같은 수직 위치에 정렬됨
+      const dateCells = [];
+      const chipCells = [];
 
       for (let col = 0; col < 7; col++) {
         const cellIndex = row * 7 + col;
         const day = cellIndex - startDayOfWeek + 1;
 
         if (day < 1 || day > daysInMonth) {
-          cells.push(
-            <div key={`empty-${cellIndex}`} className="min-h-[72px]" />
-          );
+          dateCells.push(<div key={`empty-date-${cellIndex}`} />);
+          chipCells.push(<div key={`empty-chip-${cellIndex}`} className="min-h-[32px]" />);
           continue;
         }
 
@@ -696,14 +698,14 @@ export default function TaskContent() {
         const isSaturday = dayOfWeek === 6;
         const isHolidayDate = isKoreanHoliday(date);
 
-        cells.push(
+        // 날짜 숫자 셀
+        dateCells.push(
           <button
-            key={day}
+            key={`date-${day}`}
             onClick={() => handleDateClick(date)}
-            className="min-h-[72px] p-0.5 text-left transition-colors hover:bg-gray-50 w-full overflow-hidden"
+            className="flex items-center justify-center py-1 transition-colors hover:bg-gray-50 w-full"
           >
-            {/* 날짜 숫자 — 오늘은 회색 원형 배경 */}
-            <span className={`mx-auto mb-0.5 w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-medium ${
+            <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-medium ${
               (isToday && (isSunday || isHolidayDate))
                 ? 'bg-gray-200 text-red-600 font-bold'
                 : isToday
@@ -716,53 +718,64 @@ export default function TaskContent() {
             }`}>
               {day}
             </span>
-            {/* 공통 업무 칩 */}
-            {dayTasks.map(task => {
-              const isDone = task.completions.some((c: { userId: string }) => c.userId === currentUserId);
-              const timeLabel = task.time ? task.time.slice(0, 5) : null;
-              const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
-              const chipBg = isDone
-                ? (cat ? `${cat.color}55` : '#6ee7b7')
-                : '#e5e7eb';
-              const chipColor = isDone
-                ? (cat ? cat.color : '#065f46')
-                : '#6b7280';
-              return (
-                <span
-                  key={task.id}
-                  className="block truncate text-[8px] leading-[11px] rounded px-0.5 mb-0.5"
-                  style={{ backgroundColor: chipBg, color: chipColor }}
-                >
-                  {timeLabel ? `${timeLabel} ` : ''}{task.title}
-                </span>
-              );
-            })}
-            {/* 개인 업무 칩 */}
-            {dayPersonalTasks.map(task => {
-              const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
-              const chipBg = task.isCompleted
-                ? (cat ? `${cat.color}55` : '#6ee7b7')
-                : '#e5e7eb';
-              const chipColor = task.isCompleted
-                ? (cat ? cat.color : '#065f46')
-                : '#6b7280';
-              return (
-                <span
-                  key={task.id}
-                  className="block truncate text-[8px] leading-[11px] rounded px-0.5 mb-0.5"
-                  style={{ backgroundColor: chipBg, color: chipColor }}
-                >
-                  {task.time ? `${task.time.slice(0, 5)} ` : ''}{task.title}
-                </span>
-              );
-            })}
+          </button>
+        );
+
+        // 업무 칩 셀 — 업무 수만큼 높이가 늘어남
+        const allChips = [
+          ...dayTasks.map(task => {
+            const isDone = task.completions.some((c: { userId: string }) => c.userId === currentUserId);
+            const timeLabel = task.time ? task.time.slice(0, 5) : null;
+            const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
+            const chipBg = isDone
+              ? (cat ? `${cat.color}55` : '#6ee7b7')
+              : '#e5e7eb';
+            const chipColor = isDone
+              ? (cat ? cat.color : '#065f46')
+              : '#6b7280';
+            return { key: task.id, bg: chipBg, color: chipColor, label: `${timeLabel ? `${timeLabel} ` : ''}${task.title}` };
+          }),
+          ...dayPersonalTasks.map(task => {
+            const cat = task.categoryId ? categoryMap.get(task.categoryId) : undefined;
+            const chipBg = task.isCompleted
+              ? (cat ? `${cat.color}55` : '#6ee7b7')
+              : '#e5e7eb';
+            const chipColor = task.isCompleted
+              ? (cat ? cat.color : '#065f46')
+              : '#6b7280';
+            return { key: task.id, bg: chipBg, color: chipColor, label: `${task.time ? `${task.time.slice(0, 5)} ` : ''}${task.title}` };
+          }),
+        ];
+
+        chipCells.push(
+          <button
+            key={`chip-${day}`}
+            onClick={() => handleDateClick(date)}
+            className="p-0.5 pb-1.5 text-left transition-colors hover:bg-gray-50 w-full min-h-[32px] flex flex-col justify-start"
+          >
+            {allChips.map(chip => (
+              <span
+                key={chip.key}
+                className="block truncate text-[8px] leading-[11px] rounded px-0.5 mb-0.5"
+                style={{ backgroundColor: chip.bg, color: chip.color }}
+              >
+                {chip.label}
+              </span>
+            ))}
           </button>
         );
       }
 
       rows.push(
-        <div key={`row-${row}`} className="grid grid-cols-7">
-          {cells}
+        <div key={`row-${row}`}>
+          {/* 날짜 숫자 행 — 항상 고정 높이로 정렬 */}
+          <div className="grid grid-cols-7">
+            {dateCells}
+          </div>
+          {/* 업무 칩 행 — 내용에 따라 높이 자동 조절 */}
+          <div className="grid grid-cols-7 border-b border-gray-100">
+            {chipCells}
+          </div>
         </div>
       );
     }
@@ -1018,6 +1031,23 @@ export default function TaskContent() {
                               </div>
                             )}
                             <div className={`flex ${p.isCompleted ? 'opacity-60' : ''}`}>
+                              <div className="flex-1 py-2.5 pl-3 pr-2 min-w-0">
+                                <h4 className={`text-sm font-medium mb-1 ${p.isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                  {p.title}
+                                </h4>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {cat && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                                      style={{ backgroundColor: `${cat.color}22`, color: cat.color }}>
+                                      {cat.name}
+                                    </span>
+                                  )}
+                                  {p.description && (
+                                    <span className="text-xs text-gray-400 truncate w-full block">{p.description.split('\n')[0]}</span>
+                                  )}
+                                </div>
+                              </div>
+                              {/* 체크박스 — 오른쪽 */}
                               <div className="flex items-center px-3 py-2.5 flex-shrink-0">
                                 <button
                                   type="button"
@@ -1035,27 +1065,6 @@ export default function TaskContent() {
                                     </svg>
                                   )}
                                 </button>
-                              </div>
-                              <div className="flex-1 py-2.5 pr-3 min-w-0">
-                                <h4 className={`text-sm font-medium mb-1 ${p.isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                                  {p.title}
-                                </h4>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {cat && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-                                      style={{ backgroundColor: `${cat.color}22`, color: cat.color }}>
-                                      {cat.name}
-                                    </span>
-                                  )}
-                                  {p.description && (
-                                    <span className="text-xs text-gray-400 truncate">{p.description}</span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center px-2.5 flex-shrink-0">
-                                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
                               </div>
                             </div>
                           </div>
@@ -1195,7 +1204,26 @@ export default function TaskContent() {
                         </div>
                       )}
                       <div className={`flex ${p.isCompleted ? 'opacity-60' : ''}`}>
-                        {/* 체크박스 — 왼쪽 */}
+                        {/* 업무 정보 */}
+                        <div className="flex-1 py-2.5 pl-3 pr-2 min-w-0">
+                          <h4 className={`text-sm font-medium mb-1 ${p.isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                            {p.title}
+                          </h4>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {personalCategory && (
+                              <span
+                                className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                                style={{ backgroundColor: `${personalCategory.color}22`, color: personalCategory.color }}
+                              >
+                                {personalCategory.name}
+                              </span>
+                            )}
+                            {p.description && (
+                              <span className="text-xs text-gray-400 truncate w-full block">{p.description.split('\n')[0]}</span>
+                            )}
+                          </div>
+                        </div>
+                        {/* 체크박스 — 오른쪽 */}
                         <div className="flex items-center px-3 py-2.5 flex-shrink-0">
                           <button
                             type="button"
@@ -1213,31 +1241,6 @@ export default function TaskContent() {
                               </svg>
                             )}
                           </button>
-                        </div>
-                        {/* 업무 정보 */}
-                        <div className="flex-1 py-2.5 pr-3 min-w-0">
-                          <h4 className={`text-sm font-medium mb-1 ${p.isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                            {p.title}
-                          </h4>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {personalCategory && (
-                              <span
-                                className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-                                style={{ backgroundColor: `${personalCategory.color}22`, color: personalCategory.color }}
-                              >
-                                {personalCategory.name}
-                              </span>
-                            )}
-                            {p.description && (
-                              <span className="text-xs text-gray-400 truncate">{p.description}</span>
-                            )}
-                          </div>
-                        </div>
-                        {/* 상세 화살표 */}
-                        <div className="flex items-center px-2.5 flex-shrink-0">
-                          <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
                         </div>
                       </div>
                     </div>
@@ -1434,28 +1437,8 @@ function TaskCard({
       )}
 
       <div className={`flex ${isCompleted ? 'opacity-60' : ''}`}>
-        {/* 체크박스 — 항상 왼쪽 */}
-        <div className="flex items-center px-3 py-2.5 flex-shrink-0">
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onToggle(task.id); }}
-            className="focus:outline-none"
-            aria-label={isForeign ? (isCompleted ? 'Mark incomplete' : 'Mark complete') : (isCompleted ? '완료 취소' : '완료 처리')}
-          >
-            {isCompleted ? (
-              <svg className="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1.177 14.232l-4.243-4.243 1.414-1.414 2.829 2.829 5.656-5.657 1.414 1.415-7.07 7.07z"/>
-              </svg>
-            ) : (
-              <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" strokeWidth="1.5"/>
-              </svg>
-            )}
-          </button>
-        </div>
-
         {/* 업무 정보 */}
-        <div className={`${isAdmin ? 'w-2/5 border-r' : 'flex-1'} py-2.5 pr-3 min-w-0`}>
+        <div className={`${isAdmin ? 'w-2/5 border-r' : 'flex-1'} py-2.5 pl-3 pr-2 min-w-0`}>
           <h4 className={`text-sm font-medium mb-1 ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
             {task.title}
           </h4>
@@ -1496,14 +1479,25 @@ function TaskCard({
           </div>
         )}
 
-        {/* 상세 화살표 — 관리자는 완료 현황이 있으므로 숨김 */}
-        {!isAdmin && (
-          <div className="flex items-center px-2.5 flex-shrink-0">
-            <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-        )}
+        {/* 체크박스 — 오른쪽 */}
+        <div className="flex items-center px-3 py-2.5 flex-shrink-0">
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onToggle(task.id); }}
+            className="focus:outline-none"
+            aria-label={isForeign ? (isCompleted ? 'Mark incomplete' : 'Mark complete') : (isCompleted ? '완료 취소' : '완료 처리')}
+          >
+            {isCompleted ? (
+              <svg className="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1.177 14.232l-4.243-4.243 1.414-1.414 2.829 2.829 5.656-5.657 1.414 1.415-7.07 7.07z"/>
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" strokeWidth="1.5"/>
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

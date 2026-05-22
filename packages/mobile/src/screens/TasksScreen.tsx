@@ -1482,7 +1482,25 @@ export function TasksScreen() {
                         ) : null}
 
                         <View style={styles.taskCardContent}>
-                          {/* 왼쪽: 체크박스 */}
+                          {/* 왼쪽: 업무 정보 */}
+                          <View style={styles.taskInfo}>
+                            {personalCat && (
+                              <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${personalCat.color}22`, marginBottom: 4, alignSelf: 'flex-start' }}>
+                                <Text style={{ fontSize: 9, fontWeight: '700', color: personalCat.color }}>{personalCat.name}</Text>
+                              </View>
+                            )}
+                            <Text
+                              style={[styles.taskTitle, p.isCompleted && styles.taskTitleCompleted]}
+                              numberOfLines={2}
+                            >
+                              {p.title}
+                            </Text>
+                            {p.description ? (
+                              <Text style={[styles.taskRoles, { marginTop: 1 }]} numberOfLines={1}>{p.description.split('\n')[0]}</Text>
+                            ) : null}
+                          </View>
+
+                          {/* 오른쪽: 체크박스 */}
                           <TouchableOpacity
                             onPress={e => { e.stopPropagation?.(); handlePersonalTaskToggle(p); }}
                             style={styles.taskCheckbox}
@@ -1498,27 +1516,6 @@ export function TasksScreen() {
                               color={p.isCompleted ? '#a855f7' : '#d1d5db'}
                             />
                           </TouchableOpacity>
-
-                          {/* 가운데: 업무 정보 */}
-                          <View style={styles.taskInfo}>
-                            {personalCat && (
-                              <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${personalCat.color}22`, marginBottom: 4, alignSelf: 'flex-start' }}>
-                                <Text style={{ fontSize: 9, fontWeight: '700', color: personalCat.color }}>{personalCat.name}</Text>
-                              </View>
-                            )}
-                            <Text
-                              style={[styles.taskTitle, p.isCompleted && styles.taskTitleCompleted]}
-                              numberOfLines={2}
-                            >
-                              {p.title}
-                            </Text>
-                            {p.description ? (
-                              <Text style={[styles.taskRoles, { marginTop: 1 }]} numberOfLines={1}>{p.description}</Text>
-                            ) : null}
-                          </View>
-
-                          {/* 오른쪽: 화살표 */}
-                          <Ionicons name="chevron-forward" size={16} color="#d1d5db" style={{ flexShrink: 0 }} />
                         </View>
                       </TouchableOpacity>
                     );
@@ -2183,6 +2180,20 @@ function SheetTaskList({
               </View>
             ) : null}
             <View style={styles.taskCardContent}>
+              <View style={styles.taskInfo}>
+                {cat && (
+                  <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${cat.color}22`, marginBottom: 4, alignSelf: 'flex-start' }}>
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: cat.color }}>{cat.name}</Text>
+                  </View>
+                )}
+                <Text style={[styles.taskTitle, p.isCompleted && styles.taskTitleCompleted]} numberOfLines={2}>
+                  {p.title}
+                </Text>
+                {p.description ? (
+                  <Text style={styles.taskRoles} numberOfLines={1}>{p.description.split('\n')[0]}</Text>
+                ) : null}
+              </View>
+              {/* 오른쪽: 체크박스 */}
               <TouchableOpacity
                 onPress={() => onSheetPersonalToggle(p)}
                 style={styles.taskCheckbox}
@@ -2198,20 +2209,6 @@ function SheetTaskList({
                   color={p.isCompleted ? '#a855f7' : '#d1d5db'}
                 />
               </TouchableOpacity>
-              <View style={styles.taskInfo}>
-                {cat && (
-                  <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${cat.color}22`, marginBottom: 4, alignSelf: 'flex-start' }}>
-                    <Text style={{ fontSize: 9, fontWeight: '700', color: cat.color }}>{cat.name}</Text>
-                  </View>
-                )}
-                <Text style={[styles.taskTitle, p.isCompleted && styles.taskTitleCompleted]} numberOfLines={2}>
-                  {p.title}
-                </Text>
-                {p.description ? (
-                  <Text style={styles.taskRoles} numberOfLines={1}>{p.description}</Text>
-                ) : null}
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
             </View>
           </TouchableOpacity>
         );
@@ -2289,25 +2286,7 @@ function TaskCard({
       ) : null}
 
       <View style={styles.taskCardContent}>
-        {/* 왼쪽: 체크박스 */}
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation();
-            onToggle(task.id);
-          }}
-          style={styles.taskCheckbox}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          accessibilityLabel={isCompleted ? '완료 취소' : '완료 처리'}
-          accessibilityRole="checkbox"
-        >
-          <Ionicons
-            name={isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
-            size={26}
-            color={isCompleted ? '#3b82f6' : '#d1d5db'}
-          />
-        </TouchableOpacity>
-
-        {/* 가운데: 업무 정보 */}
+        {/* 왼쪽: 업무 정보 */}
         <View style={[styles.taskInfo, isAdmin && adminCompletionStatus && styles.taskInfoWithAdmin]}>
           {/* 카테고리 배지 */}
           {category && (
@@ -2326,8 +2305,8 @@ function TaskCard({
           </View>
         </View>
 
-        {/* 오른쪽: 관리자용 완료 현황 또는 화살표 */}
-        {isAdmin && adminCompletionStatus ? (
+        {/* 가운데: 관리자용 완료 현황 */}
+        {isAdmin && adminCompletionStatus && (
           <View style={styles.adminCompletionArea}>
             <View style={styles.adminCompletionNames}>
               {adminCompletionStatus.completedNames.length > 0 && (
@@ -2342,9 +2321,25 @@ function TaskCard({
               )}
             </View>
           </View>
-        ) : (
-          <Ionicons name="chevron-forward" size={16} color="#d1d5db" style={{ flexShrink: 0 }} />
         )}
+
+        {/* 오른쪽: 체크박스 */}
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation();
+            onToggle(task.id);
+          }}
+          style={styles.taskCheckbox}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel={isCompleted ? '완료 취소' : '완료 처리'}
+          accessibilityRole="checkbox"
+        >
+          <Ionicons
+            name={isCompleted ? 'checkmark-circle' : 'ellipse-outline'}
+            size={26}
+            color={isCompleted ? '#3b82f6' : '#d1d5db'}
+          />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
