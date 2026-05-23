@@ -20,7 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCampTab } from '../context/CampTabContext';
 import { jobCodesService, JobCode } from '../services';
 import { getTasksByCampCode } from '../services/taskService';
-import { getPersonalTasksByDate } from '../services/personalTaskService';
+import { getPersonalTasksByDate, getOverduePersonalTasks } from '../services/personalTaskService';
 import {
   getHiddenOverdueTasks,
   hideOverdueTask,
@@ -53,6 +53,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [todayPersonalTasks, setTodayPersonalTasks] = useState<PersonalTask[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
+  const [overduePersonalTasks, setOverduePersonalTasks] = useState<PersonalTask[]>([]);
   const [hiddenTaskIds, setHiddenTaskIds] = useState<Set<string>>(new Set());
   const [showHiddenOverdue, setShowHiddenOverdue] = useState(false);
   const [recentApplications, setRecentApplications] = useState<ApplicationWithJobBoard[]>([]);
@@ -147,10 +148,13 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             return sortByTime(a, b);
           });
 
-          const [hidden, personalToday] = await Promise.all([
+          const [hidden, personalToday, personalOverdue] = await Promise.all([
             getHiddenOverdueTasks(),
             userData.userId
               ? getPersonalTasksByDate(userData.userId, jobCode.code, new Date())
+              : Promise.resolve([] as PersonalTask[]),
+            userData.userId
+              ? getOverduePersonalTasks(userData.userId, jobCode.code)
               : Promise.resolve([] as PersonalTask[]),
           ]);
 
@@ -158,6 +162,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           setTodayTasks(todayTasksList);
           setTodayPersonalTasks(personalToday);
           setOverdueTasks(overdueTasksList);
+          setOverduePersonalTasks(personalOverdue);
         }
       }
 
@@ -465,8 +470,27 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
     setShowHiddenOverdue(false);
   };
 
-  const visibleOverdueTasks = overdueTasks.filter(t => !hiddenTaskIds.has(t.id));
-  const hiddenOverdueTasks = overdueTasks.filter(t => hiddenTaskIds.has(t.id));
+  type MergedOverdueItem =
+    | { kind: 'shared'; task: Task }
+    | { kind: 'personal'; task: PersonalTask };
+
+  const allOverdueItems: MergedOverdueItem[] = [
+    ...overdueTasks.map(t => ({ kind: 'shared' as const, task: t })),
+    ...overduePersonalTasks.map(t => ({ kind: 'personal' as const, task: t })),
+  ].sort((a, b) => {
+    const dateA = a.task.date.toMillis();
+    const dateB = b.task.date.toMillis();
+    if (dateA !== dateB) return dateA - dateB;
+    const timeA = a.task.time ?? '';
+    const timeB = b.task.time ?? '';
+    if (timeA && timeB) return timeA.localeCompare(timeB);
+    if (timeA && !timeB) return -1;
+    if (!timeA && timeB) return 1;
+    return 0;
+  });
+
+  const mergedOverdueItems = allOverdueItems.filter(i => !hiddenTaskIds.has(i.task.id));
+  const hiddenOverdueItems = allOverdueItems.filter(i => hiddenTaskIds.has(i.task.id));
 
   type MergedTodayItem =
     | { kind: 'shared'; task: Task }
@@ -608,11 +632,11 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                   </Text>
                 </View>
               )}
-              {visibleOverdueTasks.length > 0 && (
+              {mergedOverdueItems.length > 0 && (
                 <View style={styles.overdueProgressBadge}>
                   <Ionicons name="alert-circle" size={14} color="#ef4444" />
                   <Text style={styles.overdueProgressText}>
-                    {visibleOverdueTasks.length}건
+                    {mergedOverdueItems.length}건
                   </Text>
                 </View>
               )}
@@ -801,15 +825,15 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
         )}
 
         {/* 연체(미완료) 업무 */}
-        {(visibleOverdueTasks.length > 0 || hiddenOverdueTasks.length > 0) && (
+        {(mergedOverdueItems.length > 0 || hiddenOverdueItems.length > 0) && (
           <View style={styles.overdueCard}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleRow}>
                 <Ionicons name="alert-circle" size={20} color="#ef4444" />
                 <Text style={styles.overdueTitle}>미완료 업무</Text>
-                {visibleOverdueTasks.length > 0 && (
+                {mergedOverdueItems.length > 0 && (
                   <View style={styles.overdueBadge}>
-                    <Text style={styles.overdueBadgeText}>{visibleOverdueTasks.length}</Text>
+                    <Text style={styles.overdueBadgeText}>{mergedOverdueItems.length}</Text>
                   </View>
                 )}
               </View>
@@ -821,29 +845,33 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
               </TouchableOpacity>
             </View>
 
-            {visibleOverdueTasks.length > 0 ? (
+            {mergedOverdueItems.length > 0 ? (
               <View style={styles.tasksList}>
-                {visibleOverdueTasks.map((task) => {
-                  const taskDate = task.date.toDate();
+                {mergedOverdueItems.map((item) => {
+                  const taskDate = item.task.date.toDate();
                   const month = taskDate.getMonth() + 1;
                   const day = taskDate.getDate();
                   const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
                   const weekday = weekdays[taskDate.getDay()];
-                  const dateLabel = task.time
-                    ? `${month}/${day}(${weekday}) ${task.time}`
+                  const dateLabel = item.task.time
+                    ? `${month}/${day}(${weekday}) ${item.task.time}`
                     : `${month}/${day}(${weekday})`;
+                  const isPersonal = item.kind === 'personal';
                   return (
-                    <View key={task.id} style={styles.overdueTaskItem}>
+                    <View key={item.task.id} style={styles.overdueTaskItem}>
                       <View style={styles.taskLeftSection}>
-                        <View style={styles.overdueTaskBullet} />
+                        <View style={[
+                          styles.overdueTaskBullet,
+                          isPersonal && { backgroundColor: '#a78bfa' },
+                        ]} />
                         <Text style={styles.overdueTaskTitle} numberOfLines={2}>
-                          {task.title}
+                          {item.task.title}
                         </Text>
                       </View>
                       <View style={styles.overdueTaskRight}>
                         <Text style={styles.overdueTaskDateTime}>{dateLabel}</Text>
                         <TouchableOpacity
-                          onPress={() => handleHideOverdueTask(task.id)}
+                          onPress={() => handleHideOverdueTask(item.task.id)}
                           style={styles.hideButton}
                           accessibilityLabel="이 업무 숨기기"
                           accessibilityRole="button"
@@ -863,7 +891,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             )}
 
             {/* 숨긴 업무 표시/해제 */}
-            {hiddenOverdueTasks.length > 0 && (
+            {hiddenOverdueItems.length > 0 && (
               <View style={styles.hiddenOverdueFooter}>
                 <TouchableOpacity
                   onPress={() => setShowHiddenOverdue(prev => !prev)}
@@ -878,26 +906,26 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                   <Text style={styles.hiddenToggleText}>
                     {showHiddenOverdue
                       ? `숨긴 업무 접기`
-                      : `숨긴 업무 ${hiddenOverdueTasks.length}건`}
+                      : `숨긴 업무 ${hiddenOverdueItems.length}건`}
                   </Text>
                 </TouchableOpacity>
 
                 {showHiddenOverdue && (
                   <>
                     <View style={styles.hiddenTasksList}>
-                      {hiddenOverdueTasks.map((task) => {
-                        const taskDate = task.date.toDate();
+                      {hiddenOverdueItems.map((item) => {
+                        const taskDate = item.task.date.toDate();
                         const month = taskDate.getMonth() + 1;
                         const day = taskDate.getDate();
                         const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
                         const weekday = weekdays[taskDate.getDay()];
-                        const dateLabel = task.time
-                          ? `${month}/${day}(${weekday}) ${task.time}`
+                        const dateLabel = item.task.time
+                          ? `${month}/${day}(${weekday}) ${item.task.time}`
                           : `${month}/${day}(${weekday})`;
                         return (
-                          <View key={task.id} style={styles.hiddenTaskItem}>
+                          <View key={item.task.id} style={styles.hiddenTaskItem}>
                             <Text style={styles.hiddenTaskTitle} numberOfLines={1}>
-                              {task.title}
+                              {item.task.title}
                             </Text>
                             <Text style={styles.hiddenTaskDate}>{dateLabel}</Text>
                           </View>

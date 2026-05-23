@@ -77,6 +77,45 @@ export const createPersonalTask = async (
   }
 };
 
+// 오늘 이전 날짜 중 미완료 개인 업무 목록 가져오기 (연체 업무)
+export const getOverduePersonalTasks = async (
+  ownerId: string,
+  campCode: string
+): Promise<PersonalTask[]> => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // isCompleted 필터를 Firestore 쿼리에서 제거하고 클라이언트에서 처리
+    // (date < today + isCompleted == false 조합은 복합 인덱스를 요구하기 때문)
+    const q = query(
+      collection(db, PERSONAL_TASKS_COLLECTION),
+      where('ownerId', '==', ownerId),
+      where('campCode', '==', campCode),
+      where('date', '<', Timestamp.fromDate(todayStart))
+    );
+
+    const snapshot = await getDocs(q);
+    const tasks = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() })) as PersonalTask[];
+
+    return tasks
+      .filter(t => !t.isCompleted)
+      .sort((a, b) => {
+        const dateA = a.date.toMillis();
+        const dateB = b.date.toMillis();
+        if (dateA !== dateB) return dateA - dateB;
+        if (a.time && b.time) return a.time.localeCompare(b.time);
+        if (a.time && !b.time) return -1;
+        if (!a.time && b.time) return 1;
+        return 0;
+      });
+  } catch (error) {
+    logger.error('연체 개인 업무 가져오기 오류:', error);
+    throw error;
+  }
+};
+
 // 특정 날짜의 개인 업무 목록 가져오기 (날짜 범위 쿼리로 최적화)
 export const getPersonalTasksByDate = async (
   ownerId: string,
