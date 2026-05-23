@@ -228,14 +228,6 @@ export const StudentList: React.FC<StudentListProps> = ({
   };
 
   const handleSaveContacts = async () => {
-    if (isTemporaryData) {
-      Alert.alert(
-        '연락처 저장 불가',
-        '현재 임시 데이터가 표시 중입니다.\n실제 학생 데이터가 등록된 후 저장할 수 있습니다.',
-      );
-      return;
-    }
-
     const studentsToSave = selectedMentor ? (groupedByMentor[selectedMentor] ?? []) : allStudents;
     const validStudents = studentsToSave.filter((s) => s.parentPhone);
 
@@ -251,6 +243,16 @@ export const StudentList: React.FC<StudentListProps> = ({
   };
 
   const handleBulkSaveConfirm = async () => {
+    // 임시 데이터인 경우 미리보기 확인 후 저장 불가 안내
+    if (isTemporaryData) {
+      setBulkPreviewStudents([]);
+      Alert.alert(
+        '연락처 저장 불가',
+        '현재 임시 데이터가 표시 중입니다.\n실제 학생 데이터가 등록된 후 저장할 수 있습니다.\n\n테스트가 필요하다면 개별 학생 카드를 클릭하여 연락처 저장 아이콘을 이용하고, 이후 직접 삭제해 주세요.',
+      );
+      return;
+    }
+
     const studentsToSave = bulkPreviewStudents;
     setBulkPreviewStudents([]);
 
