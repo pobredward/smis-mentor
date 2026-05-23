@@ -609,6 +609,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         addressDetail: existingUserByPhone?.addressDetail || '',
         role: 'foreign',
         jobExperiences: existingUserByPhone?.jobExperiences || [],
+        jobCodeIds: (existingUserByPhone?.jobExperiences || []).map((exp: { id: string }) => exp.id),
         partTimeJobs: existingUserByPhone?.partTimeJobs || [],
         createdAt: existingUserByPhone?.createdAt || Timestamp.now(),
         updatedAt: Timestamp.now(),

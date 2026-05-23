@@ -16,7 +16,7 @@ import {
   formatTime,
   formatDuration,
 } from '@/lib/taskService';
-import { getUserJobCodesInfo, getUsersByJobCode } from '@/lib/firebaseService';
+import { getUserJobCodesInfo, getUsersByJobCodeId } from '@/lib/firebaseService';
 import {
   getPersonalTasksByDate,
   getPersonalTaskDatesInMonth,
@@ -199,10 +199,7 @@ export default function TaskContent() {
       
       // 캠프 사용자 목록 가져오기 (관리자만)
       if (isAdmin) {
-        logger.info('관리자 - 캠프 사용자 조회 시작');
-        const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
-        logger.info('조회된 사용자 수:', users.length);
-        logger.info('사용자 목록:', users.map(u => ({ name: u.name, jobExperiences: u.jobExperiences })));
+        const users = await getUsersByJobCodeId(activeJobCode.id);
         setCampUsers(users);
       }
 
@@ -329,14 +326,8 @@ export default function TaskContent() {
     try {
       // 캠프 사용자 목록 다시 가져오기 (관리자만)
       if (isAdmin && userData?.activeJobExperienceId) {
-        const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
-        const activeJobCode = jobCodesInfo[0];
-        
-        if (activeJobCode) {
-          const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
-          logger.info('웹 - 새로고침으로 조회된 캠프 사용자 수:', users.length);
-          setCampUsers(users);
-        }
+        const users = await getUsersByJobCodeId(userData.activeJobExperienceId);
+        setCampUsers(users);
       }
       
       await refreshCurrentData();

@@ -403,8 +403,6 @@ export const getUsersByJobCode = async (
   code: string
 ): Promise<User[]> => {
   try {
-    const users: User[] = [];
-
     // jobCodes 컬렉션에서 해당 코드와 세대에 맞는 문서 ID 찾기
     const jobCodesRef = collection(db, 'jobCodes');
     const codeQuery = query(
@@ -412,44 +410,38 @@ export const getUsersByJobCode = async (
       where('generation', '==', generation),
       where('code', '==', code)
     );
-
     const jobCodeSnapshot = await getDocs(codeQuery);
 
     if (jobCodeSnapshot.empty) {
-      return users;
+      return [];
     }
 
     const jobCodeId = jobCodeSnapshot.docs[0].id;
+    return getUsersByJobCodeId(db, jobCodeId);
+  } catch (error) {
+    logger.error('직무 코드별 사용자 조회 실패:', error);
+    throw new DatabaseError('사용자 조회에 실패했습니다', error);
+  }
+};
 
-    // 해당 jobCodeId를 jobExperiences 배열의 id 필드에 포함하는 사용자 조회
+/**
+ * jobCodeId로 해당 캠프에 속한 사용자 조회.
+ * jobCodeIds 배열에 array-contains 쿼리를 사용해 서버에서 필터링.
+ */
+export const getUsersByJobCodeId = async (
+  db: Firestore,
+  jobCodeId: string
+): Promise<User[]> => {
+  try {
     const usersRef = collection(db, 'users');
-    const userSnapshot = await getDocs(usersRef);
-    
-    const updatePromises: Promise<void>[] = [];
+    const q = query(usersRef, where('jobCodeIds', 'array-contains', jobCodeId));
+    const userSnapshot = await getDocs(q);
 
-    userSnapshot.forEach((docSnapshot) => {
+    const users: User[] = userSnapshot.docs.map((docSnapshot) => {
       const userData = docSnapshot.data() as User;
       const userId = docSnapshot.id;
-      
-      if (
-        userData.jobExperiences &&
-        userData.jobExperiences.some((exp: JobExperience) => exp.id === jobCodeId)
-      ) {
-        // id 필드가 없는 경우 자동으로 추가
-        if (!userData.id) {
-          logger.warn(`사용자 ${userId}에 id 필드가 없습니다. 자동으로 추가합니다.`);
-          updatePromises.push(updateDoc(doc(db, 'users', userId), { id: userId }));
-          users.push({ ...userData, id: userId });
-        } else {
-          users.push(userData);
-        }
-      }
+      return userData.id ? userData : { ...userData, id: userId };
     });
-    
-    // 모든 업데이트를 병렬로 실행
-    if (updatePromises.length > 0) {
-      await Promise.all(updatePromises);
-    }
 
     logger.info(`직무 코드별 사용자 조회 완료: ${users.length}명`);
     return users;

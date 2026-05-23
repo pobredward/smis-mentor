@@ -20,8 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
-import { getUserJobCodesInfo } from '../services/authService';
-import { getUsersByJobCode } from '../services/userService';
+import { getUsersByJobCodeId } from '../services/userService';
 import type { Task, JobExperienceGroupRole, User } from '../../../shared/src/types';
 import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName } from '@smis-mentor/shared';
 import {
@@ -77,15 +76,9 @@ export default function TaskDetailScreen() {
     // 캠프 사용자 목록 가져오기 (관리자만)
     if (isAdmin) {
       try {
-        const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
-        const activeJobCode = jobCodesInfo[0];
-        
-        if (activeJobCode) {
-          setCurrentCampCodeId(activeJobCode.id);
-          const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
-          logger.info('모바일 TaskDetail - 조회된 캠프 사용자 수:', users.length);
-          setCampUsers(users);
-        }
+        setCurrentCampCodeId(userData.activeJobExperienceId);
+        const users = await getUsersByJobCodeId(userData.activeJobExperienceId);
+        setCampUsers(users);
       } catch (error) {
         logger.error('캠프 데이터 로드 오류:', error);
       }

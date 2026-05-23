@@ -14,7 +14,7 @@ import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInf
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
 import { EvaluationSummaryCompact } from '@/components/evaluation/EvaluationSummary';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
-import { Timestamp, doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -75,72 +75,28 @@ export default function UserManage() {
       const currentUser = auth.currentUser;
       logger.info('🔍 Current user in user-manage:', currentUser?.uid, currentUser?.email);
       
-      if (currentUser && currentUser.email) {
-        // 이메일을 기준으로 users 컬렉션에서 사용자 찾기
-        logger.info('📧 Searching for user by email:', currentUser.email);
-        
-        try {
-          const usersSnapshot = await getDocs(collection(db, 'users'));
-          const userByEmail = usersSnapshot.docs.find(doc => {
-            const data = doc.data() as User;
-            return data.email === currentUser.email;
-          });
-          
-          if (userByEmail) {
-            const userData = userByEmail.data() as User;
-            logger.info('✅ Found user by email:', { 
-              docId: userByEmail.id,
-              name: userData.name, 
-              email: userData.email,
-              hasName: !!userData.name,
-              nameLength: userData.name?.length || 0,
-              nameType: typeof userData.name
-            });
-            
-            if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-              logger.info('✅ Using users.name from email search:', userData.name);
-              setCurrentAdminName(userData.name.trim());
-              return;
-            } else {
-              logger.info('❌ users.name is empty or invalid:', userData.name);
-            }
-          } else {
-            logger.info('❌ No user found by email in users collection');
-          }
-        } catch (emailSearchError) {
-          logger.error('Email search error:', emailSearchError);
-        }
-        
-        // UID로도 시도해보기 (백업 방법)
-        logger.info('🔄 Trying UID as backup:', currentUser.uid);
+      if (currentUser) {
+        // UID로 직접 조회 (users 컬렉션 문서 ID = Firebase Auth UID)
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
-          logger.info('📄 Found user by UID:', { 
-            name: userData.name, 
-            email: userData.email 
-          });
-          
           if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-            logger.info('✅ Using users.name from UID search:', userData.name);
             setCurrentAdminName(userData.name.trim());
             return;
           }
         }
-        
-        // Firebase Auth의 displayName 사용
+
+        // Firestore에 없으면 Auth displayName → 이메일 순으로 폴백
         if (currentUser.displayName) {
-          logger.info('✅ Using auth.displayName:', currentUser.displayName);
           setCurrentAdminName(currentUser.displayName);
           return;
         }
-        
-        // 이메일에서 이름 부분 추출 (최후의 수단)
-        const emailName = currentUser.email.split('@')[0];
-        logger.info('⚠️ Using email name as fallback:', emailName);
-        setCurrentAdminName(emailName);
+        if (currentUser.email) {
+          setCurrentAdminName(currentUser.email.split('@')[0]);
+          return;
+        }
+        setCurrentAdminName('관리자');
       } else {
-        logger.info('❌ No current user or email');
         setCurrentAdminName('관리자');
       }
     } catch (error) {
@@ -671,9 +627,12 @@ export default function UserManage() {
       const updatedJobExperiences = selectedUser.jobExperiences?.filter(exp => 
         exp.id !== jobCodeId
       ) || [];
-      
-      // jobExperiences 업데이트
-      await updateUser(selectedUser.userId, { jobExperiences: updatedJobExperiences });
+      const updatedJobCodeIds = updatedJobExperiences.map((exp) => exp.id);
+
+      await updateUser(selectedUser.userId, {
+        jobExperiences: updatedJobExperiences,
+        jobCodeIds: updatedJobCodeIds,
+      });
       
       // 삭제되는 캠프가 활성 캠프인 경우 자동으로 다음 캠프로 전환
       if (selectedUser.activeJobExperienceId === jobCodeId) {

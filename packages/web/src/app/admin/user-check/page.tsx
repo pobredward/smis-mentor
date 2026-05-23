@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
-import { getAllJobCodes, getUsersByJobCode } from '@/lib/firebaseService';
+import { getAllJobCodes, getUsersByJobCodeId } from '@/lib/firebaseService';
 import { JobCodeWithId, User } from '@/types';
 import { formatPhoneNumber, formatPhoneNumberForMentor } from '@smis-mentor/shared';
 import { useRouter } from 'next/navigation';
@@ -154,7 +154,17 @@ export default function UserCheck() {
       
       try {
         setIsLoading(true);
-        const usersData = await getUsersByJobCode(selectedGeneration, selectedCode);
+        // jobCodes는 이미 메모리에 있으므로 Firestore 왕복 없이 jobCodeId를 바로 조회
+        const selectedJobCode = jobCodes.find(
+          (c) => c.generation === selectedGeneration && c.code === selectedCode
+        );
+        if (!selectedJobCode) {
+          setUsers([]);
+          setGroupedUsers({});
+          setIsLoading(false);
+          return;
+        }
+        const usersData = await getUsersByJobCodeId(selectedJobCode.id);
         
         // 각 사용자의 그룹 정보 가져오기
         const enrichedUsers = await Promise.all(

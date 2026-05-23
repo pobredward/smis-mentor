@@ -376,10 +376,11 @@ export const updateUserActiveJobCode = async (userId: string, jobCodeId: string)
       const hasJobCode = jobExperiences.some(exp => exp.id === jobCodeId);
       
       if (!hasJobCode) {
-        // jobExperiences에 추가
+        const updatedJobExperiences = [...jobExperiences, { id: jobCodeId }];
         await updateDoc(userRef, {
           activeJobExperienceId: jobCodeId,
-          jobExperiences: [...jobExperiences, { id: jobCodeId }],
+          jobExperiences: updatedJobExperiences,
+          jobCodeIds: updatedJobExperiences.map((exp) => exp.id),
           updatedAt: Timestamp.now()
         });
       } else {
@@ -1439,6 +1440,7 @@ export const createTempUser = async (
       phone: phoneNumber,
       role: 'mentor_temp',
       jobExperiences,
+      jobCodeIds: jobExperiences.map((exp) => exp.id),
       password: '',
       address: '',
       addressDetail: '',
@@ -1498,68 +1500,33 @@ export const getAllUsers = async (includeDeleted: boolean = false) => {
 // 특정 직무 코드에 해당하는 사용자 조회
 export const getUsersByJobCode = async (generation: string, code: string) => {
   try {
-    const users: User[] = [];
-    
-    // 접근 방식 1: jobExperiences 컬렉션을 통한 조회 (이전 방식)
-    const jobExperiencesRef = collection(db, 'jobExperiences');
-    const expQuery = query(
-      jobExperiencesRef,
-      where('refGeneration', '==', generation),
-      where('refCode', '==', code)
-    );
-    
-    const jobExperienceSnapshot = await getDocs(expQuery);
-    const userIdsFromExperiences: string[] = [];
-    
-    jobExperienceSnapshot.forEach((doc) => {
-      const data = doc.data() as JobExperience;
-      if (data.refUserId) userIdsFromExperiences.push(data.refUserId);
-    });
-    
-    // 접근 방식 2: jobCodes 컬렉션에서 해당 코드와 세대에 맞는 문서 ID 찾기 (새 방식)
     const jobCodesRef = collection(db, 'jobCodes');
     const codeQuery = query(
       jobCodesRef,
       where('generation', '==', generation),
       where('code', '==', code)
     );
-    
     const jobCodeSnapshot = await getDocs(codeQuery);
-    
-    if (jobCodeSnapshot.empty) {
-      // jobCodes에서 찾지 못한 경우, 기존 방식의 결과만 반환
-      for (const userId of userIdsFromExperiences) {
-        const user = await getUserById(userId);
-        if (user) users.push(user);
-      }
-      return users;
-    }
-    
-    // jobCodes에서 찾은 문서 ID
-    const jobCodeId = jobCodeSnapshot.docs[0].id;
-    
-    // 해당 jobCodeId를 jobExperiences 배열의 id 필드에 포함하는 사용자 조회
-    // 새로운 구조에서는 where 쿼리 대신 get 후 필터링 방식 사용
+
+    if (jobCodeSnapshot.empty) return [];
+
+    return getUsersByJobCodeId(jobCodeSnapshot.docs[0].id);
+  } catch (error) {
+    logger.error('직무 코드별 사용자 조회 실패:', error);
+    throw error;
+  }
+};
+
+// jobCodeId로 해당 캠프에 속한 사용자 조회 (array-contains 쿼리 — 서버 필터링)
+export const getUsersByJobCodeId = async (jobCodeId: string): Promise<User[]> => {
+  try {
     const usersRef = collection(db, 'users');
-    const userSnapshot = await getDocs(usersRef);
-    
-    userSnapshot.forEach((doc) => {
-      const userData = doc.data() as User;
-      // jobExperiences 배열에서 id 필드가 jobCodeId와 일치하는 항목이 있는지 확인
-      if (userData.jobExperiences && userData.jobExperiences.some(exp => exp.id === jobCodeId)) {
-        users.push(userData);
-      }
-    });
-    
-    // 기존 방식으로 찾은 사용자들도 추가 (중복 제거)
-    for (const userId of userIdsFromExperiences) {
-      const user = await getUserById(userId);
-      if (user && !users.some(u => u.userId === user.userId)) {
-        users.push(user);
-      }
-    }
-    
-    return users;
+    const q = query(usersRef, where('jobCodeIds', 'array-contains', jobCodeId));
+    const userSnapshot = await getDocs(q);
+    return userSnapshot.docs.map((docSnap) => ({
+      ...(docSnap.data() as User),
+      userId: docSnap.id,
+    }));
   } catch (error) {
     logger.error('직무 코드별 사용자 조회 실패:', error);
     throw error;
@@ -1678,7 +1645,11 @@ export const addUserJobCode = async (
       newJobExperience.classCode = classCode.trim();
     }
     const updatedJobExperiences = [...jobExperiences, newJobExperience];
-    await updateDoc(userRef, { jobExperiences: updatedJobExperiences });
+    const updatedJobCodeIds = updatedJobExperiences.map((exp) => exp.id);
+    await updateDoc(userRef, {
+      jobExperiences: updatedJobExperiences,
+      jobCodeIds: updatedJobCodeIds,
+    });
     return updatedJobExperiences;
   } catch (error) {
     logger.error('직무 코드 추가 실패:', error);

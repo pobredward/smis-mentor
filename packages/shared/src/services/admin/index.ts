@@ -133,6 +133,7 @@ export const createTempUser = async (
       phone: phoneNumber,
       role,
       jobExperiences,
+      jobCodeIds: jobExperiences.map((exp) => exp.id),
       address: '',
       addressDetail: '',
       profileImage: '',
@@ -342,7 +343,11 @@ export const adminAddUserJobCode = async (
     }
 
     const updatedJobExperiences = [...jobExperiences, newJobExperience];
-    await updateDoc(userRef, { jobExperiences: updatedJobExperiences });
+    const updatedJobCodeIds = updatedJobExperiences.map((exp) => exp.id);
+    await updateDoc(userRef, {
+      jobExperiences: updatedJobExperiences,
+      jobCodeIds: updatedJobCodeIds,
+    });
 
     return updatedJobExperiences;
   } catch (error) {
@@ -371,8 +376,11 @@ export const adminRemoveUserJobCode = async (
       (exp) => exp.id !== jobCodeId
     );
 
-    // jobExperiences 업데이트
-    await updateDoc(userRef, { jobExperiences: updatedJobExperiences });
+    const updatedJobCodeIds = updatedJobExperiences.map((exp) => exp.id);
+    await updateDoc(userRef, {
+      jobExperiences: updatedJobExperiences,
+      jobCodeIds: updatedJobCodeIds,
+    });
 
     // 삭제되는 캠프가 활성 캠프인 경우 자동으로 다음 캠프로 전환
     if (user.activeJobExperienceId === jobCodeId) {
@@ -463,41 +471,33 @@ export const adminGetUsersByJobCode = async (
   code: string
 ): Promise<User[]> => {
   try {
-    const users: User[] = [];
-
-    // jobCodes 컬렉션에서 해당 코드와 세대에 맞는 문서 ID 찾기
     const jobCodesRef = collection(db, 'jobCodes');
     const codeQuery = query(
       jobCodesRef,
       where('generation', '==', generation),
       where('code', '==', code)
     );
-
     const jobCodeSnapshot = await getDocs(codeQuery);
 
-    if (jobCodeSnapshot.empty) {
-      return users;
-    }
+    if (jobCodeSnapshot.empty) return [];
 
-    // jobCodes에서 찾은 문서 ID
-    const jobCodeId = jobCodeSnapshot.docs[0].id;
+    return adminGetUsersByJobCodeId(db, jobCodeSnapshot.docs[0].id);
+  } catch (error) {
+    logger.error('직무 코드별 사용자 조회 실패:', error);
+    throw error;
+  }
+};
 
-    // 해당 jobCodeId를 jobExperiences 배열의 id 필드에 포함하는 사용자 조회
+// jobCodeId로 해당 캠프에 속한 사용자 조회 (array-contains 쿼리 — 서버 필터링)
+export const adminGetUsersByJobCodeId = async (
+  db: Firestore,
+  jobCodeId: string
+): Promise<User[]> => {
+  try {
     const usersRef = collection(db, 'users');
-    const userSnapshot = await getDocs(usersRef);
-
-    userSnapshot.forEach((docSnapshot) => {
-      const userData = docSnapshot.data() as User;
-      // jobExperiences 배열에서 id 필드가 jobCodeId와 일치하는 항목이 있는지 확인
-      if (
-        userData.jobExperiences &&
-        userData.jobExperiences.some((exp) => exp.id === jobCodeId)
-      ) {
-        users.push(userData);
-      }
-    });
-
-    return users;
+    const q = query(usersRef, where('jobCodeIds', 'array-contains', jobCodeId));
+    const userSnapshot = await getDocs(q);
+    return userSnapshot.docs.map((docSnapshot) => docSnapshot.data() as User);
   } catch (error) {
     logger.error('직무 코드별 사용자 조회 실패:', error);
     throw error;

@@ -56,7 +56,7 @@ import {
 } from '../services/personalTaskService';
 import { getTaskCategories, createTaskCategory, updateTaskCategory, deleteTaskCategory } from '../services/taskCategoryService';
 import { getUserJobCodesInfo } from '../services/authService';
-import { getUsersByJobCode } from '../services/userService';
+import { getUsersByJobCodeId } from '../services/userService';
 import type { Task, JobExperienceGroupRole, TaskAttachment, User, PersonalTask, TaskCategory } from '../../../shared/src/types';
 import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames, isKoreanHoliday, getKoreanHolidaySet } from '@smis-mentor/shared';
 import {
@@ -457,15 +457,7 @@ export function TasksScreen() {
 
       setCurrentCampCode(activeJobCode.code);
       setCurrentCampCodeId(activeJobCode.id);
-      
-      // 캠프 사용자 목록 가져오기 (관리자만)
-      if (isAdmin) {
-        const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
-        logger.info('모바일 - 조회된 캠프 사용자 수:', users.length);
-        setCampUsers(users);
-      }
 
-      // 월별 업무 + 개인 업무 + 카테고리 동시 로드 (loadMonthData로 캐시에 저장)
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
       const commonOpts = {
@@ -474,16 +466,19 @@ export function TasksScreen() {
         groupRole: resolvedGroupRole,
         adminFlag: isAdmin,
       };
-      const [data, , fetchedCategories] = await Promise.all([
-        loadMonthData(year, month, commonOpts),
-        Promise.resolve(), // 자리 맞춤
-        getTaskCategories(activeJobCode.code),
-      ]);
-      setCategories(fetchedCategories);
 
+      // 월별 업무, 카테고리, 캠프 사용자 목록을 병렬로 동시 실행
+      const [data, , fetchedCategories, campUserResult] = await Promise.all([
+        loadMonthData(year, month, commonOpts),
+        Promise.resolve(),
+        getTaskCategories(activeJobCode.code),
+        isAdmin ? getUsersByJobCodeId(activeJobCode.id) : Promise.resolve([] as User[]),
+      ]);
+
+      setCategories(fetchedCategories);
+      if (isAdmin && campUserResult.length > 0) setCampUsers(campUserResult);
       if (data) applyMonthData(data);
 
-      // 선택된 날짜의 업무 로드
       await loadTasksForDate(selectedDate, activeJobCode.code);
 
       // 인접 달 백그라운드 프리패치 — campCode/groupRole을 직접 전달해 state 반영 대기 없이 즉시 시작
@@ -647,7 +642,7 @@ export function TasksScreen() {
         const activeJobCode = jobCodesInfo[0];
         
         if (activeJobCode) {
-          const users = await getUsersByJobCode(activeJobCode.generation, activeJobCode.code);
+          const users = await getUsersByJobCodeId(activeJobCode.id);
           logger.info('모바일 - 새로고침으로 조회된 캠프 사용자 수:', users.length);
           setCampUsers(users);
         }

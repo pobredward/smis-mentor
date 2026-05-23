@@ -344,72 +344,28 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       const currentUser = auth.currentUser;
       logger.info('🔍 Current user in applicants:', currentUser?.uid, currentUser?.email);
       
-      if (currentUser && currentUser.email) {
-        // 이메일을 기준으로 users 컬렉션에서 사용자 찾기
-        logger.info('📧 Searching for user by email in applicants:', currentUser.email);
-        
-        try {
-          const usersSnapshot = await getDocs(collection(db, 'users'));
-          const userByEmail = usersSnapshot.docs.find(doc => {
-            const data = doc.data() as User;
-            return data.email === currentUser.email;
-          });
-          
-          if (userByEmail) {
-            const userData = userByEmail.data() as User;
-            logger.info('✅ Found user by email in applicants:', { 
-              docId: userByEmail.id,
-              name: userData.name, 
-              email: userData.email,
-              hasName: !!userData.name,
-              nameLength: userData.name?.length || 0,
-              nameType: typeof userData.name
-            });
-            
-            if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-              logger.info('✅ Using users.name from email search in applicants:', userData.name);
-              setCurrentAdminName(userData.name.trim());
-              return;
-            } else {
-              logger.info('❌ users.name is empty or invalid in applicants:', userData.name);
-            }
-          } else {
-            logger.info('❌ No user found by email in users collection (applicants)');
-          }
-        } catch (emailSearchError) {
-          logger.error('Email search error in applicants:', emailSearchError);
-        }
-        
-        // UID로도 시도해보기 (백업 방법)
-        logger.info('🔄 Trying UID as backup in applicants:', currentUser.uid);
+      if (currentUser) {
+        // UID로 직접 조회 (users 컬렉션 문서 ID = Firebase Auth UID)
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
-          logger.info('📄 Found user by UID in applicants:', { 
-            name: userData.name, 
-            email: userData.email 
-          });
-          
           if (userData.name && typeof userData.name === 'string' && userData.name.trim().length > 0) {
-            logger.info('✅ Using users.name from UID search in applicants:', userData.name);
             setCurrentAdminName(userData.name.trim());
             return;
           }
         }
-        
-        // Firebase Auth의 displayName 사용
+
+        // Firestore에 없으면 Auth displayName → 이메일 순으로 폴백
         if (currentUser.displayName) {
-          logger.info('✅ Using auth.displayName in applicants:', currentUser.displayName);
           setCurrentAdminName(currentUser.displayName);
           return;
         }
-        
-        // 이메일에서 이름 부분 추출 (최후의 수단)
-        const emailName = currentUser.email.split('@')[0];
-        logger.info('⚠️ Using email name as fallback in applicants:', emailName);
-        setCurrentAdminName(emailName);
+        if (currentUser.email) {
+          setCurrentAdminName(currentUser.email.split('@')[0]);
+          return;
+        }
+        setCurrentAdminName('관리자');
       } else {
-        logger.info('❌ No current user or email in applicants');
         setCurrentAdminName('관리자');
       }
     } catch (error) {
@@ -991,8 +947,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       const updatedJobExperiences = user.jobExperiences?.filter(exp => 
         exp.id !== jobCodeId
       ) || [];
-      
-      await updateUser(userId, { jobExperiences: updatedJobExperiences });
+      const updatedJobCodeIds = updatedJobExperiences.map((exp) => exp.id);
+
+      await updateUser(userId, {
+        jobExperiences: updatedJobExperiences,
+        jobCodeIds: updatedJobCodeIds,
+      });
       
       // 지원자 목록 업데이트
       setApplications(prevApps => prevApps.map(app =>

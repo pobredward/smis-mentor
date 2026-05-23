@@ -138,10 +138,11 @@ const jobCodesService = {
         const hasJobCode = jobExperiences.some((exp: any) => exp.id === jobCodeId);
         
         if (!hasJobCode) {
-          // jobExperiences에 추가
+          const updatedJobExperiences = [...jobExperiences, { id: jobCodeId }];
           await updateDoc(userRef, {
             activeJobExperienceId: jobCodeId,
-            jobExperiences: [...jobExperiences, { id: jobCodeId }],
+            jobExperiences: updatedJobExperiences,
+            jobCodeIds: updatedJobExperiences.map((exp: { id: string }) => exp.id),
           });
         } else {
           // 이미 있는 경우 activeJobExperienceId만 업데이트
