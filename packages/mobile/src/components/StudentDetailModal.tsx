@@ -272,8 +272,8 @@ const StudentCard = React.memo(({ student: s, campType, isAdmin, groupRole, onSa
     indicatorStyle="black"
   >
     {/* 프로필 사진 - 스와이프 콘텐츠와 함께 이동하여 딜레이 없음 */}
-    {profilePhotoUrl && (
-      <View style={styles.profilePhotoContainer}>
+    <View style={styles.profilePhotoContainer}>
+      {profilePhotoUrl ? (
         <Image
           source={profilePhotoUrl}
           style={styles.profilePhoto}
@@ -281,8 +281,16 @@ const StudentCard = React.memo(({ student: s, campType, isAdmin, groupRole, onSa
           transition={0}
           cachePolicy="memory-disk"
         />
-      </View>
-    )}
+      ) : (
+        <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
+          <Ionicons
+            name="person"
+            size={64}
+            color={s.gender === 'M' ? '#93c5fd' : '#fcd34d'}
+          />
+        </View>
+      )}
+    </View>
 
     <View style={styles.cardContent}>
       {/* 캠프 정보 */}
@@ -439,6 +447,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+  },
+  profilePhotoPlaceholder: {
+    backgroundColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerCenter: {
     alignItems: 'center',

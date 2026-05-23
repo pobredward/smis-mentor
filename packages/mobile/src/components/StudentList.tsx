@@ -825,9 +825,11 @@ const StudentCardContent = React.memo(({ item, convertGoogleDriveUrl }: StudentC
         />
       ) : (
         <View style={[cardStyles.photo, cardStyles.photoPlaceholder]}>
-          <Text style={[cardStyles.photoInitial, item.gender === 'M' ? cardStyles.initialBlue : cardStyles.initialYellow]}>
-            {item.name?.charAt(0) ?? '?'}
-          </Text>
+          <Ionicons
+            name="person"
+            size={32}
+            color={item.gender === 'M' ? '#93c5fd' : '#fcd34d'}
+          />
         </View>
       )}
 
@@ -875,16 +877,6 @@ const cardStyles = StyleSheet.create({
     backgroundColor: '#e2e8f0',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  photoInitial: {
-    fontSize: 22,
-    fontWeight: '700' as '700',
-  },
-  initialBlue: {
-    color: '#3b82f6',
-  },
-  initialYellow: {
-    color: '#f59e0b',
   },
   name: {
     fontSize: 11,
