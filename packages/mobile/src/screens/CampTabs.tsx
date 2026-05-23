@@ -76,20 +76,13 @@ export function LessonScreen() {
 
   // 활성화된 캠프의 jobCode 정보 가져오기
   const fetchActiveJobCode = async () => {
-    logger.info('📍 fetchActiveJobCode 시작');
-    logger.info('  - activeJobExperienceId:', userData?.activeJobExperienceId);
-    
     if (!userData?.activeJobExperienceId) {
-      logger.info('  ❌ activeJobExperienceId 없음');
       setUserJobCodes([]);
       return [];
     }
     
     try {
-      // activeJobExperienceId를 배열로 전달
-      logger.info('  🔍 getUserJobCodesInfo 호출:', [userData.activeJobExperienceId]);
       const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
-      logger.info('  ✅ jobCodesInfo:', jobCodesInfo);
       setUserJobCodes(jobCodesInfo);
       return jobCodesInfo;
     } catch (error) {
@@ -110,15 +103,10 @@ export function LessonScreen() {
 
   // 대제목/소제목 fetch 및 자동 템플릿 추가
   const fetchAll = async () => {
-    logger.info('📍 fetchAll 시작');
-    logger.info('  - userData:', userData?.name, userData?.userId);
-    logger.info('  - activeJobExperienceId:', userData?.activeJobExperienceId);
-    
     if (!userData) return;
     
     // 활성화된 캠프가 없으면 빈 상태로 표시
     if (!userData.activeJobExperienceId) {
-      logger.info('  ❌ activeJobExperienceId 없음 - 빈 상태 표시');
       setLoading(false);
       setMaterials([]);
       setSections({});
@@ -127,57 +115,34 @@ export function LessonScreen() {
     
     setLoading(true);
     try {
-      logger.info('🔍 1. 활성화된 jobCode 가져오기...');
       const activeJobCode = await fetchActiveJobCode();
-      logger.info('  ✅ activeJobCode:', activeJobCode);
       
-      logger.info('🔍 2. 모든 템플릿 가져오기...');
       const allTemplates = await getLessonMaterialTemplates();
-      logger.info('  ✅ 전체 템플릿 개수:', allTemplates.length);
-      logger.info('  📋 템플릿 목록:', allTemplates.map(t => ({ id: t.id, title: t.title, code: t.code })));
       setTemplates(allTemplates);
 
-      logger.info('🔍 3. 접근 가능한 템플릿 필터링...');
       const accessibleTemplates = getAccessibleTemplates(allTemplates, activeJobCode);
-      logger.info('  ✅ 접근 가능한 템플릿:', accessibleTemplates.map(t => ({ id: t.id, title: t.title, code: t.code })));
       
-      logger.info('🔍 4. 사용자 수업 자료 가져오기...');
       const mats = await getLessonMaterials(userData.userId);
-      logger.info('  ✅ 기존 수업 자료 개수:', mats.length);
-      logger.info('  📋 수업 자료 목록:', mats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
 
       const activeCodesList = activeJobCode.map((uc) => uc.code);
-      logger.info('  📌 활성 코드 목록:', activeCodesList);
       
       const seenTemplateIds = new Set<string>();
       const materialsToUpdate: { id: string; newTitle: string }[] = [];
 
       for (const mat of mats) {
         if (!mat.templateId) {
-          // 사용자가 추가한 대주제 - 활성화된 코드와 일치하는지 확인
           if (mat.userCode && !activeCodesList.includes(mat.userCode)) {
-            // 활성화된 코드가 아니면 숨김 (삭제하지 않음)
             continue;
           }
           continue;
         }
 
         const template = allTemplates.find((t) => t.id === mat.templateId);
-        if (!template) {
-          logger.info('  ⚠️ 템플릿 없음 - 유지 (사용자 데이터 보호):', mat.id);
-          continue;
-        }
+        if (!template) continue;
 
-        if (!template.code || !activeCodesList.includes(template.code)) {
-          // 활성화된 코드가 아닌 템플릿도 유지 (사용자 데이터 보호)
-          logger.info('  ⚠️ 비활성 코드 템플릿 - 유지 (사용자 데이터 보호):', mat.id, template.code);
-          continue;
-        }
+        if (!template.code || !activeCodesList.includes(template.code)) continue;
 
-        if (seenTemplateIds.has(mat.templateId)) {
-          logger.info('  ⚠️ 중복 템플릿 - 유지 (첫 번째만 표시):', mat.id);
-          continue;
-        }
+        if (seenTemplateIds.has(mat.templateId)) continue;
 
         seenTemplateIds.add(mat.templateId);
 
@@ -186,106 +151,96 @@ export function LessonScreen() {
         }
       }
 
-      logger.info('🔍 6. 업데이트할 자료:', materialsToUpdate.length, '개');
       for (const { id, newTitle } of materialsToUpdate) {
         await updateLessonMaterial(id, { title: newTitle });
       }
 
-      logger.info('🔍 7. 새로운 템플릿 추가 확인...');
       for (let i = 0; i < accessibleTemplates.length; i++) {
         const template = accessibleTemplates[i];
         if (!seenTemplateIds.has(template.id)) {
-          logger.info('  ➕ 새 템플릿 추가:', template.title, `(order: ${i})`);
           await addLessonMaterial(userData.userId, template.title, i, template.id);
         }
       }
 
-      logger.info('🔍 8. 최종 수업 자료 가져오기...');
-      const finalMats = await getLessonMaterials(userData.userId);
-      logger.info('  ✅ 최종 수업 자료 개수:', finalMats.length);
+      // write가 없으면 2차 getLessonMaterials 재조회 생략
+      const needsRefetch = materialsToUpdate.length > 0 || accessibleTemplates.some(t => !seenTemplateIds.has(t.id));
+      let finalMats: LessonMaterialData[];
+      if (needsRefetch) {
+        finalMats = await getLessonMaterials(userData.userId);
+      } else {
+        finalMats = mats;
+      }
       
       // 활성화된 코드에 해당하는 자료만 필터링 + 중복 제거
       const seenTemplateIdsInFinal = new Set<string>();
       const filteredMats = finalMats.filter((mat) => {
-        // 활성 코드 체크
         if (mat.templateId) {
           const template = allTemplates.find((t) => t.id === mat.templateId);
           if (!template?.code || !activeCodesList.includes(template.code)) {
             return false;
           }
-          
-          // 중복 templateId 체크 (첫 번째만 표시)
           if (seenTemplateIdsInFinal.has(mat.templateId)) {
-            logger.info('  🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
             return false;
           }
           seenTemplateIdsInFinal.add(mat.templateId);
           return true;
         } else {
-          // 사용자가 추가한 대주제는 userCode로 필터링 (중복 없음)
           return mat.userCode && activeCodesList.includes(mat.userCode);
         }
       });
       
-      logger.info('  ✅ 필터링된 자료 개수:', filteredMats.length);
-      logger.info('  📋 필터링된 자료:', filteredMats.map(m => ({ id: m.id, title: m.title, templateId: m.templateId })));
-      
       setMaterials(filteredMats);
 
-      const allSections: Record<string, SectionDataWithLinks[]> = {};
-      for (const mat of finalMats) {
-        const matSections = await getSections(mat.id);
-        const template = mat.templateId ? allTemplates.find((t) => t.id === mat.templateId) : null;
+      // filteredMats(표시할 항목)만 Promise.all 병렬 조회
+      const sectionResults = await Promise.all(
+        filteredMats.map(async (mat) => {
+          const matSections = await getSections(mat.id);
+          const template = mat.templateId ? allTemplates.find((t) => t.id === mat.templateId) : null;
 
-        const mergedSections: SectionDataWithLinks[] = [];
-        const processedUserSectionIds = new Set<string>();
+          const mergedSections: SectionDataWithLinks[] = [];
+          const processedUserSectionIds = new Set<string>();
 
-        if (template?.sections) {
-          // 삭제된 섹션 ID 목록
-          const deletedSectionIds = new Set(template.deletedSectionIds || []);
-          
-          for (const templateSection of template.sections) {
-            // 삭제된 섹션은 건너뛰기
-            if (deletedSectionIds.has(templateSection.id)) {
-              continue;
-            }
-            
-            // templateSectionId로 유저 section 찾기 (order 대신)
-            const userSection = matSections.find((s) => s.templateSectionId === templateSection.id);
-
-            if (userSection) {
-              mergedSections.push({
-                ...userSection,
-                isFromTemplate: true,
-                templateSectionId: templateSection.id,
-                title: templateSection.title,
-                links: templateSection.links || [],
-                order: templateSection.order, // 템플릿 순서 적용
-              });
-              processedUserSectionIds.add(userSection.id);
-            } else {
-              mergedSections.push({
-                id: `template-${templateSection.id}`,
-                title: templateSection.title,
-                order: templateSection.order,
-                viewUrl: '',
-                originalUrl: '',
-                links: templateSection.links || [],
-                isFromTemplate: true,
-                templateSectionId: templateSection.id,
-              });
+          if (template?.sections) {
+            const deletedSectionIds = new Set(template.deletedSectionIds || []);
+            for (const templateSection of template.sections) {
+              if (deletedSectionIds.has(templateSection.id)) continue;
+              const userSection = matSections.find((s) => s.templateSectionId === templateSection.id);
+              if (userSection) {
+                mergedSections.push({
+                  ...userSection,
+                  isFromTemplate: true,
+                  templateSectionId: templateSection.id,
+                  title: templateSection.title,
+                  links: templateSection.links || [],
+                  order: templateSection.order,
+                });
+                processedUserSectionIds.add(userSection.id);
+              } else {
+                mergedSections.push({
+                  id: `template-${templateSection.id}`,
+                  title: templateSection.title,
+                  order: templateSection.order,
+                  viewUrl: '',
+                  originalUrl: '',
+                  links: templateSection.links || [],
+                  isFromTemplate: true,
+                  templateSectionId: templateSection.id,
+                });
+              }
             }
           }
-        }
 
-        const additionalUserSections = matSections
-          .filter((s) => !processedUserSectionIds.has(s.id))
-          .map((section) => ({
-            ...section,
-            isFromTemplate: false,
-          }));
+          const additionalUserSections = matSections
+            .filter((s) => !processedUserSectionIds.has(s.id))
+            .map((section) => ({ ...section, isFromTemplate: false }));
 
-        allSections[mat.id] = [...mergedSections, ...additionalUserSections];
+          return { matId: mat.id, sections: [...mergedSections, ...additionalUserSections] };
+        })
+      );
+
+      const allSections: Record<string, SectionDataWithLinks[]> = {};
+      for (const { matId, sections } of sectionResults) {
+        allSections[matId] = sections;
       }
       setSections(allSections);
     } catch (error) {
