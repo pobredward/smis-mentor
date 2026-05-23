@@ -14,6 +14,7 @@ import {
   Modal,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampCode, CampType } from '@smis-mentor/shared';
 import { stSheetService, requestContactsPermission, saveStudentContacts, saveSingleParentContact, buildContactDisplayName, buildContactNote } from '../services';
@@ -103,6 +104,39 @@ export const StudentList: React.FC<StudentListProps> = ({
       // UI는 빈 배열로 표시됨
     }
   }, [error]);
+
+  // 학생 프로필 사진 프리로드 (데이터 로드 직후 백그라운드 캐싱)
+  useEffect(() => {
+    if (allStudents.length === 0) return;
+
+    const urls = allStudents
+      .map((s) => {
+        const url = s.profilePhoto;
+        if (!url) return null;
+        if (url.includes('drive.google.com/uc?') || url.includes('drive.google.com/thumbnail?')) return url;
+        const match = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+        if (match?.[1]) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w200`;
+        return url;
+      })
+      .filter((url): url is string => !!url);
+
+    if (urls.length === 0) return;
+
+    // 네트워크 부하를 줄이기 위해 10개씩 배치로 프리페치
+    const BATCH_SIZE = 10;
+    let cancelled = false;
+
+    const prefetchBatched = async () => {
+      for (let i = 0; i < urls.length; i += BATCH_SIZE) {
+        if (cancelled) break;
+        const batch = urls.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(batch.map((url) => Image.prefetch(url)));
+      }
+    };
+
+    prefetchBatched();
+    return () => { cancelled = true; };
+  }, [allStudents]);
 
   // 추가 메타데이터 로드 (isTemporaryData, useTemporaryDataSetting 등)
   useEffect(() => {
@@ -240,6 +274,15 @@ export const StudentList: React.FC<StudentListProps> = ({
       Alert.alert('오류', '연락처 저장 중 오류가 발생했습니다.');
     }
   };
+  // Google Drive 링크를 직접 표시 가능한 URL로 변환
+  const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
+    if (!url) return undefined;
+    if (url.includes('drive.google.com/uc?') || url.includes('drive.google.com/thumbnail?')) return url;
+    const match = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+    if (match?.[1]) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w200`;
+    return url;
+  };
+
   // 멘토별/반별로 학생 그룹화
   const groupedByMentor = allStudents.reduce((acc, student) => {
     let mentorKey: string;
@@ -679,39 +722,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                                 style={styles.studentCardDouble}
                                 onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                               >
-                                <View style={styles.cardTop}>
-                                  <Text 
-                                    style={[
-                                      styles.studentName,
-                                      item.gender === 'M' ? styles.nameBlue : styles.nameYellow
-                                    ]} 
-                                    numberOfLines={1}
-                                  >
-                                    {item.name}
-                                  </Text>
-                                  <Text style={styles.classNumberBlack} numberOfLines={1}>
-                                    {item.classNumber || '-'}
-                                  </Text>
-                                </View>
-                                
-                                <View style={styles.cardDivider} />
-                                
-                                <View style={styles.cardInfo}>
-                                  <Text style={styles.infoTextSmall} numberOfLines={1}>
-                                    {item.englishName || '-'}
-                                  </Text>
-                                  <View style={styles.infoRow}>
-                                    <Text style={styles.infoTextSmall}>{item.gender === 'M' ? '남' : '여'}</Text>
-                                    <Text style={styles.infoDot}>•</Text>
-                                    <Text style={styles.infoTextSmall}>{item.grade}</Text>
-                                  </View>
-                                  <Text style={styles.infoTextTiny} numberOfLines={1}>
-                                    반: {item.classMentor || '-'}
-                                  </Text>
-                                  <Text style={styles.infoTextTiny} numberOfLines={1}>
-                                    유닛: {item.unitMentor || '-'}
-                                  </Text>
-                                </View>
+                                <StudentCardContent item={item} convertGoogleDriveUrl={convertGoogleDriveUrl} />
                               </TouchableOpacity>
                             );
                             })}
@@ -737,39 +748,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                           style={styles.studentCard}
                           onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                         >
-                          <View style={styles.cardTop}>
-                            <Text 
-                              style={[
-                                styles.studentName,
-                                item.gender === 'M' ? styles.nameBlue : styles.nameYellow
-                              ]} 
-                              numberOfLines={1}
-                            >
-                              {item.name}
-                            </Text>
-                            <Text style={styles.classNumberBlack} numberOfLines={1}>
-                              {item.classNumber || '-'}
-                            </Text>
-                          </View>
-                          
-                          <View style={styles.cardDivider} />
-                          
-                          <View style={styles.cardInfo}>
-                            <Text style={styles.infoTextSmall} numberOfLines={1}>
-                              {item.englishName || '-'}
-                            </Text>
-                            <View style={styles.infoRow}>
-                              <Text style={styles.infoTextSmall}>{item.gender === 'M' ? '남' : '여'}</Text>
-                              <Text style={styles.infoDot}>•</Text>
-                              <Text style={styles.infoTextSmall}>{item.grade}</Text>
-                            </View>
-                            <Text style={styles.infoTextTiny} numberOfLines={1}>
-                              반: {item.classMentor || '-'}
-                            </Text>
-                            <Text style={styles.infoTextTiny} numberOfLines={1}>
-                              유닛: {item.unitMentor || '-'}
-                            </Text>
-                          </View>
+                          <StudentCardContent item={item} convertGoogleDriveUrl={convertGoogleDriveUrl} />
                         </TouchableOpacity>
                       );
                       })}
@@ -794,42 +773,7 @@ export const StudentList: React.FC<StudentListProps> = ({
               style={styles.studentCardClass}
               onPress={() => onStudentPress(item, index, displayStudents)}
             >
-              <View style={styles.cardTop}>
-                <Text 
-                  style={[
-                    styles.studentName,
-                    item.gender === 'M' ? styles.nameBlue : styles.nameYellow
-                  ]} 
-                  numberOfLines={1}
-                >
-                  {item.name}
-                </Text>
-                <Text style={styles.classNumberBlack} numberOfLines={1}>
-                  {item.classNumber || '-'}
-                </Text>
-              </View>
-              
-              <View style={styles.cardDivider} />
-              
-              <View style={styles.cardInfo}>
-                <Text style={styles.infoTextSmall} numberOfLines={1}>
-                  {item.englishName || '-'}
-                </Text>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoTextSmall}>{item.gender === 'M' ? '남' : '여'}</Text>
-                  <Text style={styles.infoDot}>•</Text>
-                  <Text style={styles.infoTextSmall}>{item.grade}</Text>
-                </View>
-                <Text style={styles.infoTextTiny} numberOfLines={1}>
-                  반: {item.classMentor || '-'}
-                </Text>
-                <Text style={styles.infoTextTiny} numberOfLines={1}>
-                  유닛: {item.unitMentor || '-'}
-                </Text>
-                <Text style={styles.infoTextTiny} numberOfLines={1}>
-                  {item.roomNumber || '-'}호
-                </Text>
-              </View>
+              <StudentCardContent item={item} convertGoogleDriveUrl={convertGoogleDriveUrl} />
             </TouchableOpacity>
           )}
           contentContainerStyle={styles.listContainer}
@@ -848,6 +792,117 @@ export const StudentList: React.FC<StudentListProps> = ({
     </View>
   );
 };
+
+interface StudentCardContentProps {
+  item: STSheetStudent;
+  convertGoogleDriveUrl: (url: string | undefined) => string | undefined;
+}
+
+const StudentCardContent = React.memo(({ item, convertGoogleDriveUrl }: StudentCardContentProps) => {
+  const photoUrl = convertGoogleDriveUrl(item.profilePhoto);
+
+  // "홍길동 (G2M)" 형식: grade에서 숫자만 + 성별 (예: "G2" + "M")
+  const gradeNum = item.grade?.replace(/[^0-9]/g, '') ?? '';
+  const gradePrefix = item.grade?.replace(/[0-9].*/g, '') ?? 'G';
+  const gradeBadge = gradeNum ? `${gradePrefix}${gradeNum}${item.gender === 'M' ? 'M' : 'F'}` : '';
+
+  // 유닛 라인 (호수 별도)
+  const unitName = item.unitMentor || item.unit
+    ? `${item.unitMentor || item.unit} 유닛`
+    : null;
+  const roomLine = item.roomNumber ? `${item.roomNumber}호` : null;
+
+  return (
+    <View style={cardStyles.wrapper}>
+      {/* 프로필 사진 */}
+      {photoUrl ? (
+        <Image
+          source={photoUrl}
+          style={cardStyles.photo}
+          contentFit="cover"
+          transition={0}
+          cachePolicy="memory-disk"
+        />
+      ) : (
+        <View style={[cardStyles.photo, cardStyles.photoPlaceholder]}>
+          <Text style={[cardStyles.photoInitial, item.gender === 'M' ? cardStyles.initialBlue : cardStyles.initialYellow]}>
+            {item.name?.charAt(0) ?? '?'}
+          </Text>
+        </View>
+      )}
+
+      {/* 이름 + 배지 */}
+      <Text
+        style={[cardStyles.name, item.gender === 'M' ? cardStyles.nameBlue : cardStyles.nameYellow]}
+        numberOfLines={1}
+      >
+        {item.name}{gradeBadge ? ` (${gradeBadge})` : ''}
+      </Text>
+
+      {/* 영어 이름 */}
+      {item.englishName ? (
+        <Text style={cardStyles.sub} numberOfLines={1}>{item.englishName}</Text>
+      ) : null}
+
+
+      {/* 유닛 */}
+      {unitName ? (
+        <Text style={cardStyles.sub} numberOfLines={1}>{unitName}</Text>
+      ) : null}
+
+      {/* 호수 */}
+      {roomLine ? (
+        <Text style={cardStyles.sub} numberOfLines={1}>{roomLine}</Text>
+      ) : null}
+    </View>
+  );
+});
+
+const cardStyles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    paddingBottom: 6,
+    gap: 2,
+  },
+  photo: {
+    width: '90%',
+    aspectRatio: 1,
+    borderRadius: 8,
+    marginTop: '5%',
+    marginBottom: 4,
+  },
+  photoPlaceholder: {
+    backgroundColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoInitial: {
+    fontSize: 22,
+    fontWeight: '700' as '700',
+  },
+  initialBlue: {
+    color: '#3b82f6',
+  },
+  initialYellow: {
+    color: '#f59e0b',
+  },
+  name: {
+    fontSize: 11,
+    fontWeight: '700' as '700',
+    textAlign: 'center',
+  },
+  nameBlue: {
+    color: '#3b82f6',
+  },
+  nameYellow: {
+    color: '#d97706',
+  },
+  sub: {
+    fontSize: 10,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -1204,21 +1259,21 @@ const styles = StyleSheet.create({
     borderColor: '#ca8a04',
   },
   listContainer: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
+    paddingHorizontal: 4,
+    paddingTop: 8,
     paddingBottom: 8,
   },
   scrollContainer: {
     flex: 1,
-    paddingTop: 12,
+    paddingTop: 8,
   },
   roomSection: {
-    marginBottom: 16,
-    paddingHorizontal: 12,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   doubleRoomSection: {
-    marginBottom: 16,
-    paddingHorizontal: 12,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   doubleRoomGrid: {
     flexDirection: 'row',
@@ -1259,8 +1314,8 @@ const styles = StyleSheet.create({
   studentCard: {
     backgroundColor: '#ffffff',
     borderRadius: 10,
-    padding: 10,
-    marginBottom: 6,
+    overflow: 'hidden',
+    marginBottom: 4,
     width: '23.5%',
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -1273,8 +1328,8 @@ const styles = StyleSheet.create({
   studentCardDouble: {
     backgroundColor: '#ffffff',
     borderRadius: 10,
-    padding: 10,
-    marginBottom: 6,
+    overflow: 'hidden',
+    marginBottom: 4,
     width: '48%',
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -1287,8 +1342,8 @@ const styles = StyleSheet.create({
   studentCardClass: {
     backgroundColor: '#ffffff',
     borderRadius: 10,
-    padding: 10,
-    marginBottom: 6,
+    overflow: 'hidden',
+    marginBottom: 4,
     width: '23.5%',
     marginHorizontal: '0.5%',
     borderWidth: 1,

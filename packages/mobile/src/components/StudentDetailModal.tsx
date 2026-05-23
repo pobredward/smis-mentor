@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
   View,
@@ -10,15 +10,15 @@ import {
   Animated,
   Dimensions,
   PanResponder,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampType } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
 import { requestContactsPermission, saveSingleParentContact } from '../services';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_HEIGHT = SCREEN_HEIGHT * 0.75; // 화면의 75%
+const CARD_HEIGHT = SCREEN_HEIGHT * 0.78; // 화면의 78%
 const CARD_WIDTH = SCREEN_WIDTH * 0.9; // 화면의 90%
 const HORIZONTAL_MARGIN = (SCREEN_WIDTH - CARD_WIDTH) / 2; // 좌우 여백
 
@@ -66,6 +66,16 @@ const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
   return url;
 };
 
+const InfoRow = React.memo(({ label, value }: { label: string; value?: string | null }) => {
+  if (!value) return null;
+  return (
+    <View style={styles.infoRow}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value}>{value}</Text>
+    </View>
+  );
+});
+
 interface StudentDetailModalProps {
   visible: boolean;
   students: STSheetStudent[];
@@ -102,24 +112,24 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         Animated.spring(scale, {
           toValue: 1,
           useNativeDriver: true,
-          tension: 80,
-          friction: 12,
+          tension: 160,
+          friction: 14,
         }),
         Animated.spring(translateY, {
           toValue: 1,
           useNativeDriver: true,
-          tension: 80,
-          friction: 12,
+          tension: 160,
+          friction: 14,
         }),
       ]).start();
       
-      // 초기 위치로 스크롤
+      // 초기 위치로 스크롤 (레이아웃 직후 즉시 이동)
       setTimeout(() => {
         scrollViewRef.current?.scrollTo({
           x: initialIndex * CARD_WIDTH,
           animated: false,
         });
-      }, 100);
+      }, 0);
     } else {
       // 카드 사라지는 애니메이션
       Animated.parallel([
@@ -146,140 +156,16 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     }
   };
 
-  if (students.length === 0) return null;
-
-  const student = students[currentIndex];
-
-  const handleSaveParentContact = async (s: STSheetStudent) => {
+  const handleSaveParentContact = useCallback(async (s: STSheetStudent) => {
     if (!s.parentPhone) return;
     const granted = await requestContactsPermission();
     if (!granted) return;
     await saveSingleParentContact(s, campCode);
-  };
+  }, [campCode]);
 
-  const InfoRow = ({ label, value }: { label: string; value?: string | null }) => {
-    if (!value) return null;
-    return (
-      <View style={styles.infoRow}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.value}>{value}</Text>
-      </View>
-    );
-  };
+  if (students.length === 0) return null;
 
-  const StudentCard = ({ student: s }: { student: STSheetStudent }) => (
-    <ScrollView
-      style={styles.cardScrollView}
-      showsVerticalScrollIndicator={false}
-      bounces={false}
-    >
-      <View style={styles.cardContent}>
-        {/* 캠프 정보 */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>캠프 정보</Text>
-          <InfoRow label="고유번호" value={s.studentId} />
-          <InfoRow 
-            label="반 정보" 
-            value={
-              s.classNumber || s.className || s.classMentor
-                ? `${s.classNumber || '-'} | ${s.className || '-'}반 | ${s.classMentor || '-'} 멘토`
-                : undefined
-            }
-          />
-          <InfoRow 
-            label="유닛 정보" 
-            value={
-              s.unit || s.unitMentor || s.roomNumber
-                ? `${s.unit || s.unitMentor || '-'} 유닛 | ${s.roomNumber || '-'}호`
-                : s.unitMentor || s.roomNumber
-                ? `${s.unitMentor || '-'} | ${s.roomNumber || '-'}호`
-                : undefined
-            }
-          />
-        </View>
-
-        {/* 기본 정보 */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>기본 정보</Text>
-          <InfoRow 
-            label="신상" 
-            value={`${s.name} | ${s.englishName || '-'} | ${s.grade} | ${s.gender === 'M' ? '남' : '여'}`} 
-          />
-          <InfoRow label="주민등록번호" value={maskSSN(s.ssn, isAdmin, groupRole)} />
-          <InfoRow label="도로명 주소" value={s.address} />
-          <InfoRow label="세부 주소" value={s.addressDetail} />
-          
-          {campType === 'EJ' && (
-            <InfoRow 
-              label="입퇴소공항" 
-              value={
-                s.departureRoute || s.arrivalRoute
-                  ? `${s.departureRoute || '-'} 입소 | ${s.arrivalRoute || '-'} 퇴소`
-                  : undefined
-              }
-            />
-          )}
-          
-          {campType === 'S' && (
-            <>
-              <InfoRow label="단체티 사이즈" value={s.shirtSize} />
-              <InfoRow 
-                label="여권정보" 
-                value={
-                  s.passportName || s.passportNumber || s.passportExpiry
-                    ? `${s.passportName || '-'} | ${s.passportNumber || '-'} | ${s.passportExpiry || '-'}`
-                    : undefined
-                }
-              />
-            </>
-          )}
-        </View>
-
-        {/* 보호자 정보 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>보호자 정보</Text>
-            {s.parentPhone && (
-              <TouchableOpacity
-                onPress={() => handleSaveParentContact(s)}
-                style={styles.saveContactBtn}
-                accessibilityLabel="보호자 연락처 저장"
-                accessibilityRole="button"
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="person-add-outline" size={15} color="#10b981" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <InfoRow 
-            label="대표 보호자" 
-            value={
-              s.parentPhone || s.parentName
-                ? `${s.parentPhone || '-'} | ${s.parentName || '-'}`
-                : undefined
-            }
-          />
-          <InfoRow label="대표 이메일" value={s.email} />
-          <InfoRow 
-            label="기타 보호자" 
-            value={
-              s.otherPhone || s.otherName
-                ? `${s.otherPhone || '-'} | ${s.otherName || '-'}`
-                : undefined
-            }
-          />
-        </View>
-
-        {/* 상세 정보 */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>상세 정보</Text>
-          <InfoRow label="복용약 & 알레르기" value={s.medication} />
-          <InfoRow label="특이사항" value={s.notes} />
-          <InfoRow label="기타" value={s.etc} />
-        </View>
-      </View>
-    </ScrollView>
-  );
+  const student = students[currentIndex] ?? students[0];
 
   return (
     <Modal
@@ -309,34 +195,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         >
           {/* 헤더 */}
           <View style={styles.header}>
-            {/* 프로필 사진 */}
-            {(() => {
-              const profilePhotoUrl = convertGoogleDriveUrl(student.profilePhoto);
-              if (profilePhotoUrl) {
-                return (
-                  <View style={styles.profilePhotoContainer}>
-                    <Image
-                      source={{ uri: profilePhotoUrl }}
-                      style={styles.profilePhoto}
-                      onLoad={() => {
-                        logger.info('✅ [StudentDetailModal] 프로필사진 로드 성공:', student.name, profilePhotoUrl);
-                      }}
-                      onError={(e) => {
-                        logger.error('❌ [StudentDetailModal] 프로필사진 로드 실패:', {
-                          name: student.name,
-                          originalUrl: student.profilePhoto,
-                          convertedUrl: profilePhotoUrl,
-                          error: e.nativeEvent,
-                        });
-                      }}
-                    />
-                  </View>
-                );
-              }
-              return null;
-            })()}
-            
-            {/* 학생 이름 - 완벽한 가운데 정렬 */}
+            {/* 학생 이름 */}
             <View style={styles.headerCenter}>
               <Text style={styles.studentName}>{student.name}</Text>
               <Text style={styles.pageIndicator}>
@@ -344,7 +203,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
               </Text>
             </View>
 
-            {/* X 버튼 - 절대 위치 최상단 */}
+            {/* X 버튼 */}
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Text style={styles.closeButtonText}>✕</Text>
             </TouchableOpacity>
@@ -362,9 +221,15 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             snapToInterval={CARD_WIDTH}
             decelerationRate="fast"
           >
-            {students.map((s, index) => (
+            {students.map((s) => (
               <View key={s.studentId} style={styles.page}>
-                <StudentCard student={s} />
+                <StudentCard
+                  student={s}
+                  campType={campType}
+                  isAdmin={isAdmin}
+                  groupRole={groupRole}
+                  onSaveContact={handleSaveParentContact}
+                />
               </View>
             ))}
           </ScrollView>
@@ -389,6 +254,145 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   );
 };
 
+interface StudentCardProps {
+  student: STSheetStudent;
+  campType: CampType;
+  isAdmin: boolean;
+  groupRole?: string;
+  onSaveContact: (s: STSheetStudent) => void;
+}
+
+const StudentCard = React.memo(({ student: s, campType, isAdmin, groupRole, onSaveContact }: StudentCardProps) => {
+  const profilePhotoUrl = convertGoogleDriveUrl(s.profilePhoto);
+  return (
+  <ScrollView
+    style={styles.cardScrollView}
+    showsVerticalScrollIndicator={true}
+    bounces={false}
+    indicatorStyle="black"
+  >
+    {/* 프로필 사진 - 스와이프 콘텐츠와 함께 이동하여 딜레이 없음 */}
+    {profilePhotoUrl && (
+      <View style={styles.profilePhotoContainer}>
+        <Image
+          source={profilePhotoUrl}
+          style={styles.profilePhoto}
+          contentFit="cover"
+          transition={0}
+          cachePolicy="memory-disk"
+        />
+      </View>
+    )}
+
+    <View style={styles.cardContent}>
+      {/* 캠프 정보 */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>캠프 정보</Text>
+        <InfoRow label="고유번호" value={s.studentId} />
+        <InfoRow
+          label="반 정보"
+          value={
+            s.classNumber || s.className || s.classMentor
+              ? `${s.classNumber || '-'} | ${s.className || '-'}반 | ${s.classMentor || '-'} 멘토`
+              : undefined
+          }
+        />
+        <InfoRow
+          label="유닛 정보"
+          value={
+            s.unit || s.unitMentor || s.roomNumber
+              ? `${s.unit || s.unitMentor || '-'} 유닛 | ${s.roomNumber || '-'}호`
+              : s.unitMentor || s.roomNumber
+              ? `${s.unitMentor || '-'} | ${s.roomNumber || '-'}호`
+              : undefined
+          }
+        />
+      </View>
+
+      {/* 기본 정보 */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>기본 정보</Text>
+        <InfoRow
+          label="신상"
+          value={`${s.name} | ${s.englishName || '-'} | ${s.grade} | ${s.gender === 'M' ? '남' : '여'}`}
+        />
+        <InfoRow label="주민등록번호" value={maskSSN(s.ssn, isAdmin, groupRole)} />
+        <InfoRow label="도로명 주소" value={s.address} />
+        <InfoRow label="세부 주소" value={s.addressDetail} />
+
+        {campType === 'EJ' && (
+          <InfoRow
+            label="입퇴소공항"
+            value={
+              s.departureRoute || s.arrivalRoute
+                ? `${s.departureRoute || '-'} 입소 | ${s.arrivalRoute || '-'} 퇴소`
+                : undefined
+            }
+          />
+        )}
+
+        {campType === 'S' && (
+          <>
+            <InfoRow label="단체티 사이즈" value={s.shirtSize} />
+            <InfoRow
+              label="여권정보"
+              value={
+                s.passportName || s.passportNumber || s.passportExpiry
+                  ? `${s.passportName || '-'} | ${s.passportNumber || '-'} | ${s.passportExpiry || '-'}`
+                  : undefined
+              }
+            />
+          </>
+        )}
+      </View>
+
+      {/* 보호자 정보 */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>보호자 정보</Text>
+          {s.parentPhone && (
+            <TouchableOpacity
+              onPress={() => onSaveContact(s)}
+              style={styles.saveContactBtn}
+              accessibilityLabel="보호자 연락처 저장"
+              accessibilityRole="button"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="person-add-outline" size={15} color="#10b981" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <InfoRow
+          label="대표 보호자"
+          value={
+            s.parentPhone || s.parentName
+              ? `${s.parentPhone || '-'} | ${s.parentName || '-'}`
+              : undefined
+          }
+        />
+        <InfoRow label="대표 이메일" value={s.email} />
+        <InfoRow
+          label="기타 보호자"
+          value={
+            s.otherPhone || s.otherName
+              ? `${s.otherPhone || '-'} | ${s.otherName || '-'}`
+              : undefined
+          }
+        />
+      </View>
+
+      {/* 상세 정보 */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>상세 정보</Text>
+        <InfoRow label="복용약 & 알레르기" value={s.medication} />
+        <InfoRow label="특이사항" value={s.notes} />
+        <InfoRow label="기타" value={s.etc} />
+      </View>
+    </View>
+  </ScrollView>
+  );
+});
+
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
@@ -412,24 +416,28 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
     backgroundColor: '#ffffff',
     position: 'relative',
-    minHeight: 80,
+    minHeight: 48,
   },
   profilePhotoContainer: {
-    marginBottom: 12,
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: '#ffffff',
   },
   profilePhoto: {
-    width: 192,
-    height: 192,
-    borderRadius: 96,
-    borderWidth: 2,
+    width: 140,
+    height: 140,
+    borderRadius: 16,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   headerCenter: {
@@ -437,14 +445,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   studentName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700' as '700',
     color: '#1e293b',
   },
   pageIndicator: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748b',
-    marginTop: 2,
+    marginTop: 1,
   },
   closeButton: {
     position: 'absolute',
@@ -468,15 +476,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 32,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 14,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600' as '600',
     color: '#1e293b',
   },
@@ -484,22 +492,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   infoRow: {
     flexDirection: 'row',
-    paddingVertical: 8,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
   label: {
-    width: 90,
-    fontSize: 13,
+    width: 85,
+    fontSize: 12,
     color: '#64748b',
   },
   value: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     color: '#1e293b',
     fontWeight: '500' as '500',
   },
@@ -507,7 +515,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 6,
     paddingHorizontal: 16,
     backgroundColor: '#ffffff',
     flexWrap: 'wrap',
