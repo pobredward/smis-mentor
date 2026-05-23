@@ -1,4 +1,5 @@
 export * from './stSheet';
+export * from './contacts';
 export * from './profileService';
 export * from './recruitmentService';
 export * from './smsService';

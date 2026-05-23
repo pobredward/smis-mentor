@@ -12,8 +12,10 @@ import {
   PanResponder,
   Image,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampType } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
+import { requestContactsPermission, saveSingleParentContact } from '../services';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.75; // 화면의 75%
@@ -66,10 +68,11 @@ const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
 
 interface StudentDetailModalProps {
   visible: boolean;
-  students: STSheetStudent[]; // 전체 학생 목록
-  initialIndex: number; // 초기 선택된 학생 인덱스
+  students: STSheetStudent[];
+  initialIndex: number;
   onClose: () => void;
   campType: CampType;
+  campCode?: string;
 }
 
 export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
@@ -78,6 +81,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   initialIndex,
   onClose,
   campType,
+  campCode,
 }) => {
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
@@ -146,6 +150,13 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
   const student = students[currentIndex];
 
+  const handleSaveParentContact = async (s: STSheetStudent) => {
+    if (!s.parentPhone) return;
+    const granted = await requestContactsPermission();
+    if (!granted) return;
+    await saveSingleParentContact(s, campCode);
+  };
+
   const InfoRow = ({ label, value }: { label: string; value?: string | null }) => {
     if (!value) return null;
     return (
@@ -165,7 +176,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       <View style={styles.cardContent}>
         {/* 캠프 정보 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>캠프 정보</Text>
+          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>캠프 정보</Text>
           <InfoRow label="고유번호" value={s.studentId} />
           <InfoRow 
             label="반 정보" 
@@ -189,7 +200,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
         {/* 기본 정보 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>기본 정보</Text>
+          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>기본 정보</Text>
           <InfoRow 
             label="신상" 
             value={`${s.name} | ${s.englishName || '-'} | ${s.grade} | ${s.gender === 'M' ? '남' : '여'}`} 
@@ -226,7 +237,20 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
         {/* 보호자 정보 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>보호자 정보</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>보호자 정보</Text>
+            {s.parentPhone && (
+              <TouchableOpacity
+                onPress={() => handleSaveParentContact(s)}
+                style={styles.saveContactBtn}
+                accessibilityLabel="보호자 연락처 저장"
+                accessibilityRole="button"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="person-add-outline" size={15} color="#10b981" />
+              </TouchableOpacity>
+            )}
+          </View>
           <InfoRow 
             label="대표 보호자" 
             value={
@@ -248,7 +272,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
         {/* 상세 정보 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>상세 정보</Text>
+          <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>상세 정보</Text>
           <InfoRow label="복용약 & 알레르기" value={s.medication} />
           <InfoRow label="특이사항" value={s.notes} />
           <InfoRow label="기타" value={s.etc} />
@@ -455,6 +479,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600' as '600',
     color: '#1e293b',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 10,
   },
   infoRow: {
@@ -464,12 +493,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f1f5f9',
   },
   label: {
-    flex: 1,
+    width: 90,
     fontSize: 13,
     color: '#64748b',
   },
   value: {
-    flex: 2,
+    flex: 1,
     fontSize: 13,
     color: '#1e293b',
     fontWeight: '500' as '500',
@@ -496,5 +525,16 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 3.5,
     backgroundColor: '#3b82f6',
+  },
+  saveContactBtn: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
+    borderRadius: 6,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
   },
 });

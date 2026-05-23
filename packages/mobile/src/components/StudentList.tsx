@@ -11,10 +11,12 @@ import {
   Alert,
   ScrollView,
   TextInput,
+  Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampCode, CampType } from '@smis-mentor/shared';
-import { stSheetService } from '../services';
+import { stSheetService, requestContactsPermission, saveStudentContacts, saveSingleParentContact, buildContactDisplayName, buildContactNote } from '../services';
 import { useAuth } from '../context/AuthContext';
 import { jobCodesService } from '../services';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,6 +25,7 @@ interface StudentListProps {
   filterType: 'class' | 'room';
   onStudentPress: (student: STSheetStudent, index: number, students: STSheetStudent[]) => void;
   onCampTypeChange?: (campType: CampType) => void;
+  onCampCodeChange?: (campCode: CampCode) => void;
   isForeign?: boolean;
 }
 
@@ -30,6 +33,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   filterType,
   onStudentPress,
   onCampTypeChange,
+  onCampCodeChange,
   isForeign,
 }) => {
   const { userData } = useAuth();
@@ -43,6 +47,9 @@ export const StudentList: React.FC<StudentListProps> = ({
   const [isTemporaryData, setIsTemporaryData] = useState(false);
   const [useTemporaryDataSetting, setUseTemporaryDataSetting] = useState(true);
   const [hasRealData, setHasRealData] = useState(false);
+  const [isSavingContacts, setIsSavingContacts] = useState(false);
+  const [contactSaveProgress, setContactSaveProgress] = useState({ done: 0, total: 0 });
+  const [bulkPreviewStudents, setBulkPreviewStudents] = useState<STSheetStudent[]>([]);
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
   const isAdmin = userData?.role === 'admin';
@@ -65,6 +72,7 @@ export const StudentList: React.FC<StudentListProps> = ({
           const type = stSheetService.getCampType(code);
           setCampType(type);
           onCampTypeChange?.(type);
+          onCampCodeChange?.(code);
         } else {
           logger.info('캠프 코드를 찾을 수 없습니다.');
         }
@@ -185,6 +193,53 @@ export const StudentList: React.FC<StudentListProps> = ({
     }
   };
 
+  const handleSaveContacts = async () => {
+    if (isTemporaryData) {
+      Alert.alert(
+        '연락처 저장 불가',
+        '현재 임시 데이터가 표시 중입니다.\n실제 학생 데이터가 등록된 후 저장할 수 있습니다.',
+      );
+      return;
+    }
+
+    const studentsToSave = selectedMentor ? (groupedByMentor[selectedMentor] ?? []) : allStudents;
+    const validStudents = studentsToSave.filter((s) => s.parentPhone);
+
+    if (validStudents.length === 0) {
+      Alert.alert('알림', '저장할 연락처가 없습니다.\n(부모님 연락처가 있는 학생이 없습니다.)');
+      return;
+    }
+
+    const granted = await requestContactsPermission();
+    if (!granted) return;
+
+    setBulkPreviewStudents(validStudents);
+  };
+
+  const handleBulkSaveConfirm = async () => {
+    const studentsToSave = bulkPreviewStudents;
+    setBulkPreviewStudents([]);
+
+    setContactSaveProgress({ done: 0, total: studentsToSave.length });
+    setIsSavingContacts(true);
+
+    try {
+      const result = await saveStudentContacts(studentsToSave, (done, total) => {
+        setContactSaveProgress({ done, total });
+      }, campCode ?? undefined);
+
+      setIsSavingContacts(false);
+
+      const lines = [`저장: ${result.saved}명`, `중복 건너뜀: ${result.skipped}명`];
+      if (result.failed > 0) lines.push(`실패: ${result.failed}명`);
+
+      Alert.alert('저장 완료', lines.join('\n'));
+    } catch (error) {
+      setIsSavingContacts(false);
+      logger.error('연락처 저장 실패:', error);
+      Alert.alert('오류', '연락처 저장 중 오류가 발생했습니다.');
+    }
+  };
   // 멘토별/반별로 학생 그룹화
   const groupedByMentor = allStudents.reduce((acc, student) => {
     let mentorKey: string;
@@ -324,6 +379,15 @@ export const StudentList: React.FC<StudentListProps> = ({
               <Text style={styles.searchIcon}>🔍</Text>
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={[styles.saveContactsButton, isTemporaryData && styles.saveContactsButtonDisabled]}
+            onPress={handleSaveContacts}
+            disabled={isSavingContacts || allStudents.length === 0}
+            accessibilityLabel="연락처 저장"
+            accessibilityRole="button"
+          >
+            <Ionicons name="person-add-outline" size={18} color="#fff" />
+          </TouchableOpacity>
           {isAdmin && (
             <>
               <TouchableOpacity
@@ -352,6 +416,80 @@ export const StudentList: React.FC<StudentListProps> = ({
           )}
         </View>
       </View>
+
+      {/* 연락처 관련 모달 (미리보기 / 저장 진행) — 하나의 Modal로 통합하여 터치 차단 버그 방지 */}
+      <Modal transparent animationType="fade" visible={isSavingContacts || bulkPreviewStudents.length > 0}>
+        <View style={styles.modalOverlay}>
+          {isSavingContacts ? (
+            <View style={styles.modalBox}>
+              <ActivityIndicator size="large" color="#3b82f6" />
+              <Text style={styles.modalTitle}>연락처 저장 중...</Text>
+              <Text style={styles.modalProgress}>
+                {contactSaveProgress.done} / {contactSaveProgress.total}명
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.bulkPreviewBox}>
+              <Text style={styles.bulkPreviewTitle}>
+                연락처 저장 ({bulkPreviewStudents.length}명)
+              </Text>
+              <Text style={styles.bulkPreviewSubtitle}>
+                이미 동일한 이름으로 저장된 연락처는 건너뜁니다.
+              </Text>
+              <ScrollView
+                style={styles.bulkPreviewList}
+                showsVerticalScrollIndicator
+              >
+                {bulkPreviewStudents.map((s) => (
+                  <View key={s.studentId} style={styles.bulkPreviewRow}>
+                    <Text style={styles.bulkPreviewName} numberOfLines={1}>
+                      {buildContactDisplayName(s, campCode ?? undefined)}
+                    </Text>
+                    {Platform.OS === 'android' ? (
+                      <>
+                        <Text style={styles.bulkPreviewPhone}>번호: {s.parentPhone}</Text>
+                        {s.otherPhone && (
+                          <Text style={styles.bulkPreviewPhone}>번호: {s.otherPhone}</Text>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.bulkPreviewPhone}>
+                          {s.parentName || '부모님'}: {s.parentPhone}
+                        </Text>
+                        {s.otherPhone && (
+                          <Text style={styles.bulkPreviewPhone}>
+                            {s.otherName || '기타 연락처'}: {s.otherPhone}
+                          </Text>
+                        )}
+                      </>
+                    )}
+                    {!!buildContactNote(s) && (
+                      <Text style={styles.bulkPreviewNote} numberOfLines={2}>
+                        메모: {buildContactNote(s)}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+              <View style={styles.bulkPreviewActions}>
+                <TouchableOpacity
+                  style={styles.bulkPreviewCancel}
+                  onPress={() => setBulkPreviewStudents([])}
+                >
+                  <Text style={styles.bulkPreviewCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bulkPreviewConfirm}
+                  onPress={handleBulkSaveConfirm}
+                >
+                  <Text style={styles.bulkPreviewConfirmText}>저장</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
 
       {/* 임시 데이터 안내 배너 */}
       {isTemporaryData && (
@@ -806,6 +944,130 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 3,
+  },
+  saveContactsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  saveContactsButtonDisabled: {
+    backgroundColor: '#94a3b8',
+    shadowColor: '#94a3b8',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 32,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '600' as '600',
+    color: '#1e293b',
+  },
+  modalProgress: {
+    fontSize: 14,
+    color: '#64748b',
+  },
+  bulkPreviewBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: '88%',
+    maxHeight: '75%',
+    paddingTop: 24,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  bulkPreviewTitle: {
+    fontSize: 16,
+    fontWeight: '700' as '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  bulkPreviewSubtitle: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginBottom: 12,
+  },
+  bulkPreviewList: {
+    flexGrow: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  bulkPreviewRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    gap: 2,
+  },
+  bulkPreviewName: {
+    fontSize: 13,
+    fontWeight: '500' as '500',
+    color: '#1e293b',
+  },
+  bulkPreviewPhone: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  bulkPreviewNote: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 1,
+  },
+  bulkPreviewActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  bulkPreviewCancel: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  bulkPreviewCancelText: {
+    fontSize: 14,
+    fontWeight: '600' as '600',
+    color: '#64748b',
+  },
+  bulkPreviewConfirm: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: '#10b981',
+    alignItems: 'center',
+  },
+  bulkPreviewConfirmText: {
+    fontSize: 14,
+    fontWeight: '600' as '600',
+    color: '#fff',
   },
   syncButtonDisabled: {
     backgroundColor: '#94a3b8',

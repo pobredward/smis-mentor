@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StudentList, StudentDetailModal } from '../components';
-import { STSheetStudent, CampType } from '@smis-mentor/shared';
+import { STSheetStudent, CampType, CampCode } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
 
 export function RoomScreen() {
@@ -10,6 +10,7 @@ export function RoomScreen() {
   const [allStudents, setAllStudents] = useState<STSheetStudent[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [campType, setCampType] = useState<CampType>('EJ');
+  const [campCode, setCampCode] = useState<CampCode | null>(null);
 
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
@@ -29,6 +30,7 @@ export function RoomScreen() {
         filterType="room"
         onStudentPress={handleStudentPress}
         onCampTypeChange={handleCampTypeChange}
+        onCampCodeChange={setCampCode}
         isForeign={isForeign}
       />
       <StudentDetailModal
@@ -37,6 +39,7 @@ export function RoomScreen() {
         initialIndex={selectedIndex}
         onClose={() => setModalVisible(false)}
         campType={campType}
+        campCode={campCode ?? undefined}
       />
     </View>
   );
