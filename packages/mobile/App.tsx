@@ -137,13 +137,15 @@ function AppContent() {
       <RootNavigator />
       <StatusBar style="auto" />
       
-      {/* 전역 WebView 프리로더 */}
-      <WebViewPreloader
-        links={preloadLinks}
-        enabled={isPreloading}
-        onLoadComplete={handleWebViewPreloadComplete}
-        onProgressUpdate={handleWebViewProgressUpdate}
-      />
+      {/* 전역 WebView 프리로더 — 완료 후 언마운트해 Native 스레드 경합 해소 */}
+      {!webViewPreloadComplete && (
+        <WebViewPreloader
+          links={preloadLinks}
+          enabled={isPreloading}
+          onLoadComplete={handleWebViewPreloadComplete}
+          onProgressUpdate={handleWebViewProgressUpdate}
+        />
+      )}
 
       {/* 스플래시 화면 (프리로딩 진행 중) */}
       {showSplash && userData && (

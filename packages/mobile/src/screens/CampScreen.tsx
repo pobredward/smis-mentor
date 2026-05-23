@@ -203,7 +203,6 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   hiddenTab: {
-    opacity: 0,
-    zIndex: -1,
+    display: 'none',
   },
 });

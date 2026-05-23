@@ -98,8 +98,8 @@ export function TasksScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   // selectedDate를 ref로도 유지 — useMemo 의존성 없이 최신 선택 날짜 참조
   const selectedDateRef = useRef(new Date());
-  // 선택된 날짜 문자열 — compactCalendarCells useMemo의 의존성으로 사용
-  // selectedDate(Date 객체) 대신 문자열을 의존성으로 써서 동일한 날짜 재선택 시 리렌더 방지
+  // 선택된 날짜 문자열 — CompactCalendarGrid props로 전달
+  // selectedDate(Date 객체) 대신 문자열을 props로 써서 동일한 날짜 재선택 시 리렌더 방지
   const [selectedDateStr, setSelectedDateStr] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -703,8 +703,14 @@ export function TasksScreen() {
   }, [currentDate, currentCampCode]);
 
   // selectedDate가 변경될 때 해당 날짜의 업무 로드 (컴팩트 뷰에서만)
+  // handleDateClick에서 캐시를 즉시 반영하므로, 여기서는 월 캐시가 없는 경우(초기 로드)에만 쿼리
   useEffect(() => {
     if (currentCampCode && selectedDate && calendarView === 'compact') {
+      const year = selectedDate.getFullYear();
+      const month = selectedDate.getMonth();
+      const key = `${year}-${month}-${currentCampCode}`;
+      const cached = monthCacheRef.current.get(key);
+      if (cached) return;
       loadTasksForDate(selectedDate);
     }
   }, [selectedDate, currentCampCode, calendarView]);
@@ -752,18 +758,28 @@ export function TasksScreen() {
   // 날짜 클릭 핸들러
   // monthTasks/personalMonthTasks는 useMemo 클로저 stale 문제를 피하기 위해 ref로 참조
   const handleDateClick = useCallback((date: Date) => {
+    const year = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${mm}-${dd}`;
+    const dayTasks = monthTasksRef.current.get(dateStr) ?? [];
+    const dayPersonalTasks = personalMonthTasksRef.current.get(dateStr) ?? [];
+
     if (calendarView === 'full') {
-      const year = date.getFullYear();
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${mm}-${dd}`;
-      const dayTasks = monthTasksRef.current.get(dateStr) ?? [];
-      const dayPersonalTasks = personalMonthTasksRef.current.get(dateStr) ?? [];
       openSheet(date, dayTasks, dayPersonalTasks);
     } else {
+      // 캐시에서 즉시 반영 — Firestore 쿼리 없이 UI 즉각 업데이트
+      unstable_batchedUpdates(() => {
+        setSelectedDateTasks(dayTasks.filter(task => {
+          if (isAdmin) return true;
+          if (!currentGroupRole) return false;
+          return task.targetRoles.includes(currentGroupRole);
+        }));
+        setPersonalTasks(dayPersonalTasks);
+      });
       applySelectedDate(date);
     }
-  }, [calendarView, openSheet, applySelectedDate]);
+  }, [calendarView, openSheet, applySelectedDate, isAdmin, currentGroupRole]);
 
   // 업무 완료 토글
   const handleToggleComplete = async (taskId: string) => {
@@ -1038,101 +1054,7 @@ export function TasksScreen() {
     }
   };
 
-  // 컴팩트 뷰 렌더링: 큰 박스(숫자/체크) + 아래에 작은 날짜
-  const compactCalendarCells = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startDayOfWeek = firstDay.getDay();
-    const daysInMonth = lastDay.getDate();
-
-    const days: React.ReactElement[] = [];
-    const currentUserId = userData?.userId ?? '';
-
-    // 31번 isKoreanHoliday 호출 대신 월 전체 Set을 한 번만 생성
-    const holidaySet = getKoreanHolidaySet(year, month);
-
-    for (let i = 0; i < startDayOfWeek; i++) {
-      days.push(<View key={`empty-${i}`} style={styles.compactCell} />);
-    }
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
-      const dateYear = date.getFullYear();
-      const dateMonth = String(date.getMonth() + 1).padStart(2, '0');
-      const dateDay = String(date.getDate()).padStart(2, '0');
-      const dateStr = `${dateYear}-${dateMonth}-${dateDay}`;
-
-      const dayTasks = monthTasks.get(dateStr) ?? [];
-      const hasTask = dayTasks.length > 0;
-      // selectedDateStr(문자열 비교)으로 동일 객체 참조 없이 선택 상태 판단
-      const isSelected = selectedDateStr === dateStr;
-      const isToday = new Date().toDateString() === date.toDateString();
-      const dayOfWeek = date.getDay();
-      const isSunday = dayOfWeek === 0;
-      const isSaturday = dayOfWeek === 6;
-      const isHolidayDate = holidaySet.has(dateStr);
-
-      const pendingCount = dayTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
-      const allCompleted = hasTask && pendingCount === 0;
-      const personalPendingCount = personalTaskDates.get(dateStr) ?? 0;
-      const totalPendingCount = pendingCount + personalPendingCount;
-      const allDone = allCompleted && personalPendingCount === 0;
-
-      // 박스 색상 결정 (공통+개인 합산 기준)
-      const boxStyle = (() => {
-        if (allDone) return styles.compactBoxCompleted;
-        if (totalPendingCount > 0) return styles.compactBoxPending;
-        return styles.compactBoxEmpty;
-      })();
-
-      // 날짜 라벨 색상 (선택 시 크고 굵은 검정 원형 배경으로 강조)
-      const dayLabelStyle = (() => {
-        if (isSelected && isToday) return styles.compactDayLabelTodaySelected;
-        if (isSelected) return styles.compactDayLabelSelected;
-        // 오늘이면서 일요일/공휴일이면 빨간색+굵게 (파란색에 덮이지 않도록 먼저 처리)
-        if (isToday && (isSunday || isHolidayDate)) return styles.compactDayLabelTodaySunday;
-        if (isToday) return styles.compactDayLabelToday;
-        if (isSunday || isHolidayDate) return styles.compactDayLabelSunday;
-        if (isSaturday) return styles.compactDayLabelSaturday;
-        return null;
-      })();
-
-      days.push(
-        <TouchableOpacity
-          key={day}
-          onPress={() => handleDateClick(date)}
-          style={styles.compactCell}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel={`${month + 1}월 ${day}일${totalPendingCount > 0 ? `, 남은 업무 ${totalPendingCount}개` : allDone ? ', 모든 업무 완료' : ''}`}
-        >
-          {/* 큰 박스 */}
-          <View style={[styles.compactBox, boxStyle]}>
-            {allDone ? (
-              <Ionicons name="checkmark" size={14} color="#ffffff" />
-            ) : totalPendingCount > 0 ? (
-              <Text style={styles.compactBoxNumber}>{totalPendingCount}</Text>
-            ) : null}
-          </View>
-          {/* 날짜 숫자 — 선택 시 원형 배경으로 강조 */}
-          <View style={[
-            styles.compactDayLabelWrap,
-            isSelected && (isToday ? styles.compactDayLabelWrapTodaySelected : styles.compactDayLabelWrapSelected),
-            !isSelected && isToday && styles.compactDayLabelWrapToday,
-          ]}>
-            <Text style={[styles.compactDayLabel, dayLabelStyle]}>
-              {day}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      );
-    }
-
-    return days;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDate, monthTasks, selectedDateStr, personalTaskDates, userData?.userId]);
+  // compactCalendarCells → CompactCalendarGrid 컴포넌트로 분리 (React.memo로 commit 범위 최소화)
 
   // 풀 캘린더 뷰 렌더링: 날짜 셀에 업무 제목/시간 직접 표시
   // sheetVisible 등 바텀시트 상태가 바뀌어도 달력 재계산을 막기 위해 useMemo로 캐싱
@@ -1388,9 +1310,14 @@ export function TasksScreen() {
 
           {/* 날짜 그리드 */}
           {calendarView === 'compact' ? (
-            <View style={styles.compactGrid}>
-              {compactCalendarCells}
-            </View>
+            <CompactCalendarGrid
+              currentDate={currentDate}
+              monthTasks={monthTasks}
+              selectedDateStr={selectedDateStr}
+              personalTaskDates={personalTaskDates}
+              currentUserId={userData?.userId ?? ''}
+              onDateClick={handleDateClick}
+            />
           ) : (
             <View style={styles.fullCalendarGrid}>
               {fullCalendarRows}
@@ -1573,23 +1500,25 @@ export function TasksScreen() {
         </View>
       )}
 
-      {/* 업무 추가/수정 모달 */}
-      <TaskAddModal
-        visible={showAddModal}
-        campCode={currentCampCode}
-        initialDate={selectedDate}
-        editingTask={editingTask}
-        categories={categories}
-        onClose={() => {
-          setShowAddModal(false);
-          setEditingTask(null);
-        }}
-        onSuccess={() => {
-          setShowAddModal(false);
-          setEditingTask(null);
-          fetchTasks();
-        }}
-      />
+      {/* 업무 추가/수정 모달 — 열릴 때만 마운트해 평상시 View 트리에서 제거 */}
+      {(showAddModal || !!editingTask) && (
+        <TaskAddModal
+          visible={showAddModal}
+          campCode={currentCampCode}
+          initialDate={selectedDate}
+          editingTask={editingTask}
+          categories={categories}
+          onClose={() => {
+            setShowAddModal(false);
+            setEditingTask(null);
+          }}
+          onSuccess={() => {
+            setShowAddModal(false);
+            setEditingTask(null);
+            fetchTasks();
+          }}
+        />
+      )}
 
       {/* 카테고리 관리 모달 (관리자 전용) */}
       {isAdmin && userData && currentCampCode && (
@@ -1605,8 +1534,8 @@ export function TasksScreen() {
         />
       )}
 
-      {/* 개인 업무 추가/수정 모달 */}
-      <Modal
+      {/* 개인 업무 추가/수정 모달 — 열릴 때만 마운트해 평상시 View 트리에서 제거 */}
+      {(showPersonalTaskModal || !!editingPersonalTask) && <Modal
         visible={showPersonalTaskModal}
         animationType="fade"
         transparent
@@ -1975,7 +1904,7 @@ export function TasksScreen() {
             </View>
           </KeyboardAvoidingView>
         </View>
-      </Modal>
+      </Modal>}
 
       {/* 풀 캘린더 날짜 클릭 바텀시트 */}
       {sheetVisible && (
@@ -3600,6 +3529,110 @@ function TaskAddModal({
     </Modal>
   );
 }
+
+// ─── CompactCalendarGrid ─────────────────────────────────────────────────────
+// React.memo로 감싸 selectedDateStr 변경 시 이 컴포넌트만 re-render/re-commit
+interface CompactCalendarGridProps {
+  currentDate: Date;
+  monthTasks: Map<string, Task[]>;
+  selectedDateStr: string;
+  personalTaskDates: Map<string, number>;
+  currentUserId: string;
+  onDateClick: (date: Date) => void;
+}
+
+const CompactCalendarGrid = React.memo(function CompactCalendarGrid({
+  currentDate,
+  monthTasks,
+  selectedDateStr,
+  personalTaskDates,
+  currentUserId,
+  onDateClick,
+}: CompactCalendarGridProps) {
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startDayOfWeek = firstDay.getDay();
+  const daysInMonth = lastDay.getDate();
+
+  const holidaySet = getKoreanHolidaySet(year, month);
+
+  const days: React.ReactElement[] = [];
+  for (let i = 0; i < startDayOfWeek; i++) {
+    days.push(<View key={`empty-${i}`} style={styles.compactCell} />);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const dateYear = date.getFullYear();
+    const dateMonth = String(date.getMonth() + 1).padStart(2, '0');
+    const dateDay = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${dateYear}-${dateMonth}-${dateDay}`;
+
+    const dayTasks = monthTasks.get(dateStr) ?? [];
+    const hasTask = dayTasks.length > 0;
+    const isSelected = selectedDateStr === dateStr;
+    const isToday = new Date().toDateString() === date.toDateString();
+    const dayOfWeek = date.getDay();
+    const isSunday = dayOfWeek === 0;
+    const isSaturday = dayOfWeek === 6;
+    const isHolidayDate = holidaySet.has(dateStr);
+
+    const pendingCount = dayTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
+    const allCompleted = hasTask && pendingCount === 0;
+    const personalPendingCount = personalTaskDates.get(dateStr) ?? 0;
+    const totalPendingCount = pendingCount + personalPendingCount;
+    const allDone = allCompleted && personalPendingCount === 0;
+
+    const boxStyle = (() => {
+      if (allDone) return styles.compactBoxCompleted;
+      if (totalPendingCount > 0) return styles.compactBoxPending;
+      return styles.compactBoxEmpty;
+    })();
+
+    const dayLabelStyle = (() => {
+      if (isSelected && isToday) return styles.compactDayLabelTodaySelected;
+      if (isSelected) return styles.compactDayLabelSelected;
+      if (isToday && (isSunday || isHolidayDate)) return styles.compactDayLabelTodaySunday;
+      if (isToday) return styles.compactDayLabelToday;
+      if (isSunday || isHolidayDate) return styles.compactDayLabelSunday;
+      if (isSaturday) return styles.compactDayLabelSaturday;
+      return null;
+    })();
+
+    days.push(
+      <TouchableOpacity
+        key={day}
+        onPress={() => onDateClick(date)}
+        style={styles.compactCell}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`${month + 1}월 ${day}일${totalPendingCount > 0 ? `, 남은 업무 ${totalPendingCount}개` : allDone ? ', 모든 업무 완료' : ''}`}
+      >
+        <View style={[styles.compactBox, boxStyle]}>
+          {allDone ? (
+            <Ionicons name="checkmark" size={14} color="#ffffff" />
+          ) : totalPendingCount > 0 ? (
+            <Text style={styles.compactBoxNumber}>{totalPendingCount}</Text>
+          ) : null}
+        </View>
+        <View style={[
+          styles.compactDayLabelWrap,
+          isSelected && (isToday ? styles.compactDayLabelWrapTodaySelected : styles.compactDayLabelWrapSelected),
+          !isSelected && isToday && styles.compactDayLabelWrapToday,
+        ]}>
+          <Text style={[styles.compactDayLabel, dayLabelStyle]}>
+            {day}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  return <View style={styles.compactGrid}>{days}</View>;
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
   View,
@@ -301,68 +301,52 @@ export function LessonScreen() {
   }, [userData]);
 
   // 코드별 필터링을 위한 materialCodeMap 생성
-  const materialCodeMap: Record<string, string> = {};
-  materials.forEach((m) => {
-    if (m.templateId) {
-      const tpl = templates.find((t) => t.id === m.templateId);
-      materialCodeMap[m.id] = tpl?.code || '미지정';
-    } else {
-      materialCodeMap[m.id] = m.userCode || '개인 자료';
-    }
-  });
+  const materialCodeMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    materials.forEach((m) => {
+      if (m.templateId) {
+        const tpl = templates.find((t) => t.id === m.templateId);
+        map[m.id] = tpl?.code || '미지정';
+      } else {
+        map[m.id] = m.userCode || '개인 자료';
+      }
+    });
+    return map;
+  }, [materials, templates]);
 
-  const userCodes = userJobCodes.map((jc) => jc.code);
-  const allMaterialCodes = Array.from(new Set(Object.values(materialCodeMap))).filter(
-    (code) => userCodes.includes(code) || code === '개인 자료'
-  );
-  const sortedMaterialCodes = allMaterialCodes.sort((a, b) => {
-    if (a === '개인 자료') return 1;
-    if (b === '개인 자료') return -1;
-    return a.localeCompare(b);
-  });
-  
-  logger.info('📊 materialCodeMap:', materialCodeMap);
-  logger.info('📊 userCodes:', userCodes);
-  logger.info('📊 allMaterialCodes:', allMaterialCodes);
-  logger.info('📊 sortedMaterialCodes:', sortedMaterialCodes);
-  logger.info('📊 selectedMaterialCode:', selectedMaterialCode);
-  logger.info('📊 대주제 추가 버튼 표시 조건:', selectedMaterialCode && selectedMaterialCode !== '개인 자료');
+  const sortedMaterialCodes = useMemo(() => {
+    const userCodes = userJobCodes.map((jc) => jc.code);
+    const allCodes = Array.from(new Set(Object.values(materialCodeMap))).filter(
+      (code) => userCodes.includes(code) || code === '개인 자료'
+    );
+    return allCodes.sort((a, b) => {
+      if (a === '개인 자료') return 1;
+      if (b === '개인 자료') return -1;
+      return a.localeCompare(b);
+    });
+  }, [materialCodeMap, userJobCodes]);
 
-  const filteredMaterials = selectedMaterialCode
-    ? materials.filter((m) => materialCodeMap[m.id] === selectedMaterialCode)
-    : materials;
-
-  // 커스텀 대주제가 먼저 오도록 정렬 (templateId가 없는 것이 위로)
-  const sortedFilteredMaterials = [...filteredMaterials].sort((a, b) => {
-    // templateId가 없는 것(커스텀)이 위로
-    if (!a.templateId && b.templateId) return -1;
-    if (a.templateId && !b.templateId) return 1;
-    // 둘 다 커스텀이거나 둘 다 템플릿이면 order 순서 유지
-    return a.order - b.order;
-  });
+  const sortedFilteredMaterials = useMemo(() => {
+    const filtered = selectedMaterialCode
+      ? materials.filter((m) => materialCodeMap[m.id] === selectedMaterialCode)
+      : materials;
+    return [...filtered].sort((a, b) => {
+      if (!a.templateId && b.templateId) return -1;
+      if (a.templateId && !b.templateId) return 1;
+      return a.order - b.order;
+    });
+  }, [materials, materialCodeMap, selectedMaterialCode]);
 
   // 코드 필터 초기화
   useEffect(() => {
-    logger.info('📍 코드 필터 초기화 useEffect');
-    logger.info('  - sortedMaterialCodes:', sortedMaterialCodes);
-    logger.info('  - selectedMaterialCode:', selectedMaterialCode);
-    logger.info('  - materials 개수:', materials.length);
-    
     if (sortedMaterialCodes.length > 0) {
-      // selectedMaterialCode가 없거나, sortedMaterialCodes에 포함되지 않으면 업데이트
       if (!selectedMaterialCode || !sortedMaterialCodes.includes(selectedMaterialCode)) {
         const hasPersonalMaterials = materials.some((m) => !m.templateId);
-        logger.info('  - hasPersonalMaterials:', hasPersonalMaterials);
-        
         if (hasPersonalMaterials && sortedMaterialCodes.includes('개인 자료')) {
-          logger.info('  ✅ selectedMaterialCode 설정: 개인 자료');
           setSelectedMaterialCode('개인 자료');
         } else {
-          logger.info('  ✅ selectedMaterialCode 설정:', sortedMaterialCodes[0]);
           setSelectedMaterialCode(sortedMaterialCodes[0]);
         }
-      } else {
-        logger.info('  ℹ️ selectedMaterialCode 유지:', selectedMaterialCode);
       }
     }
   }, [sortedMaterialCodes, selectedMaterialCode, materials]);
