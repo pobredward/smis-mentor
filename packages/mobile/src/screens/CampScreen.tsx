@@ -89,27 +89,27 @@ export function CampScreen() {
         </View>
       </View>
 
-      {/* 모든 탭 컨텐츠를 미리 마운트 (display로 제어) */}
+      {/* 모든 탭 컨텐츠를 미리 마운트 (opacity/zIndex로 제어 — display:none 금지) */}
       <View style={styles.content}>
-        <View style={[styles.tabContent, activeTab !== 'education' && styles.hiddenTab]}>
+        <View style={[styles.tabContent, activeTab !== 'education' && styles.hiddenTab]} pointerEvents={activeTab !== 'education' ? 'none' : 'auto'}>
           <EducationScreen />
         </View>
-        <View style={[styles.tabContent, activeTab !== 'lesson' && styles.hiddenTab]}>
+        <View style={[styles.tabContent, activeTab !== 'lesson' && styles.hiddenTab]} pointerEvents={activeTab !== 'lesson' ? 'none' : 'auto'}>
           <LessonScreen />
         </View>
-        <View style={[styles.tabContent, activeTab !== 'tasks' && styles.hiddenTab]}>
+        <View style={[styles.tabContent, activeTab !== 'tasks' && styles.hiddenTab]} pointerEvents={activeTab !== 'tasks' ? 'none' : 'auto'}>
           <TasksScreen />
         </View>
-        <View style={[styles.tabContent, activeTab !== 'schedule' && styles.hiddenTab]}>
+        <View style={[styles.tabContent, activeTab !== 'schedule' && styles.hiddenTab]} pointerEvents={activeTab !== 'schedule' ? 'none' : 'auto'}>
           <ScheduleScreen />
         </View>
-        <View style={[styles.tabContent, activeTab !== 'guide' && styles.hiddenTab]}>
+        <View style={[styles.tabContent, activeTab !== 'guide' && styles.hiddenTab]} pointerEvents={activeTab !== 'guide' ? 'none' : 'auto'}>
           <GuideScreen />
         </View>
-        <View style={[styles.tabContent, activeTab !== 'class' && styles.hiddenTab]}>
+        <View style={[styles.tabContent, activeTab !== 'class' && styles.hiddenTab]} pointerEvents={activeTab !== 'class' ? 'none' : 'auto'}>
           <ClassScreen />
         </View>
-        <View style={[styles.tabContent, activeTab !== 'room' && styles.hiddenTab]}>
+        <View style={[styles.tabContent, activeTab !== 'room' && styles.hiddenTab]} pointerEvents={activeTab !== 'room' ? 'none' : 'auto'}>
           <RoomScreen />
         </View>
       </View>
@@ -203,6 +203,9 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   hiddenTab: {
-    display: 'none',
+    // display: 'none' 은 RN에서 컴포넌트를 완전히 언마운트시켜 탭 이동 시 재로딩이 발생함.
+    // opacity + zIndex 방식으로 숨기면 마운트 상태를 유지하므로 프리마운트 효과가 보장됨.
+    opacity: 0,
+    zIndex: -1,
   },
 });
