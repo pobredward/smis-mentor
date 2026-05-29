@@ -41,7 +41,7 @@ export interface STSheetStudent {
   profilePhoto?: string;
 }
 
-export type CampCode = 'E27' | 'J27' | 'S08' | string;
+export type CampCode = 'E27' | 'J27' | 'S27' | string;
 export type CampType = 'EJ' | 'S';
 
 export interface JobCode {
@@ -74,7 +74,7 @@ const CAMP_SHEET_CONFIG: Record<string, {
     type: 'EJ',
     useHeaderMapping: true,
   },
-  'S08': {
+  'S27': {
     spreadsheetId: '1GQ9klMrYnv57nnbQ92LFYxBFig1EF9ewDe72obyjpC8',
     sheetName: 'ST',
     gid: '296268666',
