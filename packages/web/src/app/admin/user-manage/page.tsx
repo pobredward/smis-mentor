@@ -1266,78 +1266,6 @@ export default function UserManage() {
                       {/* 직무 경험 섹션 */}
                       {renderJobExperiencesSection()}
 
-                      {/* 평가 점수 섹션 */}
-                      <div className="mt-4 border-t pt-4">
-                        <h3 className="text-base font-semibold mb-2">평가 점수</h3>
-                        <EvaluationStageCards 
-                          userId={selectedUser.userId || selectedUser.id}
-                          targetUserName={selectedUser.name}
-                          evaluatorName={currentAdminName}
-                          onEvaluationSuccess={() => {
-                            loadUsers();
-                          }}
-                        />
-                      </div>
-
-                      {/* 알바 & 멘토링 경력 섹션 (편집 모드에서는 표시만) */}
-                      <div className="mt-4 border-t pt-4">
-                        <h3 className="text-base font-semibold mb-2">알바 & 멘토링 경력</h3>
-                        {!selectedUser.partTimeJobs || selectedUser.partTimeJobs.length === 0 ? (
-                          <p className="text-sm text-gray-500">등록된 알바 & 멘토링 경력이 없습니다.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {selectedUser.partTimeJobs.map((job, index) => (
-                              <div key={index} className="bg-gray-50 p-2 rounded border border-gray-200 text-sm">
-                                <div className="flex justify-between mb-1">
-                                  <span className="font-medium">{job.companyName}</span>
-                                  <span className="text-xs text-gray-500">{job.period}</span>
-                                </div>
-                                <div className="mb-1 text-xs">
-                                  <span className="text-gray-500 mr-1">담당:</span>
-                                  <span>{job.position}</span>
-                                </div>
-                                <div className="text-xs">
-                                  <span className="text-gray-500 mr-1">업무 내용:</span>
-                                  <span className="text-gray-700">{job.description}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 자기소개/지원동기 섹션 */}
-                      <div className="mt-4 border-t pt-4">
-                        <h3 className="text-base font-semibold mb-2">자기소개서 및 지원동기</h3>
-                        <div className="space-y-3">
-                          <div className="mb-3">
-                            <label className="block text-gray-700 text-xs font-medium mb-1">자기소개</label>
-                            <textarea
-                              name="selfIntroduction"
-                              value={editFormData.selfIntroduction || ''}
-                              onChange={handleEditFormChange}
-                              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24"
-                              placeholder="자기소개를 입력하세요"
-                              maxLength={500}
-                            />
-                            <p className="text-[10px] text-gray-500 mt-1">자기소개는 500자 이내로 작성해주세요. ({(editFormData.selfIntroduction || '').length}/500자)</p>
-                          </div>
-
-                          <div className="mb-3">
-                            <label className="block text-gray-700 text-xs font-medium mb-1">지원 동기</label>
-                            <textarea
-                              name="jobMotivation"
-                              value={editFormData.jobMotivation || ''}
-                              onChange={handleEditFormChange}
-                              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24"
-                              placeholder="지원 동기를 입력하세요"
-                              maxLength={500}
-                            />
-                            <p className="text-[10px] text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요. ({(editFormData.jobMotivation || '').length}/500자)</p>
-                          </div>
-                        </div>
-                      </div>
-
                       {/* 학교 정보 - 멘토만 */}
                       {(selectedUser.role === 'mentor' || selectedUser.role === 'mentor_temp' || selectedUser.role === 'admin') && (
                         <div className="mt-6 border-t pt-4">
@@ -1409,6 +1337,78 @@ export default function UserManage() {
                           </div>
                         </div>
                       )}
+
+                      {/* 알바 & 멘토링 경력 섹션 (편집 모드에서는 표시만) */}
+                      <div className="mt-4 border-t pt-4">
+                        <h3 className="text-base font-semibold mb-2">알바 & 멘토링 경력</h3>
+                        {!selectedUser.partTimeJobs || selectedUser.partTimeJobs.length === 0 ? (
+                          <p className="text-sm text-gray-500">등록된 알바 & 멘토링 경력이 없습니다.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {selectedUser.partTimeJobs.map((job, index) => (
+                              <div key={index} className="bg-gray-50 p-2 rounded border border-gray-200 text-sm">
+                                <div className="flex justify-between mb-1">
+                                  <span className="font-medium">{job.companyName}</span>
+                                  <span className="text-xs text-gray-500">{job.period}</span>
+                                </div>
+                                <div className="mb-1 text-xs">
+                                  <span className="text-gray-500 mr-1">담당:</span>
+                                  <span>{job.position}</span>
+                                </div>
+                                <div className="text-xs">
+                                  <span className="text-gray-500 mr-1">업무 내용:</span>
+                                  <span className="text-gray-700">{job.description}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 자기소개/지원동기 섹션 */}
+                      <div className="mt-4 border-t pt-4">
+                        <h3 className="text-base font-semibold mb-2">자기소개서 및 지원동기</h3>
+                        <div className="space-y-3">
+                          <div className="mb-3">
+                            <label className="block text-gray-700 text-xs font-medium mb-1">자기소개</label>
+                            <textarea
+                              name="selfIntroduction"
+                              value={editFormData.selfIntroduction || ''}
+                              onChange={handleEditFormChange}
+                              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24"
+                              placeholder="자기소개를 입력하세요"
+                              maxLength={500}
+                            />
+                            <p className="text-[10px] text-gray-500 mt-1">자기소개는 500자 이내로 작성해주세요. ({(editFormData.selfIntroduction || '').length}/500자)</p>
+                          </div>
+
+                          <div className="mb-3">
+                            <label className="block text-gray-700 text-xs font-medium mb-1">지원 동기</label>
+                            <textarea
+                              name="jobMotivation"
+                              value={editFormData.jobMotivation || ''}
+                              onChange={handleEditFormChange}
+                              className="w-full px-2 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-24"
+                              placeholder="지원 동기를 입력하세요"
+                              maxLength={500}
+                            />
+                            <p className="text-[10px] text-gray-500 mt-1">지원 동기는 500자 이내로 작성해주세요. ({(editFormData.jobMotivation || '').length}/500자)</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 평가 점수 섹션 */}
+                      <div className="mt-4 border-t pt-4">
+                        <h3 className="text-base font-semibold mb-2">평가 점수</h3>
+                        <EvaluationStageCards 
+                          userId={selectedUser.userId || selectedUser.id}
+                          targetUserName={selectedUser.name}
+                          evaluatorName={currentAdminName}
+                          onEvaluationSuccess={() => {
+                            loadUsers();
+                          }}
+                        />
+                      </div>
 
                       {/* 원어민 교사 정보 - 읽기 전용 */}
                       {(selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp') && selectedUser.foreignTeacher && (
@@ -1897,22 +1897,34 @@ export default function UserManage() {
                         );
                       })()}
 
-                      {/* 평가 점수 섹션 */}
-                      <div className="mt-4 border-t pt-4">
-                        <h3 className="text-base font-semibold mb-2">평가 점수</h3>
-                        {selectedUser.id || selectedUser.userId ? (
-                          <EvaluationStageCards 
-                            userId={selectedUser.id || selectedUser.userId}
-                            targetUserName={selectedUser.name}
-                            evaluatorName={currentAdminName}
-                            onEvaluationSuccess={() => {
-                              loadUsers();
-                            }}
-                          />
-                        ) : (
-                          <p className="text-sm text-gray-500">사용자 ID가 없어 평가를 불러올 수 없습니다.</p>
-                        )}
-                      </div>
+                      {/* 학교 정보 섹션 - 멘토만 */}
+                      {(selectedUser.role === 'mentor' || selectedUser.role === 'mentor_temp' || selectedUser.role === 'admin') && (
+                        <div className="mt-4 border-t pt-4">
+                          <h3 className="text-base font-semibold mb-2">학교 정보</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">학교</p>
+                              <p className="text-gray-900">{selectedUser.university || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">학년</p>
+                              <p className="text-gray-900">{selectedUser.grade ? (selectedUser.grade === 6 ? '졸업생' : `${selectedUser.grade}학년`) : '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">휴학 상태</p>
+                              <p className="text-gray-900">{selectedUser.isOnLeave === null ? '졸업생' : selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">전공 (1전공)</p>
+                              <p className="text-gray-900">{selectedUser.major1 || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">전공 (2전공/부전공)</p>
+                              <p className="text-gray-900">{selectedUser.major2 || '없음'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* 알바 & 멘토링 경력 섹션 - 멘토/관리자만 */}
                       {(selectedUser.role !== 'foreign' && selectedUser.role !== 'foreign_temp') && (
@@ -1974,34 +1986,22 @@ export default function UserManage() {
                         );
                       })()}
 
-                      {/* 학교 정보 섹션 - 멘토만 */}
-                      {(selectedUser.role === 'mentor' || selectedUser.role === 'mentor_temp' || selectedUser.role === 'admin') && (
-                        <div className="mt-4 border-t pt-4">
-                          <h3 className="text-base font-semibold mb-2">학교 정보</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <p className="text-xs text-gray-500 mb-0.5">학교</p>
-                              <p className="text-gray-900">{selectedUser.university || '-'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-0.5">학년</p>
-                              <p className="text-gray-900">{selectedUser.grade ? (selectedUser.grade === 6 ? '졸업생' : `${selectedUser.grade}학년`) : '-'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-0.5">휴학 상태</p>
-                              <p className="text-gray-900">{selectedUser.isOnLeave === null ? '졸업생' : selectedUser.isOnLeave ? '휴학 중' : '재학 중'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-0.5">전공 (1전공)</p>
-                              <p className="text-gray-900">{selectedUser.major1 || '-'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-0.5">전공 (2전공/부전공)</p>
-                              <p className="text-gray-900">{selectedUser.major2 || '없음'}</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      {/* 평가 점수 섹션 */}
+                      <div className="mt-4 border-t pt-4">
+                        <h3 className="text-base font-semibold mb-2">평가 점수</h3>
+                        {selectedUser.id || selectedUser.userId ? (
+                          <EvaluationStageCards 
+                            userId={selectedUser.id || selectedUser.userId}
+                            targetUserName={selectedUser.name}
+                            evaluatorName={currentAdminName}
+                            onEvaluationSuccess={() => {
+                              loadUsers();
+                            }}
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-500">사용자 ID가 없어 평가를 불러올 수 없습니다.</p>
+                        )}
+                      </div>
 
                       {/* 원어민 교사 정보 및 제출 서류 섹션 - foreignTeacher가 없어도 원어민이면 표시 */}
                       {(selectedUser.role === 'foreign' || selectedUser.role === 'foreign_temp') && (
