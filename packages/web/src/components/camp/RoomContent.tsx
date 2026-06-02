@@ -1,5 +1,5 @@
 'use client';
-import { logger } from '@smis-mentor/shared';
+import { logger, toDriveImageUrl } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,41 +19,6 @@ const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: s
   return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
 };
 
-// Google Drive 링크를 직접 이미지 URL로 변환
-const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
-  if (!url) return undefined;
-  
-  // 이미 변환된 URL이면 그대로 반환
-  if (url.includes('drive.google.com/uc?') || url.includes('drive.google.com/thumbnail?')) {
-    return url;
-  }
-  
-  // Google Drive 공유 링크 형식 체크
-  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
-  if (driveMatch && driveMatch[1]) {
-    const fileId = driveMatch[1];
-    
-    // 방법 1: 썸네일 API 사용 (더 안정적, CORS 문제 없음)
-    const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
-    
-    // 방법 2: 직접 다운로드 (백업용)
-    // const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-    
-    // 방법 3: 기존 방식
-    // const viewUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-    
-    logger.info('🔄 [convertGoogleDriveUrl] URL 변환:', {
-      original: url,
-      converted: thumbnailUrl,
-      fileId,
-      note: '썸네일 API 사용 (sz=w400)'
-    });
-    return thumbnailUrl;
-  }
-  
-  // Google Drive 링크가 아니면 원본 반환
-  return url;
-};
 
 export default function RoomContent() {
   const { userData } = useAuth();
@@ -498,7 +463,7 @@ export default function RoomContent() {
             <div className="flex flex-col items-center justify-center px-6 py-4 border-b border-gray-200 relative">
               {/* 프로필 사진 */}
               {(() => {
-                const profilePhotoUrl = convertGoogleDriveUrl(selectedStudent.profilePhoto);
+                const profilePhotoUrl = toDriveImageUrl(selectedStudent.profilePhoto);
                 logger.info('🖼️ [RoomContent] 학생 정보:', {
                   name: selectedStudent.name,
                   studentId: selectedStudent.studentId,
@@ -688,6 +653,51 @@ export default function RoomContent() {
                   )}
                 </div>
               </div>
+
+              {/* 사전 설문조사 */}
+              {selectedStudent.surveyMbti && (
+                <div className="mb-5">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">사전 설문조사</h4>
+                  <div className="space-y-2">
+                    {([
+                      ['MBTI', selectedStudent.surveyMbti],
+                      ['캠프 참여 결정', selectedStudent.surveyCampDecision],
+                      ['캠프에 기대하는 1순위', selectedStudent.surveyCampExpectation],
+                      ['이전 영어캠프/어학캠프 경험 (회)', selectedStudent.surveyCampExperience],
+                      ['모바일/PC게임 (시간/일)', selectedStudent.surveyGameTime],
+                      ['SNS (시간/일)', selectedStudent.surveySnsTime],
+                      ['재학 학교 유형', selectedStudent.surveySchoolType],
+                      ['영어학원 기간 (년)', selectedStudent.surveyAcademyPeriod],
+                      ['원어민 수업 (시간/주)', selectedStudent.surveyNativeClassHours],
+                      ['원어민 수업 발화 비율 (%)', selectedStudent.surveySpeakingRatio],
+                      ['영어를 좋아하는 편', selectedStudent.surveyLikesEnglish],
+                      ['영어를 잘 하는 편', selectedStudent.surveyGoodAtEnglish],
+                      ['처음 보는 친구에게 먼저 말 걸기', selectedStudent.surveyTalkFirst],
+                      ['학교 친구가 많은 편', selectedStudent.surveyManyFriends],
+                      ['조별 활동 주도적', selectedStudent.surveyGroupLeader],
+                      ['단체 활동 규칙 준수', selectedStudent.surveyFollowRules],
+                      ['선생님 말 잘 듣기', selectedStudent.surveyListenTeacher],
+                      ['집이 화목한 편', selectedStudent.surveyHappyHome],
+                      ['부모님 말 잘 듣기', selectedStudent.surveyListenParents],
+                      ['평균 수면 시간 (시간)', selectedStudent.surveySleepHours],
+                      ['학교에서 공부 잘 하는 편', selectedStudent.surveyGoodAtStudy],
+                      ['학교 발표 자주 하는 편', selectedStudent.surveyPresentation],
+                      ['노력하면 실력 늘어난다 믿음', selectedStudent.surveyGrowthMindset],
+                      ['모르면 바로 질문', selectedStudent.surveyAsksQuestions],
+                      ['숙제 미루지 않기', selectedStudent.surveyNoHomeworkDelay],
+                      ['계획 지키는 편', selectedStudent.surveyFollowPlan],
+                      ['수업 집중 잘 하는 편', selectedStudent.surveyFocusInClass],
+                      ['다니는 학원 개수 (개)', selectedStudent.surveyAcademyCount],
+                      ['다니는 학원 종류', selectedStudent.surveyAcademyTypes],
+                    ] as [string, string | undefined][]).filter(([, v]) => !!v).map(([label, value]) => (
+                      <div key={label} className="flex py-2 border-b border-gray-100">
+                        <span className="flex-1 text-xs text-gray-500">{label}</span>
+                        <span className="flex-[2] text-xs text-gray-900 font-medium">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* 닫기 버튼 */}

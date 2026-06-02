@@ -46,6 +46,37 @@ export const ST_SHEET_HEADER_MAPPING = {
   
   // 프로필
   '프로필사진': 'profilePhoto',
+
+  // 사전 설문조사 (28기 이후 J/S 캠프)
+  'MBTI': 'surveyMbti',
+  '캠프 참여 결정': 'surveyCampDecision',
+  '캠프에 기대하는 1순위': 'surveyCampExpectation',
+  '이전 영어캠프/어학캠프 경험 (1주 이상)': 'surveyCampExperience',
+  '하루 몇 시간 모바일이나 PC게임을 하나요?': 'surveyGameTime',
+  '하루 몇 시간 SNS(인스타그램, 틱톡 등)를 하나요?': 'surveySnsTime',
+  '현재 재학중인 학교 유형': 'surveySchoolType',
+  '영어학원 다닌 기간': 'surveyAcademyPeriod',
+  '1주일당 원어민 선생님 수업시간': 'surveyNativeClassHours',
+  '원어민 수업에서 내가 말하는 비율': 'surveySpeakingRatio',
+  '영어를 좋아하는 편인가요?': 'surveyLikesEnglish',
+  '영어를 잘 하는 편인가요?': 'surveyGoodAtEnglish',
+  '처음 보는 친구에게 먼저 말을 거는 편인가요?': 'surveyTalkFirst',
+  '학교에서 친구들이 많은 편인가요?': 'surveyManyFriends',
+  '조별 활동에서 내가 주도적으로 임하는 편인가요?': 'surveyGroupLeader',
+  '단체 활동에서 규칙을 잘 따르는 편인가요?': 'surveyFollowRules',
+  '학교에서 선생님 말을 잘 듣는 편인가요?': 'surveyListenTeacher',
+  '집이 화목한 편인가요?': 'surveyHappyHome',
+  '부모님 말씀을 잘 듣는 편인가요?': 'surveyListenParents',
+  '평균 수면 시간': 'surveySleepHours',
+  '학교에서 상대적으로 공부를 잘 하는 편인가요?': 'surveyGoodAtStudy',
+  '학교에서 발표를 자주 하는 편이었나요?': 'surveyPresentation',
+  '노력하면 실력이 늘어난다고 믿나요?': 'surveyGrowthMindset',
+  '모르면 바로바로 질문하는 편인가요?': 'surveyAsksQuestions',
+  '숙제를 할 때 미루지 않고 시작하는 편인가요?': 'surveyNoHomeworkDelay',
+  '계획을 세우면 그대로 지키는 편인가요?': 'surveyFollowPlan',
+  '수업에서 집중을 잘 하는 편인가요?': 'surveyFocusInClass',
+  '다니는 학원 개수': 'surveyAcademyCount',
+  '다니는 학원 종류': 'surveyAcademyTypes',
 } as const;
 
 /**
@@ -167,6 +198,44 @@ export function mapHeadersToStudent(
   // F 캠프도 단체티 처리
   if (campType === 'F') {
     student.shirtSize = getValue('단체티');
+  }
+
+  // 사전 설문조사 (28기 이후 J/S 캠프)
+  // 값이 빈 문자열인 경우 키 자체를 설정하지 않음 (Firestore undefined 오류 방지)
+  const surveyFields: Record<string, string> = {
+    surveyMbti:             getValue('MBTI'),
+    surveyCampDecision:     getValue('캠프 참여 결정'),
+    surveyCampExpectation:  getValue('캠프에 기대하는 1순위'),
+    surveyCampExperience:   getValue('이전 영어캠프/어학캠프 경험 (1주 이상)'),
+    surveyGameTime:         getValue('하루 몇 시간 모바일이나 PC게임을 하나요?'),
+    surveySnsTime:          getValue('하루 몇 시간 SNS(인스타그램, 틱톡 등)를 하나요?'),
+    surveySchoolType:       getValue('현재 재학중인 학교 유형'),
+    surveyAcademyPeriod:    getValue('영어학원 다닌 기간'),
+    surveyNativeClassHours: getValue('1주일당 원어민 선생님 수업시간'),
+    surveySpeakingRatio:    getValue('원어민 수업에서 내가 말하는 비율'),
+    surveyLikesEnglish:     getValue('영어를 좋아하는 편인가요?'),
+    surveyGoodAtEnglish:    getValue('영어를 잘 하는 편인가요?'),
+    surveyTalkFirst:        getValue('처음 보는 친구에게 먼저 말을 거는 편인가요?'),
+    surveyManyFriends:      getValue('학교에서 친구들이 많은 편인가요?'),
+    surveyGroupLeader:      getValue('조별 활동에서 내가 주도적으로 임하는 편인가요?'),
+    surveyFollowRules:      getValue('단체 활동에서 규칙을 잘 따르는 편인가요?'),
+    surveyListenTeacher:    getValue('학교에서 선생님 말을 잘 듣는 편인가요?'),
+    surveyHappyHome:        getValue('집이 화목한 편인가요?'),
+    surveyListenParents:    getValue('부모님 말씀을 잘 듣는 편인가요?'),
+    surveySleepHours:       getValue('평균 수면 시간'),
+    surveyGoodAtStudy:      getValue('학교에서 상대적으로 공부를 잘 하는 편인가요?'),
+    surveyPresentation:     getValue('학교에서 발표를 자주 하는 편이었나요?'),
+    surveyGrowthMindset:    getValue('노력하면 실력이 늘어난다고 믿나요?'),
+    surveyAsksQuestions:    getValue('모르면 바로바로 질문하는 편인가요?'),
+    surveyNoHomeworkDelay:  getValue('숙제를 할 때 미루지 않고 시작하는 편인가요?'),
+    surveyFollowPlan:       getValue('계획을 세우면 그대로 지키는 편인가요?'),
+    surveyFocusInClass:     getValue('수업에서 집중을 잘 하는 편인가요?'),
+    surveyAcademyCount:     getValue('다니는 학원 개수'),
+    surveyAcademyTypes:     getValue('다니는 학원 종류'),
+  };
+  // 빈 문자열인 필드는 아예 키를 추가하지 않음
+  for (const [key, val] of Object.entries(surveyFields)) {
+    if (val) (student as unknown as Record<string, unknown>)[key] = val;
   }
 
   return student;
@@ -595,7 +664,38 @@ export interface STSheetStudent {
   
   // 프로필
   profilePhoto?: string;
-  
+
+  // 사전 설문조사 (28기 이후 J/S 캠프)
+  surveyMbti?: string;
+  surveyCampDecision?: string;
+  surveyCampExpectation?: string;
+  surveyCampExperience?: string;
+  surveyGameTime?: string;
+  surveySnsTime?: string;
+  surveySchoolType?: string;
+  surveyAcademyPeriod?: string;
+  surveyNativeClassHours?: string;
+  surveySpeakingRatio?: string;
+  surveyLikesEnglish?: string;
+  surveyGoodAtEnglish?: string;
+  surveyTalkFirst?: string;
+  surveyManyFriends?: string;
+  surveyGroupLeader?: string;
+  surveyFollowRules?: string;
+  surveyListenTeacher?: string;
+  surveyHappyHome?: string;
+  surveyListenParents?: string;
+  surveySleepHours?: string;
+  surveyGoodAtStudy?: string;
+  surveyPresentation?: string;
+  surveyGrowthMindset?: string;
+  surveyAsksQuestions?: string;
+  surveyNoHomeworkDelay?: string;
+  surveyFollowPlan?: string;
+  surveyFocusInClass?: string;
+  surveyAcademyCount?: string;
+  surveyAcademyTypes?: string;
+
   // 메타 정보
   rowNumber: number;
   lastSyncedAt: Date;

@@ -10,22 +10,11 @@ import {
   StudentGroup,
   StudentHistoryResult,
 } from '@/lib/stSheetService';
-import { STSheetStudent, FamilyUnit } from '@smis-mentor/shared';
+import { STSheetStudent, FamilyUnit, toDriveImageUrl } from '@smis-mentor/shared';
 import { IoSearch, IoArrowBack, IoCalendar, IoPerson, IoCall } from 'react-icons/io5';
 
 // ─── 유틸 ─────────────────────────────────────────────────
 
-/**
- * Google Drive 공유 링크를 <img>에서 직접 로드 가능한 썸네일 URL로 변환.
- * 형식: https://drive.google.com/file/d/{ID}/view... → https://lh3.googleusercontent.com/d/{ID}
- * /uc?export=view 는 리다이렉트가 많아 브라우저에서 막히는 경우가 있어 lh3 방식 사용.
- */
-function toDriveImageUrl(url?: string): string | undefined {
-  if (!url) return undefined;
-  const match = url.match(/\/file\/d\/([^/]+)/);
-  if (!match) return url;
-  return `https://lh3.googleusercontent.com/d/${match[1]}`;
-}
 
 // 이미지 전체화면 모달
 function PhotoModal({ src, name, onClose }: { src: string; name: string; onClose: () => void }) {
@@ -163,6 +152,46 @@ function CampDetail({ campCode, student }: { campCode: string; student: STSheetS
           <InfoRow label="복용약 & 알레르기" value={student.medication} />
           <InfoRow label="특이사항"      value={student.notes} />
           <InfoRow label="기타"          value={student.etc} />
+        </div>
+      )}
+
+      {/* 사전 설문조사 */}
+      {student.surveyMbti && (
+        <div>
+          <SectionTitle title="사전 설문조사" />
+          {([
+            ['MBTI', student.surveyMbti],
+            ['캠프 참여 결정', student.surveyCampDecision],
+            ['캠프에 기대하는 1순위', student.surveyCampExpectation],
+            ['이전 영어캠프/어학캠프 경험 (회)', student.surveyCampExperience],
+            ['모바일/PC게임 (시간/일)', student.surveyGameTime],
+            ['SNS (시간/일)', student.surveySnsTime],
+            ['재학 학교 유형', student.surveySchoolType],
+            ['영어학원 기간 (년)', student.surveyAcademyPeriod],
+            ['원어민 수업 (시간/주)', student.surveyNativeClassHours],
+            ['원어민 수업 발화 비율 (%)', student.surveySpeakingRatio],
+            ['영어를 좋아하는 편', student.surveyLikesEnglish],
+            ['영어를 잘 하는 편', student.surveyGoodAtEnglish],
+            ['처음 보는 친구에게 먼저 말 걸기', student.surveyTalkFirst],
+            ['학교 친구가 많은 편', student.surveyManyFriends],
+            ['조별 활동 주도적', student.surveyGroupLeader],
+            ['단체 활동 규칙 준수', student.surveyFollowRules],
+            ['선생님 말 잘 듣기', student.surveyListenTeacher],
+            ['집이 화목한 편', student.surveyHappyHome],
+            ['부모님 말 잘 듣기', student.surveyListenParents],
+            ['평균 수면 시간 (시간)', student.surveySleepHours],
+            ['학교에서 공부 잘 하는 편', student.surveyGoodAtStudy],
+            ['학교 발표 자주 하는 편', student.surveyPresentation],
+            ['노력하면 실력 늘어난다 믿음', student.surveyGrowthMindset],
+            ['모르면 바로 질문', student.surveyAsksQuestions],
+            ['숙제 미루지 않기', student.surveyNoHomeworkDelay],
+            ['계획 지키는 편', student.surveyFollowPlan],
+            ['수업 집중 잘 하는 편', student.surveyFocusInClass],
+            ['다니는 학원 개수 (개)', student.surveyAcademyCount],
+            ['다니는 학원 종류', student.surveyAcademyTypes],
+          ] as [string, string | undefined][]).filter(([, v]) => !!v).map(([label, value]) => (
+            <InfoRow key={label} label={label} value={value} />
+          ))}
         </div>
       )}
 

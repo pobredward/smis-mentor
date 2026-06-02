@@ -17,6 +17,7 @@ import {
 admin.initializeApp();
 
 const db = admin.firestore();
+db.settings({ ignoreUndefinedProperties: true });
 const expo = new Expo();
 
 interface Task {
@@ -1030,9 +1031,14 @@ export const syncSTSheet = functionsV2.https.onCall(
         console.log(`🔄 ST 시트 동기화 시작: ${campCode}`);
         const students = await fetchAndParseCamp(campCode);
 
+        // undefined 필드 제거 (Firestore는 undefined 값을 허용하지 않음)
+        const sanitizedStudents = students.map(s =>
+          Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined))
+        );
+
         await db.collection('stSheetCache').doc(campCode).set({
           campCode,
-          data: students,
+          data: sanitizedStudents,
           lastSyncedAt: new Date().toISOString(),
           syncedBy: request.auth.uid,
           syncedByName: callerData.name ?? 'Admin',

@@ -483,13 +483,6 @@ function calcAgeFromSSN(ssn: string): number | null {
   return age > 0 && age < 100 ? age : null;
 }
 
-/** Drive 공유 링크 → 임베드 가능 URL */
-export function toDriveImageUrl(url?: string): string | undefined {
-  if (!url) return undefined;
-  const match = url.match(/\/file\/d\/([^/]+)/);
-  if (!match) return url;
-  return `https://lh3.googleusercontent.com/d/${match[1]}`;
-}
 
 /** 페이지 진입 시 1회 호출: 전체 캐시 로드 */
 export async function loadAllStudentRecords(): Promise<StudentHistoryResult[]> {

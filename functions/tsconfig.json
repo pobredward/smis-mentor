@@ -1,5 +1,4 @@
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
     "module": "commonjs",
     "outDir": "lib",
@@ -8,7 +7,12 @@
     "target": "es2020",
     "moduleResolution": "node",
     "lib": ["es2020"],
-    "noEmit": false
+    "noEmit": false,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noUnusedLocals": false
   },
   "include": ["src"],
   "exclude": ["node_modules", "lib"]

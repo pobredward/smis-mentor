@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { logger } from '@smis-mentor/shared';
+import { logger, toDriveImageUrl } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -36,35 +36,6 @@ const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: s
   return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
 };
 
-// Google Drive 링크를 직접 이미지 URL로 변환
-const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
-  if (!url) return undefined;
-  
-  // 이미 변환된 URL이면 그대로 반환
-  if (url.includes('drive.google.com/uc?') || url.includes('drive.google.com/thumbnail?')) {
-    return url;
-  }
-  
-  // Google Drive 공유 링크 형식 체크
-  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
-  if (driveMatch && driveMatch[1]) {
-    const fileId = driveMatch[1];
-    
-    // 썸네일 API 사용 (더 안정적, CORS 문제 없음)
-    const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
-    
-    logger.info('🔄 [convertGoogleDriveUrl] URL 변환:', {
-      original: url,
-      converted: thumbnailUrl,
-      fileId,
-      note: '썸네일 API 사용 (sz=w400)'
-    });
-    return thumbnailUrl;
-  }
-  
-  // Google Drive 링크가 아니면 원본 반환
-  return url;
-};
 
 const InfoRow = React.memo(({ label, value }: { label: string; value?: string | null }) => {
   if (!value) return null;
@@ -263,7 +234,7 @@ interface StudentCardProps {
 }
 
 const StudentCard = React.memo(({ student: s, campType, isAdmin, groupRole, onSaveContact }: StudentCardProps) => {
-  const profilePhotoUrl = convertGoogleDriveUrl(s.profilePhoto);
+  const profilePhotoUrl = toDriveImageUrl(s.profilePhoto);
   return (
   <ScrollView
     style={styles.cardScrollView}
@@ -396,6 +367,48 @@ const StudentCard = React.memo(({ student: s, campType, isAdmin, groupRole, onSa
         <InfoRow label="특이사항" value={s.notes} />
         <InfoRow label="기타" value={s.etc} />
       </View>
+
+      {/* 사전 설문조사 */}
+      {!!s.surveyMbti && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>사전 설문조사</Text>
+          {([
+            ['MBTI', s.surveyMbti],
+            ['캠프 참여 결정', s.surveyCampDecision],
+            ['캠프에 기대하는 1순위', s.surveyCampExpectation],
+            ['이전 영어캠프/어학캠프 경험 (회)', s.surveyCampExperience],
+            ['모바일/PC게임 (시간/일)', s.surveyGameTime],
+            ['SNS (시간/일)', s.surveySnsTime],
+            ['재학 학교 유형', s.surveySchoolType],
+            ['영어학원 기간 (년)', s.surveyAcademyPeriod],
+            ['원어민 수업 (시간/주)', s.surveyNativeClassHours],
+            ['원어민 수업 발화 비율 (%)', s.surveySpeakingRatio],
+            ['영어를 좋아하는 편', s.surveyLikesEnglish],
+            ['영어를 잘 하는 편', s.surveyGoodAtEnglish],
+            ['처음 보는 친구에게 먼저 말 걸기', s.surveyTalkFirst],
+            ['학교 친구가 많은 편', s.surveyManyFriends],
+            ['조별 활동 주도적', s.surveyGroupLeader],
+            ['단체 활동 규칙 준수', s.surveyFollowRules],
+            ['선생님 말 잘 듣기', s.surveyListenTeacher],
+            ['집이 화목한 편', s.surveyHappyHome],
+            ['부모님 말 잘 듣기', s.surveyListenParents],
+            ['평균 수면 시간 (시간)', s.surveySleepHours],
+            ['학교에서 공부 잘 하는 편', s.surveyGoodAtStudy],
+            ['학교 발표 자주 하는 편', s.surveyPresentation],
+            ['노력하면 실력 늘어난다 믿음', s.surveyGrowthMindset],
+            ['모르면 바로 질문', s.surveyAsksQuestions],
+            ['숙제 미루지 않기', s.surveyNoHomeworkDelay],
+            ['계획 지키는 편', s.surveyFollowPlan],
+            ['수업 집중 잘 하는 편', s.surveyFocusInClass],
+            ['다니는 학원 개수 (개)', s.surveyAcademyCount],
+            ['다니는 학원 종류', s.surveyAcademyTypes],
+          ] as [string, string | undefined][])
+            .filter(([, v]) => !!v)
+            .map(([label, value]) => (
+              <InfoRow key={label} label={label} value={value} />
+            ))}
+        </View>
+      )}
     </View>
   </ScrollView>
   );

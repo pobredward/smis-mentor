@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { logger } from '@smis-mentor/shared';
+import { logger, toDriveImageUrl } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -110,14 +110,7 @@ export const StudentList: React.FC<StudentListProps> = ({
     if (allStudents.length === 0) return;
 
     const urls = allStudents
-      .map((s) => {
-        const url = s.profilePhoto;
-        if (!url) return null;
-        if (url.includes('drive.google.com/uc?') || url.includes('drive.google.com/thumbnail?')) return url;
-        const match = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
-        if (match?.[1]) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w200`;
-        return url;
-      })
+      .map((s) => toDriveImageUrl(s.profilePhoto))
       .filter((url): url is string => !!url);
 
     if (urls.length === 0) return;
@@ -276,14 +269,6 @@ export const StudentList: React.FC<StudentListProps> = ({
       logger.error('연락처 저장 실패:', error);
       Alert.alert('오류', '연락처 저장 중 오류가 발생했습니다.');
     }
-  };
-  // Google Drive 링크를 직접 표시 가능한 URL로 변환
-  const convertGoogleDriveUrl = (url: string | undefined): string | undefined => {
-    if (!url) return undefined;
-    if (url.includes('drive.google.com/uc?') || url.includes('drive.google.com/thumbnail?')) return url;
-    const match = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
-    if (match?.[1]) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w200`;
-    return url;
   };
 
   // 멘토별/반별로 학생 그룹화
@@ -725,7 +710,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                                 style={styles.studentCardDouble}
                                 onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                               >
-                                <StudentCardContent item={item} convertGoogleDriveUrl={convertGoogleDriveUrl} />
+                                <StudentCardContent item={item} />
                               </TouchableOpacity>
                             );
                             })}
@@ -751,7 +736,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                           style={styles.studentCard}
                           onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                         >
-                          <StudentCardContent item={item} convertGoogleDriveUrl={convertGoogleDriveUrl} />
+                          <StudentCardContent item={item} />
                         </TouchableOpacity>
                       );
                       })}
@@ -776,7 +761,7 @@ export const StudentList: React.FC<StudentListProps> = ({
               style={styles.studentCardClass}
               onPress={() => onStudentPress(item, index, displayStudents)}
             >
-              <StudentCardContent item={item} convertGoogleDriveUrl={convertGoogleDriveUrl} />
+              <StudentCardContent item={item} />
             </TouchableOpacity>
           )}
           contentContainerStyle={styles.listContainer}
@@ -798,11 +783,10 @@ export const StudentList: React.FC<StudentListProps> = ({
 
 interface StudentCardContentProps {
   item: STSheetStudent;
-  convertGoogleDriveUrl: (url: string | undefined) => string | undefined;
 }
 
-const StudentCardContent = React.memo(({ item, convertGoogleDriveUrl }: StudentCardContentProps) => {
-  const photoUrl = convertGoogleDriveUrl(item.profilePhoto);
+const StudentCardContent = React.memo(({ item }: StudentCardContentProps) => {
+  const photoUrl = toDriveImageUrl(item.profilePhoto);
 
   // "홍길동 (G2M)" 형식: grade에서 숫자만 + 성별 (예: "G2" + "M")
   const gradeNum = item.grade?.replace(/[^0-9]/g, '') ?? '';
