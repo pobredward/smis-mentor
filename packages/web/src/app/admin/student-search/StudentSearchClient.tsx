@@ -15,6 +15,13 @@ import { IoSearch, IoArrowBack, IoCalendar, IoPerson, IoCall } from 'react-icons
 
 // ─── 유틸 ─────────────────────────────────────────────────
 
+// 주민등록번호 포맷 (이미 하이픈 포함 시 원본 반환)
+function formatSSN(ssn: string | undefined | null): string | undefined {
+  if (!ssn) return undefined;
+  if (ssn.includes('-')) return ssn;
+  return ssn.length >= 7 ? `${ssn.slice(0, 6)}-${ssn.slice(6)}` : ssn;
+}
+
 // Firestore Timestamp / Date / string 모두 처리
 function toDisplayDate(val: unknown): string | null {
   if (!val) return null;
@@ -115,11 +122,7 @@ function CampDetail({ campCode, student }: { campCode: string; student: STSheetS
         <InfoRow label="신상"
           value={`${student.name}${student.englishName ? ` | ${student.englishName}` : ''} | ${student.grade} | ${student.gender === 'M' ? '남' : '여'}`}
         />
-        <InfoRow label="주민등록번호"
-          value={student.ssn
-            ? (student.ssn.length >= 7 ? `${student.ssn.slice(0, 6)}-${student.ssn.slice(6)}` : student.ssn)
-            : undefined}
-        />
+        <InfoRow label="주민등록번호" value={formatSSN(student.ssn)} />
         <InfoRow label="도로명 주소" value={student.address} />
         <InfoRow label="세부 주소"   value={student.addressDetail} />
         {(student.departureRoute || student.arrivalRoute) && (
@@ -262,9 +265,7 @@ function FamilyCampDetail({ campCode, family, studentId }: {
           <FamilyInfoRow label="이메일" value={p.email} />
           <FamilyInfoRow label="여권이름" value={p.passportName} />
           <FamilyInfoRow label="여권번호" value={p.passportNumber} />
-          <FamilyInfoRow label="주민번호"
-            value={p.ssn ? (p.ssn.length >= 7 ? `${p.ssn.slice(0, 6)}-${p.ssn.slice(6)}` : p.ssn) : undefined}
-          />
+          <FamilyInfoRow label="주민번호" value={formatSSN(p.ssn)} />
         </FamilyInfoSection>
       ))}
 
@@ -277,11 +278,7 @@ function FamilyCampDetail({ campCode, family, studentId }: {
           <FamilyInfoRow label="여권번호"  value={thisStudent.passportNumber} />
           <FamilyInfoRow label="건강정보"  value={thisStudent.medication} />
           <FamilyInfoRow label="등록처"    value={thisStudent.registrationSource} />
-          <FamilyInfoRow label="주민번호"
-            value={thisStudent.ssn
-              ? (thisStudent.ssn.length >= 7 ? `${thisStudent.ssn.slice(0, 6)}-${thisStudent.ssn.slice(6)}` : thisStudent.ssn)
-              : undefined}
-          />
+          <FamilyInfoRow label="주민번호" value={formatSSN(thisStudent.ssn)} />
         </FamilyInfoSection>
       )}
 
