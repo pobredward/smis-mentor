@@ -159,13 +159,12 @@ function CampDetail({ student }: { student: STSheetStudent }) {
       )}
 
       {/* 상세 정보 */}
-      {(student.registrationSource || student.medication || student.notes || student.etc || student.region) && (
+      {(student.registrationSource || student.medication || student.notes || student.etc) && (
         <View style={detailStyles.section}>
           <SectionTitle title="상세 정보" />
           <InfoRow label="등록처"          value={student.registrationSource} />
           <InfoRow label="복용약 & 알레르기" value={student.medication} />
           <InfoRow label="특이사항"        value={student.notes} />
-          <InfoRow label="지역"            value={student.region} />
           <InfoRow label="기타"            value={student.etc} />
         </View>
       )}
