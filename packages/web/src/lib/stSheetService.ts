@@ -421,32 +421,143 @@ export const stSheetService = {
 export interface StudentHistoryResult {
   student: STSheetStudent;
   campCode: string;
+  /** F타입 가족캠프 여부 */
+  isFamily?: boolean;
+  /** F타입일 때 소속 가족 정보 */
+  familyUnit?: FamilyUnit;
 }
 
-// stSheetCache 전체 캠프를 순회하며 이름 또는 부모님 연락처로 학생을 검색
+/** 캠프코드에서 기수 숫자를 추출하여 정렬키 반환 (J28 → 28, F26_1 → 26.1, J22 → 22) */
+export function campSortKey(campCode: string): number {
+  const match = campCode.match(/^[A-Za-z]+(\d+)(?:_(\d+))?$/);
+  if (!match) return 0;
+  const gen = parseInt(match[1], 10);
+  const sub = match[2] ? parseInt(match[2], 10) * 0.1 : 0;
+  return gen + sub;
+}
+
+/**
+ * 페이지 진입 시 1회 호출: 전체 stSheetCache + familySTSheetCache를 메모리에 로드.
+ * 이후 검색은 filterStudents()로 클라이언트 사이드에서 처리한다.
+ */
+export async function loadAllStudentRecords(): Promise<StudentHistoryResult[]> {
+  const [regularSnap, familySnap] = await Promise.all([
+    getDocs(collection(db, 'stSheetCache')),
+    getDocs(collection(db, 'familySTSheetCache')),
+  ]);
+
+  const records: StudentHistoryResult[] = [];
+
+  regularSnap.forEach((docSnap) => {
+    const campCode = docSnap.id;
+    const students: STSheetStudent[] = docSnap.data().data || [];
+    students.forEach((student) => records.push({ student, campCode }));
+  });
+
+  familySnap.forEach((docSnap) => {
+    const campCode = docSnap.id;
+    const families: FamilyUnit[] = docSnap.data().families || [];
+    families.forEach((family) => {
+      family.students.forEach((fs) => {
+        const student: STSheetStudent = {
+          name: fs.name,
+          englishName: fs.englishName,
+          grade: fs.grade,
+          gender: fs.gender,
+          ssn: fs.ssn,
+          passportName: fs.passportName,
+          passportNumber: fs.passportNumber,
+          passportExpiry: fs.passportExpiry,
+          medication: fs.medication,
+          parentPhone: fs.parentPhone || family.parents[0]?.phone,
+          registrationSource: fs.registrationSource,
+          roomNumber: family.roomNumber,
+          studentId: fs.id,
+          lastSyncedAt: family.lastSyncedAt,
+        } as STSheetStudent;
+        records.push({ student, campCode, isFamily: true, familyUnit: family });
+      });
+    });
+  });
+
+  return records;
+}
+
+/** 메모리에 올라온 records에서 query로 필터링 (Firestore 호출 없음) */
+export function filterStudents(records: StudentHistoryResult[], query: string): StudentHistoryResult[] {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  const normalizedPhone = trimmed.replace(/-/g, '');
+
+  return records.filter(({ student, familyUnit }) => {
+    if (student.name?.includes(trimmed)) return true;
+    if (student.parentPhone?.replace(/-/g, '').includes(normalizedPhone)) return true;
+    // 가족캠프: 부모 전화번호도 검색
+    if (familyUnit?.parents.some((p) => p.phone?.replace(/-/g, '').includes(normalizedPhone))) return true;
+    return false;
+  });
+}
+
+// stSheetCache + familySTSheetCache 전체 캠프를 순회하며 이름 또는 부모님 연락처로 검색
 export async function searchStudents(query: string): Promise<StudentHistoryResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
+  const normalizedPhone = trimmed.replace(/-/g, '');
 
   try {
-    const colRef = collection(db, 'stSheetCache');
-    const snapshot = await getDocs(colRef);
+    const [regularSnap, familySnap] = await Promise.all([
+      getDocs(collection(db, 'stSheetCache')),
+      getDocs(collection(db, 'familySTSheetCache')),
+    ]);
 
     const results: StudentHistoryResult[] = [];
 
-    snapshot.forEach((docSnap) => {
+    // 일반 캠프 (stSheetCache)
+    regularSnap.forEach((docSnap) => {
       const campCode = docSnap.id;
-      const data = docSnap.data();
-      const students: STSheetStudent[] = data.data || [];
+      const students: STSheetStudent[] = docSnap.data().data || [];
+      students
+        .filter((s) =>
+          s.name?.includes(trimmed) ||
+          s.parentPhone?.replace(/-/g, '').includes(normalizedPhone)
+        )
+        .forEach((student) => results.push({ student, campCode }));
+    });
 
-      const matched = students.filter((s) => {
-        const nameMatch = s.name?.includes(trimmed);
-        const phoneMatch = s.parentPhone?.replace(/-/g, '').includes(trimmed.replace(/-/g, ''));
-        return nameMatch || phoneMatch;
-      });
+    // 가족 캠프 (familySTSheetCache)
+    familySnap.forEach((docSnap) => {
+      const campCode = docSnap.id;
+      const families: FamilyUnit[] = docSnap.data().families || [];
 
-      matched.forEach((student) => {
-        results.push({ student, campCode });
+      families.forEach((family) => {
+        family.students.forEach((fs) => {
+          const nameMatch = fs.name?.includes(trimmed);
+          const phoneMatch =
+            fs.parentPhone?.replace(/-/g, '').includes(normalizedPhone) ||
+            family.parents.some((p) => p.phone?.replace(/-/g, '').includes(normalizedPhone));
+
+          if (!nameMatch && !phoneMatch) return;
+
+          // FamilyStudent → STSheetStudent 변환 (공통 필드만 매핑)
+          const student: STSheetStudent = {
+            name: fs.name,
+            englishName: fs.englishName,
+            grade: fs.grade,
+            gender: fs.gender,
+            ssn: fs.ssn,
+            passportName: fs.passportName,
+            passportNumber: fs.passportNumber,
+            passportExpiry: fs.passportExpiry,
+            medication: fs.medication,
+            parentPhone: fs.parentPhone || family.parents[0]?.phone,
+            registrationSource: fs.registrationSource,
+            roomNumber: family.roomNumber,
+            studentId: fs.id,
+            lastSyncedAt: family.lastSyncedAt,
+          } as STSheetStudent;
+
+          results.push({ student, campCode, isFamily: true, familyUnit: family });
+        });
       });
     });
 
@@ -461,20 +572,55 @@ export async function searchStudents(query: string): Promise<StudentHistoryResul
 export interface StudentGroup {
   key: string;                         // 식별 키 (ssn 또는 name:phone)
   name: string;
-  grade: string;
+  grade: string;                       // 가장 최신 캠프 기준 학년
   gender: string;
   parentPhone: string;
   parentName: string;
+  age: number | null;                  // 주민번호 생년월일 기반 현재 나이 (없으면 null)
+  ssn: string | null;                  // 나이 계산 원본 보존
   history: Array<{
     campCode: string;
     student: STSheetStudent;
+    isFamily?: boolean;
+    familyUnit?: FamilyUnit;
   }>;
+}
+
+/**
+ * 주민번호 앞 6자리(YYMMDD)에서 현재 나이를 계산.
+ * 2000년대 생은 뒷자리 첫 번째 숫자(3,4)로 구분.
+ */
+function calcAgeFromSSN(ssn: string): number | null {
+  const digits = ssn.replace(/-/g, '');
+  if (digits.length < 7) return null;
+
+  const yy = parseInt(digits.slice(0, 2), 10);
+  const mm = parseInt(digits.slice(2, 4), 10);
+  const dd = parseInt(digits.slice(4, 6), 10);
+  const genderDigit = parseInt(digits[6], 10);
+
+  if (isNaN(yy) || isNaN(mm) || isNaN(dd) || isNaN(genderDigit)) return null;
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+  // 1: 남(1900년대), 2: 여(1900년대), 3: 남(2000년대), 4: 여(2000년대)
+  const century = genderDigit <= 2 ? 1900 : 2000;
+  const birthYear = century + yy;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthYear;
+  // 생일이 아직 안 지났으면 1살 빼기
+  const hasBirthdayPassed =
+    today.getMonth() + 1 > mm ||
+    (today.getMonth() + 1 === mm && today.getDate() >= dd);
+  if (!hasBirthdayPassed) age -= 1;
+
+  return age > 0 && age < 100 ? age : null;
 }
 
 export function groupStudentResults(results: StudentHistoryResult[]): StudentGroup[] {
   const map = new Map<string, StudentGroup>();
 
-  results.forEach(({ student, campCode }) => {
+  results.forEach(({ student, campCode, isFamily, familyUnit }) => {
     // ssn 있으면 ssn 기준, 없으면 name+parentPhone 조합
     const key = student.ssn
       ? `ssn:${student.ssn}`
@@ -488,16 +634,28 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
         gender: student.gender || '',
         parentPhone: student.parentPhone || '',
         parentName: student.parentName || '',
+        age: student.ssn ? calcAgeFromSSN(student.ssn) : null,
+        ssn: student.ssn || null,
         history: [],
       });
+    } else {
+      // ssn이 나중에 발견될 수도 있으므로 업데이트
+      const g = map.get(key)!;
+      if (!g.ssn && student.ssn) {
+        g.ssn = student.ssn;
+        g.age = calcAgeFromSSN(student.ssn);
+      }
     }
 
-    map.get(key)!.history.push({ campCode, student });
+    map.get(key)!.history.push({ campCode, student, isFamily, familyUnit });
   });
 
-  // 이력을 캠프코드 기준으로 정렬 (최신 기수 먼저)
+  // 이력을 기수 숫자 기준 내림차순 정렬 후 → 가장 최신 캠프 학년으로 업데이트
   map.forEach((group) => {
-    group.history.sort((a, b) => b.campCode.localeCompare(a.campCode));
+    group.history.sort((a, b) => campSortKey(b.campCode) - campSortKey(a.campCode));
+    // 최신 캠프의 학년으로 덮어쓰기
+    const latestGrade = group.history[0]?.student.grade;
+    if (latestGrade) group.grade = latestGrade;
   });
 
   return Array.from(map.values());
