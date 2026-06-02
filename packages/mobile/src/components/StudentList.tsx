@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { logger, toDriveImageUrl } from '@smis-mentor/shared';
 import {
   View,
@@ -39,6 +39,13 @@ export const StudentList: React.FC<StudentListProps> = ({
 }) => {
   const { userData } = useAuth();
   const queryClient = useQueryClient();
+
+  // 최신 콜백을 ref로 유지 — activeJobCodeId 변경 시 최신 핸들러가 호출되도록
+  const onCampCodeChangeRef = useRef(onCampCodeChange);
+  const onCampTypeChangeRef = useRef(onCampTypeChange);
+  useEffect(() => { onCampCodeChangeRef.current = onCampCodeChange; }, [onCampCodeChange]);
+  useEffect(() => { onCampTypeChangeRef.current = onCampTypeChange; }, [onCampTypeChange]);
+
   const [selectedMentor, setSelectedMentor] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,10 +77,11 @@ export const StudentList: React.FC<StudentListProps> = ({
           const code = jobCodes[0].code as CampCode;
           logger.info('캠프 코드 로드 성공:', code);
           setCampCode(code);
+          setSelectedMentor(null); // 캠프 변경 시 멘토 선택 초기화
           const type = stSheetService.getCampType(code);
           setCampType(type);
-          onCampTypeChange?.(type);
-          onCampCodeChange?.(code);
+          onCampTypeChangeRef.current?.(type);
+          onCampCodeChangeRef.current?.(code);
         } else {
           logger.info('캠프 코드를 찾을 수 없습니다.');
         }

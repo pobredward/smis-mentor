@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { EducationScreen } from './EducationScreen';
 import { LessonScreen } from './CampTabs';
@@ -9,17 +9,31 @@ import { ScheduleScreen } from './ScheduleScreen';
 import { GuideScreen } from './GuideScreen';
 import { useAuth } from '../context/AuthContext';
 import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab } from '../context/CampTabContext';
+import { jobCodesService, stSheetService } from '../services';
+import { CampCode } from '@smis-mentor/shared';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
 
 export function CampScreen() {
   const { userData } = useAuth();
   const { activeTab, setActiveTab } = useCampTab();
+  const [isFamilyCamp, setIsFamilyCamp] = useState(false);
 
   useEffect(() => {
     registerNavigateToTasksTab(() => setActiveTab('tasks'));
     return () => unregisterNavigateToTasksTab();
   }, [setActiveTab]);
+
+  // activeJobCodeId가 바뀔 때마다 F캠프 여부를 직접 판단
+  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  useEffect(() => {
+    if (!activeJobCodeId) { setIsFamilyCamp(false); return; }
+    jobCodesService.getJobCodesByIds([activeJobCodeId]).then((codes) => {
+      if (codes.length > 0 && codes[0].code) {
+        setIsFamilyCamp(stSheetService.getCampType(codes[0].code as CampCode) === 'F');
+      }
+    }).catch(() => {});
+  }, [activeJobCodeId]);
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
@@ -27,14 +41,15 @@ export function CampScreen() {
   const hasNoCampAssigned =
     userData && (!userData.jobExperiences || userData.jobExperiences.length === 0);
 
+  // F캠프: 반명단(class) 탭 숨기고 방명단(room) 탭만 가족명단으로 표시
   const allTabs: { id: TabName; title: string }[] = isForeign
     ? [
         { id: 'education', title: 'Edu' },
         { id: 'tasks', title: 'Tasks' },
         { id: 'schedule', title: 'Schedule' },
         { id: 'guide', title: 'Guide' },
-        { id: 'class', title: 'Class' },
-        { id: 'room', title: 'Room' },
+        ...(!isFamilyCamp ? [{ id: 'class' as TabName, title: 'Class' }] : []),
+        { id: 'room', title: isFamilyCamp ? 'Family' : 'Room' },
       ]
     : [
         { id: 'education', title: '교육' },
@@ -42,8 +57,8 @@ export function CampScreen() {
         { id: 'tasks', title: '업무' },
         { id: 'schedule', title: '시간표' },
         { id: 'guide', title: '인솔표' },
-        { id: 'class', title: '반명단' },
-        { id: 'room', title: '방명단' },
+        ...(!isFamilyCamp ? [{ id: 'class' as TabName, title: '반명단' }] : []),
+        { id: 'room', title: isFamilyCamp ? '가족명단' : '방명단' },
       ];
 
   const tabs = allTabs;

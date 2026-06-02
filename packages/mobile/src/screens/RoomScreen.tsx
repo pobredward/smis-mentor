@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StudentList, StudentDetailModal } from '../components';
 import { FamilyList } from '../components/FamilyList';
 import { STSheetStudent, CampType, CampCode, CAMP_SHEET_CONFIG } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
+import { jobCodesService, stSheetService } from '../services';
 
 export function RoomScreen() {
   const { userData } = useAuth();
@@ -15,7 +16,19 @@ export function RoomScreen() {
 
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
-  // campCode가 로드된 후에만 F 여부 판단
+  // activeJobCodeId 변경을 직접 구독 → FamilyList 렌더 중에도 campCode 갱신
+  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  useEffect(() => {
+    if (!activeJobCodeId) { setCampCode(null); return; }
+    jobCodesService.getJobCodesByIds([activeJobCodeId]).then((codes) => {
+      if (codes.length > 0 && codes[0].code) {
+        const code = codes[0].code as CampCode;
+        setCampCode(code);
+        setCampType(stSheetService.getCampType(code));
+      }
+    }).catch(() => {});
+  }, [activeJobCodeId]);
+
   const isFamily = campCode != null
     ? CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG]?.type === 'F'
     : false;
@@ -26,12 +39,6 @@ export function RoomScreen() {
     setModalVisible(true);
   };
 
-  const handleCampTypeChange = (type: CampType) => {
-    setCampType(type);
-  };
-
-  // campCode가 아직 없으면 StudentList가 내부에서 로드 처리를 담당
-  // campCode가 F 타입이면 FamilyList로 전환
   if (isFamily && campCode) {
     return (
       <View style={styles.container}>
@@ -45,7 +52,7 @@ export function RoomScreen() {
       <StudentList
         filterType="room"
         onStudentPress={handleStudentPress}
-        onCampTypeChange={handleCampTypeChange}
+        onCampTypeChange={setCampType}
         onCampCodeChange={setCampCode}
         isForeign={isForeign}
       />
