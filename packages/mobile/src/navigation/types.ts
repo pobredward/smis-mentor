@@ -57,6 +57,7 @@ export type AdminStackParamList = {
   UserMap: undefined;
   Upload: undefined;
   AppConfig: undefined;
+  StudentSearch: undefined;
 };
 
 // Camp Top Tabs (캠프 상단 세부 탭)

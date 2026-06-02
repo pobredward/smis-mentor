@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["ES2017"],
+    "lib": [
+      "ES2017"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -23,5 +25,6 @@
     "dist",
     "lib",
     ".next"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }

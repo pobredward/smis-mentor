@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocs, setDoc, collection } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { logger } from '@smis-mentor/shared';
 import { functions as mobileFunctions, db } from '../config/firebase';
@@ -428,3 +428,163 @@ export const stSheetService = {
     }
   },
 };
+
+// ─── 학생 이력 조회 (전체 검색용) ────────────────────────────
+
+export interface StudentHistoryResult {
+  student: STSheetStudent;
+  campCode: string;
+  isFamily?: boolean;
+  familyUnit?: FamilyUnit;
+}
+
+export interface StudentGroup {
+  key: string;
+  name: string;
+  grade: string;
+  gender: string;
+  parentPhone: string;
+  parentName: string;
+  age: number | null;
+  ssn: string | null;
+  history: Array<{
+    campCode: string;
+    student: STSheetStudent;
+    isFamily?: boolean;
+    familyUnit?: FamilyUnit;
+  }>;
+}
+
+export function campSortKey(campCode: string): number {
+  const match = campCode.match(/^[A-Za-z]+(\d+)(?:_(\d+))?$/);
+  if (!match) return 0;
+  const gen = parseInt(match[1], 10);
+  const sub = match[2] ? parseInt(match[2], 10) * 0.1 : 0;
+  return gen + sub;
+}
+
+function calcAgeFromSSN(ssn: string): number | null {
+  const digits = ssn.replace(/-/g, '');
+  if (digits.length < 7) return null;
+  const yy = parseInt(digits.slice(0, 2), 10);
+  const mm = parseInt(digits.slice(2, 4), 10);
+  const dd = parseInt(digits.slice(4, 6), 10);
+  const genderDigit = parseInt(digits[6], 10);
+  if (isNaN(yy) || isNaN(mm) || isNaN(dd) || isNaN(genderDigit)) return null;
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  const century = genderDigit <= 2 ? 1900 : 2000;
+  const birthYear = century + yy;
+  const today = new Date();
+  let age = today.getFullYear() - birthYear;
+  const hasBirthdayPassed =
+    today.getMonth() + 1 > mm ||
+    (today.getMonth() + 1 === mm && today.getDate() >= dd);
+  if (!hasBirthdayPassed) age -= 1;
+  return age > 0 && age < 100 ? age : null;
+}
+
+/** Drive 공유 링크 → 임베드 가능 URL */
+export function toDriveImageUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  const match = url.match(/\/file\/d\/([^/]+)/);
+  if (!match) return url;
+  return `https://lh3.googleusercontent.com/d/${match[1]}`;
+}
+
+/** 페이지 진입 시 1회 호출: 전체 캐시 로드 */
+export async function loadAllStudentRecords(): Promise<StudentHistoryResult[]> {
+  const [regularSnap, familySnap] = await Promise.all([
+    getDocs(collection(db, 'stSheetCache')),
+    getDocs(collection(db, 'familySTSheetCache')),
+  ]);
+
+  const records: StudentHistoryResult[] = [];
+
+  regularSnap.forEach((docSnap) => {
+    const campCode = docSnap.id;
+    const students: STSheetStudent[] = docSnap.data().data || [];
+    students.forEach((student) => records.push({ student, campCode }));
+  });
+
+  familySnap.forEach((docSnap) => {
+    const campCode = docSnap.id;
+    const families: FamilyUnit[] = docSnap.data().families || [];
+    families.forEach((family) => {
+      family.students.forEach((fs) => {
+        const student = {
+          name: fs.name,
+          englishName: fs.englishName,
+          grade: fs.grade,
+          gender: fs.gender,
+          ssn: fs.ssn,
+          passportName: fs.passportName,
+          passportNumber: fs.passportNumber,
+          passportExpiry: fs.passportExpiry,
+          medication: fs.medication,
+          parentPhone: fs.parentPhone || family.parents[0]?.phone,
+          registrationSource: fs.registrationSource,
+          roomNumber: family.roomNumber,
+          studentId: fs.id,
+          lastSyncedAt: family.lastSyncedAt,
+        } as STSheetStudent;
+        records.push({ student, campCode, isFamily: true, familyUnit: family });
+      });
+    });
+  });
+
+  return records;
+}
+
+/** 메모리 내 필터링 */
+export function filterStudents(records: StudentHistoryResult[], query: string): StudentHistoryResult[] {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  const normalizedPhone = trimmed.replace(/-/g, '');
+  return records.filter(({ student, familyUnit }) => {
+    if (student.name?.includes(trimmed)) return true;
+    if (student.parentPhone?.replace(/-/g, '').includes(normalizedPhone)) return true;
+    if (familyUnit?.parents.some((p) => p.phone?.replace(/-/g, '').includes(normalizedPhone))) return true;
+    return false;
+  });
+}
+
+/** 동일 학생 그룹핑 + 최신 기수 정렬 */
+export function groupStudentResults(results: StudentHistoryResult[]): StudentGroup[] {
+  const map = new Map<string, StudentGroup>();
+
+  results.forEach(({ student, campCode, isFamily, familyUnit }) => {
+    const key = student.ssn
+      ? `ssn:${student.ssn}`
+      : `name:${student.name}:phone:${(student.parentPhone || '').replace(/-/g, '')}`;
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        name: student.name || '',
+        grade: student.grade || '',
+        gender: student.gender || '',
+        parentPhone: student.parentPhone || '',
+        parentName: student.parentName || '',
+        age: student.ssn ? calcAgeFromSSN(student.ssn) : null,
+        ssn: student.ssn || null,
+        history: [],
+      });
+    } else {
+      const g = map.get(key)!;
+      if (!g.ssn && student.ssn) {
+        g.ssn = student.ssn;
+        g.age = calcAgeFromSSN(student.ssn);
+      }
+    }
+
+    map.get(key)!.history.push({ campCode, student, isFamily, familyUnit });
+  });
+
+  map.forEach((group) => {
+    group.history.sort((a, b) => campSortKey(b.campCode) - campSortKey(a.campCode));
+    const latestGrade = group.history[0]?.student.grade;
+    if (latestGrade) group.grade = latestGrade;
+  });
+
+  return Array.from(map.values());
+}

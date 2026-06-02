@@ -100,6 +100,13 @@ const adminSections: AdminSection[] = [
         iconColor: '#3b82f6',
         screenName: 'JobGenerate',
       },
+      {
+        id: '10',
+        title: '학생 조회',
+        icon: 'people-circle',
+        iconColor: '#7c3aed',
+        screenName: 'StudentSearch',
+      },
     ],
   },
 ];

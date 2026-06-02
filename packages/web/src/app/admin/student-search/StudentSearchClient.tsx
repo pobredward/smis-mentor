@@ -11,12 +11,7 @@ import {
   StudentHistoryResult,
 } from '@/lib/stSheetService';
 import { STSheetStudent, FamilyUnit } from '@smis-mentor/shared';
-import {
-  IoSearch, IoArrowBack,
-  IoPerson, IoCalendar, IoHome, IoPeople, IoCall,
-  IoMail, IoShirt, IoAirplane, IoCard, IoLocation,
-  IoInformationCircle, IoMedical, IoDocumentText,
-} from 'react-icons/io5';
+import { IoSearch, IoArrowBack, IoCalendar, IoPerson, IoCall } from 'react-icons/io5';
 
 // ─── 유틸 ─────────────────────────────────────────────────
 
@@ -77,36 +72,19 @@ function GenderBadge({ gender }: { gender: string }) {
   );
 }
 
-// 정보 행 하나 (아이콘 + 라벨 + 값)
-function InfoRow({
-  icon,
-  label,
-  value,
-  highlight = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string | undefined | null;
-  highlight?: boolean;
-}) {
+// ── 공통 정보 행 (방명단/반명단 모달과 동일한 스타일) ─────────
+function InfoRow({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
-    <div className={`flex items-start gap-1.5 text-xs ${highlight ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>
-      <span className="mt-0.5 text-gray-400 flex-shrink-0">{icon}</span>
-      <span className="text-gray-400 flex-shrink-0 min-w-[52px]">{label}</span>
-      <span className="break-all">{value}</span>
+    <div className="flex py-2 border-b border-gray-100">
+      <span className="flex-1 text-xs text-gray-500">{label}</span>
+      <span className="flex-[2] text-xs text-gray-900 font-medium break-all">{value}</span>
     </div>
   );
 }
 
-// 섹션 구분 박스
-function InfoSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5">{title}</p>
-      <div className="space-y-1">{children}</div>
-    </div>
-  );
+function SectionTitle({ title }: { title: string }) {
+  return <h4 className="text-sm font-semibold text-gray-900 mb-3">{title}</h4>;
 }
 
 // 캠프별 상세 정보 패널
@@ -116,108 +94,109 @@ function CampDetail({ campCode, student }: { campCode: string; student: STSheetS
     : null;
 
   return (
-    <div className="px-4 py-4 bg-gray-50 space-y-4">
-      {/* 기본 정보 (그 당시 학년/성별/영문명) */}
-      <InfoSection title="기본 정보">
-        <InfoRow icon={<IoPerson className="w-3 h-3" />} label="학년" value={student.grade} highlight />
-        <InfoRow icon={<IoPerson className="w-3 h-3" />} label="성별" value={student.gender === 'M' ? '남' : student.gender === 'F' ? '여' : student.gender} />
-        {student.englishName && (
-          <InfoRow icon={<IoPerson className="w-3 h-3" />} label="영문명" value={student.englishName} />
-        )}
-      </InfoSection>
+    <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 space-y-5">
+      {/* 캠프 정보 */}
+      <div>
+        <SectionTitle title="캠프 정보" />
+        <InfoRow label="고유번호" value={student.studentId} />
+        <InfoRow label="반 정보"
+          value={student.classNumber || student.className || student.classMentor
+            ? `${student.classNumber || '-'} | ${student.className || '-'}반 | ${student.classMentor || '-'} 멘토`
+            : undefined}
+        />
+        <InfoRow label="유닛 정보"
+          value={student.unit || student.roomNumber
+            ? `${student.unit || '-'} 유닛 | ${student.roomNumber || '-'}호`
+            : undefined}
+        />
+      </div>
 
-      {/* 반 / 배정 정보 */}
-      <InfoSection title="반 · 배정">
-        <InfoRow icon={<IoPeople className="w-3 h-3" />} label="반번호"   value={student.classNumber} highlight />
-        <InfoRow icon={<IoPeople className="w-3 h-3" />} label="반이름"   value={student.className} highlight />
-        <InfoRow icon={<IoPerson className="w-3 h-3" />} label="담임멘토" value={student.classMentor} highlight />
-        <InfoRow icon={<IoPeople className="w-3 h-3" />} label="유닛"     value={student.unit} />
-        <InfoRow icon={<IoPerson className="w-3 h-3" />} label="유닛멘토" value={student.unitMentor} />
-        <InfoRow icon={<IoHome className="w-3 h-3" />}   label="방호수"   value={student.roomNumber} highlight />
-        <InfoRow icon={<IoDocumentText className="w-3 h-3" />} label="등록처" value={student.registrationSource} />
-      </InfoSection>
-
-      {/* 여정 (E/J캠프 전용) */}
-      {(student.departureRoute || student.arrivalRoute) && (
-        <InfoSection title="여정">
-          <InfoRow icon={<IoAirplane className="w-3 h-3" />} label="입소여정" value={student.departureRoute} />
-          <InfoRow icon={<IoAirplane className="w-3 h-3" />} label="퇴소여정" value={student.arrivalRoute} />
-        </InfoSection>
-      )}
-
-      {/* 여권 (S캠프 전용) */}
-      {(student.passportName || student.passportNumber || student.passportExpiry || student.shirtSize) && (
-        <InfoSection title="여권 · 단체티">
-          <InfoRow icon={<IoCard className="w-3 h-3" />} label="여권 영문명" value={student.passportName} />
-          <InfoRow icon={<IoCard className="w-3 h-3" />} label="여권번호" value={student.passportNumber} />
-          <InfoRow icon={<IoCard className="w-3 h-3" />} label="여권만료일" value={student.passportExpiry} />
-          <InfoRow icon={<IoShirt className="w-3 h-3" />} label="단체티" value={student.shirtSize} />
-        </InfoSection>
-      )}
-
-      {/* 건강 / 특이사항 */}
-      {(student.medication || student.notes) && (
-        <InfoSection title="건강 · 특이사항">
-          <InfoRow icon={<IoMedical className="w-3 h-3" />} label="복용약/알레르기" value={student.medication} />
-          <InfoRow icon={<IoInformationCircle className="w-3 h-3" />} label="특이사항" value={student.notes} />
-        </InfoSection>
-      )}
-
-      {/* 연락처 상세 */}
-      {(student.parentPhone || student.parentName || student.otherPhone || student.otherName || student.email) && (
-        <InfoSection title="추가 연락처">
-          <InfoRow icon={<IoPerson className="w-3 h-3" />} label="보호자"     value={student.parentName} highlight />
-          <InfoRow icon={<IoCall className="w-3 h-3" />}   label="보호자 연락처" value={student.parentPhone} />
-          <InfoRow icon={<IoPerson className="w-3 h-3" />} label="기타 보호자" value={student.otherName} />
-          <InfoRow icon={<IoCall className="w-3 h-3" />}   label="기타 연락처" value={student.otherPhone} />
-          <InfoRow icon={<IoMail className="w-3 h-3" />}   label="이메일"     value={student.email} />
-        </InfoSection>
-      )}
-
-      {/* 주소 */}
-      {(student.region || student.address || student.addressDetail) && (
-        <InfoSection title="주소">
-          <InfoRow icon={<IoLocation className="w-3 h-3" />} label="지역" value={student.region} />
-          <InfoRow icon={<IoLocation className="w-3 h-3" />} label="주소" value={student.address} />
-          <InfoRow icon={<IoLocation className="w-3 h-3" />} label="세부주소" value={student.addressDetail} />
-        </InfoSection>
-      )}
-
-      {/* 개인정보 (주민번호 마스킹) */}
-      {student.ssn && (
-        <InfoSection title="개인정보">
-          <InfoRow
-            icon={<IoCard className="w-3 h-3" />}
-            label="주민번호"
-            value={student.ssn.length >= 7
-              ? `${student.ssn.slice(0, 6)}-${student.ssn.slice(6, 7)}******`
-              : student.ssn}
+      {/* 기본 정보 */}
+      <div>
+        <SectionTitle title="기본 정보" />
+        <InfoRow label="신상"
+          value={`${student.name}${student.englishName ? ` | ${student.englishName}` : ''} | ${student.grade} | ${student.gender === 'M' ? '남' : '여'}`}
+        />
+        <InfoRow label="주민등록번호"
+          value={student.ssn
+            ? (student.ssn.length >= 7 ? `${student.ssn.slice(0, 6)}-${student.ssn.slice(6)}` : student.ssn)
+            : undefined}
+        />
+        <InfoRow label="도로명 주소" value={student.address} />
+        <InfoRow label="세부 주소"   value={student.addressDetail} />
+        {(student.departureRoute || student.arrivalRoute) && (
+          <InfoRow label="입퇴소공항"
+            value={`${student.departureRoute || '-'} 입소 | ${student.arrivalRoute || '-'} 퇴소`}
           />
-        </InfoSection>
-      )}
+        )}
+        {(student.passportName || student.passportNumber || student.passportExpiry) && (
+          <InfoRow label="여권정보"
+            value={`${student.passportName || '-'} | ${student.passportNumber || '-'} | ${student.passportExpiry || '-'}`}
+          />
+        )}
+        <InfoRow label="단체티 사이즈" value={student.shirtSize} />
+      </div>
 
-      {/* 기타 */}
-      {(student.etc || student.studentId) && (
-        <InfoSection title="기타">
-          {student.studentId && (
-            <InfoRow icon={<IoDocumentText className="w-3 h-3" />} label="고유번호" value={student.studentId} />
-          )}
-          <InfoRow icon={<IoDocumentText className="w-3 h-3" />} label="기타" value={student.etc} />
-        </InfoSection>
-      )}
-
-      {/* 동기화 메타 */}
-      {syncDate && (
-        <div className="text-[10px] text-gray-400 flex items-center gap-1 pt-1 border-t border-gray-200">
-          <IoCalendar className="w-3 h-3" />
-          <span>마지막 동기화: {syncDate}</span>
+      {/* 보호자 정보 */}
+      {(student.parentPhone || student.parentName || student.otherPhone || student.otherName || student.email) && (
+        <div>
+          <SectionTitle title="보호자 정보" />
+          <InfoRow label="대표 보호자"
+            value={student.parentPhone || student.parentName
+              ? `${student.parentPhone || '-'} | ${student.parentName || '-'}`
+              : undefined}
+          />
+          <InfoRow label="대표 이메일" value={student.email} />
+          <InfoRow label="기타 보호자"
+            value={student.otherPhone || student.otherName
+              ? `${student.otherPhone || '-'} | ${student.otherName || '-'}`
+              : undefined}
+          />
         </div>
+      )}
+
+      {/* 상세 정보 */}
+      {(student.registrationSource || student.medication || student.notes || student.etc || student.region) && (
+        <div>
+          <SectionTitle title="상세 정보" />
+          <InfoRow label="등록처"        value={student.registrationSource} />
+          <InfoRow label="복용약 & 알레르기" value={student.medication} />
+          <InfoRow label="특이사항"      value={student.notes} />
+          <InfoRow label="지역"          value={student.region} />
+          <InfoRow label="기타"          value={student.etc} />
+        </div>
+      )}
+
+      {syncDate && (
+        <p className="text-[10px] text-gray-400 flex items-center gap-1 pt-1 border-t border-gray-200">
+          <IoCalendar className="w-3 h-3" />
+          마지막 동기화: {syncDate}
+        </p>
       )}
     </div>
   );
 }
 
 // ─── F캠프 전용 상세 패널 ────────────────────────────────────
+
+function FamilyInfoRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start gap-1.5 text-xs text-gray-600">
+      <span className="text-gray-400 flex-shrink-0 min-w-[56px]">{label}</span>
+      <span className="break-all">{value}</span>
+    </div>
+  );
+}
+
+function FamilyInfoSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5">{title}</p>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
 
 function FamilyCampDetail({ campCode, family, studentId }: {
   campCode: string;
@@ -233,58 +212,57 @@ function FamilyCampDetail({ campCode, family, studentId }: {
   return (
     <div className="px-4 py-4 bg-pink-50 space-y-4">
       {/* 가족 기본 */}
-      <InfoSection title="가족 정보">
-        <InfoRow icon={<IoPeople className="w-3 h-3" />} label="가족번호" value={`#${family.familyId}`} highlight />
-        <InfoRow icon={<IoPeople className="w-3 h-3" />} label="가족유형" value={family.familyType} highlight />
-        <InfoRow icon={<IoHome className="w-3 h-3" />}   label="방호수"   value={family.roomNumber || '-'} highlight />
-      </InfoSection>
+      <FamilyInfoSection title="가족 정보">
+        <FamilyInfoRow label="가족번호" value={`#${family.familyId}`} />
+        <FamilyInfoRow label="가족유형" value={family.familyType} />
+        <FamilyInfoRow label="방호수"   value={family.roomNumber || '-'} />
+      </FamilyInfoSection>
 
       {/* 보호자 */}
       {family.parents.map((p, idx) => (
-        <InfoSection key={p.id} title={family.parents.length > 1 ? `보호자 ${idx + 1}` : '보호자'}>
-          <InfoRow icon={<IoPerson className="w-3 h-3" />} label="성함"   value={p.name} highlight />
-          <InfoRow icon={<IoCall className="w-3 h-3" />}   label="연락처" value={p.phone} />
-          <InfoRow icon={<IoLocation className="w-3 h-3" />} label="지역" value={p.region} />
-          <InfoRow icon={<IoMail className="w-3 h-3" />}   label="이메일" value={p.email} />
-          <InfoRow icon={<IoCard className="w-3 h-3" />}   label="여권이름" value={p.passportName} />
-          <InfoRow icon={<IoCard className="w-3 h-3" />}   label="여권번호" value={p.passportNumber} />
-          <InfoRow icon={<IoCard className="w-3 h-3" />}   label="주민번호" value={
-            p.ssn ? (p.ssn.length >= 7 ? `${p.ssn.slice(0, 6)}-${p.ssn.slice(6, 7)}******` : p.ssn) : undefined
-          } />
-        </InfoSection>
+        <FamilyInfoSection key={p.id} title={family.parents.length > 1 ? `보호자 ${idx + 1}` : '보호자'}>
+          <FamilyInfoRow label="성함"   value={p.name} />
+          <FamilyInfoRow label="연락처" value={p.phone} />
+          <FamilyInfoRow label="지역"   value={p.region} />
+          <FamilyInfoRow label="이메일" value={p.email} />
+          <FamilyInfoRow label="여권이름" value={p.passportName} />
+          <FamilyInfoRow label="여권번호" value={p.passportNumber} />
+          <FamilyInfoRow label="주민번호"
+            value={p.ssn ? (p.ssn.length >= 7 ? `${p.ssn.slice(0, 6)}-${p.ssn.slice(6)}` : p.ssn) : undefined}
+          />
+        </FamilyInfoSection>
       ))}
 
       {/* 해당 학생 */}
       {thisStudent && (
-        <InfoSection title="학생 정보">
-          <InfoRow icon={<IoPerson className="w-3 h-3" />}       label="이름"   value={thisStudent.name} highlight />
-          <InfoRow icon={<IoPerson className="w-3 h-3" />}       label="학년/성별" value={`${thisStudent.grade} · ${thisStudent.gender === 'M' ? '남' : '여'}`} />
-          <InfoRow icon={<IoCard className="w-3 h-3" />}         label="여권이름" value={thisStudent.passportName} />
-          <InfoRow icon={<IoCard className="w-3 h-3" />}         label="여권번호" value={thisStudent.passportNumber} />
-          <InfoRow icon={<IoMedical className="w-3 h-3" />}      label="건강정보" value={thisStudent.medication} />
-          <InfoRow icon={<IoDocumentText className="w-3 h-3" />} label="등록처"  value={thisStudent.registrationSource} />
-          <InfoRow icon={<IoCard className="w-3 h-3" />}         label="주민번호" value={
-            thisStudent.ssn
-              ? (thisStudent.ssn.length >= 7 ? `${thisStudent.ssn.slice(0, 6)}-${thisStudent.ssn.slice(6, 7)}******` : thisStudent.ssn)
-              : undefined
-          } />
-        </InfoSection>
+        <FamilyInfoSection title="학생 정보">
+          <FamilyInfoRow label="이름"     value={thisStudent.name} />
+          <FamilyInfoRow label="학년/성별" value={`${thisStudent.grade} · ${thisStudent.gender === 'M' ? '남' : '여'}`} />
+          <FamilyInfoRow label="여권이름"  value={thisStudent.passportName} />
+          <FamilyInfoRow label="여권번호"  value={thisStudent.passportNumber} />
+          <FamilyInfoRow label="건강정보"  value={thisStudent.medication} />
+          <FamilyInfoRow label="등록처"    value={thisStudent.registrationSource} />
+          <FamilyInfoRow label="주민번호"
+            value={thisStudent.ssn
+              ? (thisStudent.ssn.length >= 7 ? `${thisStudent.ssn.slice(0, 6)}-${thisStudent.ssn.slice(6)}` : thisStudent.ssn)
+              : undefined}
+          />
+        </FamilyInfoSection>
       )}
 
       {/* 형제자매 */}
       {family.students.length > 1 && (
-        <InfoSection title="형제자매">
+        <FamilyInfoSection title="형제자매">
           {family.students
             .filter((s) => s.id !== thisStudent?.id)
             .map((s) => (
-              <InfoRow
+              <FamilyInfoRow
                 key={s.id}
-                icon={<IoPerson className="w-3 h-3" />}
                 label={s.grade}
                 value={`${s.name}${s.englishName ? ` (${s.englishName})` : ''}`}
               />
             ))}
-        </InfoSection>
+        </FamilyInfoSection>
       )}
 
       {syncDate && (
