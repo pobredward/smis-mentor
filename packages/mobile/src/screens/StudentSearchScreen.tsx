@@ -447,12 +447,12 @@ function StudentCard({ group }: StudentCardProps) {
 
       {/* 캠프 코드 탭 — 항상 표시 */}
       <View style={cardStyles.campTabs}>
-        {group.history.map(({ campCode, isFamily }) => {
+        {group.history.map(({ campCode, isFamily }, idx) => {
           const colors = campTypeBadgeColor(campCode);
           const isActive = expandedCamp === campCode;
           return (
             <TouchableOpacity
-              key={campCode}
+              key={`${campCode}-${idx}`}
               onPress={() => toggleCamp(campCode)}
               style={[
                 cardStyles.campTab,

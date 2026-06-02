@@ -546,8 +546,10 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
   const map = new Map<string, StudentGroup>();
 
   results.forEach(({ student, campCode, isFamily, familyUnit }) => {
-    const key = student.ssn
-      ? `ssn:${student.ssn}`
+    // ssn은 하이픈 제거 후 정규화 (980619-1234567 == 9806191234567)
+    const normalizedSsn = student.ssn ? student.ssn.replace(/-/g, '') : null;
+    const key = normalizedSsn
+      ? `ssn:${normalizedSsn}`
       : `name:${student.name}:phone:${(student.parentPhone || '').replace(/-/g, '')}`;
 
     if (!map.has(key)) {
@@ -570,7 +572,14 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
       }
     }
 
-    map.get(key)!.history.push({ campCode, student, isFamily, familyUnit });
+    const group = map.get(key)!;
+    const existingIdx = group.history.findIndex((h) => h.campCode === campCode);
+    if (existingIdx === -1) {
+      group.history.push({ campCode, student, isFamily, familyUnit });
+    } else if (isFamily && !group.history[existingIdx].isFamily) {
+      // 가족 캠프 데이터가 더 풍부하므로 일반 항목을 교체
+      group.history[existingIdx] = { campCode, student, isFamily, familyUnit };
+    }
   });
 
   map.forEach((group) => {

@@ -381,9 +381,9 @@ function StudentHistoryCard({ group }: { group: StudentGroup }) {
 
       {/* 캠프 코드 탭 — 항상 표시 */}
       <div className="flex flex-wrap gap-1.5 px-4 pb-3">
-        {group.history.map(({ campCode, isFamily }) => (
+        {group.history.map(({ campCode, isFamily }, idx) => (
           <button
-            key={campCode}
+            key={`${campCode}-${idx}`}
             onClick={() => toggleCamp(campCode)}
             className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
               expandedCamp === campCode
