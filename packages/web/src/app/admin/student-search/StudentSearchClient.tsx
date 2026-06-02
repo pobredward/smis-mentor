@@ -15,6 +15,17 @@ import { IoSearch, IoArrowBack, IoCalendar, IoPerson, IoCall } from 'react-icons
 
 // ─── 유틸 ─────────────────────────────────────────────────
 
+// Firestore Timestamp / Date / string 모두 처리
+function toDisplayDate(val: unknown): string | null {
+  if (!val) return null;
+  const d = typeof val === 'object' && val !== null && typeof (val as { toDate?: unknown }).toDate === 'function'
+    ? (val as { toDate: () => Date }).toDate()
+    : new Date(val as string | number | Date);
+  if (isNaN(d.getTime())) return null;
+  const date = d.toLocaleDateString('ko-KR');
+  const time = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${date} ${time}`;
+}
 
 // 이미지 전체화면 모달
 function PhotoModal({ src, name, onClose }: { src: string; name: string; onClose: () => void }) {
@@ -78,9 +89,7 @@ function SectionTitle({ title }: { title: string }) {
 
 // 캠프별 상세 정보 패널
 function CampDetail({ campCode, student }: { campCode: string; student: STSheetStudent }) {
-  const syncDate = student.lastSyncedAt
-    ? new Date(student.lastSyncedAt as unknown as string).toLocaleDateString('ko-KR')
-    : null;
+  const syncDate = toDisplayDate(student.lastSyncedAt);
 
   return (
     <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 space-y-5">
@@ -231,9 +240,7 @@ function FamilyCampDetail({ campCode, family, studentId }: {
   family: FamilyUnit;
   studentId?: string;
 }) {
-  const syncDate = family.lastSyncedAt
-    ? new Date(family.lastSyncedAt as unknown as string).toLocaleDateString('ko-KR')
-    : null;
+  const syncDate = toDisplayDate(family.lastSyncedAt);
 
   const thisStudent = family.students.find((s) => s.id === studentId) ?? family.students[0];
 
