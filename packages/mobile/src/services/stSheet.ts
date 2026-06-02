@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { logger } from '@smis-mentor/shared';
 import { functions as mobileFunctions, db } from '../config/firebase';
@@ -7,6 +7,7 @@ import {
   CAMP_SHEET_CONFIG,
   CampCode,
   CampType,
+  FamilyUnit,
 } from '@smis-mentor/shared';
 
 export interface GetStudentsByMentorRequest {
@@ -23,6 +24,7 @@ export interface GetStudentsByMentorResponse {
 export interface SyncSTSheetResponse {
   success: boolean;
   count: number;
+  familyCount?: number;
   lastSync: string;
 }
 
@@ -395,12 +397,34 @@ export const stSheetService = {
   // 실제 데이터 존재 여부 확인
   hasRealData: async (campCode: CampCode = 'E27'): Promise<boolean> => {
     try {
-      const docRef = doc(db, 'stSheetCache', campCode);
+      const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
+      const isFamily = config?.type === 'F';
+      const collectionName = isFamily ? 'familySTSheetCache' : 'stSheetCache';
+      const docRef = doc(db, collectionName, campCode);
       const docSnap = await getDoc(docRef);
-      return docSnap.exists() && docSnap.data()?.data && docSnap.data()?.data.length > 0;
+      if (!docSnap.exists()) return false;
+      const data = docSnap.data();
+      return isFamily
+        ? (data?.families?.length ?? 0) > 0
+        : (data?.data?.length ?? 0) > 0;
     } catch (error) {
       logger.error('실제 데이터 확인 실패:', error);
       return false;
+    }
+  },
+
+  // F 캠프 가족 데이터 조회
+  getCachedFamilies: async (campCode: CampCode): Promise<FamilyUnit[]> => {
+    try {
+      const docRef = doc(db, 'familySTSheetCache', campCode);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return (docSnap.data()?.families ?? []) as FamilyUnit[];
+      }
+      return [];
+    } catch (error) {
+      logger.error('❌ 가족 데이터 로드 실패:', error);
+      return [];
     }
   },
 };

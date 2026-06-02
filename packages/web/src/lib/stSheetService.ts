@@ -7,10 +7,12 @@ import {
   ST_SHEET_HEADER_MAPPING,
   CampCode,
   CampType,
+  FamilyUnit,
+  FamilySTSheetCache,
 } from '@smis-mentor/shared';
 import { db, functions } from './firebase';
 
-export type { STSheetStudent, CampCode, CampType };
+export type { STSheetStudent, CampCode, CampType, FamilyUnit, FamilySTSheetCache };
 
 export interface JobCode {
   id: string;
@@ -396,6 +398,21 @@ export const stSheetService = {
   getCampType: (campCode: CampCode): CampType => {
     const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
     return (config?.type as CampType) || 'EJ';
+  },
+
+  // F 캠프 가족 데이터 조회
+  getCachedFamilies: async (campCode: CampCode): Promise<FamilyUnit[]> => {
+    try {
+      const docRef = doc(db, 'familySTSheetCache', campCode);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return (docSnap.data()?.families ?? []) as FamilyUnit[];
+      }
+      return [];
+    } catch (error) {
+      logger.error('❌ 가족 데이터 로드 실패:', error);
+      return [];
+    }
   },
 };
 

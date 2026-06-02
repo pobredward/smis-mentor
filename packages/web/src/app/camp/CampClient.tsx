@@ -12,6 +12,8 @@ import GuideContent from '@/components/camp/GuideContent';
 import ClassContent from '@/components/camp/ClassContent';
 import RoomContent from '@/components/camp/RoomContent';
 import TaskContent from '@/components/camp/TaskContent';
+import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
+import FamilyContent from '@/components/camp/FamilyContent';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
 
@@ -27,8 +29,21 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   const router = useRouter();
   const pathname = usePathname();
   const { userData } = useAuth();
+  const [isFamilyCamp, setIsFamilyCamp] = useState(false);
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+
+  // 활성 캠프 타입 로드 (F 캠프 여부 판별용)
+  useEffect(() => {
+    const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+    if (!activeJobCodeId) return;
+    jobCodesService.getJobCodesByIds([activeJobCodeId]).then(codes => {
+      if (codes.length > 0 && codes[0].code) {
+        const type = stSheetService.getCampType(codes[0].code as CampCode);
+        setIsFamilyCamp(type === 'F');
+      }
+    }).catch(() => {});
+  }, [userData?.activeJobExperienceId, userData?.jobExperiences]);
 
   // 관리자가 캠프를 아직 배정하지 않은 경우
   const hasNoCampAssigned =
@@ -42,7 +57,13 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
     { id: 'schedule', title: isForeign ? 'Schedule' : '시간표', path: '/camp/schedule' },
     { id: 'guide', title: isForeign ? 'Guide' : '인솔표', path: '/camp/guide' },
     { id: 'class', title: isForeign ? 'Class' : '반명단', path: '/camp/class' },
-    { id: 'room', title: isForeign ? 'Room' : '방명단', path: '/camp/room' },
+    {
+      id: 'room',
+      title: isForeign
+        ? (isFamilyCamp ? 'Family' : 'Room')
+        : (isFamilyCamp ? '가족명단' : '방명단'),
+      path: '/camp/room',
+    },
   ];
   
   const tabs = isForeign 
@@ -158,7 +179,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
             </div>
           ) : activeTab === 'room' ? (
             <div className="h-[calc(100vh-120px)]">
-              <RoomContent />
+              {isFamilyCamp ? <FamilyContent /> : <RoomContent />}
             </div>
           ) : null}
         </div>

@@ -9,6 +9,9 @@ import {
   mapHeadersToStudent,
   isInactiveStudent,
   STSheetStudent,
+  parseFamilySheet,
+  FamilyUnit,
+  FamilySTSheetCache,
 } from './studentTypes';
 
 admin.initializeApp();
@@ -921,32 +924,13 @@ async function fetchAndParseCamp(campCode: string): Promise<STSheetStudent[]> {
     return [];
   }
 
-  let students: STSheetStudent[];
-
-  if (config.type === 'F') {
-    // F형: '고유번호' 열이 시작점
-    const studentSectionStart = rows[0].findIndex((h) => h.trim() === '고유번호');
-    if (studentSectionStart === -1) {
-      console.warn(`[${campCode}] F형 시트에서 '고유번호' 열을 찾을 수 없습니다.`);
-      return [];
-    }
-    const studentHeaders = rows[0].slice(studentSectionStart);
-    const headerIndexMap = buildNormalizedHeaderIndexMap(studentHeaders);
-    students = rows
-      .slice(1)
-      .filter((row) => row[studentSectionStart]?.trim())
-      .map((row, idx) =>
-        mapHeadersToStudent(row.slice(studentSectionStart), headerIndexMap, idx + 2, campCode, 'F')
-      );
-  } else {
-    const headerIndexMap = buildNormalizedHeaderIndexMap(rows[0]);
-    students = rows
-      .slice(1)
-      .filter((row) => row[0]?.trim())
-      .map((row, idx) =>
-        mapHeadersToStudent(row, headerIndexMap, idx + 2, campCode, config.type)
-      );
-  }
+  const headerIndexMap = buildNormalizedHeaderIndexMap(rows[0]);
+  const students = rows
+    .slice(1)
+    .filter((row) => row[0]?.trim())
+    .map((row, idx) =>
+      mapHeadersToStudent(row, headerIndexMap, idx + 2, campCode, config.type)
+    );
 
   const active = students.filter((s) => !isInactiveStudent(s));
   const skipped = students.length - active.length;
@@ -954,6 +938,35 @@ async function fetchAndParseCamp(campCode: string): Promise<STSheetStudent[]> {
   console.log(`[${campCode}] 활성 학생 ${active.length}명`);
 
   return active;
+}
+
+/**
+ * F 캠프 시트를 FamilyUnit[] 로 파싱하여 반환.
+ * stSheetCache 대신 familySTSheetCache 컬렉션에 저장.
+ */
+async function fetchAndParseFamilyCamp(campCode: string): Promise<FamilyUnit[]> {
+  const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
+  if (!config) throw new Error(`캠프 코드 ${campCode}에 대한 설정이 없습니다.`);
+  if (config.type !== 'F') throw new Error(`${campCode}는 F 타입 캠프가 아닙니다.`);
+
+  const sheets = await getSheetsClient();
+  const sheetName = await resolveSheetName(sheets, config.spreadsheetId, config.gid);
+
+  console.log(`📊 [${campCode}] F캠프 가족 시트 읽기: "${sheetName}" (gid=${config.gid})`);
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.spreadsheetId,
+    range: sheetName,
+    valueRenderOption: 'FORMATTED_VALUE',
+  });
+
+  const rows: string[][] = (response.data.values ?? []).map((row) =>
+    (row as string[]).map((cell) => String(cell ?? ''))
+  );
+
+  const families = parseFamilySheet(rows, campCode);
+  console.log(`[${campCode}] 가족 ${families.length}팀, 학생 ${families.reduce((s, f) => s + f.students.length, 0)}명`);
+  return families;
 }
 
 /**
@@ -986,21 +999,50 @@ export const syncSTSheet = functionsV2.https.onCall(
     }
 
     try {
-      console.log(`🔄 ST 시트 동기화 시작: ${campCode}`);
-      const students = await fetchAndParseCamp(campCode);
+      const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
+      const isFamily = config?.type === 'F';
 
-      await db.collection('stSheetCache').doc(campCode).set({
-        campCode,
-        data: students,
-        lastSyncedAt: new Date().toISOString(),
-        syncedBy: request.auth.uid,
-        syncedByName: callerData.name ?? 'Admin',
-        version: Date.now(),
-        totalStudents: students.length,
-      });
+      if (isFamily) {
+        // F 캠프: 가족 단위 파싱 → familySTSheetCache 컬렉션
+        console.log(`🔄 F캠프 가족 시트 동기화 시작: ${campCode}`);
+        const families = await fetchAndParseFamilyCamp(campCode);
+        const totalStudents = families.reduce((s, f) => s + f.students.length, 0);
 
-      console.log(`✅ 동기화 완료: ${campCode} (${students.length}명)`);
-      return { success: true, count: students.length, lastSync: new Date().toISOString() };
+        const cacheData: Omit<FamilySTSheetCache, 'id'> = {
+          campCode,
+          families,
+          lastSyncedAt: new Date(),
+          syncedBy: request.auth.uid,
+          syncedByName: callerData.name ?? 'Admin',
+          version: Date.now(),
+          totalFamilies: families.length,
+          totalStudents,
+        };
+
+        await db.collection('familySTSheetCache').doc(campCode).set(
+          JSON.parse(JSON.stringify(cacheData))
+        );
+
+        console.log(`✅ F캠프 동기화 완료: ${campCode} (${families.length}가족, 학생 ${totalStudents}명)`);
+        return { success: true, count: totalStudents, familyCount: families.length, lastSync: new Date().toISOString() };
+      } else {
+        // 일반 캠프: 학생 단위 파싱 → stSheetCache 컬렉션
+        console.log(`🔄 ST 시트 동기화 시작: ${campCode}`);
+        const students = await fetchAndParseCamp(campCode);
+
+        await db.collection('stSheetCache').doc(campCode).set({
+          campCode,
+          data: students,
+          lastSyncedAt: new Date().toISOString(),
+          syncedBy: request.auth.uid,
+          syncedByName: callerData.name ?? 'Admin',
+          version: Date.now(),
+          totalStudents: students.length,
+        });
+
+        console.log(`✅ 동기화 완료: ${campCode} (${students.length}명)`);
+        return { success: true, count: students.length, lastSync: new Date().toISOString() };
+      }
     } catch (error) {
       console.error(`❌ 동기화 실패 [${campCode}]:`, error);
       const message = error instanceof Error ? error.message : '알 수 없는 오류';

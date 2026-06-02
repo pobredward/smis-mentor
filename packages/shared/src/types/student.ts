@@ -270,14 +270,14 @@ export const CAMP_SHEET_CONFIG = {
   F27_1: {
     spreadsheetId: '1PeUbMxaAVDRxK8zyIxLwjf60YFPGz0FaM8jJUointL0',
     sheetName: 'ST',
-    gid: '1282186412',
+    gid: '0',
     type: 'F' as const,
     useHeaderMapping: true,
   },
   F27_2: {
     spreadsheetId: '1AhJP6y1qOlnosbdkMReCgfpuz81KUmo9WWfPRjn7qgI',
     sheetName: 'ST',
-    gid: '1939172041',
+    gid: '0',
     type: 'F' as const,
     useHeaderMapping: true,
   },
@@ -304,15 +304,8 @@ export const CAMP_SHEET_CONFIG = {
     type: 'DG' as const,
     useHeaderMapping: true,
   },
-  F26_1: {
+  F26: {
     spreadsheetId: '1rJgf-DFmUhdiUZS-GAtQ_7TBb-lsOiXKqZkY7292m1Y',
-    sheetName: 'ST',
-    gid: '0',
-    type: 'F' as const,
-    useHeaderMapping: true,
-  },
-  F26_2: {
-    spreadsheetId: '1dU23gmKtQAEwyBmvayzJmB6fujR3WvAFY4TjnW60yIw',
     sheetName: 'ST',
     gid: '0',
     type: 'F' as const,
@@ -648,7 +641,229 @@ export interface STSheetCache {
   totalStudents: number;
 }
 
+/**
+ * F 캠프 시트의 행 배열을 FamilyUnit 배열로 파싱한다.
+ *
+ * 1행 헤더를 기반으로 열 인덱스를 자동 감지하므로
+ * 캠프마다 열 위치가 달라도 안전하게 처리된다.
+ *
+ * 부모 섹션: "가족번호" 헤더가 있는 열 기준
+ * 학생 섹션: "고유번호" 헤더가 등장하는 열부터
+ *   ("가족번호" 도입 이후 구조에서는 첫 번째 "고유번호"가 학생 섹션)
+ *
+ * 데이터 행의 가족번호 패턴:
+ *   P01.1 → 1번 가족 첫 번째 행, P01.2/P01.3 → 동일 가족 추가 행
+ */
+export function parseFamilySheet(rows: string[][], campCode: string): FamilyUnit[] {
+  if (rows.length < 2) return [];
+
+  const header = rows[0].map(h => h?.trim() ?? '');
+
+  // ── 헤더에서 열 인덱스 탐색 헬퍼 ──────────────────────────────────
+  const col = (name: string, startFrom = 0): number => {
+    const idx = header.indexOf(name, startFrom);
+    return idx >= 0 ? idx : -1;
+  };
+
+  // ── 부모 섹션 열 인덱스 ──────────────────────────────────────────
+  const pFamilyId  = col('가족번호');
+  const pType      = col('유형') >= 0 ? col('유형') : col('숙소 형태');
+  const pName      = col('성함') >= 0 ? col('성함') : col('부모님 성함');
+  const pPhone     = col('연락처') >= 0 ? col('연락처') : col('부모님 연락처');
+  const pRegion    = col('지역');
+  const pSsn       = col('주민등록번호');
+  const pPassName  = col('여권상 영문이름');
+  const pPassNum   = col('여권 번호');
+  const pPassExp   = col('여권 만료일자');
+  const pNative    = col('원어민');
+  const pEmail     = col('이메일 주소') >= 0 ? col('이메일 주소') : col('이메일주소');
+  const pAddress   = col('집 주소');
+  const pNotes     = col('기타');
+  const pRoom      = col('방호수');
+
+  // ── 학생 섹션 시작 열 인덱스 감지 ───────────────────────────────
+  // "가족번호"가 있는 신형 구조: 첫 번째 "고유번호"가 학생 섹션
+  // "가족번호" 없는 구형 구조: 두 번째 "고유번호"가 학생 섹션
+  let sStart = -1;
+  {
+    let found = 0;
+    for (let i = 0; i < header.length; i++) {
+      if (header[i] === '고유번호') {
+        found++;
+        if (pFamilyId >= 0 && found === 1) {
+          sStart = i;
+          break;
+        }
+        if (pFamilyId < 0 && found === 2) {
+          sStart = i;
+          break;
+        }
+      }
+    }
+    if (sStart === -1) sStart = col('고유번호'); // 마지막 fallback
+  }
+
+  if (sStart === -1) return [];
+
+  // 학생 섹션 헤더 슬라이스 기준 열 탐색
+  const sh = header.slice(sStart);
+  const sc = (name: string): number => {
+    const idx = sh.indexOf(name);
+    return idx >= 0 ? sStart + idx : -1;
+  };
+
+  const sId       = sStart;
+  const sName     = sc('학생 이름');
+  const sEngName  = sc('영어 닉네임');
+  const sGrade    = sc('학년');
+  const sGender   = sc('성별');
+  const sSsn      = sc('주민등록번호');
+  const sPassName = sc('여권상 영문이름');
+  const sPassNum  = sc('여권 번호');
+  const sPassExp  = sc('여권 만료일자');
+  const sMed      = sc('학생 건강정보 및 특이사항') >= 0
+    ? sc('학생 건강정보 및 특이사항')
+    : sc('특이사항');
+  const sParPhone = sc('부모님 연락처');
+  const sReg      = sc('등록처');
+
+  // ── 행 파싱 ──────────────────────────────────────────────────────
+  const familyMap = new Map<string, FamilyUnit>();
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every(cell => !cell?.trim())) continue;
+
+    const rawFamilyId = (pFamilyId >= 0 ? row[pFamilyId] : row[0])?.trim() ?? '';
+    if (!rawFamilyId || rawFamilyId === '-') continue;
+
+    const familyMatch = rawFamilyId.match(/^P(\d+)\./);
+    if (!familyMatch) continue;
+    const familyId = familyMatch[1].padStart(2, '0');
+
+    if (!familyMap.has(familyId)) {
+      familyMap.set(familyId, {
+        familyId,
+        familyType: pType >= 0 ? row[pType]?.trim() ?? '' : '',
+        parents: [],
+        students: [],
+        roomNumber: pRoom >= 0 ? row[pRoom]?.trim() ?? '' : '',
+        rowNumber: i + 1,
+        lastSyncedAt: new Date(),
+        campCode,
+      });
+    }
+
+    const unit = familyMap.get(familyId)!;
+    const typeVal = pType >= 0 ? row[pType]?.trim() : '';
+    if (typeVal) unit.familyType = typeVal;
+    const roomVal = pRoom >= 0 ? row[pRoom]?.trim() : '';
+    if (roomVal) unit.roomNumber = roomVal;
+
+    // 부모: 성함 열에 값이 있으면 부모
+    const parentName = pName >= 0 ? row[pName]?.trim() ?? '' : '';
+    if (parentName) {
+      unit.parents.push({
+        id: rawFamilyId,
+        name: parentName,
+        phone:          pPhone    >= 0 ? row[pPhone]?.trim()    ?? '' : '',
+        region:         pRegion   >= 0 ? row[pRegion]?.trim()   ?? '' : '',
+        ssn:            pSsn      >= 0 ? row[pSsn]?.trim()      ?? '' : '',
+        passportName:   pPassName >= 0 ? row[pPassName]?.trim() ?? '' : '',
+        passportNumber: pPassNum  >= 0 ? row[pPassNum]?.trim()  ?? '' : '',
+        passportExpiry: pPassExp  >= 0 ? row[pPassExp]?.trim()  ?? '' : '',
+        nativeEnglish:  pNative   >= 0 ? row[pNative]?.trim()   ?? '' : '',
+        email:          pEmail    >= 0 ? row[pEmail]?.trim()    ?? '' : '',
+        address:        pAddress  >= 0 ? row[pAddress]?.trim()  ?? '' : '',
+        notes:          pNotes    >= 0 ? row[pNotes]?.trim()    ?? '' : '',
+        roomNumber:     pRoom     >= 0 ? row[pRoom]?.trim()     ?? '' : '',
+      });
+    }
+
+    // 학생: 고유번호 열에 값이 있으면 학생
+    const studentId   = row[sId]?.trim() ?? '';
+    const studentName = sName >= 0 ? row[sName]?.trim() ?? '' : '';
+    if (studentId && studentId !== '-' && studentName) {
+      const genderRaw = sGender >= 0 ? row[sGender]?.trim() ?? 'M' : 'M';
+      unit.students.push({
+        id: studentId,
+        name: studentName,
+        englishName:        sEngName  >= 0 ? row[sEngName]?.trim()  ?? '' : '',
+        grade:              sGrade    >= 0 ? row[sGrade]?.trim()    ?? '' : '',
+        gender:             (genderRaw.toUpperCase() === 'F' ? 'F' : 'M') as 'M' | 'F',
+        ssn:                sSsn      >= 0 ? row[sSsn]?.trim()      ?? '' : '',
+        passportName:       sPassName >= 0 ? row[sPassName]?.trim() ?? '' : '',
+        passportNumber:     sPassNum  >= 0 ? row[sPassNum]?.trim()  ?? '' : '',
+        passportExpiry:     sPassExp  >= 0 ? row[sPassExp]?.trim()  ?? '' : '',
+        medication:         sMed      >= 0 ? row[sMed]?.trim()      ?? '' : '',
+        parentPhone:        sParPhone >= 0 ? row[sParPhone]?.trim() ?? '' : '',
+        registrationSource: sReg      >= 0 ? row[sReg]?.trim()      ?? '' : '',
+      });
+    }
+  }
+
+  return Array.from(familyMap.values())
+    .filter(f => f.students.length > 0 || f.parents.length > 0)
+    .sort((a, b) => a.familyId.localeCompare(b.familyId));
+}
+
 export interface MentorStudentFilter {
   mentorName: string;
   filterType: 'class' | 'unit';
+}
+
+// ─── F 캠프 전용 가족 단위 타입 ─────────────────────────────────────────────
+
+export interface FamilyParent {
+  id: string;            // P01.1, P01.2(부모2명 경우) 등
+  name: string;
+  phone: string;
+  region?: string;
+  ssn?: string;
+  passportName?: string;
+  passportNumber?: string;
+  passportExpiry?: string;
+  nativeEnglish?: string; // 원어민 수업 신청 여부
+  email?: string;
+  address?: string;
+  notes?: string;
+  roomNumber?: string;
+}
+
+export interface FamilyStudent {
+  id: string;            // F01, F02 등
+  name: string;
+  englishName?: string;
+  grade: string;
+  gender: 'M' | 'F';
+  ssn?: string;
+  passportName?: string;
+  passportNumber?: string;
+  passportExpiry?: string;
+  medication?: string;   // 학생 건강정보 및 특이사항
+  parentPhone?: string;
+  registrationSource?: string;
+}
+
+export interface FamilyUnit {
+  familyId: string;      // "01", "02" 등 (P01 → "01")
+  familyType: string;    // "2인 가족", "3인 가족" 등
+  parents: FamilyParent[];
+  students: FamilyStudent[];
+  roomNumber?: string;
+  rowNumber: number;
+  lastSyncedAt: Date;
+  campCode?: string;
+}
+
+export interface FamilySTSheetCache {
+  id: string;
+  campCode: string;
+  families: FamilyUnit[];
+  lastSyncedAt: Date;
+  syncedBy: string;
+  syncedByName: string;
+  version: number;
+  totalFamilies: number;
+  totalStudents: number;
 }
