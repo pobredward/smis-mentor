@@ -17,7 +17,6 @@
   },
   "main": "lib/index.js",
   "dependencies": {
-    "@smis-mentor/shared": "file:../packages/shared",
     "expo-server-sdk": "^6.1.0",
     "firebase-admin": "^13.7.0",
     "firebase-functions": "^7.0.0",

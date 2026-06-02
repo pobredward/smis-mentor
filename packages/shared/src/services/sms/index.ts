@@ -33,7 +33,7 @@ export class SMSApiClient {
         body: JSON.stringify(params),
       });
 
-      const data = await response.json();
+      const data = await response.json() as SendSMSResponse;
       return data;
     } catch (error) {
       console.error('SMS 전송 오류:', error);

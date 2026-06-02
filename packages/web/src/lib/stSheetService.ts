@@ -1,48 +1,16 @@
-import { getFirestore, collection, doc, getDoc, setDoc, query, where, getDocs } from 'firebase/firestore';
-import { logger } from '@smis-mentor/shared';
-import { db } from './firebase';
+import { collection, doc, getDoc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import {
+  logger,
+  STSheetStudent,
+  CAMP_SHEET_CONFIG,
+  ST_SHEET_HEADER_MAPPING,
+  CampCode,
+  CampType,
+} from '@smis-mentor/shared';
+import { db, functions } from './firebase';
 
-export interface STSheetStudent {
-  studentId?: string;
-  name?: string;
-  englishName?: string;
-  grade?: string;
-  gender?: 'M' | 'F';
-  parentPhone?: string;
-  parentName?: string;
-  otherPhone?: string;
-  otherName?: string;
-  medication?: string;
-  notes?: string;
-  ssn?: string;
-  region?: string;
-  address?: string;
-  addressDetail?: string;
-  email?: string;
-  etc?: string;
-  classNumber?: string;
-  className?: string;
-  classMentor?: string;
-  unitMentor?: string;
-  roomNumber?: string;
-  rowNumber?: number;
-  lastSyncedAt?: Date;
-  displayFields?: Record<string, any>;
-  departureRoute?: string;
-  arrivalRoute?: string;
-  shirtSize?: string;
-  passportName?: string;
-  passportNumber?: string;
-  passportExpiry?: string;
-  unit?: string;
-  phoneNumber?: string;
-  parentPhoneNumber?: string;
-  schoolName?: string;
-  profilePhoto?: string;
-}
-
-export type CampCode = 'E27' | 'J27' | 'S27' | string;
-export type CampType = 'EJ' | 'S';
+export type { STSheetStudent, CampCode, CampType };
 
 export interface JobCode {
   id: string;
@@ -53,184 +21,11 @@ export interface JobCode {
   korea?: boolean;
 }
 
-const CAMP_SHEET_CONFIG: Record<string, { 
-  spreadsheetId: string;
-  sheetName: string;
-  gid: string;
-  type: CampType;
-  useHeaderMapping: boolean;
-}> = {
-  'E27': {
-    spreadsheetId: '1hHO1Lm3ezpzo6JILHRzdC2j1OhkTpRxhNzKew3tcJp8',
-    sheetName: 'ST',
-    gid: '0',
-    type: 'EJ',
-    useHeaderMapping: true,
-  },
-  'J27': {
-    spreadsheetId: '17tdhLYotT3IqkUCrUTXt9wjs5lB5pMAKKSSxtLQ3m6c',
-    sheetName: 'ST',
-    gid: '0',
-    type: 'EJ',
-    useHeaderMapping: true,
-  },
-  'S27': {
-    spreadsheetId: '1GQ9klMrYnv57nnbQ92LFYxBFig1EF9ewDe72obyjpC8',
-    sheetName: 'ST',
-    gid: '296268666',
-    type: 'S',
-    useHeaderMapping: true,
-  },
-};
+// shared의 buildNormalizedHeaderIndexMap / mapHeadersToStudent 사용으로 통합됨
 
-const ST_SHEET_HEADER_MAPPING: Record<string, string> = {
-  '고유번호': 'studentId',
-  '학생 이름': 'name',
-  '영어 닉네임': 'englishName',
-  '학년': 'grade',
-  '성별': 'gender',
-  '부모님 연락처': 'parentPhone',
-  '부모님 성함': 'parentName',
-  '기타 연락처': 'otherPhone',
-  '기타 연락처 성함': 'otherName',
-  '복용약 & 알레르기': 'medication',
-  '특이사항': 'notes',
-  '주민등록번호': 'ssn',
-  '지역': 'region',
-  '도로명 주소': 'address',
-  '세부 주소': 'addressDetail',
-  '이메일 주소': 'email',
-  '입소여정': 'departureRoute',
-  '퇴소여정': 'arrivalRoute',
-  '단체티': 'shirtSize',
-  '여권상 영문이름': 'passportName',
-  '여권 번호': 'passportNumber',
-  '여권 만료일자': 'passportExpiry',
-  '기타': 'etc',
-  '반번호': 'classNumber',
-  '반이름': 'className',
-  '반멘토': 'classMentor',
-  '유닛': 'unit',
-  '호수': 'roomNumber',
-  '프로필사진': 'profilePhoto',
-};
-
-// Google Sheets에서 데이터 가져오기
-const fetchGoogleSheetsData = async (campCode: CampCode): Promise<STSheetStudent[]> => {
-  try {
-    const config = CAMP_SHEET_CONFIG[campCode];
-    if (!config) {
-      throw new Error(`캠프 코드 ${campCode}에 대한 설정을 찾을 수 없습니다.`);
-    }
-
-    logger.info(`📊 Google Sheets 데이터 가져오기 시작... (캠프: ${campCode})`);
-    
-    const exportUrl = `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/export?format=tsv&gid=${config.gid}`;
-    
-    const response = await fetch(exportUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const tsvData = await response.text();
-    
-    const lines = tsvData.split('\n').filter((line: string) => line.trim());
-    const headers = lines[0].split('\t');
-    logger.info(`📋 헤더 ${headers.length}개 로드`);
-    
-    const headerIndexMap: Record<string, number> = {};
-    if (config.useHeaderMapping) {
-      headers.forEach((header, index) => {
-        const trimmedHeader = header.trim();
-        headerIndexMap[trimmedHeader] = index;
-      });
-      logger.info(`📋 헤더 매핑:`, headerIndexMap);
-      
-      // 프로필사진 열이 있는지 확인
-      if (headerIndexMap['프로필사진'] !== undefined) {
-        logger.info(`✅ "프로필사진" 열 발견! 인덱스: ${headerIndexMap['프로필사진']}`);
-      } else {
-        logger.warn(`⚠️ "프로필사진" 열을 찾을 수 없습니다. 사용 가능한 헤더:`, Object.keys(headerIndexMap));
-      }
-    }
-    
-    const rows = lines.slice(1).map((line: string) => line.split('\t'));
-    logger.info(`📊 총 ${rows.length}개 행 로드`);
-
-    const students: STSheetStudent[] = rows
-      .filter((row: any[]) => row[0] && row[0].trim())
-      .map((row: any[], index: number) => {
-        const getValue = (headerName: string): string => {
-          if (config.useHeaderMapping) {
-            const colIndex = headerIndexMap[headerName];
-            if (colIndex !== undefined) {
-              return row[colIndex]?.trim() || '';
-            }
-            return '';
-          }
-          return '';
-        };
-
-        const student: STSheetStudent = {
-          studentId: getValue('고유번호'),
-          name: getValue('학생 이름'),
-          englishName: getValue('영어 닉네임'),
-          grade: getValue('학년'),
-          gender: (getValue('성별') || 'M') as 'M' | 'F',
-          parentPhone: getValue('부모님 연락처'),
-          parentName: getValue('부모님 성함'),
-          otherPhone: getValue('기타 연락처'),
-          otherName: getValue('기타 연락처 성함'),
-          medication: getValue('복용약 & 알레르기'),
-          notes: getValue('특이사항'),
-          ssn: getValue('주민등록번호'),
-          region: getValue('지역'),
-          address: getValue('도로명 주소'),
-          addressDetail: getValue('세부 주소'),
-          email: getValue('이메일 주소'),
-          etc: getValue('기타'),
-          classNumber: getValue('반번호'),
-          className: getValue('반이름'),
-          classMentor: getValue('반멘토'),
-          unitMentor: getValue('유닛'),
-          roomNumber: getValue('호수'),
-          profilePhoto: getValue('프로필사진'),
-          rowNumber: index + 2,
-          lastSyncedAt: new Date(),
-          displayFields: {}
-        };
-
-        // 프로필사진 디버깅 (첫 5명)
-        if (index < 5 && student.profilePhoto) {
-          logger.info(`📸 [stSheetService] 학생 ${index + 1}:`, {
-            name: student.name,
-            profilePhoto: student.profilePhoto,
-            photoLength: student.profilePhoto.length
-          });
-        }
-
-        if (config.type === 'EJ') {
-          student.departureRoute = getValue('입소여정');
-          student.arrivalRoute = getValue('퇴소여정');
-        } else if (config.type === 'S') {
-          student.shirtSize = getValue('단체티');
-          student.passportName = getValue('여권상 영문이름');
-          student.passportNumber = getValue('여권 번호');
-          student.passportExpiry = getValue('여권 만료일자');
-        }
-        
-        student.unit = getValue('유닛');
-
-        return student;
-      });
-
-    const studentsWithPhotos = students.filter(s => s.profilePhoto);
-    logger.info(`✅ ${students.length}명의 학생 데이터 변환 완료 (프로필사진: ${studentsWithPhotos.length}명)`);
-    return students;
-  } catch (error) {
-    logger.error('❌ Google Sheets 데이터 가져오기 실패:', error);
-    throw error;
-  }
-};
+// ─── syncSTSheet는 Cloud Function에서 처리 ───────────────────────────────────
+// TSV export URL 방식은 비공개 시트에서 동작하지 않으므로,
+// 서비스 계정 인증이 된 Cloud Function(syncSTSheet)을 호출한다.
 
 // 임시 데이터 생성 함수
 const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
@@ -387,6 +182,7 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
       
       const medication = medications[Math.floor(Math.random() * medications.length)];
       
+      const globalStudentIndex = (classIndex - 1) * 10 + studentIndex;
       const student: STSheetStudent = {
         studentId,
         name,
@@ -407,7 +203,9 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
         classMentor,
         unitMentor,
         unit: unitMentor,
-        roomNumber: '', // 나중에 배정
+        roomNumber: '',
+        rowNumber: globalStudentIndex + 1,
+        lastSyncedAt: new Date(),
       };
       
       if (campType === 'EJ') {
@@ -574,37 +372,14 @@ export const stSheetService = {
   },
 
   syncSTSheet: async (campCode: CampCode = 'E27'): Promise<{ success: boolean; count: number; lastSync: string }> => {
-    try {
-      logger.info(`🔄 ST 시트 전체 데이터 동기화 시작... (캠프: ${campCode})`);
-
-      // Google Sheets에서 전체 데이터 가져오기
-      const allStudents = await fetchGoogleSheetsData(campCode);
-
-      logger.info(`✅ 전체 학생: ${allStudents.length}명`);
-
-      // Firestore에 전체 데이터 저장
-      const docRef = doc(db, 'stSheetCache', campCode);
-      await setDoc(docRef, {
-        campCode: campCode,
-        data: allStudents,
-        lastSyncedAt: new Date().toISOString(),
-        syncedBy: 'admin',
-        syncedByName: 'Admin User',
-        version: Date.now(),
-        totalStudents: allStudents.length
-      });
-
-      logger.info(`✅ Firestore 저장 완료! (캠프: ${campCode})`);
-
-      return {
-        success: true,
-        count: allStudents.length,
-        lastSync: new Date().toISOString()
-      };
-    } catch (error) {
-      logger.error('동기화 실패:', error);
-      throw error;
-    }
+    logger.info(`🔄 ST 시트 동기화 요청 → Cloud Function (캠프: ${campCode})`);
+    const fn = httpsCallable<{ campCode: string }, { success: boolean; count: number; lastSync: string }>(
+      functions,
+      'syncSTSheet'
+    );
+    const result = await fn({ campCode });
+    logger.info(`✅ 동기화 완료: ${result.data.count}명`);
+    return result.data;
   },
 
   getStudentDetail: async (studentId: string, campCode: CampCode = 'E27'): Promise<STSheetStudent | null> => {
@@ -619,10 +394,97 @@ export const stSheetService = {
   },
 
   getCampType: (campCode: CampCode): CampType => {
-    const config = CAMP_SHEET_CONFIG[campCode];
-    return config?.type || 'EJ';
+    const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
+    return (config?.type as CampType) || 'EJ';
   },
 };
+
+// ─── 학생 이력 조회 ──────────────────────────────────────
+
+export interface StudentHistoryResult {
+  student: STSheetStudent;
+  campCode: string;
+}
+
+// stSheetCache 전체 캠프를 순회하며 이름 또는 부모님 연락처로 학생을 검색
+export async function searchStudents(query: string): Promise<StudentHistoryResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  try {
+    const colRef = collection(db, 'stSheetCache');
+    const snapshot = await getDocs(colRef);
+
+    const results: StudentHistoryResult[] = [];
+
+    snapshot.forEach((docSnap) => {
+      const campCode = docSnap.id;
+      const data = docSnap.data();
+      const students: STSheetStudent[] = data.data || [];
+
+      const matched = students.filter((s) => {
+        const nameMatch = s.name?.includes(trimmed);
+        const phoneMatch = s.parentPhone?.replace(/-/g, '').includes(trimmed.replace(/-/g, ''));
+        return nameMatch || phoneMatch;
+      });
+
+      matched.forEach((student) => {
+        results.push({ student, campCode });
+      });
+    });
+
+    return results;
+  } catch (error) {
+    logger.error('학생 검색 실패:', error);
+    throw error;
+  }
+}
+
+// 동일 학생의 캠프 참여 이력 그룹 (ssn 또는 name+parentPhone 기준)
+export interface StudentGroup {
+  key: string;                         // 식별 키 (ssn 또는 name:phone)
+  name: string;
+  grade: string;
+  gender: string;
+  parentPhone: string;
+  parentName: string;
+  history: Array<{
+    campCode: string;
+    student: STSheetStudent;
+  }>;
+}
+
+export function groupStudentResults(results: StudentHistoryResult[]): StudentGroup[] {
+  const map = new Map<string, StudentGroup>();
+
+  results.forEach(({ student, campCode }) => {
+    // ssn 있으면 ssn 기준, 없으면 name+parentPhone 조합
+    const key = student.ssn
+      ? `ssn:${student.ssn}`
+      : `name:${student.name}:phone:${(student.parentPhone || '').replace(/-/g, '')}`;
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        name: student.name || '',
+        grade: student.grade || '',
+        gender: student.gender || '',
+        parentPhone: student.parentPhone || '',
+        parentName: student.parentName || '',
+        history: [],
+      });
+    }
+
+    map.get(key)!.history.push({ campCode, student });
+  });
+
+  // 이력을 캠프코드 기준으로 정렬 (최신 기수 먼저)
+  map.forEach((group) => {
+    group.history.sort((a, b) => b.campCode.localeCompare(a.campCode));
+  });
+
+  return Array.from(map.values());
+}
 
 export const jobCodesService = {
   getJobCodesByIds: async (jobExperiences: Array<{ id: string }> | string[]): Promise<JobCode[]> => {

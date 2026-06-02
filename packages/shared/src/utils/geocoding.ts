@@ -30,7 +30,7 @@ export async function geocodeAddress(address: string, apiKey?: string): Promise<
       return null;
     }
 
-    const data = await response.json();
+    const data = await response.json() as { documents?: Array<{ x: string; y: string }> };
     
     if (data.documents && data.documents.length > 0) {
       const result = data.documents[0];

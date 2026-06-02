@@ -2,6 +2,14 @@ import * as functions from 'firebase-functions/v1';
 import * as functionsV2 from 'firebase-functions/v2';
 import * as admin from 'firebase-admin';
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
+import { google } from 'googleapis';
+import {
+  CAMP_SHEET_CONFIG,
+  buildNormalizedHeaderIndexMap,
+  mapHeadersToStudent,
+  isInactiveStudent,
+  STSheetStudent,
+} from './studentTypes';
 
 admin.initializeApp();
 
@@ -852,6 +860,154 @@ export const cleanupUserStorageOnDelete = functions
 
     console.log(`✅ Storage 정리 완료: 총 ${totalDeleted}개 파일 삭제 (userId: ${userId})`);
   });
+
+// ─── ST 시트 동기화 ──────────────────────────────────────────────────────────
+
+// 서비스 계정 키 파일을 직접 로드 (.gitignore에서 제외 해제하여 배포 번들에 포함)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const SHEETS_SERVICE_ACCOUNT = require('../managesheet-export-fb9c3744de0f.json');
+
+async function getSheetsClient() {
+  const auth = new google.auth.GoogleAuth({
+    credentials: SHEETS_SERVICE_ACCOUNT,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  });
+  return google.sheets({ version: 'v4', auth });
+}
+
+/**
+ * GID → 시트 이름 변환
+ * spreadsheets.get으로 시트 목록을 가져와 sheetId가 일치하는 시트 이름을 반환.
+ */
+async function resolveSheetName(
+  sheets: ReturnType<typeof google.sheets>,
+  spreadsheetId: string,
+  gid: string
+): Promise<string> {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
+  const sheetList = meta.data.sheets ?? [];
+  const matched = sheetList.find(
+    (s) => String(s.properties?.sheetId) === gid
+  );
+  return matched?.properties?.title ?? 'ST';
+}
+
+function parseLines(rawValues: string[][]): STSheetStudent[] {
+  // rawValues[0] = 헤더 행
+  return [];
+}
+
+async function fetchAndParseCamp(campCode: string): Promise<STSheetStudent[]> {
+  const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
+  if (!config) throw new Error(`캠프 코드 ${campCode}에 대한 설정이 없습니다.`);
+
+  const sheets = await getSheetsClient();
+  const sheetName = await resolveSheetName(sheets, config.spreadsheetId, config.gid);
+
+  console.log(`📊 [${campCode}] 시트 읽기: "${sheetName}" (gid=${config.gid})`);
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.spreadsheetId,
+    range: sheetName,
+    valueRenderOption: 'FORMATTED_VALUE',
+  });
+
+  const rows: string[][] = (response.data.values ?? []).map((row) =>
+    (row as string[]).map((cell) => String(cell ?? ''))
+  );
+
+  if (rows.length < 2) {
+    console.warn(`[${campCode}] 데이터 행이 없습니다.`);
+    return [];
+  }
+
+  let students: STSheetStudent[];
+
+  if (config.type === 'F') {
+    // F형: '고유번호' 열이 시작점
+    const studentSectionStart = rows[0].findIndex((h) => h.trim() === '고유번호');
+    if (studentSectionStart === -1) {
+      console.warn(`[${campCode}] F형 시트에서 '고유번호' 열을 찾을 수 없습니다.`);
+      return [];
+    }
+    const studentHeaders = rows[0].slice(studentSectionStart);
+    const headerIndexMap = buildNormalizedHeaderIndexMap(studentHeaders);
+    students = rows
+      .slice(1)
+      .filter((row) => row[studentSectionStart]?.trim())
+      .map((row, idx) =>
+        mapHeadersToStudent(row.slice(studentSectionStart), headerIndexMap, idx + 2, campCode, 'F')
+      );
+  } else {
+    const headerIndexMap = buildNormalizedHeaderIndexMap(rows[0]);
+    students = rows
+      .slice(1)
+      .filter((row) => row[0]?.trim())
+      .map((row, idx) =>
+        mapHeadersToStudent(row, headerIndexMap, idx + 2, campCode, config.type)
+      );
+  }
+
+  const active = students.filter((s) => !isInactiveStudent(s));
+  const skipped = students.length - active.length;
+  if (skipped > 0) console.log(`[${campCode}] 이월자/취소자 ${skipped}명 제외`);
+  console.log(`[${campCode}] 활성 학생 ${active.length}명`);
+
+  return active;
+}
+
+/**
+ * ST 시트 동기화 Callable Function
+ * 클라이언트(웹/모바일)에서 campCode를 전달하면
+ * 서버에서 Google Sheets API(서비스 계정)로 읽어 Firestore에 저장.
+ */
+export const syncSTSheet = functionsV2.https.onCall(
+  {
+    region: 'asia-northeast3',
+    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
+    timeoutSeconds: 120,
+    memory: '512MiB',
+  },
+  async (request: functionsV2.https.CallableRequest<{ campCode: string }>) => {
+    if (!request.auth) {
+      throw new functionsV2.https.HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+
+    // 관리자 권한 확인
+    const callerDoc = await db.collection('users').doc(request.auth.uid).get();
+    const callerData = callerDoc.data();
+    if (!callerData || callerData.role !== 'admin') {
+      throw new functionsV2.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
+    }
+
+    const { campCode } = request.data;
+    if (!campCode) {
+      throw new functionsV2.https.HttpsError('invalid-argument', 'campCode가 필요합니다.');
+    }
+
+    try {
+      console.log(`🔄 ST 시트 동기화 시작: ${campCode}`);
+      const students = await fetchAndParseCamp(campCode);
+
+      await db.collection('stSheetCache').doc(campCode).set({
+        campCode,
+        data: students,
+        lastSyncedAt: new Date().toISOString(),
+        syncedBy: request.auth.uid,
+        syncedByName: callerData.name ?? 'Admin',
+        version: Date.now(),
+        totalStudents: students.length,
+      });
+
+      console.log(`✅ 동기화 완료: ${campCode} (${students.length}명)`);
+      return { success: true, count: students.length, lastSync: new Date().toISOString() };
+    } catch (error) {
+      console.error(`❌ 동기화 실패 [${campCode}]:`, error);
+      const message = error instanceof Error ? error.message : '알 수 없는 오류';
+      throw new functionsV2.https.HttpsError('internal', `동기화 실패: ${message}`);
+    }
+  }
+);
 
 /**
  * 매일 자동으로 고아 소셜 계정 정리

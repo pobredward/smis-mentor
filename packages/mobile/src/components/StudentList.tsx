@@ -194,7 +194,8 @@ export const StudentList: React.FC<StudentListProps> = ({
       Alert.alert('성공', '데이터 동기화가 완료되었습니다.');
     } catch (error) {
       logger.error('동기화 실패:', error);
-      Alert.alert('오류', '동기화에 실패했습니다.');
+      const message = error instanceof Error ? error.message : '동기화에 실패했습니다.';
+      Alert.alert('동기화 실패', message);
     } finally {
       setSyncing(false);
     }

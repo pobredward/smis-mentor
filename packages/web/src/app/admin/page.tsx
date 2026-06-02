@@ -95,6 +95,12 @@ export default function AdminDashboard() {
           iconClass: 'text-blue-600',
           icon: <IoBriefcase className="w-5 h-5" />,
         },
+        {
+          title: '학생 조회',
+          href: '/admin/student-search',
+          iconClass: 'text-purple-500',
+          icon: <IoSearch className="w-5 h-5" />,
+        },
       ],
     },
   ];
