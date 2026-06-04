@@ -61,9 +61,9 @@ export async function requestContactsPermission(): Promise<boolean> {
 
 /**
  * STSheetStudent 한 명을 Contacts.Contact 형식으로 변환합니다.
- * - iOS: 번호마다 010-xxxx-xxxx와 +82 10-xxxx-xxxx 두 개씩 저장
- *   (아이폰 발신자 식별 위해 두 형식 모두 필요)
- *   레이블에 실명(parentName/otherName) 사용, isPrimary 적용
+ * - parentPhone만 저장 (otherPhone 제외) — 카카오톡 중복 친구 등록 방지
+ * - iOS: 010-xxxx-xxxx와 +82 10-xxxx-xxxx 두 개 저장 (아이폰 발신자 식별용)
+ *   레이블에 실명(parentName) 사용, isPrimary 적용
  * - Android: addContactAsync에서 label/isPrimary가 동작하지 않는 버그(#34047)로
  *   표준 레이블 "mobile" 사용 (정상 표시), isPrimary 미설정 / +82 미추가
  */
@@ -88,25 +88,6 @@ function buildContact(student: STSheetStudent, campCode?: string): Contacts.Cont
     if (formattedPlus82) {
       phoneNumbers.push({
         label: `${parentLabel}2`,
-        number: formattedPlus82,
-      });
-    }
-  }
-
-  if (student.otherPhone) {
-    const formatted010 = formatTo010(student.otherPhone);
-    const formattedPlus82 = !isAndroid ? formatToPlus82(student.otherPhone) : null;
-    const otherLabel = student.otherName || '기타 연락처';
-
-    phoneNumbers.push({
-      label: isAndroid ? 'mobile' : otherLabel,
-      number: formatted010,
-    });
-
-    // iOS 전용: +82 형식 추가 저장
-    if (formattedPlus82) {
-      phoneNumbers.push({
-        label: `${otherLabel}2`,
         number: formattedPlus82,
       });
     }
@@ -145,7 +126,7 @@ function normalizePhone(phone: string): string {
  * 11자리 숫자(01012345678) → 010-1234-5678
  * 10자리 숫자(1012345678) → 010-1234-5678
  */
-function formatTo010(phone: string): string {
+export function formatTo010(phone: string): string {
   const digits = phone.replace(/\D/g, '');
 
   let local = digits;
@@ -171,7 +152,7 @@ function formatTo010(phone: string): string {
  * 전화번호를 +82 10-xxxx-xxxx 형식으로 변환합니다.
  * 010-1234-5678 → +82 10-1234-5678
  */
-function formatToPlus82(phone: string): string | null {
+export function formatToPlus82(phone: string): string | null {
   const normalized = formatTo010(phone);
   // 010-xxxx-xxxx 패턴인 경우만 변환
   const match = normalized.match(/^010-(\d{4})-(\d{4})$/);
@@ -232,9 +213,6 @@ export async function saveSingleParentContact(
     if (isAndroid) {
       // Android: 레이블 미지원 — 번호만 표시
       previewLines.push(`번호: ${formatTo010(student.parentPhone)}`);
-      if (student.otherPhone) {
-        previewLines.push(`번호: ${formatTo010(student.otherPhone)}`);
-      }
     } else {
       // iOS: 실명 레이블 + 010 / +82 두 형식 모두 표시
       const parentLabel = student.parentName || '부모님';
@@ -243,16 +221,6 @@ export async function saveSingleParentContact(
       previewLines.push(`${parentLabel}: ${parent010}`);
       if (parentPlus82) {
         previewLines.push(`${parentLabel}2: ${parentPlus82}`);
-      }
-
-      if (student.otherPhone) {
-        const otherLabel = student.otherName || '기타 연락처';
-        const other010 = formatTo010(student.otherPhone);
-        const otherPlus82 = formatToPlus82(student.otherPhone);
-        previewLines.push(`${otherLabel}: ${other010}`);
-        if (otherPlus82) {
-          previewLines.push(`${otherLabel}2: ${otherPlus82}`);
-        }
       }
     }
 

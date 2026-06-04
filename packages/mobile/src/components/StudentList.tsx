@@ -17,7 +17,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampCode, CampType } from '@smis-mentor/shared';
-import { stSheetService, requestContactsPermission, saveStudentContacts, deleteStudentContacts, saveSingleParentContact, buildContactDisplayName, buildContactNote } from '../services';
+import { stSheetService, requestContactsPermission, saveStudentContacts, deleteStudentContacts, saveSingleParentContact, buildContactDisplayName, buildContactNote, formatTo010, formatToPlus82 } from '../services';
 import { useAuth } from '../context/AuthContext';
 import { jobCodesService } from '../services';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -559,20 +559,15 @@ export const StudentList: React.FC<StudentListProps> = ({
                       {buildContactDisplayName(s, campCode ?? undefined)}
                     </Text>
                     {Platform.OS === 'android' ? (
-                      <>
-                        <Text style={styles.bulkPreviewPhone}>번호: {s.parentPhone}</Text>
-                        {s.otherPhone && (
-                          <Text style={styles.bulkPreviewPhone}>번호: {s.otherPhone}</Text>
-                        )}
-                      </>
+                      <Text style={styles.bulkPreviewPhone}>번호: {formatTo010(s.parentPhone)}</Text>
                     ) : (
                       <>
                         <Text style={styles.bulkPreviewPhone}>
-                          {s.parentName || '부모님'}: {s.parentPhone}
+                          {s.parentName || '부모님'}: {formatTo010(s.parentPhone)}
                         </Text>
-                        {s.otherPhone && (
+                        {formatToPlus82(s.parentPhone) && (
                           <Text style={styles.bulkPreviewPhone}>
-                            {s.otherName || '기타 연락처'}: {s.otherPhone}
+                            {s.parentName || '부모님'}2: {formatToPlus82(s.parentPhone)}
                           </Text>
                         )}
                       </>
