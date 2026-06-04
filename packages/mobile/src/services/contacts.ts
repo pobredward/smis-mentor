@@ -61,9 +61,11 @@ export async function requestContactsPermission(): Promise<boolean> {
 
 /**
  * STSheetStudent 한 명을 Contacts.Contact 형식으로 변환합니다.
- * - iOS: 레이블에 실명(parentName/otherName) 사용, isPrimary 적용
+ * - iOS: 번호마다 010-xxxx-xxxx와 +82 10-xxxx-xxxx 두 개씩 저장
+ *   (아이폰 발신자 식별 위해 두 형식 모두 필요)
+ *   레이블에 실명(parentName/otherName) 사용, isPrimary 적용
  * - Android: addContactAsync에서 label/isPrimary가 동작하지 않는 버그(#34047)로
- *   표준 레이블 "mobile" 사용 (정상 표시), isPrimary 미설정
+ *   표준 레이블 "mobile" 사용 (정상 표시), isPrimary 미설정 / +82 미추가
  */
 function buildContact(student: STSheetStudent, campCode?: string): Contacts.Contact {
   const displayName = buildContactDisplayName(student, campCode);
@@ -72,18 +74,42 @@ function buildContact(student: STSheetStudent, campCode?: string): Contacts.Cont
   const phoneNumbers: Contacts.PhoneNumber[] = [];
 
   if (student.parentPhone) {
+    const formatted010 = formatTo010(student.parentPhone);
+    const formattedPlus82 = !isAndroid ? formatToPlus82(student.parentPhone) : null;
+    const parentLabel = student.parentName || '부모님';
+
     phoneNumbers.push({
-      label: isAndroid ? 'mobile' : (student.parentName || '부모님'),
-      number: student.parentPhone,
+      label: isAndroid ? 'mobile' : parentLabel,
+      number: formatted010,
       ...(isAndroid ? {} : { isPrimary: true }),
     });
+
+    // iOS 전용: +82 형식 추가 저장 (아이폰 문자 발신자 인식용)
+    if (formattedPlus82) {
+      phoneNumbers.push({
+        label: `${parentLabel}2`,
+        number: formattedPlus82,
+      });
+    }
   }
 
   if (student.otherPhone) {
+    const formatted010 = formatTo010(student.otherPhone);
+    const formattedPlus82 = !isAndroid ? formatToPlus82(student.otherPhone) : null;
+    const otherLabel = student.otherName || '기타 연락처';
+
     phoneNumbers.push({
-      label: isAndroid ? 'mobile' : (student.otherName || '기타 연락처'),
-      number: student.otherPhone,
+      label: isAndroid ? 'mobile' : otherLabel,
+      number: formatted010,
     });
+
+    // iOS 전용: +82 형식 추가 저장
+    if (formattedPlus82) {
+      phoneNumbers.push({
+        label: `${otherLabel}2`,
+        number: formattedPlus82,
+      });
+    }
   }
 
   const note = buildContactNote(student);
@@ -114,8 +140,49 @@ function normalizePhone(phone: string): string {
 }
 
 /**
+ * 전화번호를 010-xxxx-xxxx 형식으로 정규화합니다.
+ * +82, 82, 0082 접두사 제거 후 10으로 시작하면 0을 붙입니다.
+ * 11자리 숫자(01012345678) → 010-1234-5678
+ * 10자리 숫자(1012345678) → 010-1234-5678
+ */
+function formatTo010(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+
+  let local = digits;
+  if (local.startsWith('82')) {
+    local = '0' + local.slice(2);
+  }
+  if (local.startsWith('0082')) {
+    local = '0' + local.slice(4);
+  }
+  // 10으로 시작하는 10자리 → 010 붙이기
+  if (local.length === 10 && local.startsWith('10')) {
+    local = '0' + local;
+  }
+
+  if (local.length === 11) {
+    return `${local.slice(0, 3)}-${local.slice(3, 7)}-${local.slice(7)}`;
+  }
+  // 변환 불가능한 경우 원본 반환
+  return phone;
+}
+
+/**
+ * 전화번호를 +82 10-xxxx-xxxx 형식으로 변환합니다.
+ * 010-1234-5678 → +82 10-1234-5678
+ */
+function formatToPlus82(phone: string): string | null {
+  const normalized = formatTo010(phone);
+  // 010-xxxx-xxxx 패턴인 경우만 변환
+  const match = normalized.match(/^010-(\d{4})-(\d{4})$/);
+  if (!match) return null;
+  return `+82 10-${match[1]}-${match[2]}`;
+}
+
+/**
  * 완전히 동일한 이름+전화번호 쌍이 존재하는지 확인합니다.
  * 번호가 같아도 이름이 다르면(형제자매 등) 중복으로 보지 않습니다.
+ * iOS의 경우 010 형식과 +82 형식 중 하나라도 저장되어 있으면 중복으로 판단합니다.
  */
 async function isExactDuplicate(displayName: string, phone: string): Promise<boolean> {
   try {
@@ -124,10 +191,19 @@ async function isExactDuplicate(displayName: string, phone: string): Promise<boo
       name: displayName,
     });
 
+    // 비교 대상 번호: 010 형식 + +82 형식 둘 다 숫자 정규화해서 비교
+    const formatted010 = formatTo010(phone);
+    const formattedPlus82 = formatToPlus82(phone);
+    const candidateNumbers = new Set([
+      normalizePhone(phone),
+      normalizePhone(formatted010),
+      ...(formattedPlus82 ? [normalizePhone(formattedPlus82)] : []),
+    ]);
+
     return data.some(
       (c) =>
         c.name === displayName &&
-        c.phoneNumbers?.some((p) => normalizePhone(p.number ?? '') === normalizePhone(phone)),
+        c.phoneNumbers?.some((p) => candidateNumbers.has(normalizePhone(p.number ?? ''))),
     );
   } catch {
     return false;
@@ -155,15 +231,28 @@ export async function saveSingleParentContact(
 
     if (isAndroid) {
       // Android: 레이블 미지원 — 번호만 표시
-      previewLines.push(`번호: ${student.parentPhone}`);
+      previewLines.push(`번호: ${formatTo010(student.parentPhone)}`);
       if (student.otherPhone) {
-        previewLines.push(`번호: ${student.otherPhone}`);
+        previewLines.push(`번호: ${formatTo010(student.otherPhone)}`);
       }
     } else {
-      // iOS: 실명 레이블 표시
-      previewLines.push(`${student.parentName || '부모님'}: ${student.parentPhone}`);
+      // iOS: 실명 레이블 + 010 / +82 두 형식 모두 표시
+      const parentLabel = student.parentName || '부모님';
+      const parent010 = formatTo010(student.parentPhone);
+      const parentPlus82 = formatToPlus82(student.parentPhone);
+      previewLines.push(`${parentLabel}: ${parent010}`);
+      if (parentPlus82) {
+        previewLines.push(`${parentLabel}2: ${parentPlus82}`);
+      }
+
       if (student.otherPhone) {
-        previewLines.push(`${student.otherName || '기타 연락처'}: ${student.otherPhone}`);
+        const otherLabel = student.otherName || '기타 연락처';
+        const other010 = formatTo010(student.otherPhone);
+        const otherPlus82 = formatToPlus82(student.otherPhone);
+        previewLines.push(`${otherLabel}: ${other010}`);
+        if (otherPlus82) {
+          previewLines.push(`${otherLabel}2: ${otherPlus82}`);
+        }
       }
     }
 
@@ -199,6 +288,64 @@ export async function saveSingleParentContact(
     Alert.alert('오류', '연락처 저장 중 오류가 발생했습니다.');
     return 'error';
   }
+}
+
+export interface ContactDeleteResult {
+  deleted: number;
+  notFound: number;
+  failed: number;
+  errors: string[];
+}
+
+/**
+ * 학생 배열에 해당하는 연락처를 기기에서 일괄 삭제합니다.
+ * 이름이 완전히 일치하는 연락처를 찾아 삭제합니다.
+ * onProgress: 삭제 진행률 콜백 (완료 수, 전체 수)
+ */
+export async function deleteStudentContacts(
+  students: STSheetStudent[],
+  onProgress?: (done: number, total: number) => void,
+  campCode?: string,
+): Promise<ContactDeleteResult> {
+  const result: ContactDeleteResult = { deleted: 0, notFound: 0, failed: 0, errors: [] };
+
+  const targets = students.filter((s) => s.parentPhone);
+  const total = targets.length;
+
+  for (let i = 0; i < targets.length; i++) {
+    const student = targets[i];
+    onProgress?.(i, total);
+
+    try {
+      const displayName = buildContactDisplayName(student, campCode);
+
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers],
+        name: displayName,
+      });
+
+      // 이름이 완전히 일치하는 연락처만 삭제
+      const matched = data.filter((c) => c.name === displayName);
+
+      if (matched.length === 0) {
+        result.notFound++;
+        continue;
+      }
+
+      for (const contact of matched) {
+        if (contact.id) {
+          await Contacts.removeContactAsync(contact.id);
+        }
+      }
+      result.deleted++;
+    } catch (error) {
+      result.failed++;
+      result.errors.push(`${student.name}: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    }
+  }
+
+  onProgress?.(total, total);
+  return result;
 }
 
 /**

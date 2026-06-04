@@ -15,7 +15,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampType } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
-import { requestContactsPermission, saveSingleParentContact } from '../services';
+import { requestContactsPermission, saveSingleParentContact, deleteSingleParentContact } from '../services';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.78; // 화면의 78%

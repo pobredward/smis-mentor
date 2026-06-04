@@ -17,7 +17,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampCode, CampType } from '@smis-mentor/shared';
-import { stSheetService, requestContactsPermission, saveStudentContacts, saveSingleParentContact, buildContactDisplayName, buildContactNote } from '../services';
+import { stSheetService, requestContactsPermission, saveStudentContacts, deleteStudentContacts, saveSingleParentContact, buildContactDisplayName, buildContactNote } from '../services';
 import { useAuth } from '../context/AuthContext';
 import { jobCodesService } from '../services';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -58,6 +58,8 @@ export const StudentList: React.FC<StudentListProps> = ({
   const [isSavingContacts, setIsSavingContacts] = useState(false);
   const [contactSaveProgress, setContactSaveProgress] = useState({ done: 0, total: 0 });
   const [bulkPreviewStudents, setBulkPreviewStudents] = useState<STSheetStudent[]>([]);
+  const [isDeletingContacts, setIsDeletingContacts] = useState(false);
+  const [contactDeleteProgress, setContactDeleteProgress] = useState({ done: 0, total: 0 });
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
   const isAdmin = userData?.role === 'admin';
@@ -279,6 +281,56 @@ export const StudentList: React.FC<StudentListProps> = ({
     }
   };
 
+  const handleDeleteContacts = async () => {
+    const studentsToDelete = selectedMentor ? (groupedByMentor[selectedMentor] ?? []) : allStudents;
+    const validStudents = studentsToDelete.filter((s) => s.parentPhone);
+
+    if (validStudents.length === 0) {
+      Alert.alert('알림', '삭제할 연락처가 없습니다.');
+      return;
+    }
+
+    const granted = await requestContactsPermission();
+    if (!granted) return;
+
+    const targetLabel = selectedMentor ? `"${selectedMentor}" 그룹` : '전체';
+
+    Alert.alert(
+      '연락처 일괄 삭제',
+      `${targetLabel}의 학생 연락처 ${validStudents.length}명을 기기에서 삭제합니다.\n\n이름이 정확히 일치하는 연락처만 삭제됩니다.\n\n계속하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            setContactDeleteProgress({ done: 0, total: validStudents.length });
+            setIsDeletingContacts(true);
+
+            try {
+              const result = await deleteStudentContacts(
+                validStudents,
+                (done, total) => setContactDeleteProgress({ done, total }),
+                campCode ?? undefined,
+              );
+
+              setIsDeletingContacts(false);
+
+              const lines = [`삭제: ${result.deleted}명`, `저장 안 됨 (건너뜀): ${result.notFound}명`];
+              if (result.failed > 0) lines.push(`실패: ${result.failed}명`);
+
+              Alert.alert('삭제 완료', lines.join('\n'));
+            } catch (error) {
+              setIsDeletingContacts(false);
+              logger.error('연락처 삭제 실패:', error);
+              Alert.alert('오류', '연락처 삭제 중 오류가 발생했습니다.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   // 멘토별/반별로 학생 그룹화
   const groupedByMentor = allStudents.reduce((acc, student) => {
     let mentorKey: string;
@@ -421,11 +473,20 @@ export const StudentList: React.FC<StudentListProps> = ({
           <TouchableOpacity
             style={[styles.saveContactsButton, isTemporaryData && styles.saveContactsButtonDisabled]}
             onPress={handleSaveContacts}
-            disabled={isSavingContacts || allStudents.length === 0}
+            disabled={isSavingContacts || isDeletingContacts || allStudents.length === 0}
             accessibilityLabel="연락처 저장"
             accessibilityRole="button"
           >
             <Ionicons name="person-add-outline" size={18} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.deleteContactsButton, (isSavingContacts || isDeletingContacts || allStudents.length === 0) && styles.deleteContactsButtonDisabled]}
+            onPress={handleDeleteContacts}
+            disabled={isSavingContacts || isDeletingContacts || allStudents.length === 0}
+            accessibilityLabel="연락처 삭제"
+            accessibilityRole="button"
+          >
+            <Ionicons name="person-remove-outline" size={18} color="#fff" />
           </TouchableOpacity>
           {isAdmin && (
             <>
@@ -455,6 +516,19 @@ export const StudentList: React.FC<StudentListProps> = ({
           )}
         </View>
       </View>
+
+      {/* 연락처 삭제 진행 모달 */}
+      <Modal transparent animationType="fade" visible={isDeletingContacts}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <ActivityIndicator size="large" color="#ef4444" />
+            <Text style={styles.modalTitle}>연락처 삭제 중...</Text>
+            <Text style={styles.modalProgress}>
+              {contactDeleteProgress.done} / {contactDeleteProgress.total}명
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       {/* 연락처 관련 모달 (미리보기 / 저장 진행) — 하나의 Modal로 통합하여 터치 차단 버그 방지 */}
       <Modal transparent animationType="fade" visible={isSavingContacts || bulkPreviewStudents.length > 0}>
@@ -1001,6 +1075,23 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   saveContactsButtonDisabled: {
+    backgroundColor: '#94a3b8',
+    shadowColor: '#94a3b8',
+  },
+  deleteContactsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  deleteContactsButtonDisabled: {
     backgroundColor: '#94a3b8',
     shadowColor: '#94a3b8',
   },
