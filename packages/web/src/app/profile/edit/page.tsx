@@ -32,7 +32,8 @@ const partTimeJobSchema = z.object({
   period: z.string().min(1, '기간을 입력해주세요.'),
   companyName: z.string().min(1, '회사명을 입력해주세요.'),
   position: z.string().min(1, '담당을 입력해주세요.'),
-  description: z.string().min(1, '업무 내용을 입력해주세요.'),
+  // 기존 DB 데이터에 빈 값이 저장된 경우가 있어 optional 처리
+  description: z.string().optional(),
 });
 
 const profileSchemaBase = z.object({
@@ -147,10 +148,9 @@ export default function EditProfilePage() {
       position: '',
       description: '',
     };
-    setPartTimeJobs([...partTimeJobs, newJob]);
-    if (section === 'experience') {
-      setValue('partTimeJobs', [...partTimeJobs, newJob]);
-    }
+    const updated = [...partTimeJobs, newJob];
+    setPartTimeJobs(updated);
+    setValue('partTimeJobs', updated, { shouldValidate: false });
   };
 
   // 알바 & 멘토링 경력 삭제
@@ -158,9 +158,7 @@ export default function EditProfilePage() {
     const updatedJobs = [...partTimeJobs];
     updatedJobs.splice(index, 1);
     setPartTimeJobs(updatedJobs);
-    if (section === 'experience') {
-      setValue('partTimeJobs', updatedJobs);
-    }
+    setValue('partTimeJobs', updatedJobs, { shouldValidate: true });
   };
 
   // 알바 & 멘토링 경력 업데이트
@@ -168,9 +166,7 @@ export default function EditProfilePage() {
     const updatedJobs = [...partTimeJobs];
     updatedJobs[index] = { ...updatedJobs[index], [field]: value };
     setPartTimeJobs(updatedJobs);
-    if (section === 'experience') {
-      setValue('partTimeJobs', updatedJobs);
-    }
+    setValue('partTimeJobs', updatedJobs, { shouldValidate: false });
   };
 
   // 사용자 데이터로 폼 초기화
@@ -525,6 +521,7 @@ export default function EditProfilePage() {
       await refreshUserData();
 
       toast.success('프로필이 성공적으로 업데이트되었습니다.');
+      router.back();
     } catch {
       toast.error('프로필 업데이트 중 오류가 발생했습니다.');
     } finally {
@@ -580,7 +577,14 @@ export default function EditProfilePage() {
             aspectRatio={1}
           />
         ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="bg-white shadow-md rounded-lg p-6">
+          <form onSubmit={handleSubmit(onSubmit, (fieldErrors) => {
+              // 경력 필드 오류 시 안내 토스트
+              if (fieldErrors.partTimeJobs) {
+                toast.error('경력 정보를 올바르게 입력해주세요. (기간, 회사명, 담당 필수)');
+              } else {
+                toast.error('입력 정보를 다시 확인해주세요.');
+              }
+            })} className="bg-white shadow-md rounded-lg p-6">
             <div className="mb-6">
               {/* 프로필 이미지 업로드 섹션 */}
               {(section === 'all' || section === 'personal') && (
@@ -940,9 +944,14 @@ export default function EditProfilePage() {
                                 type="text"
                                 value={job.period}
                                 onChange={(e) => updatePartTimeJob(index, 'period', e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                  errors.partTimeJobs?.[index]?.period ? 'border-red-500' : 'border-gray-300'
+                                }`}
                                 placeholder="2022.03 - 2022.09"
                               />
+                              {errors.partTimeJobs?.[index]?.period && (
+                                <p className="mt-1 text-xs text-red-600">{errors.partTimeJobs[index].period?.message}</p>
+                              )}
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -952,9 +961,14 @@ export default function EditProfilePage() {
                                 type="text"
                                 value={job.companyName}
                                 onChange={(e) => updatePartTimeJob(index, 'companyName', e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                  errors.partTimeJobs?.[index]?.companyName ? 'border-red-500' : 'border-gray-300'
+                                }`}
                                 placeholder="회사명"
                               />
+                              {errors.partTimeJobs?.[index]?.companyName && (
+                                <p className="mt-1 text-xs text-red-600">{errors.partTimeJobs[index].companyName?.message}</p>
+                              )}
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -964,9 +978,14 @@ export default function EditProfilePage() {
                                 type="text"
                                 value={job.position}
                                 onChange={(e) => updatePartTimeJob(index, 'position', e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                  errors.partTimeJobs?.[index]?.position ? 'border-red-500' : 'border-gray-300'
+                                }`}
                                 placeholder="직무/담당"
                               />
+                              {errors.partTimeJobs?.[index]?.position && (
+                                <p className="mt-1 text-xs text-red-600">{errors.partTimeJobs[index].position?.message}</p>
+                              )}
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
