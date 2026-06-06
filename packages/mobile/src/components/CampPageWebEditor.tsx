@@ -1,8 +1,7 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text, Platform, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import WebView from 'react-native-webview';
 import { logger } from '@smis-mentor/shared';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CampPageWebEditorProps {
   content: string;
@@ -45,7 +44,6 @@ export function CampPageWebEditor({
   const [isLoading, setIsLoading] = useState(true);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const insets = useSafeAreaInsets();
 
   // Toolbar 버튼 클릭 핸들러
   const handleToolbarCommand = (command: string) => {
@@ -1086,6 +1084,8 @@ export function CampPageWebEditor({
           const data = JSON.parse(event.data);
           if (data.type === 'SET_CONTENT') {
             setContent(data.content);
+          } else if (data.type === 'INSERT_NOTION_HTML') {
+            insertNotionContent(data.html);
           }
         } catch (error) {
           sendMessage('ERROR', { error: error.message });
@@ -1098,12 +1098,197 @@ export function CampPageWebEditor({
           const data = JSON.parse(event.data);
           if (data.type === 'SET_CONTENT') {
             setContent(data.content);
+          } else if (data.type === 'INSERT_NOTION_HTML') {
+            insertNotionContent(data.html);
           }
         } catch (error) {
           sendMessage('ERROR', { error: error.message });
         }
       });
       
+      // ───────────────────────────────────────────────────────
+      // 노션 HTML → 에디터 내부 HTML 변환
+      // ───────────────────────────────────────────────────────
+
+      // 노션 토글 <li> 판별: 첫 자식이 <p>이고 자식 2개 이상이거나 <img>를 포함
+      function isToggleLi(li) {
+        const children = Array.from(li.children);
+        if (children.length === 0) return false;
+        const first = children[0];
+        if (first.tagName !== 'P') return false;
+        return children.length >= 2 || first.querySelector('img') !== null;
+      }
+
+      // 인라인 요소 → HTML 문자열 (볼드/이탤릭/링크 등 마크 보존)
+      function inlineToHtml(node) {
+        if (node.nodeType === 3) return node.textContent || '';
+        const tag = node.tagName;
+        const inner = Array.from(node.childNodes).map(inlineToHtml).join('');
+        if (tag === 'STRONG' || tag === 'B') return '<strong>' + inner + '</strong>';
+        if (tag === 'EM' || tag === 'I') return '<em>' + inner + '</em>';
+        if (tag === 'U') return '<u>' + inner + '</u>';
+        if (tag === 'CODE') return '<code>' + inner + '</code>';
+        if (tag === 'A') return '<a href="' + (node.getAttribute('href') || '') + '">' + inner + '</a>';
+        if (tag === 'IMG') {
+          const src = node.getAttribute('src') || '';
+          const alt = node.getAttribute('alt') || '';
+          return '<img src="' + src + '" alt="' + alt + '" style="max-width:100%;">';
+        }
+        return inner;
+      }
+
+      // 요소 → 에디터 내부 HTML 문자열 (재귀)
+      function notionElToHtml(node) {
+        if (node.nodeType === 3) return node.textContent || '';
+        const tag = node.tagName;
+        if (!tag) return '';
+
+        if (tag === 'H1') return '<h1>' + Array.from(node.childNodes).map(inlineToHtml).join('') + '</h1>';
+        if (tag === 'H2') return '<h2>' + Array.from(node.childNodes).map(inlineToHtml).join('') + '</h2>';
+        if (tag === 'H3') return '<h3>' + Array.from(node.childNodes).map(inlineToHtml).join('') + '</h3>';
+
+        if (tag === 'P') {
+          const imgEl = node.querySelector('img');
+          if (imgEl) return '<p>' + inlineToHtml(imgEl) + '</p>';
+          return '<p>' + Array.from(node.childNodes).map(inlineToHtml).join('') + '</p>';
+        }
+
+        if (tag === 'BLOCKQUOTE') {
+          const inner = Array.from(node.children).map(notionElToHtml).join('');
+          return '<blockquote><p>' + inner + '</p></blockquote>';
+        }
+
+        if (tag === 'UL') {
+          const parts = [];
+          Array.from(node.children).filter(c => c.tagName === 'LI').forEach(li => {
+            if (isToggleLi(li)) {
+              parts.push(liToToggleHtml(li));
+            } else {
+              const inner = Array.from(li.childNodes).map(n => {
+                if (n.nodeType === 3) return n.textContent || '';
+                return notionElToHtml(n);
+              }).join('');
+              parts.push('<ul><li>' + inner + '</li></ul>');
+            }
+          });
+          return parts.join('');
+        }
+
+        if (tag === 'OL') {
+          const items = Array.from(node.children).filter(c => c.tagName === 'LI').map(li => {
+            const inner = Array.from(li.childNodes).map(n => {
+              if (n.nodeType === 3) return n.textContent || '';
+              return notionElToHtml(n);
+            }).join('');
+            return '<li>' + inner + '</li>';
+          });
+          return '<ol>' + items.join('') + '</ol>';
+        }
+
+        // 기타 → 텍스트 단락
+        const text = node.textContent || '';
+        return text ? '<p>' + text + '</p>' : '';
+      }
+
+      // 토글 <li> → .toggle-block HTML
+      function liToToggleHtml(li) {
+        const titleEl = li.querySelector(':scope > p');
+        const titleHtml = titleEl ? Array.from(titleEl.childNodes).map(inlineToHtml).join('') : '';
+        const contentNodes = Array.from(li.children).filter(c => c !== titleEl);
+        const contentHtml = contentNodes.length
+          ? contentNodes.map(notionElToHtml).join('')
+          : '<p>내용을 입력하세요...</p>';
+
+        return (
+          '<div class="toggle-block" data-collapsed="false" contenteditable="false">' +
+            '<div class="toggle-header">' +
+              '<span class="toggle-icon">▶</span>' +
+              '<strong>' + titleHtml + '</strong>' +
+            '</div>' +
+            '<div class="toggle-content" contenteditable="true">' +
+              contentHtml +
+            '</div>' +
+          '</div>' +
+          '<p><br></p>'
+        );
+      }
+
+      // 노션 HTML 전체를 에디터 내부 HTML로 변환
+      function convertNotionHtmlToEditorHtml(htmlString) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlString, 'text/html');
+        return Array.from(doc.body.children).map(notionElToHtml).join('');
+      }
+
+      // ───────────────────────────────────────────────────────
+      // paste 이벤트: 노션 콘텐츠 감지 → RN으로 전달
+      // ───────────────────────────────────────────────────────
+      editor.addEventListener('paste', function(e) {
+        if (!IS_EDITABLE) return;
+
+        const clipboardData = e.clipboardData;
+        if (!clipboardData) return;
+
+        const html = clipboardData.getData('text/html') || '';
+        const isFromNotion = html.includes('notionvc:') || html.includes('notion-block');
+
+        // 노션 출처가 아니면 기본 붙여넣기 허용
+        if (!isFromNotion) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const notionBlocksV3 =
+          clipboardData.getData('text/_notion-blocks-v3-production') ||
+          clipboardData.getData('text/_notion-blocks-v3-staging') ||
+          '';
+
+        // 이미지 blob 확인
+        const imageItem = Array.from(clipboardData.items || []).find(
+          item => item.type.startsWith('image/')
+        );
+
+        if (imageItem) {
+          // 이미지 blob → base64로 변환 후 RN으로 전달
+          const file = imageItem.getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+              const base64 = ev.target ? ev.target.result : null;
+              sendMessage('NOTION_PASTE', {
+                html: html,
+                notionBlocksV3: notionBlocksV3,
+                imageBlob: base64,
+                imageMime: file.type,
+              });
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
+        }
+
+        // 이미지 없이 전달
+        sendMessage('NOTION_PASTE', {
+          html: html,
+          notionBlocksV3: notionBlocksV3,
+          imageBlob: null,
+          imageMime: null,
+        });
+      });
+
+      // ───────────────────────────────────────────────────────
+      // INSERT_NOTION_HTML 메시지 수신: 변환된 HTML 삽입
+      // ───────────────────────────────────────────────────────
+      function insertNotionContent(rawHtml) {
+        const editorHtml = convertNotionHtmlToEditorHtml(rawHtml);
+        if (!editorHtml) return;
+        document.execCommand('insertHTML', false, editorHtml);
+        // 새로 삽입된 토글에 이벤트 연결
+        attachToggleEvents();
+        saveHistory();
+        sendMessage('CONTENT_CHANGED', { content: editor.innerHTML });
+      }
+
       // 초기화 완료
       setTimeout(() => {
         sendMessage('EDITOR_READY');
@@ -1113,7 +1298,209 @@ export function CampPageWebEditor({
 </html>
   `;
 
-  const handleMessage = (event: any) => {
+  // 웹 서버 API URL (노션 이미지 업로드용)
+  const WEB_API_BASE = (process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com').replace(/\/$/, '');
+
+  // 노션 이미지 업로드: notion-image API 호출
+  const uploadViaNotionApi = async (block: {
+    blockId: string;
+    spaceId: string;
+    fileId: string;
+    originalSrc: string;
+  }): Promise<string | null> => {
+    try {
+      const res = await fetch(`${WEB_API_BASE}/api/notion-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blockId: block.blockId,
+          spaceId: block.spaceId,
+          fileId: block.fileId,
+          originalUrl: block.originalSrc,
+        }),
+      });
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? '업로드 실패');
+      return data.url ?? null;
+    } catch (err) {
+      logger.error('[모바일] 노션 이미지 업로드 실패:', err);
+      return null;
+    }
+  };
+
+  // 이미지 blob(base64) 업로드: upload-from-url API 호출
+  const uploadImageBlob = async (base64DataUrl: string, mime: string): Promise<string | null> => {
+    try {
+      const ext = mime.split('/')[1]?.toLowerCase() || 'png';
+      const formData = new FormData();
+      // React Native에서는 uri를 직접 FormData에 첨부
+      formData.append('file', {
+        uri: base64DataUrl,
+        type: mime,
+        name: `paste_${Date.now()}.${ext}`,
+      } as unknown as Blob);
+      const res = await fetch(`${WEB_API_BASE}/api/upload-from-url`, {
+        method: 'POST',
+        body: formData as unknown as BodyInit_,
+      });
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? '업로드 실패');
+      return data.url ?? null;
+    } catch (err) {
+      logger.error('[모바일] 이미지 blob 업로드 실패:', err);
+      return null;
+    }
+  };
+
+  // NOTION_PASTE 처리: 이미지 업로드 후 HTML 주입
+  const handleNotionPaste = async (data: {
+    html: string;
+    notionBlocksV3: string;
+    imageBlob: string | null;
+    imageMime: string | null;
+  }) => {
+    const { html, notionBlocksV3, imageBlob, imageMime } = data;
+
+    // 노션 S3 이미지 URL 수집
+    const isNotionImgSrc = (src: string) =>
+      src.includes('prod-files-secure.s3') ||
+      src.includes('notion.so') ||
+      src.includes('notionusercontent.com');
+
+    // 이미지 blob이 있으면 blob 업로드 처리
+    if (imageBlob && imageMime) {
+      const uploadedUrl = await uploadImageBlob(imageBlob, imageMime);
+      if (!uploadedUrl) {
+        Alert.alert('오류', '이미지 업로드에 실패했습니다.');
+        return;
+      }
+      // 단일 이미지 삽입
+      const imgHtml = `<p><img src="${uploadedUrl}" style="max-width:100%;"></p>`;
+      const message = JSON.stringify({ type: 'INSERT_NOTION_HTML', html: imgHtml });
+      webViewRef.current?.postMessage(message);
+      return;
+    }
+
+    // notionBlocksV3에서 이미지 블록 추출
+    interface ImageBlock { blockId: string; spaceId: string; fileId: string; originalSrc: string; }
+    const imageBlocks: ImageBlock[] = [];
+    if (notionBlocksV3) {
+      try {
+        const v3Data = JSON.parse(notionBlocksV3) as {
+          blocks: Array<{
+            blockId: string;
+            blockSubtree: {
+              block: Record<string, {
+                value: {
+                  type: string;
+                  properties?: { source?: string[][] };
+                  file_ids?: string[];
+                  space_id?: string;
+                };
+              }>;
+            };
+          }>;
+        };
+        for (const b of v3Data.blocks) {
+          for (const [blockId, blockData] of Object.entries(b.blockSubtree.block)) {
+            const val = blockData?.value;
+            if (val?.type === 'image' && val?.file_ids?.length && val?.space_id) {
+              const originalSrc = val.properties?.source?.[0]?.[0] ?? '';
+              if (originalSrc) {
+                imageBlocks.push({
+                  blockId,
+                  spaceId: val.space_id,
+                  fileId: val.file_ids[0],
+                  originalSrc,
+                });
+              }
+            }
+          }
+        }
+      } catch { /* JSON 파싱 실패 시 무시 */ }
+    }
+
+    // HTML에서 노션 이미지 URL 수집 (v3 데이터 없을 때 fallback)
+    const htmlImgUrls: string[] = [];
+    if (imageBlocks.length === 0) {
+      const imgMatches = html.match(/<img[^>]+src="([^"]+)"/g) || [];
+      imgMatches.forEach((imgTag) => {
+        const match = imgTag.match(/src="([^"]+)"/);
+        if (match && isNotionImgSrc(match[1])) htmlImgUrls.push(match[1]);
+      });
+    }
+
+    const hasImages = imageBlocks.length > 0 || htmlImgUrls.length > 0;
+
+    if (!hasImages) {
+      // 이미지 없으면 바로 삽입
+      const message = JSON.stringify({ type: 'INSERT_NOTION_HTML', html });
+      webViewRef.current?.postMessage(message);
+      return;
+    }
+
+    // 이미지 업로드
+    const urlMap = new Map<string, string>();
+    if (imageBlocks.length > 0) {
+      const results = await Promise.all(
+        imageBlocks.map(async (block) => {
+          const uploaded = await uploadViaNotionApi(block);
+          return { original: block.originalSrc, uploaded };
+        })
+      );
+      results.forEach(({ original, uploaded }) => {
+        if (uploaded) urlMap.set(original, uploaded);
+      });
+    } else {
+      const results = await Promise.all(
+        htmlImgUrls.map(async (srcUrl) => {
+          try {
+            const r = await fetch(srcUrl);
+            if (!r.ok) throw new Error(`S3 fetch 실패 (${r.status})`);
+            const blob = await r.blob();
+            const ext = blob.type.split('/')[1]?.toLowerCase() || 'jpg';
+            const formData = new FormData();
+            formData.append('file', {
+              uri: srcUrl,
+              type: blob.type,
+              name: `notion_${Date.now()}.${ext}`,
+            } as unknown as Blob);
+            const res = await fetch(`${WEB_API_BASE}/api/upload-from-url`, {
+              method: 'POST',
+              body: formData as unknown as BodyInit_,
+            });
+            const data = await res.json() as { url?: string; error?: string };
+            if (!res.ok) throw new Error(data.error ?? '업로드 실패');
+            return { original: srcUrl, uploaded: data.url ?? null };
+          } catch (err) {
+            logger.error('[모바일] S3 이미지 업로드 실패:', err);
+            return { original: srcUrl, uploaded: null };
+          }
+        })
+      );
+      results.forEach(({ original, uploaded }) => {
+        if (uploaded) urlMap.set(original, uploaded);
+      });
+    }
+
+    if (urlMap.size === 0) {
+      Alert.alert('알림', '이미지를 가져오지 못했습니다. 텍스트 내용만 삽입됩니다.');
+      const message = JSON.stringify({ type: 'INSERT_NOTION_HTML', html });
+      webViewRef.current?.postMessage(message);
+      return;
+    }
+
+    // HTML 내 이미지 src 교체
+    let processedHtml = html;
+    urlMap.forEach((uploadedUrl, originalUrl) => {
+      processedHtml = processedHtml.replace(new RegExp(originalUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), uploadedUrl);
+    });
+
+    const message = JSON.stringify({ type: 'INSERT_NOTION_HTML', html: processedHtml });
+    webViewRef.current?.postMessage(message);
+  };
+
+  const handleMessage = (event: { nativeEvent: { data: string } }) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       
@@ -1138,6 +1525,16 @@ export function CampPageWebEditor({
         case 'HISTORY_STATE':
           setCanUndo(data.canUndo);
           setCanRedo(data.canRedo);
+          break;
+          
+        case 'NOTION_PASTE':
+          // 비동기 처리 — void 반환 의도적
+          void handleNotionPaste({
+            html: data.html ?? '',
+            notionBlocksV3: data.notionBlocksV3 ?? '',
+            imageBlob: data.imageBlob ?? null,
+            imageMime: data.imageMime ?? null,
+          });
           break;
           
         case 'TABLE_DETECTED':
@@ -1166,29 +1563,30 @@ export function CampPageWebEditor({
           contentContainerStyle={styles.toolbarContent}
         >
           {TOOLBAR_BUTTONS.map((button) => {
-            if (button.type === 'divider') {
+            if ('type' in button && button.type === 'divider') {
               return <View key={button.id} style={styles.toolbarDivider} />;
             }
             
+            const btn = button as { id: string; label: string; title: string; command: string };
             const isDisabled = 
-              (button.id === 'undo' && !canUndo) ||
-              (button.id === 'redo' && !canRedo);
+              (btn.id === 'undo' && !canUndo) ||
+              (btn.id === 'redo' && !canRedo);
             
             return (
               <TouchableOpacity
-                key={button.id}
+                key={btn.id}
                 style={[
                   styles.toolbarButton,
                   isDisabled && styles.toolbarButtonDisabled
                 ]}
-                onPress={() => handleToolbarCommand(button.command)}
+                onPress={() => handleToolbarCommand(btn.command)}
                 disabled={isDisabled}
               >
                 <Text style={[
                   styles.toolbarButtonText,
                   isDisabled && styles.toolbarButtonTextDisabled
                 ]}>
-                  {button.label}
+                  {btn.label}
                 </Text>
               </TouchableOpacity>
             );

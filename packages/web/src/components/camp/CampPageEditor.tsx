@@ -12,10 +12,13 @@ import TextAlign from '@tiptap/extension-text-align';
 import Underline from '@tiptap/extension-underline';
 import TextStyle from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
+import Details from '@tiptap/extension-details';
+import DetailsSummary from '@tiptap/extension-details-summary';
+import DetailsContent from '@tiptap/extension-details-content';
 import { uploadImage } from '@/lib/firebaseService';
 import { logger } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface CampPageEditorProps {
   content: string;
@@ -33,8 +36,11 @@ export default function CampPageEditor({
   placeholder = '내용을 입력하세요...',
 }: CampPageEditorProps) {
   const [isUploading, setIsUploading] = useState(false);
+  // paste 핸들러에서 최신 editor 인스턴스에 접근하기 위한 ref
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: {
@@ -91,6 +97,15 @@ export default function CampPageEditor({
       Underline,
       TextStyle,
       Color,
+      Details.configure({
+        persist: true,
+        openClassName: 'is-open',
+        HTMLAttributes: {
+          class: 'details-block',
+        },
+      }),
+      DetailsSummary,
+      DetailsContent,
     ],
     content,
     onUpdate: ({ editor }) => {
@@ -100,12 +115,350 @@ export default function CampPageEditor({
       attributes: {
         class: 'prose prose-slate max-w-none focus:outline-none min-h-[200px] p-4',
       },
+      handlePaste: (_view, event) => {
+        const clipboardData = event.clipboardData;
+        if (!clipboardData) return false;
+
+        const currentEditor = editorRef.current;
+        if (!currentEditor) return false;
+
+        // 이미지 blob 우선 처리 (이미지 우클릭 → 복사 후 붙여넣기)
+        const imageItem = Array.from(clipboardData.items).find((item) =>
+          item.type.startsWith('image/')
+        );
+        if (imageItem) {
+          const blob = imageItem.getAsFile();
+          if (blob) {
+            event.preventDefault();
+            const ext = blob.type.split('/')[1] || 'png';
+            const file = new File([blob], `paste_${Date.now()}.${ext}`, { type: blob.type });
+            toast.loading('이미지 업로드 중...', { id: 'paste-image' });
+            uploadImage(file)
+              .then((url) => {
+                currentEditor.chain().focus().setImage({ src: url }).run();
+                toast.success('이미지가 삽입되었습니다.', { id: 'paste-image' });
+              })
+              .catch(() => {
+                toast.error('이미지 업로드에 실패했습니다.', { id: 'paste-image' });
+              });
+            return true;
+          }
+        }
+
+        const html = clipboardData.getData('text/html');
+        if (!html) return false;
+
+        // 노션 출처 식별: <!-- notionvc: ... --> 주석 포함 여부 확인
+        const isFromNotion = html.includes('notionvc:') || html.includes('notion-block');
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // 1) 표준 <details><summary> 구조 (노션 외 출처 또는 기존 저장 데이터)
+        const detailsEls = doc.body.querySelectorAll('details');
+        if (detailsEls.length > 0) {
+          event.preventDefault();
+          const parts: string[] = [];
+          detailsEls.forEach((detailsEl) => {
+            const summaryEl = detailsEl.querySelector('summary');
+            const summaryText = summaryEl?.textContent?.trim() ?? '토글';
+            if (summaryEl) summaryEl.remove();
+            const innerHtml = detailsEl.innerHTML.trim() || '<p></p>';
+            parts.push(
+              `<details><summary>${summaryText}</summary><div data-type="detailsContent">${innerHtml}</div></details>`
+            );
+          });
+          currentEditor.chain().focus().insertContent(parts.join('')).run();
+          return true;
+        }
+
+        if (!isFromNotion) return false;
+
+        // 노션 S3 이미지 URL 목록 수집 (DOM 전체에서)
+        const isNotionImgSrc = (src: string) =>
+          src.includes('prod-files-secure.s3') ||
+          src.includes('notion.so') ||
+          src.includes('notionusercontent.com');
+
+        const notionImgUrls = Array.from(doc.querySelectorAll('img'))
+          .map((el) => el.getAttribute('src') || '')
+          .filter(isNotionImgSrc);
+
+        // 노션 토글 <li> 판별:
+        // 첫 번째 직계 자식이 <p>이고 자식이 2개 이상이거나, 첫 <p> 안에 <img> 포함
+        const isToggleLi = (li: Element): boolean => {
+          const children = Array.from(li.children);
+          if (children.length === 0) return false;
+          const first = children[0];
+          if (first.tagName !== 'P') return false;
+          return children.length >= 2 || first.querySelector('img') !== null;
+        };
+
+        // 노션 HTML → Tiptap JSON 재귀 변환
+        // HTML 문자열 대신 JSON을 쓰는 이유: 중첩 <details> 파싱 시 Tiptap HTML 파서 오류 방지
+        type TiptapNode = {
+          type: string;
+          attrs?: Record<string, unknown>;
+          content?: TiptapNode[];
+          marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
+          text?: string;
+        };
+
+        const textNodeToTiptap = (el: Element): TiptapNode[] => {
+          // <p> → paragraph, 텍스트 노드/인라인 요소 처리
+          const nodes: TiptapNode[] = [];
+          el.childNodes.forEach((child) => {
+            if (child.nodeType === Node.TEXT_NODE) {
+              const text = child.textContent ?? '';
+              if (text) nodes.push({ type: 'text', text });
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+              const el2 = child as Element;
+              if (el2.tagName === 'STRONG' || el2.tagName === 'B') {
+                const text = el2.textContent ?? '';
+                if (text) nodes.push({ type: 'text', text, marks: [{ type: 'bold' }] });
+              } else if (el2.tagName === 'EM' || el2.tagName === 'I') {
+                const text = el2.textContent ?? '';
+                if (text) nodes.push({ type: 'text', text, marks: [{ type: 'italic' }] });
+              } else if (el2.tagName === 'U') {
+                const text = el2.textContent ?? '';
+                if (text) nodes.push({ type: 'text', text, marks: [{ type: 'underline' }] });
+              } else if (el2.tagName === 'CODE') {
+                const text = el2.textContent ?? '';
+                if (text) nodes.push({ type: 'text', text, marks: [{ type: 'code' }] });
+              } else if (el2.tagName === 'A') {
+                const text = el2.textContent ?? '';
+                const href = el2.getAttribute('href') ?? '';
+                if (text) nodes.push({ type: 'text', text, marks: [{ type: 'link', attrs: { href } }] });
+              } else if (el2.tagName === 'IMG') {
+                const src = el2.getAttribute('src') ?? '';
+                if (src) nodes.push({ type: 'image', attrs: { src, alt: el2.getAttribute('alt') ?? '' } });
+              } else {
+                const text = el2.textContent ?? '';
+                if (text) nodes.push({ type: 'text', text });
+              }
+            }
+          });
+          return nodes;
+        };
+
+        const elToTiptap = (node: Element): TiptapNode[] => {
+          const tag = node.tagName;
+
+          if (tag === 'H1' || tag === 'H2' || tag === 'H3') {
+            const level = parseInt(tag[1]);
+            return [{ type: 'heading', attrs: { level }, content: textNodeToTiptap(node) }];
+          }
+
+          if (tag === 'P') {
+            const imgEl = node.querySelector('img');
+            if (imgEl) {
+              const src = imgEl.getAttribute('src') ?? '';
+              return src ? [{ type: 'image', attrs: { src, alt: imgEl.getAttribute('alt') ?? '' } }] : [];
+            }
+            const content = textNodeToTiptap(node);
+            return [{ type: 'paragraph', content: content.length ? content : undefined }];
+          }
+
+          if (tag === 'UL') {
+            const result: TiptapNode[] = [];
+            const lis = Array.from(node.children).filter((c) => c.tagName === 'LI');
+            for (const li of lis) {
+              if (isToggleLi(li)) {
+                result.push(...liToToggle(li));
+              } else {
+                const innerContent = liToInlineContent(li);
+                result.push({ type: 'bulletList', content: [{ type: 'listItem', content: innerContent }] });
+              }
+            }
+            return result;
+          }
+
+          if (tag === 'OL') {
+            const items = Array.from(node.children).filter((c) => c.tagName === 'LI').map((li) => ({
+              type: 'listItem' as const,
+              content: liToInlineContent(li),
+            }));
+            return [{ type: 'orderedList', content: items }];
+          }
+
+          if (tag === 'BLOCKQUOTE') {
+            return [{ type: 'blockquote', content: Array.from(node.children).flatMap((c) => elToTiptap(c)) }];
+          }
+
+          // 기타 → paragraph로 fallback
+          const text = node.textContent ?? '';
+          return text ? [{ type: 'paragraph', content: [{ type: 'text', text }] }] : [];
+        };
+
+        const liToInlineContent = (li: Element): TiptapNode[] => {
+          // li 직계 자식들을 block 변환
+          const blocks: TiptapNode[] = [];
+          li.childNodes.forEach((child) => {
+            if (child.nodeType === Node.TEXT_NODE) {
+              const text = child.textContent?.trim() ?? '';
+              if (text) blocks.push({ type: 'paragraph', content: [{ type: 'text', text }] });
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+              blocks.push(...elToTiptap(child as Element));
+            }
+          });
+          return blocks.length ? blocks : [{ type: 'paragraph' }];
+        };
+
+        const liToToggle = (li: Element): TiptapNode[] => {
+          const titleEl = li.querySelector(':scope > p');
+          const summaryContent = titleEl ? textNodeToTiptap(titleEl) : [];
+          const contentNodes = Array.from(li.children)
+            .filter((c) => c !== titleEl)
+            .flatMap((c) => elToTiptap(c));
+
+          return [{
+            type: 'details',
+            content: [
+              { type: 'detailsSummary', content: summaryContent.length ? summaryContent : [{ type: 'text', text: '' }] },
+              { type: 'detailsContent', content: contentNodes.length ? contentNodes : [{ type: 'paragraph' }] },
+            ],
+          }];
+        };
+
+        // body의 직계 자식들을 변환
+        const hasAnyToggle = doc.body.querySelectorAll('ul > li').length > 0;
+
+        // 이미지 없으면 즉시 변환 삽입
+        if (notionImgUrls.length === 0) {
+          if (!hasAnyToggle) return false;
+          event.preventDefault();
+          const tiptapNodes = Array.from(doc.body.children).flatMap((c) => elToTiptap(c));
+          currentEditor.chain().focus().insertContent(tiptapNodes).run();
+          return true;
+        }
+
+        event.preventDefault();
+
+        // 이미지 업로드: text/_notion-blocks-v3-production 파싱 → notion API 경로
+        const notionBlocksRaw =
+          clipboardData.getData('text/_notion-blocks-v3-production') ||
+          clipboardData.getData('text/_notion-blocks-v3-staging') ||
+          '';
+
+        interface NotionImageBlock {
+          blockId: string;
+          spaceId: string;
+          fileId: string;
+          originalSrc: string;
+        }
+
+        const imageBlocks: NotionImageBlock[] = [];
+        if (notionBlocksRaw) {
+          try {
+            const v3Data = JSON.parse(notionBlocksRaw) as {
+              blocks: Array<{
+                blockId: string;
+                blockSubtree: {
+                  block: Record<string, {
+                    value: {
+                      type: string;
+                      properties?: { source?: string[][] };
+                      file_ids?: string[];
+                      space_id?: string;
+                    };
+                  }>;
+                };
+              }>;
+            };
+            for (const b of v3Data.blocks) {
+              for (const [blockId, blockData] of Object.entries(b.blockSubtree.block)) {
+                const val = blockData?.value;
+                if (val?.type === 'image' && val?.file_ids?.length && val?.space_id) {
+                  const originalSrc = val.properties?.source?.[0]?.[0] ?? '';
+                  if (originalSrc) {
+                    imageBlocks.push({ blockId, spaceId: val.space_id, fileId: val.file_ids[0], originalSrc });
+                  }
+                }
+              }
+            }
+          } catch { /* JSON 파싱 실패 시 fallback */ }
+        }
+
+        const toastId = 'notion-img-upload';
+        const imgCount = imageBlocks.length || notionImgUrls.length;
+        toast.loading(`노션 이미지 ${imgCount}개 가져오는 중...`, { id: toastId });
+
+        const uploadViaNotionApi = async (block: NotionImageBlock) => {
+          const res = await fetch('/api/notion-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blockId: block.blockId, spaceId: block.spaceId, fileId: block.fileId, originalUrl: block.originalSrc }),
+          });
+          const data = await res.json() as { url?: string; error?: string };
+          if (!res.ok) throw new Error(data.error ?? '업로드 실패');
+          return { original: block.originalSrc, uploaded: data.url ?? null };
+        };
+
+        const uploadTasks = imageBlocks.length > 0
+          ? imageBlocks.map((block) =>
+              uploadViaNotionApi(block).catch((err: unknown) => ({
+                original: block.originalSrc, uploaded: null,
+                error: err instanceof Error ? err.message : '업로드 실패',
+              }))
+            )
+          : notionImgUrls.map((srcUrl) =>
+              fetch(srcUrl)
+                .then(async (r) => {
+                  if (!r.ok) throw new Error(`S3 fetch 실패 (${r.status})`);
+                  const blob = await r.blob();
+                  const formData = new FormData();
+                  const ext = blob.type.split('/')[1]?.toLowerCase() || 'jpg';
+                  formData.append('file', new File([blob], `notion_${Date.now()}.${ext}`, { type: blob.type }));
+                  const res = await fetch('/api/upload-from-url', { method: 'POST', body: formData });
+                  const data = await res.json() as { url?: string; error?: string };
+                  if (!res.ok) throw new Error(data.error ?? '업로드 실패');
+                  return { original: srcUrl, uploaded: data.url ?? null };
+                })
+                .catch((err: unknown) => ({ original: srcUrl, uploaded: null, error: err instanceof Error ? err.message : '업로드 실패' }))
+            );
+
+        Promise.all(uploadTasks).then((results) => {
+          const urlMap = new Map<string, string>();
+          let failedMsg = '';
+          results.forEach((r) => {
+            if (r.uploaded) urlMap.set(r.original, r.uploaded);
+            else failedMsg = 'error' in r ? (r.error ?? '') : '';
+          });
+
+          if (urlMap.size === 0) {
+            toast.error(failedMsg || '이미지를 가져오지 못했습니다.', { id: toastId });
+            return;
+          }
+
+          // doc 내 모든 <img>의 src를 Firebase URL로 교체
+          doc.querySelectorAll('img').forEach((imgEl) => {
+            const src = imgEl.getAttribute('src') || '';
+            if (urlMap.has(src)) imgEl.setAttribute('src', urlMap.get(src)!);
+          });
+
+          // Tiptap JSON으로 변환 후 삽입 (중첩 토글 파싱 오류 방지)
+          const tiptapNodes = Array.from(doc.body.children).flatMap((c) => elToTiptap(c));
+          currentEditor?.chain().focus().insertContent(tiptapNodes).run();
+
+          const failCount = results.filter((r) => !r.uploaded).length;
+          if (failCount > 0) {
+            toast.success(`이미지 ${urlMap.size}개 삽입 완료 (${failCount}개 실패)`, { id: toastId });
+          } else {
+            toast.success(`이미지 ${urlMap.size}개 포함 내용이 삽입되었습니다.`, { id: toastId });
+          }
+        });
+
+        return true;
+      },
     },
   });
 
   if (!editor) {
     return null;
   }
+
+  // paste 핸들러가 최신 editor 인스턴스를 참조할 수 있도록 ref 동기화
+  editorRef.current = editor;
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -341,27 +694,16 @@ export default function CampPageEditor({
 
         {/* 토글 */}
         <button
-          onClick={() => {
-            const title = window.prompt('토글 제목을 입력하세요:', '토글 제목');
-            if (!title) return;
-            
-            const toggleHTML = `
-              <div class="toggle-block" data-collapsed="true">
-                <div class="toggle-header">
-                  <span class="toggle-icon">▶</span>
-                  <strong>${title}</strong>
-                </div>
-                <div class="toggle-content" style="display: none;">
-                  <p>내용을 입력하세요...</p>
-                </div>
-              </div>
-            `;
-            editor.chain().focus().insertContent(toggleHTML).run();
-          }}
-          className="px-3 py-1.5 rounded text-sm bg-white hover:bg-gray-100"
+          onClick={() => editor.chain().focus().setDetails().run()}
+          disabled={!editor.can().setDetails()}
+          className={`px-3 py-1.5 rounded text-sm ${
+            editor.isActive('details')
+              ? 'bg-blue-600 text-white'
+              : 'bg-white hover:bg-gray-100'
+          } disabled:opacity-40 disabled:cursor-not-allowed`}
           title="토글 (접기/펼치기)"
         >
-          ▼
+          ▶
         </button>
 
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
@@ -525,7 +867,76 @@ export default function CampPageEditor({
             pointer-events: none;
           }
           
-          /* 토글 블록 스타일 */
+          /* Details(토글) 블록 스타일 - Tiptap Details NodeView */
+          /* NodeView DOM: div[data-type="details"] > button + div > summary + div[data-type="detailsContent"] */
+          .ProseMirror div[data-type="details"] {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 0;
+            border: none;
+            border-radius: 0;
+            padding: 0.125rem 0;
+            margin: 0.25rem 0;
+            background-color: transparent;
+          }
+
+          /* 토글 버튼 (▶) — summary 첫 줄 텍스트 중앙 정렬 */
+          .ProseMirror div[data-type="details"] > button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            margin-right: 0.3rem;
+            font-size: 0.6rem;
+            color: #6b7280;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+            /* summary의 line-height(1.5em = ~1.5rem) 기준 첫 줄 중앙 */
+            height: 1.5em;
+            display: flex;
+            align-items: center;
+          }
+
+          .ProseMirror div[data-type="details"] > button::before {
+            content: '▶';
+          }
+
+          .ProseMirror div[data-type="details"].is-open > button {
+            transform: rotate(90deg);
+          }
+
+          /* contentDOM (summary + detailsContent를 감싸는 div) */
+          .ProseMirror div[data-type="details"] > div {
+            flex: 1;
+            min-width: 0;
+          }
+
+          /* summary (토글 제목) */
+          .ProseMirror div[data-type="details"] summary {
+            font-weight: 600;
+            cursor: default;
+            list-style: none;
+            line-height: 1.5;
+            padding: 0;
+          }
+
+          .ProseMirror div[data-type="details"] summary::-webkit-details-marker {
+            display: none;
+          }
+
+          /* detailsContent (접힌 내용) */
+          .ProseMirror div[data-type="detailsContent"] {
+            display: none;
+            padding-top: 0.25rem;
+            padding-left: 0.25rem;
+          }
+
+          .ProseMirror div[data-type="details"].is-open div[data-type="detailsContent"] {
+            display: block;
+          }
+
+          /* 레거시 toggle-block 호환 (기존 저장 데이터) */
           .ProseMirror .toggle-block {
             border: 1px solid #e5e7eb;
             border-radius: 0.5rem;
@@ -533,7 +944,7 @@ export default function CampPageEditor({
             margin: 0.5rem 0;
             background-color: #f9fafb;
           }
-          
+
           .ProseMirror .toggle-header {
             display: flex;
             align-items: center;
@@ -541,16 +952,16 @@ export default function CampPageEditor({
             cursor: pointer;
             user-select: none;
           }
-          
+
           .ProseMirror .toggle-icon {
             transition: transform 0.2s ease;
             font-size: 0.875rem;
           }
-          
+
           .ProseMirror .toggle-block[data-collapsed="false"] .toggle-icon {
             transform: rotate(90deg);
           }
-          
+
           .ProseMirror .toggle-content {
             margin-top: 0.5rem;
             padding-left: 1.5rem;

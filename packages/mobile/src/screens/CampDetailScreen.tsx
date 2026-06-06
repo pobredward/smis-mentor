@@ -108,8 +108,8 @@ export function CampDetailScreen({ route, navigation }: Props) {
 
       // 테이블이 있는지 확인
       if (foundItem.type === 'page' && foundItem.content) {
-        const hasTableTag = /<table/i.test(foundItem.content);
-        setHasTable(hasTableTag);
+        const hasTableOrToggle = needsWebView(foundItem.content);
+        setHasTable(hasTableOrToggle);
       }
     } catch (error) {
       logger.error('항목 로드 실패:', error);
@@ -139,8 +139,8 @@ export function CampDetailScreen({ route, navigation }: Props) {
         
         // 테이블이 있는지 확인
         if (foundItem.type === 'page' && foundItem.content) {
-          const hasTableTag = /<table/i.test(foundItem.content);
-          setHasTable(hasTableTag);
+          const hasTableOrToggle = needsWebView(foundItem.content);
+          setHasTable(hasTableOrToggle);
         }
       }
     } catch (error) {
@@ -214,6 +214,140 @@ export function CampDetailScreen({ route, navigation }: Props) {
     return html.replace(/<div class="table-controls"[^>]*>[\s\S]*?<\/div>\s*/gi, '');
   };
 
+  // WebView로 렌더링해야 하는지 판단 (테이블 또는 토글 블록)
+  const needsWebView = (html: string): boolean => {
+    return /<table/i.test(html) || /class="toggle-block"/i.test(html) || /<details/i.test(html);
+  };
+
+  // WebView용 공통 HTML 래퍼 (CSS + JS 포함)
+  const buildWebViewHtml = (bodyContent: string): string => `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        padding: 16px;
+        margin: 0;
+        color: #1f2937;
+        font-size: 16px;
+        line-height: 28px;
+      }
+      h1 { font-size: 32px; font-weight: bold; margin: 8px 0 6px 0; padding-top: 4px; color: #111827; line-height: 40px; }
+      h2 { font-size: 28px; font-weight: bold; margin: 8px 0 5px 0; color: #111827; line-height: 35px; }
+      h3 { font-size: 24px; font-weight: bold; margin: 6px 0 4px 0; color: #111827; line-height: 30px; }
+      p { margin: 0 0 4px 0; line-height: 28px; white-space: pre-wrap; word-break: break-word; }
+      strong, b { font-weight: bold; }
+      p:empty, p:has(br:only-child) { min-height: 28px; display: block; }
+      ul, ol { margin: 0 0 4px 0; padding-left: 20px; }
+      li { margin-bottom: 2px; }
+      img { max-width: 100%; height: auto; border-radius: 8px; margin: 6px 0; display: block; }
+
+      /* 테이블 */
+      .table-wrapper { overflow-x: auto; margin: 6px 0; }
+      table { border-collapse: collapse; table-layout: auto; width: auto; margin: 0; font-size: 12px; }
+      th, td { border: 1px solid #d1d5db; padding: 5px; vertical-align: top; box-sizing: border-box; white-space: normal; word-break: break-word; min-width: 60px; font-size: 12px; line-height: 1.3; }
+      th { background-color: #f3f4f6; font-weight: bold; }
+
+      /* 토글 블록 */
+      .toggle-block {
+        margin: 8px 0;
+        padding: 0;
+        background: transparent;
+      }
+      .toggle-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        -webkit-user-select: none;
+        padding: 2px 0;
+      }
+      .toggle-icon {
+        transition: transform 0.2s ease;
+        font-size: 12px;
+        color: #6b7280;
+        display: inline-block;
+        flex-shrink: 0;
+      }
+      .toggle-block[data-collapsed="false"] .toggle-icon {
+        transform: rotate(90deg);
+      }
+      .toggle-content {
+        padding-left: 24px;
+        padding-top: 4px;
+      }
+
+      /* details 기반 토글 (Tiptap 저장 데이터) */
+      details { margin: 8px 0; }
+      details summary {
+        font-weight: 600;
+        cursor: pointer;
+        list-style: none;
+        padding: 2px 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      details summary::-webkit-details-marker { display: none; }
+      details summary::before {
+        content: '▶';
+        font-size: 12px;
+        color: #6b7280;
+        transition: transform 0.2s ease;
+        display: inline-block;
+        flex-shrink: 0;
+      }
+      details[open] summary::before { transform: rotate(90deg); }
+      div[data-type="detailsContent"] { padding-left: 24px; padding-top: 4px; }
+
+      a { color: #2563eb; text-decoration: underline; }
+      blockquote { border-left: 4px solid #3b82f6; padding: 8px 16px; margin: 6px 0; background-color: #eff6ff; }
+      code { background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; font-size: 14px; color: #dc2626; font-family: monospace; }
+      pre { background-color: #1f2937; color: #f3f4f6; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 6px 0; }
+      iframe { max-width: 100%; }
+    </style>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // 테이블 wrapper 처리
+        const tables = document.querySelectorAll('table');
+        tables.forEach(table => {
+          if (table.parentElement && table.parentElement.classList.contains('table-wrapper')) return;
+          const wrapper = document.createElement('div');
+          wrapper.className = 'table-wrapper';
+          table.parentNode.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        });
+
+        // toggle-block 클릭 이벤트
+        document.querySelectorAll('.toggle-header').forEach(function(header) {
+          header.addEventListener('click', function(e) {
+            e.preventDefault();
+            const block = header.parentElement;
+            if (!block) return;
+            const content = block.querySelector('.toggle-content');
+            const isCollapsed = block.getAttribute('data-collapsed') === 'true';
+            block.setAttribute('data-collapsed', isCollapsed ? 'false' : 'true');
+            if (content) content.style.display = isCollapsed ? 'block' : 'none';
+          });
+          // 초기 상태 적용
+          const block = header.parentElement;
+          if (block) {
+            const content = block.querySelector('.toggle-content');
+            const isCollapsed = block.getAttribute('data-collapsed') !== 'false';
+            if (content) content.style.display = isCollapsed ? 'none' : 'block';
+          }
+        });
+      });
+    </script>
+  </head>
+  <body>${bodyContent}</body>
+</html>
+  `;
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -235,106 +369,11 @@ export function CampDetailScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       {/* 본문 */}
       {item.type === 'page' ? (
-        // 페이지 타입: 테이블이 있으면 WebView, 없으면 RenderHTML
+      // 페이지 타입: 토글/테이블이 있으면 WebView, 없으면 RenderHTML
         hasTable ? (
           <WebView
             source={{
-              html: `
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-    <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        padding: 16px;
-        margin: 0;
-        color: #1f2937;
-        font-size: 16px;
-        line-height: 28px;
-      }
-      h1 { font-size: 32px; font-weight: bold; margin: 8px 0 6px 0; padding-top: 4px; color: #111827; line-height: 40px; }
-      h2 { font-size: 28px; font-weight: bold; margin: 8px 0 5px 0; color: #111827; line-height: 35px; }
-      h3 { font-size: 24px; font-weight: bold; margin: 6px 0 4px 0; color: #111827; line-height: 30px; }
-      p { margin: 0 0 4px 0; line-height: 28px; white-space: pre-wrap; word-break: break-word; }
-      
-      /* 볼드체 스타일 */
-      strong, b { font-weight: bold; }
-      
-      /* 빈 단락 처리 */
-      p:empty,
-      p:has(br:only-child) {
-        min-height: 28px;
-        display: block;
-      }
-      
-      ul, ol { margin: 0 0 4px 0; padding-left: 20px; }
-      li { margin-bottom: 2px; }
-      img { max-width: 100%; height: auto; border-radius: 8px; margin: 6px 0; display: block; }
-      
-      /* 테이블 wrapper 가로 스크롤 */
-      .table-wrapper {
-        overflow-x: auto;
-        margin: 6px 0;
-      }
-      
-      /* 테이블 스타일 - 모바일 최적화 (더 컴팩트) */
-      table { 
-        border-collapse: collapse; 
-        table-layout: auto; 
-        width: auto; 
-        margin: 0;
-        font-size: 12px;
-      }
-      
-      th, td { 
-        border: 1px solid #d1d5db; 
-        padding: 5px; 
-        vertical-align: top;
-        box-sizing: border-box;
-        white-space: normal;
-        word-break: break-word;
-        min-width: 60px;
-        font-size: 12px;
-        line-height: 1.3;
-      }
-      
-      th { 
-        background-color: #f3f4f6; 
-        font-weight: bold; 
-      }
-      
-      a { color: #2563eb; text-decoration: underline; }
-      blockquote { border-left: 4px solid #3b82f6; padding-left: 16px; padding: 8px 16px; margin: 6px 0; background-color: #eff6ff; }
-      code { background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; font-size: 14px; color: #dc2626; font-family: monospace; }
-      pre { background-color: #1f2937; color: #f3f4f6; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 6px 0; }
-      iframe { max-width: 100%; }
-    </style>
-    <script>
-      // YouTube iframe 처리
-      document.addEventListener('DOMContentLoaded', function() {
-        const iframes = document.querySelectorAll('iframe[src*="youtube"]');
-        iframes.forEach(iframe => {
-          iframe.setAttribute('allowfullscreen', '');
-          iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
-        });
-        
-        // 테이블을 wrapper로 감싸기
-        const tables = document.querySelectorAll('table');
-        tables.forEach(table => {
-          if (table.parentElement.classList.contains('table-wrapper')) return;
-          
-          const wrapper = document.createElement('div');
-          wrapper.className = 'table-wrapper';
-          table.parentNode.insertBefore(wrapper, table);
-          wrapper.appendChild(table);
-        });
-      });
-    </script>
-  </head>
-  <body>${removeTableControls(item.content || '') || '<p style="color: #9ca3af; text-align: center;">내용이 없습니다.</p>'}</body>
-</html>
-              `,
+              html: buildWebViewHtml(removeTableControls(item.content || '') || '<p style="color: #9ca3af; text-align: center;">내용이 없습니다.</p>'),
             }}
             style={styles.webview}
             scalesPageToFit={false}

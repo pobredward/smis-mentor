@@ -56,27 +56,29 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
       }
     });
 
-    // 토글 블록 클릭 이벤트 추가
+    // 레거시 toggle-block 클릭 이벤트 (기존 저장 데이터 호환)
     const toggleHeaders = containerRef.current.querySelectorAll('.toggle-header');
     toggleHeaders.forEach((header) => {
+      // data 속성으로 중복 등록 방지
+      if (header.getAttribute('data-toggle-bound') === 'true') return;
+      header.setAttribute('data-toggle-bound', 'true');
+
       const toggleBlock = header.parentElement;
       if (!toggleBlock) return;
 
       header.addEventListener('click', () => {
-        const content = toggleBlock.querySelector('.toggle-content');
+        const toggleContent = toggleBlock.querySelector('.toggle-content');
         const isCollapsed = toggleBlock.getAttribute('data-collapsed') === 'true';
 
         if (isCollapsed) {
-          // 펼치기
           toggleBlock.setAttribute('data-collapsed', 'false');
-          if (content instanceof HTMLElement) {
-            content.style.display = 'block';
+          if (toggleContent instanceof HTMLElement) {
+            toggleContent.style.display = 'block';
           }
         } else {
-          // 접기
           toggleBlock.setAttribute('data-collapsed', 'true');
-          if (content instanceof HTMLElement) {
-            content.style.display = 'none';
+          if (toggleContent instanceof HTMLElement) {
+            toggleContent.style.display = 'none';
           }
         }
       });
@@ -168,7 +170,60 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
           font-weight: 700;
         }
         
-        /* 토글 블록 스타일 */
+        /* Details(토글) 블록 스타일 - Tiptap Details 익스텐션 저장 HTML */
+        /* 저장 형태: <details open?><summary>제목</summary><div data-type="detailsContent">내용</div></details> */
+        .prose details {
+          border: none;
+          border-radius: 0;
+          padding: 0.125rem 0;
+          margin: 0.25rem 0;
+          background-color: transparent;
+        }
+
+        .prose details > summary {
+          display: flex;
+          align-items: center;
+          gap: 0.3rem;
+          cursor: pointer;
+          user-select: none;
+          font-weight: 600;
+          list-style: none;
+          line-height: 1.5;
+          padding: 0;
+          transition: opacity 0.15s;
+        }
+
+        .prose details > summary:hover {
+          opacity: 0.75;
+        }
+
+        .prose details > summary::-webkit-details-marker {
+          display: none;
+        }
+
+        /* 토글 화살표 아이콘 — 텍스트 중앙 정렬 */
+        .prose details > summary::before {
+          content: '▶';
+          font-size: 0.6rem;
+          color: #6b7280;
+          transition: transform 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          flex-shrink: 0;
+          height: 1.5em;
+        }
+
+        .prose details[open] > summary::before {
+          transform: rotate(90deg);
+        }
+
+        .prose details > div[data-type="detailsContent"],
+        .prose details > div:not([class]) {
+          padding-left: 1.25rem;
+          padding-top: 0.375rem;
+        }
+
+        /* 레거시 toggle-block 호환 (기존 저장 데이터) */
         .prose .toggle-block {
           border: 1px solid #e5e7eb;
           border-radius: 0.5rem;
