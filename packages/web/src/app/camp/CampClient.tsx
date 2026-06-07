@@ -33,9 +33,20 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
+  const isAdmin = userData?.role === 'admin';
+  // admin은 adminTempActiveCamp 또는 activeJobExperienceId가 있으면 캠프 접근 가능
+  const adminActiveCampId =
+    isAdmin
+      ? ((userData as any).adminTempActiveCamp as string | undefined) ||
+        userData?.activeJobExperienceId
+      : undefined;
+
   // 활성 캠프 타입 로드 (F 캠프 여부 판별용)
   useEffect(() => {
-    const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+    const activeJobCodeId =
+      adminActiveCampId ||
+      userData?.activeJobExperienceId ||
+      userData?.jobExperiences?.[0]?.id;
     if (!activeJobCodeId) return;
     jobCodesService.getJobCodesByIds([activeJobCodeId]).then(codes => {
       if (codes.length > 0 && codes[0].code) {
@@ -43,11 +54,15 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
         setIsFamilyCamp(type === 'F');
       }
     }).catch(() => {});
-  }, [userData?.activeJobExperienceId, userData?.jobExperiences]);
+  }, [adminActiveCampId, userData?.activeJobExperienceId, userData?.jobExperiences]);
 
   // 관리자가 캠프를 아직 배정하지 않은 경우
-  const hasNoCampAssigned =
-    userData && (!userData.jobExperiences || userData.jobExperiences.length === 0);
+  // admin은 임시 활성화(adminTempActiveCamp) 또는 activeJobExperienceId가 있으면 진입 허용
+  const hasNoCampAssigned = userData && (
+    isAdmin
+      ? !adminActiveCampId
+      : (!userData.jobExperiences || userData.jobExperiences.length === 0)
+  );
   
   // 원어민 유저는 '수업' 탭 제외
   const allTabs: { id: TabName; title: string; path: string }[] = [
