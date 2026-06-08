@@ -39,25 +39,29 @@ export default function ProfilePage() {
   const [deletingDoc, setDeletingDoc] = useState<'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert' | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const checkAuthAndLoadData = async () => {
       try {
         setAuthChecking(true);
         await waitForAuthReady();
         
-        // userData가 없으면 새로고침 시도 (네이버/카카오 포함)
+        // userData가 없으면 한 번만 새로고침 시도 (네이버/카카오 포함)
         if (!userData) {
           await refreshUserData();
         }
 
-        setAuthChecking(false);
+        if (!cancelled) setAuthChecking(false);
       } catch (error) {
         console.error('인증 상태 확인 오류:', error);
-        setAuthChecking(false);
+        if (!cancelled) setAuthChecking(false);
       }
     };
 
     checkAuthAndLoadData();
-  }, [waitForAuthReady, userData, refreshUserData]);
+    return () => { cancelled = true; };
+  // userData를 의존성에서 제거 → refreshUserData 후 userData 변경으로 인한 무한루프 방지
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitForAuthReady, refreshUserData]);
 
   useEffect(() => {
     const fetchJobCodes = async () => {
@@ -90,8 +94,13 @@ export default function ProfilePage() {
       setLoading(false);
     };
 
-    if (!authChecking && userData) {
-      fetchJobCodes();
+    if (!authChecking) {
+      if (userData) {
+        fetchJobCodes();
+      } else {
+        // authChecking이 끝났는데 userData가 없으면 로딩 해제 (Layout의 requireAuth가 리다이렉트 처리)
+        setLoading(false);
+      }
     }
   }, [userData, authChecking]);
 
