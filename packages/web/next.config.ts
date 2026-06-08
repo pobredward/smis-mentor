@@ -18,7 +18,13 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "frame-src 'self' https://*.notion.site https://*.notion.so https://docs.google.com https://www.google.com https://postcode.map.kakao.com http://postcode.map.kakao.com https://*.daumcdn.net http://*.daumcdn.net;",
+            // Firebase Google OAuth 팝업: accounts.google.com, smis-mentor.firebaseapp.com 필수
+            value: "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com https://*.notion.site https://*.notion.so https://docs.google.com https://www.google.com https://postcode.map.kakao.com http://postcode.map.kakao.com https://*.daumcdn.net http://*.daumcdn.net;",
+          },
+          {
+            // Firebase 소셜 로그인 팝업(Google 등)이 부모 창과 통신하기 위해 unsafe-none 필요
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'unsafe-none',
           },
         ],
       },

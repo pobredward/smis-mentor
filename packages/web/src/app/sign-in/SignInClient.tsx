@@ -334,25 +334,30 @@ export function SignInClient() {
         const currentUser = auth.currentUser;
         
         logger.info('🔑 NEED_PHONE - Firebase Auth UID:', currentUser?.uid);
-        logger.info('🔑 Provider UID (네이버 ID):', data.providerUid);
+        logger.info('🔑 Provider UID:', data.providerUid);
         logger.info('🔑 Provider:', data.providerId);
         
-        // ✅ Firebase Auth UID 또는 Provider UID를 socialData에 저장
-        // 네이버/카카오 신규 가입의 경우 currentUser가 없으므로 email을 키로 사용
+        // ✅ Firebase Auth UID 저장
+        // 구글/애플: signInWithPopup으로 이미 Firebase Auth 계정 생성됨 → UID 보존
+        // 네이버/카카오: Firebase Auth 계정이 없으므로 임시 키 생성
         const updatedSocialData = {
           ...data,
-          firebaseAuthUid: currentUser?.uid || `${data.providerId}_${data.email}`, // 임시 키 생성
+          firebaseAuthUid: currentUser?.uid || `${data.providerId}_${data.email}`,
         };
         
         logger.info('💾 updatedSocialData:', {
           email: updatedSocialData.email,
           firebaseAuthUid: updatedSocialData.firebaseAuthUid,
+          provider: data.providerId,
         });
         
-        if (currentUser) {
+        // 구글/애플은 signInWithPopup으로 생성된 Firebase Auth 계정을 회원가입에서 재사용
+        // → 삭제하지 않고 유지 (details/page.tsx의 auth.currentUser로 접근)
+        // 네이버/카카오는 Firebase Auth 계정이 없으므로 삭제할 것도 없음
+        if (currentUser && (data.providerId === 'naver' || data.providerId === 'kakao')) {
           try {
             await currentUser.delete();
-            logger.info('🗑️ Firebase Auth 임시 계정 삭제 완료');
+            logger.info('🗑️ 네이버/카카오 Firebase Auth 임시 계정 삭제 완료');
           } catch (deleteError) {
             logger.error('계정 삭제 실패:', deleteError);
             await auth.signOut();

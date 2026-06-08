@@ -352,26 +352,7 @@ export default function SignUpDetails() {
         // 🔥 소셜 가입과 일반 가입 분기 처리
         let tempPasswordForSocial: string | undefined;
         if (socialSignUp) {
-          // 소셜 가입: 일반 가입처럼 이메일/비밀번호로 Firebase Auth 계정 생성
-          // (네이버 신규 가입은 Custom Token을 생성할 Firestore 사용자가 없으므로)
-          logger.info('✅ 소셜 신규 가입 - Firebase Auth 계정 생성');
-          
-          // 임시 비밀번호 생성 (사용자는 모르는 비밀번호)
-          tempPasswordForSocial = `${email}_${Date.now()}_${Math.random().toString(36)}`;
-          
-          try {
-            const userCredential = await signUp(email, tempPasswordForSocial);
-            newUserId = userCredential.user.uid;
-            logger.info('✅ Firebase Auth 계정 생성 완료, UID:', newUserId);
-          } catch (authError: any) {
-            if (authError.code === 'auth/email-already-in-use') {
-              // 이미 계정이 존재하면 로그인으로 안내
-              toast.error('이 이메일은 이미 사용 중입니다. 로그인 페이지로 이동합니다.');
-              router.push('/sign-in');
-              return;
-            }
-            throw authError;
-          }
+          logger.info('✅ 소셜 신규 가입 처리 시작:', { socialProvider, firebaseAuthUid });
           
           // socialProvider 동적 처리 및 정규화
           // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
@@ -379,22 +360,59 @@ export default function SignUpDetails() {
           const normalizedProviderId = provider === 'naver' || provider === 'kakao' 
             ? provider 
             : `${provider}.com`;
+
+          // 구글/애플: signInWithPopup으로 이미 Firebase Auth 계정이 생성되어 있음
+          // → auth.currentUser를 재사용해 소셜 연동 유지
+          const isGoogleOrApple = provider === 'google' || provider === 'apple';
+          const currentUser = auth.currentUser;
+
+          if (isGoogleOrApple && currentUser) {
+            // 구글/애플: 기존 Firebase Auth 계정(소셜 UID) 재사용
+            newUserId = currentUser.uid;
+            logger.info('✅ 구글/애플 신규 가입 - 기존 Auth UID 재사용:', newUserId);
+
+            authProvidersData = {
+              authProviders: [{
+                providerId: normalizedProviderId,
+                uid: socialProviderUid || currentUser.uid,
+                email,
+                linkedAt: now,
+                displayName: socialDisplayName || name,
+                photoURL: socialPhotoURL,
+              }],
+              primaryAuthMethod: 'social',
+            };
+          } else {
+            // 네이버/카카오: Firebase Auth 계정이 없으므로 임시 비밀번호로 생성
+            tempPasswordForSocial = `${email}_${Date.now()}_${Math.random().toString(36)}`;
             
-          authProvidersData = {
-            authProviders: [{
-              providerId: normalizedProviderId,
-              uid: socialProviderUid || newUserId, // 소셜 제공자 고유 ID 우선
-              email,
-              linkedAt: now,
-              displayName: socialDisplayName || name,
-              photoURL: socialPhotoURL,
-            }],
-            primaryAuthMethod: 'social',
-            // 🔑 소셜 전용 계정의 Firebase Auth 로그인용 비밀번호
-            // - 사용자가 모르는 시스템 생성 비밀번호
-            // - 모든 연동된 소셜 계정(네이버, 카카오 등)이 이 비밀번호로 로그인
-            _firebaseAuthPassword: tempPasswordForSocial,
-          };
+            try {
+              const userCredential = await signUp(email, tempPasswordForSocial);
+              newUserId = userCredential.user.uid;
+              logger.info('✅ 네이버/카카오 신규 가입 - Firebase Auth 계정 생성:', newUserId);
+            } catch (authError: any) {
+              if (authError.code === 'auth/email-already-in-use') {
+                toast.error('이 이메일은 이미 사용 중입니다. 로그인 페이지로 이동합니다.');
+                router.push('/sign-in');
+                return;
+              }
+              throw authError;
+            }
+            
+            authProvidersData = {
+              authProviders: [{
+                providerId: normalizedProviderId,
+                uid: socialProviderUid || newUserId,
+                email,
+                linkedAt: now,
+                displayName: socialDisplayName || name,
+                photoURL: socialPhotoURL,
+              }],
+              primaryAuthMethod: 'social',
+              // 네이버/카카오 전용: Firebase Auth 로그인용 시스템 생성 비밀번호
+              _firebaseAuthPassword: tempPasswordForSocial,
+            };
+          }
         } else {
           // 일반 가입: 새 Firebase Auth 계정 생성
           if (!password) {
