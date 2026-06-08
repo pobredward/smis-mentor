@@ -15,7 +15,8 @@ import Button from '@/components/common/Button';
 import ProgressSteps from '@/components/common/ProgressSteps';
 import { FaEnvelope, FaLock, FaInfoCircle } from 'react-icons/fa';
 
-const step2Schema = z.object({
+// 일반 가입: 이메일/비밀번호 필수
+const step2SchemaDefault = z.object({
   email: z.string().email('Please enter a valid email address.'),
   password: z
     .string()
@@ -30,7 +31,14 @@ const step2Schema = z.object({
   path: ['confirmPassword'],
 });
 
-type Step2FormValues = z.infer<typeof step2Schema>;
+// 소셜 가입: 이메일/비밀번호 불필요
+const step2SchemaSocial = z.object({
+  email: z.string().optional(),
+  password: z.string().optional(),
+  confirmPassword: z.string().optional(),
+});
+
+type Step2FormValues = z.infer<typeof step2SchemaDefault>;
 
 export default function ForeignSignUpStep2() {
   const router = useRouter();
@@ -57,7 +65,7 @@ export default function ForeignSignUpStep2() {
     handleSubmit,
     formState: { errors },
   } = useForm<Step2FormValues>({
-    resolver: zodResolver(step2Schema),
+    resolver: zodResolver(socialSignUp ? step2SchemaSocial : step2SchemaDefault),
   });
 
   if (!firstName || !lastName || !countryCode || !phone) {
@@ -100,11 +108,17 @@ export default function ForeignSignUpStep2() {
         ? `${firstName} ${middleName} ${lastName}`
         : `${firstName} ${lastName}`;
 
+      // 소셜 가입 시 이메일은 auth.currentUser에서 가져옴 (폼 입력 없음)
+      const currentUser = auth.currentUser;
+      const resolvedEmail = socialSignUp
+        ? (currentUser?.email ?? '')
+        : (data.email ?? '');
+
       // 전화번호로 기존 사용자 확인
       const existingUserByPhone = await getUserByPhone(fullPhone);
       
       // 이메일로 기존 사용자 확인
-      const existingUserByEmail = await getUserByEmail(data.email);
+      const existingUserByEmail = resolvedEmail ? await getUserByEmail(resolvedEmail) : null;
       
       let userId: string;
       let isUpdatingExistingUser = false;
@@ -114,23 +128,26 @@ export default function ForeignSignUpStep2() {
       if (socialSignUp && socialProvider) {
         logger.info('🔗 Social sign-up flow for foreign teacher');
         
-        // Firebase Auth 계정 확인 및 생성
-        const currentUser = auth.currentUser;
         if (!currentUser) {
           // 네이버/카카오는 Firebase Auth 계정이 없으므로 생성
           logger.info('🔐 Creating Firebase Auth account for social sign-up (Naver/Kakao)');
           const { createUserWithEmailAndPassword } = await import('firebase/auth');
           
+          if (!resolvedEmail) {
+            toast.error('Could not retrieve email from social account. Please try again.');
+            setIsLoading(false);
+            return;
+          }
+          
           // 임시 비밀번호 생성
-          tempPasswordForSocial = `${data.email}_${Date.now()}_${Math.random().toString(36)}`;
+          tempPasswordForSocial = `${resolvedEmail}_${Date.now()}_${Math.random().toString(36)}`;
           
           try {
-            const userCredential = await createUserWithEmailAndPassword(auth, data.email, tempPasswordForSocial);
+            const userCredential = await createUserWithEmailAndPassword(auth, resolvedEmail, tempPasswordForSocial);
             userId = userCredential.user.uid;
             logger.info('✅ Firebase Auth account created, UID:', userId);
           } catch (authError: any) {
             if (authError.code === 'auth/email-already-in-use') {
-              // 이미 계정이 있으면 로그인 시도
               logger.info('⚠️ Email already exists, trying to sign in...');
               toast.error('This email is already in use. Please sign in instead.');
               setIsLoading(false);
@@ -220,7 +237,7 @@ export default function ForeignSignUpStep2() {
         userId: userId,
         id: userId,
         name: fullName,
-        email: data.email,
+        email: resolvedEmail,
         phone: fullPhone,
         phoneNumber: fullPhone,
         password: '',
@@ -261,7 +278,7 @@ export default function ForeignSignUpStep2() {
               ? socialProvider
               : `${socialProvider}.com`,
             uid: socialProviderUid || userId,
-            email: data.email,
+            email: resolvedEmail,
             linkedAt: Timestamp.now(),
             displayName: socialDisplayName,
             photoURL: socialPhotoURL,
@@ -273,7 +290,7 @@ export default function ForeignSignUpStep2() {
           authProviders: [{
             providerId: 'password',
             uid: userId,
-            email: data.email,
+            email: resolvedEmail,
             linkedAt: Timestamp.now(),
           }],
           primaryAuthMethod: 'password',
