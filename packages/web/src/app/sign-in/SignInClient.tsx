@@ -487,13 +487,57 @@ export function SignInClient() {
               setIsLoading(false);
               return;
             } else {
-              // 이메일이 같으면 바로 로그인
-              toast.success('Welcome back! Logging you in...');
-              setTimeout(() => {
-                const params = new URLSearchParams(window.location.search);
-                const redirectTo = params.get('redirect');
-                router.push(redirectTo || '/');
-              }, 1000);
+              // 이메일이 같으면 Firebase Auth 세션 복원 후 로그인
+              logger.info('🔑 원어민 재로그인 - Firebase Auth 세션 복원 시작');
+              try {
+                const currentUser = auth.currentUser;
+                const targetUserId = existingUser.userId;
+
+                // 구글/애플은 팝업 세션이 있을 수 있으므로 UID 비교 후 필요 시 복원
+                if (socialData.providerId === 'google.com' || socialData.providerId === 'apple.com') {
+                  if (currentUser?.uid !== targetUserId) {
+                    const firebaseAuthPassword = (existingUser as any)._firebaseAuthPassword;
+                    if (firebaseAuthPassword) {
+                      await signIn(existingUser.email, firebaseAuthPassword);
+                    } else {
+                      toast.loading('로그인 인증 중...', { id: 'foreign-relogin-loading' });
+                      try {
+                        await signInWithCustomTokenFromFunction(targetUserId, existingUser.email, targetUserId);
+                        toast.dismiss('foreign-relogin-loading');
+                      } catch (err) {
+                        toast.dismiss('foreign-relogin-loading');
+                        throw err;
+                      }
+                    }
+                  }
+                } else {
+                  // 네이버/카카오: Firebase Auth 계정이 없으므로 비밀번호 또는 Custom Token으로 로그인
+                  const firebaseAuthPassword = (existingUser as any)._firebaseAuthPassword;
+                  if (firebaseAuthPassword) {
+                    await signIn(existingUser.email, firebaseAuthPassword);
+                  } else {
+                    toast.loading('로그인 인증 중...', { id: 'foreign-relogin-loading' });
+                    try {
+                      await signInWithCustomTokenFromFunction(targetUserId, existingUser.email, targetUserId);
+                      toast.dismiss('foreign-relogin-loading');
+                    } catch (err) {
+                      toast.dismiss('foreign-relogin-loading');
+                      throw err;
+                    }
+                  }
+                }
+
+                toast.success('Welcome back! Logging you in...');
+                setTimeout(() => {
+                  const params = new URLSearchParams(window.location.search);
+                  const redirectTo = params.get('redirect');
+                  router.push(redirectTo || '/');
+                }, 1000);
+              } catch (loginError) {
+                logger.error('❌ 원어민 재로그인 실패:', loginError);
+                toast.error('Login failed. Please try again or contact the administrator.');
+                setIsLoading(false);
+              }
               return;
             }
           }
@@ -513,6 +557,7 @@ export function SignInClient() {
               `socialSignUp=true&` +
               `tempUserId=${existingUser.userId}&` +
               `socialProvider=${provider}&` +
+              `socialEmail=${encodeURIComponent(socialData.email || '')}&` +
               `socialProviderUid=${encodeURIComponent(socialData.providerUid || '')}&` +
               `socialDisplayName=${encodeURIComponent(socialData.name || '')}&` +
               `socialPhotoURL=${encodeURIComponent(socialData.photoURL || '')}`
@@ -552,6 +597,7 @@ export function SignInClient() {
             `phone=${encodeURIComponent(data.phoneNumber)}&` +
             `socialSignUp=true&` +
             `socialProvider=${provider}&` +
+            `socialEmail=${encodeURIComponent(socialData.email || '')}&` +
             `socialProviderUid=${encodeURIComponent(socialData.providerUid || '')}&` +
             `socialDisplayName=${encodeURIComponent(socialData.name || '')}&` +
             `socialPhotoURL=${encodeURIComponent(socialData.photoURL || '')}`
@@ -635,8 +681,8 @@ export function SignInClient() {
         logger.info('💾 SessionStorage 저장 - firebaseAuthUid:', socialData.firebaseAuthUid);
         
         if (role === 'foreign_temp') {
-          // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
-          router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=${provider}&socialProviderUid=${encodeURIComponent(socialData.providerUid || '')}&socialDisplayName=${encodeURIComponent(socialData.name || '')}&socialPhotoURL=${encodeURIComponent(socialData.photoURL || '')}`);
+          // 소셜 로그인이므로 foreign/account로 이동 (이름/전화 params는 없지만 tempUserId로 Firestore 조회)
+          router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=${provider}&socialEmail=${encodeURIComponent(socialData.email || '')}&socialProviderUid=${encodeURIComponent(socialData.providerUid || '')}&socialDisplayName=${encodeURIComponent(socialData.name || '')}&socialPhotoURL=${encodeURIComponent(socialData.photoURL || '')}`);
         } else {
           // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
           // SessionStorage에 저장

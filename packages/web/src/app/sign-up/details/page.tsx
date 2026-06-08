@@ -187,65 +187,73 @@ export default function SignUpDetails() {
         
         // 🔥 소셜 가입과 일반 가입 분기 처리
         if (socialSignUp) {
-          // 소셜 가입: Firebase Auth 계정이 이미 존재
+          const provider = socialProvider || 'google';
+          const normalizedProviderId = provider === 'naver' || provider === 'kakao'
+            ? provider
+            : `${provider}.com`;
+          const isGoogleOrApple = provider === 'google' || provider === 'apple';
           let currentUser = auth.currentUser;
-          
-          // 네이버/카카오의 경우 Custom Token으로 재로그인 시도
-          if (!currentUser && (socialProvider === 'naver' || socialProvider === 'kakao')) {
-            logger.info('🔄 Custom Token 재로그인 시도...', { firebaseAuthUid, tempUserId, email });
+
+          if (isGoogleOrApple) {
+            // 구글/애플: signInWithPopup으로 이미 Firebase Auth 계정이 생성되어 있음
+            if (!currentUser) {
+              logger.error('❌ 구글/애플 소셜 Auth 없음:', { socialProvider, email });
+              toast.error('인증 상태가 올바르지 않습니다. 다시 로그인해주세요.');
+              signupStorage.clear();
+              router.push('/sign-in');
+              setIsLoading(false);
+              return;
+            }
+            newUserId = currentUser.uid;
+            logger.info('✅ 구글/애플 temp 활성화 - Auth UID 재사용:', newUserId);
+          } else {
+            // 네이버/카카오: Firebase Auth 계정이 없으므로 임시 비밀번호로 신규 생성
+            // (합성 firebaseAuthUid는 Custom Token으로 사용 불가)
+            logger.info('🆕 네이버/카카오 temp 활성화 - Firebase Auth 신규 생성');
+            const tempPw = `${email}_${Date.now()}_${Math.random().toString(36)}`;
             try {
-              const { signInWithCustomTokenFromFunction } = await import('@/lib/firebaseService');
-              // firebaseAuthUid 또는 tempUserId 사용
-              const uidToUse = firebaseAuthUid || tempUserId;
-              
-              if (uidToUse) {
-                await signInWithCustomTokenFromFunction(uidToUse, email);
-                currentUser = auth.currentUser;
-                logger.info('✅ Custom Token 재로그인 성공:', currentUser?.uid);
-              } else {
-                logger.error('❌ UID 정보 없음');
+              const naverCred = await signUp(email, tempPw);
+              newUserId = naverCred.user.uid;
+              currentUser = naverCred.user;
+              logger.info('✅ 네이버/카카오 temp 활성화 - Auth 계정 생성:', newUserId);
+              // Firestore에 저장할 임시 비밀번호 (재로그인용)
+              userCredential = {
+                user: naverCred.user,
+                authProviders: [{
+                  providerId: normalizedProviderId,
+                  uid: socialProviderUid || newUserId,
+                  email,
+                  linkedAt: now,
+                  displayName: socialDisplayName || name,
+                  photoURL: socialPhotoURL,
+                }],
+                primaryAuthMethod: 'social',
+                _firebaseAuthPassword: tempPw,
+              };
+            } catch (authError: any) {
+              if (authError.code === 'auth/email-already-in-use') {
+                toast.error('이 이메일은 이미 사용 중입니다. 로그인 페이지로 이동합니다.');
+                router.push('/sign-in');
+                return;
               }
-            } catch (error) {
-              logger.error('❌ Custom Token 재로그인 실패:', error);
+              throw authError;
             }
           }
-          
-          if (!currentUser) {
-            logger.error('❌ Auth 상태 확인 실패:', {
-              socialProvider,
-              email,
-              tempUserId,
-              firebaseAuthUid,
-            });
-            toast.error('인증 상태가 올바르지 않습니다. 다시 로그인해주세요.');
-            signupStorage.clear();
-            router.push('/sign-in');
-            setIsLoading(false);
-            return;
+
+          if (!userCredential) {
+            userCredential = {
+              user: currentUser,
+              authProviders: [{
+                providerId: normalizedProviderId,
+                uid: socialProviderUid || currentUser!.uid,
+                email,
+                linkedAt: now,
+                displayName: socialDisplayName || name,
+                photoURL: socialPhotoURL,
+              }],
+              primaryAuthMethod: 'social',
+            };
           }
-          
-          newUserId = currentUser.uid;
-          logger.info('✅ 소셜 가입 - Auth UID 사용:', newUserId);
-          
-          // socialProvider 동적 처리 및 정규화
-          // 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
-          const provider = socialProvider || 'google';
-          const normalizedProviderId = provider === 'naver' || provider === 'kakao' 
-            ? provider 
-            : `${provider}.com`;
-            
-          userCredential = {
-            user: currentUser,
-            authProviders: [{
-              providerId: normalizedProviderId,
-              uid: socialProviderUid || currentUser.uid, // 소셜 제공자 고유 ID 우선
-              email,
-              linkedAt: now,
-              displayName: socialDisplayName || name,
-              photoURL: socialPhotoURL,
-            }],
-            primaryAuthMethod: 'social',
-          };
         } else {
           // 일반 가입: 새 Firebase Auth 계정 생성
           if (!password) {
@@ -319,6 +327,10 @@ export default function SignUpDetails() {
           ...(socialSignUp && {
             authProviders: userCredential.authProviders,
             primaryAuthMethod: userCredential.primaryAuthMethod,
+            // 네이버/카카오 temp 활성화: 재로그인용 임시 비밀번호 저장
+            ...(userCredential._firebaseAuthPassword && {
+              _firebaseAuthPassword: userCredential._firebaseAuthPassword,
+            }),
           }),
           ...geocodeUpdate, // 좌표 정보 추가
         }, newUserId);

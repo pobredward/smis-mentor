@@ -39,6 +39,8 @@ const step2SchemaSocial = z.object({
 });
 
 type Step2FormValues = z.infer<typeof step2SchemaDefault>;
+type Step2SocialFormValues = z.infer<typeof step2SchemaSocial>;
+type Step2AnyFormValues = Step2FormValues | Step2SocialFormValues;
 
 export default function ForeignSignUpStep2() {
   const router = useRouter();
@@ -59,13 +61,15 @@ export default function ForeignSignUpStep2() {
   const socialProviderUid = searchParams.get('socialProviderUid') ? decodeURIComponent(searchParams.get('socialProviderUid') as string) : null;
   const socialDisplayName = searchParams.get('socialDisplayName') ? decodeURIComponent(searchParams.get('socialDisplayName') as string) : null;
   const socialPhotoURL = searchParams.get('socialPhotoURL') ? decodeURIComponent(searchParams.get('socialPhotoURL') as string) : null;
+  // 네이버/카카오는 auth.currentUser가 없으므로 URL로 이메일 전달
+  const socialEmail = searchParams.get('socialEmail') ? decodeURIComponent(searchParams.get('socialEmail') as string) : null;
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<Step2FormValues>({
-    resolver: zodResolver(socialSignUp ? step2SchemaSocial : step2SchemaDefault),
+  } = useForm<Step2AnyFormValues>({
+    resolver: zodResolver(socialSignUp ? step2SchemaSocial : step2SchemaDefault) as any,
   });
 
   if (!firstName || !lastName || !countryCode || !phone) {
@@ -92,7 +96,7 @@ export default function ForeignSignUpStep2() {
     );
   }
 
-  const onSubmit = async (data: Step2FormValues) => {
+  const onSubmit = async (data: Step2AnyFormValues) => {
     setIsLoading(true);
     try {
       // 전화번호에 국가코드 추가
@@ -108,10 +112,11 @@ export default function ForeignSignUpStep2() {
         ? `${firstName} ${middleName} ${lastName}`
         : `${firstName} ${lastName}`;
 
-      // 소셜 가입 시 이메일은 auth.currentUser에서 가져옴 (폼 입력 없음)
+      // 소셜 가입 시 이메일 우선순위: auth.currentUser → URL socialEmail param → 폼 입력
+      // 네이버/카카오는 auth.currentUser가 null이므로 URL로 전달된 소셜 이메일 사용
       const currentUser = auth.currentUser;
       const resolvedEmail = socialSignUp
-        ? (currentUser?.email ?? '')
+        ? (currentUser?.email ?? socialEmail ?? '')
         : (data.email ?? '');
 
       // 전화번호로 기존 사용자 확인
@@ -198,7 +203,7 @@ export default function ForeignSignUpStep2() {
           const { auth } = await import('@/lib/firebase');
           
           try {
-            const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+            const userCredential = await createUserWithEmailAndPassword(auth, data.email!, data.password!);
             userId = userCredential.user.uid;
             isUpdatingExistingUser = true;
             logger.info('✅ Created new Firebase Auth account, will migrate temp data to UID:', userId);
@@ -223,13 +228,20 @@ export default function ForeignSignUpStep2() {
           logger.info('🔐 Creating new Firebase Authentication account:', data.email);
           const { createUserWithEmailAndPassword } = await import('firebase/auth');
           const { auth } = await import('@/lib/firebase');
-          const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+          const userCredential = await createUserWithEmailAndPassword(auth, data.email!, data.password!);
           userId = userCredential.user.uid;
           logger.info('✅ Firebase Authentication account created, UID:', userId);
         }
       }
 
       // 2. Firestore에 사용자 문서 생성 또는 업데이트
+      if (!userId) {
+        logger.error('❌ userId가 설정되지 않음 — Firebase Auth 계정 생성 실패');
+        toast.error('Account creation failed. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+
       const { doc, setDoc, Timestamp } = await import('firebase/firestore');
       const { db } = await import('@/lib/firebase');
 
@@ -428,7 +440,17 @@ export default function ForeignSignUpStep2() {
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <p className="text-sm text-green-800 flex items-center">
                     <span className="mr-2">✓</span>
-                    <span>You are signing up with Google. No password required.</span>
+                    <span>
+                      You are signing up with{' '}
+                      {socialProvider === 'naver'
+                        ? 'Naver'
+                        : socialProvider === 'kakao'
+                        ? 'Kakao'
+                        : socialProvider === 'apple'
+                        ? 'Apple'
+                        : 'Google'}
+                      . No password required.
+                    </span>
                   </p>
                 </div>
               )}
