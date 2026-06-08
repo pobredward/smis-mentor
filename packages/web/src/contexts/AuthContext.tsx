@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { getUserByEmail, updateUserActiveJobCode } from '@/lib/firebaseService';
+import { getUserByEmail, getUserById, updateUserActiveJobCode } from '@/lib/firebaseService';
 import { User } from '@/types';
 import { logger, ensureActiveJobExperience } from '@smis-mentor/shared';
 
@@ -222,10 +222,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setCurrentUser(user);
         
         if (user) {
-          // 이메일이 없는 경우 (비정상 상태)
+          // 이메일이 없는 경우 → UID로 Firestore 직접 조회 (구글 팝업 세션 복원 시 발생 가능)
           if (!user.email) {
-            logger.warn('Firebase Auth 사용자에 이메일이 없습니다. 로그아웃 처리합니다.');
-            setUserData(null);
+            logger.warn('Firebase Auth 사용자에 이메일이 없습니다. UID로 Firestore 조회를 시도합니다.', user.uid);
+            try {
+              const userByUid = await getUserById(user.uid);
+              if (userByUid) {
+                const activeJobExpId = await ensureActiveJobExperience(db, userByUid as unknown as User);
+                if (activeJobExpId && !userByUid.activeJobExperienceId) {
+                  userByUid.activeJobExperienceId = activeJobExpId;
+                }
+                setUserData(userByUid as unknown as User);
+                logger.info('UID로 사용자 데이터 로드 성공:', userByUid.name);
+              } else {
+                logger.warn('UID로도 사용자를 찾을 수 없습니다:', user.uid);
+                setUserData(null);
+              }
+            } catch (err) {
+              logger.error('UID로 사용자 조회 실패:', err);
+              setUserData(null);
+            }
             setLoading(false);
             setAuthReady(true);
             return;
