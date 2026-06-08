@@ -18,6 +18,9 @@ export interface SignUpData {
   socialProvider?: string;
   socialEmail?: string;
   firebaseAuthUid?: string;  // 네이버/카카오 소셜 로그인 시 Firebase Auth UID 저장
+  socialProviderUid?: string; // 소셜 제공자 고유 ID
+  socialDisplayName?: string; // 소셜 로그인 표시 이름
+  socialPhotoURL?: string;    // 소셜 로그인 프로필 이미지
 }
 
 const STORAGE_KEY = 'signup_data';

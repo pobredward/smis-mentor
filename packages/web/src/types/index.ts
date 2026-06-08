@@ -35,6 +35,7 @@ export interface User {
     groupRole: JobExperienceGroupRole,
     classCode?: string
   }>;
+  jobCodeIds?: string[];
   activeJobExperienceId?: string;
   partTimeJobs?: PartTimeJob[];
   createdAt: Timestamp;
@@ -62,7 +63,7 @@ export interface User {
   rrnLast?: string;
   university?: string;
   grade?: number;
-  isOnLeave?: boolean;
+  isOnLeave?: boolean | null;
   major1?: string;
   major2?: string;
   referralPath?: string;

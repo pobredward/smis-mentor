@@ -7,7 +7,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { signupStorage } from '@/utils/signupStorage';
+import { signupStorage, SignUpData } from '@/utils/signupStorage';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -36,7 +36,7 @@ export default function SignUpEducation() {
   useEffect(() => {
     const data = signupStorage.get();
     
-    const requiredFields: (keyof typeof data)[] = data?.socialSignUp 
+    const requiredFields: (keyof SignUpData)[] = data?.socialSignUp 
       ? ['name', 'phoneNumber', 'email'] // 소셜 로그인
       : ['name', 'phoneNumber', 'email', 'password']; // 일반 가입
     

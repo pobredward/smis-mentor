@@ -56,7 +56,7 @@ const profileSchemaBase = z.object({
     required_error: '학년을 선택해주세요.',
     invalid_type_error: '학년을 선택해주세요.',
   }).min(1, '학년을 선택해주세요.').max(6, '유효한 학년을 선택해주세요.').optional(),
-  isOnLeave: z.boolean(),
+  isOnLeave: z.boolean().nullable().optional(),
   major1: z.string().optional(),
   major2: z.string().optional(),
   partTimeJobs: z.array(partTimeJobSchema).optional(),

@@ -10,7 +10,7 @@ import DaumPostcode, { Address } from 'react-daum-postcode';
 import toast from 'react-hot-toast';
 import { getUserByPhone, updateUser, createUser, signUp } from '@/lib/firebaseService';
 import { getUserInfoFromRRN } from '@/utils/userUtils';
-import { signupStorage } from '@/utils/signupStorage';
+import { signupStorage, SignUpData } from '@/utils/signupStorage';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -48,7 +48,7 @@ export default function SignUpDetails() {
   useEffect(() => {
     const data = signupStorage.get();
     
-    const requiredFields: (keyof typeof data)[] = data?.socialSignUp
+    const requiredFields: (keyof SignUpData)[] = data?.socialSignUp
       ? ['name', 'phoneNumber', 'email', 'university', 'grade', 'major1']
       : ['name', 'phoneNumber', 'email', 'password', 'university', 'grade', 'major1'];
     
