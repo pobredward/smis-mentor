@@ -1650,6 +1650,8 @@ export const addUserJobCode = async (
       jobExperiences: updatedJobExperiences,
       jobCodeIds: updatedJobCodeIds,
     });
+    // 해당 사용자의 캐시 무효화 → 다음 조회 시 최신 데이터 반영
+    await removeCache(CACHE_STORE.USERS, userId);
     return updatedJobExperiences;
   } catch (error) {
     logger.error('직무 코드 추가 실패:', error);
