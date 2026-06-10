@@ -56,7 +56,7 @@ type Screen =
   | 'social-signup';
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
-  const { isAuthenticated, userData, loading, updateActiveJobCode, refreshUserData } = useAuth();
+  const { isAuthenticated, userData, loading, updateActiveJobCode, refreshUserData, isSharingLocation } = useAuth();
   const { prefetchCampData, invalidateCampData } = useCampDataPrefetch();
   const { prefetchRecruitmentData, invalidateRecruitmentData } = useRecruitmentDataPrefetch();
   const { 
@@ -170,6 +170,16 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
   const handleJobCodeSelect = async (jobCodeId: string) => {
     if (userData?.activeJobExperienceId === jobCodeId) {
+      return;
+    }
+
+    // 위치 공유 중이면 캠프 전환 차단
+    if (isSharingLocation) {
+      Alert.alert(
+        '위치 공유 중',
+        '위치 공유를 먼저 꺼주세요.\n위치 공유를 끈 후 활성 캠프를 변경할 수 있습니다.',
+        [{ text: '확인', style: 'default' }]
+      );
       return;
     }
 

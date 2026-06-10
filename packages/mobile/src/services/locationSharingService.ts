@@ -25,7 +25,14 @@ const BG_LOCATION_TASK = 'SMIS_BG_LOCATION_UPDATE';
 let bgContext: {
   userId: string;
   campCode: string;
-  userInfo: { displayName: string; photoURL: string | null; role: UserRole };
+  userInfo: {
+    displayName: string;
+    photoURL: string | null;
+    role: UserRole;
+    group: string | null;
+    groupRole: string | null;
+    classCode: string | null;
+  };
 } | null = null;
 
 // 백그라운드 위치 태스크 등록 (앱 최상위에서 한 번만 실행됨)
@@ -64,6 +71,12 @@ export interface UserLocationData {
   displayName: string;
   photoURL: string | null;
   role: UserRole;
+  // 캠프 그룹 (예: 'junior', 'summer' 등). 없으면 null
+  group: string | null;
+  // 캠프 그룹 내 역할 (예: '담임', 'Speaking' 등). 없으면 null
+  groupRole: string | null;
+  // 담당 반 코드 (예: 'A1'). 없으면 null
+  classCode: string | null;
   isSharing: boolean;
   // 0~1 사이 값 (예: 0.85 = 85%), null이면 미지원 기기
   batteryLevel: number | null;
@@ -100,7 +113,14 @@ export const getLocationPermissionStatus =
 const startBackgroundLocationUpdates = async (
   userId: string,
   campCode: string,
-  userInfo: { displayName: string; photoURL: string | null; role: UserRole }
+  userInfo: {
+    displayName: string;
+    photoURL: string | null;
+    role: UserRole;
+    group: string | null;
+    groupRole: string | null;
+    classCode: string | null;
+  }
 ): Promise<void> => {
   try {
     // 이미 실행 중이면 중복 등록 방지
@@ -168,7 +188,14 @@ const upsertLocationDoc = async (
   userId: string,
   campCode: string,
   coords: { latitude: number; longitude: number },
-  userInfo: { displayName: string; photoURL: string | null; role: UserRole },
+  userInfo: {
+    displayName: string;
+    photoURL: string | null;
+    role: UserRole;
+    group: string | null;
+    groupRole: string | null;
+    classCode: string | null;
+  },
   isSharing: boolean
 ): Promise<void> => {
   const { batteryLevel, isCharging } = await getBatteryInfo();
@@ -183,6 +210,9 @@ const upsertLocationDoc = async (
       displayName: userInfo.displayName,
       photoURL: userInfo.photoURL,
       role: userInfo.role,
+      group: userInfo.group,
+      groupRole: userInfo.groupRole,
+      classCode: userInfo.classCode,
       isSharing,
       batteryLevel,
       isCharging,
@@ -193,26 +223,30 @@ const upsertLocationDoc = async (
 };
 
 // 현재 위치를 가져오는 내부 헬퍼
-// getCurrentPositionAsync 실패 시 getLastKnownPositionAsync로 폴백
+// 1순위: 캐시된 마지막 위치 (즉시 반환) → 2순위: getCurrentPositionAsync (3초 타임아웃)
 const getInitialPosition =
   async (): Promise<Location.LocationObject | null> => {
-    try {
-      return await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-        // 10초 내 응답 없으면 타임아웃
-        timeInterval: 10000,
-      });
-    } catch (e) {
-      logger.warn('[LocationSharing] getCurrentPositionAsync 실패, 마지막 위치로 폴백:', e);
-    }
-
+    // 캐시된 위치를 먼저 시도 (즉시 반환 → 빠른 UX)
     try {
       const last = await Location.getLastKnownPositionAsync({
-        maxAge: 5 * 60 * 1000, // 5분 이내 캐시 허용
+        maxAge: 10 * 60 * 1000, // 10분 이내 캐시 허용
       });
       if (last) return last;
     } catch (e) {
       logger.warn('[LocationSharing] getLastKnownPositionAsync 실패:', e);
+    }
+
+    // 캐시 없으면 현재 위치 요청 (3초 타임아웃)
+    try {
+      const result = await Promise.race([
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      if (result) return result;
+    } catch (e) {
+      logger.warn('[LocationSharing] getCurrentPositionAsync 실패:', e);
     }
 
     return null;
@@ -228,6 +262,9 @@ export const startLocationSharing = async (
     displayName: string;
     photoURL: string | null;
     role: UserRole;
+    group: string | null;
+    groupRole: string | null;
+    classCode: string | null;
   }
 ): Promise<boolean> => {
   // 기존 감시가 있으면 먼저 중지
@@ -236,25 +273,11 @@ export const startLocationSharing = async (
     activeLocationSubscription = null;
   }
 
-  // 초기 위치 획득 (실패해도 watchPositionAsync로 계속 진행)
-  const initialPosition = await getInitialPosition();
-
-  if (initialPosition) {
-    try {
-      await upsertLocationDoc(db, userId, campCode, initialPosition.coords, userInfo, true);
-    } catch (e) {
-      logger.error('[LocationSharing] Firestore 초기 위치 저장 실패:', e);
-      return false;
-    }
-  }
-  // initialPosition이 null인 경우: 문서 없이 감시만 먼저 시작
-  // watchPositionAsync에서 첫 위치가 오면 그때 Firestore에 기록됨
-
-  // 위치 변화 감시 시작
-  let isFirstUpdate = initialPosition === null; // 초기 위치 없었으면 첫 업데이트에서 isSharing=true로 문서 생성
-
-  try {
-    activeLocationSubscription = await Location.watchPositionAsync(
+  // 초기 위치 획득과 watchPositionAsync 시작을 병렬 처리
+  // → 초기 위치를 기다리는 동안 감시도 미리 준비
+  const [initialPosition, watchSubscription] = await Promise.all([
+    getInitialPosition(),
+    Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: 5000, // 5초마다
@@ -262,12 +285,50 @@ export const startLocationSharing = async (
       },
       async (locationUpdate) => {
         try {
-          if (isFirstUpdate) {
-            // 초기 위치를 가져오지 못했던 경우 → 첫 콜백에서 문서 생성
-            await upsertLocationDoc(
-              db, userId, campCode, locationUpdate.coords, userInfo, true
-            );
-            isFirstUpdate = false;
+          const { batteryLevel, isCharging } = await getBatteryInfo();
+          const docId = getLocationDocId(campCode, userId);
+          await updateDoc(doc(db, 'userLocations', docId), {
+            lat: locationUpdate.coords.latitude,
+            lng: locationUpdate.coords.longitude,
+            batteryLevel,
+            isCharging,
+            updatedAt: serverTimestamp(),
+          });
+        } catch {
+          // 위치 업데이트 실패는 무시 (네트워크 오류 등)
+        }
+      }
+    ).catch((e) => {
+      logger.error('[LocationSharing] watchPositionAsync 시작 실패:', e);
+      return null;
+    }),
+  ]);
+
+  if (!watchSubscription) return false;
+  activeLocationSubscription = watchSubscription;
+
+  // 초기 위치로 Firestore 문서 생성 (있는 경우)
+  // 없으면 watchPositionAsync 첫 콜백에서 updateDoc이 실패하므로 upsert로 처리
+  if (initialPosition) {
+    try {
+      await upsertLocationDoc(db, userId, campCode, initialPosition.coords, userInfo, true);
+    } catch (e) {
+      logger.error('[LocationSharing] Firestore 초기 위치 저장 실패:', e);
+      activeLocationSubscription.remove();
+      activeLocationSubscription = null;
+      return false;
+    }
+  } else {
+    // 캐시된 위치도 없는 경우: watchPositionAsync 첫 콜백에서 upsert로 문서 생성
+    const originalCallback = activeLocationSubscription;
+    let firstUpdateDone = false;
+    activeLocationSubscription = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+      async (locationUpdate) => {
+        try {
+          if (!firstUpdateDone) {
+            firstUpdateDone = true;
+            await upsertLocationDoc(db, userId, campCode, locationUpdate.coords, userInfo, true);
           } else {
             const { batteryLevel, isCharging } = await getBatteryInfo();
             const docId = getLocationDocId(campCode, userId);
@@ -280,17 +341,16 @@ export const startLocationSharing = async (
             });
           }
         } catch {
-          // 위치 업데이트 실패는 무시 (네트워크 오류 등)
+          // 위치 업데이트 실패는 무시
         }
       }
-    );
-  } catch (e) {
-    logger.error('[LocationSharing] watchPositionAsync 시작 실패:', e);
-    return false;
+    ).catch(() => null);
+    originalCallback.remove(); // 이전 감시 중단
+    if (!activeLocationSubscription) return false;
   }
 
   // 백그라운드 위치 업데이트 시작 (Expo Go에서는 조용히 실패)
-  await startBackgroundLocationUpdates(userId, campCode, userInfo);
+  startBackgroundLocationUpdates(userId, campCode, userInfo); // await 없이 논블로킹
 
   return true;
 };
@@ -306,18 +366,21 @@ export const stopLocationSharing = async (
     activeLocationSubscription = null;
   }
 
-  // 백그라운드 위치 업데이트 중지
-  await stopBackgroundLocationUpdates();
-
-  try {
-    const docId = getLocationDocId(campCode, userId);
-    await updateDoc(doc(db, 'userLocations', docId), {
-      isSharing: false,
-      updatedAt: serverTimestamp(),
-    });
-  } catch {
-    // 문서가 없는 경우 등 무시
-  }
+  // Firestore 업데이트와 백그라운드 중지를 병렬 처리 (순서 의존성 없음)
+  await Promise.all([
+    (async () => {
+      try {
+        const docId = getLocationDocId(campCode, userId);
+        await updateDoc(doc(db, 'userLocations', docId), {
+          isSharing: false,
+          updatedAt: serverTimestamp(),
+        });
+      } catch {
+        // 문서가 없는 경우 등 무시
+      }
+    })(),
+    stopBackgroundLocationUpdates(),
+  ]);
 };
 
 // 포그라운드 위치 감시만 중단 (백그라운드 태스크는 계속 실행)

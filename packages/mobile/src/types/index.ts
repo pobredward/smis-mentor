@@ -76,4 +76,6 @@ export interface AuthContextType {
   waitForAuthReady: () => Promise<void>;
   updateActiveJobCode: (jobCodeId: string) => Promise<void>;
   triggerDataPrefetch: () => void;
+  isSharingLocation: boolean;
+  setIsSharingLocation: (sharing: boolean) => void;
 }

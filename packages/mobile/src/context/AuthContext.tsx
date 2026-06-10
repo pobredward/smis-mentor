@@ -41,6 +41,8 @@ const AuthContext = createContext<AuthContextType>({
   waitForAuthReady: async () => {},
   updateActiveJobCode: async () => {},
   triggerDataPrefetch: () => {},
+  isSharingLocation: false,
+  setIsSharingLocation: () => {},
 });
 
 // 데이터 프리페칭 트리거 이벤트 (싱글톤 패턴)
@@ -65,6 +67,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
+  // 위치 공유 상태 (LocationSharingScreen에서 동기화)
+  const [isSharingLocation, setIsSharingLocation] = useState(false);
   const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
   const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
   const hasPrefetchedRef = useRef(false); // 프리페칭 중복 방지
@@ -440,6 +444,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       waitForAuthReady,
       updateActiveJobCode,
       triggerDataPrefetch,
+      isSharingLocation,
+      setIsSharingLocation,
     }),
     [
       currentUser,
@@ -450,6 +456,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       waitForAuthReady,
       updateActiveJobCode,
       triggerDataPrefetch,
+      isSharingLocation,
+      setIsSharingLocation,
     ]
   );
 

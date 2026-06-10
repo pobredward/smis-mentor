@@ -12,6 +12,9 @@ import {
   ActivityIndicator,
   Animated,
   ScrollView,
+  Platform,
+  Pressable,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
@@ -86,13 +89,16 @@ const getRoleLabel = (role: UserRole | string): string => {
 };
 
 // 커스텀 마커 컴포넌트
+// iOS/Android 모두: 렌더 완료 콜백을 받아 tracksViewChanges 전환에 사용
 const UserMarker = React.memo(
   ({
     location,
     isMe,
+    onReady,
   }: {
     location: UserLocationData;
     isMe: boolean;
+    onReady?: () => void;
   }) => {
     const color = isMe ? '#ef4444' : getRoleColor(location.role);
     return (
@@ -108,9 +114,14 @@ const UserMarker = React.memo(
               source={{ uri: location.photoURL }}
               style={styles.markerAvatar}
               contentFit="cover"
+              // onLoad: expo-image가 이미지를 디코딩·렌더 완료한 시점 (iOS/Android 공통)
+              onLoad={onReady}
             />
           ) : (
-            <View style={[styles.markerAvatarFallback, { backgroundColor: color }]}>
+            <View
+              style={[styles.markerAvatarFallback, { backgroundColor: color }]}
+              onLayout={onReady}
+            >
               <Text style={styles.markerAvatarText}>
                 {location.displayName.charAt(0)}
               </Text>
@@ -126,6 +137,37 @@ const UserMarker = React.memo(
   }
 );
 
+// iOS/Android 공통: tracksViewChanges를 렌더 완료 후 false로 전환하는 마커 래퍼
+// photoURL이 있는 경우 이미지 로드 완료 후, 없는 경우 레이아웃 완료 후 전환
+const TrackedMarker = ({
+  coordinate,
+  onPress,
+  location,
+  isMe,
+}: {
+  coordinate: { latitude: number; longitude: number };
+  onPress: () => void;
+  location: UserLocationData;
+  isMe: boolean;
+}) => {
+  // 항상 true로 시작해 렌더 완료 후 false로 전환 (iOS/Android 동일)
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  const handleReady = useCallback(() => {
+    setTracksViewChanges(false);
+  }, []);
+
+  return (
+    <Marker
+      coordinate={coordinate}
+      tracksViewChanges={tracksViewChanges}
+      onPress={onPress}
+    >
+      <UserMarker location={location} isMe={isMe} onReady={handleReady} />
+    </Marker>
+  );
+};
+
 // 한국 중심 기본 지도 영역
 const DEFAULT_REGION: Region = {
   latitude: 36.5,
@@ -135,7 +177,7 @@ const DEFAULT_REGION: Region = {
 };
 
 export function LocationSharingScreen() {
-  const { userData } = useAuth();
+  const { userData, setIsSharingLocation } = useAuth();
   const mapRef = useRef<MapView | null>(null);
 
   const [isSharing, setIsSharing] = useState(false);
@@ -145,10 +187,16 @@ export function LocationSharingScreen() {
   const [myLocation, setMyLocation] = useState<UserLocationData | null>(null);
   const [isLoadingCampCode, setIsLoadingCampCode] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserLocationData | null>(null);
+  // 바텀시트 표시 여부 (pointerEvents 제어용 — 항상 마운트해 초기 딜레이 제거)
+  const [sheetVisible, setSheetVisible] = useState(false);
+
+  // 바텀시트 애니메이션
+  const sheetY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   const unsubscribeRef = useRef<Unsubscribe | null>(null);
   const isSharingRef = useRef(false); // AppState 핸들러에서 최신 값 참조용
-  const cardAnim = useRef(new Animated.Value(0)).current; // 0=숨김, 1=표시
+  const hasInitialFitRef = useRef(false); // 최초 1회 지도 범위 조정 완료 여부
 
   // 활성 캠프코드 로드
   useEffect(() => {
@@ -170,98 +218,6 @@ export function LocationSharingScreen() {
       .catch(() => {})
       .finally(() => setIsLoadingCampCode(false));
   }, [userData?.activeJobExperienceId, userData?.jobExperiences]);
-
-  // 캠프코드가 결정되면 Firestore 실시간 구독 시작
-  useEffect(() => {
-    if (!campCode) return;
-
-    unsubscribeRef.current?.();
-    unsubscribeRef.current = subscribeToLocationSharing(
-      db,
-      campCode,
-      (locations) => {
-        const me = locations.find((l) => l.userId === userData?.userId);
-        setMyLocation(me ?? null);
-        setSharedLocations(locations);
-
-        // 내가 공유 중인 경우 공유 상태 동기화
-        if (me) {
-          setIsSharing(me.isSharing);
-          isSharingRef.current = me.isSharing;
-        }
-      }
-    );
-
-    return () => {
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
-    };
-  }, [campCode, userData?.userId]);
-
-  // 앱 상태 변화 처리 (백그라운드 진입 시 위치 감시 중지)
-  useEffect(() => {
-    const handleAppStateChange = async (nextState: AppStateStatus) => {
-      if (!userData?.userId || !campCode) return;
-
-      if (nextState === 'background' || nextState === 'inactive') {
-        if (isSharingRef.current) {
-          // 위치 감시만 중단, Firestore isSharing 상태는 유지 (포그라운드 복귀 시 재개)
-          pauseLocationWatcher();
-        }
-      } else if (nextState === 'active') {
-        if (isSharingRef.current) {
-          // 포그라운드 복귀 시 위치 감시 재개
-          await startLocationSharing(db, userData.userId, campCode, {
-            displayName: userData.name,
-            photoURL: userData.profileImage ?? null,
-            role: userData.role,
-          });
-        }
-      }
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
-  }, [userData, campCode]);
-
-  // 화면 이탈 시 위치 감시는 유지 (탭 전환이므로 공유 상태 유지)
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
-        // 탭 전환 시 위치 감시는 계속 유지 (명시적 토글 OFF만 중단)
-      };
-    }, [])
-  );
-
-  // 유저 카드 표시
-  const showUserCard = useCallback((loc: UserLocationData) => {
-    setSelectedUser(loc);
-    Animated.spring(cardAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
-    // 해당 마커로 지도 이동
-    mapRef.current?.animateToRegion(
-      {
-        latitude: loc.lat - 0.002,
-        longitude: loc.lng,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      },
-      400
-    );
-  }, [cardAnim]);
-
-  // 유저 카드 닫기
-  const hideUserCard = useCallback(() => {
-    Animated.timing(cardAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => setSelectedUser(null));
-  }, [cardAnim]);
 
   // 공유 중인 유저들이 보이도록 지도 범위 조정
   const fitMapToLocations = useCallback((locations: UserLocationData[]) => {
@@ -289,12 +245,122 @@ export function LocationSharingScreen() {
     );
   }, []);
 
-  // 위치 목록이 변경될 때 지도 범위 자동 조정
+  // 캠프코드가 결정되면 Firestore 실시간 구독 시작
   useEffect(() => {
-    if (sharedLocations.length > 0) {
-      fitMapToLocations(sharedLocations);
-    }
-  }, [sharedLocations, fitMapToLocations]);
+    if (!campCode) return;
+
+    unsubscribeRef.current?.();
+    hasInitialFitRef.current = false; // 캠프코드 변경 시 초기 fit 리셋
+
+    unsubscribeRef.current = subscribeToLocationSharing(
+      db,
+      campCode,
+      (locations) => {
+        const me = locations.find((l) => l.userId === userData?.userId);
+        setMyLocation(me ?? null);
+        setSharedLocations(locations);
+
+        // 내가 공유 중인 경우 공유 상태 동기화
+        if (me) {
+          setIsSharing(me.isSharing);
+          isSharingRef.current = me.isSharing;
+        }
+
+        // 처음 데이터를 받았을 때만 1회 지도 범위 조정
+        if (!hasInitialFitRef.current && locations.length > 0) {
+          hasInitialFitRef.current = true;
+          setTimeout(() => fitMapToLocations(locations), 300);
+        }
+      }
+    );
+
+    return () => {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+    };
+  }, [campCode, userData?.userId, fitMapToLocations]);
+
+  // 앱 상태 변화 처리 (백그라운드 진입 시 위치 감시 중지)
+  useEffect(() => {
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (!userData?.userId || !campCode) return;
+
+      if (nextState === 'background' || nextState === 'inactive') {
+        if (isSharingRef.current) {
+          // 위치 감시만 중단, Firestore isSharing 상태는 유지 (포그라운드 복귀 시 재개)
+          pauseLocationWatcher();
+        }
+      } else if (nextState === 'active') {
+        if (isSharingRef.current) {
+          const activeExp = userData.jobExperiences?.find(
+            (e) => e.id === userData.activeJobExperienceId
+          ) ?? userData.jobExperiences?.[0];
+          // 포그라운드 복귀 시 위치 감시 재개
+          await startLocationSharing(db, userData.userId, campCode, {
+            displayName: userData.name,
+            photoURL: userData.profileImage ?? null,
+            role: userData.role,
+            group: activeExp?.group ?? null,
+            groupRole: activeExp?.groupRole ?? null,
+            classCode: activeExp?.classCode ?? null,
+          });
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [userData, campCode]);
+
+  // 화면 이탈 시 위치 감시는 유지 (탭 전환이므로 공유 상태 유지)
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        // 탭 전환 시 위치 감시는 계속 유지 (명시적 토글 OFF만 중단)
+      };
+    }, [])
+  );
+
+  // 유저 카드 표시 (바텀시트 슬라이드 업 — state 변경 없이 즉시 애니메이션)
+  const showUserCard = useCallback((loc: UserLocationData) => {
+    setSelectedUser(loc);
+    setSheetVisible(true);
+    // Animated 값은 이미 초기화돼 있으므로 즉시 시작
+    sheetY.setValue(Dimensions.get('window').height);
+    backdropOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(sheetY, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 3,
+        speed: 18,       // 더 빠르게
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [sheetY, backdropOpacity]);
+
+  // 유저 카드 닫기 (슬라이드 다운 후 숨김)
+  const hideUserCard = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(sheetY, {
+        toValue: Dimensions.get('window').height,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setSheetVisible(false);
+      setSelectedUser(null);
+    });
+  }, [sheetY, backdropOpacity]);
 
   // 토글 처리
   const handleToggle = async (value: boolean) => {
@@ -330,10 +396,16 @@ export function LocationSharingScreen() {
         }
 
         // 4단계: 권한 확인 완료 → 위치 공유 시작
+        const activeExp = userData.jobExperiences?.find(
+          (e) => e.id === userData.activeJobExperienceId
+        ) ?? userData.jobExperiences?.[0];
         const success = await startLocationSharing(db, userData.userId, campCode, {
           displayName: userData.name,
           photoURL: userData.profileImage ?? null,
           role: userData.role,
+          group: activeExp?.group ?? null,
+          groupRole: activeExp?.groupRole ?? null,
+          classCode: activeExp?.classCode ?? null,
         });
 
         if (!success) {
@@ -347,12 +419,14 @@ export function LocationSharingScreen() {
 
         setIsSharing(true);
         isSharingRef.current = true;
+        setIsSharingLocation(true);
       } else {
         // 공유 중지
         await stopLocationSharing(db, userData.userId, campCode);
         setIsSharing(false);
         isSharingRef.current = false;
         setMyLocation(null);
+        setIsSharingLocation(false);
       }
     } finally {
       setIsToggling(false);
@@ -407,7 +481,7 @@ export function LocationSharingScreen() {
   const sharingCount = sharedLocations.length;
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       {/* 헤더 컨트롤 패널 */}
       <View style={styles.controlPanel}>
         <View style={styles.controlLeft}>
@@ -449,30 +523,27 @@ export function LocationSharingScreen() {
           showsUserLocation={false}
           showsMyLocationButton={false}
           toolbarEnabled={false}
-          onPress={hideUserCard}
         >
           {/* 내 마커 */}
           {myLocation && (
-            <Marker
+            <TrackedMarker
               key={`me_${userData?.userId}`}
               coordinate={{ latitude: myLocation.lat, longitude: myLocation.lng }}
-              tracksViewChanges={false}
               onPress={() => showUserCard(myLocation)}
-            >
-              <UserMarker location={myLocation} isMe />
-            </Marker>
+              location={myLocation}
+              isMe
+            />
           )}
 
           {/* 다른 유저 마커 */}
           {otherLocations.map((loc) => (
-            <Marker
+            <TrackedMarker
               key={loc.userId}
               coordinate={{ latitude: loc.lat, longitude: loc.lng }}
-              tracksViewChanges={false}
               onPress={() => showUserCard(loc)}
-            >
-              <UserMarker location={loc} isMe={false} />
-            </Marker>
+              location={loc}
+              isMe={false}
+            />
           ))}
         </MapView>
 
@@ -516,42 +587,6 @@ export function LocationSharingScreen() {
           </View>
         )}
 
-        {/* 마커 클릭 시 유저 정보 카드 */}
-        {selectedUser && (
-          <Animated.View
-            style={[
-              styles.userCard,
-              {
-                transform: [
-                  {
-                    translateY: cardAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [200, 0],
-                    }),
-                  },
-                ],
-                opacity: cardAnim,
-              },
-            ]}
-          >
-            <UserInfoCard
-              location={selectedUser}
-              isMe={selectedUser.userId === userData?.userId}
-              onClose={hideUserCard}
-              onLocate={() => {
-                mapRef.current?.animateToRegion(
-                  {
-                    latitude: selectedUser.lat,
-                    longitude: selectedUser.lng,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                  },
-                  400
-                );
-              }}
-            />
-          </Animated.View>
-        )}
       </View>
 
       {/* 범례 */}
@@ -564,6 +599,46 @@ export function LocationSharingScreen() {
           />
         </View>
       )}
+
+      {/* 바텀시트 — 항상 마운트, pointerEvents로 터치 차단해 첫 클릭 딜레이 제거 */}
+      {/* 반투명 배경 */}
+      <Animated.View
+        style={[styles.sheetBackdrop, { opacity: backdropOpacity }]}
+        pointerEvents={sheetVisible ? 'box-none' : 'none'}
+      >
+        <Pressable style={{ flex: 1 }} onPress={hideUserCard} />
+      </Animated.View>
+
+      {/* 시트 본체 */}
+      <Animated.View
+        style={[
+          styles.sheetContainer,
+          { transform: [{ translateY: sheetY }] },
+        ]}
+        pointerEvents={sheetVisible ? 'box-none' : 'none'}
+      >
+        <Pressable onPress={(e) => e.stopPropagation()}>
+          {selectedUser && (
+            <UserInfoCard
+              location={selectedUser}
+              isMe={selectedUser.userId === userData?.userId}
+              onClose={hideUserCard}
+              onLocate={() => {
+                hideUserCard();
+                mapRef.current?.animateToRegion(
+                  {
+                    latitude: selectedUser.lat,
+                    longitude: selectedUser.lng,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                  },
+                  400
+                );
+              }}
+            />
+          )}
+        </Pressable>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -638,6 +713,24 @@ const UserInfoCard = React.memo(
                 <Text style={[styles.userCardRoleText, { color }]}>
                   {getRoleLabel(location.role)}
                 </Text>
+                {location.group && (
+                  <>
+                    <Text style={styles.userCardRoleSep}>·</Text>
+                    <Text style={styles.userCardGroupRole}>{location.group}</Text>
+                  </>
+                )}
+                {location.groupRole && (
+                  <>
+                    <Text style={styles.userCardRoleSep}>·</Text>
+                    <Text style={styles.userCardGroupRole}>{location.groupRole}</Text>
+                  </>
+                )}
+                {location.classCode && (
+                  <>
+                    <Text style={styles.userCardRoleSep}>·</Text>
+                    <Text style={styles.userCardGroupRole}>{location.classCode}</Text>
+                  </>
+                )}
               </View>
               <View style={styles.userCardStatusRow}>
                 <Text style={styles.userCardStatus}>위치 공유 중</Text>
@@ -677,6 +770,15 @@ const UserInfoCard = React.memo(
   }
 );
 
+// 역할 정렬 순서: 나(본인) → 멘토 → 원어민 → 관리자
+const ROLE_ORDER: Record<string, number> = {
+  mentor: 1,
+  mentor_temp: 1,
+  foreign: 2,
+  foreign_temp: 2,
+  admin: 3,
+};
+
 // 공유 중인 유저 목록 범례 (가로 스크롤 칩)
 const ScrollLegend = React.memo(
   ({
@@ -688,6 +790,19 @@ const ScrollLegend = React.memo(
     myUserId: string | undefined;
     onSelect: (loc: UserLocationData) => void;
   }) => {
+    const sorted = [...locations].sort((a, b) => {
+      // 본인은 맨 앞
+      const aIsMe = a.userId === myUserId ? 0 : 1;
+      const bIsMe = b.userId === myUserId ? 0 : 1;
+      if (aIsMe !== bIsMe) return aIsMe - bIsMe;
+      // 역할 순서
+      const aOrder = ROLE_ORDER[a.role] ?? 9;
+      const bOrder = ROLE_ORDER[b.role] ?? 9;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      // 같은 역할 내 이름 가나다 순
+      return a.displayName.localeCompare(b.displayName, 'ko');
+    });
+
     return (
       <ScrollView
         horizontal
@@ -695,7 +810,7 @@ const ScrollLegend = React.memo(
         contentContainerStyle={styles.legendContent}
         style={styles.legendScroll}
       >
-        {locations.map((loc) => {
+        {sorted.map((loc) => {
           const isMe = loc.userId === myUserId;
           const color = isMe ? '#ef4444' : getRoleColor(loc.role);
           const { icon: batIcon, color: batColor, label: batLabel } = getBatteryDisplay(
@@ -725,14 +840,15 @@ const ScrollLegend = React.memo(
                   </Text>
                 </View>
               )}
-              {/* 이름 */}
-              <Text style={styles.legendName} numberOfLines={1}>
-                {isMe ? '나' : loc.displayName}
-              </Text>
-              {/* 배터리 */}
-              <View style={styles.legendBattery}>
-                <Ionicons name={batIcon as any} size={11} color={batColor} />
-                <Text style={[styles.legendBatteryLabel, { color: batColor }]}>{batLabel}</Text>
+              {/* 이름 + 배터리 (세로 배치) */}
+              <View style={styles.legendTextCol}>
+                <Text style={styles.legendName} numberOfLines={1}>
+                  {isMe ? '나' : loc.displayName}
+                </Text>
+                <View style={styles.legendBattery}>
+                  <Ionicons name={batIcon as any} size={10} color={batColor} />
+                  <Text style={[styles.legendBatteryLabel, { color: batColor }]}>{batLabel}</Text>
+                </View>
               </View>
             </TouchableOpacity>
           );
@@ -893,6 +1009,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
+  legendTextCol: {
+    flexDirection: 'column',
+    gap: 2,
+  },
   legendName: {
     fontSize: 12,
     color: '#1e293b',
@@ -908,23 +1028,37 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
-  // 유저 정보 카드
-  userCard: {
+  // 바텀시트 스타일
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    zIndex: 100,
+  },
+  sheetContainer: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-  },
-  userCardInner: {
-    backgroundColor: '#ffffff',
+    bottom: 0,
+    zIndex: 101,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingBottom: 16,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    // iOS 그림자
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
+    // Android 그림자
     elevation: 16,
+  },
+  userCard: {
+    backgroundColor: 'transparent',
+  },
+  userCardInner: {
+    // sheetContainer가 이미 흰색 배경 — 이중 배경 방지
+    backgroundColor: 'transparent',
+    paddingBottom: 32,
   },
   userCardHandle: {
     width: 36,
@@ -1000,6 +1134,16 @@ const styles = StyleSheet.create({
   userCardRoleText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  userCardRoleSep: {
+    fontSize: 12,
+    color: '#cbd5e1',
+    marginHorizontal: 2,
+  },
+  userCardGroupRole: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
   },
   userCardStatusRow: {
     flexDirection: 'row',
