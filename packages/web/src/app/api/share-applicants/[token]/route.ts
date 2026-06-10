@@ -91,13 +91,24 @@ export async function GET(
         
         if (userDoc.exists) {
           const rawUserData = userDoc.data() as any;
+          // 공유 링크는 비인증 접근 가능 → 민감 개인정보 필드 제외
           userData = {
-            ...rawUserData,
             id: userDoc.id,
-            // Timestamp를 ISO 문자열로 변환
+            name: rawUserData.name,
+            profileImage: rawUserData.profileImage || null,
+            university: rawUserData.university || null,
+            grade: rawUserData.grade || null,
+            major1: rawUserData.major1 || null,
+            major2: rawUserData.major2 || null,
+            selfIntroduction: rawUserData.selfIntroduction || null,
+            jobMotivation: rawUserData.jobMotivation || null,
+            partTimeJobs: rawUserData.partTimeJobs || [],
+            jobExperiences: rawUserData.jobExperiences || [],
+            role: rawUserData.role,
+            status: rawUserData.status,
             createdAt: rawUserData.createdAt?.toDate?.()?.toISOString() || null,
-            updatedAt: rawUserData.updatedAt?.toDate?.()?.toISOString() || null,
-            lastLoginAt: rawUserData.lastLoginAt?.toDate?.()?.toISOString() || null,
+            // 개인정보 필드 제외: email, phoneNumber, password, rrnFront, rrnLast,
+            // address, addressDetail, authProviders, foreignTeacher 문서 URL 등
             evaluationSummary: rawUserData.evaluationSummary ? {
               ...rawUserData.evaluationSummary,
               documentReview: rawUserData.evaluationSummary.documentReview ? {

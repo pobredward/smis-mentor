@@ -1,8 +1,9 @@
 import { logger } from '@smis-mentor/shared';
 import { NextRequest, NextResponse } from 'next/server';
 
-const NAVER_CLIENT_ID = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID!;
-const NAVER_CLIENT_SECRET = process.env.NEXT_PUBLIC_NAVER_CLIENT_SECRET!;
+const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || process.env.NEXT_PUBLIC_NAVER_CLIENT_ID!;
+// Client Secret은 서버 전용 환경변수로만 사용 (NEXT_PUBLIC_ 접두사 사용 금지)
+const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET!;
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
 export async function GET(request: NextRequest) {

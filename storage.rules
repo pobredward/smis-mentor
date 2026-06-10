@@ -1,0 +1,161 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ──────────────────────────────────────────────────────────────
+    // 헬퍼 함수
+    // ──────────────────────────────────────────────────────────────
+
+    // 로그인 여부
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 본인 여부
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // 이미지 파일 유형 검증
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // PDF 또는 이미지 파일
+    function isImageOrPdf() {
+      return request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType == 'application/pdf';
+    }
+
+    // 파일 크기 제한: 10MB
+    function isUnder10MB() {
+      return request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    // 파일 크기 제한: 5MB
+    function isUnder5MB() {
+      return request.resource.size <= 5 * 1024 * 1024;
+    }
+
+    // 파일 크기 제한: 50MB (업무 첨부파일)
+    function isUnder50MB() {
+      return request.resource.size <= 50 * 1024 * 1024;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 프로필 이미지 (웹)
+    // 경로: profileImages/{userId}/...
+    // 역할: 본인(업로드/삭제), 인증 사용자(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /profileImages/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if (
+        isOwner(userId) &&
+        isImage() &&
+        isUnder5MB()
+      );
+      allow delete: if isOwner(userId);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 프로필 이미지 (모바일)
+    // 경로: profile-images/{userId}
+    // 역할: 본인(업로드/삭제), 인증 사용자(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /profile-images/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if (
+        isOwner(userId) &&
+        isImage() &&
+        isUnder5MB()
+      );
+      allow delete: if isOwner(userId);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 원어민 교사 문서 (웹)
+    // 경로: foreignTeachers/{userId}/...
+    // 역할: 본인(업로드/삭제), admin(읽기)
+    // 민감 문서: 여권, 신분증, 통장사본 등
+    // ──────────────────────────────────────────────────────────────
+    match /foreignTeachers/{userId}/{allPaths=**} {
+      // 본인 또는 admin만 읽기 가능 (민감 문서)
+      allow read: if isOwner(userId);
+
+      // 프로필 이미지 (5MB 이하 이미지)
+      allow write: if (
+        isOwner(userId) &&
+        isImageOrPdf() &&
+        isUnder10MB()
+      );
+      allow delete: if isOwner(userId);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 원어민 교사 문서 (모바일)
+    // 경로: foreign-teachers/{userId}/...
+    // 역할: 본인(업로드/삭제), 본인(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /foreign-teachers/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId);
+      allow write: if (
+        isOwner(userId) &&
+        isImageOrPdf() &&
+        isUnder10MB()
+      );
+      allow delete: if isOwner(userId);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 업무 첨부파일
+    // 경로: tasks/{taskId}/...
+    // 역할: 인증 사용자(읽기), 인증 사용자(업로드), admin(삭제)
+    // ──────────────────────────────────────────────────────────────
+    match /tasks/{taskId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if (
+        isAuthenticated() &&
+        isUnder50MB()
+      );
+      allow delete: if isAuthenticated();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 채용 공고 이미지
+    // 경로: job-board-images/...
+    // 역할: 인증 사용자(읽기), 인증 사용자(업로드)
+    // ──────────────────────────────────────────────────────────────
+    match /job-board-images/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if (
+        isAuthenticated() &&
+        isImage() &&
+        isUnder10MB()
+      );
+      allow delete: if isAuthenticated();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 캠프 페이지 이미지
+    // 경로: campPages/{jobCodeId}/...
+    // 역할: 인증 사용자(읽기), 인증 사용자(업로드)
+    // ──────────────────────────────────────────────────────────────
+    match /campPages/{jobCodeId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if (
+        isAuthenticated() &&
+        isImageOrPdf() &&
+        isUnder10MB()
+      );
+      allow delete: if isAuthenticated();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 기본 거부 (명시되지 않은 모든 경로)
+    // ──────────────────────────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

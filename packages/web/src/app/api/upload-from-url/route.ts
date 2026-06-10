@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminStorage } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 const ALLOWED_HOSTS = [
   'prod-files-secure.s3.us-west-2.amazonaws.com',
@@ -28,6 +31,13 @@ function isAllowedUrl(url: string): boolean {
  */
 export async function POST(req: NextRequest) {
   try {
+    // 인증 확인: 캠프 페이지 이미지는 admin만 업로드 가능
+    const authContext = await getAuthenticatedUser(req);
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     const contentType = req.headers.get('content-type') || '';
 
     // --- 모드 1: 클라이언트가 blob 직접 전송 ---
@@ -37,6 +47,11 @@ export async function POST(req: NextRequest) {
 
       if (!file) {
         return NextResponse.json({ error: '파일이 없습니다.' }, { status: 400 });
+      }
+
+      // 파일 크기 제한 (10MB)
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json({ error: '파일 크기는 10MB를 초과할 수 없습니다.' }, { status: 400 });
       }
 
       const mimeType = file.type || 'image/jpeg';

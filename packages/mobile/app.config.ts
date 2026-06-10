@@ -180,7 +180,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
       EXPO_PUBLIC_NAVER_CLIENT_ID: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID,
-      EXPO_PUBLIC_NAVER_CLIENT_SECRET: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET,
+      // NAVER_CLIENT_SECRET은 앱 바이너리에 포함되면 안 됨. 서버 사이드 콜백(/api/auth/callback/naver)을 통해 처리.
+      // Expo Go OAuth 방식은 개발 환경 전용이므로 제한적 노출만 허용 (프로덕션 빌드 제외)
+      ...(process.env.NODE_ENV !== 'production' && {
+        EXPO_PUBLIC_NAVER_CLIENT_SECRET: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET,
+      }),
       kakaoRestApiKey: process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY,
     },
     owner: 'pobredward02',

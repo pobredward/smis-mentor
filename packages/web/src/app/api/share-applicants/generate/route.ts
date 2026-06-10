@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { shareApplicantsSchema } from '@/lib/validationSchemas';
 import { logger } from '@smis-mentor/shared';
 import { getAdminFirestore } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
 // Vercel에서 Node.js 런타임 사용 (Firebase Admin SDK 필요)
 export const runtime = 'nodejs';
@@ -10,6 +11,13 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // 지원자 공유 링크는 admin만 생성 가능
+    const authContext = await getAuthenticatedUser(request);
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) {
+      return adminCheck;
+    }
+
     logger.info('📝 공유 링크 생성 API 시작');
 
     const body = await request.json();

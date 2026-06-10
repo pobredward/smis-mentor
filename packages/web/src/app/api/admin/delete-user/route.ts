@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
       deletedUserEmail: userData?.email,
       deletedUserRole: userData?.role,
       deletedBy: adminUserId,
-      deletedByName: adminData?.name,
+      deletedByName: authContext!.user.name,
       authDeleted,
       authError,
       timestamp: new Date().toISOString(),

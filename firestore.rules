@@ -1,0 +1,414 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ──────────────────────────────────────────────────────────────
+    // 헬퍼 함수
+    // ──────────────────────────────────────────────────────────────
+
+    // 로그인 여부
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 사용자 역할 가져오기 (Firestore 문서 기반)
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // 역할 체크 헬퍼
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    function isMentor() {
+      return isAuthenticated() && getUserRole() in ['mentor', 'mentor_temp'];
+    }
+
+    function isForeign() {
+      return isAuthenticated() && getUserRole() in ['foreign', 'foreign_temp'];
+    }
+
+    // 활성 사용자 (temp 아님)
+    function isActiveUser() {
+      return isAuthenticated() && getUserRole() in ['admin', 'mentor', 'foreign'];
+    }
+
+    // 캠프 운영진 (admin + active mentor/foreign)
+    function isCampStaff() {
+      return isAuthenticated() && getUserRole() in ['admin', 'mentor', 'foreign'];
+    }
+
+    // 본인 여부
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // 필드 변경 감지: 변경되지 않아야 할 필드
+    function fieldUnchanged(field) {
+      return !(field in request.resource.data.diff(resource.data).affectedKeys());
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // users 컬렉션
+    // 역할: admin(전체), 본인(읽기 + 제한적 수정), 비인증(가입용 쓰기)
+    // ──────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // admin: 전체 조회
+      // 본인: 자신의 문서 읽기
+      allow read: if isAdmin() || isOwner(userId);
+
+      // 신규 가입 시 생성 (미인증 포함, 단 역할은 반드시 temp로 시작)
+      allow create: if (
+        // 반드시 temp 역할로만 생성 가능
+        request.resource.data.role in ['mentor_temp', 'foreign_temp'] &&
+        // 필수 필드 존재 확인
+        request.resource.data.keys().hasAll(['name', 'email', 'role', 'status', 'agreedTerms', 'agreedPersonal']) &&
+        // 이름 길이 제한 (DoS 방지)
+        request.resource.data.name is string &&
+        request.resource.data.name.size() <= 50 &&
+        // 이메일 길이 제한
+        request.resource.data.email is string &&
+        request.resource.data.email.size() <= 200 &&
+        // status는 'temp'만 허용
+        request.resource.data.status == 'temp'
+      );
+
+      // 수정 권한
+      allow update: if (
+        // admin: 모든 필드 수정 가능 (역할 변경 포함)
+        isAdmin() ||
+        // 본인: 비민감 필드만 수정 가능 (역할/상태/이메일 변경 불가)
+        (
+          isOwner(userId) &&
+          fieldUnchanged('role') &&
+          fieldUnchanged('status') &&
+          fieldUnchanged('deletedAt') &&
+          fieldUnchanged('deletedBy') &&
+          // 이름/이메일 길이 제한
+          (!('name' in request.resource.data) || request.resource.data.name.size() <= 50) &&
+          (!('email' in request.resource.data) || request.resource.data.email.size() <= 200)
+        )
+      );
+
+      // 삭제: admin만 가능 (Soft Delete)
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // jobCodes 컬렉션 (캠프 코드)
+    // 역할: admin(전체), 인증 사용자(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /jobCodes/{jobCodeId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // jobBoards 컬렉션 (채용 공고)
+    // 역할: admin(전체), 인증 사용자(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /jobBoards/{jobBoardId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // applicationHistories 컬렉션 (지원 내역)
+    // 역할: admin(전체), 본인(자신의 지원 내역 읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /applicationHistories/{applicationId} {
+      allow read: if (
+        isAdmin() ||
+        // 본인의 지원 내역만 읽기
+        (isAuthenticated() && resource.data.refUserId == request.auth.uid)
+      );
+      allow create: if (
+        isAuthenticated() &&
+        // 본인 명의로만 지원 가능
+        request.resource.data.refUserId == request.auth.uid &&
+        // 필수 필드
+        request.resource.data.keys().hasAll(['refUserId', 'refJobBoardId', 'applicationStatus', 'createdAt', 'updatedAt']) &&
+        // 최초 상태는 'pending'만 가능
+        request.resource.data.applicationStatus == 'pending'
+      );
+      // 상태 변경은 admin만
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // evaluationCriteria 컬렉션 (평가 기준 템플릿)
+    // 역할: admin(전체), 인증 사용자(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /evaluationCriteria/{criteriaId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // evaluations 컬렉션 (평가 데이터)
+    // 역할: admin(전체), active 사용자(본인이 평가한 것 읽기/생성)
+    // ──────────────────────────────────────────────────────────────
+    match /evaluations/{evaluationId} {
+      allow read: if (
+        isAdmin() ||
+        // 평가자 본인이 작성한 평가만 읽기
+        (isActiveUser() && resource.data.evaluatorId == request.auth.uid)
+      );
+      allow create: if (
+        isActiveUser() &&
+        // 본인 명의로만 평가 생성
+        request.resource.data.evaluatorId == request.auth.uid &&
+        // 필수 필드
+        request.resource.data.keys().hasAll(['refUserId', 'evaluationStage', 'criteriaTemplateId', 'evaluatorId', 'scores', 'totalScore', 'createdAt', 'updatedAt']) &&
+        // 점수 범위 체크 (0~100)
+        request.resource.data.totalScore is number &&
+        request.resource.data.totalScore >= 0 &&
+        request.resource.data.totalScore <= 100
+      );
+      allow update: if (
+        isAdmin() ||
+        // 평가자 본인만 수정 가능 (미완료 상태에서만)
+        (
+          isActiveUser() &&
+          resource.data.evaluatorId == request.auth.uid &&
+          resource.data.isFinalized == false &&
+          fieldUnchanged('evaluatorId') &&
+          fieldUnchanged('refUserId')
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // reviews 컬렉션 (후기)
+    // 역할: 인증 사용자(읽기), 본인(생성/수정/삭제)
+    // ──────────────────────────────────────────────────────────────
+    match /reviews/{reviewId} {
+      allow read: if isAuthenticated();
+      allow create: if (
+        isActiveUser() &&
+        request.resource.data.author.id == request.auth.uid &&
+        request.resource.data.keys().hasAll(['title', 'content', 'author', 'createdAt', 'updatedAt']) &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() <= 200 &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() <= 10000
+      );
+      allow update: if (
+        isAdmin() ||
+        (
+          isActiveUser() &&
+          resource.data.author.id == request.auth.uid &&
+          fieldUnchanged('author')
+        )
+      );
+      allow delete: if isAdmin() || (isActiveUser() && resource.data.author.id == request.auth.uid);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // smsTemplates 컬렉션 (SMS 템플릿)
+    // 역할: admin(전체), 캠프 스태프(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /smsTemplates/{templateId} {
+      allow read: if isCampStaff();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // stSheetCache 컬렉션 (ST시트 캐시 - 학생 데이터)
+    // 역할: admin(전체), 캠프 스태프(읽기)
+    // 주의: 민감한 학생 개인정보 포함 (주민번호 등)
+    // ──────────────────────────────────────────────────────────────
+    match /stSheetCache/{campCode} {
+      allow read: if isCampStaff();
+      // 쓰기는 서버(Cloud Functions/Admin SDK)를 통해서만 가능
+      allow write: if false;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // familySTSheetCache 컬렉션 (가족 ST시트 캐시)
+    // 역할: admin(전체), 캠프 스태프(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /familySTSheetCache/{campCode} {
+      allow read: if isCampStaff();
+      allow write: if false;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // campTasks 컬렉션 (캠프 업무)
+    // 역할: admin(전체 CRUD), 캠프 스태프(읽기 + 완료 체크)
+    // 한계: Firestore 규칙에서 배열 내부 요소(completions[*].userId)까지
+    //       request.auth.uid와 비교할 수 없음. 타인 완료 체크 방지는
+    //       Cloud Functions의 완료 처리 API를 통해 서버 사이드에서 검증할 것.
+    // ──────────────────────────────────────────────────────────────
+    match /campTasks/{taskId} {
+      allow read: if isCampStaff();
+      allow create: if isAdmin();
+      // 업무 완료/취소 처리: completions 필드만 수정 가능, 1개 단위 변경만 허용
+      allow update: if (
+        isAdmin() ||
+        (
+          isCampStaff() &&
+          // 완료 처리 및 업데이트 시간 외 필드 변경 불가
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completions', 'updatedAt']) &&
+          // 완료 항목 수는 정확히 1개 증가 또는 1개 감소만 허용 (본인 완료/취소)
+          (
+            request.resource.data.completions.size() == resource.data.completions.size() + 1 ||
+            request.resource.data.completions.size() == resource.data.completions.size() - 1
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // personalTasks 컬렉션 (개인 업무)
+    // 역할: 본인만 전체 CRUD
+    // ──────────────────────────────────────────────────────────────
+    match /personalTasks/{taskId} {
+      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      allow create: if (
+        isActiveUser() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.keys().hasAll(['ownerId', 'campCode', 'title', 'isCompleted', 'createdAt', 'updatedAt']) &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() <= 200
+      );
+      allow update: if (
+        isActiveUser() &&
+        resource.data.ownerId == request.auth.uid &&
+        // ownerId 변경 불가
+        fieldUnchanged('ownerId')
+      );
+      allow delete: if isActiveUser() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // taskCategories 컬렉션 (업무 카테고리)
+    // 역할: admin(전체), 인증 사용자(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /taskCategories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // campPages 컬렉션 (캠프 페이지)
+    // 역할: admin(전체), 역할 기반 읽기 (targetRole 체크)
+    // ──────────────────────────────────────────────────────────────
+    match /campPages/{pageId} {
+      allow read: if (
+        isAdmin() ||
+        (
+          isCampStaff() && (
+            // 공통 페이지는 모든 캠프 스태프 읽기 가능
+            resource.data.targetRole == 'common' ||
+            // 멘토 페이지
+            (resource.data.targetRole == 'mentor' && isMentor()) ||
+            // 원어민 페이지
+            (resource.data.targetRole == 'foreign' && isForeign())
+          )
+        )
+      );
+      allow create, update: if (
+        isAdmin() &&
+        request.resource.data.keys().hasAll(['jobCodeId', 'category', 'title', 'targetRole', 'content', 'order', 'createdAt', 'updatedAt']) &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() <= 200 &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() <= 500000
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // generationResources 컬렉션 (기수별 리소스 링크)
+    // 역할: admin(전체), 캠프 스태프(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /generationResources/{jobCodeId} {
+      allow read: if isCampStaff();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // lessonMaterials 컬렉션 (수업 자료)
+    // 역할: admin(전체), 캠프 스태프(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /lessonMaterials/{materialId} {
+      allow read: if isCampStaff();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+
+      // 서브컬렉션: sections
+      match /sections/{sectionId} {
+        allow read: if isCampStaff();
+        allow create, update: if isAdmin();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // interviewSettings 컬렉션 (면접 설정/링크)
+    // 역할: admin(전체), 인증 사용자(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /interviewSettings/{settingId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // appConfig 컬렉션 (앱 전역 설정)
+    // 역할: admin(전체), 인증 사용자(읽기) - 버전 체크 등
+    // ──────────────────────────────────────────────────────────────
+    match /appConfig/{configId} {
+      // 앱 버전 체크는 미인증 상태에서도 필요할 수 있음
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // campHomeMessages 컬렉션 (캠프별 홈 메시지)
+    // 역할: admin(전체), 인증 사용자(읽기)
+    // ──────────────────────────────────────────────────────────────
+    match /campHomeMessages/{campCode} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // shareTokens 컬렉션 (지원자 공유 토큰)
+    // 역할: 클라이언트 직접 접근 금지 (서버/Admin SDK 전용)
+    // ──────────────────────────────────────────────────────────────
+    match /shareTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // auditLogs 컬렉션 (감사 로그)
+    // 역할: admin(읽기), 쓰기는 서버 전용
+    // ──────────────────────────────────────────────────────────────
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 기본 거부 (명시되지 않은 모든 컬렉션)
+    // ──────────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
