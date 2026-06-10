@@ -1,22 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { Timestamp } from 'firebase-admin/firestore';
+import { getAdminFirestore } from '@/lib/firebase-admin';
 import { logger } from '@smis-mentor/shared';
 
 /**
  * 만료된 공유 토큰을 비활성화하는 API
- * 
- * 이 API는 다음과 같은 방법으로 실행할 수 있습니다:
+ * shareTokens 컬렉션은 client SDK 접근이 금지(rules: false)되어 있으므로
+ * 반드시 Admin SDK를 사용해야 합니다.
+ *
+ * 실행 방법:
  * 1. Vercel Cron Job을 통한 주기적 실행
  * 2. 수동 호출
  * 3. 다른 시스템에서 webhook으로 호출
  */
 export async function POST(request: NextRequest) {
   try {
-    // 보안을 위한 간단한 API 키 검증 (선택사항)
     const authHeader = request.headers.get('authorization');
     const apiKey = process.env.CRON_SECRET;
-    
+
     if (apiKey && authHeader !== `Bearer ${apiKey}`) {
       return NextResponse.json(
         { error: '인증되지 않은 요청입니다.' },
@@ -24,18 +25,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const adminDb = getAdminFirestore();
     const now = Timestamp.fromDate(new Date());
-    
+
     // 만료되었지만 아직 활성화된 토큰 조회
-    const shareTokensRef = collection(db, 'shareTokens');
-    const expiredTokensQuery = query(
-      shareTokensRef,
-      where('isActive', '==', true),
-      where('expiresAt', '<=', now)
-    );
-    
-    const expiredTokensSnapshot = await getDocs(expiredTokensQuery);
-    
+    const expiredTokensSnapshot = await adminDb
+      .collection('shareTokens')
+      .where('isActive', '==', true)
+      .where('expiresAt', '<=', now)
+      .get();
+
     if (expiredTokensSnapshot.empty) {
       return NextResponse.json({
         success: true,
@@ -44,14 +43,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 만료된 토큰들을 비활성화
-    const updatePromises = expiredTokensSnapshot.docs.map(async (tokenDoc) => {
-      return updateDoc(doc(db, 'shareTokens', tokenDoc.id), {
-        isActive: false,
-      });
+    // 배치로 만료된 토큰들을 비활성화
+    const batch = adminDb.batch();
+    expiredTokensSnapshot.docs.forEach((tokenDoc) => {
+      batch.update(tokenDoc.ref, { isActive: false });
     });
-
-    await Promise.all(updatePromises);
+    await batch.commit();
 
     return NextResponse.json({
       success: true,
