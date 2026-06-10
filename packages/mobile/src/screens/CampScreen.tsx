@@ -7,12 +7,13 @@ import { ClassScreen } from './ClassScreen';
 import { RoomScreen } from './RoomScreen';
 import { ScheduleScreen } from './ScheduleScreen';
 import { GuideScreen } from './GuideScreen';
+import { LocationSharingScreen } from './LocationSharingScreen';
 import { useAuth } from '../context/AuthContext';
 import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab } from '../context/CampTabContext';
 import { jobCodesService, stSheetService } from '../services';
 import { CampCode } from '@smis-mentor/shared';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room' | 'location';
 
 export function CampScreen() {
   const { userData } = useAuth();
@@ -50,6 +51,7 @@ export function CampScreen() {
         { id: 'guide', title: 'Guide' },
         ...(!isFamilyCamp ? [{ id: 'class' as TabName, title: 'Class' }] : []),
         { id: 'room', title: isFamilyCamp ? 'Family' : 'Room' },
+        { id: 'location', title: 'Map' },
       ]
     : [
         { id: 'education', title: '교육' },
@@ -59,6 +61,7 @@ export function CampScreen() {
         { id: 'guide', title: '인솔표' },
         ...(!isFamilyCamp ? [{ id: 'class' as TabName, title: '반명단' }] : []),
         { id: 'room', title: isFamilyCamp ? '가족명단' : '방명단' },
+        { id: 'location', title: '위치' },
       ];
 
   const tabs = allTabs;
@@ -126,6 +129,9 @@ export function CampScreen() {
         </View>
         <View style={[styles.tabContent, activeTab !== 'room' && styles.hiddenTab]} pointerEvents={activeTab !== 'room' ? 'none' : 'auto'}>
           <RoomScreen />
+        </View>
+        <View style={[styles.tabContent, activeTab !== 'location' && styles.hiddenTab]} pointerEvents={activeTab !== 'location' ? 'none' : 'auto'}>
+          <LocationSharingScreen />
         </View>
       </View>
     </View>

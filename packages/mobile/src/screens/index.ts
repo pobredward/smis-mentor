@@ -37,3 +37,6 @@ export * from './NotificationTestScreen';
 export { RecruitmentListScreen } from './RecruitmentListScreen';
 export * from './RecruitmentScreen';
 export * from './RecruitmentTabs';
+
+// Camp location sharing
+export * from './LocationSharingScreen';

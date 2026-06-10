@@ -6,7 +6,7 @@ import { logger } from '@smis-mentor/shared';
 const LAST_TAB_KEY = 'SMIS_LAST_CAMP_TAB';
 const LAST_PRELOAD_LINKS_KEY = 'SMIS_LAST_PRELOAD_LINKS';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room' | 'location';
 
 interface CampTabContextType {
   activeTab: TabName;

@@ -66,7 +66,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'applinks:www.smis-mentor.com',
       ],
       config: {
-        googleMapsApiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_IOS',
+        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY_FOR_IOS || '',
       },
       infoPlist: {
         NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
@@ -97,7 +97,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       softwareKeyboardLayoutMode: 'resize',
       config: {
         googleMaps: {
-          apiKey: 'YOUR_GOOGLE_MAPS_API_KEY_FOR_ANDROID',
+          apiKey: process.env.GOOGLE_MAPS_API_KEY_FOR_ANDROID || '',
         },
       },
       intentFilters: [
@@ -168,6 +168,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         '@react-native-google-signin/google-signin',
         {
           iosUrlScheme: 'com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me',
+        },
+      ],
+      [
+        'expo-location',
+        {
+          locationAlwaysAndWhenInUsePermission: '캠프 위치 공유를 위해 위치 정보 접근 권한이 필요합니다.',
+          locationWhenInUsePermission: '캠프 위치 공유를 위해 앱 사용 중 위치 정보 접근 권한이 필요합니다.',
+          isAndroidBackgroundLocationEnabled: false,
         },
       ],
     ],

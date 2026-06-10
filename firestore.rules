@@ -489,6 +489,25 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // userLocations 컬렉션 (실시간 위치 공유)
+    // 역할: 캠프 스태프끼리 실시간 위치 공유 (토글 ON 시)
+    // 문서 ID: {campCode}_{userId} 복합 키
+    // ──────────────────────────────────────────────────────────────
+    match /userLocations/{locationId} {
+      // 로그인한 모든 사용자(temp 포함) 읽기 가능
+      allow read: if isAuthenticated();
+      // 본인 문서만 생성/수정 가능
+      allow create, update: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.isSharing is bool
+        && request.resource.data.lat is number
+        && request.resource.data.lng is number;
+      // 본인 문서만 삭제 가능
+      allow delete: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // shareTokens 컬렉션 (지원자 공유 토큰)
     // 역할: 클라이언트 직접 접근 금지 (서버/Admin SDK 전용)
     // 주의: cleanup-expired API route는 반드시 Admin SDK를 사용해야 함

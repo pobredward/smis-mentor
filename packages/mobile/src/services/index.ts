@@ -8,3 +8,4 @@ export { default as generationResourcesService } from './generationResourcesServ
 export type { ResourceLink, LinkType, ResourceLinkRole } from './generationResourcesService';
 export { default as jobCodesService } from './jobCodesService';
 export type { JobCode } from './jobCodesService';
+export * from './locationSharingService';
