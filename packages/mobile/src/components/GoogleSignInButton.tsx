@@ -12,7 +12,7 @@ import type { SocialUserData } from '@smis-mentor/shared';
 import { signInWithGoogleDirect } from '../services/googleAuthService';
 
 interface GoogleSignInButtonProps {
-  onSuccess: (socialData: SocialUserData) => void;
+  onSuccess: (socialData: SocialUserData, credential?: any) => void;
   onError: (error: Error) => void;
   disabled?: boolean;
 }
@@ -35,7 +35,8 @@ export function GoogleSignInButton({
     setLoading(true);
     try {
       const result = await signInWithGoogleDirect();
-      onSuccess(result.socialData);
+      // credential을 함께 전달하여 상위 컴포넌트에서 Firebase Auth 처리 가능하도록 함
+      onSuccess(result.socialData, result.credential);
     } catch (error: any) {
       logger.error('Google 로그인 실패:', error);
       onError(error);

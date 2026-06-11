@@ -338,12 +338,12 @@ export default function ForeignSignUpStep2() {
         );
       }
 
-      const { startTransition } = await import('react');
+      // 소셜 회원가입 후 하드 네비게이션으로 AuthContext를 처음부터 재초기화
+      // router.push는 SPA 전환이라 onAuthStateChanged가 이미 완료된 상태에서
+      // userData가 null인 경우 무한로딩이 발생할 수 있음
       setTimeout(() => {
-        startTransition(() => {
-          router.push('/profile');
-        });
-      }, 3000);
+        window.location.href = '/profile';
+      }, 2000);
     } catch (error: any) {
       logger.error('Sign up error:', error);
       

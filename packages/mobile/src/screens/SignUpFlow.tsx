@@ -166,7 +166,34 @@ export function SignUpFlow({
         );
       }
       
-      const userId = doc(db, 'users').id;
+      // Firebase Auth UID를 Firestore document ID로 사용 (일관성 보장)
+      const { auth: firebaseAuth } = await import('../config/firebase');
+      const { signInWithCredential } = await import('firebase/auth');
+      
+      // credential이 있으면 Firebase Auth에 먼저 로그인 (Android Native SDK 경로)
+      const credential = (socialData as any)._credential;
+      if (credential && !firebaseAuth.currentUser) {
+        try {
+          const userCred = await signInWithCredential(firebaseAuth, credential);
+          logger.info('✅ Firebase Auth signInWithCredential 완료 (회원가입 직전):', userCred.user.uid);
+        } catch (credError: any) {
+          logger.warn('⚠️ signInWithCredential 실패:', credError.message);
+        }
+      }
+      
+      const currentFirebaseUser = firebaseAuth.currentUser;
+      const userId = currentFirebaseUser?.uid || socialData.firebaseAuthUid || socialData.providerUid;
+      
+      if (!userId) {
+        throw new Error('Firebase Auth 로그인이 필요합니다. 다시 시도해주세요.');
+      }
+      
+      logger.info('✅ 소셜 회원가입 userId 결정:', {
+        currentUserUid: currentFirebaseUser?.uid,
+        firebaseAuthUid: socialData.firebaseAuthUid,
+        providerUid: socialData.providerUid,
+        finalUserId: userId,
+      });
       
       // providerId 정규화: 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
       const normalizedProviderId = socialData.providerId === 'naver' || socialData.providerId === 'kakao'
@@ -177,9 +204,11 @@ export function SignUpFlow({
       
       await setDoc(doc(db, 'users', userId), {
         userId,
-        email: socialData.email, // ✅ 실제 이메일만 허용
+        id: userId,
+        email: socialData.email,
         name,
         phone,
+        phoneNumber: phone,
         university,
         grade,
         isOnLeave,
@@ -192,7 +221,7 @@ export function SignUpFlow({
           {
             providerId: normalizedProviderId,
             uid: socialData.providerUid,
-            email: socialData.email, // ✅ 실제 이메일만 허용
+            email: socialData.email,
             linkedAt: Timestamp.now(),
             displayName: socialData.name,
             photoURL: socialData.photoURL,
@@ -202,6 +231,8 @@ export function SignUpFlow({
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
+      
+      logger.info('✅ Firestore 사용자 문서 생성 완료:', userId);
     }
   };
 

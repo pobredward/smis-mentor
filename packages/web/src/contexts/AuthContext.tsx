@@ -260,43 +260,51 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             } else {
               logger.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
               logger.info('회원가입 진행 중이거나 Firestore 데이터가 없는 상태일 수 있습니다.');
-              // 3초 후 한 번 더 시도
-              setTimeout(async () => {
+              // 소셜 회원가입 직후 Firestore 문서가 아직 없을 수 있으므로
+              // loading/authReady를 false 상태로 유지하며 재시도
+              const retryWithDelay = async (delayMs: number): Promise<boolean> => {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
                 try {
                   const retryUserRecord = await getUserByEmail(user.email || '');
                   if (retryUserRecord) {
-                    // 활성 캠프 자동 선택
                     const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
                     if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
                       retryUserRecord.activeJobExperienceId = activeJobExpId;
                     }
                     setUserData(retryUserRecord as unknown as User);
                     logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
+                    return true;
                   }
                 } catch (retryError) {
                   logger.error('사용자 데이터 재시도 실패:', retryError);
                 }
-              }, 3000);
+                return false;
+              };
+
+              // 1차 재시도 (1.5초 후) - 소셜 회원가입 완료 직후 리다이렉션 대응
+              const firstRetry = await retryWithDelay(1500);
+              if (!firstRetry) {
+                // 2차 재시도 (추가 3초 후)
+                await retryWithDelay(3000);
+              }
             }
           } catch (error) {
             logger.error('사용자 데이터 가져오기 실패:', error);
             // 네트워크 오류 등의 경우 재시도
-            setTimeout(async () => {
-              try {
-                const retryUserRecord = await getUserByEmail(user.email || '');
-                if (retryUserRecord) {
-                  // 활성 캠프 자동 선택
-                  const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
-                  if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
-                    retryUserRecord.activeJobExperienceId = activeJobExpId;
-                  }
-                  setUserData(retryUserRecord as unknown as User);
-                  logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
+            try {
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              const retryUserRecord = await getUserByEmail(user.email || '');
+              if (retryUserRecord) {
+                const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
+                if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
+                  retryUserRecord.activeJobExperienceId = activeJobExpId;
                 }
-              } catch (retryError) {
-                logger.error('사용자 데이터 재시도 실패:', retryError);
+                setUserData(retryUserRecord as unknown as User);
+                logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
               }
-            }, 3000);
+            } catch (retryError) {
+              logger.error('사용자 데이터 재시도 실패:', retryError);
+            }
           }
         } else {
           setUserData(null);

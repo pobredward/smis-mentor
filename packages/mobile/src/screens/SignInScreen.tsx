@@ -34,7 +34,7 @@ import type { SocialUserData } from '@smis-mentor/shared';
 interface SignInScreenProps {
   onSignUpPress: () => void;
   onSignInSuccess: () => void;
-  onSocialSignUp?: (socialData: SocialUserData, tempUserId?: string) => void;
+  onSocialSignUp?: (socialData: SocialUserData, tempUserId?: string, credential?: any) => void;
 }
 
 export function SignInScreen({
@@ -55,6 +55,7 @@ export function SignInScreen({
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [socialData, setSocialData] = useState<SocialUserData | null>(null);
+  const [googleCredential, setGoogleCredential] = useState<any>(null);
   const [existingUserEmail, setExistingUserEmail] = useState('');
 
   // 컴포넌트 마운트 시 저장된 로그인 정보 확인
@@ -166,7 +167,7 @@ export function SignInScreen({
   /**
    * Google 로그인 성공 핸들러
    */
-  const handleGoogleSignInSuccess = async (socialUserData: SocialUserData) => {
+  const handleGoogleSignInSuccess = async (socialUserData: SocialUserData, credential?: any) => {
     try {
       setIsLoading(true); // 로딩 시작
       const { getUserByEmail, getUserBySocialProvider } = await import('../services/authService');
@@ -179,7 +180,7 @@ export function SignInScreen({
       
       switch (result.action) {
         case 'LOGIN':
-          // 기존 active 계정 → Firebase Auth로 로그인
+          // 기존 active 계정 → Custom Token으로 Firebase Auth 로그인
           logger.info('✅ Google 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
             userId: result.user?.userId,
@@ -204,19 +205,22 @@ export function SignInScreen({
           // 기존 active 계정에 Google 연동 필요 → 비밀번호 입력
           logger.info('🔗 Google 연동 필요 - 비밀번호 확인 모달 표시');
           setSocialData(socialUserData);
+          setGoogleCredential(credential || null);
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
           break;
           
         case 'NEED_PHONE':
-          // 전화번호 입력 필요
+          // 전화번호 입력 필요 (신규 회원가입) - credential 저장하여 SignUpFlow에서 사용
           setSocialData(socialUserData);
+          setGoogleCredential(credential || null);
           setShowPhoneModal(true);
           break;
           
         case 'LINK_TEMP':
           // temp 계정 (이메일 있음 - 드문 케이스)
           setSocialData(socialUserData);
+          setGoogleCredential(credential || null);
           setShowPhoneModal(true);
           break;
           
@@ -441,9 +445,8 @@ export function SignInScreen({
                   style: 'cancel',
                   onPress: () => {
                     setShowPhoneModal(false);
-                    // 소셜 회원가입으로 이동
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone });
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, googleCredential);
                     } else {
                       onSignUpPress();
                     }
@@ -453,9 +456,8 @@ export function SignInScreen({
                   text: '연동하기',
                   onPress: () => {
                     setShowPhoneModal(false);
-                    // temp 계정 연동 후 회원가입 플로우로 이동
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, user.userId || user.id);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, user.userId || user.id, googleCredential);
                     } else {
                       Alert.alert(
                         '안내',
@@ -489,9 +491,8 @@ export function SignInScreen({
                   text: '새 계정 만들기',
                   onPress: () => {
                     setShowPhoneModal(false);
-                    // 소셜 회원가입으로 이동
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone });
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, googleCredential);
                     } else {
                       onSignUpPress();
                     }
@@ -504,9 +505,8 @@ export function SignInScreen({
       } else {
         // 전화번호로 계정 없음 → 신규 회원가입
         setShowPhoneModal(false);
-        // 소셜 회원가입으로 이동
         if (onSocialSignUp) {
-          onSocialSignUp({ ...socialData, name: data.name, phone: data.phone });
+          onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, googleCredential);
         } else {
           onSignUpPress();
         }

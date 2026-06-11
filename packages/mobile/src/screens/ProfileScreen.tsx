@@ -551,10 +551,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   /**
    * 소셜 회원가입 핸들러
    */
-  const handleSocialSignUp = (socialData: any, tempUserId?: string) => {
+  const handleSocialSignUp = (socialData: any, tempUserId?: string, credential?: any) => {
     setSignUpData({
       ...signUpData,
-      socialData,
+      socialData: { ...socialData, _credential: credential },
       tempUserId,
       name: socialData.name,
       phone: socialData.phone,
