@@ -576,7 +576,8 @@ export interface StudentGroup {
   gender: string;
   parentPhone: string;
   parentName: string;
-  age: number | null;                  // 주민번호 생년월일 기반 현재 나이 (없으면 null)
+  age: number | null;                  // 주민번호 기반 한국 나이 (없으면 null)
+  schoolGrade: string | null;          // 주민번호 출생연도 기반 현재 학년 (없으면 null)
   ssn: string | null;                  // 나이 계산 원본 보존
   history: Array<{
     campCode: string;
@@ -587,10 +588,10 @@ export interface StudentGroup {
 }
 
 /**
- * 주민번호 앞 6자리(YYMMDD)에서 현재 나이를 계산.
- * 2000년대 생은 뒷자리 첫 번째 숫자(3,4)로 구분.
+ * 주민번호 앞 6자리(YYMMDD)에서 출생연도를 파싱하는 내부 헬퍼.
+ * 1: 남(1900년대), 2: 여(1900년대), 3: 남(2000년대), 4: 여(2000년대)
  */
-function calcAgeFromSSN(ssn: string): number | null {
+function parseBirthYearFromSSN(ssn: string): number | null {
   const digits = ssn.replace(/-/g, '');
   if (digits.length < 7) return null;
 
@@ -602,19 +603,31 @@ function calcAgeFromSSN(ssn: string): number | null {
   if (isNaN(yy) || isNaN(mm) || isNaN(dd) || isNaN(genderDigit)) return null;
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
 
-  // 1: 남(1900년대), 2: 여(1900년대), 3: 남(2000년대), 4: 여(2000년대)
   const century = genderDigit <= 2 ? 1900 : 2000;
-  const birthYear = century + yy;
+  return century + yy;
+}
 
-  const today = new Date();
-  let age = today.getFullYear() - birthYear;
-  // 생일이 아직 안 지났으면 1살 빼기
-  const hasBirthdayPassed =
-    today.getMonth() + 1 > mm ||
-    (today.getMonth() + 1 === mm && today.getDate() >= dd);
-  if (!hasBirthdayPassed) age -= 1;
+/** 주민번호에서 한국 나이 계산 (올해 연도 - 출생연도 + 1, 생일 무관) */
+function calcAgeFromSSN(ssn: string): number | null {
+  const birthYear = parseBirthYearFromSSN(ssn);
+  if (birthYear === null) return null;
+  const age = new Date().getFullYear() - birthYear + 1;
+  return age > 0 && age < 130 ? age : null;
+}
 
-  return age > 0 && age < 100 ? age : null;
+/**
+ * 주민번호 출생연도에서 현재 학년을 계산.
+ * 한국 나이 기준: 한국 나이 8세에 초1 입학
+ * 공식: schoolYear = 한국 나이 - 7 = (현재연도 - 출생연도 + 1) - 7 = 현재연도 - 출생연도 - 6
+ */
+function calcGradeFromSSN(ssn: string): string | null {
+  const birthYear = parseBirthYearFromSSN(ssn);
+  if (birthYear === null) return null;
+  const schoolYear = new Date().getFullYear() - birthYear - 6;
+  if (schoolYear < 1 || schoolYear > 12) return null;
+  if (schoolYear <= 6) return `초${schoolYear}`;
+  if (schoolYear <= 9) return `중${schoolYear - 6}`;
+  return `고${schoolYear - 9}`;
 }
 
 export function groupStudentResults(results: StudentHistoryResult[]): StudentGroup[] {
@@ -636,6 +649,7 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
         parentPhone: student.parentPhone || '',
         parentName: student.parentName || '',
         age: student.ssn ? calcAgeFromSSN(student.ssn) : null,
+        schoolGrade: student.ssn ? calcGradeFromSSN(student.ssn) : null,
         ssn: student.ssn || null,
         history: [],
       });
@@ -645,6 +659,7 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
       if (!g.ssn && student.ssn) {
         g.ssn = student.ssn;
         g.age = calcAgeFromSSN(student.ssn);
+        g.schoolGrade = calcGradeFromSSN(student.ssn);
       }
     }
 

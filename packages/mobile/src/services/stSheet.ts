@@ -446,6 +446,7 @@ export interface StudentGroup {
   parentPhone: string;
   parentName: string;
   age: number | null;
+  schoolGrade: string | null;
   ssn: string | null;
   history: Array<{
     campCode: string;
@@ -463,7 +464,7 @@ export function campSortKey(campCode: string): number {
   return gen + sub;
 }
 
-function calcAgeFromSSN(ssn: string): number | null {
+function parseBirthYearFromSSN(ssn: string): number | null {
   const digits = ssn.replace(/-/g, '');
   if (digits.length < 7) return null;
   const yy = parseInt(digits.slice(0, 2), 10);
@@ -473,14 +474,24 @@ function calcAgeFromSSN(ssn: string): number | null {
   if (isNaN(yy) || isNaN(mm) || isNaN(dd) || isNaN(genderDigit)) return null;
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
   const century = genderDigit <= 2 ? 1900 : 2000;
-  const birthYear = century + yy;
-  const today = new Date();
-  let age = today.getFullYear() - birthYear;
-  const hasBirthdayPassed =
-    today.getMonth() + 1 > mm ||
-    (today.getMonth() + 1 === mm && today.getDate() >= dd);
-  if (!hasBirthdayPassed) age -= 1;
-  return age > 0 && age < 100 ? age : null;
+  return century + yy;
+}
+
+function calcAgeFromSSN(ssn: string): number | null {
+  const birthYear = parseBirthYearFromSSN(ssn);
+  if (birthYear === null) return null;
+  const age = new Date().getFullYear() - birthYear + 1;
+  return age > 0 && age < 130 ? age : null;
+}
+
+function calcGradeFromSSN(ssn: string): string | null {
+  const birthYear = parseBirthYearFromSSN(ssn);
+  if (birthYear === null) return null;
+  const schoolYear = new Date().getFullYear() - birthYear - 6;
+  if (schoolYear < 1 || schoolYear > 12) return null;
+  if (schoolYear <= 6) return `초${schoolYear}`;
+  if (schoolYear <= 9) return `중${schoolYear - 6}`;
+  return `고${schoolYear - 9}`;
 }
 
 
@@ -561,6 +572,7 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
         parentPhone: student.parentPhone || '',
         parentName: student.parentName || '',
         age: student.ssn ? calcAgeFromSSN(student.ssn) : null,
+        schoolGrade: student.ssn ? calcGradeFromSSN(student.ssn) : null,
         ssn: student.ssn || null,
         history: [],
       });
@@ -569,6 +581,7 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
       if (!g.ssn && student.ssn) {
         g.ssn = student.ssn;
         g.age = calcAgeFromSSN(student.ssn);
+        g.schoolGrade = calcGradeFromSSN(student.ssn);
       }
     }
 

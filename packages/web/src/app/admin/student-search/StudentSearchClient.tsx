@@ -366,6 +366,11 @@ function StudentHistoryCard({ group }: { group: StudentGroup }) {
                 {group.age}세
               </span>
             )}
+            {group.schoolGrade !== null && (
+              <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                {group.schoolGrade}
+              </span>
+            )}
           </div>
           <div className="mt-0.5 text-xs text-gray-500 flex items-center gap-1">
             <IoCall className="w-3 h-3 flex-shrink-0" />

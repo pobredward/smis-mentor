@@ -432,6 +432,11 @@ function StudentCard({ group }: StudentCardProps) {
                 <Text style={cardStyles.ageText}>{group.age}세</Text>
               </View>
             )}
+            {group.schoolGrade !== null && (
+              <View style={cardStyles.gradeBadge}>
+                <Text style={cardStyles.gradeText}>{group.schoolGrade}</Text>
+              </View>
+            )}
           </View>
           <View style={cardStyles.phoneRow}>
             <Ionicons name="call-outline" size={12} color="#9ca3af" />
@@ -587,6 +592,17 @@ const cardStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#7c3aed',
+  },
+  gradeBadge: {
+    backgroundColor: '#e0e7ff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  gradeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4338ca',
   },
   phoneRow: {
     flexDirection: 'row',
