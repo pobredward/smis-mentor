@@ -32,6 +32,7 @@ import {
   requestLocationPermission,
   pauseLocationWatcher,
   UserLocationData,
+  type LocationPermissionLevel,
 } from '../services/locationSharingService';
 import type { Unsubscribe } from 'firebase/firestore';
 import type { UserRole } from '@smis-mentor/shared';
@@ -197,6 +198,8 @@ export function LocationSharingScreen() {
   const unsubscribeRef = useRef<Unsubscribe | null>(null);
   const isSharingRef = useRef(false); // AppState 핸들러에서 최신 값 참조용
   const hasInitialFitRef = useRef(false); // 최초 1회 지도 범위 조정 완료 여부
+  // 앱 재시작 후 Firestore isSharing 상태로 자동 복구 시도했는지 여부
+  const hasAutoResumedRef = useRef(false);
 
   // 활성 캠프코드 로드
   useEffect(() => {
@@ -264,6 +267,35 @@ export function LocationSharingScreen() {
         if (me) {
           setIsSharing(me.isSharing);
           isSharingRef.current = me.isSharing;
+        }
+
+        // 앱 재시작 후 Firestore에 isSharing=true가 남아있으면 자동으로 GPS 감시 재개
+        // hasAutoResumedRef로 1회만 시도 (무한 루프 방지)
+        if (!hasAutoResumedRef.current && me?.isSharing && userData) {
+          hasAutoResumedRef.current = true;
+          const activeExp =
+            userData.jobExperiences?.find(
+              (e) => e.id === userData.activeJobExperienceId
+            ) ?? userData.jobExperiences?.[0];
+          startLocationSharing(db, userData.userId, campCode, {
+            displayName: userData.name,
+            photoURL: userData.profileImage ?? null,
+            role: userData.role,
+            group: activeExp?.group ?? null,
+            groupRole: activeExp?.groupRole ?? null,
+            classCode: activeExp?.classCode ?? null,
+          }).then((success) => {
+            if (success) {
+              setIsSharing(true);
+              isSharingRef.current = true;
+              setIsSharingLocation(true);
+            } else {
+              // GPS 재개 실패 시 Firestore isSharing 초기화 (고스트 상태 방지)
+              stopLocationSharing(db, userData.userId, campCode).catch(() => {});
+              setIsSharing(false);
+              isSharingRef.current = false;
+            }
+          }).catch(() => {});
         }
 
         // 처음 데이터를 받았을 때만 1회 지도 범위 조정
@@ -362,6 +394,20 @@ export function LocationSharingScreen() {
     });
   }, [sheetY, backdropOpacity]);
 
+  // 백그라운드 권한이 없을 때 "항상 허용" 설정 안내
+  const showBackgroundPermissionGuide = useCallback(() => {
+    const iosGuide = 'iOS: 설정 > 개인 정보 보호 및 보안 > 위치 서비스 > SMIS Mentor > "항상"';
+    const androidGuide = 'Android: 설정 > 앱 > SMIS Mentor > 권한 > 위치 > "항상 허용"';
+    Alert.alert(
+      '백그라운드 위치 권한 필요',
+      `앱을 종료하거나 최소화해도 위치가 공유되려면 "항상 허용" 권한이 필요합니다.\n\n${Platform.OS === 'ios' ? iosGuide : androidGuide}\n\n설정에서 변경하시겠습니까?`,
+      [
+        { text: '나중에', style: 'cancel' },
+        { text: '설정 열기', onPress: () => Linking.openSettings() },
+      ]
+    );
+  }, []);
+
   // 토글 처리
   const handleToggle = async (value: boolean) => {
     if (!userData || !campCode || isToggling) return;
@@ -370,35 +416,32 @@ export function LocationSharingScreen() {
 
     try {
       if (value) {
-        // 1단계: 현재 권한 상태 확인
-        let permStatus = await getLocationPermissionStatus();
+        // 1단계: 현재 권한 수준 확인
+        let permLevel: LocationPermissionLevel = await getLocationPermissionStatus();
 
-        // 2단계: 아직 결정하지 않은 경우에만 권한 요청 (granted/denied면 재요청 불필요)
-        if (permStatus !== 'granted') {
-          const granted = await requestLocationPermission();
-          if (granted) permStatus = 'granted' as typeof permStatus;
+        // 2단계: 포그라운드 권한도 없는 경우에만 권한 요청 다이얼로그 표시
+        if (permLevel === 'denied') {
+          permLevel = await requestLocationPermission();
         }
 
-        // 3단계: 최종적으로 권한이 없으면 설정으로 안내
-        if (permStatus !== 'granted') {
+        // 3단계: 포그라운드 권한도 없으면 설정으로 안내 후 중단
+        if (permLevel === 'denied') {
           Alert.alert(
             '위치 권한 필요',
             '위치 공유를 사용하려면 설정에서 위치 권한을 허용해야 합니다.',
             [
               { text: '취소', style: 'cancel' },
-              {
-                text: '설정 열기',
-                onPress: () => Linking.openSettings(),
-              },
+              { text: '설정 열기', onPress: () => Linking.openSettings() },
             ]
           );
           return;
         }
 
         // 4단계: 권한 확인 완료 → 위치 공유 시작
-        const activeExp = userData.jobExperiences?.find(
-          (e) => e.id === userData.activeJobExperienceId
-        ) ?? userData.jobExperiences?.[0];
+        const activeExp =
+          userData.jobExperiences?.find(
+            (e) => e.id === userData.activeJobExperienceId
+          ) ?? userData.jobExperiences?.[0];
         const success = await startLocationSharing(db, userData.userId, campCode, {
           displayName: userData.name,
           photoURL: userData.profileImage ?? null,
@@ -409,17 +452,21 @@ export function LocationSharingScreen() {
         });
 
         if (!success) {
-          Alert.alert(
-            '위치 공유 시작 실패',
-            '잠시 후 다시 시도해 주세요.',
-            [{ text: '확인' }]
-          );
+          Alert.alert('위치 공유 시작 실패', '잠시 후 다시 시도해 주세요.', [
+            { text: '확인' },
+          ]);
           return;
         }
 
         setIsSharing(true);
         isSharingRef.current = true;
         setIsSharingLocation(true);
+
+        // 5단계: 백그라운드 권한이 없으면 "항상 허용" 안내 (공유는 이미 시작됨)
+        if (permLevel === 'whenInUse') {
+          // 살짝 지연 후 표시 — 토글 완료 애니메이션과 겹치지 않게
+          setTimeout(showBackgroundPermissionGuide, 600);
+        }
       } else {
         // 공유 중지
         await stopLocationSharing(db, userData.userId, campCode);

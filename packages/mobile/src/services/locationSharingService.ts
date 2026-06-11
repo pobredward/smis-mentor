@@ -95,17 +95,46 @@ let activeLocationSubscription: LocationSubscription | null = null;
 const getLocationDocId = (campCode: string, userId: string): string =>
   `${campCode}_${userId}`;
 
-// 위치 권한을 요청하고 결과를 반환
-export const requestLocationPermission = async (): Promise<boolean> => {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  return status === Location.PermissionStatus.GRANTED;
-};
+// 위치 권한 허용 수준
+export type LocationPermissionLevel = 'denied' | 'whenInUse' | 'always';
+
+// 위치 권한을 요청하고 허용 수준을 반환
+// 1단계: 포그라운드 권한 요청 → 2단계: 백그라운드 권한 요청 (포그라운드 허용 후에만 가능)
+export const requestLocationPermission =
+  async (): Promise<LocationPermissionLevel> => {
+    const { status: fgStatus } =
+      await Location.requestForegroundPermissionsAsync();
+    if (fgStatus !== Location.PermissionStatus.GRANTED) return 'denied';
+
+    // 백그라운드 권한 요청 (iOS: "항상 허용" / Android: "항상 허용")
+    try {
+      const { status: bgStatus } =
+        await Location.requestBackgroundPermissionsAsync();
+      return bgStatus === Location.PermissionStatus.GRANTED
+        ? 'always'
+        : 'whenInUse';
+    } catch {
+      // Expo Go 등 백그라운드 권한 API 미지원 환경
+      return 'whenInUse';
+    }
+  };
 
 // 현재 위치 권한 상태 확인 (권한 요청 없이 확인만)
 export const getLocationPermissionStatus =
-  async (): Promise<Location.PermissionStatus> => {
-    const { status } = await Location.getForegroundPermissionsAsync();
-    return status;
+  async (): Promise<LocationPermissionLevel> => {
+    const { status: fgStatus } =
+      await Location.getForegroundPermissionsAsync();
+    if (fgStatus !== Location.PermissionStatus.GRANTED) return 'denied';
+
+    try {
+      const { status: bgStatus } =
+        await Location.getBackgroundPermissionsAsync();
+      return bgStatus === Location.PermissionStatus.GRANTED
+        ? 'always'
+        : 'whenInUse';
+    } catch {
+      return 'whenInUse';
+    }
   };
 
 // 백그라운드 위치 업데이트 시작

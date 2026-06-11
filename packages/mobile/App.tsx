@@ -1,4 +1,6 @@
 import Sentry from './sentry.config';
+// 앱 시작 즉시 백그라운드 위치 태스크를 등록해야 재시작 후 자동 복구가 동작함
+import './src/services/locationSharingService';
 import React, { useCallback, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';

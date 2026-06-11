@@ -73,6 +73,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         NSCameraUsageDescription: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
         NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
         NSLocationWhenInUseUsageDescription: '사용자 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.',
+        NSLocationAlwaysAndWhenInUseUsageDescription: '캠프 위치 공유를 위해 항상 위치 접근 권한이 필요합니다.',
+        NSLocationAlwaysUsageDescription: '캠프 위치 공유를 위해 항상 위치 접근 권한이 필요합니다.',
         NSContactsUsageDescription: '학생 부모님 연락처를 기기 연락처 앱에 저장하기 위해 연락처 접근 권한이 필요합니다.',
         ITSAppUsesNonExemptEncryption: false,
         CFBundleURLTypes: [
@@ -128,6 +130,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         // 'READ_MEDIA_IMAGES', // Google Play 정책으로 인해 제거 - expo-image-picker가 자동으로 Photo Picker 사용
         'ACCESS_FINE_LOCATION',
         'ACCESS_COARSE_LOCATION',
+        'ACCESS_BACKGROUND_LOCATION',
         'POST_NOTIFICATIONS',
         'READ_CONTACTS',
         'WRITE_CONTACTS',
@@ -175,7 +178,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         {
           locationAlwaysAndWhenInUsePermission: '캠프 위치 공유를 위해 위치 정보 접근 권한이 필요합니다.',
           locationWhenInUsePermission: '캠프 위치 공유를 위해 앱 사용 중 위치 정보 접근 권한이 필요합니다.',
-          isAndroidBackgroundLocationEnabled: false,
+          isAndroidBackgroundLocationEnabled: true,
+          isAndroidForegroundServiceEnabled: true,
         },
       ],
     ],
