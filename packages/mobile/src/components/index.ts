@@ -1,4 +1,5 @@
 export { AddLinkModal } from './AddLinkModal';
+export { ShareLinkModal } from './ShareLinkModal';
 export { default as EvaluationStageCards } from './EvaluationStageCards';
 export { default as EvaluationForm } from './EvaluationForm';
 export { SMSMessageBox } from './SMSMessageBox';

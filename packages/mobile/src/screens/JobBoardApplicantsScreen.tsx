@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import {
   getJobBoardById,
   getApplicationsByJobBoardId,
@@ -22,6 +22,7 @@ import {
   getScoreColor,
 } from '@smis-mentor/shared';
 import { AdminStackScreenProps } from '../navigation/types';
+import { ShareLinkModal } from '../components';
 
 interface User {
   id: string;
@@ -79,6 +80,7 @@ export function JobBoardApplicantsScreen({
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [appliedCampsMap, setAppliedCampsMap] = useState<Record<string, string[]>>({});
+  const [shareLinkTarget, setShareLinkTarget] = useState<ApplicationWithUser | null>(null);
 
   // 사용자가 지원한 모든 캠프 코드 불러오기
   const loadUserAppliedCamps = useCallback(async (userId: string) => {
@@ -431,6 +433,19 @@ export function JobBoardApplicantsScreen({
               activeOpacity={0.7}
             >
               <View style={styles.applicantCardContent}>
+                {/* 공유 버튼 */}
+                <TouchableOpacity
+                  style={styles.shareButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setShareLinkTarget(app);
+                  }}
+                  accessibilityLabel={`${app.user?.name || '지원자'} 정보 공유`}
+                  accessibilityRole="button"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="share-outline" size={18} color="#6b7280" />
+                </TouchableOpacity>
                 {/* 프로필 이미지 */}
                 <View style={styles.profileImageContainer}>
                   {app.user?.profileImage ? (
@@ -646,6 +661,19 @@ export function JobBoardApplicantsScreen({
           ))}
         </ScrollView>
       )}
+
+      {/* 공유 링크 생성 모달 */}
+      {shareLinkTarget && jobBoard && (
+        <ShareLinkModal
+          visible={!!shareLinkTarget}
+          onClose={() => setShareLinkTarget(null)}
+          jobBoardId={jobBoardId}
+          jobBoardTitle={jobBoard.title}
+          applicationId={shareLinkTarget.id}
+          applicantName={shareLinkTarget.user?.name || '알 수 없음'}
+          currentUserId={auth.currentUser?.uid || ''}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -771,6 +799,14 @@ const styles = StyleSheet.create({
   applicantCardContent: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    position: 'relative',
+  },
+  shareButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    padding: 4,
+    zIndex: 1,
   },
   profileImageContainer: {
     marginRight: 12,
