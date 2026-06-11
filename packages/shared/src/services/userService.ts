@@ -33,9 +33,16 @@ export const deactivateUserMobile = async (userId: string, db: Firestore, auth: 
     logger.info('✅ Firestore 사용자 정보 업데이트 완료');
     
     // 현재 로그인된 사용자가 탈퇴하려는 사용자인 경우 Authentication 계정 삭제
-    if (auth.currentUser && auth.currentUser.email === userData.email) {
+    // Custom Token 로그인 유저는 auth.currentUser.email이 null이므로
+    // email 대신 uid(userId)로 본인 여부를 확인
+    const isCurrentUser = auth.currentUser && (
+      auth.currentUser.uid === userId ||
+      auth.currentUser.email === userData.email
+    );
+    
+    if (isCurrentUser) {
       try {
-        await deleteUser(auth.currentUser);
+        await deleteUser(auth.currentUser!);
         logger.info('✅ Firebase Authentication 계정 삭제 완료');
       } catch (authError: any) {
         logger.error('❌ Firebase Authentication 계정 삭제 실패:', authError);
@@ -48,6 +55,11 @@ export const deactivateUserMobile = async (userId: string, db: Firestore, auth: 
         // 다른 Authentication 오류는 무시하고 Firestore 업데이트는 성공으로 처리
         logger.warn('⚠️ Authentication 계정 삭제에 실패했지만 Firestore 업데이트는 성공');
       }
+    } else {
+      logger.warn('⚠️ 현재 로그인 사용자와 탈퇴 대상이 불일치하여 Auth 삭제 스킵:', {
+        currentUid: auth.currentUser?.uid,
+        targetUserId: userId,
+      });
     }
     
     logger.info('✅ 회원 탈퇴 처리 완료:', userData.email);

@@ -99,6 +99,16 @@ service cloud.firestore {
           (!('name' in request.resource.data) || request.resource.data.name.size() <= 50) &&
           (!('email' in request.resource.data) || request.resource.data.email.size() <= 200)
         ) ||
+        // 본인: 회원 탈퇴 (active → inactive 전환만 허용)
+        // status: active → inactive, role 변경 불가
+        (
+          isOwner(userId) &&
+          resource.data.status == 'active' &&
+          request.resource.data.status == 'inactive' &&
+          fieldUnchanged('role') &&
+          fieldUnchanged('deletedAt') &&
+          fieldUnchanged('deletedBy')
+        ) ||
         // 가입 완료 시 temp→active 승격 (Firebase Auth UID로 인증된 상태)
         // role: *_temp → mentor/foreign, status: temp → active 변경 허용
         (
