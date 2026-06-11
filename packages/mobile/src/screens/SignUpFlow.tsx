@@ -42,18 +42,81 @@ export function SignUpFlow({
     phone: string;
     tempUserId?: string;
   }) => {
-    setSignUpData(prev => ({ 
-      ...prev, 
+    const updatedData: SignUpState = {
+      ...signUpData,
       name: data.name,
       phone: data.phone,
-      tempUserId: data.tempUserId || prev.tempUserId,
-    }));
+      tempUserId: data.tempUserId || signUpData.tempUserId,
+    };
+    setSignUpData(updatedData);
 
-    // 소셜 로그인이면 Step 2 건너뛰기
     if (signUpData.isSocialSignUp) {
-      setStep(3);
+      if (role === 'foreign') {
+        // 원어민 소셜 가입은 추가 학력 정보 없이 바로 완료
+        completeForeignSocialSignUp(updatedData);
+      } else {
+        // 멘토 소셜 가입은 Step 3(학력 정보)으로
+        setStep(3);
+      }
     } else {
       setStep(2);
+    }
+  };
+
+  /**
+   * 원어민 소셜 가입 즉시 완료 처리
+   */
+  const completeForeignSocialSignUp = async (data: SignUpState) => {
+    setIsSubmitting(true);
+    try {
+      await handleSocialSignUp(data);
+
+      const rememberEmail = data.email?.trim() || data.socialData?.email?.trim();
+      if (rememberEmail) {
+        await persistLoginRememberEmail(rememberEmail);
+      }
+
+      const { auth: firebaseAuth } = await import('../config/firebase');
+
+      if (firebaseAuth.currentUser) {
+        Alert.alert(
+          '회원가입 완료',
+          '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
+          [{ text: '확인', onPress: onComplete }]
+        );
+      } else {
+        const { signInWithCustomToken: signInCustom } = await import('../services/authService');
+        const userId = data.socialData!.firebaseAuthUid || data.socialData!.providerUid;
+        const userEmail = data.socialData!.email;
+
+        if (userId && userEmail) {
+          try {
+            await signInCustom(userId, userEmail);
+            Alert.alert(
+              '회원가입 완료',
+              '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
+              [{ text: '확인', onPress: onComplete }]
+            );
+          } catch {
+            Alert.alert(
+              '회원가입 완료',
+              '회원가입이 완료되었습니다. 로그인해주세요.',
+              [{ text: '확인', onPress: onComplete }]
+            );
+          }
+        } else {
+          Alert.alert(
+            '회원가입 완료',
+            '회원가입이 완료되었습니다. 로그인해주세요.',
+            [{ text: '확인', onPress: onComplete }]
+          );
+        }
+      }
+    } catch (error: any) {
+      logger.error('원어민 소셜 회원가입 실패:', error);
+      Alert.alert('오류', error.message || '회원가입 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -231,7 +294,7 @@ export function SignUpFlow({
         isOnLeave,
         major1,
         major2,
-        role: 'mentor',
+        role: role === 'foreign' ? 'foreign_temp' : 'mentor_temp',
         status: 'active',
         agreedTerms: true,
         agreedPersonal: true,
@@ -322,7 +385,7 @@ export function SignUpFlow({
         isOnLeave,
         major1,
         major2,
-        role: 'mentor',
+        role: role === 'foreign' ? 'foreign_temp' : 'mentor_temp',
         status: 'active',
         agreedTerms: true,
         agreedPersonal: true,
@@ -371,7 +434,7 @@ export function SignUpFlow({
       isOnLeave,
       major1,
       major2,
-      role: 'mentor',
+      role: role === 'foreign' ? 'foreign_temp' : 'mentor_temp',
       status: 'active',
       agreedTerms: true,
       agreedPersonal: true,

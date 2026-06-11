@@ -420,7 +420,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
   const handleRoleSelect = (role: 'mentor' | 'foreign') => {
     setSelectedRole(role);
-    if (role === 'mentor') {
+    if (signUpData.socialData) {
+      // 소셜 회원가입 컨텍스트이면 역할 선택 후 바로 소셜 가입 플로우로 이동
+      setCurrentScreen('social-signup');
+    } else if (role === 'mentor') {
       setCurrentScreen('mentor-signup-step1');
     } else {
       setCurrentScreen('foreign-signup-step1');
@@ -550,7 +553,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   };
 
   /**
-   * 소셜 회원가입 핸들러
+   * 소셜 회원가입 핸들러 - 소셜 데이터를 저장한 뒤 역할 선택 화면으로 이동
    */
   const handleSocialSignUp = (socialData: any, tempUserId?: string, credential?: any) => {
     setSignUpData({
@@ -561,8 +564,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       phone: socialData.phone,
       email: socialData.email,
     });
-    setSelectedRole('mentor'); // 기본적으로 멘토로 설정
-    setCurrentScreen('social-signup');
+    setSelectedRole(null);
+    setCurrentScreen('role-selection');
   };
 
   const handleForeignSignUpStep2Next = async (data: {
