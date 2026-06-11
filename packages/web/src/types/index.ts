@@ -44,6 +44,7 @@ export interface User {
   deletedAt?: Timestamp | null; // Soft Delete 시간
   deletedBy?: string | null; // Soft Delete 실행한 관리자 ID
   age?: number;
+  dateOfBirth?: string;
   agreedTerms: boolean;
   agreedPersonal: boolean;
   profileImage: string;

@@ -38,10 +38,7 @@ const partTimeJobSchema = z.object({
 
 const profileSchemaBase = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
-  age: z.number({
-    required_error: '나이를 입력해주세요.',
-    invalid_type_error: '유효한 숫자를 입력해주세요.',
-  }).min(15, '최소 15세 이상이어야 합니다.').max(100, '유효한 나이를 입력해주세요.'),
+  dateOfBirth: z.string().optional(),
   phoneNumber: z.string().min(8, '유효한 휴대폰 번호를 입력해주세요.'),
   email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
   address: z.string().optional(),
@@ -65,7 +62,7 @@ const profileSchemaBase = z.object({
   otherReferralDetail: z.string().optional(),
 });
 
-// 멘토용: 주소·학교·학년·전공 필수
+// 멘토용: name 사용, 주소·학교·학년·전공 필수
 const profileSchemaMentor = profileSchemaBase.extend({
   address: z.string().min(1, '주소를 입력해주세요.'),
   addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
@@ -77,12 +74,18 @@ const profileSchemaMentor = profileSchemaBase.extend({
   major1: z.string().min(1, '전공을 입력해주세요.'),
 });
 
-// 원어민용: 주소·학교·학년·전공 선택사항
-const profileSchemaForeign = profileSchemaBase;
+// 원어민용: firstName/lastName/middleName 분화, name은 자동 합성되므로 optional, 주소·학교·학년·전공 선택사항
+const profileSchemaForeign = profileSchemaBase.extend({
+  name: z.string().optional(),
+  firstName: z.string().min(1, 'Please enter your First Name.'),
+  lastName: z.string().min(1, 'Please enter your Last Name.'),
+  middleName: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+});
 
-const profileSchema = profileSchemaMentor;
-
-type ProfileFormValues = z.infer<typeof profileSchemaMentor>;
+type MentorFormValues = z.infer<typeof profileSchemaMentor>;
+type ForeignFormValues = z.infer<typeof profileSchemaForeign>;
+type ProfileFormValues = MentorFormValues & Partial<ForeignFormValues>;
 
 export default function EditProfilePage() {
   const { userData, refreshUserData } = useAuth();
@@ -103,6 +106,8 @@ export default function EditProfilePage() {
   const [countryCode, setCountryCode] = useState('+82');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const activeSchema: any = isForeign ? profileSchemaForeign : profileSchemaMentor;
   const {
     register,
     handleSubmit,
@@ -111,10 +116,13 @@ export default function EditProfilePage() {
     reset,
     formState: { errors },
   } = useForm<ProfileFormValues>({
-    resolver: zodResolver(isForeign ? profileSchemaForeign : profileSchemaMentor),
+    resolver: zodResolver(activeSchema),
     defaultValues: {
       name: '',
-      age: undefined,
+      firstName: '',
+      lastName: '',
+      middleName: '',
+      dateOfBirth: '',
       phoneNumber: '',
       email: '',
       address: '',
@@ -207,9 +215,25 @@ export default function EditProfilePage() {
         referralPathValue = '기타';
       }
       
+      // 생년월일 처리 (YYYY-MM-DD 형식으로 변환)
+      let dateOfBirthValue = '';
+      if (userData.dateOfBirth) {
+        // Timestamp이거나 문자열일 수 있음
+        const dob = userData.dateOfBirth as unknown;
+        if (typeof dob === 'string') {
+          dateOfBirthValue = dob.substring(0, 10);
+        } else if (dob && typeof (dob as { toDate?: () => Date }).toDate === 'function') {
+          const date = (dob as { toDate: () => Date }).toDate();
+          dateOfBirthValue = date.toISOString().substring(0, 10);
+        }
+      }
+
       reset({
         name: userData.name,
-        age: userData.age || undefined,
+        firstName: userData.foreignTeacher?.firstName || '',
+        lastName: userData.foreignTeacher?.lastName || '',
+        middleName: userData.foreignTeacher?.middleName || '',
+        dateOfBirth: dateOfBirthValue,
         phoneNumber: phoneWithoutCode,
         email: userData.email,
         address: userData.address,
@@ -469,14 +493,33 @@ export default function EditProfilePage() {
       
       // 섹션에 따라 업데이트할 데이터 선택
       if (section === 'all' || section === 'personal') {
-        updateData.name = data.name;
-        
-        // 정확한 나이 값 설정
-        if (data.age !== undefined) {
-          // 나이 값이 변경된 경우에만 설정하고, 변환 과정 확인
-          updateData.age = parseInt(String(data.age), 10);
+        if (isForeign) {
+          // 원어민: firstName/lastName/middleName으로 name 구성
+          const firstName = data.firstName?.trim() || '';
+          const lastName = data.lastName?.trim() || '';
+          const middleName = data.middleName?.trim() || '';
+          const fullName = middleName
+            ? `${firstName} ${middleName} ${lastName}`
+            : `${firstName} ${lastName}`;
+          updateData.name = fullName;
+
+          // foreignTeacher 서브 필드 동기화
+          updateData.foreignTeacher = {
+            ...(userData.foreignTeacher || {}),
+            firstName,
+            lastName,
+            middleName,
+            countryCode: countryCode,
+          };
+        } else {
+          updateData.name = data.name;
         }
-        
+
+        // 생년월일 저장 (YYYY-MM-DD 문자열)
+        if (data.dateOfBirth) {
+          (updateData as Record<string, unknown>).dateOfBirth = data.dateOfBirth;
+        }
+
         updateData.phoneNumber = finalPhoneNumber;
         updateData.email = data.email;
         updateData.address = data.address || '';
@@ -506,10 +549,11 @@ export default function EditProfilePage() {
         updateData.partTimeJobs = partTimeJobs;
       }
       
-      if (section === 'all' || section === 'education') {
+      // 학교 정보는 멘토 전용 (원어민은 해당 없음)
+      if (!isForeign && (section === 'all' || section === 'education')) {
         updateData.university = data.university;
-        updateData.grade = data.grade;
-        updateData.isOnLeave = data.isOnLeave;
+        if (data.grade !== undefined) updateData.grade = data.grade;
+        updateData.isOnLeave = data.isOnLeave ?? false;
         updateData.major1 = data.major1;
         updateData.major2 = data.major2 || '';
       }
@@ -522,7 +566,8 @@ export default function EditProfilePage() {
 
       toast.success('프로필이 성공적으로 업데이트되었습니다.');
       router.back();
-    } catch {
+    } catch (error) {
+      logger.error('프로필 업데이트 오류:', error);
       toast.error('프로필 업데이트 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
@@ -642,21 +687,56 @@ export default function EditProfilePage() {
               {/* 개인 정보 섹션 */}
               {(section === 'all' || section === 'personal') && (
                 <>
-                  <FormInput
-                    label={isForeign ? 'Name' : '이름'}
-                    type="text"
-                    placeholder={isForeign ? 'Enter your name' : '이름을 입력하세요'}
-                    error={errors.name?.message}
-                    {...register('name')}
-                  />
+                  {isForeign ? (
+                    <>
+                      <FormInput
+                        label="First Name *"
+                        type="text"
+                        placeholder="Enter your First Name"
+                        error={(errors as Record<string, { message?: string }>).firstName?.message}
+                        {...register('firstName')}
+                      />
+                      <FormInput
+                        label="Middle Name (optional)"
+                        type="text"
+                        placeholder="Enter your Middle Name"
+                        {...register('middleName')}
+                      />
+                      <FormInput
+                        label="Last Name *"
+                        type="text"
+                        placeholder="Enter your Last Name"
+                        error={(errors as Record<string, { message?: string }>).lastName?.message}
+                        {...register('lastName')}
+                      />
+                    </>
+                  ) : (
+                    <FormInput
+                      label="이름"
+                      type="text"
+                      placeholder="이름을 입력하세요"
+                      error={errors.name?.message}
+                      {...register('name')}
+                    />
+                  )}
 
-                  <FormInput
-                    label={isForeign ? 'Age' : '나이'}
-                    type="number"
-                    placeholder={isForeign ? 'Enter your age' : '나이를 입력하세요'}
-                    error={errors.age?.message}
-                    {...register('age', { valueAsNumber: true })}
-                  />
+                  <div className="w-full mb-4">
+                    <label className="block text-gray-700 text-sm font-medium mb-1">
+                      {isForeign ? 'Date of Birth' : '생년월일'}
+                    </label>
+                    <input
+                      type="date"
+                      className={`w-full px-3 py-2 border ${
+                        (errors as Record<string, { message?: string }>).dateOfBirth ? 'border-red-500' : 'border-gray-300'
+                      } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                      {...register('dateOfBirth')}
+                    />
+                    {(errors as Record<string, { message?: string }>).dateOfBirth && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {(errors as Record<string, { message?: string }>).dateOfBirth?.message}
+                      </p>
+                    )}
+                  </div>
 
                   <FormInput
                     label={isForeign ? 'Email' : '이메일'}

@@ -349,11 +349,27 @@ export const getUserByForeignName = async (firstName: string, lastName: string) 
 export const updateUser = async (userId: string, updates: Partial<User>) => {
   const now = Timestamp.now();
   const userRef = doc(db, 'users', userId);
-  
-  await updateDoc(userRef, {
-    ...updates,
-    updatedAt: now
-  });
+
+  // foreignTeacher 중첩 객체는 dot notation으로 분리하여 기존 필드(cvUrl 등)가 삭제되지 않도록 처리
+  const { foreignTeacher, ...rest } = updates;
+
+  // Firestore는 undefined 값을 허용하지 않으므로 모두 제거
+  const flatUpdates: Record<string, unknown> = { updatedAt: now };
+  for (const [key, value] of Object.entries(rest)) {
+    if (value !== undefined) {
+      flatUpdates[key] = value;
+    }
+  }
+
+  if (foreignTeacher) {
+    for (const [key, value] of Object.entries(foreignTeacher)) {
+      if (value !== undefined) {
+        flatUpdates[`foreignTeacher.${key}`] = value;
+      }
+    }
+  }
+
+  await updateDoc(userRef, flatUpdates);
   
   // 해당 사용자 캐시 삭제 (다음 조회 시 새로 불러오도록)
   await clearUserCache(userId);
