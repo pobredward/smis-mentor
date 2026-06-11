@@ -46,36 +46,55 @@ const countryCodes = [
   { code: '+27', country: 'South Africa', flag: '🇿🇦' },
 ];
 
-function buildProfileSchema(isForeignUser: boolean) {
-  return z.object({
-    name: z.string().min(2, isForeignUser ? 'Name must be at least 2 characters.' : '이름은 최소 2자 이상이어야 합니다.'),
-    age: z.number({
-      required_error: isForeignUser ? 'Please enter your age.' : '나이를 입력해주세요.',
-      invalid_type_error: isForeignUser ? 'Please enter a valid number.' : '유효한 숫자를 입력해주세요.',
-    }).min(15, isForeignUser ? 'Must be at least 15 years old.' : '최소 15세 이상이어야 합니다.').max(100, isForeignUser ? 'Please enter a valid age.' : '유효한 나이를 입력해주세요.'),
-    phoneNumber: z.string().min(8, isForeignUser ? 'Please enter a valid phone number.' : '유효한 휴대폰 번호를 입력해주세요.'),
-    email: z.string().email(isForeignUser ? 'Please enter a valid email address.' : '유효한 이메일 주소를 입력해주세요.'),
-    address: z.string().min(1, isForeignUser ? 'Please enter your address.' : '주소를 입력해주세요.'),
-    addressDetail: z.string().min(1, isForeignUser ? 'Please enter detailed address.' : '상세 주소를 입력해주세요.'),
-    gender: z.enum(['M', 'F'], {
-      errorMap: () => ({ message: isForeignUser ? 'Please select your gender.' : '성별을 선택해주세요.' }),
-    }),
-    selfIntroduction: z.string().max(500, isForeignUser ? 'Self-introduction must be 500 characters or less.' : '자기소개는 500자 이내로 작성해주세요.').optional(),
-    jobMotivation: z.string().max(500, isForeignUser ? 'Application motivation must be 500 characters or less.' : '지원 동기는 500자 이내로 작성해주세요.').optional(),
-    university: z.string().min(1, isForeignUser ? 'Please enter your school name.' : '학교명을 입력해주세요.'),
-    grade: z.number({
-      required_error: isForeignUser ? 'Please select your grade.' : '학년을 선택해주세요.',
-      invalid_type_error: isForeignUser ? 'Please select your grade.' : '학년을 선택해주세요.',
-    }).min(1, isForeignUser ? 'Please select your grade.' : '학년을 선택해주세요.').max(6, isForeignUser ? 'Please select a valid grade.' : '유효한 학년을 선택해주세요.'),
-    isOnLeave: z.boolean(),
-    major1: z.string().min(1, isForeignUser ? 'Please enter your major.' : '전공을 입력해주세요.'),
-    major2: z.string().optional(),
-  });
-}
+// 멘토용 스키마
+const profileSchemaMentor = z.object({
+  name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
+  dateOfBirth: z.string().optional(),
+  phoneNumber: z.string().min(8, '유효한 휴대폰 번호를 입력해주세요.'),
+  email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
+  address: z.string().min(1, '주소를 입력해주세요.'),
+  addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
+  gender: z.enum(['M', 'F'], {
+    errorMap: () => ({ message: '성별을 선택해주세요.' }),
+  }),
+  selfIntroduction: z.string().max(500, '자기소개는 500자 이내로 작성해주세요.').optional(),
+  jobMotivation: z.string().max(500, '지원 동기는 500자 이내로 작성해주세요.').optional(),
+  university: z.string().min(1, '학교명을 입력해주세요.'),
+  grade: z.number({
+    required_error: '학년을 선택해주세요.',
+    invalid_type_error: '학년을 선택해주세요.',
+  }).min(1, '학년을 선택해주세요.').max(6, '유효한 학년을 선택해주세요.'),
+  isOnLeave: z.boolean(),
+  major1: z.string().min(1, '전공을 입력해주세요.'),
+  major2: z.string().optional(),
+});
 
-const profileSchema = buildProfileSchema(false);
+// 원어민용 스키마: firstName/lastName/middleName 분화, name 자동합성이므로 optional, 학교정보 불필요
+const profileSchemaForeign = z.object({
+  name: z.string().optional(),
+  firstName: z.string().min(1, 'Please enter your First Name.'),
+  lastName: z.string().min(1, 'Please enter your Last Name.'),
+  middleName: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  phoneNumber: z.string().min(8, 'Please enter a valid phone number.'),
+  email: z.string().email('Please enter a valid email address.'),
+  address: z.string().optional(),
+  addressDetail: z.string().optional(),
+  gender: z.enum(['M', 'F'], {
+    errorMap: () => ({ message: 'Please select your gender.' }),
+  }),
+  selfIntroduction: z.string().optional(),
+  jobMotivation: z.string().optional(),
+  university: z.string().optional(),
+  grade: z.number().optional(),
+  isOnLeave: z.boolean().optional(),
+  major1: z.string().optional(),
+  major2: z.string().optional(),
+});
 
-type ProfileFormValues = z.infer<typeof profileSchema>;
+type MentorFormValues = z.infer<typeof profileSchemaMentor>;
+type ForeignFormValues = z.infer<typeof profileSchemaForeign>;
+type ProfileFormValues = MentorFormValues & Partial<ForeignFormValues>;
 
 interface PartTimeJob {
   period: string;
@@ -101,6 +120,8 @@ export function ProfileEditScreen() {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const activeSchema: any = isForeign ? profileSchemaForeign : profileSchemaMentor;
   const {
     control,
     handleSubmit,
@@ -109,10 +130,13 @@ export function ProfileEditScreen() {
     reset,
     formState: { errors },
   } = useForm<ProfileFormValues>({
-    resolver: zodResolver(buildProfileSchema(isForeign)),
+    resolver: zodResolver(activeSchema),
     defaultValues: {
       name: '',
-      age: undefined,
+      firstName: '',
+      lastName: '',
+      middleName: '',
+      dateOfBirth: '',
       phoneNumber: '',
       email: '',
       address: '',
@@ -160,10 +184,19 @@ export function ProfileEditScreen() {
       }
       
       setCountryCode(extractedCountryCode);
-      
+
+      // 생년월일 처리 (YYYY-MM-DD 형식)
+      let dateOfBirthValue = '';
+      if (userData.dateOfBirth) {
+        dateOfBirthValue = String(userData.dateOfBirth).substring(0, 10);
+      }
+
       reset({
         name: userData.name,
-        age: userData.age || undefined,
+        firstName: userData.foreignTeacher?.firstName || '',
+        lastName: userData.foreignTeacher?.lastName || '',
+        middleName: userData.foreignTeacher?.middleName || '',
+        dateOfBirth: dateOfBirthValue,
         phoneNumber: phoneWithoutCode,
         email: userData.email,
         address: userData.address || '',
@@ -354,23 +387,46 @@ export function ProfileEditScreen() {
       }
 
       // 업데이트할 데이터 준비
-      const updateData: any = {
-        name: data.name,
-        age: parseInt(String(data.age), 10),
-        phoneNumber: finalPhoneNumber,
-        email: data.email,
-        address: data.address,
-        addressDetail: data.addressDetail,
-        gender: data.gender,
-        selfIntroduction: data.selfIntroduction || '',
-        jobMotivation: data.jobMotivation || '',
-        university: data.university,
-        grade: data.grade,
-        isOnLeave: data.isOnLeave,
-        major1: data.major1,
-        major2: data.major2 || '',
-        partTimeJobs: partTimeJobs,
-      };
+      const updateData: Record<string, unknown> = {};
+
+      if (isForeign) {
+        // 원어민: firstName/lastName/middleName으로 name 합성
+        const firstName = (data.firstName ?? '').trim();
+        const lastName = (data.lastName ?? '').trim();
+        const middleName = (data.middleName ?? '').trim();
+        const fullName = middleName
+          ? `${firstName} ${middleName} ${lastName}`
+          : `${firstName} ${lastName}`;
+        updateData.name = fullName;
+
+        // foreignTeacher 서브 필드 동기화
+        updateData.foreignTeacher = {
+          ...(userData.foreignTeacher || {}),
+          firstName,
+          lastName,
+          middleName,
+          countryCode,
+        };
+      } else {
+        updateData.name = data.name;
+        // 멘토 전용: 학교 정보
+        updateData.university = data.university;
+        if (data.grade !== undefined) updateData.grade = data.grade;
+        updateData.isOnLeave = data.isOnLeave ?? false;
+        updateData.major1 = data.major1;
+        updateData.major2 = data.major2 || '';
+        updateData.partTimeJobs = partTimeJobs;
+        updateData.selfIntroduction = data.selfIntroduction || '';
+        updateData.jobMotivation = data.jobMotivation || '';
+      }
+
+      // 공통 필드
+      if (data.dateOfBirth) updateData.dateOfBirth = data.dateOfBirth;
+      updateData.phoneNumber = finalPhoneNumber;
+      updateData.email = data.email;
+      updateData.address = data.address || '';
+      updateData.addressDetail = data.addressDetail || '';
+      updateData.gender = data.gender;
 
       // 주소가 변경되었으면 자동으로 좌표 업데이트
       if (data.address !== userData.address) {
@@ -489,41 +545,105 @@ export function ProfileEditScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{isForeign ? 'Personal Information' : '개인 정보'}</Text>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Name *' : '이름 *'}</Text>
-              <Controller
-                control={control}
-                name="name"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.name && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder={isForeign ? 'Enter your name' : '이름을 입력하세요'}
+            {isForeign ? (
+              <>
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>First Name *</Text>
+                  <Controller
+                    control={control}
+                    name="firstName"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        style={[styles.input, (errors as Record<string, {message?: string}>).firstName && styles.inputError]}
+                        onBlur={onBlur}
+                        onChangeText={onChange}
+                        value={value ?? ''}
+                        placeholder="Enter your First Name"
+                        autoCapitalize="words"
+                      />
+                    )}
                   />
-                )}
-              />
-              {errors.name && <Text style={styles.errorMessage}>{errors.name.message}</Text>}
-            </View>
+                  {(errors as Record<string, {message?: string}>).firstName && (
+                    <Text style={styles.errorMessage}>{(errors as Record<string, {message?: string}>).firstName?.message}</Text>
+                  )}
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Middle Name <Text style={styles.optionalLabel}>(optional)</Text></Text>
+                  <Controller
+                    control={control}
+                    name="middleName"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        style={styles.input}
+                        onBlur={onBlur}
+                        onChangeText={onChange}
+                        value={value ?? ''}
+                        placeholder="Enter your Middle Name"
+                        autoCapitalize="words"
+                      />
+                    )}
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Last Name *</Text>
+                  <Controller
+                    control={control}
+                    name="lastName"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        style={[styles.input, (errors as Record<string, {message?: string}>).lastName && styles.inputError]}
+                        onBlur={onBlur}
+                        onChangeText={onChange}
+                        value={value ?? ''}
+                        placeholder="Enter your Last Name"
+                        autoCapitalize="words"
+                      />
+                    )}
+                  />
+                  {(errors as Record<string, {message?: string}>).lastName && (
+                    <Text style={styles.errorMessage}>{(errors as Record<string, {message?: string}>).lastName?.message}</Text>
+                  )}
+                </View>
+              </>
+            ) : (
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>이름 *</Text>
+                <Controller
+                  control={control}
+                  name="name"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput
+                      style={[styles.input, errors.name && styles.inputError]}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      value={value ?? ''}
+                      placeholder="이름을 입력하세요"
+                    />
+                  )}
+                />
+                {errors.name && <Text style={styles.errorMessage}>{errors.name.message}</Text>}
+              </View>
+            )}
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Age *' : '나이 *'}</Text>
+              <Text style={styles.label}>{isForeign ? 'Date of Birth' : '생년월일'}</Text>
               <Controller
                 control={control}
-                name="age"
+                name="dateOfBirth"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    style={[styles.input, errors.age && styles.inputError]}
+                    style={styles.input}
                     onBlur={onBlur}
-                    onChangeText={(text) => onChange(text ? parseInt(text, 10) : undefined)}
-                    value={value?.toString() || ''}
-                    placeholder={isForeign ? 'Enter your age' : '나이를 입력하세요'}
-                    keyboardType="number-pad"
+                    onChangeText={onChange}
+                    value={value ?? ''}
+                    placeholder="YYYY-MM-DD"
+                    keyboardType="numeric"
+                    maxLength={10}
                   />
                 )}
               />
-              {errors.age && <Text style={styles.errorMessage}>{errors.age.message}</Text>}
             </View>
 
             <View style={styles.formGroup}>
@@ -616,7 +736,11 @@ export function ProfileEditScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Address *' : '주소 *'}</Text>
+              <Text style={styles.label}>
+                {isForeign ? (
+                  <>{'Address '}<Text style={styles.optionalLabel}>(optional)</Text></>
+                ) : '주소 *'}
+              </Text>
               <View style={styles.addressRow}>
                 <Controller
                   control={control}
@@ -641,7 +765,11 @@ export function ProfileEditScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Detailed Address *' : '상세 주소 *'}</Text>
+              <Text style={styles.label}>
+                {isForeign ? (
+                  <>{'Detailed Address '}<Text style={styles.optionalLabel}>(optional)</Text></>
+                ) : '상세 주소 *'}
+              </Text>
               <Controller
                 control={control}
                 name="addressDetail"
@@ -1101,6 +1229,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#374151',
     marginBottom: 8,
+  },
+  optionalLabel: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#9ca3af',
   },
   labelWithCount: {
     flexDirection: 'row',

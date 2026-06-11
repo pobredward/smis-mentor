@@ -28,6 +28,7 @@ export interface User {
   phoneNumber?: string;
   birth?: string;
   age?: number;
+  dateOfBirth?: string;
   address?: string;
   addressDetail?: string;
   profileImage?: string;
