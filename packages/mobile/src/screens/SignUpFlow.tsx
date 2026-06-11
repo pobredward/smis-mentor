@@ -5,9 +5,8 @@ import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
 import type { SocialUserData, SignUpState } from '@smis-mentor/shared';
-import { activateTempAccountWithSocial } from '@smis-mentor/shared';
-import { signUp, updateUser, persistLoginRememberEmail } from '../services/authService';
-import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { signUp, updateUser, persistLoginRememberEmail, getUserById } from '../services/authService';
+import { doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 interface SignUpFlowProps {
@@ -96,11 +95,56 @@ export function SignUpFlow({
         await persistLoginRememberEmail(rememberEmail);
       }
 
-      Alert.alert(
-        '회원가입 완료',
-        '환영합니다! 로그인해주세요.',
-        [{ text: '확인', onPress: onComplete }]
-      );
+      // 소셜 회원가입이고 Firebase Auth에 이미 로그인된 경우 → 자동 로그인
+      if (finalData.isSocialSignUp && finalData.socialData) {
+        const { auth: firebaseAuth } = await import('../config/firebase');
+        
+        if (firebaseAuth.currentUser) {
+          // Google/Apple: signInWithCredential로 이미 로그인됨 → 바로 완료
+          logger.info('✅ 소셜 회원가입 완료 - Firebase Auth 로그인 확인됨, 자동 진입');
+          Alert.alert(
+            '회원가입 완료',
+            '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
+            [{ text: '확인', onPress: onComplete }]
+          );
+        } else {
+          // 네이버 등 Custom Token 방식: 가입 직후 로그인 시도
+          const { signInWithCustomToken: signInCustom } = await import('../services/authService');
+          const userId = finalData.socialData.firebaseAuthUid || finalData.socialData.providerUid;
+          const userEmail = finalData.socialData.email;
+          
+          if (userId && userEmail) {
+            try {
+              await signInCustom(userId, userEmail);
+              logger.info('✅ Custom Token 자동 로그인 완료');
+              Alert.alert(
+                '회원가입 완료',
+                '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
+                [{ text: '확인', onPress: onComplete }]
+              );
+            } catch (loginErr) {
+              logger.warn('⚠️ 자동 로그인 실패 - 수동 로그인 필요:', loginErr);
+              Alert.alert(
+                '회원가입 완료',
+                '회원가입이 완료되었습니다. 로그인해주세요.',
+                [{ text: '확인', onPress: onComplete }]
+              );
+            }
+          } else {
+            Alert.alert(
+              '회원가입 완료',
+              '회원가입이 완료되었습니다. 로그인해주세요.',
+              [{ text: '확인', onPress: onComplete }]
+            );
+          }
+        }
+      } else {
+        Alert.alert(
+          '회원가입 완료',
+          '환영합니다! 로그인해주세요.',
+          [{ text: '확인', onPress: onComplete }]
+        );
+      }
     } catch (error: any) {
       logger.error('회원가입 실패:', error);
       Alert.alert('오류', error.message || '회원가입 중 오류가 발생했습니다.');
@@ -134,26 +178,90 @@ export function SignUpFlow({
     }
 
     if (tempUserId) {
-      // temp 계정 활성화
-      logger.info('✅ temp 계정 활성화:', tempUserId);
-      
-      const { getUserById } = await import('../services/authService');
-      
-      await activateTempAccountWithSocial(
-        tempUserId,
-        socialData,
-        {
-          phone,
-          university,
-          grade,
-          isOnLeave,
-          major1,
-          major2,
-          role: 'mentor', // temp_mentor → mentor
-        },
-        updateUser,
-        getUserById // ✅ getUserById 전달
-      );
+      // temp 계정 활성화: 웹과 동일하게 새 Auth UID로 문서 생성 후 기존 temp 삭제
+      // (Firestore Rules: request.auth.uid == userId 조건 충족을 위해 새 문서 생성 필요)
+      logger.info('✅ temp 계정 활성화 시작 (새 UID 패턴):', tempUserId);
+
+      const { auth: firebaseAuth } = await import('../config/firebase');
+      const { signInWithCredential } = await import('firebase/auth');
+
+      // credential이 있으면 Firebase Auth 로그인 확정
+      const credential = (socialData as any)._credential;
+      if (credential && !firebaseAuth.currentUser) {
+        try {
+          const userCred = await signInWithCredential(firebaseAuth, credential);
+          logger.info('✅ Firebase Auth signInWithCredential 완료 (temp 활성화):', userCred.user.uid);
+        } catch (credError: any) {
+          logger.warn('⚠️ signInWithCredential 실패:', credError.message);
+        }
+      }
+
+      const newUserId = firebaseAuth.currentUser?.uid || socialData.firebaseAuthUid;
+      if (!newUserId) {
+        throw new Error('Firebase Auth 로그인이 필요합니다. 다시 시도해주세요.');
+      }
+
+      // 기존 temp 문서에서 필요한 정보 가져오기
+      const tempUserData = await getUserById(tempUserId);
+
+      // Apple 임시 이메일 처리: 기존 temp 계정 이메일 유지
+      let finalEmail = socialData.email;
+      if (socialData.email.includes('@privaterelay.appleid.com') && tempUserData?.email && !tempUserData.email.includes('@privaterelay.appleid.com')) {
+        finalEmail = tempUserData.email;
+        logger.info('✅ Apple 임시 이메일 → temp 계정 이메일 사용:', finalEmail);
+      }
+
+      // providerId 정규화
+      const normalizedProviderId = socialData.providerId === 'naver' || socialData.providerId === 'kakao'
+        ? socialData.providerId
+        : socialData.providerId.includes('.com')
+          ? socialData.providerId
+          : `${socialData.providerId}.com`;
+
+      // 새 Auth UID로 Firestore 문서 생성
+      await setDoc(doc(db, 'users', newUserId), {
+        userId: newUserId,
+        id: newUserId,
+        email: finalEmail,
+        name: tempUserData?.name || name,
+        phone: phone || tempUserData?.phone || '',
+        phoneNumber: phone || tempUserData?.phone || '',
+        university,
+        grade,
+        isOnLeave,
+        major1,
+        major2,
+        role: 'mentor',
+        status: 'active',
+        agreedTerms: true,
+        agreedPersonal: true,
+        profileImage: socialData.photoURL || tempUserData?.profileImage || '',
+        selfIntroduction: (tempUserData as any)?.selfIntroduction || '',
+        jobMotivation: (tempUserData as any)?.jobMotivation || '',
+        feedback: (tempUserData as any)?.feedback || '',
+        jobExperiences: (tempUserData as any)?.jobExperiences || [],
+        authProviders: [
+          {
+            providerId: normalizedProviderId,
+            uid: socialData.providerUid,
+            email: finalEmail,
+            linkedAt: Timestamp.now(),
+            ...(socialData.name && { displayName: socialData.name }),
+            ...(socialData.photoURL && { photoURL: socialData.photoURL }),
+          },
+        ],
+        primaryAuthMethod: 'social',
+        createdAt: tempUserData?.createdAt || Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+
+      logger.info('✅ 새 Auth UID로 문서 생성 완료:', newUserId);
+
+      // 기존 temp 문서 삭제 (새 문서가 생성된 이후에 삭제)
+      if (newUserId !== tempUserId) {
+        await deleteDoc(doc(db, 'users', tempUserId));
+        logger.info('🗑️ 기존 temp 문서 삭제 완료:', tempUserId);
+      }
     } else {
       // 완전히 새로운 소셜 계정 생성
       logger.info('✅ 새 소셜 계정 생성');
@@ -216,6 +324,8 @@ export function SignUpFlow({
         major2,
         role: 'mentor',
         status: 'active',
+        agreedTerms: true,
+        agreedPersonal: true,
         profileImage: socialData.photoURL || '',
         authProviders: [
           {
@@ -263,6 +373,8 @@ export function SignUpFlow({
       major2,
       role: 'mentor',
       status: 'active',
+      agreedTerms: true,
+      agreedPersonal: true,
       profileImage: '',
       authProviders: [
         {

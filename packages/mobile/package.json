@@ -1,6 +1,6 @@
 {
   "name": "@smis-mentor/mobile",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "main": "index.ts",
   "scripts": {
     "start": "CI=false expo start",

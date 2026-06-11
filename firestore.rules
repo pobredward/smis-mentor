@@ -126,12 +126,18 @@ service cloud.firestore {
 
       // 삭제: admin 또는 가입 플로우에서 본인이 소유한 temp 문서 삭제
       // (소셜 가입 시 임시 문서를 새 UID 문서로 교체하는 과정)
+      // isOwner(userId): Auth UID = 문서 ID인 경우 (temp 활성화 직후)
+      // resource.data.userId == request.auth.uid: Firestore userId 필드 기준 본인 확인
       allow delete: if (
         isAdmin() ||
         (
           isAuthenticated() &&
           resource.data.status == 'temp' &&
-          resource.data.role in ['mentor_temp', 'foreign_temp']
+          resource.data.role in ['mentor_temp', 'foreign_temp'] &&
+          (
+            isOwner(userId) ||
+            resource.data.userId == request.auth.uid
+          )
         )
       );
     }

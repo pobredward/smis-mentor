@@ -148,33 +148,35 @@ export const getUserBySocialProvider = async (providerId: string, providerUid: s
   try {
     logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
     
-    // Firestore에서 authProviders 배열을 검색할 수 없으므로
-    // 모든 active 사용자를 가져와서 클라이언트에서 필터링
-    const q = query(
-      collection(db, 'users'),
-      where('status', '==', 'active')
-    );
+    // active + temp 상태 모두 조회 (temp 계정에 소셜이 미리 연동된 케이스 포함)
+    // deleted/inactive 제외
+    const [activeSnapshot, tempSnapshot] = await Promise.all([
+      getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
+      getDocs(query(collection(db, 'users'), where('status', '==', 'temp'))),
+    ]);
     
-    const querySnapshot = await getDocs(q);
+    const normalizedSearchId = providerId.replace('.com', '');
     
-    for (const doc of querySnapshot.docs) {
-      const userData = doc.data() as User;
-      const authProviders = userData.authProviders || [];
-      
-      // providerId 정규화 비교
-      const normalizedSearchId = providerId.replace('.com', '');
-      const matchedProvider = authProviders.find((p: any) => {
-        const normalizedStoredId = p.providerId.replace('.com', '');
-        return normalizedStoredId === normalizedSearchId && p.uid === providerUid;
-      });
-      
-      if (matchedProvider) {
-        logger.info('✅ 소셜 제공자로 사용자 발견:', {
-          userId: userData.userId,
-          email: userData.email,
-          providerId: matchedProvider.providerId,
+    // active 우선, 그 다음 temp 순서로 반환
+    for (const snapshot of [activeSnapshot, tempSnapshot]) {
+      for (const doc of snapshot.docs) {
+        const userData = doc.data() as User;
+        const authProviders = userData.authProviders || [];
+        
+        const matchedProvider = authProviders.find((p: any) => {
+          const normalizedStoredId = p.providerId.replace('.com', '');
+          return normalizedStoredId === normalizedSearchId && p.uid === providerUid;
         });
-        return userData;
+        
+        if (matchedProvider) {
+          logger.info('✅ 소셜 제공자로 사용자 발견:', {
+            userId: userData.userId,
+            email: userData.email,
+            status: userData.status,
+            providerId: matchedProvider.providerId,
+          });
+          return userData;
+        }
       }
     }
     

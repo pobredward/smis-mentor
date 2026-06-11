@@ -13,7 +13,7 @@ import type { SocialUserData } from '@smis-mentor/shared';
 import { signInWithApple, isAppleAuthAvailable } from '../services/appleAuthService';
 
 interface AppleSignInButtonProps {
-  onSuccess: (socialData: SocialUserData) => void;
+  onSuccess: (socialData: SocialUserData, credential?: any) => void;
   onError: (error: Error) => void;
   disabled?: boolean;
 }
@@ -47,7 +47,23 @@ export function AppleSignInButton({
     setLoading(true);
     try {
       const result = await signInWithApple();
-      onSuccess(result);
+      
+      // Firebase OAuthCredential 생성 (신규 가입 시 signInWithCredential에 사용)
+      let appleCredential: any = null;
+      if (result.idToken) {
+        try {
+          const { OAuthProvider } = await import('firebase/auth');
+          const provider = new OAuthProvider('apple.com');
+          appleCredential = provider.credential({
+            idToken: result.idToken,
+            rawNonce: undefined,
+          });
+        } catch (credErr) {
+          logger.warn('⚠️ Apple OAuthCredential 생성 실패 (무시):', credErr);
+        }
+      }
+      
+      onSuccess(result, appleCredential);
     } catch (error: any) {
       logger.error('Apple 로그인 실패:', error);
       onError(error);

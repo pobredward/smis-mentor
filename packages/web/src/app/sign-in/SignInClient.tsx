@@ -73,6 +73,20 @@ export function SignInClient() {
       // 사용자 정보 조회
       const userRecord = await getUserByEmail(data.email);
       
+      // 탈퇴/삭제된 계정 차단
+      if (userRecord?.status === 'inactive') {
+        await import('firebase/auth').then(({ signOut }) => signOut(auth));
+        toast.error('탈퇴한 계정입니다. 재가입이 필요합니다.');
+        setIsLoading(false);
+        return;
+      }
+      if (userRecord?.status === 'deleted') {
+        await import('firebase/auth').then(({ signOut }) => signOut(auth));
+        toast.error('삭제된 계정입니다. 관리자에게 문의하세요.');
+        setIsLoading(false);
+        return;
+      }
+      
       // 멘토이고 프로필이 미완성인 경우 체크
       const isMentor = userRecord?.role === 'mentor';
       const hasProfileImage = !!userRecord?.profileImage;
@@ -158,7 +172,7 @@ export function SignInClient() {
   const handleGoogleSignInSuccess = async (data: SocialUserData) => {
     setIsLoading(true); // ✅ 로딩 시작
     try {
-      const result = await handleSocialLogin(data, getUserByEmail, getUserBySocialProvider);
+      const result = await handleSocialLogin(data, getUserByEmail, getUserBySocialProvider, updateUser);
       
       if (result.action === 'LOGIN') {
         // 기존 소셜 계정으로 바로 로그인

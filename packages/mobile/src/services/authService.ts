@@ -82,6 +82,10 @@ export async function getPersistedLoginRememberEmail(): Promise<{
 // 사용자 조회
 export const getUserByEmail = async (email: string): Promise<User | null> => {
   try {
+    if (!email || typeof email !== 'string') {
+      return null;
+    }
+
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('email', '==', email));
     const querySnapshot = await getDocs(q);
@@ -90,8 +94,31 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
       return null;
     }
 
-    const doc = querySnapshot.docs[0];
-    return { ...doc.data(), userId: doc.id } as User;
+    // deleted 상태 사용자 필터링
+    const nonDeletedDocs = querySnapshot.docs.filter(
+      d => d.data().status !== 'deleted'
+    );
+
+    if (nonDeletedDocs.length === 0) {
+      return null;
+    }
+
+    // 여러 문서가 있을 경우 우선순위: active > temp > inactive
+    if (nonDeletedDocs.length > 1) {
+      logger.warn('⚠️ 동일한 이메일로 여러 사용자 발견 (deleted 제외):', {
+        email,
+        count: nonDeletedDocs.length,
+      });
+
+      const activeDoc = nonDeletedDocs.find(d => d.data().status === 'active');
+      if (activeDoc) return { ...activeDoc.data(), userId: activeDoc.id } as User;
+
+      const tempDoc = nonDeletedDocs.find(d => d.data().status === 'temp');
+      if (tempDoc) return { ...tempDoc.data(), userId: tempDoc.id } as User;
+    }
+
+    const first = nonDeletedDocs[0];
+    return { ...first.data(), userId: first.id } as User;
   } catch (error) {
     logger.error('사용자 조회 실패:', error);
     throw error;
@@ -137,33 +164,34 @@ export const getUserBySocialProvider = async (
   try {
     logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
 
-    // Firestore에서 authProviders 배열을 직접 검색할 수 없으므로
-    // 모든 active 사용자를 가져와서 클라이언트에서 필터링
-    const q = query(
-      collection(db, 'users'),
-      where('status', '==', 'active')
-    );
+    // active + temp 상태 모두 조회 (temp 계정에 소셜이 미리 연동된 케이스 포함)
+    const [activeSnapshot, tempSnapshot] = await Promise.all([
+      getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
+      getDocs(query(collection(db, 'users'), where('status', '==', 'temp'))),
+    ]);
 
-    const querySnapshot = await getDocs(q);
+    const normalizedSearchId = providerId.replace('.com', '');
 
-    for (const doc of querySnapshot.docs) {
-      const userData = doc.data() as User;
-      const authProviders = userData.authProviders || [];
+    // active 우선, 그 다음 temp 순서로 반환
+    for (const snapshot of [activeSnapshot, tempSnapshot]) {
+      for (const doc of snapshot.docs) {
+        const userData = doc.data() as User;
+        const authProviders = userData.authProviders || [];
 
-      // providerId 정규화 비교 (google.com = google, naver.com = naver)
-      const normalizedSearchId = providerId.replace('.com', '');
-      const matchedProvider = authProviders.find((p: any) => {
-        const normalizedStoredId = p.providerId.replace('.com', '');
-        return normalizedStoredId === normalizedSearchId && p.uid === providerUid;
-      });
-
-      if (matchedProvider) {
-        logger.info('✅ 소셜 제공자로 사용자 발견:', {
-          userId: userData.userId,
-          email: userData.email,
-          providerId: matchedProvider.providerId,
+        const matchedProvider = authProviders.find((p: any) => {
+          const normalizedStoredId = p.providerId.replace('.com', '');
+          return normalizedStoredId === normalizedSearchId && p.uid === providerUid;
         });
-        return { ...userData, userId: doc.id } as User;
+
+        if (matchedProvider) {
+          logger.info('✅ 소셜 제공자로 사용자 발견:', {
+            userId: userData.userId,
+            status: userData.status,
+            email: userData.email,
+            providerId: matchedProvider.providerId,
+          });
+          return { ...userData, userId: doc.id } as User;
+        }
       }
     }
 
@@ -278,6 +306,16 @@ export const signIn = async (email: string, password: string) => {
     // 로그인 성공 시 마지막 로그인 시간 업데이트
     const userRecord = await getUserByEmail(email);
     if (userRecord) {
+      // 탈퇴/삭제된 계정 차단
+      if (userRecord.status === 'inactive') {
+        await firebaseSignOut(auth);
+        throw new Error('ACCOUNT_INACTIVE');
+      }
+      if (userRecord.status === 'deleted') {
+        await firebaseSignOut(auth);
+        throw new Error('ACCOUNT_DELETED');
+      }
+
       await updateUser(userRecord.userId, {
         lastLoginAt: Timestamp.now(),
       });

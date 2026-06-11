@@ -83,6 +83,15 @@ async function signInWithNativeGoogleSDK(GoogleSignin: any): Promise<{
   credential: any;
 }> {
   await GoogleSignin.hasPlayServices();
+
+  // 기존 세션을 먼저 로그아웃해서 항상 계정 선택 창이 뜨도록 강제
+  // (자동 선택 방지)
+  try {
+    await GoogleSignin.signOut();
+  } catch {
+    // 로그인 상태가 아닐 수 있으므로 무시
+  }
+
   const response = await GoogleSignin.signIn();
 
   const idToken = response.data?.idToken || response.idToken;
@@ -133,6 +142,7 @@ async function signInWithGoogleOAuth(): Promise<{
     response_type: 'id_token token',
     scope: 'openid profile email',
     nonce: Math.random().toString(36).substring(7),
+    prompt: 'select_account', // 항상 계정 선택 창 표시
   })}`;
 
   logger.info('📍 Redirect URI:', redirectUri);

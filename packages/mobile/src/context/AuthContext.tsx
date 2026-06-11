@@ -13,7 +13,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { auth, db } from '../config/firebase';
-import { getUserByEmail } from '../services/authService';
+import { getUserByEmail, getUserById } from '../services/authService';
 import { jobCodesService } from '../services';
 import { User, AuthContextType } from '../types';
 import { ensureActiveJobExperience } from '@smis-mentor/shared';
@@ -333,6 +333,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (user) {
         const loadUserData = async (retryCount = 0) => {
           try {
+            // email이 없으면 (Custom Token / Apple) UID로 직접 조회
+            if (!user.email) {
+              logger.warn('⚠️ Firebase Auth 사용자에 이메일이 없음. UID로 Firestore 조회:', user.uid);
+              try {
+                const userByUid = await getUserById(user.uid);
+                if (userByUid) {
+                  const activeJobExpId = await ensureActiveJobExperience(db, userByUid as any);
+                  if (activeJobExpId && !userByUid.activeJobExperienceId) {
+                    userByUid.activeJobExperienceId = activeJobExpId;
+                  }
+                  setUserData(userByUid);
+                  logger.info('✅ UID로 사용자 데이터 로드 성공:', userByUid.name);
+                } else if (retryCount < 2) {
+                  await new Promise((resolve) => setTimeout(resolve, 1500));
+                  await loadUserData(retryCount + 1);
+                } else {
+                  logger.warn('⚠️ UID로도 사용자를 찾을 수 없음:', user.uid);
+                }
+              } catch (err) {
+                logger.error('UID로 사용자 조회 실패:', err);
+              }
+              return;
+            }
+
             const userRecord = await getUserByEmail(user.email || '');
             if (userRecord) {
               // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트

@@ -56,6 +56,7 @@ export function SignInScreen({
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [socialData, setSocialData] = useState<SocialUserData | null>(null);
   const [googleCredential, setGoogleCredential] = useState<any>(null);
+  const [appleCredential, setAppleCredential] = useState<any>(null);
   const [existingUserEmail, setExistingUserEmail] = useState('');
 
   // 컴포넌트 마운트 시 저장된 로그인 정보 확인
@@ -103,7 +104,11 @@ export function SignInScreen({
       onSignInSuccess();
     } catch (error: any) {
       // 인증 실패는 Alert로만 표시 (logger.error 제거)
-      if (
+      if (error.message === 'ACCOUNT_INACTIVE') {
+        Alert.alert('로그인 불가', '탈퇴한 계정입니다. 재가입이 필요합니다.');
+      } else if (error.message === 'ACCOUNT_DELETED') {
+        Alert.alert('로그인 불가', '삭제된 계정입니다. 관리자에게 문의하세요.');
+      } else if (
         error.code === 'auth/user-not-found' ||
         error.code === 'auth/wrong-password' ||
         error.code === 'auth/invalid-credential'
@@ -170,12 +175,13 @@ export function SignInScreen({
   const handleGoogleSignInSuccess = async (socialUserData: SocialUserData, credential?: any) => {
     try {
       setIsLoading(true); // 로딩 시작
-      const { getUserByEmail, getUserBySocialProvider } = await import('../services/authService');
+      const { getUserByEmail, getUserBySocialProvider, updateUser } = await import('../services/authService');
 
       const result = await handleSocialLogin(
         socialUserData, 
         getUserByEmail,
-        getUserBySocialProvider
+        getUserBySocialProvider,
+        updateUser
       );
       
       switch (result.action) {
@@ -201,14 +207,30 @@ export function SignInScreen({
           }
           break;
         
-        case 'LINK_ACTIVE':
-          // 기존 active 계정에 Google 연동 필요 → 비밀번호 입력
-          logger.info('🔗 Google 연동 필요 - 비밀번호 확인 모달 표시');
+        case 'LINK_ACTIVE': {
+          // 기존 active 계정에 Google 연동 필요
+          logger.info('🔗 Google 연동 필요');
+          const hasPassword = result.user.authProviders?.some(
+            (p: any) => p.providerId === 'password'
+          );
+          if (!hasPassword) {
+            // 비밀번호 없는 소셜 전용 계정 → 기존 소셜로 로그인 안내
+            const existingProviders = (result.user.authProviders || [])
+              .filter((p: any) => p.providerId !== 'password')
+              .map((p: any) => getSocialProviderName(p.providerId))
+              .join(', ');
+            Alert.alert(
+              '다른 소셜 계정으로 가입된 이메일',
+              `이 이메일은 이미 ${existingProviders}(으)로 가입되어 있습니다.\n해당 소셜 계정으로 로그인한 후 Google을 연동해주세요.`
+            );
+            break;
+          }
           setSocialData(socialUserData);
           setGoogleCredential(credential || null);
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
           break;
+        }
           
         case 'NEED_PHONE':
           // 전화번호 입력 필요 (신규 회원가입) - credential 저장하여 SignUpFlow에서 사용
@@ -249,12 +271,13 @@ export function SignInScreen({
   const handleNaverSignInSuccess = async (socialUserData: SocialUserData) => {
     try {
       setIsLoading(true); // 로딩 시작
-      const { getUserByEmail, getUserBySocialProvider } = await import('../services/authService');
+      const { getUserByEmail, getUserBySocialProvider, updateUser } = await import('../services/authService');
 
       const result = await handleSocialLogin(
         socialUserData, 
         getUserByEmail,
-        getUserBySocialProvider
+        getUserBySocialProvider,
+        updateUser
       );
       
       switch (result.action) {
@@ -280,13 +303,28 @@ export function SignInScreen({
           }
           break;
         
-        case 'LINK_ACTIVE':
-          // 기존 active 계정에 네이버 연동 필요 → 비밀번호 입력
-          logger.info('🔗 네이버 연동 필요 - 비밀번호 확인 모달 표시');
+        case 'LINK_ACTIVE': {
+          // 기존 active 계정에 네이버 연동 필요
+          logger.info('🔗 네이버 연동 필요');
+          const hasPassword = result.user.authProviders?.some(
+            (p: any) => p.providerId === 'password'
+          );
+          if (!hasPassword) {
+            const existingProviders = (result.user.authProviders || [])
+              .filter((p: any) => p.providerId !== 'password')
+              .map((p: any) => getSocialProviderName(p.providerId))
+              .join(', ');
+            Alert.alert(
+              '다른 소셜 계정으로 가입된 이메일',
+              `이 이메일은 이미 ${existingProviders}(으)로 가입되어 있습니다.\n해당 소셜 계정으로 로그인한 후 네이버를 연동해주세요.`
+            );
+            break;
+          }
           setSocialData(socialUserData);
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
           break;
+        }
           
         case 'NEED_PHONE':
           // 전화번호 입력 필요
@@ -322,15 +360,16 @@ export function SignInScreen({
   /**
    * Apple 로그인 성공 핸들러
    */
-  const handleAppleSignInSuccess = async (socialUserData: SocialUserData) => {
+  const handleAppleSignInSuccess = async (socialUserData: SocialUserData, credential?: any) => {
     try {
       setIsLoading(true); // 로딩 시작
-      const { getUserByEmail, getUserBySocialProvider } = await import('../services/authService');
+      const { getUserByEmail, getUserBySocialProvider, updateUser } = await import('../services/authService');
 
       const result = await handleSocialLogin(
         socialUserData, 
         getUserByEmail,
-        getUserBySocialProvider
+        getUserBySocialProvider,
+        updateUser
       );
       
       switch (result.action) {
@@ -356,23 +395,41 @@ export function SignInScreen({
           }
           break;
         
-        case 'LINK_ACTIVE':
-          // 기존 active 계정에 Apple 연동 필요 → 비밀번호 입력
-          logger.info('🔗 Apple 연동 필요 - 비밀번호 확인 모달 표시');
+        case 'LINK_ACTIVE': {
+          // 기존 active 계정에 Apple 연동 필요
+          logger.info('🔗 Apple 연동 필요');
+          const hasPassword = result.user.authProviders?.some(
+            (p: any) => p.providerId === 'password'
+          );
+          if (!hasPassword) {
+            const existingProviders = (result.user.authProviders || [])
+              .filter((p: any) => p.providerId !== 'password')
+              .map((p: any) => getSocialProviderName(p.providerId))
+              .join(', ');
+            Alert.alert(
+              '다른 소셜 계정으로 가입된 이메일',
+              `이 이메일은 이미 ${existingProviders}(으)로 가입되어 있습니다.\n해당 소셜 계정으로 로그인한 후 Apple을 연동해주세요.`
+            );
+            break;
+          }
           setSocialData(socialUserData);
+          setAppleCredential(credential || null);
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
           break;
+        }
           
         case 'NEED_PHONE':
-          // 전화번호 입력 필요
+          // 전화번호 입력 필요 (신규 회원가입) - credential 저장
           setSocialData(socialUserData);
+          setAppleCredential(credential || null);
           setShowPhoneModal(true);
           break;
           
         case 'LINK_TEMP':
-          // temp 계정 (이메일 있음 - 드문 케이스)
+          // temp 계정 연동
           setSocialData(socialUserData);
+          setAppleCredential(credential || null);
           setShowPhoneModal(true);
           break;
           
@@ -400,6 +457,9 @@ export function SignInScreen({
    */
   const handlePhoneSubmit = async (data: { name: string; phone: string }) => {
     if (!socialData) return;
+    
+    // 현재 소셜 제공자의 credential (Google, Apple 등)
+    const currentCredential = googleCredential || appleCredential;
     
     setIsLoading(true);
     try {
@@ -446,7 +506,7 @@ export function SignInScreen({
                   onPress: () => {
                     setShowPhoneModal(false);
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, googleCredential);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential);
                     } else {
                       onSignUpPress();
                     }
@@ -457,7 +517,7 @@ export function SignInScreen({
                   onPress: () => {
                     setShowPhoneModal(false);
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, user.userId || user.id, googleCredential);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, user.userId || user.id, currentCredential);
                     } else {
                       Alert.alert(
                         '안내',
@@ -492,7 +552,7 @@ export function SignInScreen({
                   onPress: () => {
                     setShowPhoneModal(false);
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, googleCredential);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential);
                     } else {
                       onSignUpPress();
                     }
@@ -506,7 +566,7 @@ export function SignInScreen({
         // 전화번호로 계정 없음 → 신규 회원가입
         setShowPhoneModal(false);
         if (onSocialSignUp) {
-          onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, googleCredential);
+          onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential);
         } else {
           onSignUpPress();
         }

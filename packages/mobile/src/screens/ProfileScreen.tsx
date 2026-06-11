@@ -497,6 +497,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         referralPath: data.referralPath,
         referrerName: data.referrerName || '',
         otherReferralDetail: data.otherReferralDetail || '',
+        agreedTerms: true,
         agreedPersonal: data.agreedPersonal,
         geocode: data.geocode,
         photoURL: '',

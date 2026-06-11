@@ -58,92 +58,43 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // 사용자 데이터 새로고침 함수 - useCallback으로 최적화
   const refreshUserData = useCallback(async () => {
-    // Firebase Auth 사용자
-    if (currentUser?.email) {
-      try {
-        const userRecord = await getUserByEmail(currentUser.email);
-        if (userRecord) {
-          // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
-          if ((userRecord.role === 'mentor_temp' || userRecord.role === 'foreign_temp') && userRecord.status === 'temp') {
-            try {
-              logger.info('🔄 웹 로그인 - 임시 사용자를 활성 상태로 업데이트 중:', userRecord.email);
-              
-              const { doc, updateDoc } = await import('firebase/firestore');
-              const newRole = userRecord.role === 'mentor_temp' ? 'mentor' : 'foreign';
-              
-              await updateDoc(doc(db, 'users', userRecord.userId), {
-                role: newRole,
-                status: 'active',
-                updatedAt: new Date()
-              });
-              
-              // 로컬 상태 업데이트
-              userRecord.role = newRole as any;
-              userRecord.status = 'active';
-              
-              logger.info('✅ 웹 사용자 상태 업데이트 완료:', { role: newRole, status: 'active' });
-            } catch (error) {
-              logger.error('❌ 웹 사용자 상태 업데이트 실패:', error);
-            }
-          }
-          
-          // 활성 캠프 자동 선택
-          const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
-          if (activeJobExpId && !userRecord.activeJobExperienceId) {
-            userRecord.activeJobExperienceId = activeJobExpId;
-          }
-          setUserData(userRecord as unknown as User);
-        }
-      } catch (error) {
-        logger.error('Failed to refresh user data:', error);
-      }
-    } 
-    // 소셜 로그인 사용자 (세션 스토리지)
-    else {
-      const socialUserStr = sessionStorage.getItem('social_user');
-      if (socialUserStr) {
+    if (!currentUser?.email) return;
+
+    try {
+      const userRecord = await getUserByEmail(currentUser.email);
+      if (!userRecord) return;
+
+      // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
+      if ((userRecord.role === 'mentor_temp' || userRecord.role === 'foreign_temp') && userRecord.status === 'temp') {
         try {
-          const socialUser = JSON.parse(socialUserStr);
-          const userRecord = await getUserByEmail(socialUser.email);
-          if (userRecord) {
-            // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
-            if ((userRecord.role === 'mentor_temp' || userRecord.role === 'foreign_temp') && userRecord.status === 'temp') {
-              try {
-                logger.info('🔄 웹 소셜 로그인 - 임시 사용자를 활성 상태로 업데이트 중:', userRecord.email);
-                
-                const { doc, updateDoc } = await import('firebase/firestore');
-                const newRole = userRecord.role === 'mentor_temp' ? 'mentor' : 'foreign';
-                
-                await updateDoc(doc(db, 'users', userRecord.userId), {
-                  role: newRole,
-                  status: 'active',
-                  updatedAt: new Date()
-                });
-                
-                // 로컬 상태 업데이트
-                userRecord.role = newRole as any;
-                userRecord.status = 'active';
-                
-                logger.info('✅ 웹 소셜 사용자 상태 업데이트 완료:', { role: newRole, status: 'active' });
-              } catch (error) {
-                logger.error('❌ 웹 소셜 사용자 상태 업데이트 실패:', error);
-              }
-            }
-            
-            // 활성 캠프 자동 선택
-            const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
-            if (activeJobExpId && !userRecord.activeJobExperienceId) {
-              userRecord.activeJobExperienceId = activeJobExpId;
-            }
-            setUserData(userRecord as unknown as User);
-          }
+          logger.info('🔄 웹 로그인 - 임시 사용자를 활성 상태로 업데이트 중:', userRecord.email);
+
+          const { doc, updateDoc } = await import('firebase/firestore');
+          const newRole = userRecord.role === 'mentor_temp' ? 'mentor' : 'foreign';
+
+          await updateDoc(doc(db, 'users', userRecord.userId), {
+            role: newRole,
+            status: 'active',
+            updatedAt: new Date(),
+          });
+
+          userRecord.role = newRole as any;
+          userRecord.status = 'active';
+
+          logger.info('✅ 웹 사용자 상태 업데이트 완료:', { role: newRole, status: 'active' });
         } catch (error) {
-          logger.error('Failed to refresh social user data:', error);
+          logger.error('❌ 웹 사용자 상태 업데이트 실패:', error);
         }
-      } else {
-        // 세션이 없으면 userData 초기화
-        setUserData(null);
       }
+
+      // 활성 캠프 자동 선택
+      const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
+      if (activeJobExpId && !userRecord.activeJobExperienceId) {
+        userRecord.activeJobExperienceId = activeJobExpId;
+      }
+      setUserData(userRecord as unknown as User);
+    } catch (error) {
+      logger.error('Failed to refresh user data:', error);
     }
   }, [currentUser?.email]);
 
@@ -163,16 +114,48 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [userData?.userId, refreshUserData]);
 
   useEffect(() => {
-    // 세션 스토리지에서 소셜 로그인 정보 확인 (네이버/카카오)
-    const checkSocialSession = async () => {
-      const socialUserStr = sessionStorage.getItem('social_user');
-      if (socialUserStr) {
+    // 로그아웃 이벤트 리스너
+    const handleUserLogout = () => {
+      logger.info('👋 로그아웃 이벤트 수신');
+      setUserData(null);
+      setCurrentUser(null);
+    };
+
+    window.addEventListener('user-logout', handleUserLogout);
+
+    // Firebase 인증 상태 변경 감지
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      logger.info('Auth state changed:', user ? `로그인됨 (${user.email})` : '로그아웃됨');
+      setCurrentUser(user);
+
+      if (user) {
+        // 이메일이 없는 경우 → UID로 Firestore 직접 조회 (Custom Token 로그인 시 발생 가능)
+        if (!user.email) {
+          logger.warn('Firebase Auth 사용자에 이메일이 없습니다. UID로 Firestore 조회를 시도합니다.', user.uid);
+          try {
+            const userByUid = await getUserById(user.uid);
+            if (userByUid) {
+              const activeJobExpId = await ensureActiveJobExperience(db, userByUid as unknown as User);
+              if (activeJobExpId && !userByUid.activeJobExperienceId) {
+                userByUid.activeJobExperienceId = activeJobExpId;
+              }
+              setUserData(userByUid as unknown as User);
+              logger.info('UID로 사용자 데이터 로드 성공:', userByUid.name);
+            } else {
+              logger.warn('UID로도 사용자를 찾을 수 없습니다:', user.uid);
+              setUserData(null);
+            }
+          } catch (err) {
+            logger.error('UID로 사용자 조회 실패:', err);
+            setUserData(null);
+          }
+          setLoading(false);
+          setAuthReady(true);
+          return;
+        }
+
         try {
-          const socialUser = JSON.parse(socialUserStr);
-          logger.info('✅ 세션 스토리지에서 소셜 사용자 발견:', socialUser);
-          
-          // Firestore에서 사용자 데이터 가져오기
-          const userRecord = await getUserByEmail(socialUser.email);
+          const userRecord = await getUserByEmail(user.email);
           if (userRecord) {
             // 활성 캠프 자동 선택
             const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
@@ -180,156 +163,63 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               userRecord.activeJobExperienceId = activeJobExpId;
             }
             setUserData(userRecord as unknown as User);
-            logger.info('✅ 네이버/카카오 사용자 데이터 로드 성공:', userRecord.name);
-            setLoading(false);
-            setAuthReady(true);
-            return true;
+            logger.info('사용자 데이터 로드 성공:', userRecord.name);
+          } else {
+            logger.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
+            // 소셜 회원가입 직후 Firestore 문서가 아직 없을 수 있으므로 재시도
+            const retryWithDelay = async (delayMs: number): Promise<boolean> => {
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              try {
+                const retryUserRecord = await getUserByEmail(user.email || '');
+                if (retryUserRecord) {
+                  const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
+                  if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
+                    retryUserRecord.activeJobExperienceId = activeJobExpId;
+                  }
+                  setUserData(retryUserRecord as unknown as User);
+                  logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
+                  return true;
+                }
+              } catch (retryError) {
+                logger.error('사용자 데이터 재시도 실패:', retryError);
+              }
+              return false;
+            };
+
+            // 1차 재시도 (1.5초 후), 2차 재시도 (추가 3초 후)
+            const firstRetry = await retryWithDelay(1500);
+            if (!firstRetry) {
+              await retryWithDelay(3000);
+            }
           }
         } catch (error) {
-          logger.error('세션 스토리지 사용자 데이터 로드 실패:', error);
-        }
-      }
-      return false;
-    };
-
-    // 소셜 로그인 성공 이벤트 리스너
-    const handleSocialLoginSuccess = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      logger.info('🎉 소셜 로그인 성공 이벤트 수신:', customEvent.detail);
-      checkSocialSession();
-    };
-    
-    // 로그아웃 이벤트 리스너
-    const handleUserLogout = () => {
-      logger.info('👋 로그아웃 이벤트 수신');
-      setUserData(null);
-      setCurrentUser(null);
-    };
-    
-    window.addEventListener('social-login-success', handleSocialLoginSuccess);
-    window.addEventListener('user-logout', handleUserLogout);
-
-    // 먼저 세션 스토리지 확인
-    checkSocialSession().then((hasSocialSession) => {
-      if (hasSocialSession) {
-        // 네이버/카카오 로그인된 상태면 Firebase Auth는 무시
-        return;
-      }
-
-      // Firebase 인증 상태 변경 감지
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        logger.info('Auth state changed:', user ? `로그인됨 (${user.email})` : '로그아웃됨');
-        setCurrentUser(user);
-        
-        if (user) {
-          // 이메일이 없는 경우 → UID로 Firestore 직접 조회 (구글 팝업 세션 복원 시 발생 가능)
-          if (!user.email) {
-            logger.warn('Firebase Auth 사용자에 이메일이 없습니다. UID로 Firestore 조회를 시도합니다.', user.uid);
-            try {
-              const userByUid = await getUserById(user.uid);
-              if (userByUid) {
-                const activeJobExpId = await ensureActiveJobExperience(db, userByUid as unknown as User);
-                if (activeJobExpId && !userByUid.activeJobExperienceId) {
-                  userByUid.activeJobExperienceId = activeJobExpId;
-                }
-                setUserData(userByUid as unknown as User);
-                logger.info('UID로 사용자 데이터 로드 성공:', userByUid.name);
-              } else {
-                logger.warn('UID로도 사용자를 찾을 수 없습니다:', user.uid);
-                setUserData(null);
-              }
-            } catch (err) {
-              logger.error('UID로 사용자 조회 실패:', err);
-              setUserData(null);
-            }
-            setLoading(false);
-            setAuthReady(true);
-            return;
-          }
-          
+          logger.error('사용자 데이터 가져오기 실패:', error);
           try {
-            const userRecord = await getUserByEmail(user.email);
-            if (userRecord) {
-              // 활성 캠프 자동 선택
-              const activeJobExpId = await ensureActiveJobExperience(db, userRecord as unknown as User);
-              if (activeJobExpId && !userRecord.activeJobExperienceId) {
-                userRecord.activeJobExperienceId = activeJobExpId;
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            const retryUserRecord = await getUserByEmail(user.email || '');
+            if (retryUserRecord) {
+              const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
+              if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
+                retryUserRecord.activeJobExperienceId = activeJobExpId;
               }
-              setUserData(userRecord as unknown as User);
-              logger.info('사용자 데이터 로드 성공:', userRecord.name);
-            } else {
-              logger.warn('사용자 데이터를 찾을 수 없습니다:', user.email);
-              logger.info('회원가입 진행 중이거나 Firestore 데이터가 없는 상태일 수 있습니다.');
-              // 소셜 회원가입 직후 Firestore 문서가 아직 없을 수 있으므로
-              // loading/authReady를 false 상태로 유지하며 재시도
-              const retryWithDelay = async (delayMs: number): Promise<boolean> => {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-                try {
-                  const retryUserRecord = await getUserByEmail(user.email || '');
-                  if (retryUserRecord) {
-                    const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
-                    if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
-                      retryUserRecord.activeJobExperienceId = activeJobExpId;
-                    }
-                    setUserData(retryUserRecord as unknown as User);
-                    logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
-                    return true;
-                  }
-                } catch (retryError) {
-                  logger.error('사용자 데이터 재시도 실패:', retryError);
-                }
-                return false;
-              };
-
-              // 1차 재시도 (1.5초 후) - 소셜 회원가입 완료 직후 리다이렉션 대응
-              const firstRetry = await retryWithDelay(1500);
-              if (!firstRetry) {
-                // 2차 재시도 (추가 3초 후)
-                await retryWithDelay(3000);
-              }
+              setUserData(retryUserRecord as unknown as User);
+              logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
             }
-          } catch (error) {
-            logger.error('사용자 데이터 가져오기 실패:', error);
-            // 네트워크 오류 등의 경우 재시도
-            try {
-              await new Promise(resolve => setTimeout(resolve, 3000));
-              const retryUserRecord = await getUserByEmail(user.email || '');
-              if (retryUserRecord) {
-                const activeJobExpId = await ensureActiveJobExperience(db, retryUserRecord as unknown as User);
-                if (activeJobExpId && !retryUserRecord.activeJobExperienceId) {
-                  retryUserRecord.activeJobExperienceId = activeJobExpId;
-                }
-                setUserData(retryUserRecord as unknown as User);
-                logger.info('재시도로 사용자 데이터 로드 성공:', retryUserRecord.name);
-              }
-            } catch (retryError) {
-              logger.error('사용자 데이터 재시도 실패:', retryError);
-            }
+          } catch (retryError) {
+            logger.error('사용자 데이터 재시도 실패:', retryError);
           }
-        } else {
-          setUserData(null);
         }
-        
-        setLoading(false);
-        setAuthReady(true);
-      });
+      } else {
+        setUserData(null);
+      }
 
-      // Cleanup 함수 등록
-      return unsubscribe;
+      setLoading(false);
+      setAuthReady(true);
     });
 
-    // 페이지 표시될 때마다 세션 확인 (다른 탭에서 로그인한 경우 대응)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        checkSocialSession();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
-      window.removeEventListener('social-login-success', handleSocialLoginSuccess);
       window.removeEventListener('user-logout', handleUserLogout);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unsubscribe();
     };
   }, []);
 
