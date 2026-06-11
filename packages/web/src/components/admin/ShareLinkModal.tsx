@@ -6,6 +6,7 @@ import Button from '@/components/common/Button';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { authenticatedFetch } from '@/lib/apiClient';
 
 interface ShareLinkModalProps {
   isOpen: boolean;
@@ -62,11 +63,8 @@ export function ShareLinkModal({
     try {
       setIsGenerating(true);
       
-      const response = await fetch('/api/share-applicants/generate', {
+      const response = await authenticatedFetch('/api/share-applicants/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           jobBoardId,
           applicationIds: selectedApplicationIds,
