@@ -13,7 +13,7 @@ export function PrivacyPolicyScreen() {
       <View style={styles.header}>
         <Ionicons name="shield-checkmark" size={48} color="#3b82f6" />
         <Text style={styles.title}>개인정보처리방침</Text>
-        <Text style={styles.lastUpdated}>최종 수정일: 2026년 3월 20일</Text>
+        <Text style={styles.lastUpdated}>최종 수정일: 2026년 6월 12일</Text>
       </View>
 
       <View style={styles.content}>
@@ -51,6 +51,7 @@ export function PrivacyPolicyScreen() {
             <Text style={styles.infoBoxTitle}>자동 수집 항목</Text>
             <Text style={styles.infoBoxContent}>
               • 서비스 이용 기록, 접속 로그, 쿠키, 접속 IP 정보, 기기 정보
+              {'\n'}• 위치 공유 기능 이용 시: GPS 기반 위도·경도 좌표 (사용자가 직접 활성화한 경우에 한함)
             </Text>
           </View>
         </View>
@@ -143,7 +144,44 @@ export function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>9. 개인정보 처리방침 변경</Text>
+          <Text style={styles.sectionTitle}>9. 위치 정보의 수집·이용</Text>
+          <Text style={styles.paragraph}>
+            회사는 캠프 운영 스태프 간 실시간 위치 공유 서비스 제공을 위해 아래와 같이 위치 정보를 처리합니다.
+          </Text>
+          <View style={[styles.infoBox, { borderLeftColor: '#3b82f6' }]}>
+            <Text style={styles.infoBoxTitle}>수집 항목</Text>
+            <Text style={styles.infoBoxContent}>
+              GPS 기반 실시간 위도·경도 좌표, 위치 업데이트 시각
+            </Text>
+          </View>
+          <View style={[styles.infoBox, { borderLeftColor: '#10b981' }]}>
+            <Text style={styles.infoBoxTitle}>수집 및 이용 목적</Text>
+            <Text style={styles.infoBoxContent}>
+              캠프 진행 중 같은 캠프 코드를 보유한 스태프(멘토, 원어민 교사, 관리자) 간 실시간 위치 확인 및 안전 관리
+            </Text>
+          </View>
+          <View style={[styles.infoBox, { borderLeftColor: '#f59e0b' }]}>
+            <Text style={styles.infoBoxTitle}>수집 방법 및 동의</Text>
+            <Text style={styles.infoBoxContent}>
+              위치 공유는 사용자가 앱 내 위치 공유 토글을 직접 활성화한 경우에만 작동합니다. 앱 최초 실행 시 또는 기능 사용 시 위치 권한 허용 여부를 사용자에게 명시적으로 요청하며, 권한을 거부하면 위치 공유 기능은 작동하지 않습니다. 사용자는 언제든지 토글을 끄거나 기기 설정에서 위치 권한을 철회할 수 있습니다.
+            </Text>
+          </View>
+          <View style={[styles.infoBox, { borderLeftColor: '#8b5cf6' }]}>
+            <Text style={styles.infoBoxTitle}>포그라운드 및 백그라운드 위치 수집</Text>
+            <Text style={styles.infoBoxContent}>
+              위치 공유가 활성화된 상태에서 앱이 백그라운드로 전환되어도 위치 정보 업데이트가 지속됩니다(Android: Foreground Service 알림 표시, iOS: 상태 표시줄 위치 아이콘 표시). 이는 캠프 운영 중 스태프 위치를 지속적으로 파악하기 위한 목적이며, 사용자가 위치 공유를 끄면 즉시 중단됩니다.
+            </Text>
+          </View>
+          <View style={[styles.infoBox, { borderLeftColor: '#ef4444' }]}>
+            <Text style={styles.infoBoxTitle}>공개 범위 및 보유 기간</Text>
+            <Text style={styles.infoBoxContent}>
+              수집된 위치 정보는 동일 캠프 코드를 보유한 스태프에게만 공개됩니다. 위치 공유를 끄는 즉시 지도에서 제거되며, Firebase Firestore에서 공유 상태가 비활성 처리됩니다. 위치 데이터는 서비스 목적 달성 후 지체 없이 파기됩니다.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>10. 개인정보 처리방침 변경</Text>
           <Text style={styles.paragraph}>
             이 개인정보처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
           </Text>
