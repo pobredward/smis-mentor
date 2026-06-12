@@ -14,6 +14,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Android 앱 링크 인증을 위한 Digital Asset Links 파일 설정
+        source: '/.well-known/assetlinks.json',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/json',
+          },
+        ],
+      },
+      {
         source: '/:path*',
         headers: [
           {
