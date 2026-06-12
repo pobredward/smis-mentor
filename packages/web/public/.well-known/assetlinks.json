@@ -8,7 +8,8 @@
       "namespace": "android_app",
       "package_name": "com.smis.smismentor",
       "sha256_cert_fingerprints": [
-        "61:C9:E7:D0:AB:54:38:8D:B4:72:69:4B:7D:B0:20:89:12:A9:21:E9:83:9A:A9:58:95:DC:F1:EE:CF:C5"
+        "61:C9:E7:D0:AB:54:38:8D:B4:72:69:4B:7D:B0:20:89:12:A9:21:E9:83:9A:A9:58:95:DC:F1:EE:CF:C5",
+        "61:C9:E7:D0:AB:54:38:8D:B4:72:69:4B:7D:B0:20:89:12:A9:21:E9:83:9A:9A:5B:95:DC:F1:EE:CF:C5:44:8E"
       ]
     }
   }
