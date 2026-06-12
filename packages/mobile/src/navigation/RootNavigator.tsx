@@ -14,6 +14,8 @@ import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from '../screens/TermsOfServiceScreen';
 import { useAuth } from '../context/AuthContext';
 import { ProfileEditScreen } from '../screens/ProfileEditScreen';
+import { PostDetailScreen } from '../screens/PostDetailScreen';
+import { PostWriteScreen } from '../screens/PostWriteScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -140,6 +142,24 @@ function AppStack() {
         options={{
           headerShown: true,
           title: isForeign ? 'Terms of Service' : '서비스 이용약관',
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="PostDetail"
+        component={PostDetailScreen}
+        options={{
+          headerShown: false,
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="PostWrite"
+        component={PostWriteScreen}
+        options={{
+          headerShown: false,
           presentation: 'card',
           animation: 'slide_from_right',
         }}

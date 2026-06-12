@@ -22,6 +22,22 @@ export type RootStackParamList = {
   NotificationTest: undefined;
   PrivacyPolicy: undefined;
   TermsOfService: undefined;
+  /** 게시글 세부 화면 (댓글 포함) */
+  PostDetail: { postId: string };
+  /** 게시글 작성/수정 화면 */
+  PostWrite: {
+    scope: 'all' | 'camp' | 'group' | 'dev';
+    jobCodeId: string | null;
+    groupId: string | null;
+    groupLabel: string | null;
+    authorId: string;
+    authorName: string;
+    authorProfileImage: string | null;
+    authorJobCodeLabel: string | null;
+    authorIsAdmin: boolean;
+    /** 수정 시 기존 게시글 ID */
+    editPostId?: string;
+  };
 };
 
 // Bottom Tabs (메인 하단 탭)
@@ -29,6 +45,7 @@ export type MainTabsParamList = {
   Home: undefined;
   Recruitment: undefined;
   Camp: undefined;
+  Community: undefined;
   Profile: undefined;
   Admin: undefined;
 };

@@ -9,6 +9,7 @@ import {
   HomeScreen,
   CampScreen,
   ProfileScreen,
+  CommunityScreen,
 } from '../screens';
 import { useAuth } from '../context/AuthContext';
 
@@ -18,6 +19,8 @@ export function MainTabs() {
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  // 업무코드가 하나라도 있는 사용자에게만 게시판 탭 표시
+  const hasAnyJobCode = (userData?.jobExperiences?.length ?? 0) > 0;
 
   return (
     <Tab.Navigator
@@ -70,6 +73,19 @@ export function MainTabs() {
             ),
           }}
         />
+        {/* 업무코드가 하나 이상 있는 멘토/원어민에게만 게시판 탭 표시 */}
+        {hasAnyJobCode && (
+          <Tab.Screen
+            name="Community"
+            component={CommunityScreen}
+            options={{
+              title: isForeign ? 'Board' : '게시판',
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="newspaper-outline" size={size} color={color} />
+              ),
+            }}
+          />
+        )}
         <Tab.Screen
           name="Profile"
           component={ProfileScreen}

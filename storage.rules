@@ -152,6 +152,21 @@ service firebase.storage {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // 커뮤니티 게시글 이미지
+    // 경로: community/posts/{postId}/...
+    // 역할: 인증 사용자(읽기), 인증 사용자(업로드/삭제)
+    // ──────────────────────────────────────────────────────────────
+    match /community/posts/{postId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if (
+        isAuthenticated() &&
+        isImage() &&
+        isUnder10MB()
+      );
+      allow delete: if isAuthenticated();
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // 기본 거부 (명시되지 않은 모든 경로)
     // ──────────────────────────────────────────────────────────────
     match /{allPaths=**} {

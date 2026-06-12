@@ -344,24 +344,40 @@ service cloud.firestore {
 
     // ──────────────────────────────────────────────────────────────
     // personalTasks 컬렉션 (개인 업무)
-    // 역할: 본인만 전체 CRUD
+    // 역할: 본인(ownerId)만 전체 CRUD — admin 포함 모든 역할(temp 포함)
+    //
+    // [read 설계 배경]
+    // getPersonalTasksByGroupId, getPersonalTasksByDate 등 컬렉션 list 쿼리에서
+    // where('ownerId', '==', uid) 조건으로 본인 데이터만 필터링한다.
+    // Firestore list 쿼리는 규칙에서 resource.data를 사용할 수 없으므로
+    // isAuthenticated() 수준에서 허용하되, 쿼리 자체에 ownerId 필터를 강제한다.
+    // (실질적인 데이터 분리는 클라이언트 쿼리의 where('ownerId', '==', uid)로 보장)
+    //
+    // [delete 설계 배경]
+    // deletePersonalTaskGroup은 groupId 기반 쿼리 후 배치 삭제를 수행한다.
+    // temp 역할 사용자도 자신의 개인 업무를 삭제할 수 있어야 하므로
+    // isActiveUser() 대신 isAuthenticated()를 사용한다.
     // ──────────────────────────────────────────────────────────────
     match /personalTasks/{taskId} {
-      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      // list 쿼리 허용 (where ownerId == uid 조건 강제는 클라이언트에서 보장)
+      // getDoc 단건 조회는 resource.data.ownerId 비교로 본인만 허용
+      allow list: if isAuthenticated();
+      allow get: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
       allow create: if (
-        isActiveUser() &&
+        isAuthenticated() &&
         request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.keys().hasAll(['ownerId', 'campCode', 'title', 'isCompleted', 'createdAt', 'updatedAt']) &&
         request.resource.data.title is string &&
         request.resource.data.title.size() <= 200
       );
       allow update: if (
-        isActiveUser() &&
+        isAuthenticated() &&
         resource.data.ownerId == request.auth.uid &&
         // ownerId 변경 불가
         fieldUnchanged('ownerId')
       );
-      allow delete: if isActiveUser() && resource.data.ownerId == request.auth.uid;
+      // 본인(ownerId)만 삭제 가능 — temp 역할 포함
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -579,6 +595,117 @@ service cloud.firestore {
     match /auditLogs/{logId} {
       allow read: if isAdmin();
       allow write: if false;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // posts 컬렉션 (게시판)
+    //
+    // [접근 설계]
+    // - 작성/읽기 권한: active 역할(mentor, foreign, admin)만 허용
+    //   temp 역할(mentor_temp, foreign_temp)은 업무코드 없이 게시판 불가
+    // - scope='dev': 작성자 본인 + admin만 읽기 가능
+    // - scope 나머지(all/camp/group): active 캠프 스태프 전체 읽기
+    //   (camp/group 범위 필터링은 클라이언트 쿼리에서 jobCodeId/groupId로 처리)
+    //
+    // [update 분리 설계]
+    // - 좋아요 토글(likedBy, likeCount): 본인이 아닌 active 유저도 가능
+    // - commentCount 증감: 댓글 생성/삭제 시 서비스에서 처리 → active 유저 허용
+    // - 내용 수정(content, imageUrls): 작성자 본인 + 핵심 필드 불변 보장
+    // ──────────────────────────────────────────────────────────────
+    match /posts/{postId} {
+      // dev 게시글: 본인 또는 admin만 읽기
+      // 나머지 scope: active 캠프 스태프 전체 읽기
+      allow read: if (
+        isActiveUser() && (
+          resource.data.scope != 'dev' ||
+          isAdmin() ||
+          resource.data.authorId == request.auth.uid
+        )
+      );
+
+      // 새 게시글 작성: active 캠프 스태프 + 본인 명의
+      allow create: if (
+        isActiveUser() &&
+        request.resource.data.authorId == request.auth.uid &&
+        request.resource.data.keys().hasAll([
+          'scope', 'authorId', 'authorName',
+          'content', 'imageUrls',
+          'likeCount', 'likedBy', 'commentCount',
+          'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.scope in ['all', 'camp', 'group', 'dev'] &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() <= 5000 &&
+        request.resource.data.likeCount == 0 &&
+        request.resource.data.commentCount == 0
+      );
+
+      // 좋아요 토글 또는 commentCount 증감:
+      // active 유저라면 likedBy/likeCount/commentCount/updatedAt 만 변경 허용
+      allow update: if (
+        isActiveUser() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likedBy', 'likeCount', 'commentCount', 'updatedAt'])
+      );
+
+      // 게시글 내용 수정: 작성자 본인만, 핵심 필드 불변
+      allow update: if (
+        isActiveUser() &&
+        resource.data.authorId == request.auth.uid &&
+        fieldUnchanged('authorId') &&
+        fieldUnchanged('scope') &&
+        fieldUnchanged('jobCodeId') &&
+        fieldUnchanged('groupId') &&
+        fieldUnchanged('likedBy') &&
+        fieldUnchanged('likeCount') &&
+        fieldUnchanged('commentCount') &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() <= 5000
+      );
+
+      // 게시글 삭제: 작성자 본인 또는 admin
+      allow delete: if (
+        isAdmin() ||
+        (isActiveUser() && resource.data.authorId == request.auth.uid)
+      );
+
+      // 댓글 서브컬렉션
+      match /comments/{commentId} {
+        // dev 게시글 댓글: 본인 또는 admin만
+        // 나머지: active 캠프 스태프 전체
+        allow read: if (
+          isActiveUser() && (
+            get(/databases/$(database)/documents/posts/$(postId)).data.scope != 'dev' ||
+            isAdmin() ||
+            resource.data.authorId == request.auth.uid
+          )
+        );
+
+        allow create: if (
+          isActiveUser() &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.resource.data.keys().hasAll([
+            'parentId', 'authorId', 'authorName',
+            'content', 'createdAt', 'updatedAt'
+          ]) &&
+          request.resource.data.content is string &&
+          request.resource.data.content.size() <= 1000
+        );
+
+        // 댓글 수정 / soft delete: 작성자 본인만, 핵심 필드 불변
+        allow update: if (
+          isActiveUser() &&
+          resource.data.authorId == request.auth.uid &&
+          fieldUnchanged('authorId') &&
+          fieldUnchanged('parentId')
+        );
+
+        // 댓글 삭제: 작성자 본인 또는 admin
+        allow delete: if (
+          isAdmin() ||
+          (isActiveUser() && resource.data.authorId == request.auth.uid)
+        );
+      }
     }
 
     // ──────────────────────────────────────────────────────────────

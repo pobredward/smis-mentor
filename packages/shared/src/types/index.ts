@@ -10,3 +10,5 @@ export * from './appConfig';
 
 // 기존 타입들도 re-export (추후 이동 예정)
 export type { User, JobBoard, ApplicationHistory, Review } from './legacy';
+
+export * from './community';
