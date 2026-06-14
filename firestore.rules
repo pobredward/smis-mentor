@@ -176,10 +176,10 @@ service cloud.firestore {
 
     // ──────────────────────────────────────────────────────────────
     // jobBoards 컬렉션 (채용 공고)
-    // 역할: admin(전체), 인증 사용자(읽기)
+    // 역할: admin(전체), 전체 공개(읽기) - 비로그인 사용자도 공고 열람 가능
     // ──────────────────────────────────────────────────────────────
     match /jobBoards/{jobBoardId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -282,10 +282,10 @@ service cloud.firestore {
 
     // ──────────────────────────────────────────────────────────────
     // reviews 컬렉션 (후기)
-    // 역할: 인증 사용자(읽기), 본인(생성/수정/삭제)
+    // 역할: 전체 공개(읽기) - 비로그인 사용자도 후기 열람 가능, 본인(생성/수정/삭제)
     // ──────────────────────────────────────────────────────────────
     match /reviews/{reviewId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if (
         isActiveUser() &&
         request.resource.data.author.id == request.auth.uid &&

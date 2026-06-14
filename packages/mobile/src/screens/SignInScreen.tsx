@@ -37,12 +37,14 @@ interface SignInScreenProps {
   onSignUpPress: () => void;
   onSignInSuccess: () => void;
   onSocialSignUp?: (socialData: SocialUserData, tempUserId?: string, credential?: any, role?: 'mentor' | 'foreign') => void;
+  onBack?: () => void;
 }
 
 export function SignInScreen({
   onSignUpPress,
   onSignInSuccess,
   onSocialSignUp,
+  onBack,
 }: SignInScreenProps) {
   const { refreshUserData } = useAuth(); // AuthContext에서 refreshUserData 가져오기
   
@@ -499,11 +501,13 @@ export function SignInScreen({
             setShowPasswordModal(true);
             return;
           } else {
-            // 이메일 같음 → 재로그인
+            // 이메일 같음 → 소셜 계정 연동 후 로그인
+            // (handleSocialLogin에서 이미 LOGIN을 반환했어야 하지만, 방어 코드로 처리)
             setShowForeignPhoneModal(false);
             try {
               const { signInWithCustomToken: signInCustom } = await import('../services/authService');
               await signInCustom(existingUser.userId || (existingUser as any).id, existingUser.email);
+              await persistLoginRememberEmail(existingUser.email);
               onSignInSuccess();
             } catch (loginError) {
               logger.error('❌ 원어민 재로그인 실패:', loginError);
@@ -522,6 +526,12 @@ export function SignInScreen({
             name: fullName,
             phone: `${data.countryCode}${cleanPhone}`,
             countryCode: data.countryCode,
+            foreignTeacher: {
+              firstName: data.firstName,
+              lastName: data.lastName,
+              middleName: data.middleName ?? '',
+              countryCode: data.countryCode,
+            },
           };
           if (onSocialSignUp) {
             onSocialSignUp(updatedSocialData, existingUser.userId || (existingUser as any).id, currentCredential, 'foreign');
@@ -553,6 +563,13 @@ export function SignInScreen({
         name: fullName,
         phone: `${data.countryCode}${cleanPhone}`,
         countryCode: data.countryCode,
+        // foreignTeacher 필드: ProfileScreen → SignUpFlow로 전달
+        foreignTeacher: {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          middleName: data.middleName ?? '',
+          countryCode: data.countryCode,
+        },
       };
       if (onSocialSignUp) {
         onSocialSignUp(updatedSocialData, undefined, currentCredential, 'foreign');
@@ -860,6 +877,19 @@ export function SignInScreen({
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
+          {/* 뒤로가기 버튼 */}
+          {onBack && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={onBack}
+              accessibilityLabel="뒤로가기"
+              accessibilityRole="button"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#64748b" />
+            </TouchableOpacity>
+          )}
+
           {/* 로고/타이틀 */}
           <View style={styles.header}>
             <Text style={styles.title}>SMIS</Text>
@@ -1060,6 +1090,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     justifyContent: 'center',
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+    padding: 4,
   },
   header: {
     alignItems: 'center',

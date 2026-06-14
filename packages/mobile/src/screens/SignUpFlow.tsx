@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { logger } from '@smis-mentor/shared';
-import { Alert, ActivityIndicator, View, StyleSheet } from 'react-native';
+import { Alert, ActivityIndicator, View, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
@@ -24,29 +24,28 @@ export function SignUpFlow({
   onComplete,
   onCancel,
 }: SignUpFlowProps) {
-  // 소셜 가입 시 이름+전화번호가 이미 확인됨 → step 1 건너뛰기
-  // mentor: step 3(학력)부터, foreign: step 1에서 completeForeignSocialSignUp 즉시 호출
   const socialHasIdentity = !!initialSocialData && !!initialSocialData.name && !!initialSocialData.phone;
-  const initialStep = socialHasIdentity && role === 'mentor' ? 3 : 1;
 
-  const [step, setStep] = useState(initialStep);
+  // 소셜 가입 시 이름+전화번호가 이미 확인됨 → step 1 건너뛰기
+  // mentor: step 3(학력)부터, foreign: step 4(Account & Documents 확인)로 바로 이동
+  const getInitialStep = () => {
+    if (!socialHasIdentity) return 1;
+    if (role === 'mentor') return 3;
+    if (role === 'foreign') return 4; // Account & Documents 확인 화면
+    return 1;
+  };
+
+  const [step, setStep] = useState(getInitialStep);
   const [signUpData, setSignUpData] = useState<SignUpState>({
     name: initialSocialData?.name || '',
     phone: initialSocialData?.phone || '',
     isSocialSignUp: !!initialSocialData,
     socialData: initialSocialData,
     tempUserId: initialTempUserId,
+    // ForeignPhoneInputModal에서 전달된 foreignTeacher 정보 초기화
+    foreignTeacher: (initialSocialData as any)?.foreignTeacher,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // 원어민 소셜 가입: 이름+전화번호가 이미 확인됐으면 마운트 시 즉시 완료 처리
-  React.useEffect(() => {
-    if (role === 'foreign' && socialHasIdentity) {
-      completeForeignSocialSignUp(signUpData);
-    }
-  // 마운트 시 1회만 실행
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   /**
    * Step 1 완료: 이름 + 전화번호
@@ -66,10 +65,10 @@ export function SignUpFlow({
 
     if (signUpData.isSocialSignUp) {
       if (role === 'foreign') {
-        // 원어민 소셜 가입은 추가 학력 정보 없이 바로 완료
-        completeForeignSocialSignUp(updatedData);
+        // 원어민 소셜 가입: Account & Documents 확인 화면(step 4)으로
+        setStep(4);
       } else {
-        // 멘토 소셜 가입은 Step 3(학력 정보)으로
+        // 멘토 소셜 가입: Step 3(학력 정보)으로
         setStep(3);
       }
     } else {
@@ -78,7 +77,7 @@ export function SignUpFlow({
   };
 
   /**
-   * 원어민 소셜 가입 즉시 완료 처리
+   * 원어민 소셜 가입 Account & Documents 확인 후 최종 완료 처리 (웹의 /account 페이지와 동일)
    */
   const completeForeignSocialSignUp = async (data: SignUpState) => {
     setIsSubmitting(true);
@@ -93,25 +92,30 @@ export function SignUpFlow({
       const { auth: firebaseAuth } = await import('../config/firebase');
 
       if (firebaseAuth.currentUser) {
+        // Google/Apple: signInWithCredential로 이미 로그인됨 → 바로 완료
         Alert.alert(
           '회원가입 완료',
           '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
           [{ text: '확인', onPress: onComplete }]
         );
       } else {
+        // 네이버: Custom Token으로 로그인 필요
+        // handleSocialSignUp에서 Firestore 문서 ID = Firebase Auth UID로 생성됨
         const { signInWithCustomToken: signInCustom } = await import('../services/authService');
-        const userId = data.socialData!.firebaseAuthUid || data.socialData!.providerUid;
+        // Firebase Auth UID (setDoc에서 사용한 userId)를 우선으로 사용
+        const firebaseUid = data.socialData!.firebaseAuthUid;
         const userEmail = data.socialData!.email;
 
-        if (userId && userEmail) {
+        if (firebaseUid && userEmail) {
           try {
-            await signInCustom(userId, userEmail);
+            await signInCustom(firebaseUid, userEmail);
             Alert.alert(
               '회원가입 완료',
               '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
               [{ text: '확인', onPress: onComplete }]
             );
           } catch {
+            // Custom Token 로그인 실패 시 로그인 화면으로 안내
             Alert.alert(
               '회원가입 완료',
               '회원가입이 완료되었습니다. 로그인해주세요.',
@@ -236,14 +240,12 @@ export function SignUpFlow({
   const handleBack = () => {
     if (step === 1) {
       onCancel();
-    } else if (step === 3 && signUpData.isSocialSignUp) {
-      // 소셜 가입에서 Step 3이 첫 화면(이름+전화번호 이미 확인)이면 취소
-      if (socialHasIdentity) {
-        onCancel();
-      } else {
-        // 소셜 가입이나 이름/전화번호가 없는 경우(일반) → Step 1로
-        setStep(1);
-      }
+    } else if (step === 4 && role === 'foreign' && socialHasIdentity) {
+      // foreign 소셜 가입: Account 확인 화면에서 뒤로 → 취소 (신원 정보는 모달에서 입력했으므로)
+      onCancel();
+    } else if (step === 3 && signUpData.isSocialSignUp && socialHasIdentity) {
+      // 멘토 소셜 가입: Step 3이 첫 화면이면 취소
+      onCancel();
     } else {
       setStep(step - 1);
     }
@@ -253,7 +255,7 @@ export function SignUpFlow({
    * 소셜 회원가입 처리
    */
   const handleSocialSignUp = async (data: SignUpState) => {
-    const { socialData, tempUserId, phone, name, university, grade, isOnLeave, major1, major2 } = data;
+    const { socialData, tempUserId, phone, name, university, grade, isOnLeave, major1, major2, foreignTeacher } = data;
 
     if (!socialData) {
       throw new Error('소셜 로그인 데이터가 없습니다');
@@ -310,18 +312,33 @@ export function SignUpFlow({
         name: tempUserData?.name || name,
         phone: phone || tempUserData?.phone || '',
         phoneNumber: phone || tempUserData?.phone || '',
-        university,
-        grade,
-        isOnLeave,
-        major1,
-        major2,
+        // 역할별 전용 필드 분리 (undefined → Firestore 오류 방지)
+        ...(role !== 'foreign' && {
+          university: university ?? '',
+          grade: grade ?? 0,
+          isOnLeave: isOnLeave ?? null,
+          major1: major1 ?? '',
+          major2: major2 ?? '',
+        }),
+        ...(role === 'foreign' && {
+          jobMotivation: 'Foreign Teacher Application',
+          foreignTeacher: {
+            firstName: foreignTeacher?.firstName ?? '',
+            lastName: foreignTeacher?.lastName ?? '',
+            middleName: foreignTeacher?.middleName ?? '',
+            countryCode: foreignTeacher?.countryCode ?? '',
+            cvUrl: (tempUserData as any)?.foreignTeacher?.cvUrl ?? '',
+            passportPhotoUrl: (tempUserData as any)?.foreignTeacher?.passportPhotoUrl ?? '',
+            foreignIdCardUrl: (tempUserData as any)?.foreignTeacher?.foreignIdCardUrl ?? '',
+            applicationDate: Timestamp.now(),
+          },
+        }),
         role: role === 'foreign' ? 'foreign' : 'mentor_temp',
         status: 'active',
         agreedTerms: true,
         agreedPersonal: true,
         profileImage: socialData.photoURL || tempUserData?.profileImage || '',
         selfIntroduction: (tempUserData as any)?.selfIntroduction || '',
-        jobMotivation: (tempUserData as any)?.jobMotivation || '',
         feedback: (tempUserData as any)?.feedback || '',
         jobExperiences: (tempUserData as any)?.jobExperiences || [],
         authProviders: [
@@ -416,11 +433,27 @@ export function SignUpFlow({
         name,
         phone,
         phoneNumber: phone,
-        university,
-        grade,
-        isOnLeave,
-        major1,
-        major2,
+        // 역할별 전용 필드 분리 (undefined → Firestore 오류 방지)
+        ...(role !== 'foreign' && {
+          university: university ?? '',
+          grade: grade ?? 0,
+          isOnLeave: isOnLeave ?? null,
+          major1: major1 ?? '',
+          major2: major2 ?? '',
+        }),
+        ...(role === 'foreign' && {
+          jobMotivation: 'Foreign Teacher Application',
+          foreignTeacher: {
+            firstName: foreignTeacher?.firstName ?? '',
+            lastName: foreignTeacher?.lastName ?? '',
+            middleName: foreignTeacher?.middleName ?? '',
+            countryCode: foreignTeacher?.countryCode ?? '',
+            cvUrl: '',
+            passportPhotoUrl: '',
+            foreignIdCardUrl: '',
+            applicationDate: Timestamp.now(),
+          },
+        }),
         role: role === 'foreign' ? 'foreign' : 'mentor_temp',
         status: 'active',
         agreedTerms: true,
@@ -503,7 +536,6 @@ export function SignUpFlow({
     });
   };
 
-  // 로딩 중이면 로딩 스피너 표시
   if (isSubmitting) {
     return (
       <View style={styles.loadingContainer}>
@@ -519,6 +551,7 @@ export function SignUpFlow({
         <SignUpStep1Screen
           onNext={handleStep1Complete}
           onSignInPress={onCancel}
+          onBack={onCancel}
         />
       );
 
@@ -545,6 +578,17 @@ export function SignUpFlow({
         />
       );
 
+    case 4:
+      // Foreign 소셜 가입 전용: Account & Documents 확인 화면 (웹 /sign-up/foreign/account 동일)
+      return (
+        <ForeignAccountScreen
+          name={signUpData.name}
+          socialProvider={signUpData.socialData?.providerId ?? null}
+          onComplete={() => completeForeignSocialSignUp(signUpData)}
+          onBack={handleBack}
+        />
+      );
+
     default:
       return null;
   }
@@ -556,5 +600,207 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f3f4f6',
+  },
+});
+
+/**
+ * Foreign 소셜 가입 - Account & Documents 확인 화면
+ * 웹의 /sign-up/foreign/account 페이지와 동일한 역할
+ */
+function ForeignAccountScreen({
+  name,
+  socialProvider,
+  onComplete,
+  onBack,
+}: {
+  name: string;
+  socialProvider: string | null;
+  onComplete: () => void;
+  onBack: () => void;
+}) {
+  const providerLabel =
+    socialProvider === 'naver' ? 'Naver' :
+    socialProvider === 'kakao' ? 'Kakao' :
+    socialProvider === 'apple' ? 'Apple' : 'Google';
+
+  return (
+    <View style={foreignStyles.container}>
+      <View style={foreignStyles.header}>
+        <Text style={foreignStyles.title}>Account & Documents</Text>
+        <Text style={foreignStyles.subtitle}>Upload your account information and required documents</Text>
+      </View>
+
+      <View style={foreignStyles.card}>
+        {/* 진행 표시 */}
+        <View style={foreignStyles.progressRow}>
+          <Text style={foreignStyles.progressText}>단계 2/2</Text>
+        </View>
+        <View style={foreignStyles.progressBar}>
+          <View style={foreignStyles.progressFill} />
+        </View>
+
+        {/* 소셜 로그인 알림 */}
+        {socialProvider && (
+          <View style={foreignStyles.socialBanner}>
+            <Text style={foreignStyles.socialBannerText}>
+              ✓ You are signing up with {providerLabel}. No password required.
+            </Text>
+          </View>
+        )}
+
+        <View style={foreignStyles.divider} />
+
+        {/* 서류 업로드 안내 */}
+        <View style={foreignStyles.infoBanner}>
+          <Text style={foreignStyles.infoBannerTitle}>Document Upload Required After Registration</Text>
+          <Text style={foreignStyles.infoBannerBody}>
+            After completing registration, please upload the following documents in{' '}
+            <Text style={foreignStyles.bold}>Profile Edit</Text>:
+          </Text>
+          <View style={foreignStyles.docList}>
+            <Text style={foreignStyles.docItem}>• Profile Photo</Text>
+            <Text style={foreignStyles.docItem}>• CV (PDF)</Text>
+            <Text style={foreignStyles.docItem}>• Passport Photo</Text>
+            <Text style={foreignStyles.docItem}>• Alien Registration Card (if applicable)</Text>
+          </View>
+        </View>
+
+        {/* 버튼 */}
+        <View style={foreignStyles.buttonRow}>
+          <TouchableOpacity style={foreignStyles.backButton} onPress={onBack}>
+            <Text style={foreignStyles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={foreignStyles.completeButton} onPress={onComplete}>
+            <Text style={foreignStyles.completeButtonText}>Complete Registration</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const foreignStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    padding: 20,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#166534',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  progressRow: {
+    marginBottom: 6,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 3,
+    marginBottom: 20,
+  },
+  progressFill: {
+    height: 6,
+    width: '100%',
+    backgroundColor: '#2563eb',
+    borderRadius: 3,
+  },
+  socialBanner: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  socialBannerText: {
+    fontSize: 13,
+    color: '#166534',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginBottom: 16,
+  },
+  infoBanner: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 24,
+  },
+  infoBannerTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1e40af',
+    marginBottom: 6,
+  },
+  infoBannerBody: {
+    fontSize: 12,
+    color: '#1d4ed8',
+    marginBottom: 8,
+  },
+  bold: {
+    fontWeight: '700',
+  },
+  docList: {
+    gap: 4,
+  },
+  docItem: {
+    fontSize: 12,
+    color: '#1d4ed8',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  backButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    fontSize: 15,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  completeButton: {
+    flex: 1,
+    backgroundColor: '#16a34a',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  completeButtonText: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600',
   },
 });

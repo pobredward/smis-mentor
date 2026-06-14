@@ -589,6 +589,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       name: socialData.name,
       phone: socialData.phone,
       email: socialData.email,
+      // ForeignPhoneInputModal에서 수집한 foreignTeacher 정보 전달
+      ...(socialData.foreignTeacher && { foreignTeacher: socialData.foreignTeacher }),
     });
 
     if (role) {
@@ -2276,6 +2278,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         <SignUpStep1Screen
           onNext={handleMentorSignUpStep1Next}
           onSignInPress={() => setCurrentScreen('signin')}
+          onBack={() => setCurrentScreen('role-selection')}
         />
       );
     case 'mentor-signup-step2':
@@ -2339,13 +2342,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           role={selectedRole || 'mentor'}
           initialSocialData={signUpData.socialData}
           initialTempUserId={signUpData.tempUserId}
-          onComplete={() => {
-            Alert.alert(
-              '회원가입 완료',
-              '환영합니다! 로그인해주세요.',
-              [{ text: '확인', onPress: () => setCurrentScreen('signin') }]
-            );
-          }}
+          onComplete={() => setCurrentScreen('signin')}
           onCancel={() => setCurrentScreen('signin')}
         />
       );
@@ -2356,6 +2353,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           onSignUpPress={() => setCurrentScreen('role-selection')}
           onSignInSuccess={() => setCurrentScreen('profile')}
           onSocialSignUp={handleSocialSignUp}
+          onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
         />
       );
   }

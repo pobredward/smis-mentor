@@ -17,11 +17,13 @@ import { getUserByPhone, getUserByPhoneIncludeInactive, getUserJobCodesInfo } fr
 interface SignUpStep1ScreenProps {
   onNext: (data: { name: string; phone: string }) => void;
   onSignInPress: () => void;
+  onBack?: () => void;
 }
 
 export function SignUpStep1Screen({
   onNext,
   onSignInPress,
+  onBack,
 }: SignUpStep1ScreenProps) {
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -206,18 +208,35 @@ export function SignUpStep1Screen({
               />
             </View>
 
-            <TouchableOpacity
-              style={[styles.button, isLoading && styles.buttonDisabled]}
-              onPress={handleSubmit}
-              disabled={isLoading}
-              activeOpacity={0.7}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.buttonText}>다음</Text>
+            <View style={styles.buttonGroup}>
+              {onBack && (
+                <TouchableOpacity
+                  style={[styles.button, styles.buttonOutline]}
+                  onPress={onBack}
+                  disabled={isLoading}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.buttonOutlineText}>이전</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  styles.buttonPrimary,
+                  isLoading && styles.buttonDisabled,
+                ]}
+                onPress={handleSubmit}
+                disabled={isLoading}
+                activeOpacity={0.7}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.buttonText}>다음</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -289,12 +308,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1e293b',
   },
+  buttonGroup: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
   button: {
-    backgroundColor: '#3b82f6',
+    flex: 1,
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 8,
+  },
+  buttonOutline: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  buttonOutlineText: {
+    color: '#64748b',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonPrimary: {
+    backgroundColor: '#3b82f6',
   },
   buttonDisabled: {
     backgroundColor: '#94a3b8',
