@@ -24,7 +24,12 @@ export function SignUpFlow({
   onComplete,
   onCancel,
 }: SignUpFlowProps) {
-  const [step, setStep] = useState(1);
+  // 소셜 가입 시 이름+전화번호가 이미 확인됨 → step 1 건너뛰기
+  // mentor: step 3(학력)부터, foreign: step 1에서 completeForeignSocialSignUp 즉시 호출
+  const socialHasIdentity = !!initialSocialData && !!initialSocialData.name && !!initialSocialData.phone;
+  const initialStep = socialHasIdentity && role === 'mentor' ? 3 : 1;
+
+  const [step, setStep] = useState(initialStep);
   const [signUpData, setSignUpData] = useState<SignUpState>({
     name: initialSocialData?.name || '',
     phone: initialSocialData?.phone || '',
@@ -33,6 +38,15 @@ export function SignUpFlow({
     tempUserId: initialTempUserId,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 원어민 소셜 가입: 이름+전화번호가 이미 확인됐으면 마운트 시 즉시 완료 처리
+  React.useEffect(() => {
+    if (role === 'foreign' && socialHasIdentity) {
+      completeForeignSocialSignUp(signUpData);
+    }
+  // 마운트 시 1회만 실행
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * Step 1 완료: 이름 + 전화번호
@@ -223,8 +237,13 @@ export function SignUpFlow({
     if (step === 1) {
       onCancel();
     } else if (step === 3 && signUpData.isSocialSignUp) {
-      // 소셜 로그인에서는 Step 2가 없으므로 Step 1로
-      setStep(1);
+      // 소셜 가입에서 Step 3이 첫 화면(이름+전화번호 이미 확인)이면 취소
+      if (socialHasIdentity) {
+        onCancel();
+      } else {
+        // 소셜 가입이나 이름/전화번호가 없는 경우(일반) → Step 1로
+        setStep(1);
+      }
     } else {
       setStep(step - 1);
     }

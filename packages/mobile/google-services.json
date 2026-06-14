@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "382190683951-f4hhtgv0i20eiejckjq4vjiv6a3j8q30.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.smis.smismentor",
+            "certificate_hash": "27b12303ae7db701bcaacd1c4f6e69b006991cd9"
+          }
+        },
+        {
           "client_id": "382190683951-d213f6sqm30lokbddeth6g2gucava2en.apps.googleusercontent.com",
           "client_type": 3
         }

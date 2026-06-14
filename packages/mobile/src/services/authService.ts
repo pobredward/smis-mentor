@@ -329,6 +329,41 @@ export const getUserJobCodesInfo = async (
   }
 };
 
+// 원어민 이름(First + Last)으로 사용자 조회
+export const getUserByForeignName = async (
+  firstName: string,
+  lastName: string
+): Promise<User | null> => {
+  try {
+    if (!firstName || !lastName) return null;
+
+    const q = query(
+      collection(db, 'users'),
+      where('foreignTeacher.firstName', '==', firstName),
+      where('foreignTeacher.lastName', '==', lastName)
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+
+    const activeDocs = snapshot.docs.filter(d => d.data().status !== 'deleted');
+    if (activeDocs.length === 0) return null;
+
+    // 우선순위: active > temp > inactive
+    const sorted = activeDocs.sort((a, b) => {
+      const order = { active: 0, temp: 1, inactive: 2 };
+      const aOrder = order[(a.data().status as keyof typeof order)] ?? 3;
+      const bOrder = order[(b.data().status as keyof typeof order)] ?? 3;
+      return aOrder - bOrder;
+    });
+
+    return { ...sorted[0].data(), userId: sorted[0].id } as User;
+  } catch (error) {
+    logger.error('원어민 이름 조회 실패:', error);
+    return null;
+  }
+};
+
 // 사용자 업데이트
 export const updateUser = async (
   userId: string,

@@ -7,7 +7,7 @@ import { logger } from '@smis-mentor/shared';
 WebBrowser.maybeCompleteAuthSession();
 
 const NAVER_CLIENT_ID = Constants.expoConfig?.extra?.EXPO_PUBLIC_NAVER_CLIENT_ID || '';
-const NAVER_CLIENT_SECRET = Constants.expoConfig?.extra?.EXPO_PUBLIC_NAVER_CLIENT_SECRET || '';
+const NAVER_CLIENT_SECRET = Constants.expoConfig?.extra?.NAVER_CLIENT_SECRET || '';
 
 /**
  * 네이버 로그인 (자동 방식 감지)
@@ -40,9 +40,26 @@ export async function signInWithNaver(): Promise<SocialUserData> {
 }
 
 /**
- * Native SDK 방식 (Development Build)
+ * Native SDK 방식 (Development Build / APK / App Store)
+ * AuthContext에서 initialize가 앱 시작 시 호출되지만,
+ * 혹시 초기화 전에 호출될 경우를 대비해 여기서도 멱등적으로 재호출
  */
 async function signInWithNativeSDK(NaverLogin: any): Promise<SocialUserData> {
+  // 초기화가 완료되지 않았을 경우 대비한 방어 호출 (멱등)
+  if (NAVER_CLIENT_ID && NAVER_CLIENT_SECRET) {
+    try {
+      NaverLogin.initialize({
+        appName: 'SMIS Mentor',
+        consumerKey: NAVER_CLIENT_ID,
+        consumerSecret: NAVER_CLIENT_SECRET,
+        serviceUrlSchemeIOS: 'smismentor',
+        disableNaverAppAuthIOS: true,
+      });
+    } catch {
+      // 이미 초기화된 경우 무시
+    }
+  }
+
   const { failureResponse, successResponse } = await NaverLogin.login();
 
   if (!successResponse || !successResponse.accessToken) {

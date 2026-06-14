@@ -1,10 +1,37 @@
 import { ConfigContext, ExpoConfig } from '@expo/config';
 import type { ConfigPlugin } from 'expo/config-plugins';
-import { withProjectBuildGradle } from 'expo/config-plugins';
+import { withProjectBuildGradle, withDangerousMod } from 'expo/config-plugins';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as dotenv from 'dotenv';
 
 // .env 파일 로드
 dotenv.config();
+
+/**
+ * 네이버 로그인 SDK Proguard 규칙 주입
+ * @react-native-seoul/naver-login 4.2.4 내부 Android SDK(v5.9.1)는 consumer rules 미포함
+ * → Release 빌드에서 ClassNotFoundException 방지를 위해 proguard-rules.pro에 수동 추가 필요
+ */
+const withNaverLoginProguard: ConfigPlugin = (cfg) =>
+  withDangerousMod(cfg, [
+    'android',
+    async (c) => {
+      const proguardPath = path.join(c.modRequest.platformProjectRoot, 'app', 'proguard-rules.pro');
+      const MARKER = '# smis-naver-login-proguard';
+      const rule = `-keep public class com.navercorp.nid.** { *; }`;
+
+      let contents = '';
+      if (fs.existsSync(proguardPath)) {
+        contents = fs.readFileSync(proguardPath, 'utf8');
+      }
+      if (!contents.includes(MARKER)) {
+        contents += `\n${MARKER}\n${rule}\n`;
+        fs.writeFileSync(proguardPath, contents, 'utf8');
+      }
+      return c;
+    },
+  ]);
 
 /** android/ 가 gitignore → EAS prebuild 시 매번 생성되므로 여기서 루트 build.gradle을 패치합니다. */
 const withReactNativePickerMonorepo: ConfigPlugin = (cfg) =>
@@ -164,7 +191,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       [
         '@react-native-seoul/naver-login',
         {
-          urlScheme: 'com.smis.smismentor',
+          urlScheme: 'smismentor',
         },
       ],
       [
@@ -193,16 +220,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
       EXPO_PUBLIC_NAVER_CLIENT_ID: process.env.EXPO_PUBLIC_NAVER_CLIENT_ID,
-      // NAVER_CLIENT_SECRET은 앱 바이너리에 포함되면 안 됨. 서버 사이드 콜백(/api/auth/callback/naver)을 통해 처리.
-      // Expo Go OAuth 방식은 개발 환경 전용이므로 제한적 노출만 허용 (프로덕션 빌드 제외)
-      ...(process.env.NODE_ENV !== 'production' && {
-        EXPO_PUBLIC_NAVER_CLIENT_SECRET: process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET,
-      }),
+      // Native SDK 초기화에 필요 (Android/iOS 모두). 앱 바이너리에 포함되지만
+      // 네이버 개발자 센터에 등록된 패키지명/번들 ID와 함께 검증되어 단독 사용 불가.
+      NAVER_CLIENT_SECRET: process.env.NAVER_CLIENT_SECRET,
       kakaoRestApiKey: process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY,
     },
     owner: 'pobredward02',
   };
 
   // ConfigPlugin을 직접 적용하여 타입 오류 해결
-  return withReactNativePickerMonorepo(baseConfig);
+  return withNaverLoginProguard(withReactNativePickerMonorepo(baseConfig));
 };

@@ -30,7 +30,7 @@ add_env_vars() {
   
   # 🔑 네이버 로그인
   eas env:create --name EXPO_PUBLIC_NAVER_CLIENT_ID --value "XgK86FxXznee_HFfBeH3" --environment $ENV --visibility plaintext --force --non-interactive || true
-  eas env:create --name EXPO_PUBLIC_NAVER_CLIENT_SECRET --value "GcoXVzqEZs" --environment $ENV --visibility plaintext --force --non-interactive || true
+  eas env:create --name NAVER_CLIENT_SECRET --value "GcoXVzqEZs" --environment $ENV --visibility secret --force --non-interactive || true
   eas env:create --name EXPO_PUBLIC_NAVER_CALLBACK_URL --value "https://auth.expo.io/@pobredward02/smis-mentor" --environment $ENV --visibility plaintext --force --non-interactive || true
   
   # 🐛 Sentry (클라이언트)

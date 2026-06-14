@@ -76,12 +76,19 @@ export async function signInWithGoogleDirect(): Promise<{
 }
 
 /**
- * Google Native SDK 방식 (Development Build)
+ * Google Native SDK 방식 (Development Build / Android APK)
  */
 async function signInWithNativeGoogleSDK(GoogleSignin: any): Promise<{
   socialData: SocialUserData;
   credential: any;
 }> {
+  // configure가 아직 안 됐을 경우를 대비해 여기서도 호출 (멱등적)
+  // Android는 google-services.json에서 클라이언트 ID를 자동으로 읽음
+  GoogleSignin.configure({
+    iosClientId: GOOGLE_IOS_CLIENT_ID,
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+  });
+
   await GoogleSignin.hasPlayServices();
 
   // 기존 세션을 먼저 로그아웃해서 항상 계정 선택 창이 뜨도록 강제

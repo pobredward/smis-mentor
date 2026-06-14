@@ -577,9 +577,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   };
 
   /**
-   * 소셜 회원가입 핸들러 - 소셜 데이터를 저장한 뒤 역할 선택 화면으로 이동
+   * 소셜 회원가입 핸들러
+   * - role이 전달되면(SignInScreen에서 역할 선택 완료): 바로 소셜 가입 플로우로 이동
+   * - role이 없으면: 역할 선택 화면으로 이동 (이전 방식 fallback)
    */
-  const handleSocialSignUp = (socialData: any, tempUserId?: string, credential?: any) => {
+  const handleSocialSignUp = (socialData: any, tempUserId?: string, credential?: any, role?: 'mentor' | 'foreign') => {
     setSignUpData({
       ...signUpData,
       socialData: { ...socialData, _credential: credential },
@@ -588,8 +590,16 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       phone: socialData.phone,
       email: socialData.email,
     });
-    setSelectedRole(null);
-    setCurrentScreen('role-selection');
+
+    if (role) {
+      // SignInScreen에서 역할 선택이 완료된 경우 → 바로 소셜 가입 플로우
+      setSelectedRole(role);
+      setCurrentScreen('social-signup');
+    } else {
+      // fallback: 역할 선택 화면으로 이동
+      setSelectedRole(null);
+      setCurrentScreen('role-selection');
+    }
   };
 
   const handleForeignSignUpStep2Next = async (data: {

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -21,7 +22,7 @@ import {
   persistLoginRememberEmail,
   getPersistedLoginRememberEmail,
 } from '../services/authService';
-import { GoogleSignInButton, PhoneInputModal, PasswordInputModal, NaverSignInButton, AppleSignInButton } from '../components';
+import { GoogleSignInButton, PhoneInputModal, ForeignPhoneInputModal, PasswordInputModal, NaverSignInButton, AppleSignInButton } from '../components';
 import { 
   handleSocialLogin, 
   checkTempAccountByPhone,
@@ -29,12 +30,13 @@ import {
   handleSocialAuthError,
   getSocialProviderName,
 } from '@smis-mentor/shared';
+import { getUserByForeignName } from '../services/authService';
 import type { SocialUserData } from '@smis-mentor/shared';
 
 interface SignInScreenProps {
   onSignUpPress: () => void;
   onSignInSuccess: () => void;
-  onSocialSignUp?: (socialData: SocialUserData, tempUserId?: string, credential?: any) => void;
+  onSocialSignUp?: (socialData: SocialUserData, tempUserId?: string, credential?: any, role?: 'mentor' | 'foreign') => void;
 }
 
 export function SignInScreen({
@@ -52,7 +54,10 @@ export function SignInScreen({
   const [resetEmail, setResetEmail] = useState('');
 
   // 소셜 로그인 관련 상태
+  const [showRoleSelectionModal, setShowRoleSelectionModal] = useState(false);
+  const [selectedSocialRole, setSelectedSocialRole] = useState<'mentor' | 'foreign' | null>(null);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [showForeignPhoneModal, setShowForeignPhoneModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [socialData, setSocialData] = useState<SocialUserData | null>(null);
   const [googleCredential, setGoogleCredential] = useState<any>(null);
@@ -233,17 +238,12 @@ export function SignInScreen({
         }
           
         case 'NEED_PHONE':
-          // 전화번호 입력 필요 (신규 회원가입) - credential 저장하여 SignUpFlow에서 사용
-          setSocialData(socialUserData);
-          setGoogleCredential(credential || null);
-          setShowPhoneModal(true);
-          break;
-          
         case 'LINK_TEMP':
-          // temp 계정 (이메일 있음 - 드문 케이스)
+          // 역할 선택 먼저 → 이후 본인 확인 (웹과 동일한 순서)
           setSocialData(socialUserData);
           setGoogleCredential(credential || null);
-          setShowPhoneModal(true);
+          setSelectedSocialRole(null);
+          setShowRoleSelectionModal(true);
           break;
           
         default:
@@ -327,15 +327,11 @@ export function SignInScreen({
         }
           
         case 'NEED_PHONE':
-          // 전화번호 입력 필요
-          setSocialData(socialUserData);
-          setShowPhoneModal(true);
-          break;
-          
         case 'LINK_TEMP':
-          // temp 계정 (이메일 있음 - 드문 케이스)
+          // 역할 선택 먼저 → 이후 본인 확인 (웹과 동일한 순서)
           setSocialData(socialUserData);
-          setShowPhoneModal(true);
+          setSelectedSocialRole(null);
+          setShowRoleSelectionModal(true);
           break;
           
         default:
@@ -420,17 +416,12 @@ export function SignInScreen({
         }
           
         case 'NEED_PHONE':
-          // 전화번호 입력 필요 (신규 회원가입) - credential 저장
-          setSocialData(socialUserData);
-          setAppleCredential(credential || null);
-          setShowPhoneModal(true);
-          break;
-          
         case 'LINK_TEMP':
-          // temp 계정 연동
+          // 역할 선택 먼저 → 이후 본인 확인 (웹과 동일한 순서)
           setSocialData(socialUserData);
           setAppleCredential(credential || null);
-          setShowPhoneModal(true);
+          setSelectedSocialRole(null);
+          setShowRoleSelectionModal(true);
           break;
           
         default:
@@ -450,6 +441,130 @@ export function SignInScreen({
   const handleAppleSignInError = (error: Error) => {
     logger.error('Apple 로그인 실패:', error);
     Alert.alert('로그인 실패', handleSocialAuthError(error));
+  };
+
+  /**
+   * 역할 선택 후 처리 (웹의 NEED_PHONE → RoleSelectionModal 흐름과 동일)
+   * mentor: PhoneInputModal(이름+전화번호)
+   * foreign: ForeignPhoneInputModal(성명+전화번호+국가코드)
+   */
+  const handleSocialRoleSelect = (role: 'mentor' | 'foreign') => {
+    setSelectedSocialRole(role);
+    setShowRoleSelectionModal(false);
+    if (role === 'mentor') {
+      setShowPhoneModal(true);
+    } else {
+      setShowForeignPhoneModal(true);
+    }
+  };
+
+  /**
+   * 원어민 본인 확인 처리
+   */
+  const handleForeignPhoneSubmit = async (data: {
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    countryCode: string;
+    phoneNumber: string;
+  }) => {
+    if (!socialData) return;
+
+    const currentCredential = googleCredential || appleCredential;
+    const fullName = data.middleName
+      ? `${data.firstName} ${data.middleName} ${data.lastName}`
+      : `${data.firstName} ${data.lastName}`;
+
+    let cleanPhone = data.phoneNumber.replace(/[^0-9]/g, '');
+    if (data.countryCode === '+82' && cleanPhone.startsWith('0')) {
+      cleanPhone = cleanPhone.substring(1);
+    }
+
+    setIsLoading(true);
+    try {
+      logger.info('🔍 원어민 계정 검색:', { firstName: data.firstName, lastName: data.lastName });
+      const existingUser = await getUserByForeignName(data.firstName, data.lastName);
+
+      if (existingUser) {
+        const role = existingUser.role;
+        logger.info('👤 원어민 계정 발견:', { role, status: existingUser.status });
+
+        // active 원어민 계정
+        if (role === 'foreign' && existingUser.status === 'active') {
+          if (existingUser.email !== socialData.email) {
+            // 이메일 다름 → 비밀번호 연동 모달
+            setShowForeignPhoneModal(false);
+            setSocialData({ ...socialData, name: fullName });
+            setExistingUserEmail(existingUser.email);
+            setShowPasswordModal(true);
+            return;
+          } else {
+            // 이메일 같음 → 재로그인
+            setShowForeignPhoneModal(false);
+            try {
+              const { signInWithCustomToken: signInCustom } = await import('../services/authService');
+              await signInCustom(existingUser.userId || (existingUser as any).id, existingUser.email);
+              onSignInSuccess();
+            } catch (loginError) {
+              logger.error('❌ 원어민 재로그인 실패:', loginError);
+              Alert.alert('오류', 'Login failed. Please try again or contact the administrator.');
+            }
+            return;
+          }
+        }
+
+        // foreign_temp → 활성화 진행 (소셜 가입 플로우로)
+        if (role === 'foreign_temp' && existingUser.status === 'temp') {
+          logger.info('✅ foreign_temp 계정 발견 - 활성화 진행');
+          setShowForeignPhoneModal(false);
+          const updatedSocialData = {
+            ...socialData,
+            name: fullName,
+            phone: `${data.countryCode}${cleanPhone}`,
+            countryCode: data.countryCode,
+          };
+          if (onSocialSignUp) {
+            onSocialSignUp(updatedSocialData, existingUser.userId || (existingUser as any).id, currentCredential, 'foreign');
+          }
+          return;
+        }
+
+        // mentor/mentor_temp 이름 충돌
+        if (role === 'mentor_temp' || role === 'mentor') {
+          Alert.alert(
+            'Account Conflict',
+            'This name is registered as a mentor account. Please contact the administrator.\n\nAdministrator: 010-7656-7933 (Shin Sunwoong)'
+          );
+          return;
+        }
+
+        Alert.alert(
+          'Account Conflict',
+          `This name is already registered with a different role. Please contact the administrator.\n\nAdministrator: 010-7656-7933 (Shin Sunwoong)`
+        );
+        return;
+      }
+
+      // 신규 원어민 가입
+      logger.info('🆕 신규 원어민 가입');
+      setShowForeignPhoneModal(false);
+      const updatedSocialData = {
+        ...socialData,
+        name: fullName,
+        phone: `${data.countryCode}${cleanPhone}`,
+        countryCode: data.countryCode,
+      };
+      if (onSocialSignUp) {
+        onSocialSignUp(updatedSocialData, undefined, currentCredential, 'foreign');
+      } else {
+        onSignUpPress();
+      }
+    } catch (error: any) {
+      logger.error('원어민 본인 확인 오류:', error);
+      Alert.alert('Error', 'An error occurred while verifying your account.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   /**
@@ -506,7 +621,7 @@ export function SignInScreen({
                   onPress: () => {
                     setShowPhoneModal(false);
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential, 'mentor');
                     } else {
                       onSignUpPress();
                     }
@@ -517,7 +632,7 @@ export function SignInScreen({
                   onPress: () => {
                     setShowPhoneModal(false);
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, user.userId || user.id, currentCredential);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, user.userId || user.id, currentCredential, 'mentor');
                     } else {
                       Alert.alert(
                         '안내',
@@ -552,7 +667,7 @@ export function SignInScreen({
                   onPress: () => {
                     setShowPhoneModal(false);
                     if (onSocialSignUp) {
-                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential);
+                      onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential, 'mentor');
                     } else {
                       onSignUpPress();
                     }
@@ -566,7 +681,7 @@ export function SignInScreen({
         // 전화번호로 계정 없음 → 신규 회원가입
         setShowPhoneModal(false);
         if (onSocialSignUp) {
-          onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential);
+          onSocialSignUp({ ...socialData, name: data.name, phone: data.phone }, undefined, currentCredential, 'mentor');
         } else {
           onSignUpPress();
         }
@@ -884,13 +999,29 @@ export function SignInScreen({
         </View>
       </ScrollView>
       
-      {/* 이름 & 전화번호 입력 모달 */}
+      {/* 역할 선택 모달 (소셜 신규 회원가입 시 가장 먼저 표시) */}
+      <SocialRoleSelectionModal
+        visible={showRoleSelectionModal}
+        onRoleSelect={handleSocialRoleSelect}
+        onCancel={() => setShowRoleSelectionModal(false)}
+      />
+
+      {/* 멘토 본인 확인 모달 (이름 + 전화번호) */}
       <PhoneInputModal
         visible={showPhoneModal}
         socialProviderName={socialData ? getSocialProviderName(socialData.providerId) : 'Google'}
         defaultName={socialData?.name || ''}
         onSubmit={handlePhoneSubmit}
         onCancel={() => setShowPhoneModal(false)}
+      />
+
+      {/* 원어민 본인 확인 모달 (성명 + 국가코드 + 전화번호) */}
+      <ForeignPhoneInputModal
+        visible={showForeignPhoneModal}
+        socialProviderName={socialData ? getSocialProviderName(socialData.providerId) : 'Google'}
+        defaultName={socialData?.name || ''}
+        onSubmit={handleForeignPhoneSubmit}
+        onCancel={() => setShowForeignPhoneModal(false)}
       />
       
       {/* 비밀번호 입력 모달 (계정 연동용) */}
@@ -1120,6 +1251,159 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: '#1e293b',
+    fontWeight: '500',
+  },
+});
+
+// ========== 역할 선택 모달 (소셜 회원가입 전용) ==========
+
+interface SocialRoleSelectionModalProps {
+  visible: boolean;
+  onRoleSelect: (role: 'mentor' | 'foreign') => void;
+  onCancel: () => void;
+}
+
+function SocialRoleSelectionModal({ visible, onRoleSelect, onCancel }: SocialRoleSelectionModalProps) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <KeyboardAvoidingView
+        style={roleModalStyles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableOpacity
+          style={roleModalStyles.backdrop}
+          activeOpacity={1}
+          onPress={onCancel}
+        />
+        <View style={roleModalStyles.card}>
+          <View style={roleModalStyles.header}>
+            <Ionicons name="person-add-outline" size={28} color="#3b82f6" />
+            <Text style={roleModalStyles.title}>회원가입</Text>
+            <Text style={roleModalStyles.subtitle}>어떤 역할로 가입하시겠습니까?</Text>
+          </View>
+
+          <TouchableOpacity
+            style={roleModalStyles.roleCard}
+            onPress={() => onRoleSelect('mentor')}
+            activeOpacity={0.75}
+          >
+            <View style={[roleModalStyles.iconBox, { backgroundColor: '#eff6ff' }]}>
+              <Ionicons name="school" size={32} color="#3b82f6" />
+            </View>
+            <View style={roleModalStyles.roleTextBox}>
+              <Text style={roleModalStyles.roleName}>멘토</Text>
+              <Text style={roleModalStyles.roleDesc}>학생들을 가르치고 지도하는 멘토</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={roleModalStyles.roleCard}
+            onPress={() => onRoleSelect('foreign')}
+            activeOpacity={0.75}
+          >
+            <View style={[roleModalStyles.iconBox, { backgroundColor: '#ecfdf5' }]}>
+              <Ionicons name="globe" size={32} color="#10b981" />
+            </View>
+            <View style={roleModalStyles.roleTextBox}>
+              <Text style={roleModalStyles.roleName}>Foreign Teacher</Text>
+              <Text style={roleModalStyles.roleDesc}>Sign up as a foreign language teacher</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={roleModalStyles.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
+            <Text style={roleModalStyles.cancelText}>취소</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const roleModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+  },
+  card: {
+    width: '88%',
+    maxWidth: 400,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 8,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  roleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  iconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  roleTextBox: {
+    flex: 1,
+  },
+  roleName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginBottom: 2,
+  },
+  roleDesc: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 16,
+  },
+  cancelBtn: {
+    marginTop: 4,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  cancelText: {
+    fontSize: 14,
+    color: '#64748b',
     fontWeight: '500',
   },
 });

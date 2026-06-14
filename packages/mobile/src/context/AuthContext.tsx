@@ -110,20 +110,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
         const consumerKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_NAVER_CLIENT_ID || '';
-        const consumerSecret = Constants.expoConfig?.extra?.EXPO_PUBLIC_NAVER_CLIENT_SECRET || '';
+        const consumerSecret = Constants.expoConfig?.extra?.NAVER_CLIENT_SECRET || '';
         const appName = 'SMIS Mentor';
-        const serviceUrlSchemeIOS = 'com.smis.smismentor';
+        // app.config.ts scheme 및 CFBundleURLSchemes와 반드시 일치해야 iOS 로그인 후 앱 복귀 가능
+        const serviceUrlSchemeIOS = 'smismentor';
 
-        if (consumerKey && consumerSecret) {
-          await NaverLogin.initialize({
-            appName,
-            consumerKey,
-            consumerSecret,
-            serviceUrlSchemeIOS,
-            disableNaverAppAuthIOS: true,
-          });
-          logger.info('✅ 네이버 SDK 초기화 완료 (Development Build)');
+        if (!consumerKey || !consumerSecret) {
+          logger.error(
+            '❌ 네이버 SDK 초기화 실패: EXPO_PUBLIC_NAVER_CLIENT_ID 또는 NAVER_CLIENT_SECRET 환경변수가 없습니다.\n' +
+            '💡 .env.local에 두 값을 모두 설정하고 EAS 환경변수도 확인하세요.'
+          );
+          return;
         }
+
+        await NaverLogin.initialize({
+          appName,
+          consumerKey,
+          consumerSecret,
+          serviceUrlSchemeIOS,
+          disableNaverAppAuthIOS: true,
+        });
+        logger.info('✅ 네이버 SDK 초기화 완료');
       } catch (error) {
         logger.warn('⚠️ 네이버 SDK 로드 실패 (Expo Go에서는 정상):', error);
       }
@@ -147,9 +154,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const iosClientId = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
         const webClientId = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
 
-        if (iosClientId && webClientId) {
+        if (webClientId) {
+          // Android는 google-services.json에서 클라이언트 ID를 자동으로 읽음
+          // iOS는 iosClientId 명시 필요
           GoogleSignin.configure({
-            iosClientId,
+            iosClientId: iosClientId || undefined,
             webClientId,
           });
           logger.info('✅ Google Sign-In SDK 초기화 완료 (Development Build)');
