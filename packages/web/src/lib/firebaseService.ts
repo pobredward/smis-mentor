@@ -935,14 +935,17 @@ export const deleteJobBoard = async (jobBoardId: string) => {
 // ApplicationHistory 관련 함수
 export const createApplication = async (applicationData: Omit<ApplicationHistory, 'applicationHistoryId' | 'applicationDate'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'applicationHistories'), {
+    // doc()으로 ID를 미리 생성한 뒤 setDoc으로 한 번에 저장
+    // (addDoc 후 updateDoc으로 applicationHistoryId를 세팅하면
+    //  update 규칙에서 Permission Denied가 발생하므로 이 방식 사용)
+    const newDocRef = doc(collection(db, 'applicationHistories'));
+    await setDoc(newDocRef, {
       ...applicationData,
+      applicationHistoryId: newDocRef.id,
       applicationDate: Timestamp.now()
     });
     
-    return await updateDoc(doc(db, 'applicationHistories', docRef.id), { 
-      applicationHistoryId: docRef.id 
-    });
+    return newDocRef.id;
   } catch (error) {
     logger.error('지원서 생성 실패:', error);
     throw error;
