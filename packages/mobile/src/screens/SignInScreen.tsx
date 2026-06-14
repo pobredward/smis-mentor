@@ -193,20 +193,42 @@ export function SignInScreen({
       
       switch (result.action) {
         case 'LOGIN':
-          // 기존 active 계정 → Custom Token으로 Firebase Auth 로그인
+          // 기존 active 계정 → credential이 있으면 signInWithCredential, 없으면 Custom Token
           logger.info('✅ Google 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
             userId: result.user?.userId,
+            hasCredential: !!credential,
           });
 
           try {
-            const { signInWithCustomToken, persistLoginRememberEmail } = await import(
-              '../services/authService'
-            );
-            await signInWithCustomToken(result.user.userId, result.user.email);
-            await persistLoginRememberEmail(result.user.email);
+            const { auth: firebaseAuth } = await import('../config/firebase');
+            const { persistLoginRememberEmail } = await import('../services/authService');
 
-            logger.info('✅ Firebase Auth 로그인 완료');
+            if (credential) {
+              // Google/Apple: credential로 직접 Firebase Auth 로그인 (권장)
+              const { signInWithCredential } = await import('firebase/auth');
+              try {
+                await signInWithCredential(firebaseAuth, credential);
+                logger.info('✅ signInWithCredential 완료 (Google)');
+              } catch (credError: any) {
+                // credential-already-in-use: 이미 다른 계정에 연결된 경우
+                // 이 경우에도 로그인은 성공이므로 currentUser 확인 후 진행
+                if (credError.code === 'auth/credential-already-in-use' || 
+                    credError.code === 'auth/email-already-in-use') {
+                  logger.warn('⚠️ signInWithCredential 충돌, currentUser 확인:', credError.code);
+                  if (!firebaseAuth.currentUser) throw credError;
+                } else {
+                  throw credError;
+                }
+              }
+            } else {
+              // 네이버 등 credential 없는 경우: Custom Token 사용
+              const { signInWithCustomToken } = await import('../services/authService');
+              await signInWithCustomToken(result.user.userId, result.user.email);
+              logger.info('✅ Custom Token 로그인 완료');
+            }
+
+            await persistLoginRememberEmail(result.user.email);
             onSignInSuccess();
           } catch (authError: any) {
             logger.error('❌ Firebase Auth 로그인 실패:', authError);
@@ -372,20 +394,39 @@ export function SignInScreen({
       
       switch (result.action) {
         case 'LOGIN':
-          // 기존 active 계정 → Firebase Auth로 로그인
+          // 기존 active 계정 → credential이 있으면 signInWithCredential, 없으면 Custom Token
           logger.info('✅ Apple 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
             userId: result.user?.userId,
+            hasCredential: !!credential,
           });
 
           try {
-            const { signInWithCustomToken, persistLoginRememberEmail } = await import(
-              '../services/authService'
-            );
-            await signInWithCustomToken(result.user.userId, result.user.email);
-            await persistLoginRememberEmail(result.user.email);
+            const { auth: firebaseAuth } = await import('../config/firebase');
+            const { persistLoginRememberEmail } = await import('../services/authService');
 
-            logger.info('✅ Firebase Auth 로그인 완료');
+            if (credential) {
+              // Apple: credential로 직접 Firebase Auth 로그인 (권장)
+              const { signInWithCredential } = await import('firebase/auth');
+              try {
+                await signInWithCredential(firebaseAuth, credential);
+                logger.info('✅ signInWithCredential 완료 (Apple)');
+              } catch (credError: any) {
+                if (credError.code === 'auth/credential-already-in-use' || 
+                    credError.code === 'auth/email-already-in-use') {
+                  logger.warn('⚠️ signInWithCredential 충돌, currentUser 확인:', credError.code);
+                  if (!firebaseAuth.currentUser) throw credError;
+                } else {
+                  throw credError;
+                }
+              }
+            } else {
+              const { signInWithCustomToken } = await import('../services/authService');
+              await signInWithCustomToken(result.user.userId, result.user.email);
+              logger.info('✅ Custom Token 로그인 완료');
+            }
+
+            await persistLoginRememberEmail(result.user.email);
             onSignInSuccess();
           } catch (authError: any) {
             logger.error('❌ Firebase Auth 로그인 실패:', authError);
