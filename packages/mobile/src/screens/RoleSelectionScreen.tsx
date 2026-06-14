@@ -56,9 +56,9 @@ export function RoleSelectionScreen({
               <View style={styles.iconContainer}>
                 <Ionicons name="globe" size={48} color="#10b981" />
               </View>
-              <Text style={styles.roleTitle}>원어민 선생님</Text>
+              <Text style={styles.roleTitle}>Foreign Teacher</Text>
               <Text style={styles.roleDescription}>
-                원어민 교사로 가입합니다
+                Sign up as a foreign language teacher
               </Text>
             </TouchableOpacity>
           </View>
