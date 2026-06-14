@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { getUserByPhone } from '../services/authService';
+import { getUserByPhone, getUserByPhoneIncludeInactive } from '../services/authService';
 import { getPhonePlaceholder } from '../utils/phoneUtils';
 
 interface ForeignSignUpStep1ScreenProps {
@@ -84,15 +84,64 @@ export function ForeignSignUpStep1Screen({
       }
       
       const fullPhone = `${countryCode}${phoneWithoutLeadingZero}`;
+      const inputFullName = middleName
+        ? `${firstName} ${middleName} ${lastName}`
+        : `${firstName} ${lastName}`;
+
+      // 탈퇴(inactive) 계정 우선 체크 — 탈퇴 후 재가입 안내
+      const userWithInactive = await getUserByPhoneIncludeInactive(fullPhone);
+      if (userWithInactive && (userWithInactive.status as string) === 'inactive') {
+        const originalName = (userWithInactive as any).originalName ||
+          userWithInactive.name.replace(/^\(탈퇴\)\s*/g, '');
+        const foreignData = (userWithInactive as any).foreignTeacher;
+        const dbFullName = foreignData?.middleName
+          ? `${foreignData.firstName} ${foreignData.middleName} ${foreignData.lastName}`
+          : foreignData
+            ? `${foreignData.firstName} ${foreignData.lastName}`
+            : originalName;
+
+        if (inputFullName === originalName || inputFullName === dbFullName) {
+          Alert.alert(
+            'Previous Account Found',
+            `A withdrawn account was found for this phone number (${originalName}).\n\nContinuing will create a new account.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Continue Sign Up',
+                onPress: () => onNext({
+                  firstName,
+                  lastName,
+                  middleName: middleName || undefined,
+                  countryCode,
+                  phone: phoneNumber,
+                  dateOfBirth: dateOfBirth || undefined,
+                }),
+              },
+            ]
+          );
+        } else {
+          // 이름이 다르면 신규 가입 진행
+          Alert.alert(
+            'Welcome',
+            `Welcome ${firstName}! We're honored to have you with SMIS. Please complete the remaining information.`
+          );
+          onNext({
+            firstName,
+            lastName,
+            middleName: middleName || undefined,
+            countryCode,
+            phone: phoneNumber,
+            dateOfBirth: dateOfBirth || undefined,
+          });
+        }
+        setIsLoading(false);
+        return;
+      }
+
       const userByPhone = await getUserByPhone(fullPhone);
 
       if (userByPhone) {
         const { status, role, name: existingName, foreignTeacher } = userByPhone;
-        
-        // 입력된 이름 조합
-        const inputFullName = middleName 
-          ? `${firstName} ${middleName} ${lastName}`
-          : `${firstName} ${lastName}`;
         
         // 기존 사용자가 임시 원어민(foreign_temp)인 경우
         if (role === 'foreign_temp' && status === 'temp') {

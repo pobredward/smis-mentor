@@ -85,11 +85,16 @@ service cloud.firestore {
         // 이메일 길이 제한
         request.resource.data.email is string &&
         request.resource.data.email.size() <= 200 &&
-        // 허용 역할: temp 또는 active 계정
+        // 허용 역할
         request.resource.data.role in ['mentor_temp', 'foreign_temp', 'mentor', 'foreign'] &&
         // 역할에 따른 status 일관성
+        // - admin이 미리 선생성한 temp 계정: *_temp + temp
+        // - 가입 완료 즉시 활성화: mentor_temp/foreign/mentor + active
+        //   (mentor_temp + active: 멘토는 가입 후 admin 승격 대기)
+        //   (foreign + active: 원어민은 가입 즉시 활성)
         (
           (request.resource.data.role in ['mentor_temp', 'foreign_temp'] && request.resource.data.status == 'temp') ||
+          (request.resource.data.role == 'mentor_temp' && request.resource.data.status == 'active') ||
           (request.resource.data.role in ['mentor', 'foreign'] && request.resource.data.status == 'active')
         )
       );
@@ -111,12 +116,15 @@ service cloud.firestore {
           (!('email' in request.resource.data) || request.resource.data.email.size() <= 200)
         ) ||
         // 본인: 회원 탈퇴 (active → inactive 전환만 허용)
-        // status: active → inactive, role 변경 불가
+        // status: active → inactive 전환 + role/email/rrnLastEncrypted/deletedAt/deletedBy 변경 불가
+        // 허용 변경 필드: status, name, originalEmail, deactivatedAt, updatedAt, profileImage, foreignTeacher
         (
           isOwner(userId) &&
           resource.data.status == 'active' &&
           request.resource.data.status == 'inactive' &&
           fieldUnchanged('role') &&
+          fieldUnchanged('email') &&
+          fieldUnchanged('rrnLastEncrypted') &&
           fieldUnchanged('deletedAt') &&
           fieldUnchanged('deletedBy')
         ) ||

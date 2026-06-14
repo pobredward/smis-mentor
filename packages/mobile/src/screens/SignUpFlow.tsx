@@ -5,8 +5,8 @@ import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
 import type { SocialUserData, SignUpState } from '@smis-mentor/shared';
-import { signUp, updateUser, persistLoginRememberEmail, getUserById } from '../services/authService';
-import { doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { signUp, updateUser, persistLoginRememberEmail, getUserById, getUserByEmailIncludeInactive } from '../services/authService';
+import { doc, setDoc, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 interface SignUpFlowProps {
@@ -282,6 +282,8 @@ export function SignUpFlow({
           : `${socialData.providerId}.com`;
 
       // 새 Auth UID로 Firestore 문서 생성
+      // foreign 소셜 가입: role='foreign' + status='active' (일반 가입과 동일)
+      // mentor 소셜 가입: role='mentor_temp' + status='active' (학교 검토 후 승격)
       await setDoc(doc(db, 'users', newUserId), {
         userId: newUserId,
         id: newUserId,
@@ -294,7 +296,7 @@ export function SignUpFlow({
         isOnLeave,
         major1,
         major2,
-        role: role === 'foreign' ? 'foreign_temp' : 'mentor_temp',
+        role: role === 'foreign' ? 'foreign' : 'mentor_temp',
         status: 'active',
         agreedTerms: true,
         agreedPersonal: true,
@@ -324,6 +326,19 @@ export function SignUpFlow({
       if (newUserId !== tempUserId) {
         await deleteDoc(doc(db, 'users', tempUserId));
         logger.info('🗑️ 기존 temp 문서 삭제 완료:', tempUserId);
+      }
+
+      // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹
+      try {
+        const inactiveUser = await getUserByEmailIncludeInactive(finalEmail);
+        if (inactiveUser && inactiveUser.userId !== newUserId) {
+          await updateDoc(doc(db, 'users', inactiveUser.userId), {
+            email: `rejoined_${Date.now()}_${finalEmail}`,
+          });
+          logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
+        }
+      } catch (cleanupError) {
+        logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
       }
     } else {
       // 완전히 새로운 소셜 계정 생성
@@ -373,6 +388,8 @@ export function SignUpFlow({
           ? socialData.providerId 
           : `${socialData.providerId}.com`;
       
+      // foreign 소셜 가입: role='foreign' + status='active' (일반 가입과 동일)
+      // mentor 소셜 가입: role='mentor_temp' + status='active' (학교 검토 후 승격)
       await setDoc(doc(db, 'users', userId), {
         userId,
         id: userId,
@@ -385,7 +402,7 @@ export function SignUpFlow({
         isOnLeave,
         major1,
         major2,
-        role: role === 'foreign' ? 'foreign_temp' : 'mentor_temp',
+        role: role === 'foreign' ? 'foreign' : 'mentor_temp',
         status: 'active',
         agreedTerms: true,
         agreedPersonal: true,
@@ -406,6 +423,19 @@ export function SignUpFlow({
       });
       
       logger.info('✅ Firestore 사용자 문서 생성 완료:', userId);
+
+      // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹
+      try {
+        const inactiveUser = await getUserByEmailIncludeInactive(socialData.email);
+        if (inactiveUser && inactiveUser.userId !== userId) {
+          await updateDoc(doc(db, 'users', inactiveUser.userId), {
+            email: `rejoined_${Date.now()}_${socialData.email}`,
+          });
+          logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
+        }
+      } catch (cleanupError) {
+        logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
+      }
     }
   };
 
@@ -424,6 +454,7 @@ export function SignUpFlow({
     const userId = userCredential.user.uid;
 
     // 2. Firestore에 사용자 정보 저장
+    // 일반 가입(이메일/비밀번호) 경로: 멘토는 mentor_temp, foreign은 foreign (즉시 활성화)
     await setDoc(doc(db, 'users', userId), {
       userId,
       email,
@@ -434,7 +465,7 @@ export function SignUpFlow({
       isOnLeave,
       major1,
       major2,
-      role: role === 'foreign' ? 'foreign_temp' : 'mentor_temp',
+      role: role === 'foreign' ? 'foreign' : 'mentor_temp',
       status: 'active',
       agreedTerms: true,
       agreedPersonal: true,

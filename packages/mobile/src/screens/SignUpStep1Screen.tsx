@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { getUserByPhone, getUserJobCodesInfo } from '../services/authService';
+import { getUserByPhone, getUserByPhoneIncludeInactive, getUserJobCodesInfo } from '../services/authService';
 
 interface SignUpStep1ScreenProps {
   onNext: (data: { name: string; phone: string }) => void;
@@ -40,6 +40,36 @@ export function SignUpStep1Screen({
 
     setIsLoading(true);
     try {
+      // 탈퇴(inactive) 계정 우선 체크 — 탈퇴 후 재가입 안내
+      const userWithInactive = await getUserByPhoneIncludeInactive(phoneNumber);
+      if (userWithInactive && (userWithInactive.status as string) === 'inactive') {
+        const originalName = (userWithInactive as any).originalName ||
+          userWithInactive.name.replace(/^\(탈퇴\)\s*/g, '');
+
+        if (name === originalName) {
+          Alert.alert(
+            '탈퇴한 계정 발견',
+            `이 전화번호로 탈퇴한 계정이 있습니다 (${originalName}님).\n\n회원가입을 계속 진행하면 새 계정으로 가입됩니다.`,
+            [
+              { text: '취소', style: 'cancel' },
+              {
+                text: '새로 가입',
+                onPress: () => onNext({ name, phone: phoneNumber }),
+              },
+            ]
+          );
+        } else {
+          // 이름이 다르면 그냥 신규 가입 진행
+          Alert.alert(
+            '환영합니다',
+            `환영합니다 ${name}님, SMIS와 함께 하게 되어 영광입니다. 나머지 정보를 채워주세요.`
+          );
+          onNext({ name, phone: phoneNumber });
+        }
+        setIsLoading(false);
+        return;
+      }
+
       const userByPhone = await getUserByPhone(phoneNumber);
 
       if (userByPhone) {

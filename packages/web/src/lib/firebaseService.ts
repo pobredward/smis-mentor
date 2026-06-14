@@ -110,21 +110,23 @@ export const getUserByEmail = async (email: string) => {
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
-    // deleted 상태가 아닌 사용자만 필터링
+    // deleted, inactive 상태는 제외 (탈퇴/삭제된 계정)
+    // inactive = 본인 탈퇴, deleted = 관리자 삭제
+    // 두 경우 모두 Auth가 삭제되어 동일 이메일 재가입이 가능해야 함
     const activeUsers = querySnapshot.docs.filter(doc => {
       const status = doc.data().status;
-      return status !== 'deleted';
+      return status !== 'deleted' && status !== 'inactive';
     });
     
-    // deleted만 있거나 사용자가 없는 경우
+    // 활성 사용자가 없는 경우
     if (activeUsers.length === 0) {
-      logger.info('📍 삭제된 사용자만 존재 - null 반환');
+      logger.info('📍 삭제/탈퇴된 사용자만 존재 - null 반환');
       return null;
     }
     
-    // 여러 사용자가 있는 경우 우선순위: active > temp > inactive
+    // 여러 사용자가 있는 경우 우선순위: active > temp
     if (activeUsers.length > 1) {
-      logger.warn('⚠️ 동일한 이메일로 여러 사용자 발견 (deleted 제외):', {
+      logger.warn('⚠️ 동일한 이메일로 여러 사용자 발견 (deleted/inactive 제외):', {
         email,
         count: activeUsers.length,
       });
@@ -140,6 +142,28 @@ export const getUserByEmail = async (email: string) => {
   } catch (error) {
     logger.error('이메일로 사용자 조회 실패:', error);
     throw error;
+  }
+};
+
+// 탈퇴(inactive) 사용자 포함 이메일 조회 — 재가입 시 복구 흐름 안내용
+export const getUserByEmailIncludeInactive = async (email: string) => {
+  try {
+    if (!email || typeof email !== 'string') return null;
+
+    const q = query(collection(db, 'users'), where('email', '==', email));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+
+    // inactive(본인 탈퇴) 또는 deleted(관리자 삭제) 계정만 반환
+    const inactiveUser = querySnapshot.docs.find(doc => {
+      const status = doc.data().status;
+      return status === 'inactive' || status === 'deleted';
+    });
+
+    return inactiveUser ? (inactiveUser.data() as User) : null;
+  } catch (error) {
+    logger.error('이메일로 탈퇴 사용자 조회 실패:', error);
+    return null;
   }
 };
 
@@ -245,21 +269,22 @@ export const getUserByPhone = async (phoneNumber: string) => {
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
-    // deleted 상태가 아닌 사용자만 필터링
+    // deleted, inactive 상태는 제외 (탈퇴/삭제된 계정)
+    // getUserByPhoneIncludeDeleted를 통해 별도 처리
     const activeUsers = querySnapshot.docs.filter(doc => {
       const status = doc.data().status;
-      return status !== 'deleted';
+      return status !== 'deleted' && status !== 'inactive';
     });
     
-    // deleted만 있거나 사용자가 없는 경우
+    // 활성 사용자가 없는 경우
     if (activeUsers.length === 0) {
-      logger.info('📍 삭제된 사용자만 존재 - null 반환');
+      logger.info('📍 삭제/탈퇴된 사용자만 존재 - null 반환');
       return null;
     }
     
     // 여러 사용자가 있는 경우 (데이터 무결성 문제)
     if (activeUsers.length > 1) {
-      logger.warn('⚠️ 동일한 전화번호로 여러 사용자 발견 (deleted 제외):', {
+      logger.warn('⚠️ 동일한 전화번호로 여러 사용자 발견 (deleted/inactive 제외):', {
         phoneNumber,
         count: activeUsers.length,
         users: activeUsers.map(doc => ({
@@ -276,16 +301,12 @@ export const getUserByPhone = async (phoneNumber: string) => {
         return activeUser.data() as User;
       }
       
-      // temp 사용자 우선 반환
+      // temp 사용자 반환
       const tempUser = activeUsers.find(doc => doc.data().status === 'temp');
       if (tempUser) {
         logger.info('✅ temp 사용자 반환');
         return tempUser.data() as User;
       }
-      
-      // 그 외 첫 번째 사용자 반환 (inactive 등)
-      logger.info('⚠️ inactive 사용자 반환');
-      return activeUsers[0].data() as User;
     }
     
     return activeUsers[0].data() as User;

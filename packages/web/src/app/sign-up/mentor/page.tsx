@@ -56,6 +56,38 @@ export default function MentorSignUpStep1() {
       // 먼저 deleted 포함해서 조회
       const userByPhoneWithDeleted = await getUserByPhoneIncludeDeleted(data.phoneNumber);
       
+      // 탈퇴(inactive) 계정이 있는지 체크 — 본인 탈퇴 후 재가입 시도
+      if (userByPhoneWithDeleted && (userByPhoneWithDeleted.status as any) === 'inactive') {
+        const originalName = (userByPhoneWithDeleted as any).originalName ||
+          userByPhoneWithDeleted.name.replace(/^\(탈퇴\)\s*/g, '');
+
+        if (data.name === originalName) {
+          logger.info('🔄 탈퇴(inactive) 계정 발견 - 자동 복구 프로세스 시작:', {
+            userId: userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId,
+            name: originalName,
+            phone: data.phoneNumber,
+          });
+
+          setDeletedUserId(userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId || '');
+          setUserName(originalName);
+          setFormData(data);
+          setShowDeletedAccountModal(true);
+          setIsLoading(false);
+          return;
+        } else {
+          logger.warn('⚠️ 탈퇴 계정이지만 이름 불일치:', {
+            inputName: data.name,
+            originalName,
+          });
+          toast.error(
+            `이 전화번호는 "${originalName}"님 이름으로 탈퇴 처리된 계정이 있습니다. 본인이 아니라면 관리자에게 문의해주세요.\n관리자: 010-7656-7933 (신선웅)`,
+            { duration: 8000 }
+          );
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // 삭제된 계정이 있는지 체크
       if (userByPhoneWithDeleted && (userByPhoneWithDeleted.status as any) === 'deleted') {
         const originalName = (userByPhoneWithDeleted as any).originalName || userByPhoneWithDeleted.name.replace(/^\(삭제됨\)\s*/g, '');

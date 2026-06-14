@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import DaumPostcode, { Address } from 'react-daum-postcode';
 import toast from 'react-hot-toast';
-import { getUserByPhone, updateUser, createUser, signUp } from '@/lib/firebaseService';
+import { getUserByPhone, getUserByEmailIncludeInactive, updateUser, createUser, signUp } from '@/lib/firebaseService';
 import { getUserInfoFromRRN } from '@/utils/userUtils';
 import { signupStorage, SignUpData } from '@/utils/signupStorage';
 import { authenticatedPost } from '@/lib/apiClient';
@@ -500,6 +500,21 @@ export default function SignUpDetails() {
           rrnFront: data.rrnFront,
           rrnLast: data.rrnLast,
         });
+
+        // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리
+        try {
+          const inactiveUser = await getUserByEmailIncludeInactive(email);
+          if (inactiveUser && inactiveUser.userId !== newUserId) {
+            const { updateDoc, doc } = await import('firebase/firestore');
+            const { db } = await import('@/lib/firebase');
+            await updateDoc(doc(db, 'users', inactiveUser.userId), {
+              email: `rejoined_${Date.now()}_${email}`,
+            });
+            logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
+          }
+        } catch (cleanupError) {
+          logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
+        }
 
         // SessionStorage 정리
         signupStorage.clear();

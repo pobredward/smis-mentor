@@ -513,6 +513,21 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       
       await setDoc(doc(db, 'users', firebaseUser.uid), userData);
 
+      // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리
+      try {
+        const { getUserByEmailIncludeInactive } = await import('../services/authService');
+        const inactiveUser = await getUserByEmailIncludeInactive(completeSignUpData.email!);
+        if (inactiveUser && inactiveUser.userId !== firebaseUser.uid) {
+          const { updateDoc, doc: docRef } = await import('firebase/firestore');
+          await updateDoc(docRef(db, 'users', inactiveUser.userId), {
+            email: `rejoined_${Date.now()}_${completeSignUpData.email}`,
+          });
+          logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
+        }
+      } catch (cleanupError) {
+        logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
+      }
+
       // 주민등록번호 암호화 저장 (서버 API Route를 통해 처리)
       const { saveSensitiveInfo } = await import('../services/apiClient');
       await saveSensitiveInfo({
@@ -601,25 +616,13 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         : `${signUpData.firstName} ${signUpData.lastName}`;
 
       const existingUserByPhone = await getUserByPhone(fullPhone);
+      const tempUser = existingUserByPhone?.role === 'foreign_temp' && existingUserByPhone?.status === 'temp'
+        ? existingUserByPhone
+        : null;
 
-      let userId: string;
-      let isUpdatingExistingUser = false;
-
-      if (existingUserByPhone && existingUserByPhone.role === 'foreign_temp' && existingUserByPhone.status === 'temp') {
-        userId = existingUserByPhone.userId;
-        isUpdatingExistingUser = true;
-
-        try {
-          await signUp(data.email, data.password);
-        } catch (authError: any) {
-          if (authError.code !== 'auth/email-already-in-use') {
-            throw authError;
-          }
-        }
-      } else {
-        const userCredential = await signUp(data.email, data.password);
-        userId = userCredential.user.uid;
-      }
+      // Firebase Auth 계정 생성 — 항상 새 UID를 받아야 Firestore 문서 ID와 일치
+      const userCredential = await signUp(data.email, data.password);
+      const userId = userCredential.user.uid;
 
       const userData = {
         userId,
@@ -628,13 +631,13 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         phone: fullPhone,
         phoneNumber: fullPhone,
         password: '',
-        address: existingUserByPhone?.address || '',
-        addressDetail: existingUserByPhone?.addressDetail || '',
+        address: tempUser?.address || '',
+        addressDetail: tempUser?.addressDetail || '',
         role: 'foreign',
-        jobExperiences: existingUserByPhone?.jobExperiences || [],
-        jobCodeIds: (existingUserByPhone?.jobExperiences || []).map((exp: { id: string }) => exp.id),
-        partTimeJobs: existingUserByPhone?.partTimeJobs || [],
-        createdAt: existingUserByPhone?.createdAt || Timestamp.now(),
+        jobExperiences: tempUser?.jobExperiences || [],
+        jobCodeIds: (tempUser?.jobExperiences || []).map((exp: { id: string }) => exp.id),
+        partTimeJobs: tempUser?.partTimeJobs || [],
+        createdAt: tempUser?.createdAt || Timestamp.now(),
         updatedAt: Timestamp.now(),
         agreedTerms: true,
         agreedPersonal: true,
@@ -648,7 +651,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         isAddressVerified: false,
         isProfileImageUploaded: false,
         jobMotivation: 'Foreign Teacher Application',
-        feedback: (existingUserByPhone as any)?.feedback || '',
+        feedback: (tempUser as any)?.feedback || '',
         ...(signUpData.dateOfBirth && {
           dateOfBirth: signUpData.dateOfBirth,
           age: calculateAgeFromDateOfBirth(signUpData.dateOfBirth),
@@ -665,41 +668,54 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         },
       };
 
-      if (isUpdatingExistingUser) {
-        await setDoc(doc(db, 'users', userId), userData, { merge: true });
+      // 새 Auth UID로 Firestore 문서 생성
+      await setDoc(doc(db, 'users', userId), userData);
 
-        Alert.alert(
-          'Account Activated',
-          `Welcome, ${fullName}!\n\nYour account has been activated.\nPlease upload your documents (Profile Photo, CV, Passport Photo) in Profile Edit.`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setCurrentScreen('signin');
-                setSelectedRole(null);
-                setSignUpData({});
-              },
-            },
-          ]
-        );
-      } else {
-        await setDoc(doc(db, 'users', userId), userData);
-
-        Alert.alert(
-          'Sign Up Complete',
-          `Welcome, ${fullName}!\n\nYour account has been successfully created.\nPlease upload your documents (Profile Photo, CV, Passport Photo) in Profile Edit.`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setCurrentScreen('signin');
-                setSelectedRole(null);
-                setSignUpData({});
-              },
-            },
-          ]
-        );
+      // temp 계정이 있었으면 기존 문서 삭제 (새 문서 생성 후에 삭제)
+      if (tempUser && tempUser.userId !== userId) {
+        try {
+          const { deleteDoc, doc: docRef } = await import('firebase/firestore');
+          await deleteDoc(docRef(db, 'users', tempUser.userId));
+          logger.info('🗑️ 기존 temp 문서 삭제 완료:', tempUser.userId);
+        } catch (deleteError) {
+          logger.warn('⚠️ 기존 temp 문서 삭제 실패 (가입은 완료됨):', deleteError);
+        }
       }
+
+      // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리
+      try {
+        const { getUserByEmailIncludeInactive } = await import('../services/authService');
+        const inactiveUser = await getUserByEmailIncludeInactive(data.email);
+        if (inactiveUser && inactiveUser.userId !== userId) {
+          const { updateDoc, doc: docRef } = await import('firebase/firestore');
+          await updateDoc(docRef(db, 'users', inactiveUser.userId), {
+            email: `rejoined_${Date.now()}_${data.email}`,
+          });
+          logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
+        }
+      } catch (cleanupError) {
+        logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
+      }
+
+      const alertTitle = tempUser ? 'Account Activated' : 'Sign Up Complete';
+      const alertMessage = tempUser
+        ? `Welcome, ${fullName}!\n\nYour account has been activated.\nPlease upload your documents (Profile Photo, CV, Passport Photo) in Profile Edit.`
+        : `Welcome, ${fullName}!\n\nYour account has been successfully created.\nPlease upload your documents (Profile Photo, CV, Passport Photo) in Profile Edit.`;
+
+      Alert.alert(
+        alertTitle,
+        alertMessage,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setCurrentScreen('signin');
+              setSelectedRole(null);
+              setSignUpData({});
+            },
+          },
+        ]
+      );
     } catch (error: any) {
       console.error('❌ 원어민 회원가입 오류:', error);
 

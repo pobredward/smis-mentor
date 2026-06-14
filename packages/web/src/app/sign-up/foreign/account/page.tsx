@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { getUserByEmail, getUserByPhone } from '@/lib/firebaseService';
+import { getUserByEmail, getUserByEmailIncludeInactive, getUserByPhone } from '@/lib/firebaseService';
 import { auth } from '@/lib/firebase';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
@@ -219,13 +219,16 @@ export default function ForeignSignUpStep2() {
             return;
           }
         }
-        // Case 2: 이메일로 계정이 존재하는 경우 (중복)
+        // Case 2: 이메일로 계정이 존재하는 경우
         else if (existingUserByEmail) {
           toast.error('This email is already in use.');
           setIsLoading(false);
           return;
         }
-        // Case 3: 완전히 새로운 사용자
+        // Case 3: 완전히 새로운 사용자이거나, 이메일이 탈퇴(inactive) 계정에만 존재하는 경우
+        // getUserByEmail은 inactive를 제외하므로, 탈퇴 후 재가입 시 이 케이스로 진입
+        // Firebase Auth도 이미 삭제되어 있으므로 정상 가입 진행 가능
+        // 단, 기존 inactive 문서는 새 가입 완료 후 처리됨
         else {
           logger.info('🔐 Creating new Firebase Authentication account:', data.email);
           const { createUserWithEmailAndPassword } = await import('firebase/auth');
@@ -337,6 +340,22 @@ export default function ForeignSignUpStep2() {
         logger.info('📝 Creating new Firestore user document');
         await setDoc(doc(db, 'users', userId), userData);
         logger.info('✅ Firestore user document created');
+
+        // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리
+        // Auth 삭제 후 재가입하는 경우 기존 문서가 중복되지 않도록 정리
+        try {
+          const inactiveUser = await getUserByEmailIncludeInactive(resolvedEmail);
+          if (inactiveUser && inactiveUser.userId !== userId) {
+            const { updateDoc: updateOldDoc, doc: docRef } = await import('firebase/firestore');
+            await updateOldDoc(docRef(db, 'users', inactiveUser.userId), {
+              email: `rejoined_${Date.now()}_${resolvedEmail}`,
+            });
+            logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
+          }
+        } catch (cleanupError) {
+          // 정리 실패가 가입 전체를 막지 않도록 오류만 기록
+          logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
+        }
 
         toast.success(
           `Welcome, ${fullName}!\n\nYour account has been successfully created.\nPlease upload your documents in Profile Edit.`,
