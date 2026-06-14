@@ -13,7 +13,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  Switch,
 } from 'react-native';
+import { saveSensitiveInfo } from '../services/apiClient';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -67,6 +69,11 @@ const profileSchemaMentor = z.object({
   isOnLeave: z.boolean(),
   major1: z.string().min(1, '전공을 입력해주세요.'),
   major2: z.string().optional(),
+  referralPath: z.string().optional(),
+  referrerName: z.string().optional(),
+  otherReferralDetail: z.string().optional(),
+  rrnFront: z.string().optional(),
+  rrnLast: z.string().optional(),
 });
 
 // 원어민용 스키마: firstName/lastName/middleName 분화, name 자동합성이므로 optional, 학교정보 불필요
@@ -118,6 +125,8 @@ export function ProfileEditScreen() {
   const [isAddressModalVisible, setIsAddressModalVisible] = useState(false);
   const [countryCode, setCountryCode] = useState('+82');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showRrnLast, setShowRrnLast] = useState(false);
+  const [hasExistingRRN, setHasExistingRRN] = useState(false);
   
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -149,6 +158,11 @@ export function ProfileEditScreen() {
       isOnLeave: false,
       major1: '',
       major2: '',
+      referralPath: '',
+      referrerName: '',
+      otherReferralDetail: '',
+      rrnFront: '',
+      rrnLast: '',
     },
   });
 
@@ -209,7 +223,19 @@ export function ProfileEditScreen() {
         isOnLeave: userData.isOnLeave || false,
         major1: userData.major1 || '',
         major2: userData.major2 || '',
+        referralPath: (userData.referralPath || '').startsWith('기타: ')
+          ? '기타'
+          : (userData.referralPath || ''),
+        referrerName: userData.referrerName || '',
+        otherReferralDetail: (userData.referralPath || '').startsWith('기타: ')
+          ? (userData.referralPath || '').substring(4).trim()
+          : '',
+        rrnFront: userData.rrnFront || '',
+        rrnLast: '',
       });
+
+      const hasRRN = !!(userData.rrnFront && ((userData as any).rrnLastEncrypted || userData.rrnLast));
+      setHasExistingRRN(hasRRN);
 
       if (userData.profileImage) {
         setProfileImageUrl(userData.profileImage);
@@ -418,6 +444,14 @@ export function ProfileEditScreen() {
         updateData.partTimeJobs = partTimeJobs;
         updateData.selfIntroduction = data.selfIntroduction || '';
         updateData.jobMotivation = data.jobMotivation || '';
+
+        // 가입 경로 처리
+        let referralPath = data.referralPath || '';
+        if (data.referralPath === '기타' && (data as any).otherReferralDetail) {
+          referralPath = `기타: ${(data as any).otherReferralDetail}`;
+        }
+        updateData.referralPath = referralPath;
+        updateData.referrerName = (data as any).referrerName || '';
       }
 
       // 공통 필드
@@ -442,6 +476,23 @@ export function ProfileEditScreen() {
 
       // 사용자 정보 업데이트
       await updateUserProfile(userData.userId, updateData);
+
+      // 주민번호 변경이 있을 경우 암호화 API 호출
+      if (!isForeign) {
+        const rrnFront = (data as any).rrnFront as string | undefined;
+        const rrnLast = (data as any).rrnLast as string | undefined;
+        if (rrnFront && rrnLast && /^\d{6}$/.test(rrnFront) && /^\d{7}$/.test(rrnLast)) {
+          try {
+            await saveSensitiveInfo({ userId: userData.userId, rrnFront, rrnLast });
+          } catch (rrnErr) {
+            logger.error('주민번호 저장 실패:', rrnErr);
+            Alert.alert('오류', '주민번호 저장에 실패했습니다. 다시 시도해주세요.');
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
       await refreshUserData();
 
       Alert.alert(
@@ -494,585 +545,497 @@ export function ProfileEditScreen() {
     >
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         {/* 헤더 */}
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           <Text style={styles.title}>{isForeign ? 'Edit Profile' : '프로필 수정'}</Text>
           <TouchableOpacity
-            style={[styles.headerSaveButton, (isLoading || emailExists || phoneExists) && styles.headerSaveButtonDisabled]}
+            style={[styles.saveButton, (isLoading || emailExists || phoneExists) && styles.saveButtonDisabled]}
             onPress={handleSubmit(onSubmit)}
             disabled={isLoading || emailExists || phoneExists}
           >
             {isLoading ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.headerSaveButtonText}>{isForeign ? 'Save' : '저장'}</Text>
+              <Text style={styles.saveButtonText}>{isForeign ? 'Save' : '저장'}</Text>
             )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.content}>
-          {/* 프로필 이미지 */}
-          <View style={styles.imageSection}>
-            <Text style={styles.label}>{isForeign ? 'Profile Image' : '프로필 이미지'}</Text>
-            <View style={styles.imageContainer}>
-              {profileImageUrl ? (
-                <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
-              ) : (
-                <View style={styles.placeholderImage}>
-                  <Text style={styles.placeholderText}>{userData.name.charAt(0)}</Text>
-                </View>
-              )}
-              {isUploading && (
-                <View style={styles.uploadingOverlay}>
-                  <ActivityIndicator size="large" color="#ffffff" />
-                  <Text style={styles.uploadProgressText}>{uploadProgress.toFixed(0)}%</Text>
-                </View>
-              )}
-            </View>
-            <TouchableOpacity
-              style={styles.changeImageButton}
-              onPress={handleImagePick}
-              disabled={isUploading}
-            >
-              <Text style={styles.changeImageButtonText}>{isForeign ? 'Change Image' : '이미지 변경'}</Text>
-            </TouchableOpacity>
-          </View>
 
-
-          {/* 개인 정보 */}
+          {/* ━━━ 1. 개인 정보 ━━━ */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{isForeign ? 'Personal Information' : '개인 정보'}</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{isForeign ? 'Personal Information' : '개인 정보'}</Text>
+            </View>
 
+            {/* 프로필 이미지 (인라인) */}
+            <View style={styles.imageRow}>
+              <TouchableOpacity onPress={handleImagePick} disabled={isUploading} style={styles.imageWrapper}>
+                {profileImageUrl ? (
+                  <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
+                ) : (
+                  <View style={styles.profileImagePlaceholder}>
+                    <Text style={styles.profileImagePlaceholderText}>{userData.name.charAt(0)}</Text>
+                  </View>
+                )}
+                {isUploading && (
+                  <View style={styles.uploadOverlay}>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={styles.uploadProgressText}>{uploadProgress.toFixed(0)}%</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleImagePick} disabled={isUploading} style={styles.changeImageBtn}>
+                <Text style={styles.changeImageBtnText}>{isForeign ? 'Change Image' : '이미지 변경'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 이름 + 성별 (2열) */}
             {isForeign ? (
               <>
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>First Name *</Text>
-                  <Controller
-                    control={control}
-                    name="firstName"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                      <TextInput
-                        style={[styles.input, (errors as Record<string, {message?: string}>).firstName && styles.inputError]}
-                        onBlur={onBlur}
-                        onChangeText={onChange}
-                        value={value ?? ''}
-                        placeholder="Enter your First Name"
-                        autoCapitalize="words"
-                      />
-                    )}
-                  />
-                  {(errors as Record<string, {message?: string}>).firstName && (
-                    <Text style={styles.errorMessage}>{(errors as Record<string, {message?: string}>).firstName?.message}</Text>
-                  )}
+                <View style={styles.row2}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>First Name *</Text>
+                    <Controller control={control} name="firstName"
+                      render={({ field: { onChange, onBlur, value } }) => (
+                        <TextInput style={[styles.input, (errors as any).firstName && styles.inputError]}
+                          onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="First Name" autoCapitalize="words" />
+                      )} />
+                    {(errors as any).firstName && <Text style={styles.errorMsg}>{(errors as any).firstName.message}</Text>}
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Last Name *</Text>
+                    <Controller control={control} name="lastName"
+                      render={({ field: { onChange, onBlur, value } }) => (
+                        <TextInput style={[styles.input, (errors as any).lastName && styles.inputError]}
+                          onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="Last Name" autoCapitalize="words" />
+                      )} />
+                    {(errors as any).lastName && <Text style={styles.errorMsg}>{(errors as any).lastName.message}</Text>}
+                  </View>
                 </View>
+                <View style={[styles.formGroup, styles.formGroupLast]}>
+                  <Text style={styles.label}>Middle Name <Text style={styles.optional}>(optional)</Text></Text>
+                  <Controller control={control} name="middleName"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="Middle Name" autoCapitalize="words" />
+                    )} />
+                </View>
+              </>
+            ) : (
+              <View style={styles.row2}>
+                <View style={styles.col}>
+                  <Text style={styles.label}>이름 *</Text>
+                  <Controller control={control} name="name"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput style={[styles.input, errors.name && styles.inputError]}
+                        onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="이름" />
+                    )} />
+                  {errors.name && <Text style={styles.errorMsg}>{errors.name.message}</Text>}
+                </View>
+                <View style={styles.col}>
+                  <Text style={styles.label}>성별</Text>
+                  <Controller control={control} name="gender"
+                    render={({ field: { onChange, value } }) => (
+                      <View style={styles.genderRow}>
+                        {(['M', 'F'] as const).map(g => (
+                          <TouchableOpacity key={g} onPress={() => onChange(g)}
+                            style={[styles.genderBtn, value === g && styles.genderBtnActive]}>
+                            <Text style={[styles.genderBtnText, value === g && styles.genderBtnTextActive]}>
+                              {g === 'M' ? '남성' : '여성'}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )} />
+                  {errors.gender && <Text style={styles.errorMsg}>{errors.gender.message}</Text>}
+                </View>
+              </View>
+            )}
 
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Middle Name <Text style={styles.optionalLabel}>(optional)</Text></Text>
-                  <Controller
-                    control={control}
-                    name="middleName"
+            {/* 이메일 (1열) */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>{isForeign ? 'Email *' : '이메일 *'}</Text>
+              <Controller control={control} name="email"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <TextInput
+                    style={[styles.input, (errors.email || emailExists) && styles.inputError]}
+                    onBlur={() => { onBlur(); handleEmailBlur(); }}
+                    onChangeText={onChange} value={value}
+                    placeholder="email@example.com" keyboardType="email-address" autoCapitalize="none" />
+                )} />
+              {emailExists && <Text style={styles.errorMsg}>이미 사용 중</Text>}
+              {errors.email && <Text style={styles.errorMsg}>{errors.email.message}</Text>}
+            </View>
+
+            {/* 전화번호 (1열) */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>{isForeign ? 'Phone *' : '전화번호 *'}</Text>
+              {isForeign ? (
+                <View style={styles.phoneRow}>
+                  <TouchableOpacity style={styles.countryCodeBtn} onPress={() => setShowCountryPicker(true)}>
+                    <Text style={styles.countryCodeText}>{countryCodes.find(c => c.code === countryCode)?.flag} {countryCode} ▼</Text>
+                  </TouchableOpacity>
+                  <Controller control={control} name="phoneNumber"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput style={[styles.phoneInput, (errors.phoneNumber || phoneExists) && styles.inputError]}
+                        onBlur={() => { onBlur(); handlePhoneBlur(); }}
+                        onChangeText={onChange} value={value} placeholder={getPhonePlaceholder(countryCode)} keyboardType="phone-pad" />
+                    )} />
+                </View>
+              ) : (
+                <Controller control={control} name="phoneNumber"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput style={[styles.input, (errors.phoneNumber || phoneExists) && styles.inputError]}
+                      onBlur={() => { onBlur(); handlePhoneBlur(); }}
+                      onChangeText={onChange} value={value} placeholder="01012345678" keyboardType="phone-pad" />
+                  )} />
+              )}
+              {phoneExists && <Text style={styles.errorMsg}>이미 사용 중</Text>}
+              {errors.phoneNumber && <Text style={styles.errorMsg}>{errors.phoneNumber.message}</Text>}
+            </View>
+
+            {/* 원어민 성별 + 생년월일 (2열) */}
+            {isForeign && (
+              <View style={[styles.row2, styles.row2Last]}>
+                <View style={styles.col}>
+                  <Text style={styles.label}>Gender</Text>
+                  <Controller control={control} name="gender"
+                    render={({ field: { onChange, value } }) => (
+                      <View style={styles.genderRow}>
+                        {(['M', 'F'] as const).map(g => (
+                          <TouchableOpacity key={g} onPress={() => onChange(g)}
+                            style={[styles.genderBtn, value === g && styles.genderBtnActive]}>
+                            <Text style={[styles.genderBtnText, value === g && styles.genderBtnTextActive]}>
+                              {g === 'M' ? 'Male' : 'Female'}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )} />
+                  {errors.gender && <Text style={styles.errorMsg}>{errors.gender.message}</Text>}
+                </View>
+                <View style={styles.col}>
+                  <Text style={styles.label}>Date of Birth <Text style={styles.optional}>(optional)</Text></Text>
+                  <Controller control={control} name="dateOfBirth"
                     render={({ field: { onChange, onBlur, value } }) => (
                       <TextInput
                         style={styles.input}
                         onBlur={onBlur}
-                        onChangeText={onChange}
+                        onChangeText={(text) => {
+                          const digits = text.replace(/[^0-9]/g, '');
+                          let formatted = digits;
+                          if (digits.length >= 5) {
+                            formatted = `${digits.substring(0, 4)}-${digits.substring(4)}`;
+                          }
+                          if (digits.length >= 7) {
+                            formatted = `${digits.substring(0, 4)}-${digits.substring(4, 6)}-${digits.substring(6, 8)}`;
+                          }
+                          onChange(formatted);
+                        }}
                         value={value ?? ''}
-                        placeholder="Enter your Middle Name"
-                        autoCapitalize="words"
+                        placeholder="YYYY-MM-DD"
+                        keyboardType="number-pad"
+                        maxLength={10}
                       />
-                    )}
-                  />
+                    )} />
+                  <Text style={styles.hint}>YYYY-MM-DD</Text>
+                  {(errors as any).dateOfBirth && <Text style={styles.errorMsg}>{(errors as any).dateOfBirth.message}</Text>}
                 </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Last Name *</Text>
-                  <Controller
-                    control={control}
-                    name="lastName"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                      <TextInput
-                        style={[styles.input, (errors as Record<string, {message?: string}>).lastName && styles.inputError]}
-                        onBlur={onBlur}
-                        onChangeText={onChange}
-                        value={value ?? ''}
-                        placeholder="Enter your Last Name"
-                        autoCapitalize="words"
-                      />
-                    )}
-                  />
-                  {(errors as Record<string, {message?: string}>).lastName && (
-                    <Text style={styles.errorMessage}>{(errors as Record<string, {message?: string}>).lastName?.message}</Text>
-                  )}
-                </View>
-              </>
-            ) : (
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>이름 *</Text>
-                <Controller
-                  control={control}
-                  name="name"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <TextInput
-                      style={[styles.input, errors.name && styles.inputError]}
-                      onBlur={onBlur}
-                      onChangeText={onChange}
-                      value={value ?? ''}
-                      placeholder="이름을 입력하세요"
-                    />
-                  )}
-                />
-                {errors.name && <Text style={styles.errorMessage}>{errors.name.message}</Text>}
               </View>
             )}
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Date of Birth' : '생년월일'}</Text>
-              <Controller
-                control={control}
-                name="dateOfBirth"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={styles.input}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value ?? ''}
-                    placeholder="YYYY-MM-DD"
-                    keyboardType="numeric"
-                    maxLength={10}
-                  />
-                )}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Email *' : '이메일 *'}</Text>
-              <Controller
-                control={control}
-                name="email"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[
-                      styles.input,
-                      (errors.email || emailExists) && styles.inputError,
-                    ]}
-                    onBlur={() => {
-                      onBlur();
-                      handleEmailBlur();
-                    }}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder={isForeign ? 'Enter your email' : '이메일 주소를 입력하세요'}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                )}
-              />
-              {emailExists && <Text style={styles.errorMessage}>{isForeign ? 'This email is already in use.' : '이미 사용 중인 이메일입니다.'}</Text>}
-              {errors.email && <Text style={styles.errorMessage}>{errors.email.message}</Text>}
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Phone Number *' : '휴대폰 번호 *'}</Text>
-              {isForeign ? (
-                // 원어민: 국가코드 선택 + 전화번호
-                <View style={styles.phoneRow}>
-                  <TouchableOpacity
-                    style={styles.countryCodeButton}
-                    onPress={() => setShowCountryPicker(true)}
-                  >
-                    <Text style={styles.countryCodeText}>
-                      {countryCodes.find(c => c.code === countryCode)?.flag} {countryCode}
-                    </Text>
-                    <Text style={styles.countryCodeArrow}>▼</Text>
-                  </TouchableOpacity>
-                  <Controller
-                    control={control}
-                    name="phoneNumber"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                      <TextInput
-                        style={[
-                          styles.phoneInput,
-                          (errors.phoneNumber || phoneExists) && styles.inputError,
-                        ]}
-                        onBlur={() => {
-                          onBlur();
-                          handlePhoneBlur();
-                        }}
-                        onChangeText={onChange}
-                        value={value}
-                        placeholder={getPhonePlaceholder(countryCode)}
-                        keyboardType="phone-pad"
-                      />
-                    )}
-                  />
+            {/* 주민등록번호 (멘토 전용) */}
+            {!isForeign && (
+              <View style={[styles.formGroup, styles.dividerTop]}>
+                <View style={styles.rrnHeader}>
+                  <Text style={styles.subSectionTitle}>주민등록번호</Text>
+                  <View style={styles.rrnBadge}>
+                    <Text style={styles.rrnBadgeText}>🔒 암호화 저장{hasExistingRRN ? ' · 변경 시에만 입력' : ''}</Text>
+                  </View>
                 </View>
-              ) : (
-                // 멘토: 전화번호만
-                <Controller
-                  control={control}
-                  name="phoneNumber"
+                {/* 앞자리 */}
+                <Text style={styles.label}>앞자리 (6자리)</Text>
+                <Controller control={control} name={'rrnFront' as any}
                   render={({ field: { onChange, onBlur, value } }) => (
                     <TextInput
-                      style={[
-                        styles.input,
-                        (errors.phoneNumber || phoneExists) && styles.inputError,
-                      ]}
-                      onBlur={() => {
-                        onBlur();
-                        handlePhoneBlur();
-                      }}
-                      onChangeText={onChange}
-                      value={value}
-                      placeholder="-없이 입력하세요"
-                      keyboardType="phone-pad"
-                    />
-                  )}
-                />
-              )}
-              {phoneExists && <Text style={styles.errorMessage}>{isForeign ? 'This phone number is already in use.' : '이미 사용 중인 휴대폰 번호입니다.'}</Text>}
-              {errors.phoneNumber && <Text style={styles.errorMessage}>{errors.phoneNumber.message}</Text>}
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>
-                {isForeign ? (
-                  <>{'Address '}<Text style={styles.optionalLabel}>(optional)</Text></>
-                ) : '주소 *'}
-              </Text>
-              <View style={styles.addressRow}>
-                <Controller
-                  control={control}
-                  name="address"
-                  render={({ field: { value } }) => (
+                      style={[styles.rrnInput, (errors as any).rrnFront && styles.inputError]}
+                      onBlur={onBlur}
+                      onChangeText={t => onChange(t.replace(/\D/g, '').slice(0, 6))}
+                      value={value ?? ''}
+                      placeholder="000000" keyboardType="numeric" maxLength={6} />
+                  )} />
+                {(errors as any).rrnFront && <Text style={styles.errorMsg}>{(errors as any).rrnFront.message}</Text>}
+                {/* 뒷자리 */}
+                <View style={[styles.rrnLastHeader, { marginTop: 10 }]}>
+                  <Text style={styles.label}>뒷자리 (7자리)</Text>
+                  <TouchableOpacity onPress={() => setShowRrnLast(!showRrnLast)}>
+                    <Text style={styles.rrnToggle}>{showRrnLast ? '숨기기' : '보기'}</Text>
+                  </TouchableOpacity>
+                </View>
+                <Controller control={control} name={'rrnLast' as any}
+                  render={({ field: { onChange, onBlur, value } }) => (
                     <TextInput
-                      style={[styles.addressInput, errors.address && styles.inputError]}
-                      value={value}
-                      placeholder={isForeign ? 'Click search button' : '주소 검색 버튼을 클릭하세요'}
-                      editable={false}
-                    />
-                  )}
-                />
-                <TouchableOpacity
-                  style={styles.searchButton}
-                  onPress={() => setIsAddressModalVisible(true)}
-                >
-                  <Text style={styles.searchButtonText}>{isForeign ? 'Search' : '검색'}</Text>
-                </TouchableOpacity>
-              </View>
-              {errors.address && <Text style={styles.errorMessage}>{errors.address.message}</Text>}
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>
-                {isForeign ? (
-                  <>{'Detailed Address '}<Text style={styles.optionalLabel}>(optional)</Text></>
-                ) : '상세 주소 *'}
-              </Text>
-              <Controller
-                control={control}
-                name="addressDetail"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.addressDetail && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder={isForeign ? 'Enter detailed address' : '상세 주소를 입력하세요'}
-                  />
+                      style={[styles.rrnInput, (errors as any).rrnLast && styles.inputError]}
+                      onBlur={onBlur}
+                      onChangeText={t => onChange(t.replace(/\D/g, '').slice(0, 7))}
+                      value={value ?? ''}
+                      placeholder="0000000" keyboardType="numeric" maxLength={7}
+                      secureTextEntry={!showRrnLast} />
+                  )} />
+                {(errors as any).rrnLast && <Text style={styles.errorMsg}>{(errors as any).rrnLast.message}</Text>}
+                {hasExistingRRN && !watch('rrnFront' as any) && (
+                  <Text style={[styles.hint, { paddingHorizontal: 0, paddingBottom: 0, marginTop: 6 }]}>비워두면 기존 저장 정보가 유지됩니다.</Text>
                 )}
-              />
-              {errors.addressDetail && <Text style={styles.errorMessage}>{errors.addressDetail.message}</Text>}
-            </View>
+              </View>
+            )}
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Gender *' : '성별 *'}</Text>
-              <Controller
-                control={control}
-                name="gender"
-                render={({ field: { onChange, value } }) => (
-                  <View style={styles.radioGroup}>
-                    <TouchableOpacity
-                      style={styles.radioButton}
-                      onPress={() => onChange('M')}
-                    >
-                      <View style={[styles.radioCircle, value === 'M' && styles.radioCircleSelected]}>
-                        {value === 'M' && <View style={styles.radioDot} />}
-                      </View>
-                      <Text style={styles.radioLabel}>{isForeign ? 'Male' : '남성'}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.radioButton}
-                      onPress={() => onChange('F')}
-                    >
-                      <View style={[styles.radioCircle, value === 'F' && styles.radioCircleSelected]}>
-                        {value === 'F' && <View style={styles.radioDot} />}
-                      </View>
-                      <Text style={styles.radioLabel}>{isForeign ? 'Female' : '여성'}</Text>
-                    </TouchableOpacity>
+            {/* 가입 경로 (멘토 전용) */}
+            {!isForeign && (
+              <View style={[styles.formGroup, styles.dividerTop, styles.formGroupLast]}>
+                <Text style={styles.subSectionTitle}>가입 경로</Text>
+                <View style={styles.referralGrid}>
+                  {['에브리타임','학교 커뮤니티','링커리어','캠퍼스픽','인스타그램','페이스북','구글/네이버 등 검색','지인 소개','기타'].map(option => (
+                    <Controller key={option} control={control} name={'referralPath' as any}
+                      render={({ field: { onChange, value } }) => (
+                        <TouchableOpacity
+                          style={[styles.referralChip, value === option && styles.referralChipActive]}
+                          onPress={() => onChange(option)}>
+                          <Text style={[styles.referralChipText, value === option && styles.referralChipTextActive]}>{option}</Text>
+                        </TouchableOpacity>
+                      )} />
+                  ))}
+                </View>
+                {watch('referralPath' as any) === '지인 소개' && (
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>소개인 이름</Text>
+                    <Controller control={control} name={'referrerName' as any}
+                      render={({ field: { onChange, onBlur, value } }) => (
+                        <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="지인의 이름" />
+                      )} />
                   </View>
                 )}
-              />
-              {errors.gender && <Text style={styles.errorMessage}>{errors.gender.message}</Text>}
-            </View>
-
-            {!isForeign && (
-            <>
-            <View style={styles.formGroup}>
-              <View style={styles.labelWithCount}>
-                <Text style={styles.label}>자기소개</Text>
-                <Text style={styles.charCount}>{currentSelfIntro.length}/500자</Text>
-              </View>
-              <Controller
-                control={control}
-                name="selfIntroduction"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.textarea, errors.selfIntroduction && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="간단한 자기소개를 입력하세요"
-                    multiline
-                    maxLength={500}
-                  />
+                {watch('referralPath' as any) === '기타' && (
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>기타 상세</Text>
+                    <Controller control={control} name={'otherReferralDetail' as any}
+                      render={({ field: { onChange, onBlur, value } }) => (
+                        <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="어떤 경로인지 입력해주세요" />
+                      )} />
+                  </View>
                 )}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <View style={styles.labelWithCount}>
-                <Text style={styles.label}>지원 동기</Text>
-                <Text style={styles.charCount}>{currentJobMotivation.length}/500자</Text>
               </View>
-              <Controller
-                control={control}
-                name="jobMotivation"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.textarea, errors.jobMotivation && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="업무 지원 동기를 입력하세요"
-                    multiline
-                    maxLength={500}
-                  />
-                )}
-              />
-            </View>
-            </>
             )}
           </View>
 
-          {/* 학교 정보 - 원어민은 숨기기 */}
+          {/* ━━━ 2. 학교 정보 (멘토 전용) ━━━ */}
           {!isForeign && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>학교 정보</Text>
+            <View style={styles.section}>
+              <View style={[styles.sectionHeader, { borderLeftColor: '#a855f7' }]}>
+                <Text style={styles.sectionTitle}>학교 정보</Text>
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>학교 *</Text>
-              <Controller
-                control={control}
-                name="university"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.university && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="학교명을 입력하세요"
-                  />
-                )}
-              />
-              {errors.university && <Text style={styles.errorMessage}>{errors.university.message}</Text>}
-            </View>
+              {/* 학교 + 학년 (2열) */}
+              <View style={styles.row2}>
+                <View style={styles.col}>
+                  <Text style={styles.label}>학교 *</Text>
+                  <Controller control={control} name="university"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput style={[styles.input, errors.university && styles.inputError]}
+                        onBlur={onBlur} onChangeText={onChange} value={value} placeholder="학교명" />
+                    )} />
+                  {errors.university && <Text style={styles.errorMsg}>{errors.university.message}</Text>}
+                </View>
+                <View style={styles.col}>
+                  <Text style={styles.label}>학년 *</Text>
+                  <Controller control={control} name="grade"
+                    render={({ field: { onChange, value } }) => (
+                      <View style={styles.gradeGrid}>
+                        {[1, 2, 3, 4, 5, 6].map(g => (
+                          <TouchableOpacity key={g} onPress={() => onChange(g)}
+                            style={[styles.gradeBtn, value === g && styles.gradeBtnActive]}>
+                            <Text style={[styles.gradeBtnText, value === g && styles.gradeBtnTextActive]}>
+                              {g === 6 ? '졸업' : `${g}학년`}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )} />
+                  {errors.grade && <Text style={styles.errorMsg}>{errors.grade.message}</Text>}
+                </View>
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>학년 *</Text>
-              <Controller
-                control={control}
-                name="grade"
+              {/* 전공 (2열) */}
+              <View style={styles.row2Last}>
+                <View style={styles.col}>
+                  <Text style={styles.label}>1전공 *</Text>
+                  <Controller control={control} name="major1"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput style={[styles.input, errors.major1 && styles.inputError]}
+                        onBlur={onBlur} onChangeText={onChange} value={value} placeholder="1전공" />
+                    )} />
+                  {errors.major1 && <Text style={styles.errorMsg}>{errors.major1.message}</Text>}
+                </View>
+                <View style={styles.col}>
+                  <Text style={styles.label}>2전공/부전공</Text>
+                  <Controller control={control} name="major2"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value} placeholder="2전공 (선택)" />
+                    )} />
+                </View>
+              </View>
+
+              {/* 휴학 */}
+              <Controller control={control} name="isOnLeave"
                 render={({ field: { onChange, value } }) => (
-                  <View style={styles.gradeButtons}>
-                    {[1, 2, 3, 4, 5, 6].map((grade) => (
-                      <TouchableOpacity
-                        key={grade}
-                        style={[
-                          styles.gradeButton,
-                          value === grade && styles.gradeButtonSelected,
-                        ]}
-                        onPress={() => onChange(grade)}
-                      >
-                        <Text
-                          style={[
-                            styles.gradeButtonText,
-                            value === grade && styles.gradeButtonTextSelected,
-                          ]}
-                        >
-                          {grade === 6 ? '졸업생' : `${grade}학년`}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              />
-              {errors.grade && <Text style={styles.errorMessage}>{errors.grade.message}</Text>}
-            </View>
-
-            <View style={styles.formGroup}>
-              <Controller
-                control={control}
-                name="isOnLeave"
-                render={({ field: { onChange, value } }) => (
-                  <TouchableOpacity
-                    style={styles.checkboxButton}
-                    onPress={() => onChange(!value)}
-                  >
+                  <TouchableOpacity style={[styles.checkRow, { borderTopWidth: 1, borderTopColor: '#f1f5f9' }]} onPress={() => onChange(!value)}>
                     <View style={[styles.checkbox, value && styles.checkboxChecked]}>
                       {value && <Text style={styles.checkmark}>✓</Text>}
                     </View>
-                    <Text style={styles.checkboxLabel}>현재 휴학 중</Text>
+                    <Text style={styles.checkLabel}>현재 휴학 중</Text>
                   </TouchableOpacity>
-                )}
-              />
+                )} />
             </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>전공 (1전공) *</Text>
-              <Controller
-                control={control}
-                name="major1"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.major1 && styles.inputError]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="1전공을 입력하세요"
-                  />
-                )}
-              />
-              {errors.major1 && <Text style={styles.errorMessage}>{errors.major1.message}</Text>}
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>전공 (2전공/부전공)</Text>
-              <Controller
-                control={control}
-                name="major2"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={styles.input}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="2전공이 있는 경우 입력하세요 (선택사항)"
-                  />
-                )}
-              />
-            </View>
-          </View>
           )}
 
-          {/* 알바 & 멘토링 경력 - 원어민은 숨기기 */}
-          {!isForeign && (
+          {/* ━━━ 3. 주소 ━━━ */}
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>알바 & 멘토링 경력</Text>
-              <TouchableOpacity onPress={addPartTimeJob} style={styles.addButton}>
-                <Text style={styles.addButtonText}>+ 경력 추가</Text>
-              </TouchableOpacity>
+            <View style={[styles.sectionHeader, { borderLeftColor: '#22c55e' }]}>
+              <Text style={styles.sectionTitle}>{isForeign ? 'Address' : '주소'}</Text>
             </View>
-
-            {partTimeJobs.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Text style={styles.emptyText}>알바 & 멘토링 경력을 추가해보세요.</Text>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                {isForeign ? 'Address (optional)' : '주소 *'}
+              </Text>
+              <View style={styles.addressRow}>
+                <Controller control={control} name="address"
+                  render={({ field: { value } }) => (
+                    <TextInput style={styles.addressInput} value={value}
+                      placeholder={isForeign ? 'Tap search button' : '주소 검색 버튼을 누르세요'} editable={false} />
+                  )} />
+                <TouchableOpacity style={styles.searchBtn} onPress={() => setIsAddressModalVisible(true)}>
+                  <Text style={styles.searchBtnText}>{isForeign ? 'Search' : '검색'}</Text>
+                </TouchableOpacity>
               </View>
-            ) : (
-              <View style={styles.jobsList}>
-                {partTimeJobs.map((job, index) => (
-                  <View key={index} style={styles.jobItem}>
-                    <TouchableOpacity
-                      style={styles.removeJobButton}
-                      onPress={() => removePartTimeJob(index)}
-                    >
-                      <Text style={styles.removeJobButtonText}>×</Text>
-                    </TouchableOpacity>
-
-                    <TextInput
-                      style={styles.jobInput}
-                      placeholder="기간 (예: 2022.03 - 2022.09)"
-                      value={job.period}
-                      onChangeText={(text) => updatePartTimeJob(index, 'period', text)}
-                    />
-                    <TextInput
-                      style={styles.jobInput}
-                      placeholder="회사명"
-                      value={job.companyName}
-                      onChangeText={(text) => updatePartTimeJob(index, 'companyName', text)}
-                    />
-                    <TextInput
-                      style={styles.jobInput}
-                      placeholder="담당/직무"
-                      value={job.position}
-                      onChangeText={(text) => updatePartTimeJob(index, 'position', text)}
-                    />
-                    <TextInput
-                      style={styles.jobInput}
-                      placeholder="간략한 업무 내용"
-                      value={job.description}
-                      onChangeText={(text) => updatePartTimeJob(index, 'description', text)}
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
+              {errors.address && <Text style={styles.errorMsg}>{errors.address.message}</Text>}
+            </View>
+            <View style={[styles.formGroup, styles.formGroupLast]}>
+              <Text style={styles.label}>{isForeign ? 'Detailed Address (optional)' : '상세 주소 *'}</Text>
+              <Controller control={control} name="addressDetail"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <TextInput style={[styles.input, errors.addressDetail && styles.inputError]}
+                    onBlur={onBlur} onChangeText={onChange} value={value}
+                    placeholder={isForeign ? 'Detailed address' : '상세 주소'} />
+                )} />
+              {errors.addressDetail && <Text style={styles.errorMsg}>{errors.addressDetail.message}</Text>}
+            </View>
           </View>
+
+          {/* ━━━ 4. 자기소개 & 지원 동기 (멘토 전용) ━━━ */}
+          {!isForeign && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>자기소개 & 지원 동기</Text>
+              </View>
+              <View style={styles.formGroup}>
+                <View style={styles.textareaHeader}>
+                  <Text style={styles.label}>자기소개</Text>
+                  <Text style={styles.charCount}>{currentSelfIntro.length}/500</Text>
+                </View>
+                <Controller control={control} name="selfIntroduction"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput style={styles.textarea} onBlur={onBlur} onChangeText={onChange} value={value}
+                      placeholder="간단한 자기소개를 입력해주세요." multiline scrollEnabled={false} maxLength={500} textAlignVertical="top" />
+                  )} />
+              </View>
+              <View style={[styles.formGroup, styles.formGroupLast]}>
+                <View style={styles.textareaHeader}>
+                  <Text style={styles.label}>지원 동기</Text>
+                  <Text style={styles.charCount}>{currentJobMotivation.length}/500</Text>
+                </View>
+                <Controller control={control} name="jobMotivation"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput style={styles.textarea} onBlur={onBlur} onChangeText={onChange} value={value}
+                      placeholder="지원 동기를 입력해주세요." multiline scrollEnabled={false} maxLength={500} textAlignVertical="top" />
+                  )} />
+              </View>
+            </View>
+          )}
+
+          {/* ━━━ 5. 알바 & 멘토링 경력 (멘토 전용) ━━━ */}
+          {!isForeign && (
+            <View style={styles.section}>
+              <View style={[styles.sectionHeader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftColor: '#f97316' }]}>
+                <Text style={styles.sectionTitle}>알바 & 멘토링 경력</Text>
+                <TouchableOpacity onPress={addPartTimeJob} style={styles.addBtn}>
+                  <Text style={styles.addBtnText}>+ 경력 추가</Text>
+                </TouchableOpacity>
+              </View>
+              {partTimeJobs.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Text style={styles.emptyText}>경력을 추가해보세요</Text>
+                </View>
+              ) : (
+                partTimeJobs.map((job, index) => (
+                  <View key={index} style={[styles.jobItem, index === partTimeJobs.length - 1 && styles.jobItemLast]}>
+                    <TouchableOpacity style={styles.removeJobBtn} onPress={() => removePartTimeJob(index)}>
+                      <Text style={styles.removeJobBtnText}>×</Text>
+                    </TouchableOpacity>
+                    <View style={styles.jobRow}>
+                      <View style={styles.col}>
+                        <Text style={styles.labelSm}>기간 *</Text>
+                        <TextInput style={styles.inputSm} placeholder="2022.03~09"
+                          value={job.period} onChangeText={t => updatePartTimeJob(index, 'period', t)} />
+                      </View>
+                      <View style={styles.col}>
+                        <Text style={styles.labelSm}>회사명 *</Text>
+                        <TextInput style={styles.inputSm} placeholder="회사명"
+                          value={job.companyName} onChangeText={t => updatePartTimeJob(index, 'companyName', t)} />
+                      </View>
+                    </View>
+                    <View style={[styles.jobRow, { marginTop: 8 }]}>
+                      <View style={styles.col}>
+                        <Text style={styles.labelSm}>담당 *</Text>
+                        <TextInput style={styles.inputSm} placeholder="담당"
+                          value={job.position} onChangeText={t => updatePartTimeJob(index, 'position', t)} />
+                      </View>
+                      <View style={styles.col}>
+                        <Text style={styles.labelSm}>업무내용</Text>
+                        <TextInput style={styles.inputSm} placeholder="내용(선택)"
+                          value={job.description} onChangeText={t => updatePartTimeJob(index, 'description', t)} />
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
           )}
 
         </View>
       </ScrollView>
-      
-      {/* 주소 검색 모달 */}
-      <DaumPostcode
-        visible={isAddressModalVisible}
-        onComplete={handleAddressComplete}
-        onClose={handleAddressCancel}
-      />
 
-      {/* Country Code Picker Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showCountryPicker}
-        onRequestClose={() => setShowCountryPicker(false)}
-      >
+      {/* 주소 검색 모달 */}
+      <DaumPostcode visible={isAddressModalVisible} onComplete={handleAddressComplete} onClose={handleAddressCancel} />
+
+      {/* 국가 코드 선택 모달 */}
+      <Modal animationType="slide" transparent visible={showCountryPicker} onRequestClose={() => setShowCountryPicker(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{isForeign ? 'Select Country Code' : '국가 코드 선택'}</Text>
               <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
-                <Text style={styles.modalCloseButton}>✕</Text>
+                <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.countryList}>
-              {countryCodes.map((country) => (
-                <TouchableOpacity
-                  key={country.code}
-                  style={[
-                    styles.countryItem,
-                    countryCode === country.code && styles.countryItemSelected
-                  ]}
-                  onPress={() => {
-                    setCountryCode(country.code);
-                    setShowCountryPicker(false);
-                  }}
-                >
-                  <Text style={styles.countryFlag}>{country.flag}</Text>
-                  <Text style={styles.countryName}>{country.country}</Text>
-                  <Text style={styles.countryCodeInList}>{country.code}</Text>
+            <ScrollView>
+              {countryCodes.map(c => (
+                <TouchableOpacity key={c.code} style={[styles.countryItem, countryCode === c.code && styles.countryItemActive]}
+                  onPress={() => { setCountryCode(c.code); setShowCountryPicker(false); }}>
+                  <Text style={styles.countryFlag}>{c.flag}</Text>
+                  <Text style={styles.countryName}>{c.country}</Text>
+                  <Text style={styles.countryCode}>{c.code}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -1084,530 +1047,216 @@ export function ProfileEditScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  scrollView: { flex: 1 },
+  errorText: { textAlign: 'center', color: '#ef4444', marginTop: 20 },
+
+  // 헤더
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingBottom: 12,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
   },
-  backButton: {
-    marginRight: 12,
-    minWidth: 32,
+  backButton: { marginRight: 10, minWidth: 28 },
+  backButtonText: { fontSize: 22, color: '#3b82f6' },
+  title: { flex: 1, fontSize: 17, fontWeight: 'bold', color: '#1e293b' },
+  saveButton: {
+    backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 7,
+    borderRadius: 8, minWidth: 52, alignItems: 'center',
   },
-  backButtonText: {
-    fontSize: 24,
-    color: '#3b82f6',
-  },
-  title: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1e293b',
-  },
-  headerSaveButton: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 8,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  headerSaveButtonDisabled: {
-    backgroundColor: '#9ca3af',
-  },
-  headerSaveButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  content: {
-    padding: 16,
-  },
-  errorText: {
-    textAlign: 'center',
-    color: '#ef4444',
-    marginTop: 20,
-  },
+  saveButtonDisabled: { backgroundColor: '#9ca3af' },
+  saveButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
-  // 이미지 섹션
-  imageSection: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  imageContainer: {
-    position: 'relative',
-    marginVertical: 16,
-  },
-  profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 8,
-  },
-  placeholderImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 8,
-    backgroundColor: '#3b82f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderText: {
-    fontSize: 48,
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  uploadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  uploadProgressText: {
-    color: '#ffffff',
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  changeImageButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-  },
-  changeImageButtonText: {
-    color: '#475569',
-    fontSize: 14,
-    fontWeight: '500',
-  },
+  // 콘텐츠 래퍼
+  content: { padding: 12, paddingBottom: 32, gap: 10 },
 
-  // 섹션
+  // 섹션 카드
   section: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
+    backgroundColor: '#fff', borderRadius: 12,
+    borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden',
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 16,
-  },
-  
-  // 폼 그룹
-  formGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  optionalLabel: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#9ca3af',
-  },
-  labelWithCount: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  charCount: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  input: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#1f2937',
-  },
-  inputError: {
-    borderColor: '#ef4444',
-  },
-  addressRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  addressInput: {
-    flex: 1,
+    paddingHorizontal: 14, paddingVertical: 9,
     backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#1f2937',
+    borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
+    borderLeftWidth: 3, borderLeftColor: '#3b82f6',
   },
-  searchButton: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#374151' },
+
+  // 폼 공통 — 카드 내부 가로 패딩 14, 상단 12, 하단은 다음 formGroup 상단이 담당
+  formGroup: { paddingHorizontal: 14, paddingTop: 12 },
+  // 마지막 formGroup 은 하단 여백 추가
+  formGroupLast: { paddingBottom: 14 },
+  dividerTop: { borderTopWidth: 1, borderTopColor: '#f1f5f9', marginTop: 4 },
+
+  // 2열 행 — 내부 col들이 formGroup 역할 겸함
+  row2: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 12, gap: 10 },
+  // row2 의 마지막 행
+  row2Last: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 14, gap: 10 },
+  col: { flex: 1 },
+  label: { fontSize: 12, fontWeight: '500', color: '#374151', marginBottom: 5 },
+  optional: { fontSize: 11, fontWeight: '400', color: '#9ca3af' },
+  input: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 7,
+    paddingHorizontal: 10, paddingVertical: 9,
+    fontSize: 13, color: '#1f2937', backgroundColor: '#fff',
   },
-  searchButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
+  inputError: { borderColor: '#ef4444' },
+  errorMsg: { fontSize: 11, color: '#ef4444', marginTop: 3 },
+  hint: { fontSize: 11, color: '#9ca3af', marginTop: 4, paddingHorizontal: 14, paddingBottom: 10 },
+  subSectionTitle: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 8 },
+
+  // 이미지
+  imageRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
   },
+  imageWrapper: { position: 'relative' },
+  profileImage: { width: 52, height: 52, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb' },
+  profileImagePlaceholder: {
+    width: 52, height: 52, borderRadius: 10,
+    backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center',
+  },
+  profileImagePlaceholderText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  uploadOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  uploadProgressText: { color: '#fff', fontSize: 10, marginTop: 2 },
+  changeImageBtn: {
+    paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: '#eff6ff', borderRadius: 8,
+    borderWidth: 1, borderColor: '#bfdbfe',
+  },
+  changeImageBtnText: { color: '#2563eb', fontSize: 12, fontWeight: '500' },
+
+  // 성별
+  genderRow: { flexDirection: 'row', gap: 6, marginTop: 2 },
+  genderBtn: {
+    flex: 1, paddingVertical: 9, borderRadius: 7,
+    borderWidth: 1, borderColor: '#d1d5db', alignItems: 'center',
+  },
+  genderBtnActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
+  genderBtnText: { fontSize: 12, color: '#6b7280', fontWeight: '500' },
+  genderBtnTextActive: { color: '#2563eb', fontWeight: '600' },
+
+  // 주민번호
+  rrnHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  rrnBadge: { backgroundColor: '#fef2f2', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  rrnBadgeText: { fontSize: 10, color: '#dc2626' },
+  rrnInput: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 7,
+    paddingHorizontal: 10, paddingVertical: 9,
+    fontSize: 14, color: '#1f2937', letterSpacing: 2, backgroundColor: '#fff',
+  },
+  rrnLastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
+  rrnToggle: { fontSize: 11, color: '#6b7280' },
+
+  // 가입경로
+  referralGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 4 },
+  referralChip: {
+    paddingHorizontal: 11, paddingVertical: 6,
+    borderRadius: 14, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#f9fafb',
+  },
+  referralChipActive: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  referralChipText: { fontSize: 12, color: '#374151' },
+  referralChipTextActive: { color: '#fff', fontWeight: '600' },
+
+  // 학년
+  gradeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 2 },
+  gradeBtn: {
+    paddingHorizontal: 9, paddingVertical: 6,
+    borderRadius: 6, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff',
+  },
+  gradeBtnActive: { borderColor: '#7c3aed', backgroundColor: '#f5f3ff' },
+  gradeBtnText: { fontSize: 11, color: '#6b7280' },
+  gradeBtnTextActive: { color: '#6d28d9', fontWeight: '600' },
+
+  // 휴학
+  checkRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
+  checkbox: {
+    width: 18, height: 18, borderRadius: 4,
+    borderWidth: 2, borderColor: '#d1d5db', justifyContent: 'center', alignItems: 'center', marginRight: 8,
+  },
+  checkboxChecked: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  checkmark: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  checkLabel: { fontSize: 13, color: '#374151' },
+
+  // 주소
+  addressRow: { flexDirection: 'row', gap: 8 },
+  addressInput: {
+    flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 7,
+    paddingHorizontal: 10, paddingVertical: 9, fontSize: 13, color: '#6b7280', backgroundColor: '#f9fafb',
+  },
+  searchBtn: {
+    backgroundColor: '#3b82f6', paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 7, justifyContent: 'center',
+  },
+  searchBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+
+  // 경력
+  addBtn: { paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#fff7ed', borderRadius: 6 },
+  addBtnText: { color: '#ea580c', fontSize: 12, fontWeight: '500' },
+  emptyBox: {
+    marginHorizontal: 14, marginTop: 10, marginBottom: 14,
+    borderWidth: 1, borderColor: '#fed7aa', borderStyle: 'dashed',
+    borderRadius: 8, padding: 18, alignItems: 'center',
+  },
+  emptyText: { color: '#9ca3af', fontSize: 12 },
+  jobItem: {
+    marginHorizontal: 14, marginTop: 10,
+    backgroundColor: '#fff7ed', borderRadius: 8,
+    borderWidth: 1, borderColor: '#fed7aa', padding: 12,
+  },
+  jobItemLast: { marginBottom: 14 },
+  removeJobBtn: {
+    position: 'absolute', top: 8, right: 8,
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center', zIndex: 1,
+  },
+  removeJobBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold', lineHeight: 16 },
+  labelSm: { fontSize: 11, fontWeight: '500', color: '#6b7280', marginBottom: 4 },
+  inputSm: {
+    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 7, fontSize: 12, color: '#1f2937', backgroundColor: '#fff',
+  },
+  // jobItem 내부 2열 행 (paddingHorizontal 없음, jobItem padding으로 대체)
+  jobRow: { flexDirection: 'row', gap: 8 },
+
+  // 자기소개/지원동기
+  textareaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
+  charCount: { fontSize: 11, color: '#9ca3af' },
   textarea: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#1f2937',
-    minHeight: 100,
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 7,
+    paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 13, color: '#1f2937',
+    minHeight: 110, backgroundColor: '#fff',
     textAlignVertical: 'top',
   },
-  errorMessage: {
-    fontSize: 12,
-    color: '#ef4444',
-    marginTop: 4,
-  },
 
-  // 라디오 버튼
-  radioGroup: {
-    flexDirection: 'row',
-    gap: 24,
+  // 전화번호
+  phoneRow: { flexDirection: 'row', gap: 6 },
+  countryCodeBtn: {
+    paddingHorizontal: 9, paddingVertical: 9,
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 7, backgroundColor: '#f9fafb', justifyContent: 'center',
   },
-  radioButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#d1d5db',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  radioCircleSelected: {
-    borderColor: '#3b82f6',
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#3b82f6',
-  },
-  radioLabel: {
-    fontSize: 15,
-    color: '#374151',
-  },
-
-  // 체크박스
-  checkboxButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#d1d5db',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  checkboxChecked: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  checkmark: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  checkboxLabel: {
-    fontSize: 15,
-    color: '#374151',
-  },
-
-  // 학년 버튼
-  gradeButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  gradeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#ffffff',
-  },
-  gradeButtonSelected: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  gradeButtonText: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  gradeButtonTextSelected: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-
-  // 경력 관리
-  addButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#eff6ff',
-    borderRadius: 6,
-  },
-  addButtonText: {
-    color: '#3b82f6',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  emptyBox: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderStyle: 'dashed',
-    borderRadius: 8,
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#6b7280',
-    fontSize: 14,
-  },
-  jobsList: {
-    gap: 12,
-  },
-  jobItem: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 16,
-    position: 'relative',
-  },
-  removeJobButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#ef4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  removeJobButtonText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  jobInput: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    marginBottom: 8,
-  },
-
-  // 저장 버튼
-  submitButton: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#9ca3af',
-  },
-  submitButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  // 전화번호 관련
-  phoneRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  countryCodeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    backgroundColor: '#f9fafb',
-    minWidth: 100,
-  },
-  countryCodeText: {
-    fontSize: 14,
-    color: '#111827',
-    marginRight: 4,
-  },
-  countryCodeArrow: {
-    fontSize: 10,
-    color: '#6b7280',
-  },
+  countryCodeText: { fontSize: 12, color: '#374151' },
   phoneInput: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#111827',
+    flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 7,
+    paddingHorizontal: 10, paddingVertical: 9, fontSize: 13, color: '#1f2937', backgroundColor: '#fff',
   },
 
-  // 국가코드 선택 모달
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  modalCloseButton: {
-    fontSize: 24,
-    color: '#6b7280',
-    fontWeight: '300',
-  },
-  countryList: {
-    maxHeight: 400,
-  },
-  countryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  countryItemSelected: {
-    backgroundColor: '#eff6ff',
-  },
-  countryFlag: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  countryName: {
-    flex: 1,
-    fontSize: 16,
-    color: '#111827',
-  },
-  countryCodeInList: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-
-  // 파일 업로드 관련
-  filePreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    backgroundColor: '#f0fdf4',
-    borderWidth: 1,
-    borderColor: '#86efac',
-    borderRadius: 8,
-  },
-  filePreviewText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#16a34a',
-    fontWeight: '500',
-  },
-  changeFileButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#3b82f6',
-    borderRadius: 6,
-  },
-  changeFileButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  uploadButton: {
-    padding: 12,
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  uploadButtonText: {
-    color: '#3b82f6',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-
+  // 국가코드 모달
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  modalTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
+  modalClose: { fontSize: 22, color: '#6b7280' },
+  countryItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  countryItemActive: { backgroundColor: '#eff6ff' },
+  countryFlag: { fontSize: 22, marginRight: 10 },
+  countryName: { flex: 1, fontSize: 14, color: '#111827' },
+  countryCode: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
 });

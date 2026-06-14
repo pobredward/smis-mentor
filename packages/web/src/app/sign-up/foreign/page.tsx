@@ -31,6 +31,13 @@ const step1Schema = z.object({
   middleName: z.string().optional(),
   countryCode: z.string(),
   phoneNumber: z.string().min(8, 'Please enter a valid phone number.'),
+  dateOfBirth: z.string().min(1, 'Please enter your date of birth.').refine(
+    (v) => {
+      const d = new Date(v);
+      return !isNaN(d.getTime()) && d <= new Date() && d >= new Date('1900-01-01');
+    },
+    { message: 'Please enter a valid date of birth.' }
+  ),
 });
 
 type Step1FormValues = z.infer<typeof step1Schema>;
@@ -217,7 +224,7 @@ export default function ForeignSignUpStep1() {
             // startTransition을 사용하여 안전하게 페이지 전환
             const { startTransition } = await import('react');
             startTransition(() => {
-              router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+              router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}&dateOfBirth=${encodeURIComponent(data.dateOfBirth)}`);
             });
             return;
           } else {
@@ -262,9 +269,9 @@ export default function ForeignSignUpStep1() {
         );
         
         // startTransition을 사용하여 안전하게 페이지 전환
-        const { startTransition } = await import('react');
-        startTransition(() => {
-          router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+        const { startTransition: st2 } = await import('react');
+        st2(() => {
+          router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}&dateOfBirth=${encodeURIComponent(data.dateOfBirth)}`);
         });
       } else {
         // 전화번호로 사용자를 찾을 수 없는 경우 → 신규 가입
@@ -274,9 +281,9 @@ export default function ForeignSignUpStep1() {
         );
         
         // startTransition을 사용하여 안전하게 페이지 전환
-        const { startTransition } = await import('react');
-        startTransition(() => {
-          router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}`);
+        const { startTransition: st3 } = await import('react');
+        st3(() => {
+          router.push(`/sign-up/foreign/account?firstName=${encodeURIComponent(data.firstName)}&lastName=${encodeURIComponent(data.lastName)}&middleName=${encodeURIComponent(data.middleName || '')}&countryCode=${encodeURIComponent(data.countryCode)}&phone=${encodeURIComponent(data.phoneNumber)}&dateOfBirth=${encodeURIComponent(data.dateOfBirth)}`);
         });
       }
     } catch (error) {
@@ -364,6 +371,14 @@ export default function ForeignSignUpStep1() {
                   <p className="mt-2 text-sm text-red-600">{errors.phoneNumber.message}</p>
                 )}
               </div>
+
+              {/* Date of Birth */}
+              <FormInput
+                label="Date of Birth"
+                type="date"
+                error={errors.dateOfBirth?.message}
+                {...register('dateOfBirth')}
+              />
               
               {/* 버튼 그룹 */}
               <div className="flex gap-3 pt-4">

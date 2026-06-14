@@ -17,6 +17,12 @@ service firebase.storage {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    // admin 여부 (Firestore users 문서의 role 필드 확인)
+    function isAdmin() {
+      return request.auth != null &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // 이미지 파일 유형 검증
     function isImage() {
       return request.resource.contentType.matches('image/.*');
@@ -76,35 +82,34 @@ service firebase.storage {
     // ──────────────────────────────────────────────────────────────
     // 원어민 교사 문서 (웹)
     // 경로: foreignTeachers/{userId}/...
-    // 역할: 본인(업로드/삭제), admin(읽기)
+    // 역할: 본인(업로드/삭제/읽기), admin(읽기/삭제) — 서류 심사 목적
     // 민감 문서: 여권, 신분증, 통장사본 등
     // ──────────────────────────────────────────────────────────────
     match /foreignTeachers/{userId}/{allPaths=**} {
       // 본인 또는 admin만 읽기 가능 (민감 문서)
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
 
-      // 프로필 이미지 (5MB 이하 이미지)
       allow write: if (
         isOwner(userId) &&
         isImageOrPdf() &&
         isUnder10MB()
       );
-      allow delete: if isOwner(userId);
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
     // ──────────────────────────────────────────────────────────────
     // 원어민 교사 문서 (모바일)
     // 경로: foreign-teachers/{userId}/...
-    // 역할: 본인(업로드/삭제), 본인(읽기)
+    // 역할: 본인(업로드/삭제/읽기), admin(읽기/삭제) — 서류 심사 목적
     // ──────────────────────────────────────────────────────────────
     match /foreign-teachers/{userId}/{allPaths=**} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
       allow write: if (
         isOwner(userId) &&
         isImageOrPdf() &&
         isUnder10MB()
       );
-      allow delete: if isOwner(userId);
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
     // ──────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { maskRRNLast } from '@/utils/userUtils';
 import { getLessonMaterials, getSections, LessonMaterialData, SectionData, getLessonMaterialTemplates, LessonMaterialTemplate } from '@/lib/lessonMaterialService';
 import { getGenerationCodes, filterMaterialsByGeneration, filterSectionsWithLinks, getGroupLabel } from '@smis-mentor/shared';
+import { authenticatedGet } from '@/lib/apiClient';
 
 type UserWithGroupInfo = User & { groupName?: string };
 
@@ -28,6 +29,8 @@ export default function UserCheck() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showAllGenerations, setShowAllGenerations] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('mentor');
+  const [decryptedRRN, setDecryptedRRN] = useState<{ rrnFront: string; rrnLast: string } | null>(null);
+  const [isDecryptingRRN, setIsDecryptingRRN] = useState(false);
   
   const roleFilters = [
     { value: 'mentor', label: '멘토' },
@@ -271,11 +274,33 @@ export default function UserCheck() {
   // 사용자 선택 핸들러 (모달 표시)
   const handleSelectUser = (user: User) => {
     setSelectedUser(user);
+    setDecryptedRRN(null);
   };
 
   // 모달 닫기 핸들러
   const handleCloseModal = () => {
     setSelectedUser(null);
+    setDecryptedRRN(null);
+  };
+
+  // admin 전용: 주민번호 복호화
+  const handleDecryptRRN = async (userId: string) => {
+    setIsDecryptingRRN(true);
+    try {
+      const result = await authenticatedGet<{ success: boolean; rrnFront: string | null; rrnLast: string | null }>(
+        `/api/admin/decrypt-rrn?userId=${encodeURIComponent(userId)}`
+      );
+      if (result.success && result.rrnFront && result.rrnLast) {
+        setDecryptedRRN({ rrnFront: result.rrnFront, rrnLast: result.rrnLast });
+      } else {
+        toast.error('주민번호 정보가 없습니다.');
+      }
+    } catch (error) {
+      logger.error('주민번호 복호화 실패:', error);
+      toast.error('주민번호 복호화에 실패했습니다.');
+    } finally {
+      setIsDecryptingRRN(false);
+    }
   };
 
   // 사용자 카드 렌더링 함수
@@ -728,9 +753,35 @@ export default function UserCheck() {
                     <div className="col-span-2 md:col-span-1">
                       <span className="text-gray-500">주민등록번호: </span>
                       <span className="text-gray-900">
-                        {selectedUser.rrnFront && selectedUser.rrnLast ?
-                          `${selectedUser.rrnFront}-${maskRRNLast(selectedUser.rrnLast)}` : '-'}
+                        {decryptedRRN
+                          ? `${decryptedRRN.rrnFront}-${decryptedRRN.rrnLast}`
+                          : selectedUser.rrnFront
+                          ? `${selectedUser.rrnFront}-${
+                              (selectedUser as any).rrnLastEncrypted
+                                ? '●●●●●●●'
+                                : selectedUser.rrnLast
+                                ? maskRRNLast(selectedUser.rrnLast)
+                                : '●●●●●●●'
+                            }`
+                          : '-'}
                       </span>
+                      {selectedUser.rrnFront && !decryptedRRN && (
+                        <button
+                          onClick={() => handleDecryptRRN(selectedUser.userId || (selectedUser as any).id)}
+                          disabled={isDecryptingRRN}
+                          className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline disabled:opacity-50"
+                        >
+                          {isDecryptingRRN ? '복호화 중...' : '원본 보기'}
+                        </button>
+                      )}
+                      {decryptedRRN && (
+                        <button
+                          onClick={() => setDecryptedRRN(null)}
+                          className="ml-2 text-xs text-gray-500 hover:text-gray-700 underline"
+                        >
+                          숨기기
+                        </button>
+                      )}
                     </div>
                     <div className="col-span-2 md:col-span-3">
                       <span className="text-gray-500">주소: </span>

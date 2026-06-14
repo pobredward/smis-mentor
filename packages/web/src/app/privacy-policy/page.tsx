@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
               </svg>
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">개인정보처리방침</h1>
-            <p className="text-blue-100">최종 수정일: 2026년 6월 12일</p>
+            <p className="text-blue-100">최종 수정일: 2026년 6월 14일</p>
           </div>
 
           {/* Content */}
@@ -53,6 +53,17 @@ export default function PrivacyPolicyPage() {
                   <p className="text-gray-700 text-sm leading-relaxed">
                     • 이름, 이메일 주소, 전화번호, 역할(멘토/멘티)<br/>
                     • 소셜 로그인 시: 소셜 계정 고유 ID, 프로필 정보
+                  </p>
+                </div>
+
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">민감 정보 (별도 암호화 저장)</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    • <strong>멘토 회원</strong>: 주민등록번호 앞자리(생년월일 6자리) 및 뒷자리(7자리)<br/>
+                    &nbsp;&nbsp;— 뒷자리는 AES-256-GCM 방식으로 암호화하여 저장하며, 서버에서만 복호화 가능<br/>
+                    &nbsp;&nbsp;— 수집 목적: 캠프 운영 시 본인 확인 및 나이 산출<br/>
+                    • <strong>원어민 회원</strong>: 생년월일(YYYY-MM-DD)<br/>
+                    &nbsp;&nbsp;— 수집 목적: 나이 확인 및 운영 관리
                   </p>
                 </div>
 
@@ -164,6 +175,17 @@ export default function PrivacyPolicyPage() {
                 <li>기술적 조치: 개인정보처리시스템 등의 접근권한 관리, 접근통제시스템 설치, 고유식별정보 등의 암호화, 보안프로그램 설치</li>
                 <li>물리적 조치: 전산실, 자료보관실 등의 접근통제</li>
               </ul>
+              <div className="mt-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">주민등록번호 암호화 처리 방침</h3>
+                <p className="text-gray-700 text-sm leading-relaxed">
+                  멘토 회원의 주민등록번호 뒷자리(7자리)는 「개인정보 보호법」 제24조 및 동법 시행령 제21조에 따라 다음과 같이 처리됩니다.<br/><br/>
+                  • <strong>암호화 방식</strong>: AES-256-GCM (인증 암호화, 무결성 검증 포함)<br/>
+                  • <strong>키 관리</strong>: 암호화 키는 서버 환경변수로만 보관하며, 클라이언트에 절대 노출되지 않습니다.<br/>
+                  • <strong>처리 방식</strong>: 암호화·복호화는 서버(API Route)에서만 수행하며, 클라이언트는 암호화된 값에 접근할 수 없습니다.<br/>
+                  • <strong>접근 권한</strong>: 복호화된 원문은 관리자(admin) 권한 보유자만 조회 가능합니다.<br/>
+                  • <strong>저장소</strong>: Firebase Firestore에 암호화된 값(`rrnLastEncrypted`)으로 저장되며, Firestore Security Rules에 의해 클라이언트의 직접 쓰기가 차단됩니다.
+                </p>
+              </div>
             </section>
 
             {/* Section 8 */}

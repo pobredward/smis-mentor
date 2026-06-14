@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { getUserByPhone, updateUser, createUser, signUp } from '@/lib/firebaseService';
 import { getUserInfoFromRRN } from '@/utils/userUtils';
 import { signupStorage, SignUpData } from '@/utils/signupStorage';
+import { authenticatedPost } from '@/lib/apiClient';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -293,8 +294,6 @@ export default function SignUpDetails() {
           password: '',
           address: data.address,
           addressDetail: data.addressDetail,
-          rrnFront: data.rrnFront,
-          rrnLast: data.rrnLast,
           gender: data.gender,
           age,
           agreedPersonal: data.agreedPersonal,
@@ -334,6 +333,13 @@ export default function SignUpDetails() {
           }),
           ...geocodeUpdate, // 좌표 정보 추가
         }, newUserId);
+
+        // ✅ 주민등록번호 암호화 저장 (서버 API Route를 통해 처리)
+        await authenticatedPost('/api/user/save-sensitive', {
+          userId: newUserId,
+          rrnFront: data.rrnFront,
+          rrnLast: data.rrnLast,
+        });
 
         // ✅ 기존 temp 문서 삭제
         logger.info('🗑️ 기존 temp 문서 삭제:', oldTempUserId);
@@ -456,8 +462,6 @@ export default function SignUpDetails() {
           password: '',  // 보안상 Firebase에만 저장
           address: data.address,
           addressDetail: data.addressDetail,
-          rrnFront: data.rrnFront,
-          rrnLast: data.rrnLast,
           gender: data.gender,
           age,
           agreedPersonal: data.agreedPersonal,
@@ -489,6 +493,13 @@ export default function SignUpDetails() {
           updatedAt: now,
           ...authProvidersData,
         }, newUserId);  // ✅ Auth UID 전달
+
+        // ✅ 주민등록번호 암호화 저장 (서버 API Route를 통해 처리)
+        await authenticatedPost('/api/user/save-sensitive', {
+          userId: newUserId,
+          rrnFront: data.rrnFront,
+          rrnLast: data.rrnLast,
+        });
 
         // SessionStorage 정리
         signupStorage.clear();

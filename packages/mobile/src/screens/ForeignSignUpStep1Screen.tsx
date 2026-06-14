@@ -22,6 +22,7 @@ interface ForeignSignUpStep1ScreenProps {
     middleName?: string;
     countryCode: string;
     phone: string;
+    dateOfBirth?: string;
   }) => void;
   onBack: () => void;
 }
@@ -45,6 +46,7 @@ export function ForeignSignUpStep1Screen({
   const [middleName, setMiddleName] = useState('');
   const [countryCode, setCountryCode] = useState('+82');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -61,6 +63,14 @@ export function ForeignSignUpStep1Screen({
     if (!phoneNumber || phoneNumber.length < 8) {
       Alert.alert('Input Error', 'Please enter a valid phone number.');
       return;
+    }
+
+    if (dateOfBirth) {
+      const d = new Date(dateOfBirth);
+      if (isNaN(d.getTime()) || d > new Date() || d < new Date('1900-01-01')) {
+        Alert.alert('Input Error', 'Please enter a valid date of birth.');
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -117,6 +127,7 @@ export function ForeignSignUpStep1Screen({
               middleName: middleName || undefined,
               countryCode,
               phone: phoneNumber,
+              dateOfBirth: dateOfBirth || undefined,
             });
             return;
           } else {
@@ -167,6 +178,7 @@ export function ForeignSignUpStep1Screen({
           middleName: middleName || undefined,
           countryCode,
           phone: phoneNumber,
+          dateOfBirth: dateOfBirth || undefined,
         });
       } else {
         // 전화번호로 사용자를 찾을 수 없는 경우 → 신규 가입
@@ -180,6 +192,7 @@ export function ForeignSignUpStep1Screen({
           middleName: middleName || undefined,
           countryCode,
           phone: phoneNumber,
+          dateOfBirth: dateOfBirth || undefined,
         });
       }
     } catch (error) {
@@ -277,6 +290,31 @@ export function ForeignSignUpStep1Screen({
               </View>
             </View>
 
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Date of Birth <Text style={styles.optional}>(optional)</Text></Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                value={dateOfBirth}
+                onChangeText={(text) => {
+                  // 숫자와 하이픈만 허용하고 자동 포맷팅
+                  const digits = text.replace(/[^0-9]/g, '');
+                  let formatted = digits;
+                  if (digits.length >= 5) {
+                    formatted = `${digits.substring(0, 4)}-${digits.substring(4)}`;
+                  }
+                  if (digits.length >= 7) {
+                    formatted = `${digits.substring(0, 4)}-${digits.substring(4, 6)}-${digits.substring(6, 8)}`;
+                  }
+                  setDateOfBirth(formatted);
+                }}
+                keyboardType="number-pad"
+                maxLength={10}
+                editable={!isLoading}
+              />
+              <Text style={styles.hint}>Format: YYYY-MM-DD (e.g. 1990-01-15)</Text>
+            </View>
+
             <View style={styles.buttonGroup}>
               <TouchableOpacity
                 style={[styles.button, styles.buttonOutline]}
@@ -364,6 +402,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1e293b',
     marginBottom: 8,
+  },
+  optional: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#94a3b8',
+  },
+  hint: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 4,
   },
   input: {
     backgroundColor: '#f8fafc',

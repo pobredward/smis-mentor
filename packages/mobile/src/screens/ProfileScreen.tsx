@@ -35,6 +35,7 @@ import { useRecruitmentDataPrefetch } from '../hooks/useRecruitmentDataPrefetch'
 import { useCampTab } from '../context/CampTabContext';
 // import { getUserInfoFromRRN } from '../utils/userUtils';
 import { logger, deactivateUserMobile } from '@smis-mentor/shared';
+import { calculateAgeFromDateOfBirth } from '@smis-mentor/shared';
 import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -83,6 +84,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     major2?: string;
     socialData?: any;
     tempUserId?: string;
+    dateOfBirth?: string;
   }>({});
   const [jobCodes, setJobCodes] = useState<JobCode[]>([]);
   const [loadingJobCodes, setLoadingJobCodes] = useState(false);
@@ -494,7 +496,6 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         major2: completeSignUpData.major2 || '',
         address: data.address,
         addressDetail: data.addressDetail,
-        ssn: `${data.rrnFront}-${data.rrnLast}`,
         gender: data.gender,
         birthDate,
         referralPath: data.referralPath,
@@ -511,6 +512,14 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       };
       
       await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+
+      // 주민등록번호 암호화 저장 (서버 API Route를 통해 처리)
+      const { saveSensitiveInfo } = await import('../services/apiClient');
+      await saveSensitiveInfo({
+        userId: firebaseUser.uid,
+        rrnFront: data.rrnFront,
+        rrnLast: data.rrnLast,
+      });
       
       // 이메일 인증 메일 발송
       const { sendEmailVerification } = await import('firebase/auth');
@@ -640,6 +649,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         isProfileImageUploaded: false,
         jobMotivation: 'Foreign Teacher Application',
         feedback: (existingUserByPhone as any)?.feedback || '',
+        ...(signUpData.dateOfBirth && {
+          dateOfBirth: signUpData.dateOfBirth,
+          age: calculateAgeFromDateOfBirth(signUpData.dateOfBirth),
+        }),
         foreignTeacher: {
           firstName: signUpData.firstName,
           lastName: signUpData.lastName,

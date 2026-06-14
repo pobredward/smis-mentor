@@ -14,6 +14,7 @@ import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import ProgressSteps from '@/components/common/ProgressSteps';
 import { FaEnvelope, FaLock, FaInfoCircle } from 'react-icons/fa';
+import { calculateAgeFromDateOfBirth } from '@smis-mentor/shared';
 
 // 일반 가입: 이메일/비밀번호 필수
 const step2SchemaDefault = z.object({
@@ -55,6 +56,7 @@ export default function ForeignSignUpStep2() {
   const middleName = searchParams.get('middleName') ? decodeURIComponent(searchParams.get('middleName') as string) : null;
   const countryCode = searchParams.get('countryCode') ? decodeURIComponent(searchParams.get('countryCode') as string) : null;
   const phone = searchParams.get('phone') ? decodeURIComponent(searchParams.get('phone') as string) : null;
+  const dateOfBirth = searchParams.get('dateOfBirth') ? decodeURIComponent(searchParams.get('dateOfBirth') as string) : null;
   const socialSignUp = searchParams.get('socialSignUp') === 'true';
   const tempUserId = searchParams.get('tempUserId');
   const socialProvider = searchParams.get('socialProvider');
@@ -274,6 +276,10 @@ export default function ForeignSignUpStep2() {
         isProfileImageUploaded: false,
         jobMotivation: 'Foreign Teacher Application',
         feedback: existingUserByPhone?.feedback || '',
+        ...(dateOfBirth && {
+          dateOfBirth,
+          age: calculateAgeFromDateOfBirth(dateOfBirth),
+        }),
         foreignTeacher: {
           firstName: firstName || '',
           lastName: lastName || '',

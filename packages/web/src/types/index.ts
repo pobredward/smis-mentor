@@ -62,6 +62,7 @@ export interface User {
   gender?: 'M' | 'F';
   rrnFront?: string;
   rrnLast?: string;
+  rrnLastEncrypted?: string;
   university?: string;
   grade?: number;
   isOnLeave?: boolean | null;

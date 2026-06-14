@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { JOB_EXPERIENCE_GROUP_ROLES, MENTOR_GROUP_ROLES, FOREIGN_GROUP_ROLES, LEGACY_GROUP_REVERSE_MAP, getGroupLabel, JobExperienceGroupRole } from '@smis-mentor/shared';
+import { authenticatedGet, authenticatedPost } from '@/lib/apiClient';
 
 type EditFormData = {
   name?: string;
@@ -64,6 +65,8 @@ export default function UserManage() {
   const [showUserList, setShowUserList] = useState(true);
   const [isLoadingJobCodes, setIsLoadingJobCodes] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('mentor');
+  const [decryptedRRN, setDecryptedRRN] = useState<{ rrnFront: string; rrnLast: string } | null>(null);
+  const [isDecryptingRRN, setIsDecryptingRRN] = useState(false);
   const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
@@ -269,6 +272,7 @@ export default function UserManage() {
   const handleSelectUser = async (user: User) => {
     setSelectedUser(user);
     setIsEditing(false);
+    setDecryptedRRN(null);
     
     // 모바일에서는 사용자 선택 시 목록 숨기기
     if (window.innerWidth < 768) {
@@ -356,6 +360,26 @@ export default function UserManage() {
     }));
   };
 
+  // admin 전용: 주민번호 복호화
+  const handleDecryptRRN = async (userId: string) => {
+    setIsDecryptingRRN(true);
+    try {
+      const result = await authenticatedGet<{ success: boolean; rrnFront: string | null; rrnLast: string | null }>(
+        `/api/admin/decrypt-rrn?userId=${encodeURIComponent(userId)}`
+      );
+      if (result.success && result.rrnFront && result.rrnLast) {
+        setDecryptedRRN({ rrnFront: result.rrnFront, rrnLast: result.rrnLast });
+      } else {
+        toast.error('주민번호 정보가 없습니다.');
+      }
+    } catch (error) {
+      logger.error('주민번호 복호화 실패:', error);
+      toast.error('주민번호 복호화에 실패했습니다.');
+    } finally {
+      setIsDecryptingRRN(false);
+    }
+  };
+
   // 사용자 업데이트 핸들러
   const handleUpdateUser = async () => {
     if (!selectedUser) return;
@@ -364,9 +388,9 @@ export default function UserManage() {
       // editFormData에서 undefined 값 제거
       const cleanedData: Record<string, unknown> = {};
       
-      // 기존 editFormData에서 undefined가 아닌 값만 복사
+      // 기존 editFormData에서 undefined가 아닌 값만 복사 (rrnLast 제외 - 별도 암호화 처리)
       Object.entries(editFormData).forEach(([key, value]) => {
-        if (value !== undefined && key !== 'otherReferralDetail') {
+        if (value !== undefined && key !== 'otherReferralDetail' && key !== 'rrnLast') {
           cleanedData[key] = value;
         }
       });
@@ -390,6 +414,23 @@ export default function UserManage() {
       }
       
       await updateUser(selectedUser.userId, cleanedData);
+
+      // rrnFront 또는 rrnLast가 변경된 경우 암호화 API를 통해 저장
+      const newRrnFront = editFormData.rrnFront;
+      const newRrnLast = editFormData.rrnLast;
+      if (newRrnFront && newRrnLast && /^\d{6}$/.test(newRrnFront) && /^\d{7}$/.test(newRrnLast)) {
+        try {
+          await authenticatedPost('/api/user/save-sensitive', {
+            userId: selectedUser.userId,
+            rrnFront: newRrnFront,
+            rrnLast: newRrnLast,
+          });
+        } catch (rrnError) {
+          logger.error('주민번호 암호화 저장 실패:', rrnError);
+          toast.error('주민번호 저장에 실패했습니다. 다시 시도해주세요.');
+          return;
+        }
+      }
       
       // 상태 업데이트
       const updatedUsers = users.map(user => 
@@ -1869,9 +1910,37 @@ export default function UserManage() {
                             {!isForeignUser && (
                               <div>
                                 <p className="text-xs text-gray-500 mb-0.5">주민등록번호</p>
-                                <p className="text-gray-900">
-                                  {selectedUser.rrnFront && selectedUser.rrnLast ?
-                                    `${selectedUser.rrnFront}-${selectedUser.rrnLast}` : '-'}
+                                <p className="text-gray-900 flex items-center gap-2 flex-wrap">
+                                  <span>
+                                    {decryptedRRN
+                                      ? `${decryptedRRN.rrnFront}-${decryptedRRN.rrnLast}`
+                                      : selectedUser.rrnFront
+                                      ? `${selectedUser.rrnFront}-${
+                                          (selectedUser as any).rrnLastEncrypted
+                                            ? '●●●●●●●'
+                                            : selectedUser.rrnLast
+                                            ? `${selectedUser.rrnLast.charAt(0)}●●●●●●`
+                                            : '●●●●●●●'
+                                        }`
+                                      : '-'}
+                                  </span>
+                                  {selectedUser.rrnFront && !decryptedRRN && (
+                                    <button
+                                      onClick={() => handleDecryptRRN(selectedUser.userId || (selectedUser as any).id)}
+                                      disabled={isDecryptingRRN}
+                                      className="text-xs text-blue-600 hover:text-blue-800 underline disabled:opacity-50 shrink-0"
+                                    >
+                                      {isDecryptingRRN ? '복호화 중...' : '원본 보기'}
+                                    </button>
+                                  )}
+                                  {decryptedRRN && (
+                                    <button
+                                      onClick={() => setDecryptedRRN(null)}
+                                      className="text-xs text-gray-500 hover:text-gray-700 underline shrink-0"
+                                    >
+                                      숨기기
+                                    </button>
+                                  )}
                                 </p>
                               </div>
                             )}

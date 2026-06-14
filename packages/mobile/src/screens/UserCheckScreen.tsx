@@ -790,8 +790,14 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
                       <Text style={[styles.modalInfoText, { flex: 1 }]}>
                         <Text style={styles.modalInfoLabel}>주민등록번호: </Text>
                         <Text style={styles.modalInfoValue}>
-                          {selectedUser.rrnFront && selectedUser.rrnLast
-                            ? `${selectedUser.rrnFront}-${selectedUser.rrnLast.charAt(0)}******`
+                          {selectedUser.rrnFront
+                            ? `${selectedUser.rrnFront}-${
+                                selectedUser.rrnLastEncrypted
+                                  ? '●●●●●●●'
+                                  : selectedUser.rrnLast
+                                  ? `${selectedUser.rrnLast.charAt(0)}●●●●●●`
+                                  : '●●●●●●●'
+                              }`
                             : '-'}
                         </Text>
                       </Text>

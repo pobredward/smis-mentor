@@ -636,7 +636,15 @@ export function UserManageDetailScreen({ route, navigation }: any) {
               <Text style={[styles.infoText, { flex: 1 }]}>
                 <Text style={styles.infoLabel}>주민등록번호: </Text>
                 <Text style={styles.infoValue}>
-                  {user.rrnFront && user.rrnLast ? `${user.rrnFront}-${user.rrnLast}` : '-'}
+                  {user.rrnFront
+                    ? `${user.rrnFront}-${
+                        user.rrnLastEncrypted
+                          ? '●●●●●●●'
+                          : user.rrnLast
+                          ? `${user.rrnLast.charAt(0)}●●●●●●`
+                          : '●●●●●●●'
+                      }`
+                    : '-'}
                 </Text>
               </Text>
             </View>

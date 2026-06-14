@@ -13,7 +13,7 @@ export function PrivacyPolicyScreen() {
       <View style={styles.header}>
         <Ionicons name="shield-checkmark" size={48} color="#3b82f6" />
         <Text style={styles.title}>개인정보처리방침</Text>
-        <Text style={styles.lastUpdated}>최종 수정일: 2026년 6월 12일</Text>
+        <Text style={styles.lastUpdated}>최종 수정일: 2026년 6월 14일</Text>
       </View>
 
       <View style={styles.content}>
@@ -39,6 +39,16 @@ export function PrivacyPolicyScreen() {
             <Text style={styles.infoBoxContent}>
               • 이름, 이메일 주소, 전화번호, 역할(멘토/멘티)
               {'\n'}• 소셜 로그인 시: 소셜 계정 고유 ID, 프로필 정보
+            </Text>
+          </View>
+          <View style={[styles.infoBox, { borderLeftColor: '#ef4444' }]}>
+            <Text style={styles.infoBoxTitle}>민감 정보 (별도 암호화 저장)</Text>
+            <Text style={styles.infoBoxContent}>
+              • 멘토 회원: 주민등록번호 앞자리(생년월일 6자리) 및 뒷자리(7자리)
+              {'\n'}  — 뒷자리는 AES-256-GCM 방식으로 암호화 저장, 서버에서만 복호화 가능
+              {'\n'}  — 수집 목적: 캠프 운영 시 본인 확인 및 나이 산출
+              {'\n'}• 원어민 회원: 생년월일(YYYY-MM-DD)
+              {'\n'}  — 수집 목적: 나이 확인 및 운영 관리
             </Text>
           </View>
           <View style={styles.infoBox}>
@@ -125,6 +135,17 @@ export function PrivacyPolicyScreen() {
             <Text style={styles.bulletItem}>• 관리적 조치: 내부관리계획 수립·시행, 정기적 직원 교육 등</Text>
             <Text style={styles.bulletItem}>• 기술적 조치: 개인정보처리시스템 등의 접근권한 관리, 접근통제시스템 설치, 고유식별정보 등의 암호화, 보안프로그램 설치</Text>
             <Text style={styles.bulletItem}>• 물리적 조치: 전산실, 자료보관실 등의 접근통제</Text>
+          </View>
+          <View style={[styles.infoBox, { borderLeftColor: '#ef4444', marginTop: 12 }]}>
+            <Text style={styles.infoBoxTitle}>주민등록번호 암호화 처리 방침</Text>
+            <Text style={styles.infoBoxContent}>
+              멘토 회원의 주민등록번호 뒷자리(7자리)는 「개인정보 보호법」 제24조에 따라 다음과 같이 처리됩니다.
+              {'\n\n'}• 암호화 방식: AES-256-GCM (인증 암호화, 무결성 검증 포함)
+              {'\n'}• 키 관리: 암호화 키는 서버 환경변수로만 보관하며, 클라이언트에 절대 노출되지 않습니다.
+              {'\n'}• 처리 방식: 암호화·복호화는 서버에서만 수행하며, 클라이언트는 암호화된 값에 접근할 수 없습니다.
+              {'\n'}• 접근 권한: 복호화된 원문은 관리자(admin) 권한 보유자만 조회 가능합니다.
+              {'\n'}• 저장소: Firebase Firestore에 암호화된 값으로 저장되며, 보안 규칙에 의해 클라이언트의 직접 쓰기가 차단됩니다.
+            </Text>
           </View>
         </View>
 
