@@ -150,7 +150,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
     try {
       setIsCopying(true);
       // 공개 공유 링크 생성 (환경 변수 사용)
-      const baseUrl = process.env.NEXT_PUBLIC_WEBSITE_URL || window.location.origin;
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       const shareUrl = `${baseUrl}/share/${category}/${itemId}`;
       await navigator.clipboard.writeText(shareUrl);
       toast.success('공유 링크가 복사되었습니다!');
