@@ -24,17 +24,20 @@ usage() {
     echo ""
     echo "옵션:"
     echo "  ios              iOS만 빌드 및 배포"
-    echo "  android          Android만 빌드 및 배포"
+    echo "  android          Android만 빌드 및 배포 (AAB, Play Store)"
+    echo "  android-apk      Android APK 빌드 및 배포 (APK, Play Store)"
     echo "  all              iOS와 Android 모두 빌드 및 배포"
     echo "  build-only-ios   iOS 빌드만 (제출 안 함)"
-    echo "  build-only-android  Android 빌드만 (제출 안 함)"
+    echo "  build-only-android  Android AAB 빌드만 (제출 안 함)"
+    echo "  build-only-android-apk  Android APK 빌드만 (제출 안 함)"
     echo "  submit-only-ios  최신 iOS 빌드 제출만"
     echo "  submit-only-android  최신 Android 빌드 제출만"
     echo ""
     echo "예제:"
-    echo "  $0 ios           # iOS 빌드 및 App Store 제출"
-    echo "  $0 android       # Android 빌드 및 Play Store 제출"
-    echo "  $0 all           # 양쪽 모두 배포"
+    echo "  $0 ios               # iOS 빌드 및 App Store 제출"
+    echo "  $0 android           # Android AAB 빌드 및 Play Store 제출"
+    echo "  $0 android-apk       # Android APK 빌드 및 Play Store 제출"
+    echo "  $0 all               # 양쪽 모두 배포"
     exit 1
 }
 
@@ -72,9 +75,15 @@ build_ios() {
 }
 
 build_android() {
-    echo -e "${BLUE}🤖 Android 프로덕션 빌드 시작...${NC}"
+    echo -e "${BLUE}🤖 Android 프로덕션 빌드 시작 (AAB)...${NC}"
     eas build --profile production --platform android --non-interactive
-    echo -e "${GREEN}✅ Android 빌드 완료${NC}"
+    echo -e "${GREEN}✅ Android AAB 빌드 완료${NC}"
+}
+
+build_android_apk() {
+    echo -e "${BLUE}🤖 Android 프로덕션 빌드 시작 (APK)...${NC}"
+    eas build --profile production-apk --platform android --non-interactive
+    echo -e "${GREEN}✅ Android APK 빌드 완료${NC}"
 }
 
 # 제출 함수
@@ -131,6 +140,11 @@ case $PLATFORM in
         echo ""
         submit_android
         ;;
+    android-apk)
+        build_android_apk
+        echo ""
+        submit_android
+        ;;
     all)
         echo -e "${BLUE}🚀 iOS와 Android 모두 빌드 중...${NC}"
         eas build --profile production --platform all --non-interactive
@@ -149,7 +163,13 @@ case $PLATFORM in
     build-only-android)
         build_android
         echo ""
-        echo -e "${YELLOW}📝 빌드만 완료되었습니다. 제출하려면:${NC}"
+        echo -e "${YELLOW}📝 AAB 빌드만 완료되었습니다. 제출하려면:${NC}"
+        echo "npm run submit:android"
+        ;;
+    build-only-android-apk)
+        build_android_apk
+        echo ""
+        echo -e "${YELLOW}📝 APK 빌드만 완료되었습니다. 제출하려면:${NC}"
         echo "npm run submit:android"
         ;;
     submit-only-ios)
