@@ -76,7 +76,19 @@ export interface SignUpState {
   major1?: string;
   major2?: string;
   
-  // Step 4: 직무정보
+  // Step 4: 상세정보 (주소, 주민번호, 성별, 가입경로)
+  address?: string;
+  addressDetail?: string;
+  rrnFront?: string;
+  rrnLast?: string;
+  gender?: 'M' | 'F';
+  referralPath?: string;
+  referrerName?: string;
+  otherReferralDetail?: string;
+  agreedPersonal?: boolean;
+  geocode?: { lat: number; lng: number; updatedAt: any };
+
+  // 직무정보 (구 Step 4)
   selfIntroduction?: string;
   jobMotivation?: string;
   partTimeJobs?: Array<{

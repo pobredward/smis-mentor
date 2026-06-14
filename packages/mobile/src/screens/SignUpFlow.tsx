@@ -4,6 +4,7 @@ import { Alert, ActivityIndicator, View, StyleSheet, Text, TouchableOpacity } fr
 import { SignUpStep1Screen } from './SignUpStep1Screen';
 import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
+import { SignUpStep4Screen } from './SignUpStep4Screen';
 import type { SocialUserData, SignUpState } from '@smis-mentor/shared';
 import { signUp, updateUser, persistLoginRememberEmail, getUserById, getUserByEmailIncludeInactive } from '../services/authService';
 import { doc, setDoc, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
@@ -27,11 +28,11 @@ export function SignUpFlow({
   const socialHasIdentity = !!initialSocialData && !!initialSocialData.name && !!initialSocialData.phone;
 
   // 소셜 가입 시 이름+전화번호가 이미 확인됨 → step 1 건너뛰기
-  // mentor: step 3(학력)부터, foreign: step 4(Account & Documents 확인)로 바로 이동
+  // mentor: step 3(학력)부터, foreign: step 5(Account & Documents 확인)로 바로 이동
   const getInitialStep = () => {
     if (!socialHasIdentity) return 1;
     if (role === 'mentor') return 3;
-    if (role === 'foreign') return 4; // Account & Documents 확인 화면
+    if (role === 'foreign') return 5; // Account & Documents 확인 화면
     return 1;
   };
 
@@ -65,8 +66,8 @@ export function SignUpFlow({
 
     if (signUpData.isSocialSignUp) {
       if (role === 'foreign') {
-        // 원어민 소셜 가입: Account & Documents 확인 화면(step 4)으로
-        setStep(4);
+        // 원어민 소셜 가입: Account & Documents 확인 화면(step 5)으로
+        setStep(5);
       } else {
         // 멘토 소셜 가입: Step 3(학력 정보)으로
         setStep(3);
@@ -147,26 +148,43 @@ export function SignUpFlow({
   };
 
   /**
-   * Step 3 완료: 교육 정보
+   * Step 3 완료: 교육 정보 → step 4(상세정보)로 이동
    */
-  const handleStep3Complete = async (data: {
+  const handleStep3Complete = (data: {
     university: string;
     grade: number;
     isOnLeave: boolean | null;
     major1: string;
     major2?: string;
   }) => {
+    setSignUpData(prev => ({ ...prev, ...data }));
+    // 소셜/일반 가입 모두 step 4(상세정보)로 이동
+    setStep(4);
+  };
+
+  /**
+   * Step 4 완료: 상세 정보 (주소, 주민번호, 가입경로) → 회원가입 완료
+   */
+  const handleStep4Complete = async (data: {
+    address: string;
+    addressDetail: string;
+    rrnFront: string;
+    rrnLast: string;
+    gender: 'M' | 'F';
+    referralPath: string;
+    referrerName?: string;
+    otherReferralDetail?: string;
+    agreedPersonal: boolean;
+    geocode?: any;
+  }) => {
     const finalData = { ...signUpData, ...data };
     setSignUpData(finalData);
 
-    // 회원가입 완료 처리
     setIsSubmitting(true);
     try {
       if (finalData.isSocialSignUp && finalData.socialData) {
-        // 소셜 회원가입
         await handleSocialSignUp(finalData);
       } else {
-        // 일반 회원가입
         await handleNormalSignUp(finalData);
       }
 
@@ -176,24 +194,23 @@ export function SignUpFlow({
         await persistLoginRememberEmail(rememberEmail);
       }
 
-      // 소셜 회원가입이고 Firebase Auth에 이미 로그인된 경우 → 자동 로그인
       if (finalData.isSocialSignUp && finalData.socialData) {
         const { auth: firebaseAuth } = await import('../config/firebase');
-        
+
         if (firebaseAuth.currentUser) {
           // Google/Apple: signInWithCredential로 이미 로그인됨 → 바로 완료
-          logger.info('✅ 소셜 회원가입 완료 - Firebase Auth 로그인 확인됨, 자동 진입');
+          logger.info('✅ 소셜 회원가입 완료 - Firebase Auth 로그인 확인됨');
           Alert.alert(
             '회원가입 완료',
             '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
             [{ text: '확인', onPress: onComplete }]
           );
         } else {
-          // 네이버 등 Custom Token 방식: 가입 직후 로그인 시도
+          // 네이버 등 Custom Token 방식
           const { signInWithCustomToken: signInCustom } = await import('../services/authService');
           const userId = finalData.socialData.firebaseAuthUid || finalData.socialData.providerUid;
           const userEmail = finalData.socialData.email;
-          
+
           if (userId && userEmail) {
             try {
               await signInCustom(userId, userEmail);
@@ -240,12 +257,15 @@ export function SignUpFlow({
   const handleBack = () => {
     if (step === 1) {
       onCancel();
-    } else if (step === 4 && role === 'foreign' && socialHasIdentity) {
-      // foreign 소셜 가입: Account 확인 화면에서 뒤로 → 취소 (신원 정보는 모달에서 입력했으므로)
+    } else if (step === 5 && role === 'foreign' && socialHasIdentity) {
+      // foreign 소셜 가입: Account 확인 화면(step 5)에서 뒤로 → 취소
       onCancel();
     } else if (step === 3 && signUpData.isSocialSignUp && socialHasIdentity) {
       // 멘토 소셜 가입: Step 3이 첫 화면이면 취소
       onCancel();
+    } else if (step === 4 && signUpData.isSocialSignUp && socialHasIdentity && role === 'mentor') {
+      // 멘토 소셜 가입: Step 4(상세정보)에서 뒤로 → Step 3(교육정보)
+      setStep(3);
     } else {
       setStep(step - 1);
     }
@@ -255,7 +275,12 @@ export function SignUpFlow({
    * 소셜 회원가입 처리
    */
   const handleSocialSignUp = async (data: SignUpState) => {
-    const { socialData, tempUserId, phone, name, university, grade, isOnLeave, major1, major2, foreignTeacher } = data;
+    const {
+      socialData, tempUserId, phone, name,
+      university, grade, isOnLeave, major1, major2, foreignTeacher,
+      address, addressDetail, rrnFront, rrnLast, gender,
+      referralPath, referrerName, otherReferralDetail, agreedPersonal, geocode,
+    } = data;
 
     if (!socialData) {
       throw new Error('소셜 로그인 데이터가 없습니다');
@@ -267,16 +292,40 @@ export function SignUpFlow({
       logger.info('✅ temp 계정 활성화 시작 (새 UID 패턴):', tempUserId);
 
       const { auth: firebaseAuth } = await import('../config/firebase');
-      const { signInWithCredential } = await import('firebase/auth');
-
-      // credential이 있으면 Firebase Auth 로그인 확정
       const credential = (socialData as any)._credential;
-      if (credential && !firebaseAuth.currentUser) {
-        try {
-          const userCred = await signInWithCredential(firebaseAuth, credential);
-          logger.info('✅ Firebase Auth signInWithCredential 완료 (temp 활성화):', userCred.user.uid);
-        } catch (credError: any) {
-          logger.warn('⚠️ signInWithCredential 실패:', credError.message);
+
+      if (credential) {
+        // Google/Apple: credential로 Firebase Auth 로그인
+        const { signInWithCredential } = await import('firebase/auth');
+        if (!firebaseAuth.currentUser) {
+          try {
+            const userCred = await signInWithCredential(firebaseAuth, credential);
+            logger.info('✅ Firebase Auth signInWithCredential 완료 (temp 활성화):', userCred.user.uid);
+          } catch (credError: any) {
+            logger.warn('⚠️ signInWithCredential 실패:', credError.message);
+          }
+        }
+      } else {
+        // 네이버: Custom Token으로 Firebase Auth 로그인 먼저
+        logger.info('🔑 네이버 temp 활성화: Custom Token으로 Firebase Auth 로그인 먼저 처리');
+        if (!firebaseAuth.currentUser) {
+          try {
+            const { getFunctions, httpsCallable } = await import('firebase/functions');
+            const { signInWithCustomToken: firebaseSignInWithCustomToken } = await import('firebase/auth');
+            const functions = getFunctions(undefined, 'asia-northeast3');
+            const createCustomToken = httpsCallable(functions, 'createCustomToken');
+            const tokenResult = await createCustomToken({
+              userId: socialData.providerUid,
+              email: socialData.email,
+            });
+            const { customToken } = tokenResult.data as { customToken: string };
+            const userCred = await firebaseSignInWithCustomToken(firebaseAuth, customToken);
+            (socialData as any).firebaseAuthUid = userCred.user.uid;
+            logger.info('✅ 네이버 Custom Token 로그인 완료 (temp 활성화):', userCred.user.uid);
+          } catch (tokenError: any) {
+            logger.error('❌ 네이버 Custom Token 로그인 실패 (temp 활성화):', tokenError.message);
+            throw new Error('Firebase 인증에 실패했습니다. 다시 시도해주세요.');
+          }
         }
       }
 
@@ -319,6 +368,16 @@ export function SignUpFlow({
           isOnLeave: isOnLeave ?? null,
           major1: major1 ?? '',
           major2: major2 ?? '',
+          address: address ?? '',
+          addressDetail: addressDetail ?? '',
+          rrnFront: rrnFront ?? '',
+          rrnLast: rrnLast ?? '',
+          gender: gender ?? 'M',
+          referralPath: referralPath ?? '',
+          ...(referrerName && { referrerName }),
+          ...(otherReferralDetail && { otherReferralDetail }),
+          agreedPersonal: agreedPersonal ?? false,
+          ...(geocode && { geocode }),
         }),
         ...(role === 'foreign' && {
           jobMotivation: 'Foreign Teacher Application',
@@ -336,7 +395,7 @@ export function SignUpFlow({
         role: role === 'foreign' ? 'foreign' : 'mentor_temp',
         status: 'active',
         agreedTerms: true,
-        agreedPersonal: true,
+        agreedPersonal: agreedPersonal ?? true,
         profileImage: socialData.photoURL || tempUserData?.profileImage || '',
         selfIntroduction: (tempUserData as any)?.selfIntroduction || '',
         feedback: (tempUserData as any)?.feedback || '',
@@ -390,16 +449,43 @@ export function SignUpFlow({
       
       // Firebase Auth UID를 Firestore document ID로 사용 (일관성 보장)
       const { auth: firebaseAuth } = await import('../config/firebase');
-      const { signInWithCredential } = await import('firebase/auth');
-      
-      // credential이 있으면 Firebase Auth에 먼저 로그인 (Android Native SDK 경로)
       const credential = (socialData as any)._credential;
-      if (credential && !firebaseAuth.currentUser) {
-        try {
-          const userCred = await signInWithCredential(firebaseAuth, credential);
-          logger.info('✅ Firebase Auth signInWithCredential 완료 (회원가입 직전):', userCred.user.uid);
-        } catch (credError: any) {
-          logger.warn('⚠️ signInWithCredential 실패:', credError.message);
+
+      if (credential) {
+        // Google/Apple: credential로 Firebase Auth 로그인
+        const { signInWithCredential } = await import('firebase/auth');
+        if (!firebaseAuth.currentUser) {
+          try {
+            const userCred = await signInWithCredential(firebaseAuth, credential);
+            logger.info('✅ Firebase Auth signInWithCredential 완료 (회원가입 직전):', userCred.user.uid);
+          } catch (credError: any) {
+            logger.warn('⚠️ signInWithCredential 실패:', credError.message);
+          }
+        }
+      } else {
+        // 네이버 등 credential 없는 경우: providerUid로 Custom Token 생성 → Firebase Auth 로그인
+        // setDoc 전에 반드시 Firebase Auth 세션이 있어야 Firestore Rules 통과
+        logger.info('🔑 네이버 신규 가입: Custom Token으로 Firebase Auth 로그인 먼저 처리');
+        if (!firebaseAuth.currentUser) {
+          try {
+            const { getFunctions, httpsCallable } = await import('firebase/functions');
+            const { signInWithCustomToken: firebaseSignInWithCustomToken } = await import('firebase/auth');
+            const functions = getFunctions(undefined, 'asia-northeast3');
+            const createCustomToken = httpsCallable(functions, 'createCustomToken');
+            // 네이버 providerUid를 userId로 사용해 Custom Token 생성
+            const tokenResult = await createCustomToken({
+              userId: socialData.providerUid,
+              email: socialData.email,
+            });
+            const { customToken } = tokenResult.data as { customToken: string };
+            const userCred = await firebaseSignInWithCustomToken(firebaseAuth, customToken);
+            // Firebase Auth UID를 socialData에 저장 (이후 setDoc userId로 사용)
+            (socialData as any).firebaseAuthUid = userCred.user.uid;
+            logger.info('✅ 네이버 Custom Token 로그인 완료 (Firebase Auth UID):', userCred.user.uid);
+          } catch (tokenError: any) {
+            logger.error('❌ 네이버 Custom Token 로그인 실패:', tokenError.message);
+            throw new Error('Firebase 인증에 실패했습니다. 다시 시도해주세요.');
+          }
         }
       }
       
@@ -440,6 +526,16 @@ export function SignUpFlow({
           isOnLeave: isOnLeave ?? null,
           major1: major1 ?? '',
           major2: major2 ?? '',
+          address: address ?? '',
+          addressDetail: addressDetail ?? '',
+          rrnFront: rrnFront ?? '',
+          rrnLast: rrnLast ?? '',
+          gender: gender ?? 'M',
+          referralPath: referralPath ?? '',
+          ...(referrerName && { referrerName }),
+          ...(otherReferralDetail && { otherReferralDetail }),
+          agreedPersonal: agreedPersonal ?? false,
+          ...(geocode && { geocode }),
         }),
         ...(role === 'foreign' && {
           jobMotivation: 'Foreign Teacher Application',
@@ -457,7 +553,7 @@ export function SignUpFlow({
         role: role === 'foreign' ? 'foreign' : 'mentor_temp',
         status: 'active',
         agreedTerms: true,
-        agreedPersonal: true,
+        agreedPersonal: agreedPersonal ?? (role === 'foreign' ? true : false),
         profileImage: socialData.photoURL || '',
         authProviders: [
           {
@@ -495,7 +591,12 @@ export function SignUpFlow({
    * 일반 회원가입 처리
    */
   const handleNormalSignUp = async (data: SignUpState) => {
-    const { email, password, phone, name, university, grade, isOnLeave, major1, major2 } = data;
+    const {
+      email, password, phone, name,
+      university, grade, isOnLeave, major1, major2,
+      address, addressDetail, rrnFront, rrnLast, gender,
+      referralPath, referrerName, otherReferralDetail, agreedPersonal, geocode,
+    } = data;
 
     if (!email || !password) {
       throw new Error('이메일과 비밀번호가 필요합니다');
@@ -506,7 +607,6 @@ export function SignUpFlow({
     const userId = userCredential.user.uid;
 
     // 2. Firestore에 사용자 정보 저장
-    // 일반 가입(이메일/비밀번호) 경로: 멘토는 mentor_temp, foreign은 foreign (즉시 활성화)
     await setDoc(doc(db, 'users', userId), {
       userId,
       email,
@@ -517,10 +617,19 @@ export function SignUpFlow({
       isOnLeave,
       major1,
       major2,
+      address: address ?? '',
+      addressDetail: addressDetail ?? '',
+      rrnFront: rrnFront ?? '',
+      rrnLast: rrnLast ?? '',
+      gender: gender ?? 'M',
+      referralPath: referralPath ?? '',
+      ...(referrerName && { referrerName }),
+      ...(otherReferralDetail && { otherReferralDetail }),
+      agreedPersonal: agreedPersonal ?? false,
+      ...(geocode && { geocode }),
       role: role === 'foreign' ? 'foreign' : 'mentor_temp',
       status: 'active',
       agreedTerms: true,
-      agreedPersonal: true,
       profileImage: '',
       authProviders: [
         {
@@ -579,6 +688,24 @@ export function SignUpFlow({
       );
 
     case 4:
+      // 멘토 회원가입 4단계: 상세정보 (주소, 주민번호, 가입경로)
+      return (
+        <SignUpStep4Screen
+          name={signUpData.name!}
+          phone={signUpData.phone!}
+          email={signUpData.email || signUpData.socialData?.email || ''}
+          password={signUpData.password || ''}
+          university={signUpData.university || ''}
+          grade={signUpData.grade || 1}
+          isOnLeave={signUpData.isOnLeave ?? null}
+          major1={signUpData.major1 || ''}
+          major2={signUpData.major2}
+          onNext={handleStep4Complete}
+          onBack={handleBack}
+        />
+      );
+
+    case 5:
       // Foreign 소셜 가입 전용: Account & Documents 확인 화면 (웹 /sign-up/foreign/account 동일)
       return (
         <ForeignAccountScreen
