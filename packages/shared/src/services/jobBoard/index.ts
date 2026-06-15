@@ -6,6 +6,7 @@ import {
   getDocs,
   getDoc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   Timestamp,
@@ -124,16 +125,17 @@ export const deleteJobBoard = async (db: Firestore, jobBoardId: string) => {
 
 export const createApplication = async (db: Firestore, applicationData: Record<string, any>) => {
   try {
-    const docRef = await addDoc(collection(db, 'applicationHistories'), {
+    // setDoc으로 ID를 미리 생성하여 한 번에 저장
+    // (addDoc 후 updateDoc으로 applicationHistoryId를 세팅하면
+    //  Firestore 보안 규칙에서 update가 거부되어 에러가 발생함)
+    const newDocRef = doc(collection(db, 'applicationHistories'));
+    await setDoc(newDocRef, {
       ...applicationData,
+      applicationHistoryId: newDocRef.id,
       applicationDate: Timestamp.now(),
     });
 
-    await updateDoc(doc(db, 'applicationHistories', docRef.id), {
-      applicationHistoryId: docRef.id,
-    });
-
-    return docRef.id;
+    return newDocRef.id;
   } catch (error) {
     console.error('지원서 생성 실패:', error);
     throw error;
