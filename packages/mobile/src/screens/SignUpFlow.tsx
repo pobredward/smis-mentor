@@ -93,43 +93,20 @@ export function SignUpFlow({
       const { auth: firebaseAuth } = await import('../config/firebase');
 
       if (firebaseAuth.currentUser) {
-        // Google/Apple: signInWithCredential로 이미 로그인됨 → 바로 완료
+        // Google/Apple: signInWithCredential로 로그인됨
+        // 네이버: signUp(임시 비번)으로 createUserWithEmailAndPassword 후 자동 로그인됨
         Alert.alert(
           '회원가입 완료',
           '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
           [{ text: '확인', onPress: onComplete }]
         );
       } else {
-        // 네이버: Custom Token으로 로그인 필요
-        // handleSocialSignUp에서 Firestore 문서 ID = Firebase Auth UID로 생성됨
-        const { signInWithCustomToken: signInCustom } = await import('../services/authService');
-        // Firebase Auth UID (setDoc에서 사용한 userId)를 우선으로 사용
-        const firebaseUid = data.socialData!.firebaseAuthUid;
-        const userEmail = data.socialData!.email;
-
-        if (firebaseUid && userEmail) {
-          try {
-            await signInCustom(firebaseUid, userEmail);
-            Alert.alert(
-              '회원가입 완료',
-              '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
-              [{ text: '확인', onPress: onComplete }]
-            );
-          } catch {
-            // Custom Token 로그인 실패 시 로그인 화면으로 안내
-            Alert.alert(
-              '회원가입 완료',
-              '회원가입이 완료되었습니다. 로그인해주세요.',
-              [{ text: '확인', onPress: onComplete }]
-            );
-          }
-        } else {
-          Alert.alert(
-            '회원가입 완료',
-            '회원가입이 완료되었습니다. 로그인해주세요.',
-            [{ text: '확인', onPress: onComplete }]
-          );
-        }
+        // 예외 케이스: Auth 세션 없음 → 로그인 안내
+        Alert.alert(
+          '회원가입 완료',
+          '회원가입이 완료되었습니다. 로그인해주세요.',
+          [{ text: '확인', onPress: onComplete }]
+        );
       }
     } catch (error: any) {
       logger.error('원어민 소셜 회원가입 실패:', error);
@@ -198,7 +175,8 @@ export function SignUpFlow({
         const { auth: firebaseAuth } = await import('../config/firebase');
 
         if (firebaseAuth.currentUser) {
-          // Google/Apple: signInWithCredential로 이미 로그인됨 → 바로 완료
+          // Google/Apple: signInWithCredential로 로그인됨
+          // 네이버: signUp(임시 비번)으로 createUserWithEmailAndPassword 후 자동 로그인됨
           logger.info('✅ 소셜 회원가입 완료 - Firebase Auth 로그인 확인됨');
           Alert.alert(
             '회원가입 완료',
@@ -206,35 +184,12 @@ export function SignUpFlow({
             [{ text: '확인', onPress: onComplete }]
           );
         } else {
-          // 네이버 등 Custom Token 방식
-          const { signInWithCustomToken: signInCustom } = await import('../services/authService');
-          const userId = finalData.socialData.firebaseAuthUid || finalData.socialData.providerUid;
-          const userEmail = finalData.socialData.email;
-
-          if (userId && userEmail) {
-            try {
-              await signInCustom(userId, userEmail);
-              logger.info('✅ Custom Token 자동 로그인 완료');
-              Alert.alert(
-                '회원가입 완료',
-                '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
-                [{ text: '확인', onPress: onComplete }]
-              );
-            } catch (loginErr) {
-              logger.warn('⚠️ 자동 로그인 실패 - 수동 로그인 필요:', loginErr);
-              Alert.alert(
-                '회원가입 완료',
-                '회원가입이 완료되었습니다. 로그인해주세요.',
-                [{ text: '확인', onPress: onComplete }]
-              );
-            }
-          } else {
-            Alert.alert(
-              '회원가입 완료',
-              '회원가입이 완료되었습니다. 로그인해주세요.',
-              [{ text: '확인', onPress: onComplete }]
-            );
-          }
+          // 예외 케이스: Auth 세션 없음 → 로그인 안내
+          Alert.alert(
+            '회원가입 완료',
+            '회원가입이 완료되었습니다. 로그인해주세요.',
+            [{ text: '확인', onPress: onComplete }]
+          );
         }
       } else {
         Alert.alert(
@@ -306,24 +261,20 @@ export function SignUpFlow({
           }
         }
       } else {
-        // 네이버: Custom Token으로 Firebase Auth 로그인 먼저
-        logger.info('🔑 네이버 temp 활성화: Custom Token으로 Firebase Auth 로그인 먼저 처리');
+        // 네이버: 임시 비밀번호로 Firebase Auth 계정 신규 생성 (웹과 동일)
+        logger.info('🔑 네이버 temp 활성화: 임시 비밀번호로 Firebase Auth 계정 생성');
         if (!firebaseAuth.currentUser) {
           try {
-            const { getFunctions, httpsCallable } = await import('firebase/functions');
-            const { signInWithCustomToken: firebaseSignInWithCustomToken } = await import('firebase/auth');
-            const functions = getFunctions(undefined, 'asia-northeast3');
-            const createCustomToken = httpsCallable(functions, 'createCustomToken');
-            const tokenResult = await createCustomToken({
-              userId: socialData.providerUid,
-              email: socialData.email,
-            });
-            const { customToken } = tokenResult.data as { customToken: string };
-            const userCred = await firebaseSignInWithCustomToken(firebaseAuth, customToken);
+            const tempPw = `${socialData.email}_${Date.now()}_${Math.random().toString(36)}`;
+            const userCred = await signUp(socialData.email, tempPw);
             (socialData as any).firebaseAuthUid = userCred.user.uid;
-            logger.info('✅ 네이버 Custom Token 로그인 완료 (temp 활성화):', userCred.user.uid);
-          } catch (tokenError: any) {
-            logger.error('❌ 네이버 Custom Token 로그인 실패 (temp 활성화):', tokenError.message);
+            logger.info('✅ 네이버 Firebase Auth 계정 생성 완료 (temp 활성화):', userCred.user.uid);
+          } catch (createError: any) {
+            if (createError.code === 'auth/email-already-in-use') {
+              logger.warn('⚠️ 네이버 temp 활성화: 이메일 이미 사용 중');
+              throw new Error('이미 가입된 이메일입니다. 로그인 화면에서 로그인해주세요.');
+            }
+            logger.error('❌ 네이버 Firebase Auth 계정 생성 실패 (temp 활성화):', createError.message);
             throw new Error('Firebase 인증에 실패했습니다. 다시 시도해주세요.');
           }
         }
@@ -463,27 +414,23 @@ export function SignUpFlow({
           }
         }
       } else {
-        // 네이버 등 credential 없는 경우: providerUid로 Custom Token 생성 → Firebase Auth 로그인
-        // setDoc 전에 반드시 Firebase Auth 세션이 있어야 Firestore Rules 통과
-        logger.info('🔑 네이버 신규 가입: Custom Token으로 Firebase Auth 로그인 먼저 처리');
+        // 네이버 등 credential 없는 경우: 임시 비밀번호로 Firebase Auth 계정 신규 생성
+        // (웹과 동일한 방식: createUserWithEmailAndPassword → UID 확보 → setDoc)
+        logger.info('🔑 네이버 신규 가입: 임시 비밀번호로 Firebase Auth 계정 생성');
         if (!firebaseAuth.currentUser) {
           try {
-            const { getFunctions, httpsCallable } = await import('firebase/functions');
-            const { signInWithCustomToken: firebaseSignInWithCustomToken } = await import('firebase/auth');
-            const functions = getFunctions(undefined, 'asia-northeast3');
-            const createCustomToken = httpsCallable(functions, 'createCustomToken');
-            // 네이버 providerUid를 userId로 사용해 Custom Token 생성
-            const tokenResult = await createCustomToken({
-              userId: socialData.providerUid,
-              email: socialData.email,
-            });
-            const { customToken } = tokenResult.data as { customToken: string };
-            const userCred = await firebaseSignInWithCustomToken(firebaseAuth, customToken);
-            // Firebase Auth UID를 socialData에 저장 (이후 setDoc userId로 사용)
+            const tempPw = `${socialData.email}_${Date.now()}_${Math.random().toString(36)}`;
+            const userCred = await signUp(socialData.email, tempPw);
             (socialData as any).firebaseAuthUid = userCred.user.uid;
-            logger.info('✅ 네이버 Custom Token 로그인 완료 (Firebase Auth UID):', userCred.user.uid);
-          } catch (tokenError: any) {
-            logger.error('❌ 네이버 Custom Token 로그인 실패:', tokenError.message);
+            logger.info('✅ 네이버 Firebase Auth 계정 생성 완료:', userCred.user.uid);
+          } catch (createError: any) {
+            if (createError.code === 'auth/email-already-in-use') {
+              // 이미 Firebase Auth 계정이 있는 경우 → signIn으로 처리 불가
+              // Firestore에서 기존 계정 조회가 필요한 케이스 (재가입 시나리오)
+              logger.warn('⚠️ 네이버 가입: 이메일 이미 사용 중 (기존 Auth 계정 존재)');
+              throw new Error('이미 가입된 이메일입니다. 로그인 화면에서 로그인해주세요.');
+            }
+            logger.error('❌ 네이버 Firebase Auth 계정 생성 실패:', createError.message);
             throw new Error('Firebase 인증에 실패했습니다. 다시 시도해주세요.');
           }
         }
