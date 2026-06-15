@@ -2093,6 +2093,17 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               </View>
               <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.settingsMenuItem, styles.settingsMenuItemBorderless]}
+              onPress={() => navigation.navigate('LocationSettings' as any)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingsMenuItemContent}>
+                <Ionicons name="location-outline" size={20} color="#10b981" />
+                <Text style={styles.settingsMenuItemText}>{isForeign ? 'Location Settings' : '위치 설정'}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+            </TouchableOpacity>
           </View>
 
           {/* 개인 정보 - 멘토만 표시 (원어민은 Teacher Information에 통합) */}
@@ -2914,6 +2925,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
+  },
+  settingsMenuItemBorderless: {
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
   },
   settingsMenuItemContent: {
     flexDirection: 'row',

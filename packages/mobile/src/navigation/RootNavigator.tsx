@@ -9,6 +9,7 @@ import PersonalTaskDetailScreen from '../screens/PersonalTaskDetailScreen';
 import { CampDetailScreen } from '../screens/CampDetailScreen';
 import { CampEditorScreen } from '../screens/CampEditorScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { LocationSettingsScreen } from '../screens/LocationSettingsScreen';
 import { NotificationTestScreen } from '../screens/NotificationTestScreen';
 import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from '../screens/TermsOfServiceScreen';
@@ -43,6 +44,7 @@ const linking = {
       CampDetail: 'camp/:category/:itemId',
       CampEditor: 'camp/:category/:itemId/edit',
       Settings: 'settings',
+      LocationSettings: 'location-settings',
       NotificationTest: 'notification-test',
       PrivacyPolicy: 'privacy-policy',
       TermsOfService: 'terms-of-service',
@@ -112,6 +114,16 @@ function AppStack() {
         options={{
           headerShown: true,
           title: isForeign ? 'Notification Settings' : '설정',
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="LocationSettings"
+        component={LocationSettingsScreen}
+        options={{
+          headerShown: true,
+          title: isForeign ? 'Location Settings' : '위치 설정',
           presentation: 'card',
           animation: 'slide_from_right',
         }}

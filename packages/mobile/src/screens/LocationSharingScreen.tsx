@@ -20,7 +20,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/types';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { jobCodesService } from '../services';
@@ -29,7 +31,7 @@ import {
   stopLocationSharing,
   subscribeToLocationSharing,
   getLocationPermissionStatus,
-  requestLocationPermission,
+  requestForegroundLocationPermission,
   pauseLocationWatcher,
   UserLocationData,
   type LocationPermissionLevel,
@@ -180,6 +182,8 @@ const DEFAULT_REGION: Region = {
 
 export function LocationSharingScreen() {
   const { userData, setIsSharingLocation } = useAuth();
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const mapRef = useRef<MapView | null>(null);
 
   const [isSharing, setIsSharing] = useState(false);
@@ -397,21 +401,29 @@ export function LocationSharingScreen() {
     });
   }, [sheetY, backdropOpacity]);
 
-  // 백그라운드 권한이 없을 때 "항상 허용" 설정 안내
+  // 백그라운드 권한이 없을 때 LocationSettingsScreen으로 유도
+  // Google Play 정책: 백그라운드 권한 요청은 별도 공개 화면에서 처리
   const showBackgroundPermissionGuide = useCallback(() => {
-    const iosGuide = 'iOS: 설정 > 개인 정보 보호 및 보안 > 위치 서비스 > SMIS Mentor > "항상"';
-    const androidGuide = 'Android: 설정 > 앱 > SMIS Mentor > 권한 > 위치 > "항상 허용"';
     Alert.alert(
-      '백그라운드 위치 권한 필요',
-      `앱을 종료하거나 최소화해도 위치가 공유되려면 "항상 허용" 권한이 필요합니다.\n\n${Platform.OS === 'ios' ? iosGuide : androidGuide}\n\n설정에서 변경하시겠습니까?`,
+      isForeign ? 'Enable Background Location' : '백그라운드 위치 설정',
+      isForeign
+        ? 'Location sharing is active while the app is open. To keep sharing in the background, enable "Always" location access in Location Settings.'
+        : '앱을 사용하는 동안 위치 공유가 활성화되었습니다. 앱을 최소화해도 계속 공유하려면 위치 설정에서 백그라운드 위치를 허용해 주세요.',
       [
-        { text: '나중에', style: 'cancel' },
-        { text: '설정 열기', onPress: () => Linking.openSettings() },
+        { text: isForeign ? 'Later' : '나중에', style: 'cancel' },
+        {
+          text: isForeign ? 'Location Settings' : '위치 설정',
+          onPress: () => navigation.navigate('LocationSettings'),
+        },
       ]
     );
-  }, []);
+  }, [isForeign, navigation]);
 
   // disclosure 모달에서 동의 후 실제 권한 요청 및 공유 시작
+  // Google Play 정책 준수:
+  // - disclosure 모달은 포그라운드 권한 다이얼로그 직전에 표시됨 (이미 충족)
+  // - 백그라운드 권한은 포그라운드 허용 후 별도 안내(LocationSettingsScreen)로 유도
+  //   → 이 화면에서 바로 백그라운드 OS 다이얼로그를 연속 호출하지 않음
   const handleDisclosureAccept = useCallback(async () => {
     setShowDisclosureModal(false);
 
@@ -419,16 +431,18 @@ export function LocationSharingScreen() {
 
     setIsToggling(true);
     try {
-      // disclosure 동의 후 OS 권한 다이얼로그 표시
-      const permLevel = await requestLocationPermission();
+      // 포그라운드 권한만 요청 (백그라운드는 별도 disclosure 경로인 LocationSettingsScreen에서 처리)
+      const fgResult = await requestForegroundLocationPermission();
 
-      if (permLevel === 'denied') {
+      if (fgResult === 'denied') {
         Alert.alert(
-          '위치 권한 필요',
-          '위치 공유를 사용하려면 설정에서 위치 권한을 허용해야 합니다.',
+          isForeign ? 'Location Permission Required' : '위치 권한 필요',
+          isForeign
+            ? 'Location access is required to use location sharing. Please allow it in your device settings.'
+            : '위치 공유를 사용하려면 설정에서 위치 권한을 허용해야 합니다.',
           [
-            { text: '취소', style: 'cancel' },
-            { text: '설정 열기', onPress: () => Linking.openSettings() },
+            { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+            { text: isForeign ? 'Open Settings' : '설정 열기', onPress: () => Linking.openSettings() },
           ]
         );
         return;
@@ -449,9 +463,11 @@ export function LocationSharingScreen() {
       });
 
       if (!success) {
-        Alert.alert('위치 공유 시작 실패', '잠시 후 다시 시도해 주세요.', [
-          { text: '확인' },
-        ]);
+        Alert.alert(
+          isForeign ? 'Failed to Start Sharing' : '위치 공유 시작 실패',
+          isForeign ? 'Please try again.' : '잠시 후 다시 시도해 주세요.',
+          [{ text: isForeign ? 'OK' : '확인' }]
+        );
         return;
       }
 
@@ -459,14 +475,14 @@ export function LocationSharingScreen() {
       isSharingRef.current = true;
       setIsSharingLocation(true);
 
-      // 포그라운드 권한만 있는 경우(백그라운드 미허용) → Android 전용 추가 안내
-      if (permLevel === 'whenInUse' && Platform.OS === 'android') {
+      // 포그라운드 권한만 있는 경우 → LocationSettingsScreen에서 백그라운드 권한을 추가 허용하도록 안내
+      if (Platform.OS === 'android') {
         setTimeout(showBackgroundPermissionGuide, 600);
       }
     } finally {
       setIsToggling(false);
     }
-  }, [userData, campCode, showBackgroundPermissionGuide]);
+  }, [userData, campCode, isForeign, showBackgroundPermissionGuide]);
 
   const handleDisclosureDeny = useCallback(() => {
     setShowDisclosureModal(false);
@@ -512,9 +528,11 @@ export function LocationSharingScreen() {
         });
 
         if (!success) {
-          Alert.alert('위치 공유 시작 실패', '잠시 후 다시 시도해 주세요.', [
-            { text: '확인' },
-          ]);
+          Alert.alert(
+            isForeign ? 'Failed to Start Sharing' : '위치 공유 시작 실패',
+            isForeign ? 'Please try again.' : '잠시 후 다시 시도해 주세요.',
+            [{ text: isForeign ? 'OK' : '확인' }]
+          );
           return;
         }
 
@@ -522,6 +540,7 @@ export function LocationSharingScreen() {
         isSharingRef.current = true;
         setIsSharingLocation(true);
 
+        // 백그라운드 권한 없으면 LocationSettingsScreen으로 유도
         if (currentPerm === 'whenInUse' && Platform.OS === 'android') {
           setTimeout(showBackgroundPermissionGuide, 600);
         }
@@ -591,6 +610,7 @@ export function LocationSharingScreen() {
         visible={showDisclosureModal}
         onAccept={handleDisclosureAccept}
         onDeny={handleDisclosureDeny}
+        isForeign={isForeign}
       />
 
       {/* 헤더 컨트롤 패널 */}

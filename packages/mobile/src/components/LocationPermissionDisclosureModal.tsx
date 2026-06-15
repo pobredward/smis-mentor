@@ -16,6 +16,8 @@ interface LocationPermissionDisclosureModalProps {
   onAccept: () => void;
   /** 사용자가 "취소" 버튼을 누름 */
   onDeny: () => void;
+  /** true면 영어 UI (foreign 역할) */
+  isForeign?: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export function LocationPermissionDisclosureModal({
   visible,
   onAccept,
   onDeny,
+  isForeign = false,
 }: LocationPermissionDisclosureModalProps) {
   return (
     <Modal
@@ -56,27 +59,42 @@ export function LocationPermissionDisclosureModal({
               </View>
             </View>
 
-            <Text style={styles.title}>위치 정보 수집 안내</Text>
+            <Text style={styles.title}>
+              {isForeign ? 'Location Data Collection Notice' : '위치 정보 수집 안내'}
+            </Text>
 
-            {/* 수집 목적 */}
+            {/* 수집하는 정보 */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>수집하는 정보</Text>
+              <Text style={styles.sectionTitle}>
+                {isForeign ? 'Data Collected' : '수집하는 정보'}
+              </Text>
               <View style={styles.bulletItem}>
                 <Ionicons name="radio-button-on" size={8} color="#3b82f6" style={styles.bullet} />
-                <Text style={styles.bulletText}>GPS 기반 실시간 위치(위도·경도)</Text>
+                <Text style={styles.bulletText}>
+                  {isForeign
+                    ? 'GPS-based real-time location (latitude & longitude)'
+                    : 'GPS 기반 실시간 위치(위도·경도)'}
+                </Text>
               </View>
               <View style={styles.bulletItem}>
                 <Ionicons name="radio-button-on" size={8} color="#3b82f6" style={styles.bullet} />
-                <Text style={styles.bulletText}>기기 배터리 잔량 및 충전 상태</Text>
+                <Text style={styles.bulletText}>
+                  {isForeign
+                    ? 'Device battery level and charging status'
+                    : '기기 배터리 잔량 및 충전 상태'}
+                </Text>
               </View>
             </View>
 
             {/* 사용 목적 */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>수집 목적</Text>
+              <Text style={styles.sectionTitle}>
+                {isForeign ? 'Purpose' : '수집 목적'}
+              </Text>
               <Text style={styles.bodyText}>
-                같은 캠프 스태프끼리 실시간으로 위치를 공유하기 위해 사용됩니다.
-                위치 정보는 광고·분석 등 다른 목적으로 사용되지 않습니다.
+                {isForeign
+                  ? 'Used to share real-time locations among camp staff. Location data is not used for advertising, analytics, or any other purpose.'
+                  : '같은 캠프 스태프끼리 실시간으로 위치를 공유하기 위해 사용됩니다. 위치 정보는 광고·분석 등 다른 목적으로 사용되지 않습니다.'}
               </Text>
             </View>
 
@@ -84,36 +102,45 @@ export function LocationPermissionDisclosureModal({
             <View style={[styles.section, styles.bgWarningBox]}>
               <View style={styles.bgWarningHeader}>
                 <Ionicons name="information-circle" size={18} color="#d97706" />
-                <Text style={styles.bgWarningTitle}>백그라운드 위치 수집</Text>
+                <Text style={styles.bgWarningTitle}>
+                  {isForeign ? 'Background Location Collection' : '백그라운드 위치 수집'}
+                </Text>
               </View>
               <Text style={styles.bgWarningText}>
-                위치 공유를 켠 상태에서는 앱을 최소화하거나 다른 앱을 사용하는 중에도
-                {Platform.OS === 'android' ? ' 알림 바에 표시되는 포그라운드 서비스를 통해' : ''}
-                {' '}위치가 수집됩니다.
-                {'\n\n'}
-                배터리 사용량을 줄이기 위해 15초 간격, 20m 이동 시에만 업데이트합니다.
+                {isForeign
+                  ? `While location sharing is on, your location is collected even when the app is minimized or you are using another app.${Platform.OS === 'android' ? ' A foreground service notification will appear in the status bar.' : ''}\n\nTo save battery, updates occur every 15 seconds or when you move 20m.`
+                  : `위치 공유를 켠 상태에서는 앱을 최소화하거나 다른 앱을 사용하는 중에도${Platform.OS === 'android' ? ' 알림 바에 표시되는 포그라운드 서비스를 통해' : ''} 위치가 수집됩니다.\n\n배터리 사용량을 줄이기 위해 15초 간격, 20m 이동 시에만 업데이트합니다.`}
               </Text>
             </View>
 
             {/* 공유 대상 */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>공유 대상</Text>
+              <Text style={styles.sectionTitle}>
+                {isForeign ? 'Who Can See Your Location' : '공유 대상'}
+              </Text>
               <Text style={styles.bodyText}>
-                같은 캠프 코드에 속한 스태프에게만 표시됩니다.
-                외부 제3자와는 공유하지 않습니다.
+                {isForeign
+                  ? 'Visible only to staff in the same camp. Not shared with any external third parties.'
+                  : '같은 캠프 코드에 속한 스태프에게만 표시됩니다. 외부 제3자와는 공유하지 않습니다.'}
               </Text>
             </View>
 
             {/* 보관 및 중지 */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>수집 중단</Text>
+              <Text style={styles.sectionTitle}>
+                {isForeign ? 'Stop Collection' : '수집 중단'}
+              </Text>
               <Text style={styles.bodyText}>
-                위치 공유 스위치를 끄면 즉시 수집이 중단되고 위치 데이터가 삭제됩니다.
+                {isForeign
+                  ? 'Turning off the location sharing switch immediately stops collection and deactivates your location data.'
+                  : '위치 공유 스위치를 끄면 즉시 수집이 중단되고 위치 데이터가 비활성 처리됩니다.'}
               </Text>
             </View>
 
             <Text style={styles.privacyNote}>
-              자세한 내용은 개인정보처리방침 §9를 확인하세요.
+              {isForeign
+                ? 'See Privacy Policy §9 for more details.'
+                : '자세한 내용은 개인정보처리방침 §9를 확인하세요.'}
             </Text>
           </ScrollView>
 
@@ -124,10 +151,10 @@ export function LocationPermissionDisclosureModal({
               onPress={onDeny}
               activeOpacity={0.75}
               accessible
-              accessibilityLabel="취소"
+              accessibilityLabel={isForeign ? 'Cancel' : '취소'}
               accessibilityRole="button"
             >
-              <Text style={styles.denyText}>취소</Text>
+              <Text style={styles.denyText}>{isForeign ? 'Cancel' : '취소'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -135,11 +162,13 @@ export function LocationPermissionDisclosureModal({
               onPress={onAccept}
               activeOpacity={0.85}
               accessible
-              accessibilityLabel="동의하고 계속"
+              accessibilityLabel={isForeign ? 'Agree and Continue' : '동의하고 계속'}
               accessibilityRole="button"
             >
               <Ionicons name="checkmark" size={18} color="#ffffff" />
-              <Text style={styles.acceptText}>동의하고 계속</Text>
+              <Text style={styles.acceptText}>
+                {isForeign ? 'Agree & Continue' : '동의하고 계속'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

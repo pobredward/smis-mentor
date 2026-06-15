@@ -172,7 +172,7 @@ export function PrivacyPolicyScreen() {
           <View style={[styles.infoBox, { borderLeftColor: '#3b82f6' }]}>
             <Text style={styles.infoBoxTitle}>수집 항목</Text>
             <Text style={styles.infoBoxContent}>
-              GPS 기반 실시간 위도·경도 좌표, 위치 업데이트 시각
+              GPS 기반 실시간 위도·경도 좌표, 위치 업데이트 시각, 기기 배터리 잔량 및 충전 상태
             </Text>
           </View>
           <View style={[styles.infoBox, { borderLeftColor: '#10b981' }]}>
@@ -184,7 +184,7 @@ export function PrivacyPolicyScreen() {
           <View style={[styles.infoBox, { borderLeftColor: '#f59e0b' }]}>
             <Text style={styles.infoBoxTitle}>수집 방법 및 동의</Text>
             <Text style={styles.infoBoxContent}>
-              위치 공유는 사용자가 앱 내 위치 공유 토글을 직접 활성화한 경우에만 작동합니다. 앱 최초 실행 시 또는 기능 사용 시 위치 권한 허용 여부를 사용자에게 명시적으로 요청하며, 권한을 거부하면 위치 공유 기능은 작동하지 않습니다. 사용자는 언제든지 토글을 끄거나 기기 설정에서 위치 권한을 철회할 수 있습니다.
+              위치 공유는 사용자가 앱 내 위치 공유 토글을 직접 활성화한 경우에만 작동합니다. 기능 사용 시 수집 목적·항목·백그라운드 수집 여부를 명시적으로 안내한 후 OS 권한 허용을 요청하며, 권한을 거부하면 위치 공유 기능은 작동하지 않습니다. 백그라운드 위치 접근 권한은 마이페이지 &gt; 설정 &gt; 위치 설정 화면에서 별도로 허용할 수 있습니다. 사용자는 언제든지 토글을 끄거나 기기 설정에서 위치 권한을 철회할 수 있습니다.
             </Text>
           </View>
           <View style={[styles.infoBox, { borderLeftColor: '#8b5cf6' }]}>
@@ -196,7 +196,7 @@ export function PrivacyPolicyScreen() {
           <View style={[styles.infoBox, { borderLeftColor: '#ef4444' }]}>
             <Text style={styles.infoBoxTitle}>공개 범위 및 보유 기간</Text>
             <Text style={styles.infoBoxContent}>
-              수집된 위치 정보는 동일 캠프 코드를 보유한 스태프에게만 공개됩니다. 위치 공유를 끄는 즉시 지도에서 제거되며, Firebase Firestore에서 공유 상태가 비활성 처리됩니다. 위치 데이터는 서비스 목적 달성 후 지체 없이 파기됩니다.
+              수집된 위치 정보는 동일 캠프 코드를 보유한 스태프에게만 공개됩니다. 위치 공유를 끄는 즉시 지도에서 제거되며, Firebase Firestore에서 공유 상태가 비활성 처리됩니다(좌표 데이터는 비활성 상태로 저장 후 캠프 종료 시 파기). 위치 데이터는 서비스 목적 달성 후 지체 없이 파기됩니다.
             </Text>
           </View>
         </View>

@@ -19,6 +19,7 @@ export type RootStackParamList = {
     initialContent: string;
   };
   Settings: undefined;
+  LocationSettings: undefined;
   NotificationTest: undefined;
   PrivacyPolicy: undefined;
   TermsOfService: undefined;
