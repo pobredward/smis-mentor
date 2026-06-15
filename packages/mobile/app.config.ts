@@ -97,7 +97,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
       infoPlist: {
         NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
-        NSCameraUsageDescription: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
         NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
         NSLocationWhenInUseUsageDescription: '사용자 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.',
         NSLocationAlwaysAndWhenInUseUsageDescription: '캠프 위치 공유를 위해 항상 위치 접근 권한이 필요합니다.',
@@ -149,7 +148,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         },
       ],
       permissions: [
-        'CAMERA',
         // Android 13+ (API 33+)에서는 Photo Picker가 자동으로 사용되어 READ_MEDIA_IMAGES 권한 불필요
         // Android 12 이하에서는 READ_EXTERNAL_STORAGE로 충분
         'READ_EXTERNAL_STORAGE',

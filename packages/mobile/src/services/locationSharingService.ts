@@ -98,25 +98,38 @@ const getLocationDocId = (campCode: string, userId: string): string =>
 // 위치 권한 허용 수준
 export type LocationPermissionLevel = 'denied' | 'whenInUse' | 'always';
 
-// 위치 권한을 요청하고 허용 수준을 반환
-// 1단계: 포그라운드 권한 요청 → 2단계: 백그라운드 권한 요청 (포그라운드 허용 후에만 가능)
-export const requestLocationPermission =
-  async (): Promise<LocationPermissionLevel> => {
-    const { status: fgStatus } =
-      await Location.requestForegroundPermissionsAsync();
-    if (fgStatus !== Location.PermissionStatus.GRANTED) return 'denied';
+// 포그라운드 위치 권한만 요청
+// Google Play 정책: 백그라운드 권한은 포그라운드 허용 후 별도 disclosure와 함께 요청해야 함
+export const requestForegroundLocationPermission =
+  async (): Promise<'granted' | 'denied'> => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    return status === Location.PermissionStatus.GRANTED ? 'granted' : 'denied';
+  };
 
-    // 백그라운드 권한 요청 (iOS: "항상 허용" / Android: "항상 허용")
+// 백그라운드 위치 권한만 요청 (포그라운드 권한 허용 후 호출해야 함)
+// Android: 별도 disclosure 모달을 표시한 뒤 이 함수를 호출할 것
+export const requestBackgroundLocationPermission =
+  async (): Promise<LocationPermissionLevel> => {
     try {
       const { status: bgStatus } =
         await Location.requestBackgroundPermissionsAsync();
-      return bgStatus === Location.PermissionStatus.GRANTED
-        ? 'always'
-        : 'whenInUse';
+      return bgStatus === Location.PermissionStatus.GRANTED ? 'always' : 'whenInUse';
     } catch {
       // Expo Go 등 백그라운드 권한 API 미지원 환경
       return 'whenInUse';
     }
+  };
+
+// 위치 권한을 요청하고 허용 수준을 반환
+// 1단계: 포그라운드 권한 요청 → 2단계: 백그라운드 권한 요청 (포그라운드 허용 후에만 가능)
+// disclosure 모달을 직접 제어하는 경우 requestForegroundLocationPermission /
+// requestBackgroundLocationPermission 을 개별 호출하세요.
+export const requestLocationPermission =
+  async (): Promise<LocationPermissionLevel> => {
+    const fgResult = await requestForegroundLocationPermission();
+    if (fgResult === 'denied') return 'denied';
+
+    return requestBackgroundLocationPermission();
   };
 
 // 현재 위치 권한 상태 확인 (권한 요청 없이 확인만)

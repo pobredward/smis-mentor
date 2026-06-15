@@ -18,7 +18,7 @@ import { jobCodesService } from '../services';
 import { User, AuthContextType } from '../types';
 import { ensureActiveJobExperience } from '@smis-mentor/shared';
 import {
-  registerForPushNotificationsAsync,
+  registerPushTokenIfPermitted,
   savePushToken,
   addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
@@ -177,10 +177,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     initGoogleSDK();
   }, []);
 
-  // 푸시 알림 등록 및 토큰 저장
+  // 이미 알림 권한이 허용된 경우에만 푸시 토큰 갱신
+  // Google Play 정책: 로그인 시 자동으로 requestPermissionsAsync()를 호출하지 않음
+  // 권한 요청은 사용자가 알림 배너/설정에서 명시적으로 탭할 때만 수행
   useEffect(() => {
     if (userData?.userId) {
-      registerForPushNotificationsAsync()
+      registerPushTokenIfPermitted()
         .then(token => {
           if (token) {
             savePushToken(userData.userId, token).catch(error => {
@@ -189,7 +191,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           }
         })
         .catch(error => {
-          logger.error('푸시 알림 등록 실패:', error);
+          logger.error('푸시 토큰 갱신 실패:', error);
         });
     }
   }, [userData?.userId]);

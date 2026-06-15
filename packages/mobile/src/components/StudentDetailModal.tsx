@@ -15,7 +15,8 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampType } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
-import { requestContactsPermission, saveSingleParentContact, deleteSingleParentContact } from '../services';
+import { requestContactsPermission, getContactsPermissionStatus, saveSingleParentContact, deleteSingleParentContact } from '../services';
+import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosureModal';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.78; // 화면의 78%
@@ -74,6 +75,9 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const scrollX = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  // Google Play 정책: 연락처 권한 요청 직전 명시적 공개(Prominent Disclosure) 모달
+  const [showContactsDisclosure, setShowContactsDisclosure] = useState(false);
+  const pendingStudentRef = useRef<STSheetStudent | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -129,16 +133,47 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
   const handleSaveParentContact = useCallback(async (s: STSheetStudent) => {
     if (!s.parentPhone) return;
+
+    // 이미 권한이 있으면 disclosure 없이 바로 저장
+    const currentStatus = await getContactsPermissionStatus();
+    if (currentStatus === 'granted') {
+      await saveSingleParentContact(s, campCode);
+      return;
+    }
+
+    // 권한이 없으면 Google Play 정책에 따라 disclosure 모달을 먼저 표시
+    pendingStudentRef.current = s;
+    setShowContactsDisclosure(true);
+  }, [campCode]);
+
+  const handleContactsDisclosureAccept = useCallback(async () => {
+    setShowContactsDisclosure(false);
+    const s = pendingStudentRef.current;
+    pendingStudentRef.current = null;
+    if (!s) return;
+
     const granted = await requestContactsPermission();
     if (!granted) return;
     await saveSingleParentContact(s, campCode);
   }, [campCode]);
+
+  const handleContactsDisclosureDeny = useCallback(() => {
+    setShowContactsDisclosure(false);
+    pendingStudentRef.current = null;
+  }, []);
 
   if (students.length === 0) return null;
 
   const student = students[currentIndex] ?? students[0];
 
   return (
+    <>
+    {/* Google Play 정책(Prominent Disclosure) 준수: OS 연락처 권한 요청 직전 명시적 공개 모달 */}
+    <ContactsPermissionDisclosureModal
+      visible={showContactsDisclosure}
+      onAccept={handleContactsDisclosureAccept}
+      onDeny={handleContactsDisclosureDeny}
+    />
     <Modal
       visible={visible}
       transparent
@@ -222,6 +257,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         </Animated.View>
       </View>
     </Modal>
+    </>
   );
 };
 

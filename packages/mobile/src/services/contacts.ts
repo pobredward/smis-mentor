@@ -31,7 +31,18 @@ export function buildContactDisplayName(student: STSheetStudent, campCode?: stri
 }
 
 /**
+ * 현재 연락처 권한 상태만 확인합니다 (권한 요청 없음).
+ */
+export async function getContactsPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
+  const { status } = await Contacts.getPermissionsAsync();
+  if (status === 'granted') return 'granted';
+  if (status === 'denied') return 'denied';
+  return 'undetermined';
+}
+
+/**
  * 연락처 앱 접근 권한을 요청합니다.
+ * Google Play 정책: 이 함수를 호출하기 전에 반드시 in-app disclosure를 표시해야 합니다.
  * 거부 시 사용자에게 설정 앱으로 이동할지 묻습니다.
  */
 export async function requestContactsPermission(): Promise<boolean> {

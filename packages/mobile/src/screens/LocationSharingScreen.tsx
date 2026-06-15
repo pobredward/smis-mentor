@@ -34,6 +34,7 @@ import {
   UserLocationData,
   type LocationPermissionLevel,
 } from '../services/locationSharingService';
+import { LocationPermissionDisclosureModal } from '../components/LocationPermissionDisclosureModal';
 import type { Unsubscribe } from 'firebase/firestore';
 import type { UserRole } from '@smis-mentor/shared';
 
@@ -190,6 +191,8 @@ export function LocationSharingScreen() {
   const [selectedUser, setSelectedUser] = useState<UserLocationData | null>(null);
   // 바텀시트 표시 여부 (pointerEvents 제어용 — 항상 마운트해 초기 딜레이 제거)
   const [sheetVisible, setSheetVisible] = useState(false);
+  // Google Play 정책: OS 권한 요청 직전 명시적 공개(Prominent Disclosure) 모달
+  const [showDisclosureModal, setShowDisclosureModal] = useState(false);
 
   // 바텀시트 애니메이션
   const sheetY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
@@ -408,40 +411,97 @@ export function LocationSharingScreen() {
     );
   }, []);
 
+  // disclosure 모달에서 동의 후 실제 권한 요청 및 공유 시작
+  const handleDisclosureAccept = useCallback(async () => {
+    setShowDisclosureModal(false);
+
+    if (!userData || !campCode) return;
+
+    setIsToggling(true);
+    try {
+      // disclosure 동의 후 OS 권한 다이얼로그 표시
+      const permLevel = await requestLocationPermission();
+
+      if (permLevel === 'denied') {
+        Alert.alert(
+          '위치 권한 필요',
+          '위치 공유를 사용하려면 설정에서 위치 권한을 허용해야 합니다.',
+          [
+            { text: '취소', style: 'cancel' },
+            { text: '설정 열기', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+
+      const activeExp =
+        userData.jobExperiences?.find(
+          (e) => e.id === userData.activeJobExperienceId
+        ) ?? userData.jobExperiences?.[0];
+
+      const success = await startLocationSharing(db, userData.userId, campCode, {
+        displayName: userData.name,
+        photoURL: userData.profileImage ?? null,
+        role: userData.role,
+        group: activeExp?.group ?? null,
+        groupRole: activeExp?.groupRole ?? null,
+        classCode: activeExp?.classCode ?? null,
+      });
+
+      if (!success) {
+        Alert.alert('위치 공유 시작 실패', '잠시 후 다시 시도해 주세요.', [
+          { text: '확인' },
+        ]);
+        return;
+      }
+
+      setIsSharing(true);
+      isSharingRef.current = true;
+      setIsSharingLocation(true);
+
+      // 포그라운드 권한만 있는 경우(백그라운드 미허용) → Android 전용 추가 안내
+      if (permLevel === 'whenInUse' && Platform.OS === 'android') {
+        setTimeout(showBackgroundPermissionGuide, 600);
+      }
+    } finally {
+      setIsToggling(false);
+    }
+  }, [userData, campCode, showBackgroundPermissionGuide]);
+
+  const handleDisclosureDeny = useCallback(() => {
+    setShowDisclosureModal(false);
+    setIsToggling(false);
+  }, []);
+
   // 토글 처리
   const handleToggle = async (value: boolean) => {
     if (!userData || !campCode || isToggling) return;
 
-    setIsToggling(true);
+    if (!value) {
+      // 공유 중지 (disclosure 불필요)
+      setIsToggling(true);
+      try {
+        await stopLocationSharing(db, userData.userId, campCode);
+        setIsSharing(false);
+        isSharingRef.current = false;
+        setMyLocation(null);
+        setIsSharingLocation(false);
+      } finally {
+        setIsToggling(false);
+      }
+      return;
+    }
 
-    try {
-      if (value) {
-        // 1단계: 현재 권한 수준 확인
-        let permLevel: LocationPermissionLevel = await getLocationPermissionStatus();
-
-        // 2단계: 포그라운드 권한도 없는 경우에만 권한 요청 다이얼로그 표시
-        if (permLevel === 'denied') {
-          permLevel = await requestLocationPermission();
-        }
-
-        // 3단계: 포그라운드 권한도 없으면 설정으로 안내 후 중단
-        if (permLevel === 'denied') {
-          Alert.alert(
-            '위치 권한 필요',
-            '위치 공유를 사용하려면 설정에서 위치 권한을 허용해야 합니다.',
-            [
-              { text: '취소', style: 'cancel' },
-              { text: '설정 열기', onPress: () => Linking.openSettings() },
-            ]
-          );
-          return;
-        }
-
-        // 4단계: 권한 확인 완료 → 위치 공유 시작
+    // 이미 권한이 있는 경우: disclosure 없이 바로 공유 시작
+    const currentPerm = await getLocationPermissionStatus();
+    if (currentPerm !== 'denied') {
+      setIsToggling(true);
+      try {
         const activeExp =
           userData.jobExperiences?.find(
             (e) => e.id === userData.activeJobExperienceId
           ) ?? userData.jobExperiences?.[0];
+
         const success = await startLocationSharing(db, userData.userId, campCode, {
           displayName: userData.name,
           photoURL: userData.profileImage ?? null,
@@ -462,22 +522,19 @@ export function LocationSharingScreen() {
         isSharingRef.current = true;
         setIsSharingLocation(true);
 
-        // 5단계: 백그라운드 권한이 없으면 "항상 허용" 안내 (공유는 이미 시작됨)
-        if (permLevel === 'whenInUse') {
-          // 살짝 지연 후 표시 — 토글 완료 애니메이션과 겹치지 않게
+        if (currentPerm === 'whenInUse' && Platform.OS === 'android') {
           setTimeout(showBackgroundPermissionGuide, 600);
         }
-      } else {
-        // 공유 중지
-        await stopLocationSharing(db, userData.userId, campCode);
-        setIsSharing(false);
-        isSharingRef.current = false;
-        setMyLocation(null);
-        setIsSharingLocation(false);
+      } finally {
+        setIsToggling(false);
       }
-    } finally {
-      setIsToggling(false);
+      return;
     }
+
+    // 권한이 없는 경우: Google Play 정책에 따라 disclosure 모달을 먼저 표시
+    // isToggling을 true로 설정하여 모달 닫힐 때까지 토글 재클릭 방지
+    setIsToggling(true);
+    setShowDisclosureModal(true);
   };
 
   // 내 위치로 이동
@@ -529,6 +586,13 @@ export function LocationSharingScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
+      {/* Google Play 정책(Prominent Disclosure) 준수: OS 권한 요청 직전 명시적 공개 모달 */}
+      <LocationPermissionDisclosureModal
+        visible={showDisclosureModal}
+        onAccept={handleDisclosureAccept}
+        onDeny={handleDisclosureDeny}
+      />
+
       {/* 헤더 컨트롤 패널 */}
       <View style={styles.controlPanel}>
         <View style={styles.controlLeft}>

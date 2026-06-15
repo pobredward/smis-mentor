@@ -17,7 +17,8 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampCode, CampType } from '@smis-mentor/shared';
-import { stSheetService, requestContactsPermission, saveStudentContacts, deleteStudentContacts, saveSingleParentContact, buildContactDisplayName, buildContactNote, formatTo010, formatToPlus82 } from '../services';
+import { stSheetService, requestContactsPermission, getContactsPermissionStatus, saveStudentContacts, deleteStudentContacts, saveSingleParentContact, buildContactDisplayName, buildContactNote, formatTo010, formatToPlus82 } from '../services';
+import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosureModal';
 import { useAuth } from '../context/AuthContext';
 import { jobCodesService } from '../services';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -60,6 +61,10 @@ export const StudentList: React.FC<StudentListProps> = ({
   const [bulkPreviewStudents, setBulkPreviewStudents] = useState<STSheetStudent[]>([]);
   const [isDeletingContacts, setIsDeletingContacts] = useState(false);
   const [contactDeleteProgress, setContactDeleteProgress] = useState({ done: 0, total: 0 });
+  // Google Play 정책: 연락처 권한 요청 직전 명시적 공개(Prominent Disclosure) 모달
+  const [showContactsDisclosure, setShowContactsDisclosure] = useState(false);
+  // disclosure 이후 실행할 동작 ('save' | 'delete')
+  const pendingContactsActionRef = React.useRef<'save' | 'delete' | null>(null);
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
   const isAdmin = userData?.role === 'admin';
@@ -240,10 +245,16 @@ export const StudentList: React.FC<StudentListProps> = ({
       return;
     }
 
-    const granted = await requestContactsPermission();
-    if (!granted) return;
+    // 이미 권한이 있으면 disclosure 없이 바로 진행
+    const currentStatus = await getContactsPermissionStatus();
+    if (currentStatus === 'granted') {
+      setBulkPreviewStudents(validStudents);
+      return;
+    }
 
-    setBulkPreviewStudents(validStudents);
+    // 권한이 없으면 Google Play 정책에 따라 disclosure 모달을 먼저 표시
+    pendingContactsActionRef.current = 'save';
+    setShowContactsDisclosure(true);
   };
 
   const handleBulkSaveConfirm = async () => {
@@ -290,8 +301,13 @@ export const StudentList: React.FC<StudentListProps> = ({
       return;
     }
 
-    const granted = await requestContactsPermission();
-    if (!granted) return;
+    // 이미 권한이 있으면 disclosure 없이 바로 진행
+    const currentStatus = await getContactsPermissionStatus();
+    if (currentStatus !== 'granted') {
+      pendingContactsActionRef.current = 'delete';
+      setShowContactsDisclosure(true);
+      return;
+    }
 
     const targetLabel = selectedMentor ? `"${selectedMentor}" 그룹` : '전체';
 
@@ -413,6 +429,62 @@ export const StudentList: React.FC<StudentListProps> = ({
       })
     : [];
 
+  // disclosure 동의 후 실제 권한 요청 및 동작 수행
+  const handleContactsDisclosureAccept = async () => {
+    setShowContactsDisclosure(false);
+    const action = pendingContactsActionRef.current;
+    pendingContactsActionRef.current = null;
+
+    const granted = await requestContactsPermission();
+    if (!granted) return;
+
+    if (action === 'save') {
+      const studentsToSave = selectedMentor ? (groupedByMentor[selectedMentor] ?? []) : allStudents;
+      const validStudents = studentsToSave.filter((s) => s.parentPhone);
+      setBulkPreviewStudents(validStudents);
+    } else if (action === 'delete') {
+      const studentsToDelete = selectedMentor ? (groupedByMentor[selectedMentor] ?? []) : allStudents;
+      const validStudents = studentsToDelete.filter((s) => s.parentPhone);
+      const targetLabel = selectedMentor ? `"${selectedMentor}" 그룹` : '전체';
+
+      Alert.alert(
+        '연락처 일괄 삭제',
+        `${targetLabel}의 학생 연락처 ${validStudents.length}명을 기기에서 삭제합니다.\n\n이름이 정확히 일치하는 연락처만 삭제됩니다.\n\n계속하시겠습니까?`,
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: '삭제',
+            style: 'destructive',
+            onPress: async () => {
+              setContactDeleteProgress({ done: 0, total: validStudents.length });
+              setIsDeletingContacts(true);
+              try {
+                const result = await deleteStudentContacts(
+                  validStudents,
+                  (done, total) => setContactDeleteProgress({ done, total }),
+                  campCode ?? undefined,
+                );
+                setIsDeletingContacts(false);
+                const lines = [`삭제: ${result.deleted}명`, `저장 안 됨 (건너뜀): ${result.notFound}명`];
+                if (result.failed > 0) lines.push(`실패: ${result.failed}명`);
+                Alert.alert('삭제 완료', lines.join('\n'));
+              } catch (err) {
+                setIsDeletingContacts(false);
+                logger.error('연락처 삭제 실패:', err);
+                Alert.alert('오류', '연락처 삭제 중 오류가 발생했습니다.');
+              }
+            },
+          },
+        ],
+      );
+    }
+  };
+
+  const handleContactsDisclosureDeny = () => {
+    setShowContactsDisclosure(false);
+    pendingContactsActionRef.current = null;
+  };
+
   if (!activeJobCodeId) {
     return (
       <View style={styles.centerContainer}>
@@ -434,6 +506,13 @@ export const StudentList: React.FC<StudentListProps> = ({
 
   return (
     <View style={styles.container}>
+      {/* Google Play 정책(Prominent Disclosure) 준수: OS 연락처 권한 요청 직전 명시적 공개 모달 */}
+      <ContactsPermissionDisclosureModal
+        visible={showContactsDisclosure}
+        onAccept={handleContactsDisclosureAccept}
+        onDeny={handleContactsDisclosureDeny}
+      />
+
       {/* 헤더 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
