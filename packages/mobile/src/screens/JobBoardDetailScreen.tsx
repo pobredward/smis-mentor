@@ -11,6 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { RecruitmentStackScreenProps } from '../navigation/types';
 import {
   getJobBoardById,
@@ -19,6 +20,7 @@ import {
   JobCodeWithId,
 } from '../services/jobBoardService';
 import { createApplication } from '../services/recruitmentService';
+import { recruitmentQueryKeys } from '../hooks/useRecruitmentDataPrefetch';
 import { HTMLRenderer } from '../components/HTMLRenderer';
 import { JobBoardEditScreen } from './JobBoardEditScreen';
 import { Timestamp } from 'firebase/firestore';
@@ -29,6 +31,7 @@ export function JobBoardDetailScreen({
 }: RecruitmentStackScreenProps<'JobBoardDetail'>) {
   const { jobBoardId } = route.params;
   const { userData } = useAuth();
+  const queryClient = useQueryClient();
   const [jobBoard, setJobBoard] = useState<JobBoardWithId | null>(null);
   const [jobCode, setJobCode] = useState<JobCodeWithId | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -171,6 +174,11 @@ export function JobBoardDetailScreen({
       }
       
       await createApplication(applicationData);
+
+      // 지원 완료 후 지원 현황 캐시를 즉시 무효화하여 탭 전환 시 최신 데이터가 표시되도록 함
+      queryClient.invalidateQueries({
+        queryKey: recruitmentQueryKeys.applications(userData.userId),
+      });
 
       setIsConfirmModalOpen(false);
       Alert.alert(

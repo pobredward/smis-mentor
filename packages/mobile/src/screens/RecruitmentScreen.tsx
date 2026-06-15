@@ -2,9 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
 import { RecruitmentListScreen } from './RecruitmentListScreen';
 import { ApplicationStatusScreen, MentorReviewScreen, RecruitmentInquiryScreen } from './RecruitmentTabs';
 import { RecruitmentStackParamList } from '../navigation/types';
+import { recruitmentQueryKeys } from '../hooks/useRecruitmentDataPrefetch';
 
 type TabName = 'jobBoard' | 'application' | 'review' | 'inquiry';
 
@@ -20,29 +23,31 @@ type RecruitmentRouteProp = RouteProp<RecruitmentStackParamList, 'RecruitmentLis
 
 export function RecruitmentScreen() {
   const [activeTab, setActiveTab] = useState<TabName>('jobBoard');
-  const [refreshKey, setRefreshKey] = useState(0);
   const navigation = useNavigation<RecruitmentNavigationProp>();
   const route = useRoute<RecruitmentRouteProp>();
+  const queryClient = useQueryClient();
+  const { userData } = useAuth();
 
   // 파라미터로 지원 현황 탭 열기가 전달되면 해당 탭으로 이동
+  // (캐시 무효화는 JobBoardDetailScreen에서 이미 처리되므로 여기선 탭 전환만 수행)
   useEffect(() => {
     if (route.params?.openApplicationTab) {
       setActiveTab('application');
-      setRefreshKey(prev => prev + 1);
       
       // 파라미터 초기화 (다음 방문 시 자동으로 열리지 않도록)
       navigation.setParams({ openApplicationTab: undefined });
     }
   }, [route.params?.openApplicationTab, navigation]);
 
-  // 화면이 포커스될 때마다 실행
+  // 지원 현황 탭이 포커스될 때 캐시가 stale이면 자동 리페치되도록 무효화
   useFocusEffect(
     useCallback(() => {
-      // 지원 현황 탭이 활성화되어 있으면 새로고침
-      if (activeTab === 'application') {
-        setRefreshKey(prev => prev + 1);
+      if (activeTab === 'application' && userData?.userId) {
+        queryClient.invalidateQueries({
+          queryKey: recruitmentQueryKeys.applications(userData.userId),
+        });
       }
-    }, [activeTab])
+    }, [activeTab, userData?.userId, queryClient])
   );
 
   return (
@@ -82,7 +87,7 @@ export function RecruitmentScreen() {
           />
         </View>
         <View style={[styles.tabContent, activeTab !== 'application' && styles.hiddenTab]}>
-          <ApplicationStatusScreen key={refreshKey} />
+          <ApplicationStatusScreen />
         </View>
         <View style={[styles.tabContent, activeTab !== 'review' && styles.hiddenTab]}>
           <MentorReviewScreen />
