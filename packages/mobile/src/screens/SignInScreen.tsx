@@ -16,9 +16,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import {
-  signIn,
+  signIn as _signIn,
   resetPassword,
-  getUserByPhone,
+  getUserByPhone as _getUserByPhone,
+  getUserByEmail as _getUserByEmail,
+  getUserBySocialProvider as _getUserBySocialProvider,
+  updateUser as _updateUser,
+  getUserById as _getUserById,
   persistLoginRememberEmail,
   getPersistedLoginRememberEmail,
 } from '../services/authService';
@@ -32,6 +36,23 @@ import {
 } from '@smis-mentor/shared';
 import { getUserByForeignName } from '../services/authService';
 import type { SocialUserData } from '@smis-mentor/shared';
+import type { User as LegacyUser } from '@smis-mentor/shared';
+
+// shared가 기대하는 legacy.User 타입과 mobile.User 간의 타입 호환 래퍼
+const getUserByEmail = _getUserByEmail as (email: string) => Promise<LegacyUser | null>;
+const getUserBySocialProvider = _getUserBySocialProvider as (
+  providerId: string,
+  providerUid: string
+) => Promise<LegacyUser | null>;
+const getUserByPhone = _getUserByPhone as (phone: string) => Promise<LegacyUser | null>;
+const updateUser = _updateUser as (userId: string, data: Partial<LegacyUser>) => Promise<void>;
+const getUserById = _getUserById as (userId: string) => Promise<LegacyUser | null>;
+
+// linkSocialToExistingAccount가 기대하는 Promise<void> 시그니처 래퍼
+const signInVoid = async (email: string, password: string): Promise<void> => {
+  await _signIn(email, password);
+};
+const signIn = _signIn;
 
 interface SignInScreenProps {
   onSignUpPress: () => void;
@@ -182,7 +203,6 @@ export function SignInScreen({
   const handleGoogleSignInSuccess = async (socialUserData: SocialUserData, credential?: any) => {
     try {
       setIsLoading(true); // 로딩 시작
-      const { getUserByEmail, getUserBySocialProvider, updateUser } = await import('../services/authService');
 
       const result = await handleSocialLogin(
         socialUserData, 
@@ -192,17 +212,20 @@ export function SignInScreen({
       );
       
       switch (result.action) {
-        case 'LOGIN':
+        case 'LOGIN': {
+          if (!result.user) {
+            Alert.alert('오류', '로그인 처리 중 사용자 정보를 찾을 수 없습니다.');
+            break;
+          }
           // 기존 active 계정 → credential이 있으면 signInWithCredential, 없으면 Custom Token
           logger.info('✅ Google 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
-            userId: result.user?.userId,
+            userId: result.user.userId,
             hasCredential: !!credential,
           });
 
           try {
             const { auth: firebaseAuth } = await import('../config/firebase');
-            const { persistLoginRememberEmail } = await import('../services/authService');
 
             if (credential) {
               // Google/Apple: credential로 직접 Firebase Auth 로그인 (권장)
@@ -235,8 +258,13 @@ export function SignInScreen({
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
           break;
+        }
         
         case 'LINK_ACTIVE': {
+          if (!result.user) {
+            Alert.alert('오류', '계정 연동 처리 중 사용자 정보를 찾을 수 없습니다.');
+            break;
+          }
           // 기존 active 계정에 Google 연동 필요
           logger.info('🔗 Google 연동 필요');
           const hasPassword = result.user.authProviders?.some(
@@ -295,7 +323,6 @@ export function SignInScreen({
   const handleNaverSignInSuccess = async (socialUserData: SocialUserData) => {
     try {
       setIsLoading(true); // 로딩 시작
-      const { getUserByEmail, getUserBySocialProvider, updateUser } = await import('../services/authService');
 
       const result = await handleSocialLogin(
         socialUserData, 
@@ -305,17 +332,19 @@ export function SignInScreen({
       );
       
       switch (result.action) {
-        case 'LOGIN':
+        case 'LOGIN': {
+          if (!result.user) {
+            Alert.alert('오류', '로그인 처리 중 사용자 정보를 찾을 수 없습니다.');
+            break;
+          }
           // 기존 active 계정 → Firebase Auth로 로그인
           logger.info('✅ 네이버 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
-            userId: result.user?.userId,
+            userId: result.user.userId,
           });
 
           try {
-            const { signInWithCustomToken, persistLoginRememberEmail } = await import(
-              '../services/authService'
-            );
+            const { signInWithCustomToken } = await import('../services/authService');
             await signInWithCustomToken(result.user.userId, result.user.email);
             await persistLoginRememberEmail(result.user.email);
 
@@ -326,8 +355,13 @@ export function SignInScreen({
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
           break;
+        }
         
         case 'LINK_ACTIVE': {
+          if (!result.user) {
+            Alert.alert('오류', '계정 연동 처리 중 사용자 정보를 찾을 수 없습니다.');
+            break;
+          }
           // 기존 active 계정에 네이버 연동 필요
           logger.info('🔗 네이버 연동 필요');
           const hasPassword = result.user.authProviders?.some(
@@ -383,7 +417,6 @@ export function SignInScreen({
   const handleAppleSignInSuccess = async (socialUserData: SocialUserData, credential?: any) => {
     try {
       setIsLoading(true); // 로딩 시작
-      const { getUserByEmail, getUserBySocialProvider, updateUser } = await import('../services/authService');
 
       const result = await handleSocialLogin(
         socialUserData, 
@@ -393,17 +426,20 @@ export function SignInScreen({
       );
       
       switch (result.action) {
-        case 'LOGIN':
+        case 'LOGIN': {
+          if (!result.user) {
+            Alert.alert('오류', '로그인 처리 중 사용자 정보를 찾을 수 없습니다.');
+            break;
+          }
           // 기존 active 계정 → credential이 있으면 signInWithCredential, 없으면 Custom Token
           logger.info('✅ Apple 로그인 성공 - Firebase Auth 로그인 시작:', {
             email: socialUserData.email,
-            userId: result.user?.userId,
+            userId: result.user.userId,
             hasCredential: !!credential,
           });
 
           try {
             const { auth: firebaseAuth } = await import('../config/firebase');
-            const { persistLoginRememberEmail } = await import('../services/authService');
 
             if (credential) {
               // Apple: credential로 직접 Firebase Auth 로그인 (권장)
@@ -433,8 +469,13 @@ export function SignInScreen({
             Alert.alert('오류', 'Firebase 인증에 실패했습니다.');
           }
           break;
+        }
         
         case 'LINK_ACTIVE': {
+          if (!result.user) {
+            Alert.alert('오류', '계정 연동 처리 중 사용자 정보를 찾을 수 없습니다.');
+            break;
+          }
           // 기존 active 계정에 Apple 연동 필요
           logger.info('🔗 Apple 연동 필요');
           const hasPassword = result.user.authProviders?.some(
@@ -641,7 +682,7 @@ export function SignInScreen({
       const result = await checkTempAccountByPhone(
         data.phone,
         socialData,
-        getUserByPhone,
+        getUserByPhone as (phone: string) => Promise<import('@smis-mentor/shared').User | null>,
         getUserJobCodesInfo
       );
       
@@ -793,7 +834,6 @@ export function SignInScreen({
     setIsLoading(true);
     try {
       const { auth } = await import('../config/firebase');
-      const { getUserByEmail, getUserById, updateUser } = await import('../services/authService');
       const { arrayUnion } = await import('firebase/firestore'); // ✅ arrayUnion import
       
       await linkSocialToExistingAccount(
@@ -801,7 +841,7 @@ export function SignInScreen({
         existingUserEmail,
         password,
         socialData,
-        signIn,
+        signInVoid,
         getUserByEmail,
         getUserById,
         updateUser,

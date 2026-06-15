@@ -103,6 +103,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [uploadingDoc, setUploadingDoc] = useState<'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert' | null>(null);
   const [deletingDoc, setDeletingDoc] = useState<'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert' | null>(null);
 
+  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+
   useEffect(() => {
     if (userData) {
       loadJobCodes();
@@ -1339,8 +1341,6 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
   // 로그인된 상태
   if (isAuthenticated && userData) {
-    const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
-
     // 상태 및 역할 표시 헬퍼 함수들
     const getRoleColor = (role: string) => {
       switch (role) {
