@@ -1555,37 +1555,63 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.deactivateModalContent}>
-              <View style={styles.deactivateModalHeader}>
-                <Ionicons name="warning" size={48} color="#ef4444" />
-                <Text style={styles.deactivateModalTitle}>
-                  {isForeign ? 'Confirm Account Deletion' : '회원 탈퇴 확인'}
-                </Text>
-                <Text style={styles.deactivateModalMessage}>
-                  {isForeign 
-                    ? 'Are you sure you want to delete your account? After deletion, you will not be able to log in with the same email, and all account information will be deactivated.'
-                    : '정말로 회원 탈퇴를 진행하시겠습니까?\n\n탈퇴 후에는 동일한 이메일로 다시 로그인할 수 없으며, 모든 계정 정보가 비활성화됩니다.'
-                  }
-                </Text>
-              </View>
-              
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                contentContainerStyle={styles.deactivateModalScroll}
+              >
+                <View style={styles.deactivateModalHeader}>
+                  <Ionicons name="warning" size={48} color="#ef4444" />
+                  <Text style={styles.deactivateModalTitle}>
+                    {isForeign ? 'Confirm Account Deletion' : '회원 탈퇴 확인'}
+                  </Text>
+                  <Text style={styles.deactivateModalMessage}>
+                    {isForeign
+                      ? 'All account data (including location data) will be deactivated and you will not be able to log in with the same email.'
+                      : '모든 계정 정보(위치 데이터 포함)가 비활성화되며, 동일한 이메일로 다시 로그인할 수 없습니다.'}
+                  </Text>
+                </View>
+
+                {/* 앱 권한 잔존 안내 — Google Play 명시적 공개 정책 준수 */}
+                <View style={styles.deactivatePermissionBox}>
+                  <View style={styles.deactivatePermissionHeader}>
+                    <Ionicons name="shield-outline" size={16} color="#b45309" />
+                    <Text style={styles.deactivatePermissionTitle}>
+                      {isForeign ? 'App Permissions Remain on Device' : '앱 권한은 기기에 남습니다'}
+                    </Text>
+                  </View>
+                  <Text style={styles.deactivatePermissionBody}>
+                    {isForeign
+                      ? 'Deleting your account does NOT automatically revoke app permissions (background location, contacts, notifications). Please revoke them manually:\n\nDevice Settings → Apps → SMIS Mentor → Permissions\n\nOr simply uninstall the app.'
+                      : '회원 탈퇴 시 앱에 부여된 권한(백그라운드 위치, 연락처, 알림)이 자동으로 철회되지 않습니다. 아래 방법으로 직접 철회해 주세요.\n\n기기 설정 → 앱 → SMIS Mentor → 권한\n\n또는 앱을 삭제하면 모든 권한이 함께 제거됩니다.'}
+                  </Text>
+                </View>
+              </ScrollView>
+
               <View style={styles.deactivateModalButtons}>
                 <TouchableOpacity
                   style={styles.deactivateModalCancelButton}
                   onPress={() => setShowDeactivateModal(false)}
                   disabled={isDeactivating}
+                  accessible
+                  accessibilityLabel={isForeign ? 'Cancel' : '취소'}
+                  accessibilityRole="button"
                 >
                   <Text style={styles.deactivateModalCancelText}>
                     {isForeign ? 'Cancel' : '취소'}
                   </Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={[
                     styles.deactivateModalConfirmButton,
-                    isDeactivating && styles.deactivateModalConfirmButtonDisabled
+                    isDeactivating && styles.deactivateModalConfirmButtonDisabled,
                   ]}
                   onPress={handleDeactivateAccount}
                   disabled={isDeactivating}
+                  accessible
+                  accessibilityLabel={isForeign ? 'Delete Account' : '탈퇴하기'}
+                  accessibilityRole="button"
                 >
                   {isDeactivating ? (
                     <ActivityIndicator size="small" color="#ffffff" />
@@ -3120,9 +3146,9 @@ const styles = StyleSheet.create({
   deactivateModalContent: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 24,
     width: '90%',
     maxWidth: 400,
+    maxHeight: '80%',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -3131,10 +3157,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 10,
+    overflow: 'hidden',
+  },
+  deactivateModalScroll: {
+    padding: 24,
+    paddingBottom: 8,
   },
   deactivateModalHeader: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   deactivateModalTitle: {
     fontSize: 20,
@@ -3150,9 +3181,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  // 앱 권한 잔존 안내 박스 (Google Play 명시적 공개 정책)
+  deactivatePermissionBox: {
+    backgroundColor: '#fffbeb',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    marginBottom: 8,
+  },
+  deactivatePermissionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  deactivatePermissionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400e',
+    flex: 1,
+  },
+  deactivatePermissionBody: {
+    fontSize: 13,
+    color: '#78350f',
+    lineHeight: 20,
+  },
   deactivateModalButtons: {
     flexDirection: 'row',
     gap: 12,
+    padding: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
   },
   deactivateModalCancelButton: {
     flex: 1,
