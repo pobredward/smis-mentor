@@ -540,10 +540,15 @@ export function ProfileEditScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
     >
-      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 44 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         {/* 헤더 */}
         <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -1068,7 +1073,7 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
   // 콘텐츠 래퍼
-  content: { padding: 12, paddingBottom: 32, gap: 10 },
+  content: { padding: 12, paddingBottom: 0, gap: 10 },
 
   // 섹션 카드
   section: {
@@ -1210,7 +1215,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff7ed', borderRadius: 8,
     borderWidth: 1, borderColor: '#fed7aa', padding: 12,
   },
-  jobItemLast: { marginBottom: 14 },
+  jobItemLast: { marginBottom: 16 },
   removeJobBtn: {
     position: 'absolute', top: 8, right: 8,
     width: 22, height: 22, borderRadius: 11,
