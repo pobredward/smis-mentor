@@ -5,6 +5,44 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 
+/**
+ * AppCheckCore(Firebase)가 Swift pod이므로 GoogleUtilities와 RecaptchaInterop에
+ * modular_headers를 활성화해야 static library로 통합 가능
+ * EAS pod install 시 "cannot yet be integrated as static libraries" 오류 방지
+ */
+const withIosModularHeaders: ConfigPlugin = (cfg) =>
+  withDangerousMod(cfg, [
+    'ios',
+    async (c) => {
+      const podfilePath = path.join(c.modRequest.platformProjectRoot, 'Podfile');
+      if (!fs.existsSync(podfilePath)) return c;
+
+      let contents = fs.readFileSync(podfilePath, 'utf8');
+      const MARKER = '# smis-modular-headers';
+      if (contents.includes(MARKER)) return c;
+
+      // target 블록 시작 직전에 개별 pod modular_headers 설정 삽입
+      const snippet = `
+${MARKER}
+pod 'GoogleUtilities', :modular_headers => true
+pod 'RecaptchaInterop', :modular_headers => true
+`;
+
+      // Podfile의 target 블록 앞에 삽입
+      const targetMatch = contents.match(/^target ['"]SMISMentor['"]/m);
+      if (targetMatch && targetMatch.index !== undefined) {
+        const insertAt = targetMatch.index;
+        contents = contents.slice(0, insertAt) + snippet + '\n' + contents.slice(insertAt);
+      } else {
+        // fallback: 파일 끝에 추가
+        contents += snippet;
+      }
+
+      fs.writeFileSync(podfilePath, contents, 'utf8');
+      return c;
+    },
+  ]);
+
 // .env 파일 로드
 dotenv.config();
 
@@ -227,5 +265,5 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   };
 
   // ConfigPlugin을 직접 적용하여 타입 오류 해결
-  return withNaverLoginProguard(withReactNativePickerMonorepo(baseConfig));
+  return withNaverLoginProguard(withReactNativePickerMonorepo(withIosModularHeaders(baseConfig)));
 };
