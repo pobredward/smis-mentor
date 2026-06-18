@@ -21,7 +21,8 @@ import { useAuth } from '../context/AuthContext';
 export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig'>) {
   const { user } = useAuth();
   const [loadingQuotes, setLoadingQuotes] = useState<string[]>([]);
-  const [minVersion, setMinVersion] = useState('');
+  const [iosMinVersion, setIosMinVersion] = useState('');
+  const [androidMinVersion, setAndroidMinVersion] = useState('');
   const [iosStoreUrl, setIosStoreUrl] = useState('');
   const [androidStoreUrl, setAndroidStoreUrl] = useState('');
   const [loading, setLoading] = useState(true);
@@ -43,7 +44,9 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
         setLoadingQuotes(DEFAULT_LOADING_QUOTES);
       }
 
-      setMinVersion(config?.minVersion ?? '');
+      // 플랫폼별 버전 우선, 없으면 공통 minVersion으로 초기값 설정 (마이그레이션 대응)
+      setIosMinVersion(config?.iosMinVersion ?? config?.minVersion ?? '');
+      setAndroidMinVersion(config?.androidMinVersion ?? config?.minVersion ?? '');
       setIosStoreUrl(config?.iosStoreUrl ?? '');
       setAndroidStoreUrl(config?.androidStoreUrl ?? '');
       
@@ -109,9 +112,15 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
       return;
     }
     
-    const trimmedMinVersion = minVersion.trim();
-    if (trimmedMinVersion && !/^\d+\.\d+\.\d+$/.test(trimmedMinVersion)) {
-      Alert.alert('알림', '최소 버전은 1.0.0 형식으로 입력해주세요.');
+    const trimmedIosMinVersion = iosMinVersion.trim();
+    const trimmedAndroidMinVersion = androidMinVersion.trim();
+
+    if (trimmedIosMinVersion && !/^\d+\.\d+\.\d+$/.test(trimmedIosMinVersion)) {
+      Alert.alert('알림', 'iOS 최소 버전은 1.0.0 형식으로 입력해주세요.');
+      return;
+    }
+    if (trimmedAndroidMinVersion && !/^\d+\.\d+\.\d+$/.test(trimmedAndroidMinVersion)) {
+      Alert.alert('알림', 'Android 최소 버전은 1.0.0 형식으로 입력해주세요.');
       return;
     }
 
@@ -121,7 +130,8 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
         db,
         {
           loadingQuotes,
-          minVersion: trimmedMinVersion || undefined,
+          iosMinVersion: trimmedIosMinVersion || undefined,
+          androidMinVersion: trimmedAndroidMinVersion || undefined,
           iosStoreUrl: iosStoreUrl.trim() || undefined,
           androidStoreUrl: androidStoreUrl.trim() || undefined,
         },
@@ -266,45 +276,71 @@ export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig
               <Text style={styles.sectionTitle}>강제 업데이트 설정</Text>
             </View>
             <Text style={styles.sectionDescription}>
-              이 버전 미만의 앱에서는 스토어 업데이트 화면이 표시됩니다.{'\n'}
+              최소 버전 미만의 앱에서는 스토어 업데이트 화면이 표시됩니다.{'\n'}
               비워두면 강제 업데이트를 사용하지 않습니다.
             </Text>
 
-            <Text style={styles.fieldLabel}>최소 허용 버전 (예: 1.0.0)</Text>
-            <TextInput
-              style={styles.input}
-              value={minVersion}
-              onChangeText={setMinVersion}
-              placeholder="예: 1.0.0"
-              placeholderTextColor="#9ca3af"
-              editable={!saving}
-              keyboardType="default"
-              autoCapitalize="none"
-            />
+            {/* iOS 설정 */}
+            <View style={styles.platformSection}>
+              <View style={styles.platformHeader}>
+                <Ionicons name="logo-apple" size={16} color="#374151" />
+                <Text style={styles.platformTitle}>iOS</Text>
+              </View>
+              <Text style={styles.fieldLabel}>최소 허용 버전 (예: 1.0.0)</Text>
+              <TextInput
+                style={styles.input}
+                value={iosMinVersion}
+                onChangeText={setIosMinVersion}
+                placeholder="예: 1.0.0"
+                placeholderTextColor="#9ca3af"
+                editable={!saving}
+                keyboardType="default"
+                autoCapitalize="none"
+              />
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>App Store URL</Text>
+              <TextInput
+                style={styles.input}
+                value={iosStoreUrl}
+                onChangeText={setIosStoreUrl}
+                placeholder="https://apps.apple.com/kr/app/..."
+                placeholderTextColor="#9ca3af"
+                editable={!saving}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+            </View>
 
-            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>iOS App Store URL</Text>
-            <TextInput
-              style={styles.input}
-              value={iosStoreUrl}
-              onChangeText={setIosStoreUrl}
-              placeholder="https://apps.apple.com/kr/app/..."
-              placeholderTextColor="#9ca3af"
-              editable={!saving}
-              autoCapitalize="none"
-              keyboardType="url"
-            />
+            <View style={styles.divider} />
 
-            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Android Google Play URL</Text>
-            <TextInput
-              style={styles.input}
-              value={androidStoreUrl}
-              onChangeText={setAndroidStoreUrl}
-              placeholder="https://play.google.com/store/apps/details?id=..."
-              placeholderTextColor="#9ca3af"
-              editable={!saving}
-              autoCapitalize="none"
-              keyboardType="url"
-            />
+            {/* Android 설정 */}
+            <View style={styles.platformSection}>
+              <View style={styles.platformHeader}>
+                <Ionicons name="logo-android" size={16} color="#374151" />
+                <Text style={styles.platformTitle}>Android</Text>
+              </View>
+              <Text style={styles.fieldLabel}>최소 허용 버전 (예: 1.0.0)</Text>
+              <TextInput
+                style={styles.input}
+                value={androidMinVersion}
+                onChangeText={setAndroidMinVersion}
+                placeholder="예: 1.0.0"
+                placeholderTextColor="#9ca3af"
+                editable={!saving}
+                keyboardType="default"
+                autoCapitalize="none"
+              />
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Google Play URL</Text>
+              <TextInput
+                style={styles.input}
+                value={androidStoreUrl}
+                onChangeText={setAndroidStoreUrl}
+                placeholder="https://play.google.com/store/apps/details?id=..."
+                placeholderTextColor="#9ca3af"
+                editable={!saving}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+            </View>
           </View>
 
           {/* 안내 */}
@@ -534,5 +570,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1e40af',
     lineHeight: 20,
+  },
+  platformSection: {
+    marginTop: 4,
+  },
+  platformHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  platformTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#f3f4f6',
+    marginVertical: 16,
   },
 });

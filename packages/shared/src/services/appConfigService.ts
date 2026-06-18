@@ -27,6 +27,8 @@ export async function getAppConfig(db: any): Promise<AppConfig | null> {
       mentorHomeMessage: data.mentorHomeMessage || '',
       foreignHomeMessage: data.foreignHomeMessage || '',
       minVersion: data.minVersion || undefined,
+      iosMinVersion: data.iosMinVersion || undefined,
+      androidMinVersion: data.androidMinVersion || undefined,
       iosStoreUrl: data.iosStoreUrl || undefined,
       androidStoreUrl: data.androidStoreUrl || undefined,
       updatedAt: data.updatedAt?.toDate() || new Date(),
@@ -65,6 +67,14 @@ export async function updateAppConfig(
 
     if (input.minVersion !== undefined) {
       updateData.minVersion = input.minVersion;
+    }
+
+    if (input.iosMinVersion !== undefined) {
+      updateData.iosMinVersion = input.iosMinVersion;
+    }
+
+    if (input.androidMinVersion !== undefined) {
+      updateData.androidMinVersion = input.androidMinVersion;
     }
 
     if (input.iosStoreUrl !== undefined) {
@@ -163,13 +173,17 @@ const DEFAULT_ANDROID_STORE_URL =
   'https://play.google.com/store/apps/details?id=com.smis.smismentor';
 
 /**
- * 현재 앱 버전과 Firestore minVersion을 비교하여 강제 업데이트 여부를 반환
+ * 현재 앱 버전과 Firestore 최소 버전을 비교하여 강제 업데이트 여부를 반환.
+ * iOS/Android 플랫폼별로 별도 최소 버전을 적용하며,
+ * 플랫폼별 버전이 없으면 공통 minVersion(deprecated)으로 폴백합니다.
  * @param db Firestore 인스턴스
  * @param currentVersion 현재 앱 버전 (예: "1.0.0")
+ * @param platform 플랫폼 ('ios' | 'android')
  */
 export async function checkForceUpdate(
   db: any,
   currentVersion: string,
+  platform: 'ios' | 'android' = 'ios',
 ): Promise<VersionCheckResult> {
   try {
     const config = await getAppConfig(db);
@@ -177,11 +191,17 @@ export async function checkForceUpdate(
     const iosStoreUrl = config?.iosStoreUrl || DEFAULT_IOS_STORE_URL;
     const androidStoreUrl = config?.androidStoreUrl || DEFAULT_ANDROID_STORE_URL;
 
-    if (!config?.minVersion) {
+    // 플랫폼별 최소 버전 우선, 없으면 공통 minVersion으로 폴백
+    const platformMinVersion =
+      platform === 'ios'
+        ? (config?.iosMinVersion || config?.minVersion)
+        : (config?.androidMinVersion || config?.minVersion);
+
+    if (!platformMinVersion) {
       return { needsUpdate: false, iosStoreUrl, androidStoreUrl };
     }
 
-    const needsUpdate = compareVersions(currentVersion, config.minVersion) < 0;
+    const needsUpdate = compareVersions(currentVersion, platformMinVersion) < 0;
     return { needsUpdate, iosStoreUrl, androidStoreUrl };
   } catch (error) {
     // 네트워크 오류 등으로 체크 실패 시 업데이트 강제하지 않음

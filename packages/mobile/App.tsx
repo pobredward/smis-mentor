@@ -17,6 +17,7 @@ import { ForceUpdateModal } from './src/components/ForceUpdateModal';
 import { useAuth } from './src/context/AuthContext';
 import { useCampDataPrefetch } from './src/hooks/useCampDataPrefetch';
 import { useRecruitmentDataPrefetch } from './src/hooks/useRecruitmentDataPrefetch';
+import { Platform } from 'react-native';
 import { logger, checkForceUpdate } from '@smis-mentor/shared';
 import { db } from './src/config/firebase';
 
@@ -174,7 +175,8 @@ function App() {
     const runVersionCheck = async () => {
       try {
         const currentVersion = Constants.expoConfig?.version ?? '0.0.0';
-        const result = await checkForceUpdate(db, currentVersion);
+        const platform = Platform.OS === 'android' ? 'android' : 'ios';
+        const result = await checkForceUpdate(db, currentVersion, platform);
 
         if (result.needsUpdate) {
           logger.info(`🔄 강제 업데이트 필요: 현재 ${currentVersion} → 스토어 이동`);

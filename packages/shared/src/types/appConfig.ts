@@ -15,8 +15,17 @@ export interface AppConfig {
   /** 외국인 홈 화면에 표시할 문구 */
   foreignHomeMessage?: string;
 
-  /** 강제 업데이트 최소 버전 (이 버전 미만이면 스토어로 이동) */
+  /**
+   * @deprecated iosMinVersion / androidMinVersion 필드를 사용하세요.
+   * 하위 호환성을 위해 유지합니다.
+   */
   minVersion?: string;
+
+  /** iOS 강제 업데이트 최소 버전 (이 버전 미만이면 App Store로 이동) */
+  iosMinVersion?: string;
+
+  /** Android 강제 업데이트 최소 버전 (이 버전 미만이면 Google Play로 이동) */
+  androidMinVersion?: string;
 
   /** iOS App Store URL */
   iosStoreUrl?: string;
@@ -36,7 +45,10 @@ export interface AppConfigUpdateInput {
   loadingQuotes: string[];
   mentorHomeMessage?: string;
   foreignHomeMessage?: string;
+  /** @deprecated iosMinVersion / androidMinVersion을 사용하세요. */
   minVersion?: string;
+  iosMinVersion?: string;
+  androidMinVersion?: string;
   iosStoreUrl?: string;
   androidStoreUrl?: string;
 }
