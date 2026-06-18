@@ -39,24 +39,25 @@ let bgContext: {
   };
 } | null = null;
 
-// 앱 시작(또는 headless 재실행) 시 AsyncStorage에서 bgContext 복원.
-// App.tsx의 `import './src/services/locationSharingService'`가 최초 실행 시
-// 이 모듈을 로드하므로, kill 후 백그라운드 태스크가 깨어날 때도 이 코드가 실행됩니다.
-AsyncStorage.getItem(BG_CONTEXT_STORAGE_KEY)
-  .then((raw) => {
-    if (raw) {
-      bgContext = JSON.parse(raw);
-    }
-  })
-  .catch(() => {});
-
 // 백그라운드 위치 태스크 등록 (앱 최상위에서 한 번만 실행됨)
 TaskManager.defineTask(BG_LOCATION_TASK, async ({ data, error }) => {
   if (error) {
     logger.error('[BgLocation] 태스크 오류:', error.message);
     return;
   }
-  if (!data || !bgContext) return;
+  if (!data) return;
+
+  // bgContext가 메모리에 없으면 AsyncStorage에서 직접 복원.
+  // 모듈 레벨 복원(비동기)이 완료되기 전에 태스크가 실행되는 race condition 방어.
+  if (!bgContext) {
+    try {
+      const raw = await AsyncStorage.getItem(BG_CONTEXT_STORAGE_KEY);
+      if (raw) bgContext = JSON.parse(raw);
+    } catch {
+      // 복원 실패 시 그냥 종료
+    }
+  }
+  if (!bgContext) return;
 
   const { locations } = data as { locations: Location.LocationObject[] };
   const latest = locations[locations.length - 1];
