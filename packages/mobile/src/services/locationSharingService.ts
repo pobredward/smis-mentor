@@ -199,10 +199,12 @@ const startBackgroundLocationUpdates = async (
       // iOS: 백그라운드 앱 새로고침 허용 알림 표시
       showsBackgroundLocationIndicator: true,
       // Android: foreground service 알림 (백그라운드 위치 권한 필요)
+      // killServiceOnDestroy: false → 앱 kill 후에도 서비스·알림 유지, 위치 갱신 지속
       foregroundService: {
         notificationTitle: 'SMIS Mentor',
         notificationBody: '위치 공유 중',
         notificationColor: '#3b82f6',
+        killServiceOnDestroy: false,
       },
     });
   } catch (e) {
