@@ -16,6 +16,7 @@ import {
   Pressable,
   Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { Image } from 'expo-image';
@@ -39,6 +40,10 @@ import {
 import { LocationPermissionDisclosureModal } from '../components/LocationPermissionDisclosureModal';
 import type { Unsubscribe } from 'firebase/firestore';
 import type { UserRole } from '@smis-mentor/shared';
+
+// Google Play 정책: 사용자가 위치 수집 disclosure에 동의했음을 기록하는 키
+// 앱 설치 후 최초 1회 동의 기록. 재설치 시 다시 동의 필요.
+const LOCATION_DISCLOSURE_CONSENT_KEY = 'location_disclosure_consent_v1';
 
 // 역할별 마커 색상
 const getRoleColor = (role: UserRole | string): string => {
@@ -197,6 +202,10 @@ export function LocationSharingScreen() {
   const [sheetVisible, setSheetVisible] = useState(false);
   // Google Play 정책: OS 권한 요청 직전 명시적 공개(Prominent Disclosure) 모달
   const [showDisclosureModal, setShowDisclosureModal] = useState(false);
+  // disclosure 모달 표시 시점의 권한 상태 (모달 텍스트 분기용)
+  const [disclosureHasPermission, setDisclosureHasPermission] = useState(false);
+  // 위치 데이터 수집 안내 배너 접힘 여부 (초기값 false — 첫 진입 시 항상 펼쳐진 상태)
+  const [bannerCollapsed, setBannerCollapsed] = useState(false);
 
   // 바텀시트 애니메이션
   const sheetY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
@@ -207,6 +216,13 @@ export function LocationSharingScreen() {
   const hasInitialFitRef = useRef(false); // 최초 1회 지도 범위 조정 완료 여부
   // 앱 재시작 후 Firestore isSharing 상태로 자동 복구 시도했는지 여부
   const hasAutoResumedRef = useRef(false);
+
+  // 배너 접힘 상태 복원 (AsyncStorage)
+  useEffect(() => {
+    AsyncStorage.getItem('location_disclosure_banner_collapsed')
+      .then((value) => { if (value === 'true') setBannerCollapsed(true); })
+      .catch(() => {});
+  }, []);
 
   // 활성 캠프코드 로드
   useEffect(() => {
@@ -278,31 +294,49 @@ export function LocationSharingScreen() {
 
         // 앱 재시작 후 Firestore에 isSharing=true가 남아있으면 자동으로 GPS 감시 재개
         // hasAutoResumedRef로 1회만 시도 (무한 루프 방지)
+        // Google Play 정책: AsyncStorage 동의 기록이 없는 경우(최초 설치 후 미동의)
+        //   자동 복구 차단 → Firestore isSharing 초기화 → 사용자가 토글로 재동의 필요
         if (!hasAutoResumedRef.current && me?.isSharing && userData) {
           hasAutoResumedRef.current = true;
-          const activeExp =
-            userData.jobExperiences?.find(
-              (e) => e.id === userData.activeJobExperienceId
-            ) ?? userData.jobExperiences?.[0];
-          startLocationSharing(db, userData.userId, campCode, {
-            displayName: userData.name,
-            photoURL: userData.profileImage ?? null,
-            role: userData.role,
-            group: activeExp?.group ?? null,
-            groupRole: activeExp?.groupRole ?? null,
-            classCode: activeExp?.classCode ?? null,
-          }).then((success) => {
-            if (success) {
-              setIsSharing(true);
-              isSharingRef.current = true;
-              setIsSharingLocation(true);
-            } else {
-              // GPS 재개 실패 시 Firestore isSharing 초기화 (고스트 상태 방지)
-              stopLocationSharing(db, userData.userId, campCode).catch(() => {});
+          const capturedUserData = userData;
+
+          void (async () => {
+            // 동의 기록 확인 (null이면 아직 AsyncStorage를 읽지 못한 상태)
+            const consentValue = await AsyncStorage.getItem(LOCATION_DISCLOSURE_CONSENT_KEY).catch(() => null);
+            const hasConsent = consentValue === 'true';
+
+            if (!hasConsent) {
+              // 동의 기록 없음: 자동 복구 차단, Firestore 상태 초기화
+              stopLocationSharing(db, capturedUserData.userId, campCode).catch(() => {});
               setIsSharing(false);
               isSharingRef.current = false;
+              setIsSharingLocation(false);
+            } else {
+              const activeExp =
+                capturedUserData.jobExperiences?.find(
+                  (e) => e.id === capturedUserData.activeJobExperienceId
+                ) ?? capturedUserData.jobExperiences?.[0];
+              startLocationSharing(db, capturedUserData.userId, campCode, {
+                displayName: capturedUserData.name,
+                photoURL: capturedUserData.profileImage ?? null,
+                role: capturedUserData.role,
+                group: activeExp?.group ?? null,
+                groupRole: activeExp?.groupRole ?? null,
+                classCode: activeExp?.classCode ?? null,
+              }).then((success) => {
+                if (success) {
+                  setIsSharing(true);
+                  isSharingRef.current = true;
+                  setIsSharingLocation(true);
+                } else {
+                  // GPS 재개 실패 시 Firestore isSharing 초기화 (고스트 상태 방지)
+                  stopLocationSharing(db, capturedUserData.userId, campCode).catch(() => {});
+                  setIsSharing(false);
+                  isSharingRef.current = false;
+                }
+              }).catch(() => {});
             }
-          }).catch(() => {});
+          })();
         }
 
         // 처음 데이터를 받았을 때만 1회 지도 범위 조정
@@ -421,31 +455,38 @@ export function LocationSharingScreen() {
 
   // disclosure 모달에서 동의 후 실제 권한 요청 및 공유 시작
   // Google Play 정책 준수:
-  // - disclosure 모달은 포그라운드 권한 다이얼로그 직전에 표시됨 (이미 충족)
+  // - disclosure 모달은 항상 수집 시작 직전에 표시됨 (권한 유무 무관)
+  // - 동의 시 AsyncStorage에 기록 저장 (재설치 전까지 유지)
   // - 백그라운드 권한은 포그라운드 허용 후 별도 안내(LocationSettingsScreen)로 유도
-  //   → 이 화면에서 바로 백그라운드 OS 다이얼로그를 연속 호출하지 않음
   const handleDisclosureAccept = useCallback(async () => {
     setShowDisclosureModal(false);
 
     if (!userData || !campCode) return;
 
+    // Google Play 정책: 동의 기록 저장
+    await AsyncStorage.setItem(LOCATION_DISCLOSURE_CONSENT_KEY, 'true').catch(() => {});
+
     setIsToggling(true);
     try {
-      // 포그라운드 권한만 요청 (백그라운드는 별도 disclosure 경로인 LocationSettingsScreen에서 처리)
-      const fgResult = await requestForegroundLocationPermission();
+      const currentPerm = await getLocationPermissionStatus();
 
-      if (fgResult === 'denied') {
-        Alert.alert(
-          isForeign ? 'Location Permission Required' : '위치 권한 필요',
-          isForeign
-            ? 'Location access is required to use location sharing. Please allow it in your device settings.'
-            : '위치 공유를 사용하려면 설정에서 위치 권한을 허용해야 합니다.',
-          [
-            { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
-            { text: isForeign ? 'Open Settings' : '설정 열기', onPress: () => Linking.openSettings() },
-          ]
-        );
-        return;
+      if (currentPerm === 'denied') {
+        // 권한이 없는 경우: 포그라운드 권한 요청
+        const fgResult = await requestForegroundLocationPermission();
+
+        if (fgResult === 'denied') {
+          Alert.alert(
+            isForeign ? 'Location Permission Required' : '위치 권한 필요',
+            isForeign
+              ? 'Location access is required to use location sharing. Please allow it in your device settings.'
+              : '위치 공유를 사용하려면 설정에서 위치 권한을 허용해야 합니다.',
+            [
+              { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+              { text: isForeign ? 'Open Settings' : '설정 열기', onPress: () => Linking.openSettings() },
+            ]
+          );
+          return;
+        }
       }
 
       const activeExp =
@@ -476,7 +517,8 @@ export function LocationSharingScreen() {
       setIsSharingLocation(true);
 
       // 포그라운드 권한만 있는 경우 → LocationSettingsScreen에서 백그라운드 권한을 추가 허용하도록 안내
-      if (Platform.OS === 'android') {
+      const newPerm = await getLocationPermissionStatus();
+      if (newPerm === 'whenInUse' && Platform.OS === 'android') {
         setTimeout(showBackgroundPermissionGuide, 600);
       }
     } finally {
@@ -508,50 +550,12 @@ export function LocationSharingScreen() {
       return;
     }
 
-    // 이미 권한이 있는 경우: disclosure 없이 바로 공유 시작
+    // Google Play 정책(Prominent Disclosure & Consent):
+    // 권한 유무와 무관하게 항상 disclosure 모달을 먼저 표시합니다.
+    // - 이미 동의 기록이 있어도 매번 표시: 정책은 "수집 직전" disclosure를 요구하며
+    //   백그라운드 수집 특성상 사용자가 수집 사실을 인지하고 확인해야 합니다.
     const currentPerm = await getLocationPermissionStatus();
-    if (currentPerm !== 'denied') {
-      setIsToggling(true);
-      try {
-        const activeExp =
-          userData.jobExperiences?.find(
-            (e) => e.id === userData.activeJobExperienceId
-          ) ?? userData.jobExperiences?.[0];
-
-        const success = await startLocationSharing(db, userData.userId, campCode, {
-          displayName: userData.name,
-          photoURL: userData.profileImage ?? null,
-          role: userData.role,
-          group: activeExp?.group ?? null,
-          groupRole: activeExp?.groupRole ?? null,
-          classCode: activeExp?.classCode ?? null,
-        });
-
-        if (!success) {
-          Alert.alert(
-            isForeign ? 'Failed to Start Sharing' : '위치 공유 시작 실패',
-            isForeign ? 'Please try again.' : '잠시 후 다시 시도해 주세요.',
-            [{ text: isForeign ? 'OK' : '확인' }]
-          );
-          return;
-        }
-
-        setIsSharing(true);
-        isSharingRef.current = true;
-        setIsSharingLocation(true);
-
-        // 백그라운드 권한 없으면 LocationSettingsScreen으로 유도
-        if (currentPerm === 'whenInUse' && Platform.OS === 'android') {
-          setTimeout(showBackgroundPermissionGuide, 600);
-        }
-      } finally {
-        setIsToggling(false);
-      }
-      return;
-    }
-
-    // 권한이 없는 경우: Google Play 정책에 따라 disclosure 모달을 먼저 표시
-    // isToggling을 true로 설정하여 모달 닫힐 때까지 토글 재클릭 방지
+    setDisclosureHasPermission(currentPerm !== 'denied');
     setIsToggling(true);
     setShowDisclosureModal(true);
   };
@@ -605,26 +609,73 @@ export function LocationSharingScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
-      {/* Google Play 정책(Prominent Disclosure) 준수: OS 권한 요청 직전 명시적 공개 모달 */}
+      {/* Google Play 정책(Prominent Disclosure) 준수: 위치 수집 시작 직전 명시적 공개 모달 */}
       <LocationPermissionDisclosureModal
         visible={showDisclosureModal}
         onAccept={handleDisclosureAccept}
         onDeny={handleDisclosureDeny}
         isForeign={isForeign}
+        hasPermission={disclosureHasPermission}
       />
 
-      {/* 헤더 컨트롤 패널 */}
-      <View style={styles.controlPanel}>
-        <View style={styles.controlLeft}>
-          <Text style={styles.controlTitle}>내 위치 공유</Text>
-          <Text style={styles.controlSubtitle}>
-            {isSharing
-              ? `공유 중 · ${sharingCount}명 참여`
-              : sharingCount > 0
-              ? `${sharingCount}명이 공유 중`
-              : '아무도 공유하지 않음'}
+      {/* Google Play 정책(Prominent Disclosure) 준수:
+          위치 데이터 수집 안내 배너 — 메뉴 탐색 없이 일반 사용 흐름 중 항상 표시.
+          헤더(타이틀)는 항상 노출, 본문은 사용자가 접기/펼치기 가능.
+          첫 진입 시에는 반드시 펼쳐진 상태로 표시됩니다. */}
+      <TouchableOpacity
+        style={styles.inlineDisclosureBanner}
+        onPress={() => {
+          const next = !bannerCollapsed;
+          setBannerCollapsed(next);
+          AsyncStorage.setItem('location_disclosure_banner_collapsed', next ? 'true' : 'false').catch(() => {});
+        }}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={
+          isForeign
+            ? bannerCollapsed ? 'Expand location data collection notice' : 'Collapse location data collection notice'
+            : bannerCollapsed ? '위치 데이터 수집 안내 펼치기' : '위치 데이터 수집 안내 접기'
+        }
+      >
+        <View style={styles.inlineDisclosureRow}>
+          <Ionicons name="information-circle" size={16} color="#1d4ed8" />
+          <Text style={styles.inlineDisclosureTitle}>
+            {isForeign ? 'Location Data Collection' : '위치 데이터 수집 안내'}
           </Text>
+          <Ionicons
+            name={bannerCollapsed ? 'chevron-down' : 'chevron-up'}
+            size={14}
+            color="#1d4ed8"
+            style={styles.inlineDisclosureChevron}
+          />
         </View>
+        {!bannerCollapsed && (
+          <Text style={styles.inlineDisclosureText}>
+            {isForeign
+              ? 'SMIS Mentor collects GPS location and battery status to enable real-time location sharing among camp staff, even when the app is in the background. Data is shared only with staff in the same camp and is not provided to third parties.'
+              : 'SMIS Mentor는 캠프 스태프 간 실시간 위치 공유를 위해 GPS 위치 및 배터리 상태를 수집합니다. 앱을 최소화해도 수집이 지속될 수 있으며, 같은 캠프 스태프에게만 공유되고 외부 제3자와는 공유하지 않습니다.'}
+          </Text>
+        )}
+      </TouchableOpacity>
+
+      {/* 위치 공유 컨트롤 패널 */}
+      <View style={styles.controlPanel}>
+        <Text style={styles.controlTitle}>
+          {isForeign ? 'Share My Location' : '내 위치 공유'}
+        </Text>
+        <Text style={styles.controlSubtitle}>
+          {isSharing
+            ? isForeign
+              ? `Sharing · ${sharingCount} participants`
+              : `공유 중 · ${sharingCount}명 참여`
+            : sharingCount > 0
+            ? isForeign
+              ? `${sharingCount} sharing`
+              : `${sharingCount}명이 공유 중`
+            : isForeign
+            ? 'No one sharing'
+            : '아무도 공유하지 않음'}
+        </Text>
         <View style={styles.controlRight}>
           {isToggling && (
             <ActivityIndicator
@@ -643,6 +694,18 @@ export function LocationSharingScreen() {
           />
         </View>
       </View>
+
+      {/* iOS: 위치 공유 중 스와이프 종료 경고 — 공유 켜진 상태에서만 표시 */}
+      {Platform.OS === 'ios' && isSharing && (
+        <View style={styles.iosShareNotice}>
+          <Ionicons name="warning-outline" size={13} color="#92400e" />
+          <Text style={styles.iosShareNoticeText}>
+            {isForeign
+              ? 'Swiping the app closed will stop location sharing. Use the Home button instead.'
+              : '앱을 스와이프로 종료하면 위치 공유가 중단됩니다. 홈 버튼으로만 내려주세요.'}
+          </Text>
+        </View>
+      )}
 
       {/* 지도 */}
       <View style={styles.mapContainer}>
@@ -1015,33 +1078,76 @@ const styles = StyleSheet.create({
   controlPanel: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
-  controlLeft: {
+  // Google Play 정책(Prominent Disclosure): 일반 사용 흐름 중 항상 노출되는 인라인 안내 배너
+  inlineDisclosureBanner: {
+    backgroundColor: '#eff6ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#bfdbfe',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  inlineDisclosureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 3,
+  },
+  inlineDisclosureTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1d4ed8',
     flex: 1,
-    gap: 2,
+  },
+  inlineDisclosureChevron: {
+    marginLeft: 'auto',
+  },
+  inlineDisclosureText: {
+    fontSize: 10,
+    color: '#1e40af',
+    lineHeight: 15,
   },
   controlTitle: {
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
     color: '#1e293b',
   },
   controlSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748b',
+    flex: 1,
   },
   controlRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
+    marginLeft: 'auto',
+    transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }],
   },
   toggleLoader: {
-    marginRight: 4,
+    marginRight: 2,
+  },
+  iosShareNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    backgroundColor: '#fffbeb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  iosShareNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#92400e',
+    lineHeight: 15,
   },
   mapContainer: {
     flex: 1,

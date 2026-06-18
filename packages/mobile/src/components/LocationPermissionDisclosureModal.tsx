@@ -18,6 +18,8 @@ interface LocationPermissionDisclosureModalProps {
   onDeny: () => void;
   /** true면 영어 UI (foreign 역할) */
   isForeign?: boolean;
+  /** true면 이미 위치 권한이 있는 경우 — 텍스트를 "재동의" 형태로 조정 */
+  hasPermission?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ export function LocationPermissionDisclosureModal({
   onAccept,
   onDeny,
   isForeign = false,
+  hasPermission = false,
 }: LocationPermissionDisclosureModalProps) {
   return (
     <Modal
@@ -60,8 +63,23 @@ export function LocationPermissionDisclosureModal({
             </View>
 
             <Text style={styles.title}>
-              {isForeign ? 'Location Data Collection Notice' : '위치 정보 수집 안내'}
+              {isForeign
+                ? hasPermission
+                  ? 'Location Data Collection Notice'
+                  : 'Location Data Collection Notice'
+                : hasPermission
+                  ? '위치 정보 수집 안내'
+                  : '위치 정보 수집 안내'}
             </Text>
+
+            {/* 권한이 이미 있는 경우: 재활성화임을 명확히 안내 */}
+            {hasPermission && (
+              <Text style={styles.resumeNotice}>
+                {isForeign
+                  ? 'Location sharing will restart. Please review the data collection details below.'
+                  : '위치 공유를 다시 시작합니다. 아래 수집 내용을 확인해 주세요.'}
+              </Text>
+            )}
 
             {/* 수집하는 정보 */}
             <View style={styles.section}>
@@ -162,12 +180,18 @@ export function LocationPermissionDisclosureModal({
               onPress={onAccept}
               activeOpacity={0.85}
               accessible
-              accessibilityLabel={isForeign ? 'Agree and Continue' : '동의하고 계속'}
+              accessibilityLabel={
+                isForeign
+                  ? hasPermission ? 'Confirm & Start Sharing' : 'Agree and Continue'
+                  : hasPermission ? '확인하고 공유 시작' : '동의하고 계속'
+              }
               accessibilityRole="button"
             >
               <Ionicons name="checkmark" size={18} color="#ffffff" />
               <Text style={styles.acceptText}>
-                {isForeign ? 'Agree & Continue' : '동의하고 계속'}
+                {isForeign
+                  ? hasPermission ? 'Confirm & Start Sharing' : 'Agree & Continue'
+                  : hasPermission ? '확인하고 공유 시작' : '동의하고 계속'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -275,6 +299,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#78350f',
     lineHeight: 20,
+  },
+  resumeNotice: {
+    fontSize: 13,
+    color: '#1e40af',
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   privacyNote: {
     fontSize: 12,

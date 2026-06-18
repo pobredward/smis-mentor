@@ -14,11 +14,15 @@ import {
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
 import * as TaskManager from 'expo-task-manager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '@smis-mentor/shared';
 import type { UserRole } from '@smis-mentor/shared';
 
 // 백그라운드 위치 업데이트 Task 이름
 const BG_LOCATION_TASK = 'SMIS_BG_LOCATION_UPDATE';
+
+// bgContext 영속화 키 — 앱 kill 후 재실행 시 복원에 사용
+const BG_CONTEXT_STORAGE_KEY = 'smis_bg_location_context';
 
 // 백그라운드 태스크에서 접근할 수 있도록 모듈 레벨에 컨텍스트 저장
 // (태스크는 별도 컨텍스트에서 실행되므로 getFirestore()로 새로 연결)
@@ -34,6 +38,17 @@ let bgContext: {
     classCode: string | null;
   };
 } | null = null;
+
+// 앱 시작(또는 headless 재실행) 시 AsyncStorage에서 bgContext 복원.
+// App.tsx의 `import './src/services/locationSharingService'`가 최초 실행 시
+// 이 모듈을 로드하므로, kill 후 백그라운드 태스크가 깨어날 때도 이 코드가 실행됩니다.
+AsyncStorage.getItem(BG_CONTEXT_STORAGE_KEY)
+  .then((raw) => {
+    if (raw) {
+      bgContext = JSON.parse(raw);
+    }
+  })
+  .catch(() => {});
 
 // 백그라운드 위치 태스크 등록 (앱 최상위에서 한 번만 실행됨)
 TaskManager.defineTask(BG_LOCATION_TASK, async ({ data, error }) => {
@@ -167,9 +182,15 @@ const startBackgroundLocationUpdates = async (
   try {
     // 이미 실행 중이면 중복 등록 방지
     const isRunning = await Location.hasStartedLocationUpdatesAsync(BG_LOCATION_TASK);
-    if (isRunning) return;
+    if (isRunning) {
+      // 이미 실행 중이어도 컨텍스트는 최신값으로 갱신 (캠프 전환 등 대비)
+      bgContext = { userId, campCode, userInfo };
+      await AsyncStorage.setItem(BG_CONTEXT_STORAGE_KEY, JSON.stringify(bgContext));
+      return;
+    }
 
     bgContext = { userId, campCode, userInfo };
+    await AsyncStorage.setItem(BG_CONTEXT_STORAGE_KEY, JSON.stringify(bgContext));
 
     await Location.startLocationUpdatesAsync(BG_LOCATION_TASK, {
       accuracy: Location.Accuracy.Balanced,
@@ -198,6 +219,7 @@ const stopBackgroundLocationUpdates = async (): Promise<void> => {
       await Location.stopLocationUpdatesAsync(BG_LOCATION_TASK);
     }
     bgContext = null;
+    await AsyncStorage.removeItem(BG_CONTEXT_STORAGE_KEY);
   } catch (e) {
     logger.warn('[BgLocation] 백그라운드 위치 업데이트 중지 실패:', e);
   }
@@ -392,7 +414,7 @@ export const startLocationSharing = async (
   }
 
   // 백그라운드 위치 업데이트 시작 (Expo Go에서는 조용히 실패)
-  startBackgroundLocationUpdates(userId, campCode, userInfo); // await 없이 논블로킹
+  await startBackgroundLocationUpdates(userId, campCode, userInfo);
 
   return true;
 };
