@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useLocationPermission } from '../hooks/useLocationPermission';
+import { LocationPermissionDisclosureModal } from '../components/LocationPermissionDisclosureModal';
 
 export function LocationSettingsScreen() {
   const { userData } = useAuth();
@@ -27,6 +28,9 @@ export function LocationSettingsScreen() {
 
   // 백그라운드 권한 disclosure를 인라인으로 읽었다는 확인 상태
   const [disclosureRead, setDisclosureRead] = useState(false);
+
+  // Google Play 정책 명시적 공개 모달 상태
+  const [showDisclosureModal, setShowDisclosureModal] = useState(false);
 
   // ── 상태별 배너 설정 ──────────────────────────────────────────────
   const getBannerConfig = () => {
@@ -71,8 +75,19 @@ export function LocationSettingsScreen() {
   const bannerConfig = getBannerConfig();
 
   // ── 권한 단계별 버튼 액션 ─────────────────────────────────────────
-  const handleForegroundRequest = async () => {
+
+  // Google Play 정책: 포그라운드 권한 요청 전 disclosure 모달 표시
+  const handleForegroundRequest = () => {
+    setShowDisclosureModal(true);
+  };
+
+  const handleDisclosureAccept = async () => {
+    setShowDisclosureModal(false);
     await requestForegroundPermission();
+  };
+
+  const handleDisclosureDeny = () => {
+    setShowDisclosureModal(false);
   };
 
   const handleBackgroundRequest = async () => {
@@ -105,6 +120,14 @@ export function LocationSettingsScreen() {
   }
 
   return (
+    <>
+    <LocationPermissionDisclosureModal
+      visible={showDisclosureModal}
+      onAccept={handleDisclosureAccept}
+      onDeny={handleDisclosureDeny}
+      isForeign={isForeign}
+      hasPermission={false}
+    />
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* 현재 권한 상태 배너 */}
       <View
@@ -320,6 +343,7 @@ export function LocationSettingsScreen() {
         </Text>
       </View>
     </ScrollView>
+    </>
   );
 }
 
