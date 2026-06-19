@@ -371,8 +371,14 @@ export const updateUser = async (
 ): Promise<void> => {
   try {
     const userRef = doc(db, 'users', userId);
+
+    // Firestore는 undefined 값을 허용하지 않으므로 top-level undefined 필드 제거
+    const sanitized = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined)
+    );
+
     await updateDoc(userRef, {
-      ...data,
+      ...sanitized,
       updatedAt: Timestamp.now(),
     });
     

@@ -2379,7 +2379,13 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           role={selectedRole || 'mentor'}
           initialSocialData={signUpData.socialData}
           initialTempUserId={signUpData.tempUserId}
-          onComplete={() => setCurrentScreen('signin')}
+          onComplete={async () => {
+            // 소셜 가입은 Auth 상태 변화가 없으므로 명시적으로 userData를 갱신 후 프로필로 이동
+            // Firestore 전파 지연 대비 짧은 대기 후 조회
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await refreshUserData();
+            setCurrentScreen('profile');
+          }}
           onCancel={() => setCurrentScreen('signin')}
         />
       );

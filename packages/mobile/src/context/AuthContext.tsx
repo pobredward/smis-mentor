@@ -245,12 +245,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // 사용자 데이터 새로고침 함수
   const refreshUserData = useCallback(async () => {
-    if (currentUser?.email) {
+    if (currentUser) {
       try {
-        logger.info('🔄 AuthContext: userData 새로고침 시작 -', currentUser.email);
+        logger.info('🔄 AuthContext: userData 새로고침 시작 -', currentUser.email || currentUser.uid);
         
-        // Firestore에서 직접 최신 데이터 가져오기 (캐시 무시)
-        const userRecord = await getUserByEmail(currentUser.email);
+        // Apple 등 이메일 없는 소셜 로그인은 UID로 조회
+        const userRecord = currentUser.email
+          ? await getUserByEmail(currentUser.email)
+          : await getUserById(currentUser.uid);
         
         if (userRecord) {
           // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
@@ -297,9 +299,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         logger.error('❌ AuthContext: Failed to refresh user data:', error);
       }
     } else {
-      logger.warn('⚠️ AuthContext: currentUser 또는 email이 없음');
+      logger.warn('⚠️ AuthContext: currentUser가 없음');
     }
-  }, [currentUser?.email]);
+  }, [currentUser]);
 
   // activeJobExperienceId 업데이트 함수
   const updateActiveJobCode = useCallback(async (jobCodeId: string) => {

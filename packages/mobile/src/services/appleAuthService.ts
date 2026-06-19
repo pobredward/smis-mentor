@@ -93,11 +93,11 @@ export async function signInWithApple(): Promise<SocialUserData> {
     const socialData: SocialUserData = {
       email: email,
       name: name,
-      photoURL: undefined, // 애플은 프로필 사진 제공 안 함
+      // Apple은 프로필 사진을 제공하지 않으므로 필드 자체를 생략
       providerId: 'apple.com',
-      providerUid: credential.user, // 이것으로 기존 계정 찾기
-      idToken: credential.identityToken || undefined,
-      accessToken: credential.authorizationCode || undefined,
+      providerUid: credential.user,
+      ...(credential.identityToken && { idToken: credential.identityToken }),
+      ...(credential.authorizationCode && { accessToken: credential.authorizationCode }),
     };
 
     logger.info('✅ 애플 로그인 완료:', { email: socialData.email, name: socialData.name });
