@@ -377,13 +377,13 @@ export function SignUpStep4Screen({
                   closeAfterSelecting={true}
                   zIndex={1000}
                   zIndexInverse={2000}
-                  listMode="SCROLLVIEW"
-                  scrollViewProps={{
-                    nestedScrollEnabled: true,
-                    showsVerticalScrollIndicator: true,
-                    scrollEnabled: true,
-                    contentContainerStyle: { flexGrow: 1 },
+                  listMode="MODAL"
+                  modalProps={{
+                    animationType: 'fade',
                   }}
+                  modalContentContainerStyle={styles.dropdownModalContent}
+                  modalTitleStyle={styles.dropdownModalTitle}
+                  modalTitle="가입 경로 선택"
                   itemSeparator={true}
                   itemSeparatorStyle={{
                     backgroundColor: '#f1f5f9',
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     borderRadius: 8,
     marginTop: 2,
-    maxHeight: 200, // 기본 높이
+    maxHeight: 200,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -611,13 +611,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 8,
-    // Android에서 더 잘 보이도록 설정
     ...(Platform.OS === 'android' && {
       elevation: 10,
       borderWidth: 1.5,
       borderColor: '#cbd5e1',
-      maxHeight: 250, // Android에서 더 넉넉하게
+      maxHeight: 250,
     }),
+  },
+  dropdownModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingBottom: 16,
+  },
+  dropdownModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
   },
   dropdownItemText: {
     fontSize: 16,
