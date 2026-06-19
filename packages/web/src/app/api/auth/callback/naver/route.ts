@@ -85,10 +85,10 @@ export async function GET(request: NextRequest) {
     const userData = {
       email: profile.email,
       name: profile.name,
-      photoURL: profile.profile_image || undefined,
+      ...(profile.profile_image && { photoURL: profile.profile_image }),
       providerId: 'naver',
       providerUid: profile.id,
-      phoneNumber: profile.mobile || profile.mobile_e164 || undefined,
+      ...(( profile.mobile || profile.mobile_e164) && { phoneNumber: profile.mobile || profile.mobile_e164 }),
     };
     
     // 4. 팝업 창에 메시지 전송 (Google과 동일한 방식)

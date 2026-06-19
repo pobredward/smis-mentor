@@ -43,11 +43,16 @@ import { authenticatedGet, authenticatedPost } from './apiClient';
 // User 관련 함수
 export const createUser = async (userData: Omit<User, 'userId' | 'id'>, userId?: string) => {
   const now = Timestamp.now();
-  
+
+  // Firestore는 undefined 값을 허용하지 않으므로 top-level undefined 필드 제거
+  const sanitized = Object.fromEntries(
+    Object.entries(userData).filter(([, v]) => v !== undefined)
+  );
+
   if (userId) {
     // Firebase Auth UID를 Document ID로 사용 (마이그레이션 후 방식)
     await setDoc(doc(db, 'users', userId), {
-      ...userData,
+      ...sanitized,
       userId,
       id: userId,
       createdAt: now,
@@ -56,7 +61,7 @@ export const createUser = async (userData: Omit<User, 'userId' | 'id'>, userId?:
   } else {
     // 기존 방식 (하위 호환성 - 사용하지 않음)
     const docRef = await addDoc(collection(db, 'users'), {
-      ...userData,
+      ...sanitized,
       createdAt: now,
       updatedAt: now
     });

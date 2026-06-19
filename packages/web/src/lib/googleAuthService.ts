@@ -72,11 +72,11 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
   return {
     email: email,
     name: user.displayName || email.split('@')[0],
-    photoURL: user.photoURL || undefined,
+    ...(user.photoURL && { photoURL: user.photoURL }),
     providerId: 'google.com',
     providerUid: user.uid,
-    idToken: credential?.idToken,
-    accessToken: credential?.accessToken,
+    ...(credential?.idToken && { idToken: credential.idToken }),
+    ...(credential?.accessToken && { accessToken: credential.accessToken }),
   };
 }
 

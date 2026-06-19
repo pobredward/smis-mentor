@@ -301,8 +301,8 @@ export default function ForeignSignUpStep2() {
             uid: socialProviderUid || userId,
             email: resolvedEmail,
             linkedAt: Timestamp.now(),
-            displayName: socialDisplayName,
-            photoURL: socialPhotoURL,
+            ...(socialDisplayName && { displayName: socialDisplayName }),
+            ...(socialPhotoURL && { photoURL: socialPhotoURL }),
           }],
           primaryAuthMethod: 'social',
           ...(tempPasswordForSocial && { _firebaseAuthPassword: tempPasswordForSocial }),
@@ -318,11 +318,16 @@ export default function ForeignSignUpStep2() {
         }),
       };
 
+      // Firestore는 undefined 값을 허용하지 않으므로 top-level undefined 필드 제거
+      const sanitizedUserData = Object.fromEntries(
+        Object.entries(userData).filter(([, v]) => v !== undefined)
+      );
+
       if (isUpdatingExistingUser && existingUserByPhone) {
         const oldTempUserId = existingUserByPhone.userId;
 
         logger.info('📝 Creating new Firestore document with Auth UID:', userId);
-        await setDoc(doc(db, 'users', userId), userData);
+        await setDoc(doc(db, 'users', userId), sanitizedUserData);
         logger.info('✅ New Firestore document created');
 
         if (oldTempUserId !== userId) {
@@ -338,7 +343,7 @@ export default function ForeignSignUpStep2() {
         );
       } else {
         logger.info('📝 Creating new Firestore user document');
-        await setDoc(doc(db, 'users', userId), userData);
+        await setDoc(doc(db, 'users', userId), sanitizedUserData);
         logger.info('✅ Firestore user document created');
 
         // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리

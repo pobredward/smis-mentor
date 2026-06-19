@@ -359,7 +359,7 @@ export async function activateTempAccountWithSocial(
     
     await updateUser(tempUserId, {
       email: finalEmail, // ✅ 실제 이메일 또는 기존 이메일 사용
-      profileImage: socialData.photoURL, // ✅ undefined 허용
+      ...(socialData.photoURL && { profileImage: socialData.photoURL }),
       status: 'active',
       authProviders: [
         {

@@ -87,7 +87,8 @@ function extractSocialUserData(user: any, credential: OAuthCredential | null): S
   return {
     email: email,
     name: name,
-    photoURL: user.photoURL || undefined, // Apple은 프로필 사진 제공 안 함
+    // Apple은 프로필 사진을 제공하지 않으므로 값이 있을 때만 포함
+    ...(user.photoURL && { photoURL: user.photoURL }),
     providerId: 'apple.com',
     providerUid: appleUserId, // ✅ 실제 Apple User ID 사용
     idToken: credential?.idToken,
