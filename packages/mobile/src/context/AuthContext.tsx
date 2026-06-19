@@ -10,10 +10,12 @@ import React, {
   useRef,
 } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { auth, db } from '../config/firebase';
 import { getUserByEmail, getUserById } from '../services/authService';
+import { removeCache, CACHE_STORE } from '../services/cacheUtils';
 import { jobCodesService } from '../services';
 import { User, AuthContextType } from '../types';
 import { ensureActiveJobExperience } from '@smis-mentor/shared';
@@ -73,6 +75,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
   const hasPrefetchedRef = useRef(false); // 프리페칭 중복 방지
   const hasShownIncompleteProfileAlert = useRef(false);
+  // Firestore users/{uid} 실시간 구독 cleanup 함수 ref
+  const userDocUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // 미완성 프로필 체크 함수
   const checkIncompleteProfile = (user: User) => {
@@ -93,6 +97,48 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } else {
       logger.warn('⚠️ 프리페칭 콜백이 등록되지 않음');
     }
+  }, []);
+
+  // users/{uid} 실시간 구독 시작 함수
+  const subscribeToUserDoc = useCallback((uid: string) => {
+    // 기존 구독이 있으면 먼저 해제
+    if (userDocUnsubscribeRef.current) {
+      userDocUnsubscribeRef.current();
+      userDocUnsubscribeRef.current = null;
+    }
+
+    logger.info('🔔 users 문서 실시간 구독 시작:', uid);
+
+    const userRef = doc(db, 'users', uid);
+    const unsubscribe = onSnapshot(
+      userRef,
+      async (snapshot) => {
+        if (!snapshot.exists()) {
+          logger.warn('⚠️ users 문서 없음 (onSnapshot):', uid);
+          return;
+        }
+
+        const updatedData = { ...snapshot.data(), userId: uid } as User;
+
+        // AsyncStorage 캐시 무효화 — 다음 getUserById 호출 시 최신 데이터를 읽도록
+        await removeCache(CACHE_STORE.USERS, uid);
+
+        // 활성 캠프 자동 선택
+        const activeJobExpId = await ensureActiveJobExperience(db, updatedData as any);
+        if (activeJobExpId && !updatedData.activeJobExperienceId) {
+          updatedData.activeJobExperienceId = activeJobExpId;
+        }
+
+        setUserData(updatedData);
+        logger.info('🔄 users 문서 변경 감지 → userData 갱신:', updatedData.name);
+      },
+      (error) => {
+        logger.error('❌ users 문서 구독 오류:', error);
+      }
+    );
+
+    userDocUnsubscribeRef.current = unsubscribe;
+    return unsubscribe;
   }, []);
 
   // 네이버 SDK 초기화 (Development Build 전용)
@@ -358,6 +404,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
                   }
                   setUserData(userByUid);
                   logger.info('✅ UID로 사용자 데이터 로드 성공:', userByUid.name);
+                  // uid 기반으로 실시간 구독 시작
+                  subscribeToUserDoc(user.uid);
                 } else if (retryCount < 2) {
                   await new Promise((resolve) => setTimeout(resolve, 1500));
                   await loadUserData(retryCount + 1);
@@ -377,10 +425,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
                 try {
                   logger.info('🔄 로그인 시 임시 사용자를 활성 상태로 업데이트 중:', userRecord.email);
                   
-                  const { doc, updateDoc } = await import('firebase/firestore');
+                  const { doc: firestoreDoc, updateDoc } = await import('firebase/firestore');
                   const newRole = userRecord.role === 'mentor_temp' ? 'mentor' : 'foreign';
                   
-                  await updateDoc(doc(db, 'users', userRecord.userId), {
+                  await updateDoc(firestoreDoc(db, 'users', userRecord.userId), {
                     role: newRole,
                     status: 'active',
                     updatedAt: new Date()
@@ -404,6 +452,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               
               setUserData(userRecord);
               logger.info('사용자 데이터 로드 성공:', userRecord.name);
+
+              // 초기 데이터 로드 후 실시간 구독 시작 (userId 또는 uid 사용)
+              const docId = userRecord.userId || user.uid;
+              subscribeToUserDoc(docId);
               
               // 미완성 프로필 체크 (한 번만)
               if (!hasShownIncompleteProfileAlert.current && checkIncompleteProfile(userRecord)) {
@@ -458,6 +510,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         await loadUserData();
       } else {
+        // 로그아웃: 실시간 구독 해제
+        if (userDocUnsubscribeRef.current) {
+          userDocUnsubscribeRef.current();
+          userDocUnsubscribeRef.current = null;
+          logger.info('🔕 users 문서 실시간 구독 해제 (로그아웃)');
+        }
         setUserData(null);
         hasPrefetchedRef.current = false;
       }
@@ -466,8 +524,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setAuthReady(true);
     });
 
-    return unsubscribe;
-  }, [triggerDataPrefetch]);
+    return () => {
+      unsubscribe();
+      // 컴포넌트 언마운트 시 구독 해제
+      if (userDocUnsubscribeRef.current) {
+        userDocUnsubscribeRef.current();
+        userDocUnsubscribeRef.current = null;
+      }
+    };
+  }, [triggerDataPrefetch, subscribeToUserDoc]);
 
   // Context 값을 useMemo로 메모이제이션
   const value = useMemo(
