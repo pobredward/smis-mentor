@@ -58,10 +58,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // 사용자 데이터 새로고침 함수 - useCallback으로 최적화
   const refreshUserData = useCallback(async () => {
-    if (!currentUser?.email) return;
+    if (!currentUser) return;
 
     try {
-      const userRecord = await getUserByEmail(currentUser.email);
+      // Apple 등 이메일 없는 소셜 로그인은 UID로 조회
+      const userRecord = currentUser.email
+        ? await getUserByEmail(currentUser.email)
+        : await getUserById(currentUser.uid);
       if (!userRecord) return;
 
       // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
@@ -96,7 +99,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } catch (error) {
       logger.error('Failed to refresh user data:', error);
     }
-  }, [currentUser?.email]);
+  }, [currentUser]);
 
   // activeJobExperienceId 업데이트 함수
   const updateActiveJobCode = useCallback(async (jobCodeId: string) => {

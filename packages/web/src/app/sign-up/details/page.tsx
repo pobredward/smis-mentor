@@ -352,14 +352,21 @@ export default function SignUpDetails() {
         
         toast.success('회원가입이 완료되었습니다!');
         
-        // 멘토인 경우 프로필 작성 유도
-        if (finalRole === 'mentor') {
+        // 소셜 가입은 Auth 상태 변경이 없으므로 하드 네비게이션으로 AuthContext 재초기화
+        // 일반 가입은 signUp() 호출로 onAuthStateChanged가 발화되어 SPA 전환으로도 안전
+        if (socialSignUp) {
           setTimeout(() => {
-            toast.success('마이페이지에서 "수정" 버튼을 눌러 프로필 사진, 자기소개서 & 지원동기를 작성해주세요!', { duration: 6000 });
+            window.location.href = finalRole === 'mentor' ? '/profile' : '/';
           }, 500);
-          router.replace('/profile');
         } else {
-          router.replace('/');
+          if (finalRole === 'mentor') {
+            setTimeout(() => {
+              toast.success('마이페이지에서 "수정" 버튼을 눌러 프로필 사진, 자기소개서 & 지원동기를 작성해주세요!', { duration: 6000 });
+            }, 500);
+            router.replace('/profile');
+          } else {
+            router.replace('/');
+          }
         }
       } else {
         // 신규 가입
@@ -521,11 +528,11 @@ export default function SignUpDetails() {
 
         toast.success('회원가입이 완료되었습니다!');
         
-        // 멘토인 경우 프로필 작성 유도
+        // 소셜 가입(특히 Apple)은 Auth 상태 변경이 없으므로 AuthContext가 새 Firestore 문서를 인식 못함
+        // → 하드 네비게이션으로 AuthContext를 완전히 재초기화
         setTimeout(() => {
-          toast.success('마이페이지에서 "수정" 버튼을 눌러 프로필 사진, 자기소개서 & 지원동기를 작성해주세요!', { duration: 6000 });
+          window.location.href = '/profile';
         }, 500);
-        router.replace('/profile');
       }
     } catch (error) {
       logger.error('회원가입 오류:', error);
