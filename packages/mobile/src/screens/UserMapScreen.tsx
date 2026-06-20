@@ -18,6 +18,7 @@ import { AdminStackScreenProps } from '../navigation/types';
 import { db } from '../config/firebase';
 import { adminGetAllUsers, adminGetUserJobCodesInfo } from '@smis-mentor/shared';
 import type { User, JobCodeWithGroup } from '@smis-mentor/shared';
+import { getGroupLabel } from '../../../shared/src/types/camp';
 import EvaluationStageCards from '../components/EvaluationStageCards';
 
 interface UserWithCoords extends User {
@@ -522,14 +523,7 @@ export function UserMapScreen({ navigation }: AdminStackScreenProps<'UserMap'>) 
                                     {exp?.group && (
                                       <View style={[styles.badge, styles.badgeGroup]}>
                                         <Text style={styles.badgeText}>
-                                          {exp.group === 'junior' ? '주니어' :
-                                           exp.group === 'middle' ? '미들' :
-                                           exp.group === 'senior' ? '시니어' :
-                                           exp.group === 'spring' ? '스프링' :
-                                           exp.group === 'summer' ? '서머' :
-                                           exp.group === 'autumn' ? '어텀' :
-                                           exp.group === 'winter' ? '윈터' :
-                                           exp.group === 'common' ? '공통' : '매니저'}
+                                          {getGroupLabel(exp.group)}
                                         </Text>
                                       </View>
                                     )}

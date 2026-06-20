@@ -41,7 +41,11 @@ type JobGroup =
   | 'autumn'
   | 'winter'
   | 'common'
-  | 'manager';
+  | 'manager'
+  | 'short1'
+  | 'short2'
+  | 'short3'
+  | 'short4';
 
 // JobExperienceGroupRole은 shared에서 import하여 사용
 

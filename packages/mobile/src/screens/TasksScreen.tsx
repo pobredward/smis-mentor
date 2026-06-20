@@ -2728,6 +2728,22 @@ function TaskAddModal({
   // 그룹 옵션
   const groupOptions: JobExperienceGroup[] = [...JOB_EXPERIENCE_GROUPS];
 
+  // 원어민용 영문 그룹 라벨
+  const GROUP_LABEL_EN: Record<string, string> = {
+    '주니어': 'Junior',
+    '미들': 'Middle',
+    '시니어': 'Senior',
+    '스프링': 'Spring',
+    '서머': 'Summer',
+    '어텀': 'Autumn',
+    '윈터': 'Winter',
+    '공통': 'All',
+    '단기1': 'Short 1',
+    '단기2': 'Short 2',
+    '단기3': 'Short 3',
+    '단기4': 'Short 4',
+  };
+
   // 날짜 선택/해제 핸들러
   const toggleDateSelection = (dateToToggle: Date) => {
     const dateStr = dateToToggle.toISOString().split('T')[0];
@@ -3365,7 +3381,7 @@ function TaskAddModal({
                         targetGroups.includes(group) && styles.groupButtonTextActive,
                       ]}
                     >
-                      {group}
+                      {isForeign ? (GROUP_LABEL_EN[group] ?? group) : group}
                     </Text>
                   </TouchableOpacity>
                 ))}

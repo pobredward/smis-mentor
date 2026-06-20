@@ -30,6 +30,7 @@ import {
   MENTOR_GROUP_ROLES,
   FOREIGN_GROUP_ROLES,
   LEGACY_GROUP_REVERSE_MAP,
+  getGroupLabel,
   JobExperienceGroupRole,
 } from '../../../shared/src/types/camp';
 import EvaluationStageCards from '../components/EvaluationStageCards';
@@ -44,7 +45,11 @@ type JobGroup =
   | 'autumn'
   | 'winter'
   | 'common'
-  | 'manager';
+  | 'manager'
+  | 'short1'
+  | 'short2'
+  | 'short3'
+  | 'short4';
 
 export function UserManageDetailScreen({ route, navigation }: any) {
   const { user: initialUser } = route.params;
@@ -917,14 +922,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
                             <>
                               <View style={[styles.badge, styles.badgeGroup]}>
                                 <Text style={styles.badgeText}>
-                                  {exp.group === 'junior' ? '주니어' :
-                                   exp.group === 'middle' ? '미들' :
-                                   exp.group === 'senior' ? '시니어' :
-                                   exp.group === 'spring' ? '스프링' :
-                                   exp.group === 'summer' ? '서머' :
-                                   exp.group === 'autumn' ? '어텀' :
-                                   exp.group === 'winter' ? '윈터' :
-                                   exp.group === 'common' ? '공통' : '매니저'}
+                                  {getGroupLabel(exp.group)}
                                 </Text>
                               </View>
                               {exp.groupRole && (

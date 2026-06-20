@@ -129,7 +129,7 @@ export interface User {
   jobCodeIds?: string[];
 }
 
-export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager';
+export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager' | 'short1' | 'short2' | 'short3' | 'short4';
 
 export interface JobCode {
   name: string;

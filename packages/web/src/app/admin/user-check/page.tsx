@@ -37,8 +37,8 @@ export default function UserCheck() {
     { value: 'foreign', label: '원어민' }
   ];
   
-  // 그룹 순서 정의
-  const groupOrder = ['manager', 'common', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
+  // 그룹 순서 정의 (단기1~4는 맨 아래)
+  const groupOrder = ['manager', 'common', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'short1', 'short2', 'short3', 'short4'];
   
   // 그룹 이름 매핑 - getGroupLabel 함수 사용으로 제거 가능하지만 groupOrder와 groupColors를 위해 유지
   const groupLabels: Record<string, string> = {
@@ -50,7 +50,11 @@ export default function UserCheck() {
     'autumn': '어텀',
     'winter': '윈터',
     'common': '공통',
-    'manager': '매니저'
+    'manager': '매니저',
+    'short1': '단기1',
+    'short2': '단기2',
+    'short3': '단기3',
+    'short4': '단기4',
   };
   
   // 그룹 색상 매핑
@@ -64,6 +68,10 @@ export default function UserCheck() {
     'winter': { bg: 'bg-pink-100', text: 'text-pink-800' },
     'common': { bg: 'bg-pink-100', text: 'text-gray-800' },
     'manager': { bg: 'bg-pink-100', text: 'text-black-800' },
+    'short1': { bg: 'bg-teal-100', text: 'text-teal-800' },
+    'short2': { bg: 'bg-cyan-100', text: 'text-cyan-800' },
+    'short3': { bg: 'bg-indigo-100', text: 'text-indigo-800' },
+    'short4': { bg: 'bg-violet-100', text: 'text-violet-800' },
   };
   
   // 모든 JobCode 및 Generation 로드

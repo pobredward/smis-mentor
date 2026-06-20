@@ -1,5 +1,5 @@
 'use client';
-import { logger } from '@smis-mentor/shared';
+import { logger, getGroupLabel, getScoreTextColor } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { format, type Locale } from 'date-fns';
@@ -8,7 +8,6 @@ import Header from '@/components/common/Header';
 import Footer from '@/components/common/Footer';
 import Button from '@/components/common/Button';
 import { ApplicationHistory, User } from '@/types';
-import { getScoreTextColor } from '@smis-mentor/shared';
 
 type ApplicationWithUser = ApplicationHistory & {
   id: string;
@@ -398,7 +397,7 @@ export function SharedApplicantsClient({ token }: Props) {
                                 {exp.classCode && <span className="text-gray-600 ml-1.5">({exp.classCode})</span>}
                               </div>
                               <span className="text-xs text-gray-500 bg-white px-1.5 py-0.5 rounded">
-                                {exp.group === 'junior' ? '초등' : exp.group === 'middle' ? '중등' : exp.group === 'senior' ? '고등' : exp.group}
+                                {exp.group === 'junior' ? '초등' : exp.group === 'middle' ? '중등' : exp.group === 'senior' ? '고등' : getGroupLabel(exp.group)}
                               </span>
                             </div>
                           ))}

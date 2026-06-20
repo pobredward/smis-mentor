@@ -40,6 +40,7 @@ import {
 import { LocationPermissionDisclosureModal } from '../components/LocationPermissionDisclosureModal';
 import type { Unsubscribe } from 'firebase/firestore';
 import type { UserRole } from '@smis-mentor/shared';
+import { getGroupLabel } from '../../../shared/src/types/camp';
 
 // Google Play 정책: 사용자가 위치 수집 disclosure에 동의했음을 기록하는 키
 // 앱 설치 후 최초 1회 동의 기록. 재설치 시 다시 동의 필요.
@@ -910,7 +911,7 @@ const UserInfoCard = React.memo(
                 {location.group && (
                   <>
                     <Text style={styles.userCardRoleSep}>·</Text>
-                    <Text style={styles.userCardGroupRole}>{location.group}</Text>
+                    <Text style={styles.userCardGroupRole}>{getGroupLabel(location.group)}</Text>
                   </>
                 )}
                 {location.groupRole && (

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { CommunityPost, CommunityPostScope } from '@smis-mentor/shared';
+import { getGroupLabel } from '../../../shared/src/types/camp';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import {
   getAllPosts,
@@ -89,7 +90,7 @@ export function CommunityScreen({ navigation }: MainTabScreenProps<'Community'>)
     }
     if (activeGroupId) {
       const grp = activeExperience?.group ?? '그룹';
-      const groupLabel = activeJobCodeLabel ? `${activeJobCodeLabel} ${grp}` : grp;
+      const groupLabel = activeJobCodeLabel ? `${activeJobCodeLabel} ${getGroupLabel(grp)}` : getGroupLabel(grp);
       list.push({ key: 'group', label: groupLabel, icon: 'people-outline' });
     }
     list.push({ key: 'dev', label: '개발자 건의', icon: 'construct-outline' });
@@ -389,7 +390,7 @@ export function CommunityScreen({ navigation }: MainTabScreenProps<'Community'>)
               groupId: currentScope === 'group' ? activeGroupId : null,
               groupLabel:
                 activeExperience
-                  ? `${activeExperience.group} · ${activeExperience.groupRole}`
+                  ? `${getGroupLabel(activeExperience.group)} · ${activeExperience.groupRole}`
                   : null,
               authorId: userData?.userId ?? '',
               authorName: userData?.name ?? '',

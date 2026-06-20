@@ -2,7 +2,7 @@
 
 import { Timestamp } from 'firebase/firestore';
 
-// 그룹 선택지 (주니어, 미들, 시니어, 계절)
+// 그룹 선택지 (주니어, 미들, 시니어, 계절, 단기)
 export const JOB_EXPERIENCE_GROUPS = [
   '주니어',
   '미들',
@@ -12,6 +12,10 @@ export const JOB_EXPERIENCE_GROUPS = [
   '어텀',
   '윈터',
   '공통',
+  '단기1',
+  '단기2',
+  '단기3',
+  '단기4',
 ] as const;
 
 export type JobExperienceGroup = typeof JOB_EXPERIENCE_GROUPS[number];
@@ -54,6 +58,10 @@ export const LEGACY_GROUP_MAP: Record<string, string> = {
   'autumn': '어텀',
   'winter': '윈터',
   'common': '공통',
+  'short1': '단기1',
+  'short2': '단기2',
+  'short3': '단기3',
+  'short4': '단기4',
 };
 
 export const LEGACY_GROUP_REVERSE_MAP: Record<string, string> = {
@@ -65,6 +73,10 @@ export const LEGACY_GROUP_REVERSE_MAP: Record<string, string> = {
   '어텀': 'autumn',
   '윈터': 'winter',
   '공통': 'common',
+  '단기1': 'short1',
+  '단기2': 'short2',
+  '단기3': 'short3',
+  '단기4': 'short4',
 };
 
 // 그룹 표시 이름 가져오기

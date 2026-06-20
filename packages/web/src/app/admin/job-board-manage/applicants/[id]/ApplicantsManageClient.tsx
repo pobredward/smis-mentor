@@ -2125,6 +2125,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                               jobCode.group === 'winter' ? 'bg-pink-100 text-pink-700' :
                                               jobCode.group === 'common' ? 'bg-gray-100 text-gray-700' :
                                               jobCode.group === 'manager' ? 'bg-indigo-100 text-indigo-700' :
+                                              jobCode.group === 'short1' ? 'bg-teal-100 text-teal-700' :
+                                              jobCode.group === 'short2' ? 'bg-cyan-100 text-cyan-700' :
+                                              jobCode.group === 'short3' ? 'bg-indigo-100 text-indigo-700' :
+                                              jobCode.group === 'short4' ? 'bg-violet-100 text-violet-700' :
                                               'bg-gray-100 text-gray-700'
                                             }`}>
                                               {getGroupLabel(jobCode.group || '')}

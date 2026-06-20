@@ -70,6 +70,10 @@ const LEGACY_GROUP_MAP: Record<string, string> = {
   'autumn': '어텀',
   'winter': '윈터',
   'common': '공통',
+  'short1': '단기1',
+  'short2': '단기2',
+  'short3': '단기3',
+  'short4': '단기4',
 };
 
 export const checkOverdueTasks = functions

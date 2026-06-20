@@ -47,6 +47,10 @@ const GROUP_LABEL_EN: Record<string, string> = {
   '어텀': 'Autumn',
   '윈터': 'Winter',
   '공통': 'All',
+  '단기1': 'Short 1',
+  '단기2': 'Short 2',
+  '단기3': 'Short 3',
+  '단기4': 'Short 4',
 };
 
 export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = false, selectedDate, categories = [], onClose, onSuccess }: TaskFormProps) {

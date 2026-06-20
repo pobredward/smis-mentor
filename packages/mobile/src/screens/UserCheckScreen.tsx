@@ -67,6 +67,10 @@ const groupLabels: Record<string, string> = {
   winter: '윈터',
   common: '공통',
   manager: '매니저',
+  short1: '단기1',
+  short2: '단기2',
+  short3: '단기3',
+  short4: '단기4',
 };
 
 // 그룹 색상 매핑
@@ -80,8 +84,13 @@ const groupColors: Record<string, { bg: string; text: string }> = {
   winter: { bg: '#fce7f3', text: '#9f1239' },
   common: { bg: '#f3f4f6', text: '#374151' },
   manager: { bg: '#e5e7eb', text: '#111827' },
+  short1: { bg: '#ccfbf1', text: '#0f766e' },
+  short2: { bg: '#cffafe', text: '#0e7490' },
+  short3: { bg: '#e0e7ff', text: '#3730a3' },
+  short4: { bg: '#ede9fe', text: '#6d28d9' },
 };
 
+// 단기1~4는 맨 아래에 위치
 const groupOrder = [
   'manager',
   'common',
@@ -92,6 +101,10 @@ const groupOrder = [
   'summer',
   'autumn',
   'winter',
+  'short1',
+  'short2',
+  'short3',
+  'short4',
 ];
 
 export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck'>) {
