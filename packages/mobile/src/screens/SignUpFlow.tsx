@@ -462,7 +462,7 @@ export function SignUpFlow({
       await setDoc(doc(db, 'users', userId), {
         userId,
         id: userId,
-        email: socialData.email,
+        email: socialData.email.toLowerCase(),
         name,
         phone,
         phoneNumber: phone,
@@ -556,7 +556,7 @@ export function SignUpFlow({
     // 2. Firestore에 사용자 정보 저장
     await setDoc(doc(db, 'users', userId), {
       userId,
-      email,
+      email: email.toLowerCase(),
       name,
       phone,
       university,
