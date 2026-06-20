@@ -63,14 +63,17 @@ export function LocationPermissionDisclosureModal({
             </View>
 
             <Text style={styles.title}>
-              {isForeign
-                ? hasPermission
-                  ? 'Location Data Collection Notice'
-                  : 'Location Data Collection Notice'
-                : hasPermission
-                  ? '위치 정보 수집 안내'
-                  : '위치 정보 수집 안내'}
+              {isForeign ? 'Location Data Collection Notice' : '위치 정보 수집 안내'}
             </Text>
+
+            {/* Google Play 정책 필수 형식 요약 문단 — 제목 바로 아래에 스크롤 없이 보여야 함 */}
+            <View style={styles.mandatoryDisclosure}>
+              <Text style={styles.mandatoryText}>
+                {isForeign
+                  ? 'SMIS Mentor collects location data (GPS coordinates) to enable the location sharing feature in the Camp tab, even when the app is closed or not in use. This data is not used for advertising.'
+                  : 'SMIS Mentor는 앱이 종료되었거나 사용 중이 아닌 때도 캠프 탭의 위치 공유 기능을 사용 설정하기 위해 위치 데이터(GPS 좌표)를 수집합니다. 이 데이터는 광고 제공·광고 기능 지원에 사용되지 않습니다.'}
+              </Text>
+            </View>
 
             {/* 권한이 이미 있는 경우: 재활성화임을 명확히 안내 */}
             {hasPermission && (
@@ -244,6 +247,20 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     textAlign: 'center',
     marginBottom: 20,
+  },
+  mandatoryDisclosure: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  mandatoryText: {
+    fontSize: 14,
+    color: '#1e40af',
+    lineHeight: 22,
   },
   section: {
     marginBottom: 16,

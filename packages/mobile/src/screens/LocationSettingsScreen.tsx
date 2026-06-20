@@ -145,7 +145,101 @@ export function LocationSettingsScreen() {
         </View>
       </View>
 
-      {/* 권한 요청 버튼 영역 */}
+      {/* ── Google Play 정책 명시적 공개(Prominent Disclosure) 섹션 ── */}
+      {/* 정책 요건: "필요한 콘텐츠가 바로 표시되어야 함" — 권한 요청 버튼보다 반드시 먼저 표시 */}
+      <View style={styles.disclosureCard}>
+        <View style={styles.disclosureHeader}>
+          <Ionicons name="information-circle" size={20} color="#d97706" />
+          <Text style={styles.disclosureHeaderText}>
+            {isForeign ? 'Background Location Collection' : '백그라운드 위치 수집'}
+          </Text>
+        </View>
+
+        <Text style={styles.disclosureBody}>
+          {isForeign
+            ? 'SMIS Mentor collects location data (GPS coordinates) to enable the location sharing feature in the Camp tab, even when the app is closed or not in use. This data is not used for advertising.'
+            : 'SMIS Mentor는 앱이 종료되었거나 사용 중이 아닌 때도 캠프 탭의 위치 공유 기능을 사용 설정하기 위해 위치 데이터(GPS 좌표)를 수집합니다. 이 데이터는 광고 제공·광고 기능 지원에 사용되지 않습니다.'}
+        </Text>
+
+        <View style={styles.disclosureItem}>
+          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
+          <Text style={styles.disclosureItemText}>
+            {isForeign
+              ? 'Collected data: GPS coordinates, device battery level and charging status'
+              : '수집 정보: GPS 좌표, 기기 배터리 잔량 및 충전 상태'}
+          </Text>
+        </View>
+        <View style={styles.disclosureItem}>
+          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
+          <Text style={styles.disclosureItemText}>
+            {isForeign
+              ? 'Purpose: Real-time location sharing among camp staff within the same camp code'
+              : '수집 목적: 같은 캠프 코드의 스태프 간 실시간 위치 공유'}
+          </Text>
+        </View>
+        <View style={styles.disclosureItem}>
+          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
+          <Text style={styles.disclosureItemText}>
+            {isForeign
+              ? 'Sharing: Only shared with staff in the same camp. Not shared with third parties.'
+              : '공유 대상: 같은 캠프 스태프에게만 표시. 외부 제3자와 공유하지 않음.'}
+          </Text>
+        </View>
+        <View style={styles.disclosureItem}>
+          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
+          <Text style={styles.disclosureItemText}>
+            {isForeign
+              ? 'Collection interval: Every 15 seconds or when moved 20m (to save battery)'
+              : '수집 주기: 15초마다 또는 20m 이동 시 (배터리 절약)'}
+          </Text>
+        </View>
+        <View style={styles.disclosureItem}>
+          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
+          <Text style={styles.disclosureItemText}>
+            {isForeign
+              ? 'Stop collection: Turn off the location sharing switch in the Camp tab to stop immediately.'
+              : '수집 중단: 캠프 탭의 위치 공유 스위치를 끄면 즉시 수집이 중단됩니다.'}
+          </Text>
+        </View>
+
+        {Platform.OS === 'android' && (
+          <View style={styles.androidNotice}>
+            <Ionicons name="logo-android" size={14} color="#374151" />
+            <Text style={styles.androidNoticeText}>
+              {isForeign
+                ? 'On Android, a foreground service notification is shown in the status bar while location sharing is active.'
+                : 'Android에서는 위치 공유 중 상태 표시줄에 포그라운드 서비스 알림이 표시됩니다.'}
+            </Text>
+          </View>
+        )}
+
+        {/* 읽음 확인 체크박스 (백그라운드 권한 요청 전 필수) */}
+        {permissionLevel === 'whenInUse' && Platform.OS === 'android' && (
+          <TouchableOpacity
+            style={styles.confirmRow}
+            onPress={() => setDisclosureRead((v) => !v)}
+            activeOpacity={0.7}
+            accessibilityLabel={
+              isForeign ? 'I have read the above notice' : '위 안내를 읽었습니다'
+            }
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: disclosureRead }}
+          >
+            <View style={[styles.checkbox, disclosureRead && styles.checkboxChecked]}>
+              {disclosureRead && (
+                <Ionicons name="checkmark" size={13} color="#ffffff" />
+              )}
+            </View>
+            <Text style={styles.confirmText}>
+              {isForeign
+                ? 'I have read the above notice and agree to background location collection.'
+                : '위 안내를 읽었으며 백그라운드 위치 수집에 동의합니다.'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* 권한 요청 버튼 영역 — disclosure 카드 다음에 배치 */}
       {permissionLevel === 'denied' && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -238,100 +332,6 @@ export function LocationSettingsScreen() {
           </TouchableOpacity>
         </View>
       )}
-
-      {/* ── Google Play 정책 명시적 공개(Prominent Disclosure) 섹션 ── */}
-      {/* 이 섹션은 Google Play 정책 준수를 위해 항상 표시합니다 */}
-      <View style={styles.disclosureCard}>
-        <View style={styles.disclosureHeader}>
-          <Ionicons name="information-circle" size={20} color="#d97706" />
-          <Text style={styles.disclosureHeaderText}>
-            {isForeign ? 'Background Location Collection' : '백그라운드 위치 수집'}
-          </Text>
-        </View>
-
-        <Text style={styles.disclosureBody}>
-          {isForeign
-            ? 'This app collects location data (GPS coordinates) and battery status even when the app is minimized or closed, to support the real-time location sharing feature.'
-            : '이 앱은 실시간 위치 공유 기능을 지원하기 위해 앱을 최소화하거나 닫은 상태에서도 위치 정보(GPS 좌표) 및 배터리 상태를 수집합니다.'}
-        </Text>
-
-        <View style={styles.disclosureItem}>
-          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
-          <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Collected data: GPS coordinates, device battery level and charging status'
-              : '수집 정보: GPS 좌표, 기기 배터리 잔량 및 충전 상태'}
-          </Text>
-        </View>
-        <View style={styles.disclosureItem}>
-          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
-          <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Purpose: Real-time location sharing among camp staff within the same camp code'
-              : '수집 목적: 같은 캠프 코드의 스태프 간 실시간 위치 공유'}
-          </Text>
-        </View>
-        <View style={styles.disclosureItem}>
-          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
-          <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Sharing: Only shared with staff in the same camp. Not shared with third parties.'
-              : '공유 대상: 같은 캠프 스태프에게만 표시. 외부 제3자와 공유하지 않음.'}
-          </Text>
-        </View>
-        <View style={styles.disclosureItem}>
-          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
-          <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Collection interval: Every 15 seconds or when moved 20m (to save battery)'
-              : '수집 주기: 15초마다 또는 20m 이동 시 (배터리 절약)'}
-          </Text>
-        </View>
-        <View style={styles.disclosureItem}>
-          <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
-          <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Stop collection: Turn off the location sharing switch in the Camp tab to stop immediately.'
-              : '수집 중단: 캠프 탭의 위치 공유 스위치를 끄면 즉시 수집이 중단됩니다.'}
-          </Text>
-        </View>
-
-        {Platform.OS === 'android' && (
-          <View style={styles.androidNotice}>
-            <Ionicons name="logo-android" size={14} color="#374151" />
-            <Text style={styles.androidNoticeText}>
-              {isForeign
-                ? 'On Android, a foreground service notification is shown in the status bar while location sharing is active.'
-                : 'Android에서는 위치 공유 중 상태 표시줄에 포그라운드 서비스 알림이 표시됩니다.'}
-            </Text>
-          </View>
-        )}
-
-        {/* 읽음 확인 체크박스 (백그라운드 권한 요청 전 필수) */}
-        {permissionLevel === 'whenInUse' && Platform.OS === 'android' && (
-          <TouchableOpacity
-            style={styles.confirmRow}
-            onPress={() => setDisclosureRead((v) => !v)}
-            activeOpacity={0.7}
-            accessibilityLabel={
-              isForeign ? 'I have read the above notice' : '위 안내를 읽었습니다'
-            }
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: disclosureRead }}
-          >
-            <View style={[styles.checkbox, disclosureRead && styles.checkboxChecked]}>
-              {disclosureRead && (
-                <Ionicons name="checkmark" size={13} color="#ffffff" />
-              )}
-            </View>
-            <Text style={styles.confirmText}>
-              {isForeign
-                ? 'I have read the above notice and agree to background location collection.'
-                : '위 안내를 읽었으며 백그라운드 위치 수집에 동의합니다.'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
 
       {/* 추가 정보 안내 */}
       <View style={styles.infoCard}>
