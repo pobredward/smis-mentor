@@ -254,7 +254,7 @@ export default function ForeignSignUpStep2() {
         userId: userId,
         id: userId,
         name: fullName,
-        email: resolvedEmail,
+        email: resolvedEmail.toLowerCase(),
         phone: fullPhone,
         phoneNumber: fullPhone,
         password: '',

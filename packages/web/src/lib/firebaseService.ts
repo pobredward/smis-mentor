@@ -111,7 +111,9 @@ export const getUserByEmail = async (email: string) => {
       return null;
     }
 
-    const q = query(collection(db, 'users'), where('email', '==', email));
+    // Firebase Auth는 항상 소문자로 정규화하므로, Firestore 조회도 소문자로 통일
+    const normalizedEmail = email.toLowerCase();
+    const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
     
@@ -155,7 +157,8 @@ export const getUserByEmailIncludeInactive = async (email: string) => {
   try {
     if (!email || typeof email !== 'string') return null;
 
-    const q = query(collection(db, 'users'), where('email', '==', email));
+    const normalizedEmail = email.toLowerCase();
+    const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
 

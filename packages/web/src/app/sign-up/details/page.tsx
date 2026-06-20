@@ -290,7 +290,7 @@ export default function SignUpDetails() {
         await createUser({
           name,
           phoneNumber,
-          email,
+          email: email.toLowerCase(),
           password: '',
           address: data.address,
           addressDetail: data.addressDetail,
@@ -465,7 +465,7 @@ export default function SignUpDetails() {
         await createUser({
           name,
           phoneNumber,
-          email,
+          email: email.toLowerCase(),
           password: '',  // 보안상 Firebase에만 저장
           address: data.address,
           addressDetail: data.addressDetail,
