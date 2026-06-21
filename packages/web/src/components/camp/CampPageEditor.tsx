@@ -154,25 +154,7 @@ export default function CampPageEditor({
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
-        // 1) 표준 <details><summary> 구조 (노션 외 출처 또는 기존 저장 데이터)
-        const detailsEls = doc.body.querySelectorAll('details');
-        if (detailsEls.length > 0) {
-          event.preventDefault();
-          const parts: string[] = [];
-          detailsEls.forEach((detailsEl) => {
-            const summaryEl = detailsEl.querySelector('summary');
-            const summaryText = summaryEl?.textContent?.trim() ?? '토글';
-            if (summaryEl) summaryEl.remove();
-            const innerHtml = detailsEl.innerHTML.trim() || '<p></p>';
-            parts.push(
-              `<details><summary>${summaryText}</summary><div data-type="detailsContent">${innerHtml}</div></details>`
-            );
-          });
-          currentEditor.chain().focus().insertContent(parts.join('')).run();
-          return true;
-        }
-
-        if (!isFromNotion) return false;
+        if (!isFromNotion && doc.body.querySelectorAll('details').length === 0) return false;
 
         // 노션 S3 이미지 URL 목록 수집 (DOM 전체에서)
         const isNotionImgSrc = (src: string) =>
@@ -250,12 +232,11 @@ export default function CampPageEditor({
           }
 
           if (tag === 'P') {
-            const imgEl = node.querySelector('img');
-            if (imgEl) {
-              const src = imgEl.getAttribute('src') ?? '';
-              return src ? [{ type: 'image', attrs: { src, alt: imgEl.getAttribute('alt') ?? '' } }] : [];
-            }
             const content = textNodeToTiptap(node);
+            // <p> 안에 이미지만 있는 경우: image 노드로 분리, 텍스트와 혼재 시 paragraph 그대로
+            if (content.length === 1 && content[0].type === 'image') {
+              return [content[0]];
+            }
             return [{ type: 'paragraph', content: content.length ? content : undefined }];
           }
 
@@ -283,6 +264,45 @@ export default function CampPageEditor({
 
           if (tag === 'BLOCKQUOTE') {
             return [{ type: 'blockquote', content: Array.from(node.children).flatMap((c) => elToTiptap(c)) }];
+          }
+
+          if (tag === 'IMG') {
+            const src = node.getAttribute('src') ?? '';
+            return src ? [{ type: 'image', attrs: { src, alt: node.getAttribute('alt') ?? '' } }] : [];
+          }
+
+          if (tag === 'FIGURE') {
+            // <figure> 안의 <img> 추출
+            const imgEl = node.querySelector('img');
+            const src = imgEl?.getAttribute('src') ?? '';
+            return src ? [{ type: 'image', attrs: { src, alt: imgEl?.getAttribute('alt') ?? '' } }] : [];
+          }
+
+          if (tag === 'DETAILS') {
+            const summaryEl = node.querySelector(':scope > summary');
+            const summaryContent = summaryEl ? textNodeToTiptap(summaryEl) : [{ type: 'text', text: '' }];
+            const contentNodes = Array.from(node.children)
+              .filter((c) => c.tagName !== 'SUMMARY')
+              .flatMap((c) => elToTiptap(c));
+            return [{
+              type: 'details',
+              content: [
+                { type: 'detailsSummary', content: summaryContent.length ? summaryContent : [{ type: 'text', text: '' }] },
+                { type: 'detailsContent', content: contentNodes.length ? contentNodes : [{ type: 'paragraph' }] },
+              ],
+            }];
+          }
+
+          if (tag === 'DIV') {
+            const dataType = node.getAttribute('data-type');
+            // div[data-type="detailsContent"]: detailsContent 내부 자식들을 재귀 처리
+            if (dataType === 'detailsContent') {
+              const childNodes = Array.from(node.children).flatMap((c) => elToTiptap(c));
+              return childNodes.length ? childNodes : [{ type: 'paragraph' }];
+            }
+            // 기타 div는 자식들을 재귀 처리
+            const childNodes = Array.from(node.children).flatMap((c) => elToTiptap(c));
+            return childNodes.length ? childNodes : [];
           }
 
           // 기타 → paragraph로 fallback
@@ -319,6 +339,16 @@ export default function CampPageEditor({
             ],
           }];
         };
+
+        // 1) 표준 <details><summary> 구조 (같은 에디터 내 복사 또는 기존 저장 데이터)
+        // elToTiptap()의 DETAILS 분기를 활용해 JSON으로 변환 → 중첩 토글 평탄화 방지
+        const detailsEls = doc.body.querySelectorAll('details');
+        if (detailsEls.length > 0 && !isFromNotion) {
+          event.preventDefault();
+          const tiptapNodes = Array.from(doc.body.children).flatMap((c) => elToTiptap(c));
+          currentEditor.chain().focus().insertContent(tiptapNodes).run();
+          return true;
+        }
 
         // body의 직계 자식들을 변환
         const hasAnyToggle = doc.body.querySelectorAll('ul > li').length > 0;
