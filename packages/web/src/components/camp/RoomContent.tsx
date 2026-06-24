@@ -42,6 +42,15 @@ export default function RoomContent() {
   const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);
   const groupRole = activeJobExp?.groupRole;
 
+  // ESC 키로 모달 닫기
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedStudent(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useEffect(() => {
     const loadCampCode = async () => {
       if (!activeJobCodeId || typeof activeJobCodeId !== 'string') {
@@ -425,6 +434,33 @@ export default function RoomContent() {
                     onClick={() => setSelectedStudent(student)}
                     className="bg-white rounded-lg p-2.5 border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all text-left"
                   >
+                    {/* 프로필 사진 */}
+                    {(() => {
+                      const photoUrl = toDriveImageUrl(student.profilePhoto);
+                      return photoUrl ? (
+                        <img
+                          src={photoUrl}
+                          alt={student.name}
+                          className="w-full aspect-square rounded-md object-cover mb-2 border border-gray-100"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null;
+                    })()}
+                    <div
+                      className={`w-full aspect-square rounded-md flex items-center justify-center mb-2 border border-gray-100 ${toDriveImageUrl(student.profilePhoto) ? 'hidden' : ''}`}
+                      style={{ backgroundColor: student.gender === 'M' ? '#dbeafe' : '#fef9c3' }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                        className="w-1/2 h-1/2"
+                        style={{ color: student.gender === 'M' ? '#93c5fd' : '#fcd34d' }}
+                      >
+                        <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+
                     <div className="mb-1.5">
                       <h3 className={`text-sm font-bold truncate leading-tight ${
                         student.gender === 'M' ? 'text-blue-600' : 'text-yellow-600'
@@ -459,10 +495,10 @@ export default function RoomContent() {
       {/* 학생 상세 모달 */}
       {selectedStudent && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setSelectedStudent(null)}>
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            {/* 헤더 */}
-            <div className="flex flex-col items-center justify-center px-6 py-4 border-b border-gray-200 relative">
-              {/* 프로필 사진 */}
+          <div className="bg-white rounded-2xl shadow-xl w-full max-h-[85vh] flex flex-col md:max-w-4xl md:flex-row md:max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
+
+            {/* 데스크탑: 왼쪽 사진 패널 (고정) */}
+            <div className="hidden md:flex md:flex-col md:items-center md:justify-start md:w-96 md:flex-shrink-0 md:p-6 md:border-r md:border-gray-200 md:bg-gray-50 md:rounded-l-2xl">
               {(() => {
                 const profilePhotoUrl = toDriveImageUrl(selectedStudent.profilePhoto);
                 logger.info('🖼️ [RoomContent] 학생 정보:', {
@@ -474,49 +510,97 @@ export default function RoomContent() {
                   profilePhotoLength: selectedStudent.profilePhoto?.length,
                   hasProfilePhoto: !!selectedStudent.profilePhoto
                 });
-                return profilePhotoUrl ? (
-                  <div className="mb-3">
-                    <img 
-                      src={profilePhotoUrl} 
-                      alt={`${selectedStudent.name} 프로필`}
-                      className="w-48 h-48 rounded-full object-cover border-2 border-gray-200"
-                      onLoad={(e) => {
-                        logger.info('✅ [RoomContent] 프로필사진 로드 성공:', selectedStudent.name, profilePhotoUrl);
-                      }}
-                      onError={(e) => {
-                        const imgElement = e.currentTarget as HTMLImageElement;
-                        logger.error('❌ [RoomContent] 프로필사진 로드 실패:', {
-                          name: selectedStudent.name,
-                          originalUrl: selectedStudent.profilePhoto,
-                          convertedUrl: profilePhotoUrl,
-                          naturalWidth: imgElement.naturalWidth,
-                          naturalHeight: imgElement.naturalHeight,
-                          complete: imgElement.complete,
-                          error: e,
-                          troubleshooting: [
-                            '1. Google Drive 파일이 "링크가 있는 모든 사용자"로 공개 설정되어 있는지 확인',
-                            '2. 파일 형식이 이미지(jpg, png, gif 등)인지 확인',
-                            '3. 파일 ID가 올바른지 확인',
-                            '4. 대안: 이미지를 Imgur, Cloudinary 등 이미지 호스팅 서비스에 업로드'
-                          ]
-                        });
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  </div>
-                ) : null;
+                return (
+                  <>
+                    {profilePhotoUrl ? (
+                      <img
+                        src={profilePhotoUrl}
+                        alt={`${selectedStudent.name} 프로필`}
+                        className="w-full aspect-square rounded-2xl object-cover border border-gray-200 mb-4"
+                        onLoad={() => {
+                          logger.info('✅ [RoomContent] 프로필사진 로드 성공:', selectedStudent.name, profilePhotoUrl);
+                        }}
+                        onError={(e) => {
+                          const imgElement = e.currentTarget as HTMLImageElement;
+                          logger.error('❌ [RoomContent] 프로필사진 로드 실패:', {
+                            name: selectedStudent.name,
+                            originalUrl: selectedStudent.profilePhoto,
+                            convertedUrl: profilePhotoUrl,
+                            naturalWidth: imgElement.naturalWidth,
+                            naturalHeight: imgElement.naturalHeight,
+                            complete: imgElement.complete,
+                            error: e,
+                          });
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className={`w-full aspect-square rounded-2xl border border-gray-200 flex items-center justify-center mb-4 ${profilePhotoUrl ? 'hidden' : ''}`}
+                      style={{ backgroundColor: selectedStudent.gender === 'M' ? '#dbeafe' : '#fef9c3' }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                        className="w-1/2 h-1/2"
+                        style={{ color: selectedStudent.gender === 'M' ? '#93c5fd' : '#fcd34d' }}
+                      >
+                        <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 text-center">{selectedStudent.name}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{selectedStudent.englishName || ''}</p>
+                  </>
+                );
               })()}
-              <h3 className="text-xl font-bold text-gray-900">{selectedStudent.name}</h3>
-              <button
-                onClick={() => setSelectedStudent(null)}
-                className="absolute right-4 top-4 text-gray-500 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center"
-              >
-                ✕
-              </button>
             </div>
-            
-            {/* 내용 - 스크롤 가능 */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+
+            {/* 오른쪽(데스크탑) / 전체(모바일) 콘텐츠 영역 */}
+            <div className="flex flex-col flex-1 min-w-0 overflow-hidden rounded-2xl md:rounded-l-none">
+              {/* 헤더 - 이름 + 닫기 버튼 */}
+              <div className="flex items-center justify-center px-6 py-3 border-b border-gray-200 relative flex-shrink-0">
+                <h3 className="text-xl font-bold text-gray-900">{selectedStudent.name}</h3>
+                <button
+                  onClick={() => setSelectedStudent(null)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 내용 스크롤 영역 */}
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                {/* 모바일: 사진을 스크롤 영역 최상단에 표시 */}
+                <div className="md:hidden">
+                  {(() => {
+                    const profilePhotoUrl = toDriveImageUrl(selectedStudent.profilePhoto);
+                    return (
+                      <div className="flex justify-center mb-4">
+                        {profilePhotoUrl ? (
+                          <img
+                            src={profilePhotoUrl}
+                            alt={`${selectedStudent.name} 프로필`}
+                            className="w-80 h-80 rounded-2xl object-cover border border-gray-200"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={`w-80 h-80 rounded-2xl border border-gray-200 flex items-center justify-center ${profilePhotoUrl ? 'hidden' : ''}`}
+                          style={{ backgroundColor: selectedStudent.gender === 'M' ? '#dbeafe' : '#fef9c3' }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                            className="w-24 h-24"
+                            style={{ color: selectedStudent.gender === 'M' ? '#93c5fd' : '#fcd34d' }}
+                          >
+                            <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               {/* 캠프 정보 */}
               <div className="mb-5">
                 <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Camp Info' : '캠프 정보'}</h4>
@@ -699,16 +783,17 @@ export default function RoomContent() {
                   </div>
                 </div>
               )}
-            </div>
-            
-            {/* 닫기 버튼 */}
-            <div className="px-6 py-4 border-t border-gray-200">
-              <button
-                onClick={() => setSelectedStudent(null)}
-                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-              >
-                {isForeign ? 'Close' : '닫기'}
-              </button>
+              </div>
+
+              {/* 닫기 버튼 */}
+              <div className="px-6 py-4 border-t border-gray-200 flex-shrink-0">
+                <button
+                  onClick={() => setSelectedStudent(null)}
+                  className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                >
+                  {isForeign ? 'Close' : '닫기'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
