@@ -1062,7 +1062,7 @@ export default function UserManage() {
                             />
                           ) : (
                             <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center mr-3">
-                              <span className="text-gray-500">{user.name.charAt(0)}</span>
+                              <span className="text-gray-500">{user.name?.charAt(0) ?? '?'}</span>
                             </div>
                           )}
                           <div className="flex-grow min-w-0">
@@ -1558,7 +1558,7 @@ export default function UserManage() {
                             />
                           ) : (
                             <div className="h-14 w-14 rounded-full bg-gray-200 flex items-center justify-center mr-3 flex-shrink-0">
-                              <span className="text-gray-500 text-xl">{selectedUser.name.charAt(0)}</span>
+                              <span className="text-gray-500 text-xl">{selectedUser.name?.charAt(0) ?? '?'}</span>
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
