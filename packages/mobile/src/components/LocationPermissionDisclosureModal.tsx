@@ -70,8 +70,8 @@ export function LocationPermissionDisclosureModal({
             <View style={styles.mandatoryDisclosure}>
               <Text style={styles.mandatoryText}>
                 {isForeign
-                  ? 'SMIS Mentor collects location data (GPS coordinates) to enable the location sharing feature in the Camp tab, even when the app is closed or not in use. This data is not used for advertising.'
-                  : 'SMIS Mentor는 앱이 종료되었거나 사용 중이 아닌 때도 캠프 탭의 위치 공유 기능을 사용 설정하기 위해 위치 데이터(GPS 좌표)를 수집합니다. 이 데이터는 광고 제공·광고 기능 지원에 사용되지 않습니다.'}
+                  ? 'SMIS Mentor collects location data (GPS coordinates) to enable the location sharing feature in the Camp tab. This data is collected in the background and when the app is closed or not in use. This data is not used for advertising.'
+                  : 'SMIS Mentor는 캠프 탭의 위치 공유 기능을 위해 위치 데이터(GPS 좌표)를 수집합니다. 앱이 종료된 경우(when the app is closed) 및 백그라운드(background) 상태에서도 수집됩니다. 이 데이터는 광고 목적으로 사용되지 않습니다.'}
               </Text>
             </View>
 
@@ -124,13 +124,15 @@ export function LocationPermissionDisclosureModal({
               <View style={styles.bgWarningHeader}>
                 <Ionicons name="information-circle" size={18} color="#d97706" />
                 <Text style={styles.bgWarningTitle}>
-                  {isForeign ? 'Background Location Collection' : '백그라운드 위치 수집'}
+                  {isForeign
+                    ? 'Background & Always-On Location Collection'
+                    : '백그라운드 및 상시 위치 수집'}
                 </Text>
               </View>
               <Text style={styles.bgWarningText}>
                 {isForeign
-                  ? `While location sharing is on, your location is collected even when the app is minimized or you are using another app.${Platform.OS === 'android' ? ' A foreground service notification will appear in the status bar.' : ''}\n\nTo save battery, updates occur every 15 seconds or when you move 20m.`
-                  : `위치 공유를 켠 상태에서는 앱을 최소화하거나 다른 앱을 사용하는 중에도${Platform.OS === 'android' ? ' 알림 바에 표시되는 포그라운드 서비스를 통해' : ''} 위치가 수집됩니다.\n\n배터리 사용량을 줄이기 위해 15초 간격, 20m 이동 시에만 업데이트합니다.`}
+                  ? `While location sharing is on, your location is collected in the background, when the app is minimized, when you are using another app, and even when the app is closed or not in use.${Platform.OS === 'android' ? ' A persistent foreground service notification will appear in the status bar while active.' : ''}\n\nUpdates occur every 15 seconds or when you move 20 meters to preserve battery life.`
+                  : `위치 공유가 켜진 동안에는 앱을 최소화하거나(background) 다른 앱을 사용 중이거나 앱이 종료된 경우(when the app is closed)에도 위치가 수집됩니다.${Platform.OS === 'android' ? ' 공유 중에는 알림 바에 포그라운드 서비스 알림이 상시 표시됩니다.' : ''}\n\n배터리 소모를 줄이기 위해 15초 간격 또는 20m 이동 시에만 업데이트합니다.`}
               </Text>
             </View>
 

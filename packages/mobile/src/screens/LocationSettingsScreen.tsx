@@ -157,8 +157,8 @@ export function LocationSettingsScreen() {
 
         <Text style={styles.disclosureBody}>
           {isForeign
-            ? 'SMIS Mentor collects location data (GPS coordinates) to enable the location sharing feature in the Camp tab, even when the app is closed or not in use. This data is not used for advertising.'
-            : 'SMIS Mentor는 앱이 종료되었거나 사용 중이 아닌 때도 캠프 탭의 위치 공유 기능을 사용 설정하기 위해 위치 데이터(GPS 좌표)를 수집합니다. 이 데이터는 광고 제공·광고 기능 지원에 사용되지 않습니다.'}
+            ? 'SMIS Mentor collects location data (GPS coordinates) to enable the location sharing feature in the Camp tab. This data is collected in the background and when the app is closed or not in use. This data is not used for advertising.'
+            : 'SMIS Mentor는 캠프 탭의 위치 공유 기능을 위해 위치 데이터(GPS 좌표)를 수집합니다. 앱이 종료된 경우(when the app is closed) 및 백그라운드(background) 상태에서도 수집됩니다. 이 데이터는 광고 목적으로 사용되지 않습니다.'}
         </Text>
 
         <View style={styles.disclosureItem}>

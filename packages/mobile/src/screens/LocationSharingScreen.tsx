@@ -205,8 +205,8 @@ export function LocationSharingScreen() {
   const [showDisclosureModal, setShowDisclosureModal] = useState(false);
   // disclosure 모달 표시 시점의 권한 상태 (모달 텍스트 분기용)
   const [disclosureHasPermission, setDisclosureHasPermission] = useState(false);
-  // 위치 데이터 수집 안내 배너 접힘 여부 (초기값 false — 첫 진입 시 항상 펼쳐진 상태)
-  const [bannerCollapsed, setBannerCollapsed] = useState(false);
+  // Google Play 정책: 최초 동의 여부 로드 완료 전까지 null
+  const [hasConsent, setHasConsent] = useState<boolean | null>(null);
 
   // 바텀시트 애니메이션
   const sheetY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
@@ -218,11 +218,26 @@ export function LocationSharingScreen() {
   // 앱 재시작 후 Firestore isSharing 상태로 자동 복구 시도했는지 여부
   const hasAutoResumedRef = useRef(false);
 
-  // 배너 접힘 상태 복원 (AsyncStorage)
+  // Google Play 정책(Prominent Disclosure):
+  // 화면 진입 시 동의 기록을 확인하고, 아직 동의하지 않은 경우 즉시 모달을 표시합니다.
+  // 이미 동의한 경우에도 위치 공유를 켜는 시점에 재표시합니다(handleToggle 참조).
   useEffect(() => {
-    AsyncStorage.getItem('location_disclosure_banner_collapsed')
-      .then((value) => { if (value === 'true') setBannerCollapsed(true); })
-      .catch(() => {});
+    AsyncStorage.getItem(LOCATION_DISCLOSURE_CONSENT_KEY)
+      .then(async (val) => {
+        const consented = val === 'true';
+        setHasConsent(consented);
+        if (!consented) {
+          // 미동의자: 화면 진입 즉시 명시적 공개 모달 표시
+          const currentPerm = await getLocationPermissionStatus();
+          setDisclosureHasPermission(currentPerm !== 'denied');
+          setShowDisclosureModal(true);
+        }
+      })
+      .catch(() => {
+        setHasConsent(false);
+        setShowDisclosureModal(true);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 활성 캠프코드 로드
@@ -304,9 +319,9 @@ export function LocationSharingScreen() {
           void (async () => {
             // 동의 기록 확인 (null이면 아직 AsyncStorage를 읽지 못한 상태)
             const consentValue = await AsyncStorage.getItem(LOCATION_DISCLOSURE_CONSENT_KEY).catch(() => null);
-            const hasConsent = consentValue === 'true';
+            const alreadyConsented = consentValue === 'true';
 
-            if (!hasConsent) {
+            if (!alreadyConsented) {
               // 동의 기록 없음: 자동 복구 차단, Firestore 상태 초기화
               stopLocationSharing(db, capturedUserData.userId, campCode).catch(() => {});
               setIsSharing(false);
@@ -464,8 +479,9 @@ export function LocationSharingScreen() {
 
     if (!userData || !campCode) return;
 
-    // Google Play 정책: 동의 기록 저장
+    // Google Play 정책: 동의 기록 저장 및 state 업데이트
     await AsyncStorage.setItem(LOCATION_DISCLOSURE_CONSENT_KEY, 'true').catch(() => {});
+    setHasConsent(true);
 
     setIsToggling(true);
     try {
@@ -621,43 +637,20 @@ export function LocationSharingScreen() {
 
       {/* Google Play 정책(Prominent Disclosure) 준수:
           위치 데이터 수집 안내 배너 — 메뉴 탐색 없이 일반 사용 흐름 중 항상 표시.
-          헤더(타이틀)는 항상 노출, 본문은 사용자가 접기/펼치기 가능.
-          첫 진입 시에는 반드시 펼쳐진 상태로 표시됩니다. */}
-      <TouchableOpacity
-        style={styles.inlineDisclosureBanner}
-        onPress={() => {
-          const next = !bannerCollapsed;
-          setBannerCollapsed(next);
-          AsyncStorage.setItem('location_disclosure_banner_collapsed', next ? 'true' : 'false').catch(() => {});
-        }}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel={
-          isForeign
-            ? bannerCollapsed ? 'Expand location data collection notice' : 'Collapse location data collection notice'
-            : bannerCollapsed ? '위치 데이터 수집 안내 펼치기' : '위치 데이터 수집 안내 접기'
-        }
-      >
+          정책 요건: 접기/펼치기 없이 항상 전체 내용이 노출되어야 합니다. */}
+      <View style={styles.inlineDisclosureBanner}>
         <View style={styles.inlineDisclosureRow}>
           <Ionicons name="information-circle" size={16} color="#1d4ed8" />
           <Text style={styles.inlineDisclosureTitle}>
-            {isForeign ? 'Location Data Collection' : '위치 데이터 수집 안내'}
+            {isForeign ? 'Location Data Collection Notice' : '위치 데이터 수집 안내'}
           </Text>
-          <Ionicons
-            name={bannerCollapsed ? 'chevron-down' : 'chevron-up'}
-            size={14}
-            color="#1d4ed8"
-            style={styles.inlineDisclosureChevron}
-          />
         </View>
-        {!bannerCollapsed && (
-          <Text style={styles.inlineDisclosureText}>
-            {isForeign
-              ? 'SMIS Mentor collects GPS location and battery status to enable real-time location sharing among camp staff, even when the app is in the background. Data is shared only with staff in the same camp and is not provided to third parties.'
-              : 'SMIS Mentor는 캠프 스태프 간 실시간 위치 공유를 위해 GPS 위치 및 배터리 상태를 수집합니다. 앱을 최소화해도 수집이 지속될 수 있으며, 같은 캠프 스태프에게만 공유되고 외부 제3자와는 공유하지 않습니다.'}
-          </Text>
-        )}
-      </TouchableOpacity>
+        <Text style={styles.inlineDisclosureText}>
+          {isForeign
+            ? 'SMIS Mentor collects GPS location and battery status to enable real-time location sharing among camp staff, even when the app is in the background or closed. Data is shared only with staff in the same camp and is not provided to third parties.'
+            : 'SMIS Mentor는 캠프 스태프 간 실시간 위치 공유를 위해 GPS 위치 및 배터리 상태를 수집합니다. 앱이 종료되거나 백그라운드 상태일 때도 수집이 지속될 수 있으며, 같은 캠프 스태프에게만 공유되고 외부 제3자와는 공유하지 않습니다.'}
+        </Text>
+      </View>
 
       {/* 위치 공유 컨트롤 패널 */}
       <View style={styles.controlPanel}>
@@ -1101,18 +1094,16 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   inlineDisclosureTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: '#1d4ed8',
     flex: 1,
   },
-  inlineDisclosureChevron: {
-    marginLeft: 'auto',
-  },
   inlineDisclosureText: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#1e40af',
-    lineHeight: 15,
+    lineHeight: 17,
+    marginTop: 2,
   },
   controlTitle: {
     fontSize: 12,
