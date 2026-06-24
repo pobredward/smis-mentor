@@ -135,17 +135,37 @@ export function TasksScreen() {
   const monthCacheRef = useRef<Map<string, MonthCacheEntry>>(new Map());
 
   // selectedDate, selectedDateStr, selectedDateRef를 함께 업데이트하는 헬퍼
-  const applySelectedDate = useCallback((date: Date) => {
+  // 월 이동 시 자동 날짜 선택에서도 업무 목록이 즉시 갱신되도록 캐시에서 해당 날짜 업무도 반영
+  const applySelectedDate = useCallback((date: Date, adminFlag?: boolean, groupRoleOverride?: JobExperienceGroupRole | null) => {
     const str = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
     selectedDateRef.current = date;
+    const dayTasks = monthTasksRef.current.get(str) ?? [];
+    const dayPersonalTasks = personalMonthTasksRef.current.get(str) ?? [];
     unstable_batchedUpdates(() => {
       setSelectedDate(date);
       setSelectedDateStr(str);
+      // 캐시에 해당 날짜 데이터가 있으면 업무 목록 즉시 반영
+      if (monthTasksRef.current.size > 0) {
+        const resolvedAdmin = adminFlag !== undefined ? adminFlag : isAdmin;
+        const resolvedRole = groupRoleOverride !== undefined ? groupRoleOverride : currentGroupRole;
+        setSelectedDateTasks(dayTasks.filter(task => {
+          if (resolvedAdmin) return true;
+          if (!resolvedRole) return false;
+          return task.targetRoles.includes(resolvedRole);
+        }));
+        setPersonalTasks(dayPersonalTasks);
+      }
     });
-  }, []);
+  }, [isAdmin, currentGroupRole]);
 
   // 4개 달력 state를 한 번의 렌더로 일괄 업데이트 — unstable_batchedUpdates 보장
+  // 선택된 날짜의 업무 목록도 함께 갱신 (월 이동 후 비동기 로드 완료 시에도 즉시 반영)
   const applyMonthData = (data: MonthCacheEntry) => {
+    const str = selectedDateRef.current
+      ? `${selectedDateRef.current.getFullYear()}-${String(selectedDateRef.current.getMonth()+1).padStart(2,'0')}-${String(selectedDateRef.current.getDate()).padStart(2,'0')}`
+      : null;
+    const dayTasks = str ? (data.tasks.get(str) ?? []) : [];
+    const dayPersonalTasks = str ? (data.personalTasks.get(str) ?? []) : [];
     unstable_batchedUpdates(() => {
       monthTasksRef.current = data.tasks;
       setMonthTasks(data.tasks);
@@ -153,6 +173,15 @@ export function TasksScreen() {
       setPersonalTaskDates(data.personalDates);
       personalMonthTasksRef.current = data.personalTasks;
       setPersonalMonthTasks(data.personalTasks);
+      // 선택된 날짜가 이번 달 데이터에 포함되면 업무 목록 갱신
+      if (str) {
+        setSelectedDateTasks(dayTasks.filter(task => {
+          if (isAdmin) return true;
+          if (!currentGroupRole) return false;
+          return task.targetRoles.includes(currentGroupRole);
+        }));
+        setPersonalTasks(dayPersonalTasks);
+      }
     });
   };
 
