@@ -80,8 +80,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // 미완성 프로필 체크 함수
   const checkIncompleteProfile = (user: User) => {
-    if (user.role === 'foreign' || user.role === 'foreign_temp') {
-      return false; // 원어민은 체크하지 않음
+    // 원어민·admin은 프로필 완성 안내 대상 아님
+    if (user.role === 'foreign' || user.role === 'foreign_temp' || user.role === 'admin') {
+      return false;
     }
     
     // 멘토의 경우 프로필 이미지, 자기소개, 지원동기 체크
