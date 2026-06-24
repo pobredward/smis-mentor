@@ -26,8 +26,9 @@ const HORIZONTAL_MARGIN = (SCREEN_WIDTH - CARD_WIDTH) / 2; // 좌우 여백
 // 주민등록번호 마스킹 함수
 const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: string): string => {
   if (!ssn) return '-';
-  // 관리자만 전체 공개
-  if (isAdmin) return ssn;
+  // admin 또는 mentor 중 매니저/부매니저는 전체 공개
+  const isManagerRole = groupRole === '매니저' || groupRole === '부매니저';
+  if (isAdmin || isManagerRole) return ssn;
   // 형식: 980619-1****** (앞 6자리 + - + 첫번째 숫자 + 나머지 *)
   const parts = ssn.split('-');
   if (parts.length !== 2) return ssn; // 형식이 다르면 원본 반환
@@ -292,7 +293,7 @@ const StudentCard = React.memo(({ student: s, campType, isAdmin, groupRole, onSa
         <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
           <Ionicons
             name="person"
-            size={64}
+            size={120}
             color={s.gender === 'M' ? '#93c5fd' : '#fcd34d'}
           />
         </View>
@@ -491,8 +492,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   profilePhoto: {
-    width: 140,
-    height: 140,
+    width: 280,
+    height: 280,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -563,12 +564,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f1f5f9',
   },
   label: {
-    width: 85,
+    flex: 5,
     fontSize: 12,
     color: '#64748b',
   },
   value: {
-    flex: 1,
+    flex: 7,
     fontSize: 12,
     color: '#1e293b',
     fontWeight: '500' as '500',
