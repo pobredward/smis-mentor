@@ -1,7 +1,7 @@
 import { logger } from '@smis-mentor/shared';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
-import { getAuthenticatedUser } from '@/lib/authMiddleware';
+import { getAuthenticatedUser, requireSelfOrAdmin } from '@/lib/authMiddleware';
 import { encryptRRN, isEncryptionConfigured } from '@/lib/encryption';
 
 /**
@@ -43,16 +43,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 본인만 자신의 민감 정보를 저장할 수 있음
-  if (authContext.firebaseUid !== userId) {
-    logger.warn('⚠️ 타인의 민감 정보 저장 시도:', {
+  // 본인 또는 관리자만 민감 정보 저장 가능
+  const accessError = requireSelfOrAdmin(authContext, userId);
+  if (accessError) {
+    logger.warn('⚠️ 민감 정보 저장 권한 없음:', {
       requester: authContext.firebaseUid,
+      requesterRole: authContext.user.role,
       target: userId,
     });
-    return NextResponse.json(
-      { error: '본인의 정보만 저장할 수 있습니다.' },
-      { status: 403 }
-    );
+    return accessError;
   }
 
   // 입력값 검증
