@@ -256,7 +256,55 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
 export const stSheetService = {
   getCachedData: async (campCode: CampCode = 'E27'): Promise<STSheetStudent[]> => {
     try {
-      // campSettings(설정)와 stSheetCache(데이터)를 병렬로 조회
+      const config = CAMP_SHEET_CONFIG[campCode];
+      const isFamily = config?.type === 'F';
+
+      // F캠프: familySTSheetCache에서 읽어 STSheetStudent[] 형태로 변환
+      if (isFamily) {
+        const [settingsSnap, familyCacheSnap] = await Promise.all([
+          getDoc(doc(db, 'campSettings', campCode)),
+          getDoc(doc(db, 'familySTSheetCache', campCode)),
+        ]);
+
+        const useTemporaryData = settingsSnap.data()?.useTemporaryData ?? false;
+        if (useTemporaryData) {
+          logger.info(`⚠️ ${campCode} 임시 데이터 표시 설정이 활성화되어 있습니다.`);
+          return getTemporaryData(campCode);
+        }
+
+        if (familyCacheSnap.exists()) {
+          const families: FamilyUnit[] = familyCacheSnap.data()?.families ?? [];
+          // FamilyUnit의 학생들을 STSheetStudent 형태로 평탄화
+          const students: STSheetStudent[] = families.flatMap((family) =>
+            family.students.map((fs) => ({
+              studentId: fs.id,
+              name: fs.name,
+              englishName: fs.englishName ?? '',
+              grade: fs.grade,
+              gender: fs.gender,
+              ssn: fs.ssn ?? '',
+              passportName: fs.passportName ?? '',
+              passportNumber: fs.passportNumber ?? '',
+              passportExpiry: fs.passportExpiry ?? '',
+              medication: fs.medication ?? '',
+              parentPhone: fs.parentPhone ?? (family.parents[0]?.phone ?? ''),
+              registrationSource: fs.registrationSource ?? '',
+              classMentor: fs.classMentor ?? '',
+              classNumber: fs.classNumber ?? '',
+              className: fs.className ?? '',
+              roomNumber: family.roomNumber ?? '',
+              familyId: family.familyId,
+              familyType: family.familyType,
+            } as STSheetStudent & { familyId: string; familyType: string; classNumber: string; className: string })
+          ));
+          logger.info(`📦 [F캠프] familySTSheetCache → ${students.length}명 변환 완료`);
+          return students;
+        }
+
+        return getTemporaryData(campCode);
+      }
+
+      // 일반 캠프: campSettings(설정)와 stSheetCache(데이터)를 병렬로 조회
       const [settingsSnap, cacheSnap] = await Promise.all([
         getDoc(doc(db, 'campSettings', campCode)),
         getDoc(doc(db, 'stSheetCache', campCode)),
@@ -334,9 +382,19 @@ export const stSheetService = {
     }
   },
 
-  // 실제 데이터 존재 여부 확인 (새로 추가)
+  // 실제 데이터 존재 여부 확인
   hasRealData: async (campCode: CampCode = 'E27'): Promise<boolean> => {
     try {
+      const config = CAMP_SHEET_CONFIG[campCode];
+      const isFamily = config?.type === 'F';
+
+      if (isFamily) {
+        const docRef = doc(db, 'familySTSheetCache', campCode);
+        const docSnap = await getDoc(docRef);
+        const families: FamilyUnit[] = docSnap.data()?.families ?? [];
+        return docSnap.exists() && families.length > 0;
+      }
+
       const docRef = doc(db, 'stSheetCache', campCode);
       const docSnap = await getDoc(docRef);
       return docSnap.exists() && docSnap.data()?.data && docSnap.data()?.data.length > 0;

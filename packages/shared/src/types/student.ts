@@ -872,20 +872,23 @@ export function parseFamilySheet(rows: string[][], campCode: string): FamilyUnit
     return idx >= 0 ? sStart + idx : -1;
   };
 
-  const sId       = sStart;
-  const sName     = sc('학생 이름');
-  const sEngName  = sc('영어 닉네임');
-  const sGrade    = sc('학년');
-  const sGender   = sc('성별');
-  const sSsn      = sc('주민등록번호');
-  const sPassName = sc('여권상 영문이름');
-  const sPassNum  = sc('여권 번호');
-  const sPassExp  = sc('여권 만료일자');
-  const sMed      = sc('학생 건강정보 및 특이사항') >= 0
+  const sId        = sStart;
+  const sName      = sc('학생 이름');
+  const sEngName   = sc('영어 닉네임');
+  const sGrade     = sc('학년');
+  const sGender    = sc('성별');
+  const sSsn       = sc('주민등록번호');
+  const sPassName  = sc('여권상 영문이름');
+  const sPassNum   = sc('여권 번호');
+  const sPassExp   = sc('여권 만료일자');
+  const sMed       = sc('학생 건강정보 및 특이사항') >= 0
     ? sc('학생 건강정보 및 특이사항')
     : sc('특이사항');
-  const sParPhone = sc('부모님 연락처');
-  const sReg      = sc('등록처');
+  const sParPhone  = sc('부모님 연락처');
+  const sReg       = sc('등록처');
+  const sClassNum  = sc('반번호');
+  const sClassName = sc('반이름');
+  const sClassMentor = sc('반멘토');
 
   // ── 행 파싱 ──────────────────────────────────────────────────────
   const familyMap = new Map<string, FamilyUnit>();
@@ -940,24 +943,31 @@ export function parseFamilySheet(rows: string[][], campCode: string): FamilyUnit
       });
     }
 
-    // 학생: 고유번호 열에 값이 있으면 학생
-    const studentId   = row[sId]?.trim() ?? '';
-    const studentName = sName >= 0 ? row[sName]?.trim() ?? '' : '';
-    if (studentId && studentId !== '-' && studentName) {
+    // 학생: 학생 이름이 있으면 학생으로 처리 (고유번호가 비어있어도 인식)
+    const studentIdRaw = row[sId]?.trim() ?? '';
+    const studentName  = sName >= 0 ? row[sName]?.trim() ?? '' : '';
+    // 고유번호가 없는 경우 "가족ID-순번" 형식으로 자동 생성
+    const studentId = (studentIdRaw && studentIdRaw !== '-')
+      ? studentIdRaw
+      : `${familyId}-${unit.students.length + 1}`;
+    if (studentName) {
       const genderRaw = sGender >= 0 ? row[sGender]?.trim() ?? 'M' : 'M';
       unit.students.push({
         id: studentId,
         name: studentName,
-        englishName:        sEngName  >= 0 ? row[sEngName]?.trim()  ?? '' : '',
-        grade:              sGrade    >= 0 ? row[sGrade]?.trim()    ?? '' : '',
+        englishName:        sEngName     >= 0 ? row[sEngName]?.trim()     ?? '' : '',
+        grade:              sGrade       >= 0 ? row[sGrade]?.trim()       ?? '' : '',
         gender:             (genderRaw.toUpperCase() === 'F' ? 'F' : 'M') as 'M' | 'F',
-        ssn:                sSsn      >= 0 ? row[sSsn]?.trim()      ?? '' : '',
-        passportName:       sPassName >= 0 ? row[sPassName]?.trim() ?? '' : '',
-        passportNumber:     sPassNum  >= 0 ? row[sPassNum]?.trim()  ?? '' : '',
-        passportExpiry:     sPassExp  >= 0 ? row[sPassExp]?.trim()  ?? '' : '',
-        medication:         sMed      >= 0 ? row[sMed]?.trim()      ?? '' : '',
-        parentPhone:        sParPhone >= 0 ? row[sParPhone]?.trim() ?? '' : '',
-        registrationSource: sReg      >= 0 ? row[sReg]?.trim()      ?? '' : '',
+        ssn:                sSsn         >= 0 ? row[sSsn]?.trim()         ?? '' : '',
+        passportName:       sPassName    >= 0 ? row[sPassName]?.trim()    ?? '' : '',
+        passportNumber:     sPassNum     >= 0 ? row[sPassNum]?.trim()     ?? '' : '',
+        passportExpiry:     sPassExp     >= 0 ? row[sPassExp]?.trim()     ?? '' : '',
+        medication:         sMed         >= 0 ? row[sMed]?.trim()         ?? '' : '',
+        parentPhone:        sParPhone    >= 0 ? row[sParPhone]?.trim()    ?? '' : '',
+        registrationSource: sReg         >= 0 ? row[sReg]?.trim()         ?? '' : '',
+        classNumber:        sClassNum    >= 0 ? row[sClassNum]?.trim()    ?? '' : '',
+        className:          sClassName   >= 0 ? row[sClassName]?.trim()   ?? '' : '',
+        classMentor:        sClassMentor >= 0 ? row[sClassMentor]?.trim() ?? '' : '',
       });
     }
   }
@@ -1003,6 +1013,9 @@ export interface FamilyStudent {
   medication?: string;   // 학생 건강정보 및 특이사항
   parentPhone?: string;
   registrationSource?: string;
+  classNumber?: string;  // 반번호
+  className?: string;    // 반이름
+  classMentor?: string;  // 반멘토
 }
 
 export interface FamilyUnit {

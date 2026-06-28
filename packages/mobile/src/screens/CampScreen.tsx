@@ -42,14 +42,13 @@ export function CampScreen() {
   const hasNoCampAssigned =
     userData && (!userData.jobExperiences || userData.jobExperiences.length === 0);
 
-  // F캠프: 반명단(class) 탭 숨기고 방명단(room) 탭만 가족명단으로 표시
   const allTabs: { id: TabName; title: string }[] = isForeign
     ? [
         { id: 'education', title: 'Edu' },
         { id: 'tasks', title: 'Tasks' },
         { id: 'schedule', title: 'Schedule' },
         { id: 'guide', title: 'Guide' },
-        ...(!isFamilyCamp ? [{ id: 'class' as TabName, title: 'Class' }] : []),
+        { id: 'class', title: 'Class' },
         { id: 'room', title: isFamilyCamp ? 'Family' : 'Room' },
         { id: 'location', title: 'Map' },
       ]
@@ -59,7 +58,7 @@ export function CampScreen() {
         { id: 'tasks', title: '업무' },
         { id: 'schedule', title: '시간표' },
         { id: 'guide', title: '인솔표' },
-        ...(!isFamilyCamp ? [{ id: 'class' as TabName, title: '반명단' }] : []),
+        { id: 'class', title: '반명단' },
         { id: 'room', title: isFamilyCamp ? '가족명단' : '방명단' },
         { id: 'location', title: '위치' },
       ];

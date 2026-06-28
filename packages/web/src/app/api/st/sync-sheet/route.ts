@@ -33,18 +33,6 @@ function getSheetsClient() {
   return google.sheets({ version: 'v4', auth });
 }
 
-/** GID → 시트 이름 변환 */
-async function resolveSheetName(
-  sheets: ReturnType<typeof google.sheets>,
-  spreadsheetId: string,
-  gid: string,
-): Promise<string> {
-  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
-  const matched = (meta.data.sheets ?? []).find(
-    (s) => String(s.properties?.sheetId) === gid,
-  );
-  return matched?.properties?.title ?? 'ST';
-}
 
 export async function POST(request: NextRequest) {
   // 1. 인증
@@ -76,7 +64,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const sheets = getSheetsClient();
-    const sheetName = await resolveSheetName(sheets, config.spreadsheetId, config.gid);
+    // config에 sheetName이 정의되어 있으므로 별도 API 조회 없이 바로 사용
+    const sheetName = config.sheetName;
 
     logger.info(`📊 [${campCode}] 시트 읽기: "${sheetName}" (gid=${config.gid})`);
 
