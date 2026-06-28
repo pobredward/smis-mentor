@@ -328,6 +328,15 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // stSheetOverrides 컬렉션 (입소 레벨 테스트 등 admin 수동 수정값)
+    // 재동기화(syncSTSheet)와 독립적으로 보존됨
+    // ──────────────────────────────────────────────────────────────
+    match /stSheetOverrides/{campCode}/students/{studentId} {
+      allow read: if isCampStaff();
+      allow write: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // familySTSheetCache 컬렉션 (가족 ST시트 캐시)
     // 역할: admin(전체), 캠프 스태프(읽기)
     // ──────────────────────────────────────────────────────────────

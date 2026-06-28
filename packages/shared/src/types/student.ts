@@ -77,6 +77,26 @@ export const ST_SHEET_HEADER_MAPPING = {
   '수업에서 집중을 잘 하는 편인가요?': 'surveyFocusInClass',
   '다니는 학원 개수': 'surveyAcademyCount',
   '다니는 학원 종류': 'surveyAcademyTypes',
+
+  // 입소 레벨 테스트
+  'P-Speaking': 'placementSpeaking',
+  'P-Reading':  'placementReading',
+  'P-Writing':  'placementWriting',
+
+  // 파이널 레벨 테스트
+  'F-Speaking': 'finalSpeaking',
+  'F-Reading':  'finalReading',
+  'F-Writing':  'finalWriting',
+
+  // 반 상담 (담임 멘토)
+  '상담(반)1': 'classCounsel1',
+  '상담(반)2': 'classCounsel2',
+  '상담(반)3': 'classCounsel3',
+
+  // 방 상담 (유닛 멘토)
+  '상담(방)1': 'unitCounsel1',
+  '상담(방)2': 'unitCounsel2',
+  '상담(방)3': 'unitCounsel3',
 } as const;
 
 /**
@@ -232,6 +252,26 @@ export function mapHeadersToStudent(
     surveyFocusInClass:     getValue('수업에서 집중을 잘 하는 편인가요?'),
     surveyAcademyCount:     getValue('다니는 학원 개수'),
     surveyAcademyTypes:     getValue('다니는 학원 종류'),
+
+    // 입소 레벨 테스트
+    placementSpeaking:      getValue('P-Speaking'),
+    placementReading:       getValue('P-Reading'),
+    placementWriting:       getValue('P-Writing'),
+
+    // 파이널 레벨 테스트
+    finalSpeaking:          getValue('F-Speaking'),
+    finalReading:           getValue('F-Reading'),
+    finalWriting:           getValue('F-Writing'),
+
+    // 반 상담 (담임 멘토)
+    classCounsel1:          getValue('상담(반)1'),
+    classCounsel2:          getValue('상담(반)2'),
+    classCounsel3:          getValue('상담(반)3'),
+
+    // 방 상담 (유닛 멘토)
+    unitCounsel1:           getValue('상담(방)1'),
+    unitCounsel2:           getValue('상담(방)2'),
+    unitCounsel3:           getValue('상담(방)3'),
   };
   // 빈 문자열인 필드는 아예 키를 추가하지 않음
   for (const [key, val] of Object.entries(surveyFields)) {
@@ -695,6 +735,26 @@ export interface STSheetStudent {
   surveyFocusInClass?: string;
   surveyAcademyCount?: string;
   surveyAcademyTypes?: string;
+
+  // 입소 레벨 테스트
+  placementSpeaking?: string;
+  placementReading?: string;
+  placementWriting?: string;
+
+  // 파이널 레벨 테스트
+  finalSpeaking?: string;
+  finalReading?: string;
+  finalWriting?: string;
+
+  // 반 상담 (담임 멘토)
+  classCounsel1?: string;
+  classCounsel2?: string;
+  classCounsel3?: string;
+
+  // 방 상담 (유닛 멘토)
+  unitCounsel1?: string;
+  unitCounsel2?: string;
+  unitCounsel3?: string;
 
   // 메타 정보
   rowNumber: number;

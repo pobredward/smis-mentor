@@ -1,7 +1,7 @@
 import { doc, getDoc, getDocs, setDoc, collection } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 import { logger } from '@smis-mentor/shared';
-import { functions as mobileFunctions, db } from '../config/firebase';
+import { db } from '../config/firebase';
+import { authenticatedFetch } from '../utils/apiClient';
 import {
   STSheetStudent,
   CAMP_SHEET_CONFIG,
@@ -258,32 +258,29 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
 };
 
 export const stSheetService = {
-  // Firestore에서 캐시된 데이터 가져오기
+  // Firestore에서 캐시된 데이터 가져오기 — campSettings/stSheetCache 병렬 조회
   getCachedData: async (campCode: CampCode = 'E27'): Promise<STSheetStudent[]> => {
     try {
-      // 설정 먼저 확인
-      const useTemporaryData = await stSheetService.getUseTemporaryDataSetting(campCode);
-      
-      // 임시 데이터 사용 설정이 켜져있으면 무조건 임시 데이터 반환
+      const [settingsSnap, cacheSnap] = await Promise.all([
+        getDoc(doc(db, 'campSettings', campCode)),
+        getDoc(doc(db, 'stSheetCache', campCode)),
+      ]);
+
+      const useTemporaryData = settingsSnap.data()?.useTemporaryData ?? false;
+
       if (useTemporaryData) {
         logger.info(`⚠️ ${campCode} 임시 데이터 표시 설정이 활성화되어 있습니다.`);
         return getTemporaryData(campCode);
       }
-      
-      // 임시 데이터 사용 설정이 꺼져있으면 실제 데이터만 반환
-      const docRef = doc(db, 'stSheetCache', campCode);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        return data.data || [];
+
+      if (cacheSnap.exists()) {
+        return cacheSnap.data().data || [];
       }
-      
-      // 실제 데이터도 없으면 빈 배열 반환 (에러 없음)
-      logger.info(`ℹ️ ${campCode} 학생 데이터 없음 (빈 배열 반환)`);
-      return [];
+
+      logger.info(`ℹ️ ${campCode} 학생 데이터 없음 → 임시 데이터로 폴백`);
+      return getTemporaryData(campCode);
     } catch (error) {
       logger.error('❌ Firestore 데이터 로드 실패:', error);
-      // 에러 발생 시에도 빈 배열 반환 (앱 크래시 방지)
       return [];
     }
   },
@@ -313,16 +310,20 @@ export const stSheetService = {
     }
   },
 
-  // Cloud Function을 통해 ST 시트 동기화 (서비스 계정 인증 사용)
+  // Next.js API를 통해 ST 시트 동기화 (Cloud Function Cold Start 없이 빠름)
   syncSTSheet: async (campCode: CampCode = 'E27'): Promise<SyncSTSheetResponse> => {
-    logger.info(`🔄 ST 시트 동기화 요청 → Cloud Function (캠프: ${campCode})`);
-    const fn = httpsCallable<{ campCode: string }, SyncSTSheetResponse>(
-      mobileFunctions,
-      'syncSTSheet'
-    );
-    const result = await fn({ campCode });
-    logger.info(`✅ 동기화 완료: ${result.data.count}명`);
-    return result.data;
+    logger.info(`🔄 ST 시트 동기화 요청 → Next.js API (캠프: ${campCode})`);
+    const response = await authenticatedFetch('/api/st/sync-sheet', {
+      method: 'POST',
+      body: JSON.stringify({ campCode }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: '' })) as { error?: string };
+      throw new Error(err.error || `동기화 실패 (${response.status})`);
+    }
+    const result = await response.json() as SyncSTSheetResponse;
+    logger.info(`✅ 동기화 완료: ${result.count}명`);
+    return result;
   },
 
   // 학생 상세 정보 조회

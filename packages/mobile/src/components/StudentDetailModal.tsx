@@ -1,3 +1,4 @@
+'use client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { logger, toDriveImageUrl } from '@smis-mentor/shared';
 import {
@@ -9,46 +10,175 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
-  PanResponder,
+  TextInput,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { STSheetStudent, CampType } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
-import { requestContactsPermission, getContactsPermissionStatus, saveSingleParentContact, deleteSingleParentContact } from '../services';
+import { requestContactsPermission, getContactsPermissionStatus, saveSingleParentContact } from '../services';
 import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosureModal';
+import { authenticatedFetch } from '../utils/apiClient';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_HEIGHT = SCREEN_HEIGHT * 0.78; // 화면의 78%
-const CARD_WIDTH = SCREEN_WIDTH * 0.9; // 화면의 90%
-const HORIZONTAL_MARGIN = (SCREEN_WIDTH - CARD_WIDTH) / 2; // 좌우 여백
+const CARD_HEIGHT = SCREEN_HEIGHT * 0.78;
+const CARD_WIDTH = SCREEN_WIDTH * 0.9;
 
-// 주민등록번호 마스킹 함수
+// 주민등록번호 마스킹
 const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: string): string => {
   if (!ssn) return '-';
-  // admin 또는 mentor 중 매니저/부매니저는 전체 공개
   const isManagerRole = groupRole === '매니저' || groupRole === '부매니저';
   if (isAdmin || isManagerRole) return ssn;
-  // 형식: 980619-1****** (앞 6자리 + - + 첫번째 숫자 + 나머지 *)
   const parts = ssn.split('-');
-  if (parts.length !== 2) return ssn; // 형식이 다르면 원본 반환
+  if (parts.length !== 2) return ssn;
   const front = parts[0];
   const back = parts[1];
   if (back.length === 0) return ssn;
   return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
 };
 
+// ─── 편집 권한 ────────────────────────────────────────────────────────────────
+type EditPermission = 'readonly' | 'all' | 'mentor';
 
+interface FieldConfig {
+  label: string;
+  max?: number;         // 만점 (레벨 테스트용)
+  permission: EditPermission;
+  multiline?: boolean;  // textarea 여부 (상세 정보용)
+  section: 'detail' | 'placement' | 'counsel';
+}
+
+const FIELD_CONFIGS: Record<string, FieldConfig> = {
+  // 상세 정보 (admin + mentor 수정 가능)
+  medication: { label: '복용약 & 알레르기', permission: 'mentor', multiline: true,  section: 'detail'    },
+  notes:      { label: '특이사항',           permission: 'mentor', multiline: true,  section: 'detail'    },
+  etc:        { label: '기타',               permission: 'mentor', multiline: true,  section: 'detail'    },
+  // 레벨 테스트
+  placementSpeaking: { label: '입소 스피킹',   max: 30, permission: 'readonly', section: 'placement' },
+  placementReading:  { label: '입소 리딩',     max: 30, permission: 'all',      section: 'placement' },
+  placementWriting:  { label: '입소 라이팅',   max: 40, permission: 'all',      section: 'placement' },
+  finalSpeaking:     { label: '파이널 스피킹', max: 30, permission: 'readonly', section: 'placement' },
+  finalReading:      { label: '파이널 리딩',   max: 30, permission: 'all',      section: 'placement' },
+  finalWriting:      { label: '파이널 라이팅', max: 40, permission: 'all',      section: 'placement' },
+  // 상담
+  classCounsel1: { label: '멘토 상담 1주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  classCounsel2: { label: '멘토 상담 2주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  classCounsel3: { label: '멘토 상담 3주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  unitCounsel1:  { label: '유닛 상담 1주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  unitCounsel2:  { label: '유닛 상담 2주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  unitCounsel3:  { label: '유닛 상담 3주차', permission: 'mentor', multiline: true, section: 'counsel' },
+};
+
+function canEditField(permission: EditPermission, role: string): boolean {
+  if (permission === 'readonly') return false;
+  if (role === 'admin') return true;
+  if (permission === 'all') return true;
+  if (permission === 'mentor') return role === 'mentor' || role === 'mentor_temp';
+  return false;
+}
+
+// ─── 공통 행 컴포넌트 ─────────────────────────────────────────────────────────
 const InfoRow = React.memo(({ label, value }: { label: string; value?: string | null }) => {
   if (!value) return null;
   return (
     <View style={styles.infoRow}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+      <Text style={styles.value} numberOfLines={0}>{value}</Text>
     </View>
   );
 });
 
+// 편집 가능한 행 컴포넌트
+interface EditableRowProps {
+  fieldKey: string;
+  cfg: FieldConfig;
+  value: string;
+  editingField: { key: string; value: string } | null;
+  fieldSaving: boolean;
+  canEdit: boolean;
+  onStartEdit: (key: string, currentValue: string) => void;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}
+
+const EditableRow = React.memo(({
+  fieldKey, cfg, value, editingField, fieldSaving, canEdit,
+  onStartEdit, onChange, onSave, onCancel,
+}: EditableRowProps) => {
+  const isThisEditing = editingField?.key === fieldKey;
+  const isSavingThis = isThisEditing && fieldSaving;
+  const displayValue = value
+    ? (cfg.max != null && cfg.max > 0 ? `${value} / ${cfg.max}` : value)
+    : '';
+
+  if (isThisEditing) {
+    return (
+      <View style={styles.editableRowColumn}>
+        <Text style={styles.label}>{cfg.label}</Text>
+        <View style={styles.editContainer}>
+          <TextInput
+            style={[styles.editInput, cfg.multiline && styles.editInputMultiline]}
+            value={editingField!.value}
+            onChangeText={onChange}
+            multiline={cfg.multiline}
+            numberOfLines={cfg.multiline ? 3 : 1}
+            autoFocus
+            placeholder="내용을 입력하세요"
+            placeholderTextColor="#cbd5e1"
+          />
+          <View style={styles.editButtons}>
+            <TouchableOpacity
+              onPress={onSave}
+              disabled={isSavingThis}
+              style={[styles.editBtn, styles.editBtnSave]}
+              accessibilityRole="button"
+            >
+              {isSavingThis
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.editBtnSaveText}>저장</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onCancel}
+              disabled={isSavingThis}
+              style={[styles.editBtn, styles.editBtnCancel]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.editBtnCancelText}>취소</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.infoRow}>
+      <Text style={styles.label}>{cfg.label}</Text>
+      <View style={styles.valueContainer}>
+        <Text style={[styles.value, !displayValue && styles.valuePlaceholder]} numberOfLines={0}>
+          {displayValue || '-'}
+        </Text>
+        {canEdit && !editingField && (
+          <TouchableOpacity
+            onPress={() => onStartEdit(fieldKey, value)}
+            style={styles.editIconBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={`${cfg.label} 수정`}
+          >
+            <Text style={styles.editIconText}>수정</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+});
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 interface StudentDetailModalProps {
   visible: boolean;
   students: STSheetStudent[];
@@ -71,78 +201,106 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
   const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);
   const groupRole = activeJobExp?.groupRole;
+
   const translateY = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0)).current;
-  const scrollX = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  // Google Play 정책: 연락처 권한 요청 직전 명시적 공개(Prominent Disclosure) 모달
+
+  // 인라인 편집 상태 (현재 보이는 학생 카드에만 적용)
+  const [editingField, setEditingField] = useState<{ key: string; value: string } | null>(null);
+  const [fieldSaving, setFieldSaving] = useState(false);
+  // 카드별 오버라이드된 값 저장 (studentId → field overrides)
+  const [overrides, setOverrides] = useState<Record<string, Record<string, string>>>({});
+
   const [showContactsDisclosure, setShowContactsDisclosure] = useState(false);
   const pendingStudentRef = useRef<STSheetStudent | null>(null);
 
   useEffect(() => {
     if (visible) {
       setCurrentIndex(initialIndex);
-      // 카드 등장 애니메이션 (scale + fade)
+      setEditingField(null);
       Animated.parallel([
-        Animated.spring(scale, {
-          toValue: 1,
-          useNativeDriver: true,
-          tension: 160,
-          friction: 14,
-        }),
-        Animated.spring(translateY, {
-          toValue: 1,
-          useNativeDriver: true,
-          tension: 160,
-          friction: 14,
-        }),
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 160, friction: 14 }),
+        Animated.spring(translateY, { toValue: 1, useNativeDriver: true, tension: 160, friction: 14 }),
       ]).start();
-      
-      // 초기 위치로 스크롤 (레이아웃 직후 즉시 이동)
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({
-          x: initialIndex * CARD_WIDTH,
-          animated: false,
-        });
+        scrollViewRef.current?.scrollTo({ x: initialIndex * CARD_WIDTH, animated: false });
       }, 0);
     } else {
-      // 카드 사라지는 애니메이션
       Animated.parallel([
-        Animated.timing(scale, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
+        Animated.timing(scale, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [visible, initialIndex]);
 
-  // 스크롤 이벤트 핸들러
   const handleScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(offsetX / CARD_WIDTH);
     if (index !== currentIndex && index >= 0 && index < students.length) {
       setCurrentIndex(index);
+      setEditingField(null); // 페이지 전환 시 편집 취소
     }
   };
 
+  // 편집 시작
+  const handleStartEdit = useCallback((fieldKey: string, currentValue: string) => {
+    setEditingField({ key: fieldKey, value: currentValue });
+  }, []);
+
+  // 편집 취소
+  const handleCancelEdit = useCallback(() => {
+    setEditingField(null);
+  }, []);
+
+  // 저장
+  const handleSaveField = useCallback(async () => {
+    if (!editingField || !campCode) return;
+    const student = students[currentIndex];
+    if (!student) return;
+
+    setFieldSaving(true);
+    try {
+      const response = await authenticatedFetch('/api/st/update-placement', {
+        method: 'POST',
+        body: JSON.stringify({
+          campCode,
+          studentId: student.studentId,
+          rowNumber: student.rowNumber,
+          fields: { [editingField.key]: editingField.value },
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: '' })) as { error?: string };
+        logger.error('저장 API 응답 오류:', { status: response.status, error: err.error });
+        throw new Error(err.error || `저장 실패 (${response.status})`);
+      }
+      // 화면 즉시 반영 (overrides에 저장)
+      setOverrides(prev => ({
+        ...prev,
+        [student.studentId]: {
+          ...(prev[student.studentId] ?? {}),
+          [editingField.key]: editingField.value,
+        },
+      }));
+      setEditingField(null);
+    } catch (e: unknown) {
+      logger.error('모바일 학생 카드 저장 실패:', e);
+      const message = e instanceof Error ? e.message : '저장에 실패했습니다. 다시 시도해주세요.';
+      Alert.alert('저장 실패', message);
+    } finally {
+      setFieldSaving(false);
+    }
+  }, [editingField, campCode, students, currentIndex]);
+
   const handleSaveParentContact = useCallback(async (s: STSheetStudent) => {
     if (!s.parentPhone) return;
-
-    // 이미 권한이 있으면 disclosure 없이 바로 저장
     const currentStatus = await getContactsPermissionStatus();
     if (currentStatus === 'granted') {
       await saveSingleParentContact(s, campCode);
       return;
     }
-
-    // 권한이 없으면 Google Play 정책에 따라 disclosure 모달을 먼저 표시
     pendingStudentRef.current = s;
     setShowContactsDisclosure(true);
   }, [campCode]);
@@ -152,7 +310,6 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     const s = pendingStudentRef.current;
     pendingStudentRef.current = null;
     if (!s) return;
-
     const granted = await requestContactsPermission();
     if (!granted) return;
     await saveSingleParentContact(s, campCode);
@@ -166,291 +323,286 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   if (students.length === 0) return null;
 
   const student = students[currentIndex] ?? students[0];
+  const userRole = userData?.role ?? '';
 
   return (
     <>
-    {/* Google Play 정책(Prominent Disclosure) 준수: OS 연락처 권한 요청 직전 명시적 공개 모달 */}
-    <ContactsPermissionDisclosureModal
-      visible={showContactsDisclosure}
-      onAccept={handleContactsDisclosureAccept}
-      onDeny={handleContactsDisclosureDeny}
-    />
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <View style={styles.backdrop}>
-        {/* 반투명 배경 */}
-        <TouchableOpacity 
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1} 
-          onPress={onClose}
-        />
-        
-        {/* 카드 컨테이너 */}
-        <Animated.View 
-          style={[
-            styles.cardContainer,
-            {
-              transform: [{ scale }],
-              opacity: translateY,
-            },
-          ]}
-        >
-          {/* 헤더 */}
-          <View style={styles.header}>
-            {/* 학생 이름 */}
-            <View style={styles.headerCenter}>
-              <Text style={styles.studentName}>{student.name}</Text>
-              <Text style={styles.pageIndicator}>
-                {currentIndex + 1} / {students.length}
-              </Text>
-            </View>
+      <ContactsPermissionDisclosureModal
+        visible={showContactsDisclosure}
+        onAccept={handleContactsDisclosureAccept}
+        onDeny={handleContactsDisclosureDeny}
+      />
+      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+        <View style={styles.backdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
 
-            {/* X 버튼 */}
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Swipeable Content */}
-          <ScrollView
-            ref={scrollViewRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            bounces={false}
-            snapToInterval={CARD_WIDTH}
-            decelerationRate="fast"
-          >
-            {students.map((s) => (
-              <View key={s.studentId} style={styles.page}>
-                <StudentCard
-                  student={s}
-                  campType={campType}
-                  isAdmin={isAdmin}
-                  groupRole={groupRole}
-                  onSaveContact={handleSaveParentContact}
-                />
+          <Animated.View style={[styles.cardContainer, { transform: [{ scale }], opacity: translateY }]}>
+            {/* 헤더 */}
+            <View style={styles.header}>
+              <View style={styles.headerCenter}>
+                <Text style={styles.studentName}>{student.name}</Text>
+                <Text style={styles.pageIndicator}>{currentIndex + 1} / {students.length}</Text>
               </View>
-            ))}
-          </ScrollView>
-
-          {/* 페이지 인디케이터 (도트) */}
-          {students.length > 1 && (
-            <View style={styles.dotsContainer}>
-              {students.map((s, idx) => (
-                <View
-                  key={s.studentId}
-                  style={[
-                    styles.dot,
-                    idx === currentIndex && styles.dotActive,
-                  ]}
-                />
-              ))}
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </Animated.View>
-      </View>
-    </Modal>
+
+            {/* 가로 스와이프 */}
+            <ScrollView
+              ref={scrollViewRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              bounces={false}
+              snapToInterval={CARD_WIDTH}
+              decelerationRate="fast"
+            >
+              {students.map((s, idx) => {
+                const studentOverrides = overrides[s.studentId] ?? {};
+                const merged = { ...s, ...studentOverrides } as unknown as Record<string, string>;
+                return (
+                  <View key={s.studentId} style={styles.page}>
+                    <StudentCard
+                      student={s}
+                      merged={merged}
+                      campType={campType}
+                      isAdmin={isAdmin}
+                      groupRole={groupRole}
+                      userRole={userRole}
+                      editingField={idx === currentIndex ? editingField : null}
+                      fieldSaving={fieldSaving}
+                      onSaveContact={handleSaveParentContact}
+                      onStartEdit={handleStartEdit}
+                      onChangeEdit={(value) => setEditingField(prev => prev ? { ...prev, value } : null)}
+                      onSaveField={handleSaveField}
+                      onCancelEdit={handleCancelEdit}
+                    />
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {/* 페이지 인디케이터 */}
+            {students.length > 1 && (
+              <View style={styles.dotsContainer}>
+                {students.map((s, idx) => (
+                  <View key={s.studentId} style={[styles.dot, idx === currentIndex && styles.dotActive]} />
+                ))}
+              </View>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
     </>
   );
 };
 
+// ─── StudentCard ──────────────────────────────────────────────────────────────
 interface StudentCardProps {
   student: STSheetStudent;
+  merged: Record<string, string>;
   campType: CampType;
   isAdmin: boolean;
   groupRole?: string;
+  userRole: string;
+  editingField: { key: string; value: string } | null;
+  fieldSaving: boolean;
   onSaveContact: (s: STSheetStudent) => void;
+  onStartEdit: (key: string, value: string) => void;
+  onChangeEdit: (value: string) => void;
+  onSaveField: () => void;
+  onCancelEdit: () => void;
 }
 
-const StudentCard = React.memo(({ student: s, campType, isAdmin, groupRole, onSaveContact }: StudentCardProps) => {
+const StudentCard = React.memo(({
+  student: s, merged, campType, isAdmin, groupRole, userRole,
+  editingField, fieldSaving,
+  onSaveContact, onStartEdit, onChangeEdit, onSaveField, onCancelEdit,
+}: StudentCardProps) => {
   const profilePhotoUrl = toDriveImageUrl(s.profilePhoto);
+
+  const renderEditableField = (fieldKey: string) => {
+    const cfg = FIELD_CONFIGS[fieldKey];
+    const canEdit = canEditField(cfg.permission, userRole);
+    const value = merged[fieldKey] ?? '';
+    return (
+      <EditableRow
+        key={fieldKey}
+        fieldKey={fieldKey}
+        cfg={cfg}
+        value={value}
+        editingField={editingField}
+        fieldSaving={fieldSaving}
+        canEdit={canEdit}
+        onStartEdit={onStartEdit}
+        onChange={onChangeEdit}
+        onSave={onSaveField}
+        onCancel={onCancelEdit}
+      />
+    );
+  };
+
   return (
-  <ScrollView
-    style={styles.cardScrollView}
-    showsVerticalScrollIndicator={true}
-    bounces={false}
-    indicatorStyle="black"
-  >
-    {/* 프로필 사진 - 스와이프 콘텐츠와 함께 이동하여 딜레이 없음 */}
-    <View style={styles.profilePhotoContainer}>
-      {profilePhotoUrl ? (
-        <Image
-          source={profilePhotoUrl}
-          style={styles.profilePhoto}
-          contentFit="cover"
-          transition={0}
-          cachePolicy="memory-disk"
-        />
-      ) : (
-        <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
-          <Ionicons
-            name="person"
-            size={120}
-            color={s.gender === 'M' ? '#93c5fd' : '#fcd34d'}
+    <ScrollView style={styles.cardScrollView} showsVerticalScrollIndicator bounces={false} indicatorStyle="black">
+      {/* 프로필 사진 */}
+      <View style={styles.profilePhotoContainer}>
+        {profilePhotoUrl ? (
+          <Image source={profilePhotoUrl} style={styles.profilePhoto} contentFit="cover" transition={0} cachePolicy="memory-disk" />
+        ) : (
+          <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
+            <Ionicons name="person" size={120} color={s.gender === 'M' ? '#93c5fd' : '#fcd34d'} />
+          </View>
+        )}
+      </View>
+
+      <View style={styles.cardContent}>
+        {/* 캠프 정보 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>캠프 정보</Text>
+          <InfoRow label="고유번호" value={s.studentId} />
+          <InfoRow
+            label="반 정보"
+            value={s.classNumber || s.className || s.classMentor
+              ? `${s.classNumber || '-'} | ${s.className || '-'}반 | ${s.classMentor || '-'} 멘토`
+              : undefined}
+          />
+          <InfoRow
+            label="유닛 정보"
+            value={s.unit || s.unitMentor || s.roomNumber
+              ? `${s.unit || s.unitMentor || '-'} 유닛 | ${s.roomNumber || '-'}호`
+              : undefined}
           />
         </View>
-      )}
-    </View>
 
-    <View style={styles.cardContent}>
-      {/* 캠프 정보 */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>캠프 정보</Text>
-        <InfoRow label="고유번호" value={s.studentId} />
-        <InfoRow
-          label="반 정보"
-          value={
-            s.classNumber || s.className || s.classMentor
-              ? `${s.classNumber || '-'} | ${s.className || '-'}반 | ${s.classMentor || '-'} 멘토`
-              : undefined
-          }
-        />
-        <InfoRow
-          label="유닛 정보"
-          value={
-            s.unit || s.unitMentor || s.roomNumber
-              ? `${s.unit || s.unitMentor || '-'} 유닛 | ${s.roomNumber || '-'}호`
-              : s.unitMentor || s.roomNumber
-              ? `${s.unitMentor || '-'} | ${s.roomNumber || '-'}호`
-              : undefined
-          }
-        />
-      </View>
-
-      {/* 기본 정보 */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>기본 정보</Text>
-        <InfoRow
-          label="신상"
-          value={`${s.name} | ${s.englishName || '-'} | ${s.grade} | ${s.gender === 'M' ? '남' : '여'}`}
-        />
-        <InfoRow label="주민등록번호" value={maskSSN(s.ssn, isAdmin, groupRole)} />
-        <InfoRow label="도로명 주소" value={s.address} />
-        <InfoRow label="세부 주소" value={s.addressDetail} />
-
-        {campType === 'EJ' && (
-          <InfoRow
-            label="입퇴소공항"
-            value={
-              s.departureRoute || s.arrivalRoute
-                ? `${s.departureRoute || '-'} 입소 | ${s.arrivalRoute || '-'} 퇴소`
-                : undefined
-            }
-          />
-        )}
-
-        {campType === 'S' && (
-          <>
-            <InfoRow label="단체티 사이즈" value={s.shirtSize} />
+        {/* 기본 정보 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>기본 정보</Text>
+          <InfoRow label="신상" value={`${s.name} | ${s.englishName || '-'} | ${s.grade} | ${s.gender === 'M' ? '남' : '여'}`} />
+          <InfoRow label="주민등록번호" value={maskSSN(s.ssn, isAdmin, groupRole)} />
+          <InfoRow label="도로명 주소" value={s.address} />
+          <InfoRow label="세부 주소" value={s.addressDetail} />
+          {campType === 'EJ' && (
             <InfoRow
-              label="여권정보"
-              value={
-                s.passportName || s.passportNumber || s.passportExpiry
-                  ? `${s.passportName || '-'} | ${s.passportNumber || '-'} | ${s.passportExpiry || '-'}`
-                  : undefined
-              }
+              label="입퇴소공항"
+              value={s.departureRoute || s.arrivalRoute
+                ? `${s.departureRoute || '-'} 입소 | ${s.arrivalRoute || '-'} 퇴소`
+                : undefined}
             />
-          </>
-        )}
-      </View>
-
-      {/* 보호자 정보 */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>보호자 정보</Text>
-          {s.parentPhone && (
-            <TouchableOpacity
-              onPress={() => onSaveContact(s)}
-              style={styles.saveContactBtn}
-              accessibilityLabel="보호자 연락처 저장"
-              accessibilityRole="button"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="person-add-outline" size={15} color="#10b981" />
-            </TouchableOpacity>
+          )}
+          {campType === 'S' && (
+            <>
+              <InfoRow label="단체티 사이즈" value={s.shirtSize} />
+              <InfoRow
+                label="여권정보"
+                value={s.passportName || s.passportNumber || s.passportExpiry
+                  ? `${s.passportName || '-'} | ${s.passportNumber || '-'} | ${s.passportExpiry || '-'}`
+                  : undefined}
+              />
+            </>
           )}
         </View>
-        <InfoRow
-          label="대표 보호자"
-          value={
-            s.parentPhone || s.parentName
-              ? `${s.parentPhone || '-'} | ${s.parentName || '-'}`
-              : undefined
-          }
-        />
-        <InfoRow label="대표 이메일" value={s.email} />
-        <InfoRow
-          label="기타 보호자"
-          value={
-            s.otherPhone || s.otherName
-              ? `${s.otherPhone || '-'} | ${s.otherName || '-'}`
-              : undefined
-          }
-        />
-      </View>
 
-      {/* 상세 정보 */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>상세 정보</Text>
-        <InfoRow label="복용약 & 알레르기" value={s.medication} />
-        <InfoRow label="특이사항" value={s.notes} />
-        <InfoRow label="기타" value={s.etc} />
-      </View>
-
-      {/* 사전 설문조사 */}
-      {!!s.surveyMbti && (
+        {/* 보호자 정보 */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>사전 설문조사</Text>
-          {([
-            ['MBTI', s.surveyMbti],
-            ['캠프 참여 결정', s.surveyCampDecision],
-            ['캠프에 기대하는 1순위', s.surveyCampExpectation],
-            ['이전 영어캠프/어학캠프 경험 (회)', s.surveyCampExperience],
-            ['모바일/PC게임 (시간/일)', s.surveyGameTime],
-            ['SNS (시간/일)', s.surveySnsTime],
-            ['재학 학교 유형', s.surveySchoolType],
-            ['영어학원 기간 (년)', s.surveyAcademyPeriod],
-            ['원어민 수업 (시간/주)', s.surveyNativeClassHours],
-            ['원어민 수업 발화 비율 (%)', s.surveySpeakingRatio],
-            ['영어를 좋아하는 편', s.surveyLikesEnglish],
-            ['영어를 잘 하는 편', s.surveyGoodAtEnglish],
-            ['처음 보는 친구에게 먼저 말 걸기', s.surveyTalkFirst],
-            ['학교 친구가 많은 편', s.surveyManyFriends],
-            ['조별 활동 주도적', s.surveyGroupLeader],
-            ['단체 활동 규칙 준수', s.surveyFollowRules],
-            ['선생님 말 잘 듣기', s.surveyListenTeacher],
-            ['집이 화목한 편', s.surveyHappyHome],
-            ['부모님 말 잘 듣기', s.surveyListenParents],
-            ['평균 수면 시간 (시간)', s.surveySleepHours],
-            ['학교에서 공부 잘 하는 편', s.surveyGoodAtStudy],
-            ['학교 발표 자주 하는 편', s.surveyPresentation],
-            ['노력하면 실력 늘어난다 믿음', s.surveyGrowthMindset],
-            ['모르면 바로 질문', s.surveyAsksQuestions],
-            ['숙제 미루지 않기', s.surveyNoHomeworkDelay],
-            ['계획 지키는 편', s.surveyFollowPlan],
-            ['수업 집중 잘 하는 편', s.surveyFocusInClass],
-            ['다니는 학원 개수 (개)', s.surveyAcademyCount],
-            ['다니는 학원 종류', s.surveyAcademyTypes],
-          ] as [string, string | undefined][])
-            .filter(([, v]) => !!v)
-            .map(([label, value]) => (
-              <InfoRow key={label} label={label} value={value} />
-            ))}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>보호자 정보</Text>
+            {s.parentPhone && (
+              <TouchableOpacity
+                onPress={() => onSaveContact(s)}
+                style={styles.saveContactBtn}
+                accessibilityLabel="보호자 연락처 저장"
+                accessibilityRole="button"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="person-add-outline" size={15} color="#10b981" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <InfoRow
+            label="대표 보호자"
+            value={s.parentPhone || s.parentName
+              ? `${s.parentPhone || '-'} | ${s.parentName || '-'}`
+              : undefined}
+          />
+          <InfoRow label="대표 이메일" value={s.email} />
+          <InfoRow
+            label="기타 보호자"
+            value={s.otherPhone || s.otherName
+              ? `${s.otherPhone || '-'} | ${s.otherName || '-'}`
+              : undefined}
+          />
         </View>
-      )}
-    </View>
-  </ScrollView>
+
+        {/* 상세 정보 — 항상 표시, admin/mentor 수정 가능 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>상세 정보</Text>
+          {(['medication', 'notes', 'etc'] as const).map(renderEditableField)}
+        </View>
+
+        {/* 레벨 테스트 — 항상 표시 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>레벨 테스트</Text>
+          {(['placementSpeaking', 'placementReading', 'placementWriting',
+            'finalSpeaking', 'finalReading', 'finalWriting'] as const).map(renderEditableField)}
+        </View>
+
+        {/* 상담 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>상담</Text>
+          {(['classCounsel1', 'classCounsel2', 'classCounsel3',
+            'unitCounsel1', 'unitCounsel2', 'unitCounsel3'] as const).map(renderEditableField)}
+        </View>
+
+        {/* 사전 설문조사 */}
+        {!!s.surveyMbti && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>사전 설문조사</Text>
+            {([
+              ['MBTI', s.surveyMbti],
+              ['캠프 참여 결정', s.surveyCampDecision],
+              ['캠프에 기대하는 1순위', s.surveyCampExpectation],
+              ['이전 영어캠프/어학캠프 경험 (회)', s.surveyCampExperience],
+              ['모바일/PC게임 (시간/일)', s.surveyGameTime],
+              ['SNS (시간/일)', s.surveySnsTime],
+              ['재학 학교 유형', s.surveySchoolType],
+              ['영어학원 기간 (년)', s.surveyAcademyPeriod],
+              ['원어민 수업 (시간/주)', s.surveyNativeClassHours],
+              ['원어민 수업 발화 비율 (%)', s.surveySpeakingRatio],
+              ['영어를 좋아하는 편', s.surveyLikesEnglish],
+              ['영어를 잘 하는 편', s.surveyGoodAtEnglish],
+              ['처음 보는 친구에게 먼저 말 걸기', s.surveyTalkFirst],
+              ['학교 친구가 많은 편', s.surveyManyFriends],
+              ['조별 활동 주도적', s.surveyGroupLeader],
+              ['단체 활동 규칙 준수', s.surveyFollowRules],
+              ['선생님 말 잘 듣기', s.surveyListenTeacher],
+              ['집이 화목한 편', s.surveyHappyHome],
+              ['부모님 말 잘 듣기', s.surveyListenParents],
+              ['평균 수면 시간 (시간)', s.surveySleepHours],
+              ['학교에서 공부 잘 하는 편', s.surveyGoodAtStudy],
+              ['학교 발표 자주 하는 편', s.surveyPresentation],
+              ['노력하면 실력 늘어난다 믿음', s.surveyGrowthMindset],
+              ['모르면 바로 질문', s.surveyAsksQuestions],
+              ['숙제 미루지 않기', s.surveyNoHomeworkDelay],
+              ['계획 지키는 편', s.surveyFollowPlan],
+              ['수업 집중 잘 하는 편', s.surveyFocusInClass],
+              ['다니는 학원 개수 (개)', s.surveyAcademyCount],
+              ['다니는 학원 종류', s.surveyAcademyTypes],
+            ] as [string, string | undefined][])
+              .filter(([, v]) => !!v)
+              .map(([label, value]) => (
+                <InfoRow key={label} label={label} value={value} />
+              ))}
+          </View>
+        )}
+      </View>
+    </ScrollView>
   );
 });
 
+// ─── 스타일 ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
@@ -464,10 +616,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
     elevation: 15,
@@ -484,24 +633,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     position: 'relative',
     minHeight: 48,
-  },
-  profilePhotoContainer: {
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: '#ffffff',
-  },
-  profilePhoto: {
-    width: 280,
-    height: 280,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  profilePhotoPlaceholder: {
-    backgroundColor: '#e2e8f0',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   headerCenter: {
     alignItems: 'center',
@@ -538,6 +669,24 @@ const styles = StyleSheet.create({
   cardScrollView: {
     flex: 1,
   },
+  profilePhotoContainer: {
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: '#ffffff',
+  },
+  profilePhoto: {
+    width: 280,
+    height: 280,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  profilePhotoPlaceholder: {
+    backgroundColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   cardContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -550,6 +699,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600' as '600',
     color: '#1e293b',
+    marginBottom: 6,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -559,19 +709,91 @@ const styles = StyleSheet.create({
   },
   infoRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
+  editableRowColumn: {
+    flexDirection: 'column',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
   label: {
-    flex: 5,
+    flex: 1,
     fontSize: 12,
     color: '#64748b',
   },
+  valueContainer: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
   value: {
-    flex: 7,
+    flex: 1,
     fontSize: 12,
     color: '#1e293b',
+    fontWeight: '500' as '500',
+  },
+  valuePlaceholder: {
+    color: '#cbd5e1',
+  },
+  editContainer: {
+    marginTop: 4,
+    gap: 6,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 12,
+    color: '#1e293b',
+    backgroundColor: '#f8fafc',
+  },
+  editInputMultiline: {
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
+  editButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+    minWidth: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editBtnSave: {
+    backgroundColor: '#3b82f6',
+  },
+  editBtnCancel: {
+    backgroundColor: '#f1f5f9',
+  },
+  editBtnSaveText: {
+    fontSize: 12,
+    color: '#ffffff',
+    fontWeight: '600' as '600',
+  },
+  editBtnCancelText: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  editIconBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#eff6ff',
+  },
+  editIconText: {
+    fontSize: 11,
+    color: '#3b82f6',
     fontWeight: '500' as '500',
   },
   dotsContainer: {

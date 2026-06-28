@@ -1,5 +1,4 @@
-import { collection, doc, getDoc, setDoc, query, where, getDocs } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
+import { collection, doc, getDoc, setDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import {
   logger,
   STSheetStudent,
@@ -10,7 +9,7 @@ import {
   FamilyUnit,
   FamilySTSheetCache,
 } from '@smis-mentor/shared';
-import { db, functions } from './firebase';
+import { db } from './firebase';
 
 export type { STSheetStudent, CampCode, CampType, FamilyUnit, FamilySTSheetCache };
 
@@ -257,25 +256,27 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
 export const stSheetService = {
   getCachedData: async (campCode: CampCode = 'E27'): Promise<STSheetStudent[]> => {
     try {
-      // 설정 먼저 확인
-      const useTemporaryData = await stSheetService.getUseTemporaryDataSetting(campCode);
-      
-      // 임시 데이터 사용 설정이 켜져있으면 무조건 임시 데이터 반환
+      // campSettings(설정)와 stSheetCache(데이터)를 병렬로 조회
+      const [settingsSnap, cacheSnap] = await Promise.all([
+        getDoc(doc(db, 'campSettings', campCode)),
+        getDoc(doc(db, 'stSheetCache', campCode)),
+      ]);
+
+      const useTemporaryData = settingsSnap.data()?.useTemporaryData ?? false;
+
+      // 임시 데이터 설정이 켜져있으면 무조건 임시 데이터 반환
       if (useTemporaryData) {
         logger.info(`⚠️ ${campCode} 임시 데이터 표시 설정이 활성화되어 있습니다.`);
         return getTemporaryData(campCode);
       }
-      
-      // 임시 데이터 사용 설정이 꺼져있으면 실제 데이터만 반환
-      const docRef = doc(db, 'stSheetCache', campCode);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        return data.data || [];
+
+      // 임시 데이터 설정이 꺼져있고 실제 캐시가 있으면 반환
+      if (cacheSnap.exists()) {
+        return cacheSnap.data().data || [];
       }
-      
-      // 실제 데이터도 없으면 빈 배열 반환
-      return [];
+
+      // 실제 캐시도 없으면 임시 데이터로 폴백
+      return getTemporaryData(campCode);
     } catch (error) {
       logger.error('Firestore 데이터 로드 실패:', error);
       throw error;
@@ -374,14 +375,15 @@ export const stSheetService = {
   },
 
   syncSTSheet: async (campCode: CampCode = 'E27'): Promise<{ success: boolean; count: number; lastSync: string }> => {
-    logger.info(`🔄 ST 시트 동기화 요청 → Cloud Function (캠프: ${campCode})`);
-    const fn = httpsCallable<{ campCode: string }, { success: boolean; count: number; lastSync: string }>(
-      functions,
-      'syncSTSheet'
+    logger.info(`🔄 ST 시트 동기화 요청 → Next.js API (캠프: ${campCode})`);
+    // Cloud Function 대신 Next.js API 라우트를 직접 호출 — Cold Start 없이 빠름
+    const { authenticatedPost } = await import('./apiClient');
+    const result = await authenticatedPost<{ success: boolean; count: number; lastSync: string }>(
+      '/api/st/sync-sheet',
+      { campCode },
     );
-    const result = await fn({ campCode });
-    logger.info(`✅ 동기화 완료: ${result.data.count}명`);
-    return result.data;
+    logger.info(`✅ 동기화 완료: ${result.count}명`);
+    return result;
   },
 
   getStudentDetail: async (studentId: string, campCode: CampCode = 'E27'): Promise<STSheetStudent | null> => {
@@ -728,5 +730,88 @@ export const jobCodesService = {
       logger.error('JobCodes 조회 실패:', error);
       throw error;
     }
+  },
+};
+
+// ─── 입소 레벨 테스트 override 서비스 ───────────────────────────────────────
+
+export interface PlacementOverride {
+  // 상세 정보
+  medication?: string;
+  notes?: string;
+  etc?: string;
+  // 입소 레벨 테스트
+  placementSpeaking?: string;
+  placementReading?: string;
+  placementWriting?: string;
+  // 파이널 레벨 테스트
+  finalSpeaking?: string;
+  finalReading?: string;
+  finalWriting?: string;
+  // 반 상담
+  classCounsel1?: string;
+  classCounsel2?: string;
+  classCounsel3?: string;
+  // 방 상담
+  unitCounsel1?: string;
+  unitCounsel2?: string;
+  unitCounsel3?: string;
+  updatedAt?: unknown;
+  updatedBy?: string;
+}
+
+export const placementOverrideService = {
+  /**
+   * 특정 학생의 override 값을 조회한다.
+   * stSheetOverrides/{campCode}/students/{studentId}
+   */
+  getOverride: async (campCode: CampCode, studentId: string): Promise<PlacementOverride | null> => {
+    try {
+      const ref = doc(db, 'stSheetOverrides', campCode, 'students', studentId);
+      const snap = await getDoc(ref);
+      return snap.exists() ? (snap.data() as PlacementOverride) : null;
+    } catch (error) {
+      logger.error('override 조회 실패:', error);
+      return null;
+    }
+  },
+
+  /**
+   * 입소 레벨 테스트 값을 저장한다. (admin 전용)
+   * 기존 값에 merge 방식으로 저장하므로 필드 단위 업데이트 가능.
+   */
+  saveOverride: async (
+    campCode: CampCode,
+    studentId: string,
+    fields: Omit<PlacementOverride, 'updatedAt' | 'updatedBy'>,
+    updatedBy: string,
+  ): Promise<void> => {
+    const ref = doc(db, 'stSheetOverrides', campCode, 'students', studentId);
+    await setDoc(ref, {
+      ...fields,
+      updatedAt: serverTimestamp(),
+      updatedBy,
+    }, { merge: true });
+  },
+
+  /**
+   * STSheetStudent 원본 위에 override 값을 병합하여 반환한다.
+   */
+  mergeOverride: (student: STSheetStudent, override: PlacementOverride | null): STSheetStudent => {
+    if (!override) return student;
+    const overridableKeys: (keyof PlacementOverride)[] = [
+      'medication', 'notes', 'etc',
+      'placementSpeaking', 'placementReading', 'placementWriting',
+      'finalSpeaking', 'finalReading', 'finalWriting',
+      'classCounsel1', 'classCounsel2', 'classCounsel3',
+      'unitCounsel1', 'unitCounsel2', 'unitCounsel3',
+    ];
+    const merged = { ...student };
+    for (const key of overridableKeys) {
+      if (override[key] !== undefined) {
+        (merged as unknown as Record<string, unknown>)[key] = override[key];
+      }
+    }
+    return merged;
   },
 };
