@@ -69,7 +69,11 @@ function columnIndexToLetter(index: number): string {
   return letter;
 }
 
-async function getSheetsClient() {
+// 프로세스 재시작 전까지 유효한 인메모리 캐시 (Vercel Serverless는 워커 재사용됨)
+let _sheetsClient: ReturnType<typeof google.sheets> | null = null;
+
+function getSheetsClient() {
+  if (_sheetsClient) return _sheetsClient;
   const raw = process.env.GOOGLE_SHEETS_SERVICE_ACCOUNT;
   if (!raw) throw new Error('GOOGLE_SHEETS_SERVICE_ACCOUNT 환경 변수 누락');
   let credentials: Record<string, string>;
@@ -82,34 +86,43 @@ async function getSheetsClient() {
     credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
-  return google.sheets({ version: 'v4', auth });
+  _sheetsClient = google.sheets({ version: 'v4', auth });
+  return _sheetsClient;
 }
 
+// campCode별 열 위치 인메모리 캐시
+const _columnMapCache = new Map<string, { columnMap: Record<string, string>; sheetName: string }>();
+
 /**
- * 열 위치 맵 반환 — Firestore 캐시 우선, 없으면 Sheets 헤더를 읽어서 캐싱
+ * 열 위치 맵 반환 — 인메모리 캐시 → Firestore 캐시 → Sheets 헤더 읽기 순서
  * { 'P-Speaking': 'AK', 'P-Reading': 'AL', ... } 형태
  */
 async function getOrBuildColumnMap(
   campCode: string,
   spreadsheetId: string,
-  gid: string,
+  sheetName: string,  // config.sheetName을 직접 전달 (spreadsheets.get() 호출 불필요)
 ): Promise<{ columnMap: Record<string, string>; sheetName: string }> {
+  // 1단계: 인메모리 캐시 (가장 빠름, API 호출 없음)
+  const cached = _columnMapCache.get(campCode);
+  if (cached && ALL_SHEET_HEADERS.every(h => h in cached.columnMap)) {
+    return cached;
+  }
+
+  // 2단계: Firestore 캐시 확인
   const db = getAdminFirestore();
   const settingsRef = db.collection('campSettings').doc(campCode);
   const settingsSnap = await settingsRef.get();
-  const cached = settingsSnap.data()?.sheetColumnMap as Record<string, string> | undefined;
-  const cachedSheetName = settingsSnap.data()?.sheetName as string | undefined;
+  const fsColumnMap = settingsSnap.data()?.sheetColumnMap as Record<string, string> | undefined;
+  const fsSheetName = (settingsSnap.data()?.sheetName as string | undefined) ?? sheetName;
 
-  if (cached && cachedSheetName && ALL_SHEET_HEADERS.every(h => h in cached)) {
-    return { columnMap: cached, sheetName: cachedSheetName };
+  if (fsColumnMap && ALL_SHEET_HEADERS.every(h => h in fsColumnMap)) {
+    const result = { columnMap: fsColumnMap, sheetName: fsSheetName };
+    _columnMapCache.set(campCode, result);
+    return result;
   }
 
-  const sheets = await getSheetsClient();
-
-  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
-  const matched = (meta.data.sheets ?? []).find(s => String(s.properties?.sheetId) === gid);
-  const sheetName = matched?.properties?.title ?? 'ST';
-
+  // 3단계: Google Sheets 헤더 읽기 (캐시 미스 시 1회만 실행)
+  const sheets = getSheetsClient();
   const headerRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `${sheetName}!1:1`,
@@ -117,16 +130,19 @@ async function getOrBuildColumnMap(
   });
   const headers = ((headerRes.data.values?.[0] ?? []) as string[]).map((h: string) => h.trim());
 
-  const columnMap: Record<string, string> = { ...(cached ?? {}) };
+  const columnMap: Record<string, string> = { ...(fsColumnMap ?? {}) };
   for (const headerName of ALL_SHEET_HEADERS) {
     const idx = headers.indexOf(headerName);
     if (idx !== -1) columnMap[headerName] = columnIndexToLetter(idx);
   }
 
+  // Firestore + 인메모리에 캐시 저장
   await settingsRef.set({ sheetColumnMap: columnMap, sheetName }, { merge: true });
+  const result = { columnMap, sheetName };
+  _columnMapCache.set(campCode, result);
   logger.info(`📦 열 위치 캐시 저장: ${campCode}`, columnMap);
 
-  return { columnMap, sheetName };
+  return result;
 }
 
 export async function POST(request: NextRequest) {
@@ -184,10 +200,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getAdminFirestore();
-    const { spreadsheetId, gid } = config;
+    const { spreadsheetId, sheetName: configSheetName } = config;
 
-    // 4. 열 위치 맵 취득 (캐시 우선)
-    const { columnMap, sheetName } = await getOrBuildColumnMap(campCode, spreadsheetId, gid);
+    // 4. 열 위치 맵 취득 (인메모리 → Firestore → Sheets 순서, 캐시 히트 시 API 호출 없음)
+    const { columnMap, sheetName } = await getOrBuildColumnMap(campCode, spreadsheetId, configSheetName);
 
     // 5. Firestore override 데이터 구성
     const overrideData: Record<string, unknown> = {
@@ -212,7 +228,7 @@ export async function POST(request: NextRequest) {
 
     // 7. Firestore override 저장 + Sheets batchUpdate 병렬 실행
     const overrideRef = db.collection('stSheetOverrides').doc(campCode).collection('students').doc(studentId);
-    const sheetsClient = await getSheetsClient();
+    const sheetsClient = getSheetsClient();
 
     await Promise.all([
       overrideRef.set(overrideData, { merge: true }),
