@@ -71,8 +71,13 @@ function columnIndexToLetter(index: number): string {
 
 async function getSheetsClient() {
   const raw = process.env.GOOGLE_SHEETS_SERVICE_ACCOUNT;
-  if (!raw) throw new Error('GOOGLE_SHEETS_SERVICE_ACCOUNT 환경 변수가 설정되지 않았습니다.');
-  const credentials = JSON.parse(raw);
+  if (!raw) throw new Error('GOOGLE_SHEETS_SERVICE_ACCOUNT 환경 변수 누락');
+  let credentials: Record<string, string>;
+  try {
+    credentials = JSON.parse(raw);
+  } catch {
+    throw new Error(`GOOGLE_SHEETS_SERVICE_ACCOUNT JSON 파싱 실패 (길이: ${raw.length})`);
+  }
   const auth = new google.auth.GoogleAuth({
     credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
@@ -222,7 +227,8 @@ export async function POST(request: NextRequest) {
     logger.info(`✅ 저장 완료: ${campCode}/${studentId} → ${dataToUpdate.map(d => d.range).join(', ')}`);
     return NextResponse.json({ success: true });
   } catch (error) {
-    logger.error('학생 카드 필드 업데이트 실패:', error);
-    return NextResponse.json({ error: '업데이트에 실패했습니다.' }, { status: 500 });
+    const errMsg = error instanceof Error ? error.message : String(error);
+    logger.error('학생 카드 필드 업데이트 실패:', errMsg);
+    return NextResponse.json({ error: '업데이트에 실패했습니다.', detail: errMsg }, { status: 500 });
   }
 }
