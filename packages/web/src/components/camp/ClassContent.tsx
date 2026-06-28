@@ -22,9 +22,9 @@ const FIELD_CONFIGS: Record<string, FieldConfig> = {
   finalReading:      { label: '파이널 리딩',    max: 30, permission: 'all',      section: 'placement' },
   finalWriting:      { label: '파이널 라이팅',  max: 40, permission: 'all',      section: 'placement' },
   // 상담
-  classCounsel1:     { label: '멘토 상담 1주차', max: 0, permission: 'mentor',   section: 'counsel'   },
-  classCounsel2:     { label: '멘토 상담 2주차', max: 0, permission: 'mentor',   section: 'counsel'   },
-  classCounsel3:     { label: '멘토 상담 3주차', max: 0, permission: 'mentor',   section: 'counsel'   },
+  classCounsel1:     { label: '담임 상담 1주차', max: 0, permission: 'mentor',   section: 'counsel'   },
+  classCounsel2:     { label: '담임 상담 2주차', max: 0, permission: 'mentor',   section: 'counsel'   },
+  classCounsel3:     { label: '담임 상담 3주차', max: 0, permission: 'mentor',   section: 'counsel'   },
   unitCounsel1:      { label: '유닛 상담 1주차', max: 0, permission: 'mentor',   section: 'counsel'   },
   unitCounsel2:      { label: '유닛 상담 2주차', max: 0, permission: 'mentor',   section: 'counsel'   },
   unitCounsel3:      { label: '유닛 상담 3주차', max: 0, permission: 'mentor',   section: 'counsel'   },

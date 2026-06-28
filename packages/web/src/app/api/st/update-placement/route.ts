@@ -39,9 +39,9 @@ export const STUDENT_EDITABLE_FIELDS: Record<string, FieldConfig> = {
   finalReading:      { sheetHeader: 'F-Reading',  label: '파이널 리딩',   max: 30, permission: 'all'      },
   finalWriting:      { sheetHeader: 'F-Writing',  label: '파이널 라이팅', max: 40, permission: 'all'      },
   // 상담
-  classCounsel1:     { sheetHeader: '상담(반)1',  label: '멘토 상담 1주차', max: 0, permission: 'mentor'  },
-  classCounsel2:     { sheetHeader: '상담(반)2',  label: '멘토 상담 2주차', max: 0, permission: 'mentor'  },
-  classCounsel3:     { sheetHeader: '상담(반)3',  label: '멘토 상담 3주차', max: 0, permission: 'mentor'  },
+  classCounsel1:     { sheetHeader: '상담(반)1',  label: '담임 상담 1주차', max: 0, permission: 'mentor'  },
+  classCounsel2:     { sheetHeader: '상담(반)2',  label: '담임 상담 2주차', max: 0, permission: 'mentor'  },
+  classCounsel3:     { sheetHeader: '상담(반)3',  label: '담임 상담 3주차', max: 0, permission: 'mentor'  },
   unitCounsel1:      { sheetHeader: '상담(방)1',  label: '유닛 상담 1주차', max: 0, permission: 'mentor'  },
   unitCounsel2:      { sheetHeader: '상담(방)2',  label: '유닛 상담 2주차', max: 0, permission: 'mentor'  },
   unitCounsel3:      { sheetHeader: '상담(방)3',  label: '유닛 상담 3주차', max: 0, permission: 'mentor'  },
