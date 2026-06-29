@@ -136,6 +136,7 @@ export function handleAppleAuthError(error: any): string {
 export async function getAppleCredential(): Promise<{
   socialData: SocialUserData;
   credential: OAuthCredential;
+  tempFirebaseUid: string | null; // 서버에서 삭제해야 할 임시 계정 UID
 }> {
   try {
     // 1. 현재 로그인된 사용자 저장
@@ -164,22 +165,18 @@ export async function getAppleCredential(): Promise<{
     // 3. SocialUserData 추출
     const socialData = extractSocialUserData(result.user, credential);
     
-    // 4. 임시 Apple Firebase Auth 계정 삭제 (credential 해제)
-    // signInWithPopup은 항상 새 Firebase Auth 세션을 열기 때문에 마이페이지 연동 시
-    // 별도 UID의 임시 계정이 생성된다. 이 계정을 삭제해야 credential이 해제되어
-    // 원래 계정에 linkWithCredential을 성공적으로 수행할 수 있다.
-    // (idToken 자체는 계정 삭제 후에도 유효하다)
-    if (currentUserData && result.user.uid !== currentUserData.uid) {
-      logger.info('🗑️ 마이페이지 연동용 - 임시 Apple Firebase Auth 계정 삭제:', result.user.uid);
-      try {
-        await result.user.delete();
-        logger.info('✅ 임시 계정 삭제 완료 - credential 해제됨');
-      } catch (deleteError) {
-        logger.warn('⚠️ 임시 계정 삭제 실패 (이미 존재하는 계정일 수 있음):', deleteError);
-      }
+    // 4. 임시 계정 UID 반환 (클라이언트에서 delete() 하지 않음)
+    // 클라이언트 delete() → onAuthStateChanged(null) → 로그아웃 처리 문제 발생
+    // 대신 서버(Admin SDK)에서 삭제하여 클라이언트 Auth 이벤트를 방지한다.
+    const tempFirebaseUid = (currentUserData && result.user.uid !== currentUserData.uid)
+      ? result.user.uid
+      : null;
+
+    if (tempFirebaseUid) {
+      logger.info('ℹ️ 임시 Apple Firebase Auth 계정 UID:', tempFirebaseUid, '(서버에서 삭제 예정)');
     }
     
-    return { socialData, credential };
+    return { socialData, credential, tempFirebaseUid };
   } catch (error: any) {
     logger.error('Apple Credential 획득 오류:', error);
     throw error;

@@ -1137,20 +1137,22 @@ export const updateUserProfile = async (user: FirebaseUser, displayName?: string
 export const signInWithCustomTokenFromFunction = async (
   userId: string,
   email: string,
-  existingUid?: string // 기존 Firebase Auth UID (있으면 재사용)
+  existingUid?: string, // 기존 Firebase Auth UID (있으면 재사용)
+  deleteTempUid?: string // 서버에서 삭제할 임시 소셜 계정 UID
 ) => {
   try {
     logger.info('🔑 Custom Token 생성 요청:', {
       userId,
       email,
       existingUid: existingUid ? `${existingUid.substring(0, 8)}...` : 'none',
+      deleteTempUid: deleteTempUid ? `${deleteTempUid.substring(0, 8)}...` : 'none',
     });
     
     // Cloud Functions 대신 Next.js API Route 사용 (CORS 문제 없고 서비스 계정 불필요)
     const response = await fetch('/api/auth/create-custom-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, email, existingUid }),
+      body: JSON.stringify({ userId, email, existingUid, deleteTempUid }),
     });
 
     if (!response.ok) {

@@ -5,10 +5,13 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, email, existingUid } = body as {
+    const { userId, email, existingUid, deleteTempUid } = body as {
       userId: string;
       email: string;
       existingUid?: string;
+      // 마이페이지 소셜 연동 시 signInWithPopup으로 생성된 임시 계정 UID.
+      // 서버에서 Admin SDK로 삭제하여 클라이언트의 onAuthStateChanged(null)을 방지한다.
+      deleteTempUid?: string;
     };
 
     logger.info('🔑 Custom Token 생성 요청 (API Route):', {
@@ -77,6 +80,22 @@ export async function POST(request: NextRequest) {
       uid: firebaseUser.uid,
       uidMatch: firebaseUser.uid === targetUid,
     });
+
+    // 마이페이지 소셜 연동용 임시 계정 서버 삭제
+    // 클라이언트에서 delete()하면 onAuthStateChanged(null) → 로그아웃 처리 문제가 생기므로
+    // Custom Token 발급과 동시에 Admin SDK로 조용히 삭제한다.
+    if (deleteTempUid && deleteTempUid !== firebaseUser.uid) {
+      try {
+        await adminAuth.deleteUser(deleteTempUid);
+        logger.info('✅ 임시 소셜 계정 서버 삭제 완료:', deleteTempUid);
+      } catch (deleteError: any) {
+        if (deleteError.code === 'auth/user-not-found') {
+          logger.info('ℹ️ 임시 소셜 계정이 이미 삭제됨:', deleteTempUid);
+        } else {
+          logger.warn('⚠️ 임시 소셜 계정 삭제 실패 (무시하고 계속):', deleteError);
+        }
+      }
+    }
 
     // httpsCallable과 동일한 응답 형식 { result: { ... } }
     return NextResponse.json({ result: { customToken, uid: firebaseUser.uid } });
