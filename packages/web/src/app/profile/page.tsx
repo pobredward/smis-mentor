@@ -509,50 +509,40 @@ export default function ProfilePage() {
       }
 
       // 2. Firebase Auth에 소셜 계정 연동 (Google, Apple만)
+      // getGoogleCredential/getAppleCredential에서 임시 계정을 삭제했으므로,
+      // 복원 후 auth.currentUser는 원래 계정이어야 한다.
       if (credential) {
-        const { linkWithCredential, signOut } = await import('firebase/auth');
+        const { linkWithCredential } = await import('firebase/auth');
         
-        // 🔒 현재 사용자 재확인
-        let freshCurrentUser = auth.currentUser;
+        // 🔒 현재 사용자 재확인 (복원 완료 후 상태)
+        const freshCurrentUser = auth.currentUser;
         
         console.log('🔗 Firebase Auth 연동 시도:', {
           currentUser: freshCurrentUser ? {
             uid: freshCurrentUser.uid,
             email: freshCurrentUser.email,
           } : null,
-          socialEmail: socialData.email,
+          originalUserUid,
           providerId,
         });
         
-        // ✅ getGoogleCredential 또는 getAppleCredential에서 팝업으로 로그인했으므로
-        // 현재 사용자가 소셜 계정으로 변경되어 있을 수 있음
-        if (!freshCurrentUser || freshCurrentUser.email === socialData.email) {
-          // 소셜 계정으로 로그인된 상태 → 원래 계정으로 복원 필요
-          console.log('⚠️ 현재 사용자가 소셜 계정으로 변경됨 → Firebase Auth 연동 불가');
-          console.log('✅ Firestore에만 저장합니다');
-          
-          // Firebase Auth 연동 건너뛰고 Firestore에만 저장
+        if (!freshCurrentUser) {
+          // 복원 실패로 로그인 상태가 아님 → Firestore에만 저장
+          console.warn('⚠️ 로그인 상태 아님 (복원 실패) → Firestore에만 저장');
         } else {
           // 원래 계정으로 로그인된 상태 → linkWithCredential 시도
           try {
             await linkWithCredential(freshCurrentUser, credential);
-            console.log('✅ Firebase Auth 소셜 계정 연동 완료');
+            console.log('✅ Firebase Auth 소셜 계정 연동 완료 (통합됨)');
           } catch (authError: any) {
             console.error('❌ Firebase Auth 연동 실패:', authError);
             
             if (authError.code === 'auth/credential-already-in-use') {
-              // ✅ credential-already-in-use: 해당 소셜 계정이 Firebase Auth에 별도로 존재
+              // 해당 소셜 계정이 이미 다른 Firebase Auth 계정에 연결되어 있음
+              // (임시 계정 삭제에 실패했거나 기존 계정이 있는 경우)
               // → Firestore에만 저장하고 계속 진행
               const providerName = providerId === 'google.com' ? '구글' : '애플';
-              console.log(`⚠️ ${providerName} 계정이 이미 Firebase Auth에 존재 → Firestore에만 저장`);
-              toast(
-                `${providerName} 계정 연동이 완료되었습니다.\n` +
-                '(Firebase Auth는 별도로 유지됩니다)',
-                { 
-                  icon: 'ℹ️',
-                  duration: 4000 
-                }
-              );
+              console.warn(`⚠️ ${providerName} credential 이미 사용 중 → Firestore에만 저장`);
             } else if (authError.code === 'auth/provider-already-linked') {
               throw new Error('이미 이 제공자가 연결되어 있습니다.');
             } else if (authError.code === 'auth/email-already-in-use') {

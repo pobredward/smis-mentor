@@ -86,6 +86,11 @@ export function SignInScreen({
   const [googleCredential, setGoogleCredential] = useState<any>(null);
   const [appleCredential, setAppleCredential] = useState<any>(null);
   const [existingUserEmail, setExistingUserEmail] = useState('');
+  // 비밀번호 모달이 열릴 시점의 소셜 임시 계정 UID.
+  // LINK_ACTIVE / NEED_PHONE→needsLink 경로에서 handlePasswordSubmit 내부
+  // signIn으로 auth.currentUser가 기존 계정으로 교체될 수 있어,
+  // 모달 취소 시 기존 계정을 잘못 삭제하는 것을 방지한다.
+  const [socialTempUid, setSocialTempUid] = useState<string | null>(null);
 
   // 컴포넌트 마운트 시 저장된 로그인 정보 확인
   React.useEffect(() => {
@@ -282,6 +287,14 @@ export function SignInScreen({
             );
             break;
           }
+          // signInWithCredential로 생성된 임시 계정 UID를 저장하여 모달 취소 시 삭제 대상 추적
+          {
+            const { auth: firebaseAuth } = await import('../config/firebase');
+            const tempUser = firebaseAuth.currentUser;
+            if (tempUser) {
+              setSocialTempUid(tempUser.uid);
+            }
+          }
           setSocialData(socialUserData);
           setGoogleCredential(credential || null);
           setExistingUserEmail(result.user.email);
@@ -378,6 +391,8 @@ export function SignInScreen({
             );
             break;
           }
+          // 네이버는 Firebase Auth 계정을 생성하지 않으므로 socialTempUid는 null
+          setSocialTempUid(null);
           setSocialData(socialUserData);
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
@@ -492,6 +507,14 @@ export function SignInScreen({
             );
             break;
           }
+          // signInWithCredential로 생성된 임시 계정 UID를 저장하여 모달 취소 시 삭제 대상 추적
+          {
+            const { auth: firebaseAuth } = await import('../config/firebase');
+            const tempUser = firebaseAuth.currentUser;
+            if (tempUser) {
+              setSocialTempUid(tempUser.uid);
+            }
+          }
           setSocialData(socialUserData);
           setAppleCredential(credential || null);
           setExistingUserEmail(result.user.email);
@@ -577,6 +600,9 @@ export function SignInScreen({
         if (role === 'foreign' && existingUser.status === 'active') {
           if (existingUser.email !== socialData.email) {
             // 이메일 다름 → 비밀번호 연동 모달
+            // 소셜 임시 계정이 아직 살아있으므로 UID 기억 (모달 취소 시 삭제 대상 추적)
+            const { auth: firebaseAuth } = await import('../config/firebase');
+            setSocialTempUid(firebaseAuth.currentUser?.uid || null);
             setShowForeignPhoneModal(false);
             setSocialData({ ...socialData, name: fullName });
             setExistingUserEmail(existingUser.email);
@@ -693,6 +719,19 @@ export function SignInScreen({
           // active 계정 발견 - 연동 필요
           if (result.needsLink) {
             // 이메일이 다른 active 계정 - 비밀번호 입력 후 연동
+            if (result.nameMatches === false) {
+              logger.warn('⚠️ 이름 불일치 - 이메일+비밀번호 검증 필요:', {
+                registered: user.name,
+                input: data.name,
+              });
+              Alert.alert(
+                '이름 불일치',
+                `등록된 이름(${user.name})과 입력한 이름이 다릅니다.\n본인 확인을 위해 기존 계정의 비밀번호를 입력해주세요.`
+              );
+            }
+            // NEED_PHONE → needsLink 경로: 소셜 임시 계정이 아직 살아있으므로 UID 기억
+            const { auth: firebaseAuth } = await import('../config/firebase');
+            setSocialTempUid(firebaseAuth.currentUser?.uid || null);
             setShowPhoneModal(false);
             setExistingUserEmail(user.email);
             setShowPasswordModal(true);
@@ -839,12 +878,13 @@ export function SignInScreen({
       // Google/Apple: signInWithCredential로 생성된 소셜 임시 계정을 linkWithCredential 전에 먼저 삭제한다.
       // 임시 계정이 살아있는 상태에서 linkWithCredential을 시도하면 credential이 이미 임시 계정에
       // 연결되어 있으므로 auth/credential-already-in-use 에러가 발생한다.
+      // credential(idToken)은 계정 삭제 후에도 유효하므로 삭제 후 기존 계정에 연결하면 성공한다.
       const currentAuthUser = auth.currentUser;
-      const currentCredential = googleCredential || appleCredential;
-      if (currentAuthUser && currentCredential) {
+      if (socialTempUid && currentAuthUser?.uid === socialTempUid) {
         try {
           logger.info('🗑️ credential-already-in-use 방지 - 소셜 임시 계정 선제 삭제:', currentAuthUser.uid);
           await currentAuthUser.delete();
+          setSocialTempUid(null);
         } catch (deleteError) {
           logger.warn('⚠️ 소셜 임시 계정 삭제 실패 (계속 진행):', deleteError);
         }
@@ -865,6 +905,9 @@ export function SignInScreen({
       await persistLoginRememberEmail(existingUserEmail);
 
       setShowPasswordModal(false);
+      setSocialTempUid(null);
+      setSocialData(null);
+      setExistingUserEmail('');
       
       // ✅ 연동 완료 즉시 새로고침 (Alert 전)
       logger.info('🔄 계정 연동 완료 - 즉시 새로고침');
@@ -954,6 +997,38 @@ export function SignInScreen({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /**
+   * 비밀번호 모달 취소 핸들러 - Firebase Auth 임시 계정 정리
+   */
+  const handlePasswordModalClose = async () => {
+    try {
+      const { auth: firebaseAuth } = await import('../config/firebase');
+      const currentUser = firebaseAuth.currentUser;
+      if (currentUser) {
+        if (socialTempUid && currentUser.uid === socialTempUid) {
+          // 비밀번호 제출 전 취소: 소셜 임시 계정 삭제
+          logger.info('계정 연동 중단 - 소셜 임시 계정 삭제:', currentUser.uid);
+          await currentUser.delete();
+        } else if (socialTempUid && currentUser.uid !== socialTempUid) {
+          // handlePasswordSubmit 내부 signIn으로 auth.currentUser가 기존 계정으로 교체된 경우.
+          // 기존 계정을 삭제하지 않고 로그아웃만 진행한다.
+          logger.warn('계정 연동 중단 - 현재 세션이 기존 계정으로 교체됨 (삭제 방지), 로그아웃 진행:', currentUser.uid);
+          await firebaseAuth.signOut();
+        }
+      }
+    } catch (error) {
+      logger.error('계정 삭제/로그아웃 실패:', error);
+      try {
+        const { auth: firebaseAuth } = await import('../config/firebase');
+        await firebaseAuth.signOut();
+      } catch { /* ignore */ }
+    }
+    setShowPasswordModal(false);
+    setSocialTempUid(null);
+    setSocialData(null);
+    setExistingUserEmail('');
   };
 
   /**
@@ -1154,7 +1229,7 @@ export function SignInScreen({
         visible={showPasswordModal}
         email={existingUserEmail}
         onSubmit={handlePasswordSubmit}
-        onCancel={() => setShowPasswordModal(false)}
+        onCancel={handlePasswordModalClose}
         onForgotPassword={handleForgotPasswordFromModal}
       />
 

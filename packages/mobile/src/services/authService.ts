@@ -460,25 +460,30 @@ export const signUp = async (email: string, password: string) => {
 
 /**
  * Custom Token으로 Firebase Auth 로그인
- * Cloud Function을 통해 Custom Token 생성 후 로그인
+ * 웹 API Route(/api/auth/create-custom-token)를 통해 Custom Token 생성 후 로그인
+ * Cloud Functions CORS/배포 문제를 우회하기 위해 Next.js API Route 방식으로 변경
  */
-export const signInWithCustomToken = async (userId: string, email: string) => {
+export const signInWithCustomToken = async (userId: string, email: string, existingUid?: string) => {
   try {
     logger.info('🔑 Custom Token 생성 요청:', { userId, email });
 
-    // Firebase Functions를 통해 Custom Token 생성
-    const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions');
-    const functions = getFunctions(undefined, 'asia-northeast3');
-
-    // 개발 환경에서는 emulator 사용 (필요 시)
-    // if (__DEV__ && USE_EMULATOR) {
-    //   connectFunctionsEmulator(functions, 'localhost', 5001);
-    // }
-
-    const createCustomToken = httpsCallable(functions, 'createCustomToken');
-    const result = await createCustomToken({ userId, email });
+    // 웹 API Route를 통해 Custom Token 생성 (Cloud Functions 대체)
+    const apiBaseUrl = (process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smis-mentor.com')
+      .replace('https://www.', 'https://'); // www 리디렉션 시 POST 손실 방지
     
-    const { customToken } = result.data as { customToken: string };
+    const response = await fetch(`${apiBaseUrl}/api/auth/create-custom-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, email, existingUid }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || 'Custom Token 생성 실패');
+    }
+
+    const responseData = await response.json();
+    const { customToken } = responseData.result as { customToken: string; uid: string };
     logger.info('✅ Custom Token 획득');
 
     // Custom Token으로 Firebase Auth 로그인

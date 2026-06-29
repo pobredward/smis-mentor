@@ -164,9 +164,20 @@ export async function getAppleCredential(): Promise<{
     // 3. SocialUserData 추출
     const socialData = extractSocialUserData(result.user, credential);
     
-    // 4. Firebase Auth에 Apple 계정이 생성되어도 괜찮음
-    logger.info('ℹ️ Apple 계정이 Firebase Auth에 생성되었습니다 (정상)');
-    logger.info('ℹ️ linkWithCredential이 실패하면 Firestore에만 저장됩니다');
+    // 4. 임시 Apple Firebase Auth 계정 삭제 (credential 해제)
+    // signInWithPopup은 항상 새 Firebase Auth 세션을 열기 때문에 마이페이지 연동 시
+    // 별도 UID의 임시 계정이 생성된다. 이 계정을 삭제해야 credential이 해제되어
+    // 원래 계정에 linkWithCredential을 성공적으로 수행할 수 있다.
+    // (idToken 자체는 계정 삭제 후에도 유효하다)
+    if (currentUserData && result.user.uid !== currentUserData.uid) {
+      logger.info('🗑️ 마이페이지 연동용 - 임시 Apple Firebase Auth 계정 삭제:', result.user.uid);
+      try {
+        await result.user.delete();
+        logger.info('✅ 임시 계정 삭제 완료 - credential 해제됨');
+      } catch (deleteError) {
+        logger.warn('⚠️ 임시 계정 삭제 실패 (이미 존재하는 계정일 수 있음):', deleteError);
+      }
+    }
     
     return { socialData, credential };
   } catch (error: any) {
