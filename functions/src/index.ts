@@ -402,52 +402,59 @@ export const sendTaskReminderToUsers = functionsV2.https.onCall(
 );
 
 // Custom Token 생성 함수 (소셜 로그인용)
-export const createCustomToken = functions
-  .region('asia-northeast3')
-  .https.onCall(async (data: { userId: string; email: string; existingUid?: string }, context) => {
+// Compute Engine 기본 서비스 계정이 없는 환경을 위해 v2 onRequest 사용
+// cors 옵션으로 CORS 자동 처리, serviceAccount 명시로 배포 가능하게 함
+export const createCustomToken = functionsV2.https.onRequest(
+  {
+    region: 'asia-northeast3',
+    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
+    cors: ['https://smis-mentor.com', 'https://www.smis-mentor.com', 'http://localhost:3000'],
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: { status: 'METHOD_NOT_ALLOWED', message: 'POST 요청만 허용됩니다.' } });
+      return;
+    }
+
     try {
+      // httpsCallable 요청 형식: { "data": { userId, email, existingUid } }
+      const data = (req.body?.data ?? req.body) as { userId: string; email: string; existingUid?: string };
+
       console.log('🔑 Custom Token 생성 요청:', {
         userId: data.userId,
         email: data.email,
         existingUid: data.existingUid ? `${data.existingUid.substring(0, 8)}...` : undefined,
       });
 
-      // userId와 email 검증
       if (!data.userId || !data.email) {
-        throw new functions.https.HttpsError('invalid-argument', 'userId와 email이 필요합니다.');
+        res.status(400).json({ error: { status: 'INVALID_ARGUMENT', message: 'userId와 email이 필요합니다.' } });
+        return;
       }
 
-      // userId로 Firestore에서 사용자 확인
       const userDoc = await db.collection('users').doc(data.userId).get();
-      
+
       if (!userDoc.exists) {
-        throw new functions.https.HttpsError('not-found', '사용자를 찾을 수 없습니다.');
+        res.status(404).json({ error: { status: 'NOT_FOUND', message: '사용자를 찾을 수 없습니다.' } });
+        return;
       }
 
       const userData = userDoc.data() as UserData;
-      
-      // 이메일 검증
+
       if (userData.email !== data.email) {
-        throw new functions.https.HttpsError('permission-denied', '이메일이 일치하지 않습니다.');
+        res.status(403).json({ error: { status: 'PERMISSION_DENIED', message: '이메일이 일치하지 않습니다.' } });
+        return;
       }
 
-      // ✅ existingUid가 있으면 기존 UID 사용, 없으면 새로 생성
       const targetUid = data.existingUid || data.userId;
       console.log(`🎯 사용할 UID: ${targetUid} (${data.existingUid ? '기존 UID 재사용' : '신규 생성'})`);
 
-      // Firebase Auth에 사용자가 있는지 확인
       let firebaseUser;
       try {
         firebaseUser = await admin.auth().getUser(targetUid);
         console.log('✅ 기존 Firebase Auth 사용자 발견:', firebaseUser.uid);
-      } catch (error: any) {
-        if (error.code === 'auth/user-not-found') {
-          // Firebase Auth에 사용자가 없으면 생성
-          console.log('🆕 Firebase Auth 사용자 생성:', {
-            uid: targetUid,
-            email: data.email,
-          });
-          
+      } catch (authError: any) {
+        if (authError.code === 'auth/user-not-found') {
+          console.log('🆕 Firebase Auth 사용자 생성:', { uid: targetUid, email: data.email });
           firebaseUser = await admin.auth().createUser({
             uid: targetUid,
             email: data.email,
@@ -455,37 +462,29 @@ export const createCustomToken = functions
             emailVerified: true,
           });
         } else {
-          console.error('❌ Firebase Auth 사용자 조회 실패:', error);
-          throw error;
+          console.error('❌ Firebase Auth 사용자 조회 실패:', authError);
+          throw authError;
         }
       }
 
-      // Custom Token 생성
       const customToken = await admin.auth().createCustomToken(firebaseUser.uid, {
         email: data.email,
         provider: 'custom',
       });
-      
+
       console.log('✅ Custom Token 생성 완료:', {
         uid: firebaseUser.uid,
         uidMatch: firebaseUser.uid === targetUid,
       });
-      
-      return { 
-        customToken,
-        uid: firebaseUser.uid 
-      };
+
+      // httpsCallable 응답 형식: { "result": { ... } }
+      res.json({ result: { customToken, uid: firebaseUser.uid } });
     } catch (error) {
       console.error('❌ Custom Token 생성 실패:', error);
-      
-      // 에러 타입에 따라 적절한 HttpsError 반환
-      if (error instanceof functions.https.HttpsError) {
-        throw error;
-      }
-      
-      throw new functions.https.HttpsError('internal', 'Custom Token 생성에 실패했습니다.');
+      res.status(500).json({ error: { status: 'INTERNAL', message: 'Custom Token 생성에 실패했습니다.' } });
     }
-  });
+  }
+);
 
 // 관리자 권한으로 사용자 삭제 (Firebase Auth + Firestore) - v2
 export const adminDeleteUser = functionsV2.https.onCall(

@@ -34,7 +34,7 @@ import {
   uploadBytes,
   listAll
 } from 'firebase/storage';
-import { db, auth, storage } from './firebase';
+import { db, auth, storage, functions } from './firebase';
 import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup, Review, JobExperienceGroupRole } from '@/types';
 import { getCache, setCache, CACHE_STORE, CACHE_TTL, getCacheCollection, setCacheCollection, removeCache, clearCacheCollection } from './cacheUtils';
 import { logger } from '@smis-mentor/shared';
@@ -1146,22 +1146,20 @@ export const signInWithCustomTokenFromFunction = async (
       existingUid: existingUid ? `${existingUid.substring(0, 8)}...` : 'none',
     });
     
-    // Firebase Functions를 통해 Custom Token 생성
-    const functionsModule = await import('firebase/functions');
-    const functionsRegion = functionsModule.getFunctions(undefined, 'asia-northeast3');
-    
-    // 개발 환경에서는 emulator 사용
-    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_USE_EMULATOR === 'true') {
-      functionsModule.connectFunctionsEmulator(functionsRegion, 'localhost', 5001);
-    }
-    
-    const createCustomToken = functionsModule.httpsCallable(functionsRegion, 'createCustomToken');
-    const result = await createCustomToken({ 
-      userId, 
-      email,
-      existingUid, // 기존 UID 전달
+    // Cloud Functions 대신 Next.js API Route 사용 (CORS 문제 없고 서비스 계정 불필요)
+    const response = await fetch('/api/auth/create-custom-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, email, existingUid }),
     });
-    const { customToken } = result.data as { customToken: string };
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || 'Custom Token 생성 실패');
+    }
+
+    const responseData = await response.json();
+    const { customToken } = responseData.result as { customToken: string; uid: string };
     
     // Custom Token으로 Firebase Auth 로그인
     const authModule = await import('firebase/auth');
