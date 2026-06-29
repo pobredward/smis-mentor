@@ -848,6 +848,21 @@ export function SignInClient() {
     
     setIsLoading(true);
     try {
+      // Google/Apple: signInWithPopup으로 생성된 소셜 임시 계정을 linkWithCredential 전에 먼저 삭제한다.
+      // 임시 계정이 살아있는 상태에서 linkWithCredential을 시도하면 credential이 이미 임시 계정에
+      // 연결되어 있으므로 auth/credential-already-in-use 에러가 발생한다.
+      // credential(idToken)은 계정 삭제 후에도 유효하므로 삭제 후 기존 계정에 연결하면 성공한다.
+      const currentUser = auth.currentUser;
+      if (socialTempUid && currentUser?.uid === socialTempUid) {
+        try {
+          logger.info('🗑️ credential-already-in-use 방지 - 소셜 임시 계정 선제 삭제:', currentUser.uid);
+          await currentUser.delete();
+          setSocialTempUid(null);
+        } catch (deleteError) {
+          logger.warn('⚠️ 소셜 임시 계정 삭제 실패 (계속 진행):', deleteError);
+        }
+      }
+
       // ✅ arrayUnion import 추가 (동시성 안전)
       const { linkSocialProvider } = await import('@smis-mentor/shared');
       const { arrayUnion } = await import('firebase/firestore');

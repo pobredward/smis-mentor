@@ -835,7 +835,21 @@ export function SignInScreen({
     try {
       const { auth } = await import('../config/firebase');
       const { arrayUnion } = await import('firebase/firestore'); // ✅ arrayUnion import
-      
+
+      // Google/Apple: signInWithCredential로 생성된 소셜 임시 계정을 linkWithCredential 전에 먼저 삭제한다.
+      // 임시 계정이 살아있는 상태에서 linkWithCredential을 시도하면 credential이 이미 임시 계정에
+      // 연결되어 있으므로 auth/credential-already-in-use 에러가 발생한다.
+      const currentAuthUser = auth.currentUser;
+      const currentCredential = googleCredential || appleCredential;
+      if (currentAuthUser && currentCredential) {
+        try {
+          logger.info('🗑️ credential-already-in-use 방지 - 소셜 임시 계정 선제 삭제:', currentAuthUser.uid);
+          await currentAuthUser.delete();
+        } catch (deleteError) {
+          logger.warn('⚠️ 소셜 임시 계정 삭제 실패 (계속 진행):', deleteError);
+        }
+      }
+
       await linkSocialToExistingAccount(
         auth,
         existingUserEmail,
