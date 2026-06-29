@@ -55,6 +55,10 @@ export function SignInClient() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [socialData, setSocialData] = useState<SocialUserData | null>(null);
   const [existingUserEmail, setExistingUserEmail] = useState<string | null>(null);
+  // 비밀번호 모달이 열릴 시점의 소셜 임시 계정 UID.
+  // linkSocialToExistingAccount 내부 signIn으로 auth.currentUser가 교체될 수 있어,
+  // 모달 닫기 시 삭제 대상이 기존 계정으로 바뀌는 것을 방지한다.
+  const [socialTempUid, setSocialTempUid] = useState<string | null>(null);
   
   const {
     register,
@@ -299,6 +303,7 @@ export function SignInClient() {
         }, 1000);
       } else if (result.action === 'LINK_ACTIVE') {
         // 기존 계정이 있음 - 비밀번호 입력 필요 (소셜 가입인지 확인)
+        // LINK_ACTIVE 경로: 소셜 팝업으로 생성된 임시 계정을 먼저 삭제 후 비밀번호 모달 진입
         const currentUser = auth.currentUser;
         if (currentUser) {
           try {
@@ -339,6 +344,8 @@ export function SignInClient() {
           return;
         }
         
+        // 이미 임시 계정을 삭제했으므로 socialTempUid는 null
+        setSocialTempUid(null);
         // 비밀번호 있으면 입력 모달 표시
         setSocialData(data);
         setExistingUserEmail(result.user?.email || data.email);
@@ -495,6 +502,8 @@ export function SignInClient() {
                   icon: '⚠️',
                 }
               );
+              // NEED_PHONE → needsLink 경로와 동일: 소셜 임시 계정 UID 기억
+              setSocialTempUid(auth.currentUser?.uid || null);
               setSocialData({ ...socialData, name: fullName });
               setExistingUserEmail(existingUser.email);
               setShowPasswordModal(true);
@@ -662,6 +671,10 @@ export function SignInClient() {
             toast('기존 계정이 발견되었습니다. 계정 연동을 위해 비밀번호를 입력해주세요.');
           }
           
+          // NEED_PHONE → needsLink 경로: 소셜 임시 계정이 아직 살아있는 시점이므로 UID 기억
+          // handlePasswordSubmit 내부 signIn으로 auth.currentUser가 교체될 수 있어,
+          // 모달 닫기 시 기존 계정을 잘못 삭제하는 것을 방지한다.
+          setSocialTempUid(auth.currentUser?.uid || null);
           setSocialData({ ...socialData, name: data.name });
           setExistingUserEmail(result.user.email);
           setShowPasswordModal(true);
@@ -808,14 +821,23 @@ export function SignInClient() {
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        logger.info('계정 연동 중단 - Firebase Auth 계정 삭제');
-        await currentUser.delete();
+        if (socialTempUid && currentUser.uid === socialTempUid) {
+          // 비밀번호를 제출하기 전에 닫은 경우: 소셜 임시 계정을 안전하게 삭제
+          logger.info('계정 연동 중단 - 소셜 임시 계정 삭제:', currentUser.uid);
+          await currentUser.delete();
+        } else {
+          // handlePasswordSubmit 내부 signIn으로 auth.currentUser가 기존 계정으로 교체된 경우.
+          // 기존 계정을 삭제하지 않고 로그아웃만 진행한다.
+          logger.warn('계정 연동 중단 - 현재 세션이 기존 계정으로 교체됨 (삭제 방지), 로그아웃 진행:', currentUser.uid);
+          await auth.signOut();
+        }
       } catch (error) {
-        logger.error('계정 삭제 실패, 로그아웃 시도:', error);
-        await auth.signOut();
+        logger.error('계정 삭제/로그아웃 실패:', error);
+        try { await auth.signOut(); } catch { /* ignore */ }
       }
     }
     setShowPasswordModal(false);
+    setSocialTempUid(null);
     setSocialData(null);
     setExistingUserEmail(null);
   };
@@ -869,6 +891,15 @@ export function SignInClient() {
         );
       } else if (firebaseError.code === 'auth/too-many-requests') {
         toast.error('너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.');
+      } else if ((error as Error).message === '이 소셜 계정은 이미 다른 계정에 연결되어 있습니다.') {
+        // Apple idToken이 이미 Firebase Auth에서 소비된 경우 (credential-already-in-use).
+        // signIn이 이미 성공했으므로 auth.currentUser가 기존 계정으로 교체된 상태.
+        // socialTempUid를 null로 설정하여 모달 닫기 시 기존 계정 삭제를 방지한다.
+        setSocialTempUid(null);
+        toast.error(
+          '소셜 계정 연동에 실패했습니다. 모달을 닫고 이메일/비밀번호로 다시 로그인해주세요.',
+          { duration: 8000 }
+        );
       } else {
         toast.error('계정 연동 중 오류가 발생했습니다. 다시 시도해주세요.');
       }
