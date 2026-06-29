@@ -6,6 +6,14 @@ const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || process.env.NEXT_PUBLIC_N
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET!;
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
+// www/non-www 모두 허용하는 origin 목록 (postMessage target 검증용)
+const ALLOWED_ORIGINS = [
+  BASE_URL,
+  BASE_URL.replace('https://www.', 'https://'),
+  BASE_URL.replace('https://', 'https://www.'),
+  'http://localhost:3000',
+].filter((v, i, arr) => arr.indexOf(v) === i); // 중복 제거
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -25,7 +33,20 @@ export async function GET(request: NextRequest) {
       return createErrorResponse('필수 정보가 누락되었습니다.');
     }
     
-    logger.info('🔐 네이버 OAuth 콜백 시작:', { code: code.substring(0, 10) + '...', state });
+    // state에서 origin 분리 (형식: "randomState__encodedOrigin")
+    const [pureState, encodedOrigin] = state.split('__');
+    const requestOrigin = encodedOrigin ? decodeURIComponent(encodedOrigin) : null;
+    
+    // 허용된 origin 검증 후 postMessage target 결정
+    const targetOrigin = (requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin))
+      ? requestOrigin
+      : BASE_URL;
+    
+    logger.info('🔐 네이버 OAuth 콜백 시작:', { 
+      code: code.substring(0, 10) + '...', 
+      state: pureState,
+      targetOrigin,
+    });
     
     // 1. Access Token 발급
     const tokenResponse = await fetch(
@@ -40,7 +61,7 @@ export async function GET(request: NextRequest) {
           client_id: NAVER_CLIENT_ID,
           client_secret: NAVER_CLIENT_SECRET,
           code: code,
-          state: state,
+          state: pureState, // origin이 제거된 순수 state 값
         }),
       }
     );
@@ -107,7 +128,7 @@ export async function GET(request: NextRequest) {
               window.opener.postMessage({
                 type: 'NAVER_LOGIN_SUCCESS',
                 userData: ${JSON.stringify(userData)}
-              }, '${BASE_URL}');
+              }, '${targetOrigin}');
               setTimeout(() => window.close(), 500);
             } else {
               console.error('opener가 없습니다. 메인 페이지로 리다이렉트');
@@ -125,12 +146,20 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     logger.error('❌ 네이버 콜백 처리 오류:', error);
-    return createErrorResponse(error instanceof Error ? error.message : '알 수 없는 오류');
+    // state에서 origin 파싱 (catch 블록에서는 위에서 파싱한 값을 사용하지 못할 수 있으므로 재파싱)
+    const stateParam = request.nextUrl.searchParams.get('state');
+    const fallbackOrigin = stateParam?.includes('__')
+      ? decodeURIComponent(stateParam.split('__')[1])
+      : undefined;
+    return createErrorResponse(
+      error instanceof Error ? error.message : '알 수 없는 오류',
+      ALLOWED_ORIGINS.includes(fallbackOrigin ?? '') ? fallbackOrigin : undefined
+    );
   }
 }
 
-function createErrorResponse(errorMessage: string) {
-  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'; 
+function createErrorResponse(errorMessage: string, targetOrigin?: string) {
+  const resolvedOrigin = targetOrigin || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   
   return new NextResponse(
     `
@@ -147,7 +176,7 @@ function createErrorResponse(errorMessage: string) {
             window.opener.postMessage({
               type: 'NAVER_LOGIN_ERROR',
               error: '${errorMessage}'
-            }, '${BASE_URL}');
+            }, '${resolvedOrigin}');
             setTimeout(() => window.close(), 500);
           } else {
             window.location.href = '/sign-in?error=callback_failed';

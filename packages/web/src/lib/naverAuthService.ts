@@ -7,14 +7,21 @@ const NAVER_STATE_KEY = 'naver_oauth_state';
 
 /**
  * 네이버 로그인 URL 생성
+ * state에 현재 origin을 포함해 콜백에서 postMessage target을 동적으로 결정
  */
 export function getNaverLoginUrl(): string {
   // CSRF 방지를 위한 state 생성
-  const state = Math.random().toString(36).substring(2, 15);
+  const randomState = Math.random().toString(36).substring(2, 15);
   
-  // state를 sessionStorage에 저장
+  // state에 현재 origin을 인코딩하여 포함 (콜백에서 postMessage target 결정에 사용)
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const state = currentOrigin
+    ? `${randomState}__${encodeURIComponent(currentOrigin)}`
+    : randomState;
+  
+  // randomState만 sessionStorage에 저장 (CSRF 검증용)
   if (typeof window !== 'undefined') {
-    sessionStorage.setItem(NAVER_STATE_KEY, state);
+    sessionStorage.setItem(NAVER_STATE_KEY, randomState);
   }
   
   const params = new URLSearchParams({
@@ -62,8 +69,12 @@ export async function signInWithNaverPopup(): Promise<SocialUserData> {
         type: event.data?.type,
       });
       
-      // 보안: origin 체크
-      if (event.origin !== window.location.origin) {
+      // 보안: origin 체크 (www/non-www 모두 같은 도메인으로 처리)
+      const normalizeOrigin = (o: string) => o.replace(/^https?:\/\/(www\.)?/, '');
+      const isSameOrigin = event.origin === window.location.origin ||
+        normalizeOrigin(event.origin) === normalizeOrigin(window.location.origin);
+      
+      if (!isSameOrigin) {
         logger.warn('⚠️ Origin 불일치, 무시:', event.origin);
         return;
       }

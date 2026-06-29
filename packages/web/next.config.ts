@@ -10,6 +10,19 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
+  // www.smis-mentor.com → smis-mentor.com 영구 리디렉션
+  // postMessage origin 불일치 및 Firebase CORS 문제 방지
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'www.smis-mentor.com' }],
+        destination: 'https://smis-mentor.com/:path*',
+        permanent: true,
+      },
+    ];
+  },
+
   // 외부 iframe 콘텐츠 허용을 위한 헤더 설정
   async headers() {
     return [
