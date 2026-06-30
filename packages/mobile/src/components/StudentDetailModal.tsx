@@ -63,12 +63,13 @@ const FIELD_CONFIGS: Record<string, FieldConfig> = {
   finalReading:      { label: '파이널 리딩',   max: 30, permission: 'all',      section: 'placement' },
   finalWriting:      { label: '파이널 라이팅', max: 40, permission: 'all',      section: 'placement' },
   // 상담
-  classCounsel1: { label: '담임 상담 1주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  classCounsel2: { label: '담임 상담 2주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  classCounsel3: { label: '담임 상담 3주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  unitCounsel1:  { label: '유닛 상담 1주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  unitCounsel2:  { label: '유닛 상담 2주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  unitCounsel3:  { label: '유닛 상담 3주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  classCounsel1:  { label: '담임 상담 1주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  classCounsel2:  { label: '담임 상담 2주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  classCounsel3:  { label: '담임 상담 3주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  unitCounsel1:   { label: '유닛 상담 1주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  unitCounsel2:   { label: '유닛 상담 2주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  unitCounsel3:   { label: '유닛 상담 3주차', permission: 'mentor', multiline: true, section: 'counsel' },
+  managerCounsel: { label: '매니저 상담',     permission: 'mentor', multiline: true, section: 'counsel' },
 };
 
 function canEditField(permission: EditPermission, role: string): boolean {
@@ -553,7 +554,8 @@ const StudentCard = React.memo(({
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>상담</Text>
           {(['classCounsel1', 'classCounsel2', 'classCounsel3',
-            'unitCounsel1', 'unitCounsel2', 'unitCounsel3'] as const).map(renderEditableField)}
+            'unitCounsel1', 'unitCounsel2', 'unitCounsel3',
+            'managerCounsel'] as const).map(renderEditableField)}
         </View>
 
         {/* 사전 설문조사 */}

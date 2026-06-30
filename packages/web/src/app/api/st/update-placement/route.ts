@@ -42,9 +42,10 @@ export const STUDENT_EDITABLE_FIELDS: Record<string, FieldConfig> = {
   classCounsel1:     { sheetHeader: '상담(반)1',  label: '담임 상담 1주차', max: 0, permission: 'mentor'  },
   classCounsel2:     { sheetHeader: '상담(반)2',  label: '담임 상담 2주차', max: 0, permission: 'mentor'  },
   classCounsel3:     { sheetHeader: '상담(반)3',  label: '담임 상담 3주차', max: 0, permission: 'mentor'  },
-  unitCounsel1:      { sheetHeader: '상담(방)1',  label: '유닛 상담 1주차', max: 0, permission: 'mentor'  },
-  unitCounsel2:      { sheetHeader: '상담(방)2',  label: '유닛 상담 2주차', max: 0, permission: 'mentor'  },
-  unitCounsel3:      { sheetHeader: '상담(방)3',  label: '유닛 상담 3주차', max: 0, permission: 'mentor'  },
+  unitCounsel1:      { sheetHeader: '상담(방)1',    label: '유닛 상담 1주차', max: 0, permission: 'mentor'  },
+  unitCounsel2:      { sheetHeader: '상담(방)2',    label: '유닛 상담 2주차', max: 0, permission: 'mentor'  },
+  unitCounsel3:      { sheetHeader: '상담(방)3',    label: '유닛 상담 3주차', max: 0, permission: 'mentor'  },
+  managerCounsel:    { sheetHeader: '상담(매니저)', label: '매니저 상담',     max: 0, permission: 'mentor'  },
 };
 
 function canEdit(permission: EditPermission, role: UserRole): boolean {
