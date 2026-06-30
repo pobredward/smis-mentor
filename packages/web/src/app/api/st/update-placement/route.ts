@@ -56,7 +56,11 @@ function canEdit(permission: EditPermission, role: UserRole): boolean {
   return false;
 }
 
-const ALL_SHEET_HEADERS = Object.values(STUDENT_EDITABLE_FIELDS).map(f => f.sheetHeader);
+// 캐시 유효성 검증에 사용할 필수 헤더 목록 (선택적 컬럼 제외)
+// 상담(매니저)는 일부 캠프에만 존재하는 컬럼이므로 검증 대상에서 제외
+const ALL_SHEET_HEADERS = Object.values(STUDENT_EDITABLE_FIELDS)
+  .filter(f => f.sheetHeader !== '상담(매니저)')
+  .map(f => f.sheetHeader);
 
 // 헤더명 → 열 문자(A, B, ...) 변환
 function columnIndexToLetter(index: number): string {
