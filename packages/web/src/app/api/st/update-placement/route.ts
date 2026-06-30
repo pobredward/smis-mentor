@@ -45,7 +45,7 @@ export const STUDENT_EDITABLE_FIELDS: Record<string, FieldConfig> = {
   unitCounsel1:      { sheetHeader: '상담(방)1',    label: '유닛 상담 1주차', max: 0, permission: 'mentor'  },
   unitCounsel2:      { sheetHeader: '상담(방)2',    label: '유닛 상담 2주차', max: 0, permission: 'mentor'  },
   unitCounsel3:      { sheetHeader: '상담(방)3',    label: '유닛 상담 3주차', max: 0, permission: 'mentor'  },
-  managerCounsel:    { sheetHeader: '상담(매니저)', label: '매니저 상담',     max: 0, permission: 'mentor'  },
+  managerCounsel:    { sheetHeader: '상담(매니저',  label: '매니저 상담',     max: 0, permission: 'mentor'  },
 };
 
 function canEdit(permission: EditPermission, role: UserRole): boolean {
@@ -58,7 +58,7 @@ function canEdit(permission: EditPermission, role: UserRole): boolean {
 
 // 캐시 유효성 검증에 사용할 필수 헤더 목록 (선택적 컬럼 제외)
 // 상담(매니저)는 일부 캠프에만 존재하는 컬럼이므로 캐시 hit 판정에서 제외
-const OPTIONAL_SHEET_HEADERS = new Set(['상담(매니저)']);
+const OPTIONAL_SHEET_HEADERS = new Set(['상담(매니저']);
 const REQUIRED_SHEET_HEADERS = Object.values(STUDENT_EDITABLE_FIELDS)
   .filter(f => !OPTIONAL_SHEET_HEADERS.has(f.sheetHeader))
   .map(f => f.sheetHeader);
