@@ -251,6 +251,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
       },
       EXPO_PUBLIC_WEBSITE_URL: process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com',
+      // www 없는 도메인 사용 필수: www.smis-mentor.com → smis-mentor.com 리다이렉트 시
+      // Authorization 헤더가 제거되어 인증 실패하므로 반드시 canonical 도메인(www 없음)을 사용해야 함
       EXPO_PUBLIC_WEB_API_URL: process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smis-mentor.com',
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
