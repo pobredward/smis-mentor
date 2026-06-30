@@ -98,8 +98,8 @@ export const ST_SHEET_HEADER_MAPPING = {
   '상담(방)2': 'unitCounsel2',
   '상담(방)3': 'unitCounsel3',
 
-  // 매니저 상담 (1회성) — 시트 헤더가 닫는 괄호 없는 '상담(매니저'
-  '상담(매니저': 'managerCounsel',
+  // 매니저 상담 (1회성)
+  '상담(매니저)': 'managerCounsel',
 } as const;
 
 /**
@@ -276,8 +276,8 @@ export function mapHeadersToStudent(
     unitCounsel2:           getValue('상담(방)2'),
     unitCounsel3:           getValue('상담(방)3'),
 
-    // 매니저 상담 (1회성) — 시트 헤더가 닫는 괄호 없는 '상담(매니저'
-    managerCounsel:         getValue('상담(매니저'),
+    // 매니저 상담 (1회성)
+    managerCounsel:         getValue('상담(매니저)'),
   };
   // 빈 문자열인 필드는 아예 키를 추가하지 않음
   for (const [key, val] of Object.entries(surveyFields)) {
