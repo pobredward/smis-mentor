@@ -57,10 +57,13 @@ function canEdit(permission: EditPermission, role: UserRole): boolean {
 }
 
 // 캐시 유효성 검증에 사용할 필수 헤더 목록 (선택적 컬럼 제외)
-// 상담(매니저)는 일부 캠프에만 존재하는 컬럼이므로 검증 대상에서 제외
-const ALL_SHEET_HEADERS = Object.values(STUDENT_EDITABLE_FIELDS)
-  .filter(f => f.sheetHeader !== '상담(매니저)')
+// 상담(매니저)는 일부 캠프에만 존재하는 컬럼이므로 캐시 hit 판정에서 제외
+const OPTIONAL_SHEET_HEADERS = new Set(['상담(매니저)']);
+const REQUIRED_SHEET_HEADERS = Object.values(STUDENT_EDITABLE_FIELDS)
+  .filter(f => !OPTIONAL_SHEET_HEADERS.has(f.sheetHeader))
   .map(f => f.sheetHeader);
+// 실제 Sheets 헤더 읽기 시 찾을 전체 헤더 목록 (선택적 포함)
+const ALL_SHEET_HEADERS = Object.values(STUDENT_EDITABLE_FIELDS).map(f => f.sheetHeader);
 
 // 헤더명 → 열 문자(A, B, ...) 변환
 function columnIndexToLetter(index: number): string {
@@ -108,8 +111,9 @@ async function getOrBuildColumnMap(
   sheetName: string,  // config.sheetName을 직접 전달 (spreadsheets.get() 호출 불필요)
 ): Promise<{ columnMap: Record<string, string>; sheetName: string }> {
   // 1단계: 인메모리 캐시 (가장 빠름, API 호출 없음)
+  // 필수 헤더만 존재하면 hit — 선택적 헤더(상담(매니저) 등) 부재는 miss 아님
   const cached = _columnMapCache.get(campCode);
-  if (cached && ALL_SHEET_HEADERS.every(h => h in cached.columnMap)) {
+  if (cached && REQUIRED_SHEET_HEADERS.every(h => h in cached.columnMap)) {
     return cached;
   }
 
@@ -120,7 +124,7 @@ async function getOrBuildColumnMap(
   const fsColumnMap = settingsSnap.data()?.sheetColumnMap as Record<string, string> | undefined;
   const fsSheetName = (settingsSnap.data()?.sheetName as string | undefined) ?? sheetName;
 
-  if (fsColumnMap && ALL_SHEET_HEADERS.every(h => h in fsColumnMap)) {
+  if (fsColumnMap && REQUIRED_SHEET_HEADERS.every(h => h in fsColumnMap)) {
     const result = { columnMap: fsColumnMap, sheetName: fsSheetName };
     _columnMapCache.set(campCode, result);
     return result;
@@ -135,6 +139,7 @@ async function getOrBuildColumnMap(
   });
   const headers = ((headerRes.data.values?.[0] ?? []) as string[]).map((h: string) => h.trim());
 
+  // 필수 + 선택적 헤더 모두 위치 탐색 (선택적은 시트에 없으면 그냥 skip)
   const columnMap: Record<string, string> = { ...(fsColumnMap ?? {}) };
   for (const headerName of ALL_SHEET_HEADERS) {
     const idx = headers.indexOf(headerName);
