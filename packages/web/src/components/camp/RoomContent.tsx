@@ -29,6 +29,7 @@ const FIELD_CONFIGS: Record<string, FieldConfig> = {
   unitCounsel1:      { label: '유닛 상담 1주차', max: 0, permission: 'mentor',   section: 'counsel'   },
   unitCounsel2:      { label: '유닛 상담 2주차', max: 0, permission: 'mentor',   section: 'counsel'   },
   unitCounsel3:      { label: '유닛 상담 3주차', max: 0, permission: 'mentor',   section: 'counsel'   },
+  managerCounsel:    { label: '매니저 상담',     max: 0, permission: 'mentor',   section: 'counsel'   },
 };
 
 function canEditField(permission: EditPermission, role: string): boolean {
