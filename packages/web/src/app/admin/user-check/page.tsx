@@ -640,6 +640,24 @@ export default function UserCheck() {
                       return (a.name || '').localeCompare(b.name || '');
                     }
                     
+                    // 원어민 그룹: groupRole 순서 우선 (Speaking -> Reading -> Writing -> Mix)
+                    if (selectedRole === 'foreign') {
+                      const foreignRoleOrder: Record<string, number> = {
+                        'Speaking': 1,
+                        'Reading': 2,
+                        'Writing': 3,
+                        'Mix': 4,
+                      };
+                      const roleA = expA?.groupRole || '';
+                      const roleB = expB?.groupRole || '';
+                      const orderA = foreignRoleOrder[roleA] ?? 999;
+                      const orderB = foreignRoleOrder[roleB] ?? 999;
+
+                      if (orderA !== orderB) {
+                        return orderA - orderB;
+                      }
+                    }
+
                     // 다른 그룹: classCode 오름차순, 없으면 맨 뒤, 이름순 2차
                     const classCodeA = expA?.classCode;
                     const classCodeB = expB?.classCode;
