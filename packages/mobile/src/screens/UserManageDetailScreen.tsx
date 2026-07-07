@@ -61,6 +61,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
   const [selectedEvaluationStage, setSelectedEvaluationStage] = useState<EvaluationStage | null>(null);
   const [currentUser, setCurrentUser] = useState<{ name: string; userId: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showProfileImageModal, setShowProfileImageModal] = useState(false);
 
   // 직무 경험 추가 관련 상태
   const [showJobCodeForm, setShowJobCodeForm] = useState(false);
@@ -555,15 +556,17 @@ export function UserManageDetailScreen({ route, navigation }: any) {
         <View style={styles.profileHeader}>
           <View style={styles.profileImageContainer}>
             {user.profileImage ? (
-              <Image
-                source={{ uri: user.profileImage }}
-                style={styles.profileImage}
-                contentFit="cover"
-                transition={200}
-                cachePolicy="memory-disk"
-                placeholder={require('../../assets/icon.png')}
-                placeholderContentFit="contain"
-              />
+              <TouchableOpacity onPress={() => setShowProfileImageModal(true)} activeOpacity={0.8}>
+                <Image
+                  source={{ uri: user.profileImage }}
+                  style={styles.profileImage}
+                  contentFit="cover"
+                  transition={200}
+                  cachePolicy="memory-disk"
+                  placeholder={require('../../assets/icon.png')}
+                  placeholderContentFit="contain"
+                />
+              </TouchableOpacity>
             ) : (
               <View style={styles.profilePlaceholder}>
                 <Text style={styles.profilePlaceholderText}>{user.name.charAt(0)}</Text>
@@ -1064,6 +1067,36 @@ export function UserManageDetailScreen({ route, navigation }: any) {
           )}
         </SafeAreaView>
       </Modal>
+      {/* 프로필 이미지 확대 모달 */}
+      <Modal
+        visible={showProfileImageModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowProfileImageModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.profileImageModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowProfileImageModal(false)}
+        >
+          <View style={styles.profileImageModalContent}>
+            <Image
+              source={{ uri: user.profileImage }}
+              style={styles.profileImageModalImage}
+              contentFit="contain"
+              transition={200}
+              cachePolicy="memory-disk"
+            />
+            <Text style={styles.profileImageModalName}>{user.name}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.profileImageModalClose}
+            onPress={() => setShowProfileImageModal(false)}
+          >
+            <Ionicons name="close-circle" size={36} color="#FFFFFF" />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1385,5 +1418,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#111827',
+  },
+  profileImageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileImageModalContent: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    width: '100%',
+  },
+  profileImageModalImage: {
+    width: 300,
+    height: 300,
+    borderRadius: 16,
+  },
+  profileImageModalName: {
+    marginTop: 16,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  profileImageModalClose: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
   },
 });

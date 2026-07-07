@@ -70,6 +70,7 @@ export default function UserManage() {
   const [selectedGroupRole, setSelectedGroupRole] = useState<JobExperienceGroupRole>('담임');
   const [classCodeInput, setClassCodeInput] = useState<string>('');
   const [currentAdminName, setCurrentAdminName] = useState<string>('관리자');
+  const [profileImageModal, setProfileImageModal] = useState<{ isOpen: boolean; url: string; name: string }>({ isOpen: false, url: '', name: '' });
   const router = useRouter();
 
   // 현재 관리자 이름 로드 (이메일 기준으로 찾기)
@@ -1554,7 +1555,8 @@ export default function UserManage() {
                             <img 
                               src={selectedUser.profileImage} 
                               alt={selectedUser.name}
-                              className="h-14 w-14 rounded-full mr-3 object-cover flex-shrink-0"
+                              className="h-14 w-14 rounded-full mr-3 object-cover flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
+                              onClick={() => setProfileImageModal({ isOpen: true, url: selectedUser.profileImage!, name: selectedUser.name })}
                             />
                           ) : (
                             <div className="h-14 w-14 rounded-full bg-gray-200 flex items-center justify-center mr-3 flex-shrink-0">
@@ -2303,6 +2305,35 @@ export default function UserManage() {
           </div>
         )}
       </div>
+
+      {/* 프로필 이미지 확대 모달 */}
+      {profileImageModal.isOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setProfileImageModal({ isOpen: false, url: '', name: '' })}
+        >
+          <div
+            className="relative max-w-lg w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors text-sm flex items-center gap-1"
+              onClick={() => setProfileImageModal({ isOpen: false, url: '', name: '' })}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+              닫기
+            </button>
+            <img
+              src={profileImageModal.url}
+              alt={profileImageModal.name}
+              className="w-full rounded-xl object-contain shadow-2xl"
+            />
+            <p className="text-center text-white mt-3 text-sm font-medium">{profileImageModal.name}</p>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 } 
