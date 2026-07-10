@@ -706,8 +706,8 @@ export default function UserCheck() {
 
         {/* 사용자 상세 정보 모달 */}
         {selectedUser && (
-          <div className="fixed inset-0 bg-black/0 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={handleCloseModal}>
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="p-6">
                 {/* 상단 요약(프로필, 이름, 연락처, 그룹 뱃지) */}
                 <div className="flex justify-between items-start mb-6">
