@@ -107,6 +107,13 @@ const adminSections: AdminSection[] = [
         iconColor: '#7c3aed',
         screenName: 'StudentSearch',
       },
+      {
+        id: '11',
+        title: 'ST시트 필드 설정',
+        icon: 'list',
+        iconColor: '#0ea5e9',
+        screenName: 'StFieldConfig',
+      },
     ],
   },
 ];

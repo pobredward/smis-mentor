@@ -17,6 +17,7 @@ import { UploadScreen } from '../screens/UploadScreen';
 import { UserMapScreen } from '../screens/UserMapScreen';
 import { AppConfigScreen } from '../screens/AppConfigScreen';
 import { StudentSearchScreen } from '../screens/StudentSearchScreen';
+import { StFieldConfigScreen } from '../screens/StFieldConfigScreen';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 
@@ -50,6 +51,7 @@ export function AdminNavigator() {
       <Stack.Screen name="Upload" component={UploadScreen} />
       <Stack.Screen name="AppConfig" component={AppConfigScreen} />
       <Stack.Screen name="StudentSearch" component={StudentSearchScreen} />
+      <Stack.Screen name="StFieldConfig" component={StFieldConfigScreen} />
     </Stack.Navigator>
   );
 }
