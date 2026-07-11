@@ -15,6 +15,7 @@ import {
   mapHeadersToStudent,
   isInactiveStudent,
   parseFamilySheet,
+  getDefaultFieldConfig,
   type CampCode,
   type FamilyUnit,
 } from '@smis-mentor/shared';
@@ -101,6 +102,16 @@ export async function POST(request: NextRequest) {
       logger.info(`🗑️ [${campCode}] stSheetOverrides ${docs.length}건 초기화 완료`);
     };
 
+    // 시트 헤더 목록 추출 (F캠프 포함 공통)
+    const rawHeaders = rows[0].map((h) => h.trim()).filter(Boolean);
+
+    // campSettings에 availableHeaders 저장 (관리자 UI에서 헤더 목록 조회용)
+    const saveAvailableHeaders = () =>
+      db.collection('campSettings').doc(campCode).set(
+        { availableHeaders: rawHeaders, headersUpdatedAt: new Date().toISOString() },
+        { merge: true },
+      );
+
     if (isFamily) {
       // F 캠프: 가족 단위 파싱 → familySTSheetCache
       const families: FamilyUnit[] = parseFamilySheet(rows, campCode);
@@ -117,10 +128,11 @@ export async function POST(request: NextRequest) {
         totalStudents,
       };
 
-      // 캐시 저장 + 오버라이드 초기화 병렬 실행
+      // 캐시 저장 + 오버라이드 초기화 + availableHeaders 저장 병렬 실행
       await Promise.all([
         db.collection('familySTSheetCache').doc(campCode).set(cacheData),
         clearOverrides(),
+        saveAvailableHeaders(),
       ]);
 
       logger.info(`✅ F캠프 동기화 완료: ${campCode} (${families.length}가족, 학생 ${totalStudents}명)`);
@@ -128,10 +140,45 @@ export async function POST(request: NextRequest) {
     } else {
       // 일반 캠프: 학생 단위 파싱 → stSheetCache
       const headerIndexMap = buildNormalizedHeaderIndexMap(rows[0]);
+
+      // Firestore에서 fieldConfig를 가져와 신규(비legacy) 헤더 목록 파악
+      // Admin SDK에서는 client SDK의 getFieldConfig를 쓸 수 없으므로, 직접 조회
+      const fieldConfigSnap = await db.collection('stSheetFieldConfig').doc(config.type).get();
+      const fieldConfigData = fieldConfigSnap.exists ? fieldConfigSnap.data() : null;
+      const defaultConfig = getDefaultFieldConfig(config.type);
+      const activeSections = fieldConfigData?.sections ?? defaultConfig.sections;
+
+      // legacy가 아닌 신규 필드의 sheetHeader 목록
+      const dynamicHeaders: string[] = [];
+      for (const section of activeSections) {
+        for (const field of section.fields ?? []) {
+          if (!field.isLegacy && field.sheetHeader) {
+            dynamicHeaders.push(field.sheetHeader);
+          }
+        }
+      }
+
       const students = rows
         .slice(1)
         .filter((row) => row[0]?.trim())
-        .map((row, idx) => mapHeadersToStudent(row, headerIndexMap, idx + 2, campCode, config.type));
+        .map((row, idx) => {
+          const student = mapHeadersToStudent(row, headerIndexMap, idx + 2, campCode, config.type);
+          // 신규 동적 헤더 값을 displayFields에 저장
+          if (dynamicHeaders.length > 0) {
+            const displayFields: Record<string, string> = {};
+            for (const header of dynamicHeaders) {
+              const colIdx = headerIndexMap[header];
+              if (colIdx !== undefined) {
+                const val = row[colIdx]?.trim() ?? '';
+                if (val) displayFields[header] = val;
+              }
+            }
+            if (Object.keys(displayFields).length > 0) {
+              student.displayFields = { ...(student.displayFields ?? {}), ...displayFields };
+            }
+          }
+          return student;
+        });
 
       const active = students.filter((s) => !isInactiveStudent(s));
       const skipped = students.length - active.length;
@@ -142,7 +189,7 @@ export async function POST(request: NextRequest) {
         Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined)),
       );
 
-      // 캐시 저장 + 오버라이드 초기화 병렬 실행
+      // 캐시 저장 + 오버라이드 초기화 + availableHeaders 저장 병렬 실행
       await Promise.all([
         db.collection('stSheetCache').doc(campCode).set({
           campCode,
@@ -154,9 +201,10 @@ export async function POST(request: NextRequest) {
           totalStudents: active.length,
         }),
         clearOverrides(),
+        saveAvailableHeaders(),
       ]);
 
-      logger.info(`✅ 동기화 완료: ${campCode} (${active.length}명)`);
+      logger.info(`✅ 동기화 완료: ${campCode} (${active.length}명, 동적필드 ${dynamicHeaders.length}개)`);
       return NextResponse.json({ success: true, count: active.length, lastSync: new Date().toISOString() });
     }
   } catch (error) {

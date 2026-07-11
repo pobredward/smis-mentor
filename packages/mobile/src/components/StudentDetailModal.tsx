@@ -1,6 +1,6 @@
 'use client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { logger, toDriveImageUrl } from '@smis-mentor/shared';
+import { logger, toDriveImageUrl, getFieldConfig, getFieldValue, getDefaultFieldConfig, type STSheetFieldConfig, type FieldItemConfig } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { requestContactsPermission, getContactsPermissionStatus, saveSingleParentContact } from '../services';
 import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosureModal';
 import { authenticatedFetch } from '../utils/apiClient';
+import { db } from '../config/firebase';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.78;
@@ -42,36 +43,6 @@ const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: s
 // ─── 편집 권한 ────────────────────────────────────────────────────────────────
 type EditPermission = 'readonly' | 'all' | 'mentor';
 
-interface FieldConfig {
-  label: string;
-  max?: number;         // 만점 (레벨 테스트용)
-  permission: EditPermission;
-  multiline?: boolean;  // textarea 여부 (상세 정보용)
-  section: 'detail' | 'placement' | 'counsel';
-}
-
-const FIELD_CONFIGS: Record<string, FieldConfig> = {
-  // 상세 정보 (admin + mentor 수정 가능)
-  medication: { label: '복용약 & 알레르기', permission: 'mentor', multiline: true,  section: 'detail'    },
-  notes:      { label: '특이사항',           permission: 'mentor', multiline: true,  section: 'detail'    },
-  etc:        { label: '기타',               permission: 'mentor', multiline: true,  section: 'detail'    },
-  // 레벨 테스트
-  placementSpeaking: { label: '입소 스피킹',   max: 30, permission: 'readonly', section: 'placement' },
-  placementReading:  { label: '입소 리딩',     max: 30, permission: 'all',      section: 'placement' },
-  placementWriting:  { label: '입소 라이팅',   max: 40, permission: 'all',      section: 'placement' },
-  finalSpeaking:     { label: '파이널 스피킹', max: 30, permission: 'readonly', section: 'placement' },
-  finalReading:      { label: '파이널 리딩',   max: 30, permission: 'all',      section: 'placement' },
-  finalWriting:      { label: '파이널 라이팅', max: 40, permission: 'all',      section: 'placement' },
-  // 상담
-  classCounsel1:  { label: '담임 상담 1주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  classCounsel2:  { label: '담임 상담 2주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  classCounsel3:  { label: '담임 상담 3주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  unitCounsel1:   { label: '유닛 상담 1주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  unitCounsel2:   { label: '유닛 상담 2주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  unitCounsel3:   { label: '유닛 상담 3주차', permission: 'mentor', multiline: true, section: 'counsel' },
-  managerCounsel: { label: '매니저 상담',     permission: 'mentor', multiline: true, section: 'counsel' },
-};
-
 function canEditField(permission: EditPermission, role: string): boolean {
   if (permission === 'readonly') return false;
   if (role === 'admin') return true;
@@ -91,10 +62,12 @@ const InfoRow = React.memo(({ label, value }: { label: string; value?: string | 
   );
 });
 
-// 편집 가능한 행 컴포넌트
+// 편집 가능한 행 컴포넌트 (FieldItemConfig 기반)
 interface EditableRowProps {
   fieldKey: string;
-  cfg: FieldConfig;
+  label: string;
+  isMultiline: boolean;
+  maxScore?: number;
   value: string;
   editingField: { key: string; value: string } | null;
   fieldSaving: boolean;
@@ -106,26 +79,27 @@ interface EditableRowProps {
 }
 
 const EditableRow = React.memo(({
-  fieldKey, cfg, value, editingField, fieldSaving, canEdit,
+  fieldKey, label, isMultiline, maxScore, value,
+  editingField, fieldSaving, canEdit,
   onStartEdit, onChange, onSave, onCancel,
 }: EditableRowProps) => {
   const isThisEditing = editingField?.key === fieldKey;
   const isSavingThis = isThisEditing && fieldSaving;
   const displayValue = value
-    ? (cfg.max != null && cfg.max > 0 ? `${value} / ${cfg.max}` : value)
+    ? (maxScore != null && maxScore > 0 ? `${value} / ${maxScore}` : value)
     : '';
 
   if (isThisEditing) {
     return (
       <View style={styles.editableRowColumn}>
-        <Text style={styles.label}>{cfg.label}</Text>
+        <Text style={styles.label}>{label}</Text>
         <View style={styles.editContainer}>
           <TextInput
-            style={[styles.editInput, cfg.multiline && styles.editInputMultiline]}
+            style={[styles.editInput, isMultiline && styles.editInputMultiline]}
             value={editingField!.value}
             onChangeText={onChange}
-            multiline={cfg.multiline}
-            numberOfLines={cfg.multiline ? 3 : 1}
+            multiline={isMultiline}
+            numberOfLines={isMultiline ? 3 : 1}
             autoFocus
             placeholder="내용을 입력하세요"
             placeholderTextColor="#cbd5e1"
@@ -158,7 +132,7 @@ const EditableRow = React.memo(({
 
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.label}>{cfg.label}</Text>
+      <Text style={styles.label}>{label}</Text>
       <View style={styles.valueContainer}>
         <Text style={[styles.value, !displayValue && styles.valuePlaceholder]} numberOfLines={0}>
           {displayValue || '-'}
@@ -169,7 +143,7 @@ const EditableRow = React.memo(({
             style={styles.editIconBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel={`${cfg.label} 수정`}
+            accessibilityLabel={`${label} 수정`}
           >
             <Text style={styles.editIconText}>수정</Text>
           </TouchableOpacity>
@@ -208,11 +182,11 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-  // 인라인 편집 상태 (현재 보이는 학생 카드에만 적용)
   const [editingField, setEditingField] = useState<{ key: string; value: string } | null>(null);
   const [fieldSaving, setFieldSaving] = useState(false);
-  // 카드별 오버라이드된 값 저장 (studentId → field overrides)
-  const [overrides, setOverrides] = useState<Record<string, Record<string, string>>>({});
+  const [overrides, setOverrides] = useState<Record<string, Record<string, unknown>>>({});
+  // 동적 필드 설정 — 기본값으로 초기화하여 로드 전에도 기본 섹션이 표시되게 함
+  const [fieldConfig, setFieldConfig] = useState<STSheetFieldConfig>(() => getDefaultFieldConfig(campType));
 
   const [showContactsDisclosure, setShowContactsDisclosure] = useState(false);
   const pendingStudentRef = useRef<STSheetStudent | null>(null);
@@ -228,13 +202,18 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       setTimeout(() => {
         scrollViewRef.current?.scrollTo({ x: initialIndex * CARD_WIDTH, animated: false });
       }, 0);
+      // campType 기준 동적 필드 설정 로드 — 우선 기본값으로, Firestore 로드 완료 후 교체
+      setFieldConfig(getDefaultFieldConfig(campType));
+      getFieldConfig(db, campType).then(setFieldConfig).catch((err) => {
+        logger.warn('[StudentDetailModal] fieldConfig 로드 실패, 기본값 사용:', err?.message);
+      });
     } else {
       Animated.parallel([
         Animated.timing(scale, { toValue: 0, duration: 200, useNativeDriver: true }),
         Animated.timing(translateY, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }
-  }, [visible, initialIndex]);
+  }, [visible, initialIndex, campType]);
 
   const handleScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -254,6 +233,15 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const handleCancelEdit = useCallback(() => {
     setEditingField(null);
   }, []);
+
+  // fieldConfig에서 해당 필드 정보 조회
+  const findFieldInConfig = useCallback((key: string): FieldItemConfig | null => {
+    for (const section of fieldConfig.sections) {
+      const field = section.fields.find(f => f.fieldKey === key);
+      if (field) return field;
+    }
+    return null;
+  }, [fieldConfig]);
 
   // 저장
   const handleSaveField = useCallback(async () => {
@@ -277,14 +265,26 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         logger.error('저장 API 응답 오류:', { status: response.status, error: err.error });
         throw new Error(err.error || `저장 실패 (${response.status})`);
       }
-      // 화면 즉시 반영 (overrides에 저장)
-      setOverrides(prev => ({
-        ...prev,
-        [student.studentId]: {
-          ...(prev[student.studentId] ?? {}),
-          [editingField.key]: editingField.value,
-        },
-      }));
+
+      // 레거시 필드는 최상위에, 동적 필드는 displayFields 하위에 저장
+      const fieldInfo = findFieldInConfig(editingField.key);
+      const isLegacy = fieldInfo?.isLegacy ?? true;
+      const sheetHeader = fieldInfo?.sheetHeader ?? editingField.key;
+
+      setOverrides(prev => {
+        const existing = prev[student.studentId] ?? {};
+        if (isLegacy) {
+          return { ...prev, [student.studentId]: { ...existing, [editingField.key]: editingField.value } };
+        }
+        const prevDisplay = (existing.displayFields as Record<string, string> | undefined) ?? {};
+        return {
+          ...prev,
+          [student.studentId]: {
+            ...existing,
+            displayFields: { ...prevDisplay, [sheetHeader]: editingField.value },
+          },
+        };
+      });
       setEditingField(null);
     } catch (e: unknown) {
       logger.error('모바일 학생 카드 저장 실패:', e);
@@ -293,7 +293,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     } finally {
       setFieldSaving(false);
     }
-  }, [editingField, campCode, students, currentIndex]);
+  }, [editingField, campCode, students, currentIndex, findFieldInConfig]);
 
   const handleSaveParentContact = useCallback(async (s: STSheetStudent) => {
     if (!s.parentPhone) return;
@@ -363,16 +363,23 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             >
               {students.map((s, idx) => {
                 const studentOverrides = overrides[s.studentId] ?? {};
-                const merged = { ...s, ...studentOverrides } as unknown as Record<string, string>;
+                const merged: STSheetStudent = {
+                  ...s,
+                  ...(studentOverrides as Partial<STSheetStudent>),
+                  displayFields: {
+                    ...(s.displayFields ?? {}),
+                    ...(studentOverrides as Record<string, unknown>).displayFields as Record<string, string> | undefined,
+                  },
+                };
                 return (
                   <View key={s.studentId} style={styles.page}>
                     <StudentCard
-                      student={s}
-                      merged={merged}
+                      student={merged}
                       campType={campType}
                       isAdmin={isAdmin}
                       groupRole={groupRole}
                       userRole={userRole}
+                      fieldConfig={fieldConfig}
                       editingField={idx === currentIndex ? editingField : null}
                       fieldSaving={fieldSaving}
                       onSaveContact={handleSaveParentContact}
@@ -404,11 +411,11 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 // ─── StudentCard ──────────────────────────────────────────────────────────────
 interface StudentCardProps {
   student: STSheetStudent;
-  merged: Record<string, string>;
   campType: CampType;
   isAdmin: boolean;
   groupRole?: string;
   userRole: string;
+  fieldConfig: STSheetFieldConfig;
   editingField: { key: string; value: string } | null;
   fieldSaving: boolean;
   onSaveContact: (s: STSheetStudent) => void;
@@ -419,32 +426,11 @@ interface StudentCardProps {
 }
 
 const StudentCard = React.memo(({
-  student: s, merged, campType, isAdmin, groupRole, userRole,
-  editingField, fieldSaving,
+  student: s, campType, isAdmin, groupRole, userRole,
+  fieldConfig, editingField, fieldSaving,
   onSaveContact, onStartEdit, onChangeEdit, onSaveField, onCancelEdit,
 }: StudentCardProps) => {
   const profilePhotoUrl = toDriveImageUrl(s.profilePhoto);
-
-  const renderEditableField = (fieldKey: string) => {
-    const cfg = FIELD_CONFIGS[fieldKey];
-    const canEdit = canEditField(cfg.permission, userRole);
-    const value = merged[fieldKey] ?? '';
-    return (
-      <EditableRow
-        key={fieldKey}
-        fieldKey={fieldKey}
-        cfg={cfg}
-        value={value}
-        editingField={editingField}
-        fieldSaving={fieldSaving}
-        canEdit={canEdit}
-        onStartEdit={onStartEdit}
-        onChange={onChangeEdit}
-        onSave={onSaveField}
-        onCancel={onCancelEdit}
-      />
-    );
-  };
 
   return (
     <ScrollView style={styles.cardScrollView} showsVerticalScrollIndicator bounces={false} indicatorStyle="black">
@@ -537,68 +523,56 @@ const StudentCard = React.memo(({
           />
         </View>
 
-        {/* 상세 정보 — 항상 표시, admin/mentor 수정 가능 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>상세 정보</Text>
-          {(['medication', 'notes', 'etc'] as const).map(renderEditableField)}
-        </View>
+        {/* 동적 섹션 — fieldConfig 기반 렌더링 */}
+        {fieldConfig.sections
+          .filter(sec => sec.isVisible)
+          .sort((a, b) => a.order - b.order)
+          .map(section => {
+            // readonly + 비편집 필드는 값이 없으면 숨김 (설문조사 등)
+            const visibleFields = section.fields
+              .filter(f => f.isVisible)
+              .sort((a, b) => a.order - b.order)
+              .filter(f => {
+                if (!f.isEditable && f.permission === 'readonly') {
+                  return !!getFieldValue(s, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: f.isLegacy });
+                }
+                return true;
+              });
+            // 표시할 필드가 없으면 섹션 자체 숨김
+            if (visibleFields.length === 0) return null;
+            return (
+              <View key={section.id} style={styles.section}>
+                <Text style={styles.sectionTitle}>{section.label}</Text>
+                {visibleFields.map(field => {
+                  const canEdit = canEditField(field.permission as EditPermission, userRole) && field.isEditable;
+                  const rawValue = getFieldValue(s, {
+                    fieldKey: field.fieldKey,
+                    sheetHeader: field.sheetHeader,
+                    isLegacy: field.isLegacy,
+                  });
+                  const isMultiline = field.fieldType === 'text';
+                  return (
+                    <EditableRow
+                      key={field.fieldKey}
+                      fieldKey={field.fieldKey}
+                      label={field.label}
+                      isMultiline={isMultiline}
+                      maxScore={field.maxScore}
+                      value={rawValue}
+                      editingField={editingField}
+                      fieldSaving={fieldSaving}
+                      canEdit={canEdit}
+                      onStartEdit={onStartEdit}
+                      onChange={onChangeEdit}
+                      onSave={onSaveField}
+                      onCancel={onCancelEdit}
+                    />
+                  );
+                })}
+              </View>
+            );
+          })}
 
-        {/* 레벨 테스트 — 항상 표시 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>레벨 테스트</Text>
-          {(['placementSpeaking', 'placementReading', 'placementWriting',
-            'finalSpeaking', 'finalReading', 'finalWriting'] as const).map(renderEditableField)}
-        </View>
-
-        {/* 상담 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>상담</Text>
-          {(['classCounsel1', 'classCounsel2', 'classCounsel3',
-            'unitCounsel1', 'unitCounsel2', 'unitCounsel3',
-            'managerCounsel'] as const).map(renderEditableField)}
-        </View>
-
-        {/* 사전 설문조사 */}
-        {!!s.surveyMbti && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>사전 설문조사</Text>
-            {([
-              ['MBTI', s.surveyMbti],
-              ['캠프 참여 결정', s.surveyCampDecision],
-              ['캠프에 기대하는 1순위', s.surveyCampExpectation],
-              ['이전 영어캠프/어학캠프 경험 (회)', s.surveyCampExperience],
-              ['모바일/PC게임 (시간/일)', s.surveyGameTime],
-              ['SNS (시간/일)', s.surveySnsTime],
-              ['재학 학교 유형', s.surveySchoolType],
-              ['영어학원 기간 (년)', s.surveyAcademyPeriod],
-              ['원어민 수업 (시간/주)', s.surveyNativeClassHours],
-              ['원어민 수업 발화 비율 (%)', s.surveySpeakingRatio],
-              ['영어를 좋아하는 편', s.surveyLikesEnglish],
-              ['영어를 잘 하는 편', s.surveyGoodAtEnglish],
-              ['처음 보는 친구에게 먼저 말 걸기', s.surveyTalkFirst],
-              ['학교 친구가 많은 편', s.surveyManyFriends],
-              ['조별 활동 주도적', s.surveyGroupLeader],
-              ['단체 활동 규칙 준수', s.surveyFollowRules],
-              ['선생님 말 잘 듣기', s.surveyListenTeacher],
-              ['집이 화목한 편', s.surveyHappyHome],
-              ['부모님 말 잘 듣기', s.surveyListenParents],
-              ['평균 수면 시간 (시간)', s.surveySleepHours],
-              ['학교에서 공부 잘 하는 편', s.surveyGoodAtStudy],
-              ['학교 발표 자주 하는 편', s.surveyPresentation],
-              ['노력하면 실력 늘어난다 믿음', s.surveyGrowthMindset],
-              ['모르면 바로 질문', s.surveyAsksQuestions],
-              ['숙제 미루지 않기', s.surveyNoHomeworkDelay],
-              ['계획 지키는 편', s.surveyFollowPlan],
-              ['수업 집중 잘 하는 편', s.surveyFocusInClass],
-              ['다니는 학원 개수 (개)', s.surveyAcademyCount],
-              ['다니는 학원 종류', s.surveyAcademyTypes],
-            ] as [string, string | undefined][])
-              .filter(([, v]) => !!v)
-              .map(([label, value]) => (
-                <InfoRow key={label} label={label} value={value} />
-              ))}
-          </View>
-        )}
       </View>
     </ScrollView>
   );

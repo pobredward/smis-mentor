@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFunctions } from 'firebase/functions';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { 
   getAuth, 
@@ -26,7 +26,7 @@ const app: FirebaseApp = getApps().length === 0
 
 // Functions, Firestore, Storage 초기화
 const functions = getFunctions(app, 'asia-northeast3');
-const db = getFirestore(app);
+const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
 const storage = getStorage(app);
 
 // Auth 초기화: 반드시 initializeAuth를 먼저 시도해야 AsyncStorage 영속화가 적용됨.

@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { logger } from '@smis-mentor/shared';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
@@ -27,7 +27,8 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const db = getFirestore(app);
+// ignoreUndefinedProperties: undefined 값이 포함된 객체 저장 시 오류 방지
+const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
 const storage = getStorage(app, 'gs://smis-mentor.firebasestorage.app');
 const functions = getFunctions(app, 'asia-northeast3');
 

@@ -550,9 +550,20 @@ service cloud.firestore {
     // ──────────────────────────────────────────────────────────────
     // campSettings 컬렉션 (캠프별 설정)
     // 역할: admin(전체 CRUD), 캠프 스태프(읽기)
-    // 용도: 임시데이터 on/off 설정 (useTemporaryData)
+    // 용도: 임시데이터 on/off 설정 (useTemporaryData), sheetColumnMap
     // ──────────────────────────────────────────────────────────────
     match /campSettings/{campCode} {
+      allow read: if isCampStaff();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // stSheetFieldConfig 컬렉션 (캠프 타입별 동적 필드 설정)
+    // 역할: admin(전체 CRUD), 캠프 스태프(읽기)
+    // 용도: 학생 상세 화면의 섹션·필드 구성 (관리자 대시보드에서 설정)
+    // ──────────────────────────────────────────────────────────────
+    match /stSheetFieldConfig/{campType} {
       allow read: if isCampStaff();
       allow create, update: if isAdmin();
       allow delete: if isAdmin();

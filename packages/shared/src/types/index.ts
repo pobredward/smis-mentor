@@ -1,5 +1,6 @@
 // 타입 정의 통합 export
 export * from './student';
+export * from './fieldConfig';
 export * from './camp';
 export * from './campPage';
 export * from './permission';

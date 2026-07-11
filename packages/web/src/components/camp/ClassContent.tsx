@@ -1,35 +1,12 @@
 'use client';
-import { logger, toDriveImageUrl } from '@smis-mentor/shared';
+import { logger, toDriveImageUrl, getFieldValue, type STSheetFieldConfig } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { stSheetService, jobCodesService, placementOverrideService, STSheetStudent, CampCode, CampType } from '@/lib/stSheetService';
-import { authenticatedPost } from '@/lib/apiClient';
+import { authenticatedPost, authenticatedGet } from '@/lib/apiClient';
 
 type EditPermission = 'readonly' | 'all' | 'mentor';
-interface FieldConfig { label: string; labelForeign?: string; max: number; permission: EditPermission; section: 'detail' | 'placement' | 'counsel' }
-
-const FIELD_CONFIGS: Record<string, FieldConfig> = {
-  // 상세 정보 (admin + mentor 수정 가능)
-  medication:        { label: '복용약 & 알레르기', labelForeign: 'Medication & Allergies', max: 0, permission: 'mentor', section: 'detail'    },
-  notes:             { label: '특이사항',           labelForeign: 'Special Notes',          max: 0, permission: 'mentor', section: 'detail'    },
-  etc:               { label: '기타',               labelForeign: 'Other',                  max: 0, permission: 'mentor', section: 'detail'    },
-  // 레벨 테스트
-  placementSpeaking: { label: '입소 스피킹',    max: 30, permission: 'readonly', section: 'placement' },
-  placementReading:  { label: '입소 리딩',      max: 30, permission: 'all',      section: 'placement' },
-  placementWriting:  { label: '입소 라이팅',    max: 40, permission: 'all',      section: 'placement' },
-  finalSpeaking:     { label: '파이널 스피킹',  max: 30, permission: 'readonly', section: 'placement' },
-  finalReading:      { label: '파이널 리딩',    max: 30, permission: 'all',      section: 'placement' },
-  finalWriting:      { label: '파이널 라이팅',  max: 40, permission: 'all',      section: 'placement' },
-  // 상담
-  classCounsel1:     { label: '담임 상담 1주차', max: 0, permission: 'mentor',   section: 'counsel'   },
-  classCounsel2:     { label: '담임 상담 2주차', max: 0, permission: 'mentor',   section: 'counsel'   },
-  classCounsel3:     { label: '담임 상담 3주차', max: 0, permission: 'mentor',   section: 'counsel'   },
-  unitCounsel1:      { label: '유닛 상담 1주차', max: 0, permission: 'mentor',   section: 'counsel'   },
-  unitCounsel2:      { label: '유닛 상담 2주차', max: 0, permission: 'mentor',   section: 'counsel'   },
-  unitCounsel3:      { label: '유닛 상담 3주차', max: 0, permission: 'mentor',   section: 'counsel'   },
-  managerCounsel:    { label: '매니저 상담',     max: 0, permission: 'mentor',   section: 'counsel'   },
-};
 
 function canEditField(permission: EditPermission, role: string): boolean {
   if (permission === 'readonly') return false;
@@ -69,9 +46,13 @@ export default function ClassContent() {
   const [isTemporaryData, setIsTemporaryData] = useState(false);
   const [useTemporaryDataSetting, setUseTemporaryDataSetting] = useState(true);
   const [hasRealData, setHasRealData] = useState(false);
+  // 동적 필드 설정
+  const [fieldConfig, setFieldConfig] = useState<STSheetFieldConfig | null>(null);
 
-  // 필드별 개별 인라인 편집 상태
-  const [editingField, setEditingField] = useState<{ key: string; value: string } | null>(null);
+  // 편집 상태: isLegacy false면 displayFields에 저장
+  const [editingField, setEditingField] = useState<{
+    key: string; value: string; sheetHeader: string; isLegacy: boolean;
+  } | null>(null);
   const [fieldSaving, setFieldSaving] = useState(false);
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
@@ -97,11 +78,14 @@ export default function ClassContent() {
   }, [campCode]);
 
   // 특정 필드 편집 시작
-  const handleStartFieldEdit = useCallback((fieldKey: string) => {
-    if (!selectedStudent) return;
-    const s = selectedStudent as unknown as Record<string, string>;
-    setEditingField({ key: fieldKey, value: s[fieldKey] ?? '' });
-  }, [selectedStudent]);
+  const handleStartFieldEdit = useCallback(
+    (fieldKey: string, sheetHeader: string, isLegacy: boolean) => {
+      if (!selectedStudent) return;
+      const value = getFieldValue(selectedStudent, { fieldKey, sheetHeader, isLegacy });
+      setEditingField({ key: fieldKey, value, sheetHeader, isLegacy });
+    },
+    [selectedStudent],
+  );
 
   // 편집 취소
   const handleCancelFieldEdit = useCallback(() => {
@@ -122,9 +106,18 @@ export default function ClassContent() {
       // 화면 즉시 반영
       setSelectedStudent(prev => {
         if (!prev) return null;
-        const updated = { ...prev } as unknown as Record<string, unknown>;
-        updated[editingField.key] = editingField.value || undefined;
-        return updated as unknown as STSheetStudent;
+        if (editingField.isLegacy) {
+          const updated = { ...prev } as unknown as Record<string, unknown>;
+          updated[editingField.key] = editingField.value || undefined;
+          return updated as unknown as STSheetStudent;
+        }
+        return {
+          ...prev,
+          displayFields: {
+            ...(prev.displayFields ?? {}),
+            [editingField.sheetHeader]: editingField.value,
+          },
+        };
       });
       setEditingField(null);
     } catch (e) {
@@ -146,8 +139,14 @@ export default function ClassContent() {
         const jobCodes = await jobCodesService.getJobCodesByIds([activeJobCodeId]);
         if (jobCodes.length > 0 && jobCodes[0].code) {
           const code = jobCodes[0].code as CampCode;
+          const type = stSheetService.getCampType(code);
           setCampCode(code);
-          setCampType(stSheetService.getCampType(code));
+          setCampType(type);
+          // 동적 필드 설정 로드 (Admin SDK 경유 → Firestore 규칙 의존성 없음)
+          const cfg = await authenticatedGet<STSheetFieldConfig>(
+            `/api/st/field-config?campType=${type}`
+          ).catch(() => null);
+          setFieldConfig(cfg);
         } else {
           setLoading(false);
         }
@@ -755,197 +754,103 @@ export default function ClassContent() {
                 </div>
               </div>
 
-              {/* 상세 정보 — 인라인 편집 (admin + mentor) */}
-              {(() => {
-                const detailKeys = Object.keys(FIELD_CONFIGS).filter(k => FIELD_CONFIGS[k].section === 'detail');
-                const userRole = userData?.role ?? '';
-                const s = selectedStudent as unknown as Record<string, string>;
-                return (
-                  <div className="mb-5">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Additional Info' : '상세 정보'}</h4>
-                    <div className="space-y-1">
-                      {detailKeys.map(fieldKey => {
-                        const cfg = FIELD_CONFIGS[fieldKey];
-                        const canEdit = canEditField(cfg.permission, userRole);
-                        const isThisEditing = editingField?.key === fieldKey;
-                        const isSavingThis = isThisEditing && fieldSaving;
-                        const value = s[fieldKey] ?? '';
-                        const fieldLabel = isForeign && cfg.labelForeign ? cfg.labelForeign : cfg.label;
-                        return (
-                          <div key={fieldKey} className="flex items-start py-1.5 border-b border-gray-100 gap-2">
-                            <span className="w-28 shrink-0 text-xs text-gray-500 pt-0.5">{fieldLabel}</span>
-                            {isThisEditing ? (
-                              <>
-                                <textarea
-                                  autoFocus
-                                  rows={3}
-                                  value={editingField.value}
-                                  onChange={e => setEditingField(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Escape') handleCancelFieldEdit();
-                                  }}
-                                  className="flex-1 text-xs text-gray-900 border border-blue-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
-                                  placeholder="내용을 입력하세요"
-                                />
-                                <div className="flex flex-col gap-1 shrink-0">
-                                  <button
-                                    onClick={handleSaveField}
-                                    disabled={isSavingThis}
-                                    className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
-                                  >
-                                    {isSavingThis ? '…' : '저장'}
-                                  </button>
-                                  <button
-                                    onClick={handleCancelFieldEdit}
-                                    disabled={isSavingThis}
-                                    className="text-xs text-gray-500 px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-50"
-                                  >
-                                    취소
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <span className="flex-1 text-xs text-gray-900 font-medium whitespace-pre-wrap break-words">
-                                  {value || <span className="text-gray-300">-</span>}
-                                </span>
-                                {canEdit && !editingField && (
-                                  <button
-                                    onClick={() => handleStartFieldEdit(fieldKey)}
-                                    className="text-xs text-blue-500 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 shrink-0 transition-colors"
-                                  >
-                                    수정
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* 동적 섹션 — fieldConfig 기반 렌더링 */}
+              {fieldConfig && fieldConfig.sections
+                .filter(sec => sec.isVisible)
+                .sort((a, b) => a.order - b.order)
+                .map(section => {
+                  const userRole = userData?.role ?? '';
+                  // readonly + 비편집 필드는 값이 없으면 숨김 (설문조사 등)
+                  const visibleFields = section.fields
+                    .filter(f => f.isVisible)
+                    .sort((a, b) => a.order - b.order)
+                    .filter(f => {
+                      if (!f.isEditable && f.permission === 'readonly') {
+                        return !!getFieldValue(selectedStudent!, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: f.isLegacy });
+                      }
+                      return true;
+                    });
+                  // 표시할 필드가 없으면 섹션 자체 숨김
+                  if (visibleFields.length === 0) return null;
+                  return (
+                    <div key={section.id} className="mb-5">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">{section.label}</h4>
+                      <div className="space-y-1">
+                        {visibleFields.map(field => {
+                          const canEdit = canEditField(field.permission as EditPermission, userRole) && field.isEditable;
+                          const isThisEditing = editingField?.key === field.fieldKey;
+                          const isSavingThis = isThisEditing && fieldSaving;
+                          const rawValue = getFieldValue(selectedStudent!, {
+                            fieldKey: field.fieldKey,
+                            sheetHeader: field.sheetHeader,
+                            isLegacy: field.isLegacy,
+                          });
+                          const displayValue = rawValue
+                            ? (field.fieldType === 'score' && field.maxScore ? `${rawValue} / ${field.maxScore}` : rawValue)
+                            : '-';
+                          const isTextArea = field.fieldType === 'text' && !field.maxScore;
 
-              {/* 레벨 테스트 & 상담 — 필드별 개별 인라인 편집 */}
-              {(['placement', 'counsel'] as const).map(section => {
-                const sectionKeys = Object.keys(FIELD_CONFIGS).filter(k => FIELD_CONFIGS[k].section === section);
-                const sectionLabel = section === 'placement' ? '레벨 테스트' : '상담';
-                const userRole = userData?.role ?? '';
-                const s = selectedStudent as unknown as Record<string, string>;
-
-                return (
-                  <div key={section} className="mb-5">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-3">{sectionLabel}</h4>
-                    <div className="space-y-1">
-                      {sectionKeys.map(fieldKey => {
-                        const cfg = FIELD_CONFIGS[fieldKey];
-                        const canEdit = canEditField(cfg.permission, userRole);
-                        const isThisEditing = editingField?.key === fieldKey;
-                        const isSavingThis = isThisEditing && fieldSaving;
-                        const value = s[fieldKey] ?? '';
-                        const displayValue = value ? (cfg.max > 0 ? `${value} / ${cfg.max}` : value) : '-';
-
-                        return (
-                          <div key={fieldKey} className="flex items-center py-1.5 border-b border-gray-100 gap-2">
-                            <span className="w-28 shrink-0 text-xs text-gray-500">
-                              {cfg.label}
-                            </span>
-                            {isThisEditing ? (
-                              <>
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  value={editingField.value}
-                                  onChange={e => setEditingField(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') handleSaveField();
-                                    if (e.key === 'Escape') handleCancelFieldEdit();
-                                  }}
-                                  className="flex-1 text-xs text-gray-900 border border-blue-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                  placeholder="-"
-                                />
-                                <button
-                                  onClick={handleSaveField}
-                                  disabled={isSavingThis}
-                                  className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50 shrink-0"
-                                >
-                                  {isSavingThis ? '…' : '저장'}
-                                </button>
-                                <button
-                                  onClick={handleCancelFieldEdit}
-                                  disabled={isSavingThis}
-                                  className="text-xs text-gray-500 px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-50 shrink-0"
-                                >
-                                  취소
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <span className="flex-1 text-xs text-gray-900 font-medium">{displayValue}</span>
-                                {canEdit && !editingField && (
-                                  <button
-                                    onClick={() => handleStartFieldEdit(fieldKey)}
-                                    className="text-xs text-blue-500 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 shrink-0 transition-colors"
-                                    title="수정"
-                                  >
-                                    수정
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* 사전 설문조사 */}
-              {selectedStudent.surveyMbti && (
-                <div className="mb-5">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">사전 설문조사</h4>
-                  <div className="space-y-2">
-                    {([
-                      ['MBTI', selectedStudent.surveyMbti],
-                      ['캠프 참여 결정', selectedStudent.surveyCampDecision],
-                      ['캠프에 기대하는 1순위', selectedStudent.surveyCampExpectation],
-                      ['이전 영어캠프/어학캠프 경험 (회)', selectedStudent.surveyCampExperience],
-                      ['모바일/PC게임 (시간/일)', selectedStudent.surveyGameTime],
-                      ['SNS (시간/일)', selectedStudent.surveySnsTime],
-                      ['재학 학교 유형', selectedStudent.surveySchoolType],
-                      ['영어학원 기간 (년)', selectedStudent.surveyAcademyPeriod],
-                      ['원어민 수업 (시간/주)', selectedStudent.surveyNativeClassHours],
-                      ['원어민 수업 발화 비율 (%)', selectedStudent.surveySpeakingRatio],
-                      ['영어를 좋아하는 편', selectedStudent.surveyLikesEnglish],
-                      ['영어를 잘 하는 편', selectedStudent.surveyGoodAtEnglish],
-                      ['처음 보는 친구에게 먼저 말 걸기', selectedStudent.surveyTalkFirst],
-                      ['학교 친구가 많은 편', selectedStudent.surveyManyFriends],
-                      ['조별 활동 주도적', selectedStudent.surveyGroupLeader],
-                      ['단체 활동 규칙 준수', selectedStudent.surveyFollowRules],
-                      ['선생님 말 잘 듣기', selectedStudent.surveyListenTeacher],
-                      ['집이 화목한 편', selectedStudent.surveyHappyHome],
-                      ['부모님 말 잘 듣기', selectedStudent.surveyListenParents],
-                      ['평균 수면 시간 (시간)', selectedStudent.surveySleepHours],
-                      ['학교에서 공부 잘 하는 편', selectedStudent.surveyGoodAtStudy],
-                      ['학교 발표 자주 하는 편', selectedStudent.surveyPresentation],
-                      ['노력하면 실력 늘어난다 믿음', selectedStudent.surveyGrowthMindset],
-                      ['모르면 바로 질문', selectedStudent.surveyAsksQuestions],
-                      ['숙제 미루지 않기', selectedStudent.surveyNoHomeworkDelay],
-                      ['계획 지키는 편', selectedStudent.surveyFollowPlan],
-                      ['수업 집중 잘 하는 편', selectedStudent.surveyFocusInClass],
-                      ['다니는 학원 개수 (개)', selectedStudent.surveyAcademyCount],
-                      ['다니는 학원 종류', selectedStudent.surveyAcademyTypes],
-                    ] as [string, string | undefined][]).filter(([, v]) => !!v).map(([label, value]) => (
-                      <div key={label} className="flex py-2 border-b border-gray-100">
-                        <span className="flex-1 text-xs text-gray-500">{label}</span>
-                        <span className="flex-[2] text-xs text-gray-900 font-medium">{value}</span>
+                          return (
+                            <div
+                              key={field.fieldKey}
+                              className={`flex ${isTextArea ? 'items-start' : 'items-center'} py-1.5 border-b border-gray-100 gap-2`}
+                            >
+                              <span className="w-28 shrink-0 text-xs text-gray-500 pt-0.5">{field.label}</span>
+                              {isThisEditing ? (
+                                <>
+                                  {isTextArea ? (
+                                    <textarea
+                                      autoFocus
+                                      rows={3}
+                                      value={editingField.value}
+                                      onChange={e => setEditingField(prev => prev ? { ...prev, value: e.target.value } : null)}
+                                      onKeyDown={e => { if (e.key === 'Escape') handleCancelFieldEdit(); }}
+                                      className="flex-1 text-xs text-gray-900 border border-blue-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+                                      placeholder="내용을 입력하세요"
+                                    />
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={editingField.value}
+                                      onChange={e => setEditingField(prev => prev ? { ...prev, value: e.target.value } : null)}
+                                      onKeyDown={e => { if (e.key === 'Enter') handleSaveField(); if (e.key === 'Escape') handleCancelFieldEdit(); }}
+                                      className="flex-1 text-xs text-gray-900 border border-blue-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                      placeholder="-"
+                                    />
+                                  )}
+                                  <div className={`flex ${isTextArea ? 'flex-col' : ''} gap-1 shrink-0`}>
+                                    <button onClick={handleSaveField} disabled={isSavingThis} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">
+                                      {isSavingThis ? '…' : '저장'}
+                                    </button>
+                                    <button onClick={handleCancelFieldEdit} disabled={isSavingThis} className="text-xs text-gray-500 px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-50">
+                                      취소
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <span className={`flex-1 text-xs text-gray-900 font-medium ${isTextArea ? 'whitespace-pre-wrap break-words' : ''}`}>
+                                    {displayValue !== '-' ? displayValue : <span className="text-gray-300">-</span>}
+                                  </span>
+                                  {canEdit && !editingField && (
+                                    <button
+                                      onClick={() => handleStartFieldEdit(field.fieldKey, field.sheetHeader, field.isLegacy)}
+                                      className="text-xs text-blue-500 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 shrink-0 transition-colors"
+                                    >
+                                      수정
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  );
+                })}
+
               </div>
 
               {/* 닫기 버튼 */}

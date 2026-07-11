@@ -11,7 +11,8 @@ import {
   IoSettings, 
   IoMap, 
   IoPersonAdd, 
-  IoBriefcase 
+  IoBriefcase,
+  IoGrid,
 } from 'react-icons/io5';
 
 type AdminMenuItem = {
@@ -100,6 +101,12 @@ export default function AdminDashboard() {
           href: '/admin/student-search',
           iconClass: 'text-purple-500',
           icon: <IoSearch className="w-5 h-5" />,
+        },
+        {
+          title: 'ST시트 필드 설정',
+          href: '/admin/st-field-config',
+          iconClass: 'text-emerald-600',
+          icon: <IoGrid className="w-5 h-5" />,
         },
       ],
     },
