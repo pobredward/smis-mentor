@@ -3,6 +3,7 @@
 import { logger } from '@smis-mentor/shared';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDisplayItems, campPageService } from '@/lib/campPageService';
@@ -214,6 +215,11 @@ export default function CampContentList({
     router.push(`/camp/${category}/${item.id}`);
   };
 
+  const getItemHref = (item: DisplayItem): string => {
+    if (item.type === 'link' && item.url) return item.url;
+    return `/camp/${category}/${item.id}`;
+  };
+
   const handleMoveItemUp = async (item: DisplayItem, sectionItems: DisplayItem[]) => {
     if (!activeJobCodeId || item.type !== 'page') return;
 
@@ -372,6 +378,7 @@ export default function CampContentList({
                   key={item.id}
                   item={item}
                   isAdmin={true}
+                  href={getItemHref(item)}
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
                   onEdit={handleStartEditItem}
@@ -397,6 +404,7 @@ export default function CampContentList({
                   key={item.id}
                   item={item}
                   isAdmin={true}
+                  href={getItemHref(item)}
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
                   onEdit={handleStartEditItem}
@@ -422,6 +430,7 @@ export default function CampContentList({
                   key={item.id}
                   item={item}
                   isAdmin={true}
+                  href={getItemHref(item)}
                   onNavigate={handleNavigateToDetail}
                   onDelete={handleDeleteItem}
                   onEdit={handleStartEditItem}
@@ -495,6 +504,7 @@ export default function CampContentList({
             key={item.id}
             item={item}
             isAdmin={false}
+            href={getItemHref(item)}
             onNavigate={handleNavigateToDetail}
             onDelete={handleDeleteItem}
             onEdit={handleStartEditItem}
@@ -508,6 +518,7 @@ export default function CampContentList({
 function ItemCard({
   item,
   isAdmin,
+  href,
   onNavigate,
   onDelete,
   onEdit,
@@ -516,96 +527,118 @@ function ItemCard({
 }: {
   item: DisplayItem;
   isAdmin: boolean;
+  href?: string;
   onNavigate: (item: DisplayItem) => void;
   onDelete: (item: DisplayItem) => void;
   onEdit: (item: DisplayItem) => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
 }) {
+  const innerContent = (
+    <div className="p-3 sm:p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 rounded-lg flex items-center justify-center text-base sm:text-lg ${
+            item.type === 'page' 
+              ? 'bg-blue-100 text-blue-600' 
+              : 'bg-purple-100 text-purple-600'
+          }`}>
+            {item.emoji || (item.type === 'page' ? '📄' : '🔗')}
+          </div>
+          <h3 className="font-semibold text-sm sm:text-base text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 flex-1">
+            {item.title}
+          </h3>
+        </div>
+
+        {isAdmin && (
+          <div className="flex flex-col gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
+            {item.type === 'page' && (
+              <div className="flex gap-0.5">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onEdit(item);
+                  }}
+                  className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                  title="수정"
+                >
+                  <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                {onMoveUp && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onMoveUp();
+                    }}
+                    className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                    title="위로 이동"
+                  >
+                    <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="flex gap-0.5">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onDelete(item);
+                }}
+                className="w-5 h-5 flex items-center justify-center hover:bg-red-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                title="삭제"
+              >
+                <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+              {onMoveDown && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onMoveDown();
+                  }}
+                  className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
+                  title="아래로 이동"
+                >
+                  <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (href) {
+    const isExternal = item.type === 'link';
+    return (
+      <Link
+        href={href}
+        className="bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group relative block"
+        {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+      >
+        {innerContent}
+      </Link>
+    );
+  }
+
   return (
     <div
       className="bg-white rounded-lg border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group relative"
       onClick={() => onNavigate(item)}
     >
-      <div className="p-3 sm:p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 rounded-lg flex items-center justify-center text-base sm:text-lg ${
-              item.type === 'page' 
-                ? 'bg-blue-100 text-blue-600' 
-                : 'bg-purple-100 text-purple-600'
-            }`}>
-              {item.emoji || (item.type === 'page' ? '📄' : '🔗')}
-            </div>
-            <h3 className="font-semibold text-sm sm:text-base text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 flex-1">
-              {item.title}
-            </h3>
-          </div>
-
-          {isAdmin && (
-            <div className="flex flex-col gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
-              {item.type === 'page' && (
-                <div className="flex gap-0.5">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(item);
-                    }}
-                    className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                    title="수정"
-                  >
-                    <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                  {onMoveUp && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onMoveUp();
-                      }}
-                      className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                      title="위로 이동"
-                    >
-                      <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              )}
-              <div className="flex gap-0.5">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(item);
-                  }}
-                  className="w-5 h-5 flex items-center justify-center hover:bg-red-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                  title="삭제"
-                >
-                  <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-                {onMoveDown && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onMoveDown();
-                    }}
-                    className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                    title="아래로 이동"
-                  >
-                    <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      {innerContent}
     </div>
   );
 }
