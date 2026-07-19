@@ -949,11 +949,18 @@ const StudentCardContent = React.memo(({ item }: StudentCardContentProps) => {
   const gradePrefix = item.grade?.replace(/[0-9].*/g, '') ?? 'G';
   const gradeBadge = gradeNum ? `${gradePrefix}${gradeNum}${item.gender === 'M' ? 'M' : 'F'}` : '';
 
-  // 유닛 라인 (호수 별도)
-  const unitName = item.unitMentor || item.unit
-    ? `${item.unitMentor || item.unit} 유닛`
+  // 반 담당자: `classMentor (className반)` 형식
+  const classLine = item.classMentor
+    ? `${item.classMentor}${item.className ? ` (${item.className}반)` : ''}`
     : null;
-  const roomLine = item.roomNumber ? `${item.roomNumber}호` : null;
+
+  // 유닛/호수: `unitMentor (roomNumber호)` 형식
+  const unitMentorName = item.unitMentor || item.unit;
+  const unitLine = unitMentorName
+    ? `${unitMentorName}${item.roomNumber ? ` (${item.roomNumber}호)` : ''}`
+    : item.roomNumber
+    ? `(${item.roomNumber}호)`
+    : null;
 
   return (
     <View style={cardStyles.wrapper}>
@@ -984,20 +991,26 @@ const StudentCardContent = React.memo(({ item }: StudentCardContentProps) => {
         {item.name}{gradeBadge ? ` (${gradeBadge})` : ''}
       </Text>
 
+      {/* 반번호 */}
+      {item.classNumber ? (
+        <Text style={cardStyles.sub} numberOfLines={1}>
+          {item.classNumber}
+        </Text>
+      ) : null}
+
       {/* 영어 이름 */}
       {item.englishName ? (
         <Text style={cardStyles.sub} numberOfLines={1}>{item.englishName}</Text>
       ) : null}
 
-
-      {/* 유닛 */}
-      {unitName ? (
-        <Text style={cardStyles.sub} numberOfLines={1}>{unitName}</Text>
+      {/* 반 담당자 */}
+      {classLine ? (
+        <Text style={cardStyles.sub} numberOfLines={1}>{classLine}</Text>
       ) : null}
 
-      {/* 호수 */}
-      {roomLine ? (
-        <Text style={cardStyles.sub} numberOfLines={1}>{roomLine}</Text>
+      {/* 유닛 담당자 + 호수 */}
+      {unitLine ? (
+        <Text style={cardStyles.sub} numberOfLines={1}>{unitLine}</Text>
       ) : null}
     </View>
   );

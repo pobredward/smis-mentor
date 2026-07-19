@@ -508,7 +508,11 @@ export default function RoomContent() {
             <div key={roomNumber} className="bg-white rounded-lg p-4 border border-gray-200">
               <h3 className="text-sm font-bold text-gray-700 mb-3">{isForeign ? `Room ${roomNumber}` : `${roomNumber}호`}</h3>
               <div className="grid grid-cols-4 gap-1">
-                {students.map(student => (
+                {students.map(student => {
+                  const gradeNum = student.grade?.replace(/[^0-9]/g, '') ?? '';
+                  const gradePrefix = student.grade?.replace(/[0-9].*/g, '') ?? 'G';
+                  const gradeBadge = gradeNum ? `${gradePrefix}${gradeNum}${student.gender === 'M' ? 'M' : 'F'}` : '';
+                  return (
                   <button
                     key={student.studentId}
                     onClick={() => handleSelectStudent(student)}
@@ -545,7 +549,7 @@ export default function RoomContent() {
                       <h3 className={`text-sm font-bold truncate leading-tight ${
                         student.gender === 'M' ? 'text-blue-600' : 'text-yellow-600'
                       }`}>
-                        {student.name}
+                        {student.name}{gradeBadge ? ` (${gradeBadge})` : ''}
                       </h3>
                       <p className="text-[10px] text-gray-900 font-medium truncate">
                         {student.classNumber || '-'}
@@ -556,16 +560,16 @@ export default function RoomContent() {
                     
                     <div className="space-y-0.5 text-[10px] text-gray-600">
                       <p className="truncate">{student.englishName || '-'}</p>
-                      <p className="truncate">
-                        <span>{student.gender === 'M' ? (isForeign ? 'M' : '남') : (isForeign ? 'F' : '여')}</span>
-                        <span className="mx-1">•</span>
-                        <span>{student.grade}</span>
+                      <p className="truncate text-[9px]">
+                        {isForeign ? 'Class' : '반'}: {student.classMentor || '-'}{student.className ? ` (${student.className}반)` : ''}
                       </p>
-                      <p className="truncate text-[9px]">{isForeign ? 'Class' : '반'}: {student.classMentor || '-'}</p>
-                      <p className="truncate text-[9px]">{isForeign ? 'Unit' : '유닛'}: {student.unitMentor || '-'}</p>
+                      <p className="truncate text-[9px]">
+                        {isForeign ? 'Unit' : '유닛'}: {student.unitMentor || '-'}{student.roomNumber ? ` (${student.roomNumber}호)` : ''}
+                      </p>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))
