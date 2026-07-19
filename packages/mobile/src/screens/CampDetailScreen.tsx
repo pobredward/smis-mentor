@@ -214,6 +214,18 @@ export function CampDetailScreen({ route, navigation }: Props) {
     return html.replace(/<div class="table-controls"[^>]*>[\s\S]*?<\/div>\s*/gi, '');
   };
 
+  // 이미지가 항상 너비 100%로 표시되도록 width/height/style 속성 제거 후 강제 적용
+  const preprocessImageStyles = (html: string): string => {
+    if (!html) return html;
+    return html.replace(/<img\b([^>]*)>/gi, (_match, attrs) => {
+      const cleanAttrs = attrs.replace(
+        /\s+(?:width|height|style)\s*=\s*(?:"[^"]*"|'[^']*')/gi,
+        ''
+      );
+      return `<img${cleanAttrs} style="width:100%;height:auto;">`;
+    });
+  };
+
   // WebView로 렌더링해야 하는지 판단 (테이블 또는 토글 블록)
   const needsWebView = (html: string): boolean => {
     return /<table/i.test(html) || /class="toggle-block"/i.test(html) || /<details/i.test(html);
@@ -242,7 +254,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
       p:empty, p:has(br:only-child) { min-height: 28px; display: block; }
       ul, ol { margin: 0 0 4px 0; padding-left: 20px; }
       li { margin-bottom: 2px; }
-      img { max-width: 100%; height: auto; border-radius: 8px; margin: 6px 0; display: block; }
+      img { width: 100%; height: auto; border-radius: 8px; margin: 6px 0; display: block; }
 
       /* 테이블 */
       .table-wrapper { overflow-x: auto; margin: 6px 0; }
@@ -373,7 +385,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
         hasTable ? (
           <WebView
             source={{
-              html: buildWebViewHtml(removeTableControls(item.content || '') || '<p style="color: #9ca3af; text-align: center;">내용이 없습니다.</p>'),
+              html: buildWebViewHtml(preprocessImageStyles(removeTableControls(item.content || '') || '<p style="color: #9ca3af; text-align: center;">내용이 없습니다.</p>')),
             }}
             style={styles.webview}
             scalesPageToFit={false}
@@ -399,8 +411,13 @@ export function CampDetailScreen({ route, navigation }: Props) {
         >
           <RenderHTML
             contentWidth={width - 32}
-            source={{ html: removeTableControls(item.content || '') || '<p style="color: #9ca3af; text-align: center;">내용이 없습니다.</p>' }}
+            source={{ html: preprocessImageStyles(removeTableControls(item.content || '')) || '<p style="color: #9ca3af; text-align: center;">내용이 없습니다.</p>' }}
             enableExperimentalMarginCollapsing={false}
+            renderersProps={{
+              img: {
+                enableExperimentalPercentWidth: true,
+              },
+            }}
             baseStyle={{
               paddingTop: 8,
             }}
@@ -458,8 +475,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
                 marginBottom: 2,
               },
               img: {
-                maxWidth: '100%',
-                height: 'auto',
+                width: '100%',
                 borderRadius: 8,
                 marginVertical: 6,
               },
