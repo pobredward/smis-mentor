@@ -513,9 +513,9 @@ export default function ClassContent() {
                   }`}>
                     {student.name}{gradeBadge ? ` (${gradeBadge})` : ''}
                   </h3>
-                  <p className="text-[10px] text-gray-900 font-medium truncate">
-                    {student.classNumber || '-'}
-                  </p>
+                      <p className="text-[10px] text-gray-900 font-medium truncate">
+                        {student.classNumber || '-'} | {student.studentId || '-'}
+                      </p>
                 </div>
                 
                 <div className="h-px bg-gray-200 my-1.5"></div>

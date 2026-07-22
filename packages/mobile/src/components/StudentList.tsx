@@ -866,7 +866,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                                 style={styles.studentCardDouble}
                                 onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                               >
-                                <StudentCardContent item={item} />
+                                <StudentCardContent item={item} isForeign={isForeign} />
                               </TouchableOpacity>
                             );
                             })}
@@ -892,7 +892,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                           style={styles.studentCard}
                           onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                         >
-                          <StudentCardContent item={item} />
+                          <StudentCardContent item={item} isForeign={isForeign} />
                         </TouchableOpacity>
                       );
                       })}
@@ -917,7 +917,7 @@ export const StudentList: React.FC<StudentListProps> = ({
               style={styles.studentCardClass}
               onPress={() => onStudentPress(item, index, displayStudents)}
             >
-              <StudentCardContent item={item} />
+              <StudentCardContent item={item} isForeign={isForeign} />
             </TouchableOpacity>
           )}
           contentContainerStyle={styles.listContainer}
@@ -939,9 +939,10 @@ export const StudentList: React.FC<StudentListProps> = ({
 
 interface StudentCardContentProps {
   item: STSheetStudent;
+  isForeign?: boolean;
 }
 
-const StudentCardContent = React.memo(({ item }: StudentCardContentProps) => {
+const StudentCardContent = React.memo(({ item, isForeign }: StudentCardContentProps) => {
   const photoUrl = toDriveImageUrl(item.profilePhoto);
 
   // "홍길동 (G2M)" 형식: grade에서 숫자만 + 성별 (예: "G2" + "M")
@@ -949,17 +950,22 @@ const StudentCardContent = React.memo(({ item }: StudentCardContentProps) => {
   const gradePrefix = item.grade?.replace(/[0-9].*/g, '') ?? 'G';
   const gradeBadge = gradeNum ? `${gradePrefix}${gradeNum}${item.gender === 'M' ? 'M' : 'F'}` : '';
 
-  // 반 담당자: `classMentor (className반)` 형식
+  // 반번호 | 고유번호
+  const classNumberLine = [item.classNumber, item.studentId].filter(Boolean).join(' | ') || null;
+
+  // 반 담당자: `반: classMentor (className반)` 형식
+  const classPrefix = isForeign ? 'Class' : '반';
   const classLine = item.classMentor
-    ? `${item.classMentor}${item.className ? ` (${item.className}반)` : ''}`
+    ? `${classPrefix}: ${item.classMentor}${item.className ? ` (${item.className}반)` : ''}`
     : null;
 
-  // 유닛/호수: `unitMentor (roomNumber호)` 형식
+  // 유닛/호수: `유닛: unitMentor (roomNumber호)` 형식
+  const unitPrefix = isForeign ? 'Unit' : '유닛';
   const unitMentorName = item.unitMentor || item.unit;
   const unitLine = unitMentorName
-    ? `${unitMentorName}${item.roomNumber ? ` (${item.roomNumber}호)` : ''}`
+    ? `${unitPrefix}: ${unitMentorName}${item.roomNumber ? ` (${item.roomNumber}호)` : ''}`
     : item.roomNumber
-    ? `(${item.roomNumber}호)`
+    ? `${unitPrefix}: (${item.roomNumber}호)`
     : null;
 
   return (
@@ -991,10 +997,10 @@ const StudentCardContent = React.memo(({ item }: StudentCardContentProps) => {
         {item.name}{gradeBadge ? ` (${gradeBadge})` : ''}
       </Text>
 
-      {/* 반번호 */}
-      {item.classNumber ? (
+      {/* 반번호 | 고유번호 */}
+      {classNumberLine ? (
         <Text style={cardStyles.sub} numberOfLines={1}>
-          {item.classNumber}
+          {classNumberLine}
         </Text>
       ) : null}
 

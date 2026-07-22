@@ -552,7 +552,7 @@ export default function RoomContent() {
                         {student.name}{gradeBadge ? ` (${gradeBadge})` : ''}
                       </h3>
                       <p className="text-[10px] text-gray-900 font-medium truncate">
-                        {student.classNumber || '-'}
+                        {student.classNumber || '-'} | {student.studentId || '-'}
                       </p>
                     </div>
                     
