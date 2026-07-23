@@ -4,7 +4,7 @@ import { logger } from '@smis-mentor/shared';
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
-import { generationResourcesService, type ResourceLinkRole, type LinkType, type ResourceLink } from '@/lib/generationResourcesService';
+import { generationResourcesService, subscribeToResources, type ResourceLinkRole, type LinkType, type ResourceLink } from '@/lib/generationResourcesService';
 import type { CampPageRole } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
 import { campQueryKeys } from '@/hooks/useCampDataPrefetch';
@@ -33,6 +33,22 @@ const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
     default: return 'bg-blue-600';
   }
 };
+
+/** 구글 시트 URL을 로그인 없이 임베드 가능한 pubhtml 형식으로 변환 */
+function toPublicGoogleSheetsUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed.includes('docs.google.com/spreadsheets') && !trimmed.includes('sheets.google.com')) {
+    return trimmed;
+  }
+  if (trimmed.includes('/pubhtml') || trimmed.includes('/pub?') || /\/pub\b/.test(trimmed)) {
+    return trimmed;
+  }
+  const idMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (!idMatch) return trimmed;
+  const gidMatch = trimmed.match(/[#&?]gid=(\d+)/);
+  const gid = gidMatch ? gidMatch[1] : '0';
+  return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/pubhtml?gid=${gid}&single=true`;
+}
 
 // linkType → campQueryKeys 매핑
 function getLinkQueryKey(linkType: LinkType, jobCodeId: string) {
@@ -77,6 +93,22 @@ export default function CampLinkList({
     enabled: !!activeJobCodeId,
   });
 
+  // admin이 링크를 추가/수정/삭제하면 모든 유저에게 즉시 반영
+  useEffect(() => {
+    if (!activeJobCodeId) return;
+
+    const unsubscribe = subscribeToResources(
+      activeJobCodeId,
+      (data) => {
+        if (data) {
+          queryClient.setQueryData(queryKey, data);
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [activeJobCodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const links: ResourceLink[] = (resources && resources[linkType]) ? resources[linkType] : [];
 
   const filteredLinks = links.filter(link => {
@@ -117,7 +149,7 @@ export default function CampLinkList({
         activeJobCodeId,
         linkType,
         newTitle.trim(),
-        newUrl.trim(),
+        toPublicGoogleSheetsUrl(newUrl),
         userData.userId,
         newTargetRole
       );
@@ -277,7 +309,7 @@ export default function CampLinkList({
       const updatedLink: ResourceLink = {
         ...editingLink,
         title: editLinkTitle.trim(),
-        url: editLinkUrl.trim(),
+        url: toPublicGoogleSheetsUrl(editLinkUrl),
         targetRole: editLinkTargetRole,
       };
 
@@ -297,7 +329,7 @@ export default function CampLinkList({
     <div className="h-[calc(100vh-12rem)] w-full flex flex-col">
       <div className={`bg-white border-b border-gray-200 px-3 flex flex-col sm:flex-row sm:items-center relative ${editMode ? 'bg-amber-50 border-amber-500 border-b-2 py-2' : 'py-2'}`} style={editMode ? { overflow: 'visible' } : {}}>
         {/* 스크롤 가능한 탭 영역 */}
-        <div className={`flex items-center gap-1 sm:gap-1.5 flex-1 sm:pr-20 ${editMode ? '' : 'overflow-x-auto'}`} style={editMode ? { overflowX: 'auto', overflowY: 'visible' } : {}}>
+        <div className={`flex items-center gap-1 sm:gap-1.5 flex-1 sm:pr-36 ${editMode ? '' : 'overflow-x-auto'}`} style={editMode ? { overflowX: 'auto', overflowY: 'visible' } : {}}>
           {isAdmin && (
             <>
               <button
@@ -525,6 +557,9 @@ function AddModal({
               placeholder="https://docs.google.com/spreadsheets/..."
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              💡 구글 시트는 <strong>파일 → 웹에 게시</strong> 후 URL을 입력하세요. /edit URL도 자동 변환됩니다.
+            </p>
           </div>
 
           <div>

@@ -13,6 +13,22 @@ import {
 } from 'react-native';
 import { generationResourcesService, LinkType, ResourceLinkRole } from '../services';
 
+/** 구글 시트 URL을 로그인 없이 임베드 가능한 pubhtml 형식으로 변환 */
+function toPublicGoogleSheetsUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed.includes('docs.google.com/spreadsheets') && !trimmed.includes('sheets.google.com')) {
+    return trimmed;
+  }
+  if (trimmed.includes('/pubhtml') || trimmed.includes('/pub?') || /\/pub\b/.test(trimmed)) {
+    return trimmed;
+  }
+  const idMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (!idMatch) return trimmed;
+  const gidMatch = trimmed.match(/[#&?]gid=(\d+)/);
+  const gid = gidMatch ? gidMatch[1] : '0';
+  return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/pubhtml?gid=${gid}&single=true`;
+}
+
 interface AddLinkModalProps {
   visible: boolean;
   onClose: () => void;
@@ -53,7 +69,7 @@ export const AddLinkModal: React.FC<AddLinkModalProps> = ({
         jobCodeId,
         linkType,
         title.trim(),
-        url.trim(),
+        toPublicGoogleSheetsUrl(url),
         userId,
         targetRole
       );
@@ -163,6 +179,10 @@ export const AddLinkModal: React.FC<AddLinkModalProps> = ({
                 keyboardType="url"
                 multiline
               />
+              <Text style={styles.urlHint}>
+                💡 구글 시트는 파일 → 웹에 게시 후 URL을 입력하세요.{'\n'}
+                /edit URL도 자동으로 변환됩니다.
+              </Text>
             </View>
           </View>
 
@@ -294,6 +314,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748b',
     marginTop: 6,
+  },
+  urlHint: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 6,
+    lineHeight: 16,
   },
   modalFooter: {
     flexDirection: 'row',
