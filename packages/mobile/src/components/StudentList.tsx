@@ -953,19 +953,19 @@ const StudentCardContent = React.memo(({ item, isForeign }: StudentCardContentPr
   // 반번호 | 고유번호
   const classNumberLine = [item.classNumber, item.studentId].filter(Boolean).join(' | ') || null;
 
-  // 반 담당자: `반: classMentor (className반)` 형식
+  // 반 담당자: `반:classMentor(className반)` 형식
   const classPrefix = isForeign ? 'Class' : '반';
   const classLine = item.classMentor
-    ? `${classPrefix}: ${item.classMentor}${item.className ? ` (${item.className}반)` : ''}`
+    ? `${classPrefix}:${item.classMentor}${item.className ? `(${item.className}반)` : ''}`
     : null;
 
-  // 유닛/호수: `유닛: unitMentor (roomNumber호)` 형식
-  const unitPrefix = isForeign ? 'Unit' : '유닛';
+  // 방/호수: `방:unitMentor(roomNumber호)` 형식
+  const unitPrefix = isForeign ? 'Room' : '방';
   const unitMentorName = item.unitMentor || item.unit;
   const unitLine = unitMentorName
-    ? `${unitPrefix}: ${unitMentorName}${item.roomNumber ? ` (${item.roomNumber}호)` : ''}`
+    ? `${unitPrefix}:${unitMentorName}${item.roomNumber ? `(${item.roomNumber}호)` : ''}`
     : item.roomNumber
-    ? `${unitPrefix}: (${item.roomNumber}호)`
+    ? `${unitPrefix}:(${item.roomNumber}호)`
     : null;
 
   return (
@@ -1011,12 +1011,12 @@ const StudentCardContent = React.memo(({ item, isForeign }: StudentCardContentPr
 
       {/* 반 담당자 */}
       {classLine ? (
-        <Text style={cardStyles.sub} numberOfLines={1}>{classLine}</Text>
+        <Text style={cardStyles.subSmall} numberOfLines={1}>{classLine}</Text>
       ) : null}
 
-      {/* 유닛 담당자 + 호수 */}
+      {/* 방 + 호수 */}
       {unitLine ? (
-        <Text style={cardStyles.sub} numberOfLines={1}>{unitLine}</Text>
+        <Text style={cardStyles.subSmall} numberOfLines={1}>{unitLine}</Text>
       ) : null}
     </View>
   );
@@ -1053,6 +1053,11 @@ const cardStyles = StyleSheet.create({
   },
   sub: {
     fontSize: 10,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  subSmall: {
+    fontSize: 9,
     color: '#64748b',
     textAlign: 'center',
   },

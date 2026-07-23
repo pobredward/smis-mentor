@@ -522,11 +522,11 @@ export default function ClassContent() {
                 
                 <div className="space-y-0.5 text-[10px] text-gray-600">
                   <p className="truncate">{student.englishName || '-'}</p>
-                  <p className="truncate text-[9px]">
-                    {isForeign ? 'Class' : '반'}: {student.classMentor || '-'}{student.className ? ` (${student.className}반)` : ''}
+                  <p className="truncate text-[8px]">
+                    {isForeign ? 'Class' : '반'}:{student.classMentor || '-'}{student.className ? `(${student.className}반)` : ''}
                   </p>
-                  <p className="truncate text-[9px]">
-                    {isForeign ? 'Unit' : '유닛'}: {student.unitMentor || '-'}{student.roomNumber ? ` (${student.roomNumber}호)` : ''}
+                  <p className="truncate text-[8px]">
+                    {isForeign ? 'Room' : '방'}:{student.unitMentor || '-'}{student.roomNumber ? `(${student.roomNumber}호)` : ''}
                   </p>
                 </div>
               </button>
