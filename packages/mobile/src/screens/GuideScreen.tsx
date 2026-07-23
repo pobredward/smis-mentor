@@ -7,22 +7,6 @@ import { useAuth } from '../context/AuthContext';
 import { AddLinkModal } from '../components';
 import { generationResourcesService, ResourceLink, ResourceLinkRole } from '../services';
 
-/** 구글 시트 URL을 로그인 없이 임베드 가능한 pubhtml 형식으로 변환 */
-function toPublicGoogleSheetsUrl(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed.includes('docs.google.com/spreadsheets') && !trimmed.includes('sheets.google.com')) {
-    return trimmed;
-  }
-  if (trimmed.includes('/pubhtml') || trimmed.includes('/pub?') || /\/pub\b/.test(trimmed)) {
-    return trimmed;
-  }
-  const idMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (!idMatch) return trimmed;
-  const gidMatch = trimmed.match(/[#&?]gid=(\d+)/);
-  const gid = gidMatch ? gidMatch[1] : '0';
-  return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/pubhtml?gid=${gid}&single=true`;
-}
-
 // 권한별 배경색 반환 함수
 const getRoleBgColor = (targetRole?: ResourceLinkRole): string => {
   switch (targetRole) {
@@ -48,7 +32,7 @@ const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
 };
 
 export function GuideScreen() {
-  const { guides, loadingStates, errorStates, zoomLevels, setZoomLevel, applyZoom, retryWebView, renderWebView, refreshResources, loading } = useWebViewCache();
+  const { guides, loadingStates, zoomLevels, setZoomLevel, applyZoom, renderWebView, refreshResources, loading } = useWebViewCache();
   const { userData } = useAuth();
   const [selectedGuideId, setSelectedGuideId] = useState<string | undefined>(undefined);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -87,7 +71,6 @@ export function GuideScreen() {
   const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
   const currentZoom = selectedGuideId ? (zoomLevels[selectedGuideId] || defaultZoom) : defaultZoom;
   const isLoading = selectedGuideId ? (loadingStates[selectedGuideId] ?? true) : true;
-  const errorState = selectedGuideId ? (errorStates[selectedGuideId] ?? null) : null;
 
   const handleZoomIn = () => {
     if (!selectedGuideId) return;
@@ -174,7 +157,7 @@ export function GuideScreen() {
     try {
       const updatedGuides = guides.map(guide =>
         guide.id === editingGuide.id
-          ? { ...guide, title: editTitle.trim(), url: toPublicGoogleSheetsUrl(editUrl), targetRole: editTargetRole }
+          ? { ...guide, title: editTitle.trim(), url: editUrl.trim(), targetRole: editTargetRole }
           : guide
       );
 
@@ -353,48 +336,13 @@ export function GuideScreen() {
 
       {/* 웹뷰 컨테이너 */}
       <View style={styles.webViewContainer}>
-        {isLoading && !errorState && (
+        {isLoading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#3b82f6" />
-            <Text style={styles.loadingText}>
-              {isForeign ? 'Loading guide...' : '인솔표 로딩 중...'}
-            </Text>
+            <Text style={styles.loadingText}>인솔표 로딩 중...</Text>
           </View>
         )}
-
-        {errorState && (
-          <View style={styles.errorContainer}>
-            <Ionicons
-              name={errorState === 'google_redirect' ? 'time-outline' : 'alert-circle-outline'}
-              size={52}
-              color={errorState === 'google_redirect' ? '#f59e0b' : '#ef4444'}
-            />
-            <Text style={styles.errorTitle}>
-              {errorState === 'google_redirect'
-                ? (isForeign ? 'Sheet is being prepared' : '시트 게시 준비 중')
-                : (isForeign ? 'Failed to load' : '불러오기 실패')}
-            </Text>
-            <Text style={styles.errorMessage}>
-              {errorState === 'google_redirect'
-                ? (isForeign
-                    ? 'Google Sheets takes a few minutes to publish.\nIt will retry automatically in 30 seconds.'
-                    : '구글 시트 게시에 잠시 시간이 걸립니다.\n30초 후 자동으로 다시 시도합니다.')
-                : errorState === 'timeout'
-                  ? (isForeign ? 'Network is too slow. Please try again.' : '네트워크가 너무 느립니다.')
-                  : (isForeign ? 'Could not load the sheet.' : '시트를 불러오지 못했습니다.')}
-            </Text>
-            <TouchableOpacity
-              style={[styles.retryButton, errorState === 'google_redirect' && styles.retryButtonWarning]}
-              onPress={() => selectedGuideId && retryWebView(selectedGuideId)}
-            >
-              <Ionicons name="refresh-outline" size={16} color="#ffffff" style={{ marginRight: 6 }} />
-              <Text style={styles.retryButtonText}>
-                {isForeign ? 'Retry now' : '지금 재시도'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
+        
         {guides.map((guide) => (
           <View
             key={guide.id}
@@ -453,25 +401,6 @@ export function GuideScreen() {
                 placeholder="https://..."
                 autoCapitalize="none"
               />
-
-              <Text style={styles.editModalLabel}>대상 권한</Text>
-              <View style={styles.roleButtonGroup}>
-                {([
-                  { value: 'common', label: '공통' },
-                  { value: 'mentor', label: '멘토' },
-                  { value: 'foreign', label: '원어민' },
-                ] as const).map(({ value, label }) => (
-                  <TouchableOpacity
-                    key={value}
-                    style={[styles.roleButton, editTargetRole === value && styles.roleButtonActive]}
-                    onPress={() => setEditTargetRole(value)}
-                  >
-                    <Text style={[styles.roleButtonText, editTargetRole === value && styles.roleButtonTextActive]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
 
               <View style={styles.editModalButtons}>
                 <TouchableOpacity
@@ -760,74 +689,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f8fafc',
     zIndex: 10,
-  },
-  errorContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    zIndex: 10,
-    paddingHorizontal: 32,
-    gap: 8,
-  },
-  errorTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginTop: 4,
-  },
-  errorMessage: {
-    fontSize: 13,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  roleButtonGroup: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 4,
-  },
-  roleButton: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
-    alignItems: 'center',
-  },
-  roleButtonActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  roleButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  roleButtonTextActive: {
-    color: '#ffffff',
-  },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    backgroundColor: '#3b82f6',
-    borderRadius: 10,
-  },
-  retryButtonWarning: {
-    backgroundColor: '#f59e0b',
-  },
-  retryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#ffffff',
   },
   editModalOverlay: {
     flex: 1,

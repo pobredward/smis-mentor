@@ -69,7 +69,6 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@react-native-community/netinfo": "11.4.1",
     "metro-runtime": "^0.83.3",
     "metro-transform-plugins": "^0.83.3",
     "metro-transform-worker": "^0.83.3",

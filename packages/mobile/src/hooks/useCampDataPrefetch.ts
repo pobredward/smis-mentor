@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { useCampTab } from '../context/CampTabContext';
 import { logger } from '@smis-mentor/shared';
+import type { PreloadLink } from '../components/WebViewPreloader';
 
 /**
  * 캠프 데이터 프리페칭을 위한 query key 생성
@@ -248,16 +249,178 @@ export function useCampDataPrefetch() {
   };
 
   /**
-   * WebView 프리로딩 완료 처리
-   *
-   * WebViewPreloader 컴포넌트는 현재 마운트되지 않으며,
-   * 시트 WebView 백그라운드 로딩은 WebViewCacheContext의 hiddenWebView가 담당합니다.
-   * (hiddenWebView: opacity 0.01, width/height 1 → 실제 네트워크 요청 발생)
+   * WebView 프리로딩 시작
    */
-  const startWebViewPreloading = async (_jobCodeId: string) => {
-    logger.info('✅ WebView 프리로딩 완료 (WebViewCacheContext에서 직접 처리)');
-    setIsPreloading(false);
-    setWebViewPreloadComplete(true);
+  const startWebViewPreloading = async (jobCodeId: string) => {
+    try {
+      logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      logger.info('🌐 WebView 프리로딩 설정 시작');
+      
+      const { generationResourcesService } = await import('../services');
+      const resources = await generationResourcesService.getResourcesByJobCodeId(jobCodeId);
+      
+      if (!resources) {
+        logger.warn('⚠️ 리소스 없음 - WebView 프리로딩 스킵');
+        logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        setIsPreloading(false);
+        setWebViewPreloadComplete(true);
+        return;
+      }
+
+      const allLinks: PreloadLink[] = [];
+
+      // 교육 링크는 프리로드하지 않음 (구글 시트 없음)
+      if (resources.educationLinks) {
+        logger.info(`📚 교육 링크: ${resources.educationLinks.length}개 (프리로드 제외)`);
+      }
+
+      // 시간표 링크 추가 (구글 시트만)
+      if (resources.scheduleLinks) {
+        logger.info(`📅 시간표 링크: ${resources.scheduleLinks.length}개`);
+        const googleSheetLinks = resources.scheduleLinks.filter(link => 
+          link.url.includes('docs.google.com')
+        );
+        logger.info(`   → 구글 시트만 프리로드: ${googleSheetLinks.length}개`);
+        googleSheetLinks.forEach((link, idx) => {
+          logger.info(`   ${idx + 1}. ${link.title} - ${link.url}`);
+          allLinks.push({
+            id: `schedule-${link.id}`,
+            title: link.title,
+            url: link.url,
+            type: 'schedule',
+          });
+        });
+      }
+
+      // 인솔표 링크 추가 (구글 시트만)
+      if (resources.guideLinks) {
+        logger.info(`🧭 인솔표 링크: ${resources.guideLinks.length}개`);
+        const googleSheetLinks = resources.guideLinks.filter(link => 
+          link.url.includes('docs.google.com')
+        );
+        logger.info(`   → 구글 시트만 프리로드: ${googleSheetLinks.length}개`);
+        googleSheetLinks.forEach((link, idx) => {
+          logger.info(`   ${idx + 1}. ${link.title} - ${link.url}`);
+          allLinks.push({
+            id: `guide-${link.id}`,
+            title: link.title,
+            url: link.url,
+            type: 'guide',
+          });
+        });
+      }
+
+      // 수업 자료 섹션 링크 추가 (구글 시트만)
+      if (userData?.userId && userData?.activeJobExperienceId) {
+        logger.info(`📖 수업 자료 섹션 링크 수집 시작...`);
+        
+        try {
+          const { getLessonMaterials, getLessonMaterialTemplates, getSections } = await import('../services/lessonMaterialService');
+          const { getUserJobCodesInfo } = await import('../services/authService');
+          
+          // 1. 활성화된 jobCode 가져오기
+          const activeJobCodes = await getUserJobCodesInfo([userData.activeJobExperienceId]);
+          const activeCodesList = activeJobCodes.map(jc => jc.code);
+          logger.info(`   활성 코드: ${activeCodesList.join(', ')}`);
+          
+          // 2. 템플릿 가져오기
+          const allTemplates = await getLessonMaterialTemplates();
+          
+          // 3. 사용자 수업 자료 가져오기
+          const materials = await getLessonMaterials(userData.userId);
+          logger.info(`   수업 자료: ${materials.length}개`);
+          
+          // 4. 활성화된 코드에 해당하는 자료만 필터링
+          const filteredMaterials = materials.filter(mat => {
+            if (mat.templateId) {
+              const template = allTemplates.find(t => t.id === mat.templateId);
+              return template?.code && activeCodesList.includes(template.code);
+            }
+            return mat.userCode && activeCodesList.includes(mat.userCode);
+          });
+          
+          logger.info(`   활성 자료: ${filteredMaterials.length}개`);
+          
+          // 5. 각 자료의 섹션에서 구글 시트 링크 수집
+          let lessonLinkCount = 0;
+          for (const material of filteredMaterials) {
+            const sections = await getSections(material.id);
+            
+            // 유저 섹션의 viewUrl 확인
+            for (const section of sections) {
+              if (section.viewUrl?.includes('docs.google.com')) {
+                lessonLinkCount++;
+                logger.info(`   ${lessonLinkCount}. [${material.title}] ${section.title}`);
+                allLinks.push({
+                  id: `lesson-${section.id}`,
+                  title: `${material.title} - ${section.title}`,
+                  url: section.viewUrl,
+                  type: 'lesson',
+                });
+              }
+            }
+            
+            // 템플릿 섹션의 links도 확인
+            const template = material.templateId 
+              ? allTemplates.find(t => t.id === material.templateId)
+              : null;
+            
+            if (template?.sections) {
+              for (const templateSection of template.sections) {
+                if (templateSection.links) {
+                  for (const link of templateSection.links) {
+                    if (link.url.includes('docs.google.com')) {
+                      lessonLinkCount++;
+                      logger.info(`   ${lessonLinkCount}. [${material.title}] ${templateSection.title} - ${link.label}`);
+                      allLinks.push({
+                        id: `lesson-template-${templateSection.id}-${link.label}`,
+                        title: `${material.title} - ${templateSection.title} - ${link.label}`,
+                        url: link.url,
+                        type: 'lesson',
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          logger.info(`   → 구글 시트만 프리로드: ${lessonLinkCount}개`);
+        } catch (error) {
+          logger.error('❌ 수업 자료 섹션 링크 수집 실패:', error);
+        }
+      }
+
+      logger.info(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      logger.info(`📊 총 ${allLinks.length}개 WebView 프리로드 시작 (구글 시트만)`);
+      logger.info(`   - 시간표: ${resources.scheduleLinks?.filter(l => l.url.includes('docs.google.com')).length || 0}개`);
+      logger.info(`   - 인솔표: ${resources.guideLinks?.filter(l => l.url.includes('docs.google.com')).length || 0}개`);
+      logger.info(`   - 수업: ${allLinks.filter(l => l.type === 'lesson').length}개`);
+
+
+      // 링크가 없으면 프리로딩 스킵
+      if (allLinks.length === 0) {
+        logger.info('⚠️ 프리로드할 링크 없음');
+        logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        setIsPreloading(false);
+        setWebViewPreloadComplete(true);
+        return;
+      }
+
+      // 프리로드 링크 설정 및 프리로딩 시작
+      logger.info(`🎯 setPreloadLinks 호출: ${allLinks.length}개 링크`);
+      await setPreloadLinks(allLinks);
+      
+      logger.info(`🎯 setIsPreloading(true) 호출`);
+      setIsPreloading(true);
+
+      logger.info('✅ WebView 프리로딩 대기열 설정 완료');
+      logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    } catch (error) {
+      logger.error('❌ WebView 프리로딩 설정 실패:', error);
+      setIsPreloading(false);
+      setWebViewPreloadComplete(true);
+    }
   };
 
   /**

@@ -4,7 +4,6 @@ import {
   getDoc,
   updateDoc,
   setDoc,
-  onSnapshot,
   Timestamp,
   arrayUnion,
 } from 'firebase/firestore';
@@ -41,32 +40,6 @@ export interface GenerationResources {
 }
 
 export type LinkType = 'educationLinks' | 'scheduleLinks' | 'guideLinks';
-
-export function getResourcesByJobCodeId(jobCodeId: string): Promise<GenerationResources | null> {
-  return generationResourcesService.getResourcesByJobCodeId(jobCodeId);
-}
-
-export function subscribeToResources(
-  jobCodeId: string,
-  onData: (resources: GenerationResources | null) => void,
-  onError?: (error: Error) => void
-): () => void {
-  const docRef = doc(db, 'generationResources', jobCodeId);
-  return onSnapshot(
-    docRef,
-    (snap) => {
-      if (snap.exists()) {
-        onData({ ...snap.data(), jobCodeId } as GenerationResources);
-      } else {
-        onData(null);
-      }
-    },
-    (error) => {
-      logger.error('generationResourcesService: 실시간 구독 오류:', error);
-      onError?.(error);
-    }
-  );
-}
 
 export const generationResourcesService = {
   getResourcesByJobCodeId: async (

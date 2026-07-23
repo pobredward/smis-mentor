@@ -2,7 +2,6 @@ import { logger } from '@smis-mentor/shared';
 import {
   doc,
   getDoc,
-  onSnapshot,
   updateDoc,
   setDoc,
   Timestamp,
@@ -45,29 +44,6 @@ export interface GenerationResources {
 }
 
 export type LinkType = 'educationLinks' | 'scheduleLinks' | 'guideLinks';
-
-export function subscribeToResources(
-  jobCodeId: string,
-  onData: (resources: GenerationResources | null) => void,
-  onError?: (error: Error) => void
-): () => void {
-  const docRef = doc(db, 'generationResources', jobCodeId);
-  return onSnapshot(
-    docRef,
-    (snap) => {
-      if (snap.exists()) {
-        logger.info('🔄 generationResourcesService: 실시간 업데이트 수신 -', jobCodeId);
-        onData({ ...snap.data(), jobCodeId } as GenerationResources);
-      } else {
-        onData(null);
-      }
-    },
-    (error) => {
-      logger.error('❌ generationResourcesService: 실시간 구독 오류:', error);
-      onError?.(error);
-    }
-  );
-}
 
 const generationResourcesService = {
   getResourcesByJobCodeId: async (

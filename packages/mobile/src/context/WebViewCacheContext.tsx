@@ -1,13 +1,10 @@
-import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useRef, ReactNode, useEffect } from 'react';
 import { logger } from '@smis-mentor/shared';
 import { View, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 import { useAuth } from './AuthContext';
-import { generationResourcesService, subscribeToResources, ResourceLink } from '../services';
-
-const WEBVIEW_LOAD_TIMEOUT_MS = 30_000;
+import { generationResourcesService, ResourceLink } from '../services';
 
 const ZOOM_CACHE_KEY = 'SMIS_WEBVIEW_ZOOM_CACHE';
 
@@ -15,13 +12,11 @@ interface WebViewCache {
   schedules: ResourceLink[];
   guides: ResourceLink[];
   loadingStates: Record<string, boolean>;
-  errorStates: Record<string, string | null>;
   zoomLevels: Record<string, number>;
   webViewRefs: React.MutableRefObject<Record<string, WebView | null>>;
   setLoadingState: (id: string, loading: boolean) => void;
   setZoomLevel: (id: string, zoom: number) => void;
   applyZoom: (id: string, zoom: number) => void;
-  retryWebView: (id: string) => void;
   renderWebView: (id: string, visible: boolean) => React.ReactElement | null;
   refreshResources: () => Promise<void>;
   loading: boolean;
@@ -35,19 +30,8 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
   const [guides, setGuides] = useState<ResourceLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
-  const [errorStates, setErrorStates] = useState<Record<string, string | null>>({});
-  const [retryCounts, setRetryCounts] = useState<Record<string, number>>({});
   const [zoomLevels, setZoomLevelsState] = useState<Record<string, number>>({});
   const webViewRefs = useRef<Record<string, WebView | null>>({});
-  const loadingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const retryTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  // stale closure 방지용 ref
-  const loadingStatesRef = useRef(loadingStates);
-  const errorStatesRef = useRef(errorStates);
-  const prevIsConnected = useRef<boolean | null>(null);
-
-  useEffect(() => { loadingStatesRef.current = loadingStates; }, [loadingStates]);
-  useEffect(() => { errorStatesRef.current = errorStates; }, [errorStates]);
 
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
@@ -80,113 +64,65 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     logger.info('🔄 WebViewCache: activeJobCodeId 변경됨:', activeJobCodeId);
+    if (activeJobCodeId) {
+      loadResources();
+    }
+  }, [userData?.activeJobExperienceId, userData?.jobExperiences?.[0]?.id]);
 
+  const loadResources = async () => {
     if (!activeJobCodeId) {
-      logger.info('⚠️ WebViewCache: activeJobCodeId 없음, 구독 중단');
+      logger.info('⚠️ WebViewCache: activeJobCodeId 없음, 리소스 로드 중단');
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setSchedules([]);
-    setGuides([]);
+    try {
+      logger.info('📥 WebViewCache: 리소스 로드 시작 -', activeJobCodeId);
+      setLoading(true);
+      
+      // 기존 데이터 초기화
+      setSchedules([]);
+      setGuides([]);
+      
+      const resources = await generationResourcesService.getResourcesByJobCodeId(activeJobCodeId);
+      
+      if (resources) {
+        logger.info('✅ WebViewCache: 리소스 로드 성공');
+        logger.info('  - scheduleLinks:', resources.scheduleLinks?.length || 0);
+        logger.info('  - guideLinks:', resources.guideLinks?.length || 0);
+        
+        setSchedules(resources.scheduleLinks || []);
+        setGuides(resources.guideLinks || []);
 
-    const unsubscribe = subscribeToResources(
-      activeJobCodeId,
-      (resources) => {
-        if (resources) {
-          logger.info('✅ WebViewCache: 실시간 데이터 수신');
-          logger.info('  - scheduleLinks:', resources.scheduleLinks?.length || 0);
-          logger.info('  - guideLinks:', resources.guideLinks?.length || 0);
-
-          const newSchedules = resources.scheduleLinks || [];
-          const newGuides = resources.guideLinks || [];
-
-          setSchedules(newSchedules);
-          setGuides(newGuides);
-
-          // 새로 추가된 시트에만 초기 loadingState/zoomLevel 설정 (기존 값 유지)
-          setLoadingStates(prev => {
-            const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
-            const allSheets = [...newSchedules, ...newGuides];
-            const next = { ...prev };
-            allSheets.forEach(sheet => {
-              if (next[sheet.id] === undefined) {
-                next[sheet.id] = true;
-              }
-            });
-            return next;
-          });
-          setZoomLevelsState(prev => {
-            const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
-            const allSheets = [...newSchedules, ...newGuides];
-            const next = { ...prev };
-            allSheets.forEach(sheet => {
-              if (next[sheet.id] === undefined) {
-                next[sheet.id] = defaultZoom;
-              }
-            });
-            return next;
-          });
-        } else {
-          logger.info('⚠️ WebViewCache: 해당 기수의 리소스 없음');
-          setSchedules([]);
-          setGuides([]);
-        }
-        setLoading(false);
-      },
-      (error) => {
-        logger.error('❌ WebViewCache: 실시간 구독 실패:', error);
+        const allSheets = [...(resources.scheduleLinks || []), ...(resources.guideLinks || [])];
+        const initialLoadingStates = allSheets.reduce((acc, sheet) => ({ ...acc, [sheet.id]: true }), {});
+        // Android는 0.8, iOS는 0.6 기본 줌
+        const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
+        const initialZoomLevels = allSheets.reduce((acc, sheet) => ({ ...acc, [sheet.id]: defaultZoom }), {});
+        
+        setLoadingStates(initialLoadingStates);
+        setZoomLevelsState(initialZoomLevels);
+      } else {
+        logger.info('⚠️ WebViewCache: 해당 기수의 리소스 없음');
         setSchedules([]);
         setGuides([]);
-        setLoading(false);
       }
-    );
+    } catch (error) {
+      logger.error('❌ WebViewCache: 리소스 로드 실패:', error);
+      setSchedules([]);
+      setGuides([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return () => {
-      logger.info('🔌 WebViewCache: 실시간 구독 해제');
-      unsubscribe();
-    };
-  }, [userData?.activeJobExperienceId, userData?.jobExperiences?.[0]?.id]);
-
-  // 실시간 구독 중이므로 refreshResources는 no-op (인터페이스 호환 유지)
   const refreshResources = async () => {
-    logger.info('ℹ️ WebViewCache: 실시간 구독 중 - refreshResources no-op');
+    await loadResources();
   };
 
   const setLoadingState = (id: string, loading: boolean) => {
     setLoadingStates(prev => ({ ...prev, [id]: loading }));
   };
-
-  const setErrorState = (id: string, error: string | null) => {
-    setErrorStates(prev => ({ ...prev, [id]: error }));
-  };
-
-  const retryWebView = useCallback((id: string) => {
-    clearTimeout(loadingTimers.current[id]);
-    setRetryCounts(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
-    setErrorStates(prev => ({ ...prev, [id]: null }));
-    setLoadingStates(prev => ({ ...prev, [id]: true }));
-    logger.info('🔄 WebView 재시도:', { id });
-  }, []);
-
-  // 네트워크 재연결 시 에러 상태인 시트 자동 재시도
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const isNowConnected = state.isConnected ?? false;
-      if (!prevIsConnected.current && isNowConnected) {
-        const failedIds = Object.keys(errorStatesRef.current).filter(
-          id => errorStatesRef.current[id] !== null
-        );
-        if (failedIds.length > 0) {
-          logger.info('📶 네트워크 재연결 - 실패한 WebView 자동 재시도:', { count: failedIds.length });
-          failedIds.forEach(id => retryWebView(id));
-        }
-      }
-      prevIsConnected.current = isNowConnected;
-    });
-    return () => unsubscribe();
-  }, [retryWebView]);
 
   const setZoomLevel = (id: string, zoom: number) => {
     setZoomLevelsState(prev => {
@@ -197,6 +133,10 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
   };
 
   const applyZoom = (id: string, zoom: number) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:applyZoom',message:'applyZoom 호출됨',data:{id,zoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     // iOS: zoom CSS 속성이 WebView 프레임 자체 크기를 바꾸므로 사용 금지
     // meta viewport initial-scale을 동적으로 변경하는 방식 사용
     // Android: zoom CSS 속성이 정상 동작하므로 그대로 사용
@@ -254,68 +194,27 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
     // Android는 0.8, iOS는 0.6 기본 줌
     const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
     const initialZoom = zoomLevels[id] || defaultZoom;
-    const retryCount = retryCounts[id] || 0;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:renderWebView',message:'renderWebView 호출됨',data:{id,visible,initialZoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     return (
       <WebView
-        key={`${id}-${retryCount}`}
+        key={id}
         ref={(ref) => { webViewRefs.current[id] = ref; }}
         source={{ uri: sheet.url }}
         style={[styles.webView, !visible && styles.hiddenWebView]}
         onLoadEnd={() => {
-          clearTimeout(loadingTimers.current[id]);
           setLoadingState(id, false);
-          setErrorState(id, null);
+          // #region agent log
+          fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:onLoadEnd',message:'onLoadEnd - applyZoom 예정',data:{id,initialZoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           setTimeout(() => {
             applyZoom(id, initialZoom);
           }, 300);
         }}
         onLoadStart={() => {
           setLoadingState(id, true);
-          setErrorState(id, null);
-          // 30초 타임아웃
-          clearTimeout(loadingTimers.current[id]);
-          loadingTimers.current[id] = setTimeout(() => {
-            if (loadingStatesRef.current[id]) {
-              setLoadingState(id, false);
-              setErrorState(id, 'timeout');
-              logger.warn('⏰ WebView 로딩 타임아웃:', { id });
-            }
-          }, WEBVIEW_LOAD_TIMEOUT_MS);
-        }}
-        onNavigationStateChange={(navState) => {
-          const url = navState.url || '';
-          const isGoogleLoginRedirect =
-            url.includes('accounts.google.com') ||
-            url.includes('ServiceLogin') ||
-            url.includes('signin/oauth') ||
-            url.includes('CheckCookie');
-          if (isGoogleLoginRedirect) {
-            webViewRefs.current[id]?.stopLoading();
-            clearTimeout(loadingTimers.current[id]);
-            clearTimeout(retryTimers.current[id]);
-            setLoadingState(id, false);
-            setErrorState(id, 'google_redirect');
-            logger.warn('⚠️ WebView: 구글 로그인 페이지 감지 - 30초 후 자동 재시도', { id, url });
-            // 30초 후 자동 재시도 (CDN 캐싱 대기)
-            retryTimers.current[id] = setTimeout(() => {
-              retryWebView(id);
-            }, 30_000);
-          }
-        }}
-        onError={(e) => {
-          clearTimeout(loadingTimers.current[id]);
-          setLoadingState(id, false);
-          setErrorState(id, e.nativeEvent.description || 'error');
-          logger.error('❌ WebView 로드 실패:', { id, error: e.nativeEvent.description, code: e.nativeEvent.code });
-        }}
-        onHttpError={(e) => {
-          if (e.nativeEvent.statusCode >= 400) {
-            clearTimeout(loadingTimers.current[id]);
-            setLoadingState(id, false);
-            setErrorState(id, `HTTP ${e.nativeEvent.statusCode}`);
-            logger.error('❌ WebView HTTP 오류:', { id, statusCode: e.nativeEvent.statusCode });
-          }
         }}
         scalesPageToFit={Platform.OS !== 'ios'}
         showsVerticalScrollIndicator={true}
@@ -323,7 +222,7 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         scrollEnabled={true}
         bounces={true}
         cacheEnabled={true}
-        cacheMode={retryCount > 0 ? 'LOAD_NO_CACHE' : 'LOAD_CACHE_ELSE_NETWORK'}
+        cacheMode="LOAD_CACHE_ELSE_NETWORK"
         incognito={false}
         androidLayerType="hardware"
         injectedJavaScript={Platform.OS === 'ios'
@@ -390,13 +289,11 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         schedules,
         guides,
         loadingStates,
-        errorStates,
         zoomLevels,
         webViewRefs,
         setLoadingState,
         setZoomLevel,
         applyZoom,
-        retryWebView,
         renderWebView,
         refreshResources,
         loading,
@@ -421,12 +318,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   hiddenWebView: {
-    // opacity:0 / width:0 / height:0 이면 iOS WKWebView가 네트워크 요청을 건너뜀
-    // 1px + opacity:0.01 로 레이아웃을 확보해야 백그라운드 로딩이 실제로 이루어짐
-    opacity: 0.01,
+    opacity: 0,
     position: 'absolute',
-    width: 1,
-    height: 1,
+    width: 0,
+    height: 0,
     zIndex: -9999,
   },
 });
