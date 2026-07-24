@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { CampPageService } from '@smis-mentor/shared';
-import { db } from '@/lib/firebase';
+import { getAdminFirestore } from '@/lib/firebase-admin';
+import type { CampPage } from '@smis-mentor/shared';
 import SharePageViewer from './SharePageViewer';
 
 interface PageProps {
@@ -10,19 +10,29 @@ interface PageProps {
   }>;
 }
 
+async function getCampPage(itemId: string): Promise<CampPage | null> {
+  const adminDb = getAdminFirestore();
+  const docSnap = await adminDb.collection('campPages').doc(itemId).get();
+
+  if (!docSnap.exists) {
+    return null;
+  }
+
+  return { id: docSnap.id, ...docSnap.data() } as CampPage;
+}
+
 // 메타데이터 생성 (SEO 및 OG 태그)
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { itemId } = await params;
   
   try {
-    const campPageService = new CampPageService(db);
-    const page = await campPageService.getPage(itemId);
+    const page = await getCampPage(itemId);
 
     if (!page) {
-    return {
-      title: 'SMIS 멘토 플랫폼 - 교육 자료',
-      description: '페이지를 찾을 수 없습니다.',
-    };
+      return {
+        title: 'SMIS 멘토 플랫폼 - 교육 자료',
+        description: '페이지를 찾을 수 없습니다.',
+      };
     }
 
     return {
@@ -60,8 +70,7 @@ export default async function ShareEducationPage({ params }: PageProps) {
   const { itemId } = await params;
   
   try {
-    const campPageService = new CampPageService(db);
-    const page = await campPageService.getPage(itemId);
+    const page = await getCampPage(itemId);
 
     // 페이지가 없거나 교육 카테고리가 아닌 경우
     if (!page || page.category !== 'education') {
