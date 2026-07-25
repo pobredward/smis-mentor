@@ -28,6 +28,7 @@ const getRoleBadgeColor = (targetRole?: CampPageRole): string => {
   switch (targetRole) {
     case 'mentor': return 'bg-blue-100 text-blue-700 border-blue-200';
     case 'foreign': return 'bg-purple-100 text-purple-700 border-purple-200';
+    case 'expired': return 'bg-amber-100 text-amber-700 border-amber-200';
     default: return 'bg-gray-100 text-gray-700 border-gray-200';
   }
 };
@@ -36,6 +37,7 @@ const getRoleLabel = (targetRole?: CampPageRole): string => {
   switch (targetRole) {
     case 'mentor': return '멘토';
     case 'foreign': return '원어민';
+    case 'expired': return '만료';
     default: return '공통';
   }
 };
@@ -111,6 +113,7 @@ export default function CampContentList({
     common: filteredItems.filter((item: DisplayItem) => !item.targetRole || item.targetRole === 'common'),
     mentor: filteredItems.filter((item: DisplayItem) => item.targetRole === 'mentor'),
     foreign: filteredItems.filter((item: DisplayItem) => item.targetRole === 'foreign'),
+    expired: filteredItems.filter((item: DisplayItem) => item.targetRole === 'expired'),
   } : null;
 
   const handleAddItem = async () => {
@@ -436,6 +439,35 @@ export default function CampContentList({
                   onEdit={handleStartEditItem}
                   onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.foreign) : undefined}
                   onMoveDown={idx < groupedItems.foreign.length - 1 ? () => handleMoveItemDown(item, groupedItems.foreign) : undefined}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 만료 자료 섹션 (admin 전용) */}
+        {groupedItems.expired.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+              만료된 자료
+              <span className="text-sm font-normal text-gray-500">({groupedItems.expired.length})</span>
+              <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-normal">
+                관리자만 표시
+              </span>
+            </h2>
+            <div className="grid grid-cols-2 gap-4 opacity-75">
+              {groupedItems.expired.map((item, idx) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  isAdmin={true}
+                  href={getItemHref(item)}
+                  onNavigate={handleNavigateToDetail}
+                  onDelete={handleDeleteItem}
+                  onEdit={handleStartEditItem}
+                  onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.expired) : undefined}
+                  onMoveDown={idx < groupedItems.expired.length - 1 ? () => handleMoveItemDown(item, groupedItems.expired) : undefined}
                 />
               ))}
             </div>
@@ -798,6 +830,7 @@ function AddModal({
               <option value="common">공통 (모든 사용자)</option>
               <option value="mentor">멘토 전용</option>
               <option value="foreign">원어민 전용</option>
+              <option value="expired">만료 (관리자만 표시)</option>
             </select>
           </div>
           
@@ -925,6 +958,7 @@ function EditModal({
               <option value="common">공통 (모든 사용자)</option>
               <option value="mentor">멘토 전용</option>
               <option value="foreign">원어민 전용</option>
+              <option value="expired">만료 (관리자만 표시)</option>
             </select>
           </div>
           

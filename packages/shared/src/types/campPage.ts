@@ -1,7 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 export type CampPageCategory = 'education' | 'schedule' | 'guide';
-export type CampPageRole = 'common' | 'mentor' | 'foreign';
+export type CampPageRole = 'common' | 'mentor' | 'foreign' | 'expired';
 
 export interface CampPage {
   id: string;

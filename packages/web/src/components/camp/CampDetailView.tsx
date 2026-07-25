@@ -209,8 +209,8 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
             </div>
 
             <div className="flex items-center gap-2">
-              {/* 공유 버튼 (교육 자료 카테고리의 페이지 타입만) */}
-              {item.type === 'page' && category === 'education' && (
+              {/* 공유 버튼 (교육 자료 카테고리의 페이지 타입만, 만료 자료 제외) */}
+              {item.type === 'page' && category === 'education' && item.targetRole !== 'expired' && (
                 <button
                   onClick={handleCopyShareLink}
                   disabled={isCopying}
