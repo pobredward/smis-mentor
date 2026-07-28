@@ -8,6 +8,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
+import { FieldValue } from 'firebase-admin/firestore';
 import {
   logger,
   CAMP_SHEET_CONFIG,
@@ -106,9 +107,14 @@ export async function POST(request: NextRequest) {
     const rawHeaders = rows[0].map((h) => h.trim()).filter(Boolean);
 
     // campSettings에 availableHeaders 저장 (관리자 UI에서 헤더 목록 조회용)
+    // sheetColumnMap도 함께 초기화 → update-placement가 다음 실행 시 최신 시트 구조로 재빌드
     const saveAvailableHeaders = () =>
       db.collection('campSettings').doc(campCode).set(
-        { availableHeaders: rawHeaders, headersUpdatedAt: new Date().toISOString() },
+        {
+          availableHeaders: rawHeaders,
+          headersUpdatedAt: new Date().toISOString(),
+          sheetColumnMap: FieldValue.delete(),
+        },
         { merge: true },
       );
 
