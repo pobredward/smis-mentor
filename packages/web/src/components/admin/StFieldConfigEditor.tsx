@@ -28,7 +28,13 @@ function generateSectionId(): string {
 
 export default function StFieldConfigEditor({ config, availableHeaders, onSave, isSaving }: Props) {
   const [sections, setSections] = useState<FieldSectionConfig[]>(
-    [...config.sections].sort((a, b) => a.order - b.order),
+    [...config.sections]
+      .sort((a, b) => a.order - b.order)
+      .map(s => ({
+        ...s,
+        // fields도 order 기준으로 정렬 (ClassContent의 렌더링 순서와 일치시킴)
+        fields: [...s.fields].sort((a, b) => a.order - b.order),
+      })),
   );
   const [newSectionLabel, setNewSectionLabel] = useState('');
 
@@ -169,7 +175,12 @@ export default function StFieldConfigEditor({ config, availableHeaders, onSave, 
   const handleSave = useCallback(async () => {
     await onSave({
       ...config,
-      sections: sections.map((s, i) => ({ ...s, order: i })),
+      sections: sections.map((s, i) => ({
+        ...s,
+        order: i,
+        // fields의 order도 현재 배열 인덱스 기준으로 재설정 (ClassContent의 sort와 일치)
+        fields: s.fields.map((f, j) => ({ ...f, order: j })),
+      })),
       updatedAt: new Date().toISOString(),
     });
   }, [config, sections, onSave]);
