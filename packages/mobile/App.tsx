@@ -12,7 +12,6 @@ import { AuthProvider, registerPrefetchTrigger, unregisterPrefetchTrigger } from
 import { QueryClientProvider } from './src/context/QueryClientProvider';
 import { CampTabProvider, useCampTab } from './src/context/CampTabContext';
 import { WebViewPreloader } from './src/components/WebViewPreloader';
-import { SplashPrefetchScreen } from './src/components/SplashPrefetchScreen';
 import { ForceUpdateModal } from './src/components/ForceUpdateModal';
 import { useAuth } from './src/context/AuthContext';
 import { useCampDataPrefetch } from './src/hooks/useCampDataPrefetch';
@@ -38,7 +37,6 @@ function AppContent() {
   const { userData, authReady, loading } = useAuth();
   const { prefetchCampData, invalidateCampData } = useCampDataPrefetch();
   const { prefetchRecruitmentData } = useRecruitmentDataPrefetch();
-  const [showSplash, setShowSplash] = useState(true);
   const [hasTriggeredPrefetch, setHasTriggeredPrefetch] = useState(false);
 
   // 프리페칭 트리거 등록
@@ -71,10 +69,6 @@ function AppContent() {
         logger.info('✅ 앱 시작: 모든 데이터 프리페칭 완료');
       } catch (error) {
         logger.error('❌ 앱 시작: 데이터 프리페칭 실패', error);
-        // 에러가 발생해도 스플래시는 닫기
-        setTimeout(() => {
-          setShowSplash(false);
-        }, 1000);
       }
     };
 
@@ -86,26 +80,21 @@ function AppContent() {
     };
   }, [userData?.activeJobExperienceId, prefetchCampData, prefetchRecruitmentData, hasTriggeredPrefetch]);
 
-  // 인증 완료 및 사용자 데이터가 없으면 스플래시 숨기기 (비로그인 유저)
+  // 인증 상태 확인 완료 시 네이티브 스플래시 숨기기
   useEffect(() => {
-    const hideNativeSplashForGuest = async () => {
-      if (authReady && !loading && !userData) {
-        logger.info('⏭️  AppContent: 비로그인 상태, 네이티브 스플래시 숨기기');
-        
+    const hideNativeSplash = async () => {
+      if (authReady && !loading) {
         try {
-          // 비로그인 유저는 네이티브 스플래시를 즉시 숨김
           await SplashScreen.hideAsync();
-          logger.info('✅ 비로그인: 네이티브 스플래시 숨김 완료');
-        } catch (error) {
-          logger.error('❌ 비로그인: 네이티브 스플래시 숨기기 실패:', error);
+          logger.info('✅ 네이티브 스플래시 숨김 완료');
+        } catch {
+          // 이미 숨겨진 경우 무시
         }
-        
-        setShowSplash(false);
       }
     };
 
-    hideNativeSplashForGuest();
-  }, [authReady, loading, userData]);
+    hideNativeSplash();
+  }, [authReady, loading]);
 
   // 프리로드할 링크가 없을 때 즉시 완료 처리
   useEffect(() => {
@@ -130,11 +119,6 @@ function AppContent() {
     setWebViewLoadProgress({ loaded, total });
   }, [setWebViewLoadProgress]);
 
-  const handleSplashComplete = useCallback(() => {
-    logger.info('👋 App: 스플래시 화면 완료');
-    setShowSplash(false);
-  }, []);
-
   return (
     <>
       <RootNavigator />
@@ -148,17 +132,6 @@ function AppContent() {
           onLoadComplete={handleWebViewPreloadComplete}
           onProgressUpdate={handleWebViewProgressUpdate}
         />
-      )}
-
-      {/* 스플래시 화면 (프리로딩 진행 중) */}
-      {showSplash && userData && (
-        <>
-          {logger.info('🖼️ SplashPrefetchScreen 렌더링 중', { showSplash, hasUserData: !!userData })}
-          <SplashPrefetchScreen 
-            onComplete={handleSplashComplete}
-            minDisplayTime={1500}
-          />
-        </>
       )}
     </>
   );
