@@ -79,6 +79,8 @@ export default function CampContentList({
   const [editTargetRole, setEditTargetRole] = useState<CampPageRole>('common');
   const [showEditEmojiPicker, setShowEditEmojiPicker] = useState(false);
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
@@ -97,10 +99,9 @@ export default function CampContentList({
     }
   };
 
-  const filteredItems = items.filter((item: DisplayItem) => {
-    // allowLinks가 false면 페이지만 표시
+  // 1단계: 역할 기반 필터 (기존 로직 유지)
+  const roleFilteredItems = items.filter((item: DisplayItem) => {
     if (!allowLinks && item.type === 'link') return false;
-    
     if (isAdmin) return true;
     if (!item.targetRole || item.targetRole === 'common') return true;
     if (userData?.role === 'mentor' && item.targetRole === 'mentor') return true;
@@ -108,12 +109,24 @@ export default function CampContentList({
     return false;
   });
 
-  // 관리자용 섹션별 그룹화
+  // 2단계: 검색어 필터 (제목 + 본문 텍스트 검색)
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const filteredItems = trimmedQuery
+    ? roleFilteredItems.filter((item: DisplayItem) => {
+        if (item.title.toLowerCase().includes(trimmedQuery)) return true;
+        if (item.content) {
+          return extractText(item.content).toLowerCase().includes(trimmedQuery);
+        }
+        return false;
+      })
+    : roleFilteredItems;
+
+  // 관리자용 섹션별 그룹화 (역할 필터 기준, 검색 미적용)
   const groupedItems = isAdmin ? {
-    common: filteredItems.filter((item: DisplayItem) => !item.targetRole || item.targetRole === 'common'),
-    mentor: filteredItems.filter((item: DisplayItem) => item.targetRole === 'mentor'),
-    foreign: filteredItems.filter((item: DisplayItem) => item.targetRole === 'foreign'),
-    expired: filteredItems.filter((item: DisplayItem) => item.targetRole === 'expired'),
+    common: roleFilteredItems.filter((item: DisplayItem) => !item.targetRole || item.targetRole === 'common'),
+    mentor: roleFilteredItems.filter((item: DisplayItem) => item.targetRole === 'mentor'),
+    foreign: roleFilteredItems.filter((item: DisplayItem) => item.targetRole === 'foreign'),
+    expired: roleFilteredItems.filter((item: DisplayItem) => item.targetRole === 'expired'),
   } : null;
 
   const handleAddItem = async () => {
@@ -233,7 +246,6 @@ export default function CampContentList({
       const newItems = [...sectionItems];
       [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
       
-      // 페이지 ID 배열 생성
       const pageIds = newItems.map(i => i.id);
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
@@ -255,7 +267,6 @@ export default function CampContentList({
       const newItems = [...sectionItems];
       [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
       
-      // 페이지 ID 배열 생성
       const pageIds = newItems.map(i => i.id);
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
@@ -303,7 +314,8 @@ export default function CampContentList({
     );
   }
 
-  if (filteredItems.length === 0) {
+  // 실제 자료가 하나도 없는 경우 (검색 전)
+  if (roleFilteredItems.length === 0) {
     return (
       <>
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
@@ -348,11 +360,13 @@ export default function CampContentList({
     return (
       <div className="max-w-5xl mx-auto px-4 py-6">
         {/* 헤더 */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{categoryTitle}</h1>
             <p className="text-sm text-gray-600 mt-1">
-              {isForeign ? `${filteredItems.length} items` : `총 ${filteredItems.length}개의 자료`}
+              {trimmedQuery
+                ? `"${searchQuery}" 검색 결과 ${filteredItems.length}개`
+                : `총 ${roleFilteredItems.length}개의 자료`}
             </p>
           </div>
           
@@ -367,111 +381,132 @@ export default function CampContentList({
           </button>
         </div>
 
-        {/* 공통 자료 섹션 */}
-        {groupedItems.common.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
-              공통 자료
-              <span className="text-sm font-normal text-gray-500">({groupedItems.common.length})</span>
-            </h2>
-            <div className="grid grid-cols-2 gap-4">
-              {groupedItems.common.map((item, idx) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  isAdmin={true}
-                  href={getItemHref(item)}
-                  onNavigate={handleNavigateToDetail}
-                  onDelete={handleDeleteItem}
-                  onEdit={handleStartEditItem}
-                  onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.common) : undefined}
-                  onMoveDown={idx < groupedItems.common.length - 1 ? () => handleMoveItemDown(item, groupedItems.common) : undefined}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        {/* 검색바 */}
+        <div className="mb-6">
+          <SearchBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isForeign={isForeign}
+          />
+        </div>
 
-        {/* 멘토 전용 자료 섹션 */}
-        {groupedItems.mentor.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-              멘토 전용 자료
-              <span className="text-sm font-normal text-gray-500">({groupedItems.mentor.length})</span>
-            </h2>
-            <div className="grid grid-cols-2 gap-4">
-              {groupedItems.mentor.map((item, idx) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  isAdmin={true}
-                  href={getItemHref(item)}
-                  onNavigate={handleNavigateToDetail}
-                  onDelete={handleDeleteItem}
-                  onEdit={handleStartEditItem}
-                  onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.mentor) : undefined}
-                  onMoveDown={idx < groupedItems.mentor.length - 1 ? () => handleMoveItemDown(item, groupedItems.mentor) : undefined}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        {/* 검색 중: 결과 리스트 / 미검색: 섹션 그리드 */}
+        {trimmedQuery ? (
+          <SearchResultList
+            items={filteredItems}
+            query={searchQuery}
+            isForeign={isForeign}
+            getItemHref={getItemHref}
+          />
+        ) : (
+          <>
+            {/* 공통 자료 섹션 */}
+            {groupedItems.common.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                  공통 자료
+                  <span className="text-sm font-normal text-gray-500">({groupedItems.common.length})</span>
+                </h2>
+                <div className="grid grid-cols-2 gap-4">
+                  {groupedItems.common.map((item, idx) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      isAdmin={true}
+                      href={getItemHref(item)}
+                      onNavigate={handleNavigateToDetail}
+                      onDelete={handleDeleteItem}
+                      onEdit={handleStartEditItem}
+                      onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.common) : undefined}
+                      onMoveDown={idx < groupedItems.common.length - 1 ? () => handleMoveItemDown(item, groupedItems.common) : undefined}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {/* 원어민 전용 자료 섹션 */}
-        {groupedItems.foreign.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-              원어민 전용 자료
-              <span className="text-sm font-normal text-gray-500">({groupedItems.foreign.length})</span>
-            </h2>
-            <div className="grid grid-cols-2 gap-4">
-              {groupedItems.foreign.map((item, idx) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  isAdmin={true}
-                  href={getItemHref(item)}
-                  onNavigate={handleNavigateToDetail}
-                  onDelete={handleDeleteItem}
-                  onEdit={handleStartEditItem}
-                  onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.foreign) : undefined}
-                  onMoveDown={idx < groupedItems.foreign.length - 1 ? () => handleMoveItemDown(item, groupedItems.foreign) : undefined}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+            {/* 멘토 전용 자료 섹션 */}
+            {groupedItems.mentor.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                  멘토 전용 자료
+                  <span className="text-sm font-normal text-gray-500">({groupedItems.mentor.length})</span>
+                </h2>
+                <div className="grid grid-cols-2 gap-4">
+                  {groupedItems.mentor.map((item, idx) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      isAdmin={true}
+                      href={getItemHref(item)}
+                      onNavigate={handleNavigateToDetail}
+                      onDelete={handleDeleteItem}
+                      onEdit={handleStartEditItem}
+                      onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.mentor) : undefined}
+                      onMoveDown={idx < groupedItems.mentor.length - 1 ? () => handleMoveItemDown(item, groupedItems.mentor) : undefined}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {/* 만료 자료 섹션 (admin 전용) */}
-        {groupedItems.expired.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
-              만료된 자료
-              <span className="text-sm font-normal text-gray-500">({groupedItems.expired.length})</span>
-              <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-normal">
-                관리자만 표시
-              </span>
-            </h2>
-            <div className="grid grid-cols-2 gap-4 opacity-75">
-              {groupedItems.expired.map((item, idx) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  isAdmin={true}
-                  href={getItemHref(item)}
-                  onNavigate={handleNavigateToDetail}
-                  onDelete={handleDeleteItem}
-                  onEdit={handleStartEditItem}
-                  onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.expired) : undefined}
-                  onMoveDown={idx < groupedItems.expired.length - 1 ? () => handleMoveItemDown(item, groupedItems.expired) : undefined}
-                />
-              ))}
-            </div>
-          </div>
+            {/* 원어민 전용 자료 섹션 */}
+            {groupedItems.foreign.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                  원어민 전용 자료
+                  <span className="text-sm font-normal text-gray-500">({groupedItems.foreign.length})</span>
+                </h2>
+                <div className="grid grid-cols-2 gap-4">
+                  {groupedItems.foreign.map((item, idx) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      isAdmin={true}
+                      href={getItemHref(item)}
+                      onNavigate={handleNavigateToDetail}
+                      onDelete={handleDeleteItem}
+                      onEdit={handleStartEditItem}
+                      onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.foreign) : undefined}
+                      onMoveDown={idx < groupedItems.foreign.length - 1 ? () => handleMoveItemDown(item, groupedItems.foreign) : undefined}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 만료 자료 섹션 (admin 전용) */}
+            {groupedItems.expired.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+                  만료된 자료
+                  <span className="text-sm font-normal text-gray-500">({groupedItems.expired.length})</span>
+                  <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-normal">
+                    관리자만 표시
+                  </span>
+                </h2>
+                <div className="grid grid-cols-2 gap-4 opacity-75">
+                  {groupedItems.expired.map((item, idx) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      isAdmin={true}
+                      href={getItemHref(item)}
+                      onNavigate={handleNavigateToDetail}
+                      onDelete={handleDeleteItem}
+                      onEdit={handleStartEditItem}
+                      onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.expired) : undefined}
+                      onMoveDown={idx < groupedItems.expired.length - 1 ? () => handleMoveItemDown(item, groupedItems.expired) : undefined}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* 추가 모달 */}
@@ -520,32 +555,264 @@ export default function CampContentList({
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{categoryTitle}</h1>
           <p className="text-sm text-gray-600 mt-1">
-            {isForeign ? `${filteredItems.length} items` : `총 ${filteredItems.length}개의 자료`}
+            {trimmedQuery
+              ? isForeign
+                ? `${filteredItems.length} results for "${searchQuery}"`
+                : `"${searchQuery}" 검색 결과 ${filteredItems.length}개`
+              : isForeign
+                ? `${roleFilteredItems.length} items`
+                : `총 ${roleFilteredItems.length}개의 자료`}
           </p>
         </div>
       </div>
 
-      {/* 카드 그리드 */}
-      <div className="grid grid-cols-2 gap-4">
-        {filteredItems.map((item) => (
-          <ItemCard
-            key={item.id}
-            item={item}
-            isAdmin={false}
-            href={getItemHref(item)}
-            onNavigate={handleNavigateToDetail}
-            onDelete={handleDeleteItem}
-            onEdit={handleStartEditItem}
-          />
-        ))}
+      {/* 검색바 */}
+      <div className="mb-6">
+        <SearchBar
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          isForeign={isForeign}
+        />
       </div>
+
+      {/* 검색 중: 결과 리스트 / 미검색: 카드 그리드 */}
+      {trimmedQuery ? (
+        <SearchResultList
+          items={filteredItems}
+          query={searchQuery}
+          isForeign={isForeign}
+          getItemHref={getItemHref}
+        />
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          {roleFilteredItems.map((item) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              isAdmin={false}
+              href={getItemHref(item)}
+              onNavigate={handleNavigateToDetail}
+              onDelete={handleDeleteItem}
+              onEdit={handleStartEditItem}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────
+// 검색 관련 헬퍼 함수
+// ─────────────────────────────────────────────────────────
+
+function extractText(html: string): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return (
+      new DOMParser().parseFromString(html, 'text/html').body.textContent ?? ''
+    );
+  } catch {
+    return '';
+  }
+}
+
+function extractSnippet(html: string, query: string): string {
+  const text = extractText(html).replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.trim().toLowerCase();
+  const index = lowerText.indexOf(lowerQuery);
+
+  if (index === -1) {
+    return text.length > 120 ? text.slice(0, 120) + '...' : text;
+  }
+
+  const start = Math.max(0, index - 40);
+  const end = Math.min(text.length, index + lowerQuery.length + 90);
+  const snippet = text.slice(start, end);
+  return (start > 0 ? '...' : '') + snippet + (end < text.length ? '...' : '');
+}
+
+// ─────────────────────────────────────────────────────────
+// 검색 관련 컴포넌트
+// ─────────────────────────────────────────────────────────
+
+function SearchBar({
+  searchQuery,
+  setSearchQuery,
+  isForeign,
+}: {
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  isForeign: boolean;
+}) {
+  return (
+    <div className="relative w-full">
+      <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder={isForeign ? 'Search by title or content...' : '제목 또는 내용으로 검색...'}
+        className="w-full pl-9 pr-9 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+      />
+      {searchQuery && (
+        <button
+          onClick={() => setSearchQuery('')}
+          className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label={isForeign ? 'Clear search' : '검색 초기화'}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function HighlightText({ text, query }: { text: string; query: string }) {
+  const lowerQuery = query.trim().toLowerCase();
+  if (!lowerQuery) return <span>{text}</span>;
+
+  const lowerText = text.toLowerCase();
+  const parts: { text: string; highlight: boolean }[] = [];
+  let lastIndex = 0;
+
+  let index = lowerText.indexOf(lowerQuery, lastIndex);
+  while (index !== -1) {
+    if (index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, index), highlight: false });
+    }
+    parts.push({ text: text.slice(index, index + lowerQuery.length), highlight: true });
+    lastIndex = index + lowerQuery.length;
+    index = lowerText.indexOf(lowerQuery, lastIndex);
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), highlight: false });
+  }
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.highlight ? (
+          <mark key={i} className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5 not-italic">
+            {part.text}
+          </mark>
+        ) : (
+          <span key={i}>{part.text}</span>
+        )
+      )}
+    </>
+  );
+}
+
+function SearchResultList({
+  items,
+  query,
+  isForeign,
+  getItemHref,
+}: {
+  items: DisplayItem[];
+  query: string;
+  isForeign: boolean;
+  getItemHref: (item: DisplayItem) => string;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+        <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <p className="text-sm font-medium text-gray-500">
+          {isForeign ? `No results for "${query}"` : `"${query}"에 해당하는 자료가 없습니다`}
+        </p>
+        <p className="text-xs text-gray-400 mt-1">
+          {isForeign ? 'Try a different keyword' : '다른 키워드로 검색해보세요'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.map((item) => (
+        <SearchResultItem
+          key={item.id}
+          item={item}
+          query={query}
+          href={getItemHref(item)}
+          isExternal={item.type === 'link'}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SearchResultItem({
+  item,
+  query,
+  href,
+  isExternal,
+}: {
+  item: DisplayItem;
+  query: string;
+  href: string;
+  isExternal: boolean;
+}) {
+  const snippet = item.content ? extractSnippet(item.content, query) : '';
+
+  return (
+    <Link
+      href={href}
+      {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+      className="flex items-start gap-3 p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm transition-all group"
+    >
+      <div className={`w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center text-base ${
+        item.type === 'page' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+      }`}>
+        {item.emoji || (item.type === 'page' ? '📄' : '🔗')}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="font-semibold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
+            <HighlightText text={item.title} query={query} />
+          </h3>
+          <span className={`flex-shrink-0 text-xs px-1.5 py-0.5 rounded border ${getRoleBadgeColor(item.targetRole)}`}>
+            {getRoleLabel(item.targetRole)}
+          </span>
+        </div>
+
+        {snippet && (
+          <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">
+            <HighlightText text={snippet} query={query} />
+          </p>
+        )}
+      </div>
+
+      <div className="flex-shrink-0 self-center ml-1">
+        <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    </Link>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// 카드 컴포넌트
+// ─────────────────────────────────────────────────────────
 
 function ItemCard({
   item,
@@ -674,6 +941,10 @@ function ItemCard({
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────
+// 모달 컴포넌트
+// ─────────────────────────────────────────────────────────
 
 function AddModal({
   showAddModal,
