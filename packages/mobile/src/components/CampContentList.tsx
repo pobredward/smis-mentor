@@ -12,6 +12,7 @@ import {
   TextInput,
   Linking,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -74,10 +75,13 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
   const [editTargetRole, setEditTargetRole] = useState<CampPageRole>('common');
   const [showEditEmojiPicker, setShowEditEmojiPicker] = useState(false);
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
-  const filteredItems = items.filter(item => {
+  // 1단계: 역할 기반 필터 (기존 로직 유지)
+  const roleFilteredItems = items.filter(item => {
     if (isAdmin) return true;
     if (!item.targetRole || item.targetRole === 'common') return true;
     if (userData?.role === 'mentor' && item.targetRole === 'mentor') return true;
@@ -85,11 +89,23 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
     return false;
   });
 
-  // 관리자용 섹션별 그룹화
+  // 2단계: 검색어 필터 (제목 + 본문 텍스트 검색)
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const filteredItems = trimmedQuery
+    ? roleFilteredItems.filter(item => {
+        if (item.title.toLowerCase().includes(trimmedQuery)) return true;
+        if (item.content) {
+          return extractText(item.content).toLowerCase().includes(trimmedQuery);
+        }
+        return false;
+      })
+    : roleFilteredItems;
+
+  // 관리자용 섹션별 그룹화 (역할 필터 기준, 검색 미적용)
   const groupedItems = isAdmin ? {
-    common: filteredItems.filter(item => !item.targetRole || item.targetRole === 'common'),
-    mentor: filteredItems.filter(item => item.targetRole === 'mentor'),
-    foreign: filteredItems.filter(item => item.targetRole === 'foreign'),
+    common: roleFilteredItems.filter(item => !item.targetRole || item.targetRole === 'common'),
+    mentor: roleFilteredItems.filter(item => item.targetRole === 'mentor'),
+    foreign: roleFilteredItems.filter(item => item.targetRole === 'foreign'),
   } : null;
 
   const loadItems = useCallback(async () => {
@@ -281,7 +297,6 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
       const newItems = [...sectionItems];
       [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
       
-      // 페이지 ID 배열 생성
       const pageIds = newItems.map(i => i.id);
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
@@ -303,7 +318,6 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
       const newItems = [...sectionItems];
       [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
       
-      // 페이지 ID 배열 생성
       const pageIds = newItems.map(i => i.id);
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
@@ -332,7 +346,8 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
     );
   }
 
-  if (filteredItems.length === 0) {
+  // 실제 자료가 하나도 없는 경우 (검색 전)
+  if (roleFilteredItems.length === 0) {
     return (
       <ScrollView
         contentContainerStyle={styles.centerContainer}
@@ -383,13 +398,13 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
   if (isAdmin && groupedItems) {
     return (
       <View style={styles.container}>
-        {/* 섹션별 리스트 */}
         <ScrollView 
           style={styles.scrollView}
           contentContainerStyle={styles.scrollViewContent}
           showsVerticalScrollIndicator={false}
           bounces={true}
           alwaysBounceVertical={true}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -404,7 +419,13 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
             <View>
               <Text style={styles.headerTitle}>{categoryTitle}</Text>
               <Text style={styles.headerSubtitle}>
-                {isForeign ? `${filteredItems.length} materials` : `총 ${filteredItems.length}개의 자료`}
+                {trimmedQuery
+                  ? isForeign
+                    ? `${filteredItems.length} results for "${searchQuery}"`
+                    : `"${searchQuery}" 검색 결과 ${filteredItems.length}개`
+                  : isForeign
+                    ? `${roleFilteredItems.length} materials`
+                    : `총 ${roleFilteredItems.length}개의 자료`}
               </Text>
             </View>
             
@@ -416,79 +437,98 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
             </TouchableOpacity>
           </View>
 
-          {/* 공통 자료 섹션 */}
-          {groupedItems.common.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: '#9ca3af' }]} />
-                <Text style={styles.sectionTitle}>{isForeign ? 'Common' : '공통 자료'}</Text>
-                <Text style={styles.sectionCount}>({groupedItems.common.length})</Text>
-              </View>
-              <View style={styles.sectionContent}>
-                {groupedItems.common.map((item, idx) => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    isAdmin={true}
-                    onNavigate={handleNavigateToDetail}
-                    onDelete={handleDeleteItem}
-                    onEdit={handleStartEditItem}
-                    onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.common) : undefined}
-                    onMoveDown={idx < groupedItems.common.length - 1 ? () => handleMoveItemDown(item, groupedItems.common) : undefined}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
+          {/* 검색바 */}
+          <SearchBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isForeign={isForeign}
+          />
 
-          {/* 멘토 전용 자료 섹션 */}
-          {groupedItems.mentor.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: '#3b82f6' }]} />
-                <Text style={styles.sectionTitle}>{isForeign ? 'Mentor Only' : '멘토 전용 자료'}</Text>
-                <Text style={styles.sectionCount}>({groupedItems.mentor.length})</Text>
-              </View>
-              <View style={styles.sectionContent}>
-                {groupedItems.mentor.map((item, idx) => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    isAdmin={true}
-                    onNavigate={handleNavigateToDetail}
-                    onDelete={handleDeleteItem}
-                    onEdit={handleStartEditItem}
-                    onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.mentor) : undefined}
-                    onMoveDown={idx < groupedItems.mentor.length - 1 ? () => handleMoveItemDown(item, groupedItems.mentor) : undefined}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
+          {/* 검색 중: 결과 리스트 / 미검색: 섹션 그리드 */}
+          {trimmedQuery ? (
+            <SearchResultList
+              items={filteredItems}
+              query={searchQuery}
+              onNavigate={handleNavigateToDetail}
+              isForeign={isForeign}
+            />
+          ) : (
+            <>
+              {/* 공통 자료 섹션 */}
+              {groupedItems.common.length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: '#9ca3af' }]} />
+                    <Text style={styles.sectionTitle}>{isForeign ? 'Common' : '공통 자료'}</Text>
+                    <Text style={styles.sectionCount}>({groupedItems.common.length})</Text>
+                  </View>
+                  <View style={styles.sectionContent}>
+                    {groupedItems.common.map((item, idx) => (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        isAdmin={true}
+                        onNavigate={handleNavigateToDetail}
+                        onDelete={handleDeleteItem}
+                        onEdit={handleStartEditItem}
+                        onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.common) : undefined}
+                        onMoveDown={idx < groupedItems.common.length - 1 ? () => handleMoveItemDown(item, groupedItems.common) : undefined}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
 
-          {/* 원어민 전용 자료 섹션 */}
-          {groupedItems.foreign.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: '#a855f7' }]} />
-                <Text style={styles.sectionTitle}>{isForeign ? 'Foreign Teacher Only' : '원어민 전용 자료'}</Text>
-                <Text style={styles.sectionCount}>({groupedItems.foreign.length})</Text>
-              </View>
-              <View style={styles.sectionContent}>
-                {groupedItems.foreign.map((item, idx) => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    isAdmin={true}
-                    onNavigate={handleNavigateToDetail}
-                    onDelete={handleDeleteItem}
-                    onEdit={handleStartEditItem}
-                    onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.foreign) : undefined}
-                    onMoveDown={idx < groupedItems.foreign.length - 1 ? () => handleMoveItemDown(item, groupedItems.foreign) : undefined}
-                  />
-                ))}
-              </View>
-            </View>
+              {/* 멘토 전용 자료 섹션 */}
+              {groupedItems.mentor.length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: '#3b82f6' }]} />
+                    <Text style={styles.sectionTitle}>{isForeign ? 'Mentor Only' : '멘토 전용 자료'}</Text>
+                    <Text style={styles.sectionCount}>({groupedItems.mentor.length})</Text>
+                  </View>
+                  <View style={styles.sectionContent}>
+                    {groupedItems.mentor.map((item, idx) => (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        isAdmin={true}
+                        onNavigate={handleNavigateToDetail}
+                        onDelete={handleDeleteItem}
+                        onEdit={handleStartEditItem}
+                        onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.mentor) : undefined}
+                        onMoveDown={idx < groupedItems.mentor.length - 1 ? () => handleMoveItemDown(item, groupedItems.mentor) : undefined}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* 원어민 전용 자료 섹션 */}
+              {groupedItems.foreign.length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionDot, { backgroundColor: '#a855f7' }]} />
+                    <Text style={styles.sectionTitle}>{isForeign ? 'Foreign Teacher Only' : '원어민 전용 자료'}</Text>
+                    <Text style={styles.sectionCount}>({groupedItems.foreign.length})</Text>
+                  </View>
+                  <View style={styles.sectionContent}>
+                    {groupedItems.foreign.map((item, idx) => (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        isAdmin={true}
+                        onNavigate={handleNavigateToDetail}
+                        onDelete={handleDeleteItem}
+                        onEdit={handleStartEditItem}
+                        onMoveUp={idx > 0 ? () => handleMoveItemUp(item, groupedItems.foreign) : undefined}
+                        onMoveDown={idx < groupedItems.foreign.length - 1 ? () => handleMoveItemDown(item, groupedItems.foreign) : undefined}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
 
@@ -542,15 +582,29 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
         <View>
           <Text style={styles.headerTitle}>{categoryTitle}</Text>
           <Text style={styles.headerSubtitle}>
-            {isForeign ? `${filteredItems.length} materials` : `총 ${filteredItems.length}개의 자료`}
+            {trimmedQuery
+              ? isForeign
+                ? `${filteredItems.length} results for "${searchQuery}"`
+                : `"${searchQuery}" 검색 결과 ${filteredItems.length}개`
+              : isForeign
+                ? `${roleFilteredItems.length} materials`
+                : `총 ${roleFilteredItems.length}개의 자료`}
           </Text>
         </View>
       </View>
 
-      {/* 카드 리스트 */}
+      {/* 검색바 */}
+      <SearchBar
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        isForeign={isForeign}
+      />
+
+      {/* 검색 중: 결과 리스트 / 미검색: 카드 그리드 */}
       <ScrollView 
-        style={styles.scrollView} 
-        contentContainerStyle={styles.listContent}
+        style={styles.scrollView}
+        contentContainerStyle={trimmedQuery ? styles.searchResultContent : styles.listContent}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -560,20 +614,257 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
           />
         }
       >
-        {filteredItems.map((item) => (
-          <ItemCard
-            key={item.id}
-            item={item}
-            isAdmin={false}
+        {trimmedQuery ? (
+          <SearchResultList
+            items={filteredItems}
+            query={searchQuery}
             onNavigate={handleNavigateToDetail}
-            onDelete={handleDeleteItem}
-            onEdit={handleStartEditItem}
+            isForeign={isForeign}
           />
-        ))}
+        ) : (
+          roleFilteredItems.map((item) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              isAdmin={false}
+              onNavigate={handleNavigateToDetail}
+              onDelete={handleDeleteItem}
+              onEdit={handleStartEditItem}
+            />
+          ))
+        )}
       </ScrollView>
     </View>
   );
 }
+
+// ─────────────────────────────────────────────────────────
+// 검색 관련 헬퍼 함수
+// ─────────────────────────────────────────────────────────
+
+function extractText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractSnippet(html: string, query: string): string {
+  const text = extractText(html);
+  if (!text) return '';
+
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.trim().toLowerCase();
+  const index = lowerText.indexOf(lowerQuery);
+
+  if (index === -1) {
+    return text.length > 120 ? text.slice(0, 120) + '...' : text;
+  }
+
+  const start = Math.max(0, index - 40);
+  const end = Math.min(text.length, index + lowerQuery.length + 90);
+  const snippet = text.slice(start, end);
+  return (start > 0 ? '...' : '') + snippet + (end < text.length ? '...' : '');
+}
+
+// ─────────────────────────────────────────────────────────
+// 검색 관련 컴포넌트
+// ─────────────────────────────────────────────────────────
+
+function SearchBar({
+  searchQuery,
+  setSearchQuery,
+  isForeign,
+}: {
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  isForeign?: boolean;
+}) {
+  return (
+    <View style={styles.searchContainer}>
+      <Text style={styles.searchIcon}>🔍</Text>
+      <TextInput
+        style={styles.searchInput}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder={isForeign ? 'Search by title or content...' : '제목 또는 내용으로 검색...'}
+        placeholderTextColor="#9ca3af"
+        returnKeyType="search"
+        clearButtonMode={Platform.OS === 'ios' ? 'while-editing' : 'never'}
+      />
+      {searchQuery.length > 0 && Platform.OS === 'android' && (
+        <TouchableOpacity
+          onPress={() => setSearchQuery('')}
+          style={styles.searchClearButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel={isForeign ? 'Clear search' : '검색 초기화'}
+          accessibilityRole="button"
+        >
+          <Text style={styles.searchClearText}>✕</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+function HighlightText({
+  text,
+  query,
+  style,
+}: {
+  text: string;
+  query: string;
+  style: object;
+}) {
+  const lowerQuery = query.trim().toLowerCase();
+  if (!lowerQuery) return <Text style={style}>{text}</Text>;
+
+  const lowerText = text.toLowerCase();
+  const parts: { text: string; highlight: boolean }[] = [];
+  let lastIndex = 0;
+
+  let index = lowerText.indexOf(lowerQuery, lastIndex);
+  while (index !== -1) {
+    if (index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, index), highlight: false });
+    }
+    parts.push({ text: text.slice(index, index + lowerQuery.length), highlight: true });
+    lastIndex = index + lowerQuery.length;
+    index = lowerText.indexOf(lowerQuery, lastIndex);
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), highlight: false });
+  }
+
+  return (
+    <Text style={style}>
+      {parts.map((part, i) =>
+        part.highlight ? (
+          <Text key={i} style={styles.highlight}>{part.text}</Text>
+        ) : (
+          <Text key={i}>{part.text}</Text>
+        )
+      )}
+    </Text>
+  );
+}
+
+function SearchResultList({
+  items,
+  query,
+  onNavigate,
+  isForeign,
+}: {
+  items: DisplayItem[];
+  query: string;
+  onNavigate: (item: DisplayItem) => void;
+  isForeign?: boolean;
+}) {
+  if (items.length === 0) {
+    return (
+      <View style={styles.searchEmptyContainer}>
+        <Text style={styles.searchEmptyIcon}>🔍</Text>
+        <Text style={styles.searchEmptyTitle}>
+          {isForeign ? `No results for "${query}"` : `"${query}"에 해당하는 자료가 없습니다`}
+        </Text>
+        <Text style={styles.searchEmptySubtitle}>
+          {isForeign ? 'Try a different keyword' : '다른 키워드로 검색해보세요'}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.searchResultListContainer}>
+      {items.map((item) => (
+        <SearchResultItem
+          key={item.id}
+          item={item}
+          query={query}
+          onNavigate={onNavigate}
+          isForeign={isForeign}
+        />
+      ))}
+    </View>
+  );
+}
+
+function SearchResultItem({
+  item,
+  query,
+  onNavigate,
+  isForeign,
+}: {
+  item: DisplayItem;
+  query: string;
+  onNavigate: (item: DisplayItem) => void;
+  isForeign?: boolean;
+}) {
+  const snippet = item.content ? extractSnippet(item.content, query) : '';
+  const badgeColor = getRoleBadgeColor(item.targetRole);
+  const roleLabel = getRoleLabel(item.targetRole, isForeign);
+
+  return (
+    <TouchableOpacity
+      style={styles.searchResultItem}
+      onPress={() => onNavigate(item)}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.title}, ${roleLabel}`}
+    >
+      <View
+        style={[
+          styles.searchResultIconBox,
+          { backgroundColor: item.type === 'page' ? '#DBEAFE' : '#F3E8FF' },
+        ]}
+      >
+        <Text style={styles.iconText}>
+          {item.emoji || (item.type === 'page' ? '📄' : '🔗')}
+        </Text>
+      </View>
+
+      <View style={styles.searchResultBody}>
+        <View style={styles.searchResultHeaderRow}>
+          <HighlightText
+            text={item.title}
+            query={query}
+            style={styles.searchResultTitle}
+          />
+          <View
+            style={[
+              styles.searchResultBadge,
+              { backgroundColor: badgeColor.bg, borderColor: badgeColor.border },
+            ]}
+          >
+            <Text style={[styles.searchResultBadgeText, { color: badgeColor.text }]}>
+              {roleLabel}
+            </Text>
+          </View>
+        </View>
+
+        {snippet ? (
+          <HighlightText
+            text={snippet}
+            query={query}
+            style={styles.searchResultSnippet}
+          />
+        ) : null}
+      </View>
+
+      <Text style={styles.searchResultArrow}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// 카드 컴포넌트
+// ─────────────────────────────────────────────────────────
 
 function ItemCard({
   item,
@@ -676,130 +967,9 @@ function ItemCard({
   );
 }
 
-function AddModal({
-  visible,
-  onClose,
-  newTitle,
-  setNewTitle,
-  newTargetRole,
-  setNewTargetRole,
-  newEmoji,
-  setNewEmoji,
-  showEmojiPicker,
-  setShowEmojiPicker,
-  onAdd,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  newTitle: string;
-  setNewTitle: (title: string) => void;
-  newTargetRole: CampPageRole;
-  setNewTargetRole: (role: CampPageRole) => void;
-  newEmoji: string;
-  setNewEmoji: (emoji: string) => void;
-  showEmojiPicker: boolean;
-  setShowEmojiPicker: (show: boolean) => void;
-  onAdd: () => void;
-}) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>페이지 추가</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Text style={styles.modalClose}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {/* 제목 */}
-            <Text style={styles.label}>제목</Text>
-            <TextInput
-              style={styles.input}
-              value={newTitle}
-              onChangeText={setNewTitle}
-              placeholder="예: 1주차 자료"
-              placeholderTextColor="#9CA3AF"
-            />
-
-            {/* 이모지 선택 */}
-            <Text style={styles.label}>아이콘</Text>
-            <TouchableOpacity
-              style={styles.emojiButton}
-              onPress={() => setShowEmojiPicker(!showEmojiPicker)}
-            >
-              <Text style={styles.emojiButtonIcon}>{newEmoji}</Text>
-              <Text style={styles.emojiButtonText}>클릭하여 변경</Text>
-            </TouchableOpacity>
-            
-            {showEmojiPicker && (
-              <View style={styles.emojiPicker}>
-                <ScrollView style={styles.emojiPickerScroll}>
-                  <View style={styles.emojiGrid}>
-                    {DEFAULT_EMOJIS.map((emoji) => (
-                      <TouchableOpacity
-                        key={emoji}
-                        style={styles.emojiOption}
-                        onPress={() => {
-                          setNewEmoji(emoji);
-                          setShowEmojiPicker(false);
-                        }}
-                      >
-                        <Text style={styles.emojiOptionText}>{emoji}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-            )}
-
-            {/* 권한 */}
-            <Text style={styles.label}>대상 권한</Text>
-            <View style={styles.roleButtons}>
-              {(['common', 'mentor', 'foreign'] as CampPageRole[]).map((role) => (
-                <TouchableOpacity
-                  key={role}
-                  style={[
-                    styles.roleButton,
-                    newTargetRole === role && styles.roleButtonActive,
-                  ]}
-                  onPress={() => setNewTargetRole(role)}
-                >
-                  <Text
-                    style={[
-                      styles.roleButtonText,
-                      newTargetRole === role && styles.roleButtonTextActive,
-                    ]}
-                  >
-                    {getRoleLabel(role)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* 버튼 */}
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                <Text style={styles.cancelButtonText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addModalButton,
-                  !newTitle.trim() && styles.addModalButtonDisabled,
-                ]}
-                onPress={onAdd}
-                disabled={!newTitle.trim()}
-              >
-                <Text style={styles.addModalButtonText}>추가</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-}
+// ─────────────────────────────────────────────────────────
+// 스타일
+// ─────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -884,6 +1054,142 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
+  searchResultContent: {
+    flexGrow: 1,
+    paddingBottom: 100,
+  },
+
+  // ── 검색바 ──
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  searchIcon: {
+    fontSize: 16,
+    color: '#9ca3af',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1f2937',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 9 : 6,
+  },
+  searchClearButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 28,
+    height: 28,
+  },
+  searchClearText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+
+  // ── 하이라이트 ──
+  highlight: {
+    backgroundColor: '#fef08a',
+    color: '#713f12',
+  },
+
+  // ── 검색 결과 리스트 ──
+  searchResultListContainer: {
+    padding: 12,
+    gap: 8,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 12,
+    marginBottom: 8,
+    gap: 10,
+  },
+  searchResultIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  searchResultBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  searchResultHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  searchResultTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f2937',
+    flexShrink: 1,
+  },
+  searchResultBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  searchResultBadgeText: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  searchResultSnippet: {
+    fontSize: 12,
+    color: '#6b7280',
+    lineHeight: 17,
+  },
+  searchResultArrow: {
+    fontSize: 20,
+    color: '#d1d5db',
+    flexShrink: 0,
+    marginLeft: 2,
+  },
+
+  // ── 검색 결과 없음 ──
+  searchEmptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  searchEmptyIcon: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  searchEmptyTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4b5563',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  searchEmptySubtitle: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textAlign: 'center',
+  },
+
+  // ── 카드 ──
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -978,6 +1284,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
   },
+
+  // ── 모달 ──
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1200,6 +1508,135 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
+
+// ─────────────────────────────────────────────────────────
+// 모달 컴포넌트
+// ─────────────────────────────────────────────────────────
+
+function AddModal({
+  visible,
+  onClose,
+  newTitle,
+  setNewTitle,
+  newTargetRole,
+  setNewTargetRole,
+  newEmoji,
+  setNewEmoji,
+  showEmojiPicker,
+  setShowEmojiPicker,
+  onAdd,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  newTitle: string;
+  setNewTitle: (title: string) => void;
+  newTargetRole: CampPageRole;
+  setNewTargetRole: (role: CampPageRole) => void;
+  newEmoji: string;
+  setNewEmoji: (emoji: string) => void;
+  showEmojiPicker: boolean;
+  setShowEmojiPicker: (show: boolean) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>페이지 추가</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={styles.modalClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {/* 제목 */}
+            <Text style={styles.label}>제목</Text>
+            <TextInput
+              style={styles.input}
+              value={newTitle}
+              onChangeText={setNewTitle}
+              placeholder="예: 1주차 자료"
+              placeholderTextColor="#9CA3AF"
+            />
+
+            {/* 이모지 선택 */}
+            <Text style={styles.label}>아이콘</Text>
+            <TouchableOpacity
+              style={styles.emojiButton}
+              onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+            >
+              <Text style={styles.emojiButtonIcon}>{newEmoji}</Text>
+              <Text style={styles.emojiButtonText}>클릭하여 변경</Text>
+            </TouchableOpacity>
+            
+            {showEmojiPicker && (
+              <View style={styles.emojiPicker}>
+                <ScrollView style={styles.emojiPickerScroll}>
+                  <View style={styles.emojiGrid}>
+                    {DEFAULT_EMOJIS.map((emoji) => (
+                      <TouchableOpacity
+                        key={emoji}
+                        style={styles.emojiOption}
+                        onPress={() => {
+                          setNewEmoji(emoji);
+                          setShowEmojiPicker(false);
+                        }}
+                      >
+                        <Text style={styles.emojiOptionText}>{emoji}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
+
+            {/* 권한 */}
+            <Text style={styles.label}>대상 권한</Text>
+            <View style={styles.roleButtons}>
+              {(['common', 'mentor', 'foreign'] as CampPageRole[]).map((role) => (
+                <TouchableOpacity
+                  key={role}
+                  style={[
+                    styles.roleButton,
+                    newTargetRole === role && styles.roleButtonActive,
+                  ]}
+                  onPress={() => setNewTargetRole(role)}
+                >
+                  <Text
+                    style={[
+                      styles.roleButtonText,
+                      newTargetRole === role && styles.roleButtonTextActive,
+                    ]}
+                  >
+                    {getRoleLabel(role)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* 버튼 */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                <Text style={styles.cancelButtonText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.addModalButton,
+                  !newTitle.trim() && styles.addModalButtonDisabled,
+                ]}
+                onPress={onAdd}
+                disabled={!newTitle.trim()}
+              >
+                <Text style={styles.addModalButtonText}>추가</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 function EditModal({
   editingItem,
