@@ -4,6 +4,7 @@ import { logger } from '@smis-mentor/shared';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { campPageService, getDisplayItems } from '@/lib/campPageService';
 import { NotionPage } from '@/components/notion/NotionPage';
@@ -46,10 +47,12 @@ const extractNotionPageId = (url: string): string | null => {
 export default function CampDetailView({ category, itemId }: CampDetailViewProps) {
   const router = useRouter();
   const { userData, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
   const [item, setItem] = useState<DisplayItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editingContent, setEditingContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
@@ -112,30 +115,34 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
     }
   };
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = async (html: string) => {
     if (!item || item.type !== 'page' || !userData?.userId) return;
+    if (isSaving) return;
 
     try {
+      setIsSaving(true);
       await campPageService.updatePage(item.id, {
-        content: editingContent,
+        content: html,
         userId: userData.userId,
       });
       
       setIsEditing(false);
       
-      // 항목 다시 로드
+      // 목록 캐시 무효화 (content 변경 반영)
       if (activeJobCodeId) {
-        const displayItems = await getDisplayItems(activeJobCodeId, category);
-        const updatedItem = displayItems.find(i => i.id === itemId);
-        if (updatedItem) {
-          setItem(updatedItem);
-        }
+        // campQueryKeys.education/schedule/guide 키 형태가 [category, jobCodeId]
+        queryClient.invalidateQueries({ queryKey: [category, activeJobCodeId] });
       }
+
+      // 현재 페이지 상태 즉시 갱신
+      setItem(prev => prev ? { ...prev, content: html } : prev);
       
       toast.success('저장되었습니다.');
     } catch (error) {
       logger.error('페이지 저장 실패:', error);
       toast.error('저장에 실패했습니다.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -224,7 +231,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
                 </button>
               )}
               
-              {isAdmin && item.type === 'page' && !isEditing && (
+            {isAdmin && item.type === 'page' && !isEditing && (
                 <button
                   onClick={handleStartEdit}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
@@ -246,11 +253,12 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
           <>
             {isEditing ? (
               <div className="bg-white md:rounded-lg md:shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '500px', maxHeight: '800px' }}>
-                <CampPageEditor
+              <CampPageEditor
                   content={editingContent}
                   onChange={setEditingContent}
                   onSave={handleSaveEdit}
                   onCancel={handleCancelEdit}
+                  isSaving={isSaving}
                 />
               </div>
             ) : (

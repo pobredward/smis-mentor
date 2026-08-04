@@ -103,14 +103,11 @@ export function useCampDataPrefetch() {
    */
   const prefetchScheduleData = async (jobCodeId: string) => {
     try {
-      const { getResourcesByJobCodeId } = await import('@/lib/generationResourcesService');
+      const { getDisplayItems } = await import('@/lib/campPageService');
       
       await queryClient.prefetchQuery({
         queryKey: campQueryKeys.schedule(jobCodeId),
-        queryFn: async () => {
-          const resources = await getResourcesByJobCodeId(jobCodeId);
-          return resources?.scheduleLinks || [];
-        },
+        queryFn: () => getDisplayItems(jobCodeId, 'schedule'),
       });
       
       logger.info('  ✅ 시간표 데이터 프리페칭 완료');
@@ -124,14 +121,11 @@ export function useCampDataPrefetch() {
    */
   const prefetchGuideData = async (jobCodeId: string) => {
     try {
-      const { getResourcesByJobCodeId } = await import('@/lib/generationResourcesService');
+      const { getDisplayItems } = await import('@/lib/campPageService');
       
       await queryClient.prefetchQuery({
         queryKey: campQueryKeys.guide(jobCodeId),
-        queryFn: async () => {
-          const resources = await getResourcesByJobCodeId(jobCodeId);
-          return resources?.guideLinks || [];
-        },
+        queryFn: () => getDisplayItems(jobCodeId, 'guide'),
       });
       
       logger.info('  ✅ 인솔표 데이터 프리페칭 완료');
@@ -145,14 +139,11 @@ export function useCampDataPrefetch() {
    */
   const prefetchEducationData = async (jobCodeId: string) => {
     try {
-      const { getResourcesByJobCodeId } = await import('@/lib/generationResourcesService');
+      const { getDisplayItems } = await import('@/lib/campPageService');
       
       await queryClient.prefetchQuery({
         queryKey: campQueryKeys.education(jobCodeId),
-        queryFn: async () => {
-          const resources = await getResourcesByJobCodeId(jobCodeId);
-          return resources?.educationLinks || [];
-        },
+        queryFn: () => getDisplayItems(jobCodeId, 'education'),
       });
       
       logger.info('  ✅ 교육 자료 데이터 프리페칭 완료');

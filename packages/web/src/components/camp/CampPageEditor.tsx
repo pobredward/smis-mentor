@@ -23,8 +23,9 @@ import { useState, useRef } from 'react';
 interface CampPageEditorProps {
   content: string;
   onChange: (content: string) => void;
-  onSave?: () => void;
+  onSave?: (html: string) => void;
   onCancel?: () => void;
+  isSaving?: boolean;
   placeholder?: string;
 }
 
@@ -33,6 +34,7 @@ export default function CampPageEditor({
   onChange,
   onSave,
   onCancel,
+  isSaving = false,
   placeholder = '내용을 입력하세요...',
 }: CampPageEditorProps) {
   const [isUploading, setIsUploading] = useState(false);
@@ -539,7 +541,7 @@ export default function CampPageEditor({
       return;
     }
 
-    onSave();
+    onSave(html);
   };
 
   return (
@@ -1016,12 +1018,13 @@ export default function CampPageEditor({
               취소
             </button>
           )}
-          {onSave && (
+      {onSave && (
             <button
               onClick={handleSave}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={isSaving}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              저장
+              {isSaving ? '저장 중...' : '저장'}
             </button>
           )}
         </div>
