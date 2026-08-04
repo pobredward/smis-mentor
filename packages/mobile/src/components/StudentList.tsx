@@ -401,11 +401,12 @@ export const StudentList: React.FC<StudentListProps> = ({
       }, { male: [] as string[], female: [] as string[] })
     : { male: [], female: [] };
 
-  // 검색 필터링
+  // 검색 필터링 (한글 이름 + 영어 이름 모두 검색)
   const filteredStudents = searchQuery.trim()
-    ? allStudents.filter(student => 
-        student.name?.includes(searchQuery.trim())
-      )
+    ? allStudents.filter(student => {
+        const q = searchQuery.trim();
+        return student.name?.includes(q) || student.englishName?.toLowerCase().includes(q.toLowerCase());
+      })
     : [];
 
   // 선택된 멘토의 학생들 (정렬 적용)
@@ -525,7 +526,7 @@ export const StudentList: React.FC<StudentListProps> = ({
             <View style={styles.searchContainer}>
               <TextInput
                 style={styles.searchInput}
-                placeholder={isForeign ? 'Search by name...' : '이름 검색...'}
+                placeholder={isForeign ? 'Search by name (KR/EN)...' : '이름 검색 (한글/영문)...'}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus

@@ -275,9 +275,12 @@ export default function ClassContent() {
 
   const sortedClasses = useMemo(() => Object.keys(groupedByClass).sort(), [groupedByClass]);
 
-  // 검색 필터링
+  // 검색 필터링 (한글 이름 + 영어 이름 모두 검색)
   const displayStudents = searchQuery.trim()
-    ? students.filter(student => student.name?.includes(searchQuery.trim())).sort((a, b) => (a.classNumber || '').localeCompare(b.classNumber || ''))
+    ? students.filter(student => {
+        const q = searchQuery.trim();
+        return student.name?.includes(q) || student.englishName?.toLowerCase().includes(q.toLowerCase());
+      }).sort((a, b) => (a.classNumber || '').localeCompare(b.classNumber || ''))
     : selectedClass
     ? (groupedByClass[selectedClass] || []).sort((a, b) => (a.classNumber || '').localeCompare(b.classNumber || ''))
     : [];
@@ -357,7 +360,7 @@ export default function ClassContent() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={isForeign ? 'Search by name...' : '이름 검색...'}
+                placeholder={isForeign ? 'Search by name (KR/EN)...' : '이름 검색 (한글/영문)...'}
                 className="bg-transparent border-none outline-none text-sm w-40"
                 autoFocus
               />
