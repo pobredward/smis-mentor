@@ -323,7 +323,26 @@ export function CampDetailScreen({ route, navigation }: Props) {
       iframe { max-width: 100%; }
     </style>
     <script>
+      var STORAGE_KEY = 'smis_toggle_${itemId}';
+
+      function loadToggleState() {
+        try {
+          var raw = localStorage.getItem(STORAGE_KEY);
+          return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function saveToggleState(state) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {}
+      }
+
       document.addEventListener('DOMContentLoaded', function() {
+        var savedState = loadToggleState();
+
         // 테이블 wrapper 처리
         const tables = document.querySelectorAll('table');
         tables.forEach(table => {
@@ -334,24 +353,45 @@ export function CampDetailScreen({ route, navigation }: Props) {
           wrapper.appendChild(table);
         });
 
-        // toggle-block 클릭 이벤트
-        document.querySelectorAll('.toggle-header').forEach(function(header) {
+        // details 기반 토글 처리 (기록 없으면 항상 닫힘, 있으면 복원)
+        document.querySelectorAll('details').forEach(function(detail, index) {
+          var stateKey = 'd_' + index;
+          if (savedState && stateKey in savedState) {
+            if (savedState[stateKey]) {
+              detail.setAttribute('open', '');
+            } else {
+              detail.removeAttribute('open');
+            }
+          } else {
+            detail.removeAttribute('open');
+          }
+          detail.addEventListener('toggle', function() {
+            var current = loadToggleState() || {};
+            current[stateKey] = detail.open;
+            saveToggleState(current);
+          });
+        });
+
+        // toggle-block 클릭 이벤트 (기록 없으면 항상 닫힘, 있으면 복원)
+        document.querySelectorAll('.toggle-header').forEach(function(header, index) {
+          var stateKey = 't_' + index;
+          var block = header.parentElement;
+          if (!block) return;
+
+          var initialOpen = (savedState && stateKey in savedState) ? savedState[stateKey] : false;
+          block.setAttribute('data-collapsed', initialOpen ? 'false' : 'true');
+          var content = block.querySelector('.toggle-content');
+          if (content) content.style.display = initialOpen ? 'block' : 'none';
+
           header.addEventListener('click', function(e) {
             e.preventDefault();
-            const block = header.parentElement;
-            if (!block) return;
-            const content = block.querySelector('.toggle-content');
-            const isCollapsed = block.getAttribute('data-collapsed') === 'true';
+            var isCollapsed = block.getAttribute('data-collapsed') === 'true';
             block.setAttribute('data-collapsed', isCollapsed ? 'false' : 'true');
             if (content) content.style.display = isCollapsed ? 'block' : 'none';
+            var current = loadToggleState() || {};
+            current[stateKey] = !isCollapsed;
+            saveToggleState(current);
           });
-          // 초기 상태 적용
-          const block = header.parentElement;
-          if (block) {
-            const content = block.querySelector('.toggle-content');
-            const isCollapsed = block.getAttribute('data-collapsed') !== 'false';
-            if (content) content.style.display = isCollapsed ? 'none' : 'block';
-          }
         });
       });
     </script>

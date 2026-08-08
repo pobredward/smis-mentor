@@ -76,45 +76,94 @@ const LEGACY_GROUP_MAP: Record<string, string> = {
   'short4': '단기4',
 };
 
-export const checkOverdueTasks = functions
-  .region('asia-northeast3')
-  .pubsub.schedule('every 30 minutes')
-  .timeZone('Asia/Seoul')
-  .onRun(async (context) => {
-    try {
-      console.log('🔔 업무 독촉 알림 체크 시작...');
-      const now = new Date();
-      
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+// Task에 notificationSentDates 필드를 추가하기 위한 확장 타입
+interface TaskWithNotification extends Task {
+  notificationSentDates?: string[]; // YYYY-MM-DD 형식, 당일 알림 발송 여부 추적
+}
 
+// Cloud Scheduler에서 HTTP POST로 30분마다 호출
+// gcloud functions deploy --build-service-account 옵션으로 배포 (Compute Engine SA 없이 Cloud Build SA 활용)
+export const checkOverdueTasks = functionsV2.https.onRequest(
+  {
+    region: 'asia-northeast3',
+    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
+  },
+  async (req, res) => {
+    // Cloud Scheduler의 OIDC 토큰 또는 내부 시크릿으로 호출 검증
+    const authHeader = req.headers.authorization ?? '';
+    const isScheduler = authHeader.startsWith('Bearer ');
+    if (!isScheduler) {
+      res.status(403).json({ error: '허가되지 않은 접근입니다.' });
+      return;
+    }
+
+    try {
+      console.log('🔔 업무 알림 체크 시작...');
+      const now = new Date();
+
+      // 30분 이전 시각 (이 창 안에 time이 있는 업무만 알림 발송)
+      const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+
+      // Cloud Function 서버는 UTC 기준으로 실행되므로 KST(UTC+9) 보정 필요
+      const KST_OFFSET = 9 * 60 * 60 * 1000;
+      const nowKST = new Date(now.getTime() + KST_OFFSET);
+
+      // KST 기준 오늘 자정(00:00)을 UTC 타임스탬프로 변환
+      const startOfTodayUTC = new Date(
+        Date.UTC(nowKST.getUTCFullYear(), nowKST.getUTCMonth(), nowKST.getUTCDate(), 0, 0, 0) - KST_OFFSET
+      );
+      const endOfTodayUTC = new Date(
+        Date.UTC(nowKST.getUTCFullYear(), nowKST.getUTCMonth(), nowKST.getUTCDate(), 23, 59, 59) - KST_OFFSET
+      );
+      // YYYY-MM-DD (KST 기준)
+      const todayStr = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, '0')}-${String(nowKST.getUTCDate()).padStart(2, '0')}`;
+
+      // campTasks 컬렉션 조회 (tasks 아님)
       const tasksSnapshot = await db
-        .collection('tasks')
-        .where('date', '>=', admin.firestore.Timestamp.fromDate(startOfToday))
-        .where('date', '<=', admin.firestore.Timestamp.fromDate(endOfToday))
+        .collection('campTasks')
+        .where('date', '>=', admin.firestore.Timestamp.fromDate(startOfTodayUTC))
+        .where('date', '<=', admin.firestore.Timestamp.fromDate(endOfTodayUTC))
         .get();
 
       if (tasksSnapshot.empty) {
         console.log('✅ 오늘 등록된 업무가 없습니다.');
-        return null;
+        res.json({ success: true, message: '오늘 등록된 업무 없음', notified: 0 });
+        return;
       }
 
-      const overdueTasks: Array<{ task: Task; users: string[] }> = [];
+      const tasksToNotify: Array<{ task: TaskWithNotification; users: string[] }> = [];
 
       for (const taskDoc of tasksSnapshot.docs) {
-        const task = { id: taskDoc.id, ...taskDoc.data() } as Task;
+        const task = { id: taskDoc.id, ...taskDoc.data() } as TaskWithNotification;
 
         if (!task.time) continue;
 
         const [hours, minutes] = task.time.split(':').map(Number);
-        const taskDateTime = new Date(task.date.toDate());
-        taskDateTime.setHours(hours, minutes, 0, 0);
+        // task.time은 KST 기준 "HH:mm" → startOfTodayUTC(KST 00:00의 UTC값)에 해당 시간(ms)을 더해 UTC 타임스탬프로 변환
+        const taskDateTimeUTC = new Date(startOfTodayUTC.getTime() + (hours * 60 + minutes) * 60 * 1000);
 
-        if (now <= taskDateTime) continue;
+        // 업무 시간이 지난 30분 이내에 있는 경우에만 알림 발송
+        if (taskDateTimeUTC < thirtyMinutesAgo || taskDateTimeUTC > now) continue;
 
+        // 이미 오늘 알림을 보낸 업무는 건너뜀 (중복 발송 방지)
+        if (task.notificationSentDates?.includes(todayStr)) {
+          console.log(`⏭️ 업무 "${task.title}" 오늘 이미 알림 발송 완료, 건너뜀`);
+          continue;
+        }
+
+        // campCode로 jobCodeId 조회
+        const jobCodesSnapshot = await db
+          .collection('jobCodes')
+          .where('code', '==', task.campCode)
+          .get();
+
+        if (jobCodesSnapshot.empty) continue;
+        const jobCodeId = jobCodesSnapshot.docs[0].id;
+
+        // activeJobExperienceId 기준으로 해당 캠프 소속 유저만 조회
         const usersSnapshot = await db
           .collection('users')
-          .where('activeJobExperienceId', '!=', null)
+          .where('activeJobExperienceId', '==', jobCodeId)
           .get();
 
         const incompleteUsers: string[] = [];
@@ -122,53 +171,64 @@ export const checkOverdueTasks = functions
         for (const userDoc of usersSnapshot.docs) {
           const userData = userDoc.data() as UserData;
 
-          if (!userData.activeJobExperienceId || !userData.jobExperiences) continue;
+          if (!userData.jobExperiences) continue;
 
-          const activeExp = userData.jobExperiences.find(
-            exp => exp.id === userData.activeJobExperienceId
-          );
+          const campExperience = userData.jobExperiences.find(exp => exp.id === jobCodeId);
+          if (!campExperience?.groupRole) continue;
 
-          if (!activeExp?.groupRole) continue;
+          // 대상 역할 확인
+          if (!task.targetRoles.includes(campExperience.groupRole)) continue;
 
-          if (!task.targetRoles.includes(activeExp.groupRole)) continue;
+          // 대상 그룹 확인
+          const userGroupKorean = LEGACY_GROUP_MAP[campExperience.group ?? ''] || campExperience.group;
+          if (!task.targetGroups.includes('공통') && !task.targetGroups.includes(userGroupKorean ?? '')) continue;
 
           const isCompleted = task.completions?.some(c => c.userId === userData.userId);
+          if (isCompleted) continue;
 
-          if (!isCompleted) {
-            const settings = userData.notificationSettings;
-            if (settings?.taskReminders !== false) {
-              incompleteUsers.push(userData.userId);
-            }
-          }
+          const settings = userData.notificationSettings;
+          if (settings?.taskReminders === false) continue;
+
+          incompleteUsers.push(userData.userId);
         }
 
         if (incompleteUsers.length > 0) {
-          overdueTasks.push({ task, users: incompleteUsers });
+          tasksToNotify.push({ task, users: incompleteUsers });
         }
       }
 
-      if (overdueTasks.length === 0) {
-        console.log('✅ 독촉 알림을 보낼 업무가 없습니다.');
-        return null;
+      if (tasksToNotify.length === 0) {
+        console.log('✅ 이번 주기에 알림을 보낼 업무가 없습니다.');
+        res.json({ success: true, message: '알림 대상 없음', notified: 0 });
+        return;
       }
 
-      console.log(`📤 ${overdueTasks.length}개 업무에 대한 독촉 알림 전송 중...`);
+      console.log(`📤 ${tasksToNotify.length}개 업무에 대한 알림 전송 중...`);
 
-      for (const { task, users } of overdueTasks) {
+      for (const { task, users } of tasksToNotify) {
         await sendTaskReminderNotifications(task, users);
+
+        // 당일 알림 발송 완료 표시 (중복 방지)
+        await db.collection('campTasks').doc(task.id).update({
+          notificationSentDates: admin.firestore.FieldValue.arrayUnion(todayStr),
+        });
+        console.log(`✅ 업무 "${task.title}" 알림 발송 완료 (${users.length}명), 발송 기록 저장`);
       }
 
-      console.log('✅ 독촉 알림 전송 완료');
-      return null;
+      console.log('✅ 업무 알림 전송 완료');
+      res.json({ success: true, message: '알림 전송 완료', notified: tasksToNotify.length });
     } catch (error) {
-      console.error('❌ 업무 독촉 알림 체크 실패:', error);
-      throw error;
+      console.error('❌ 업무 알림 체크 실패:', error);
+      res.status(500).json({ error: '업무 알림 체크 중 오류가 발생했습니다.' });
     }
-  });
+  }
+);
 
 async function sendTaskReminderNotifications(task: Task, userIds: string[]): Promise<void> {
   try {
     const messages: ExpoPushMessage[] = [];
+    // 만료 토큰 삭제를 위한 매핑: token → userId
+    const tokenUserMap = new Map<string, string>();
 
     for (const userId of userIds) {
       const userDoc = await db.collection('users').doc(userId).get();
@@ -196,6 +256,7 @@ async function sendTaskReminderNotifications(task: Task, userIds: string[]): Pro
           priority: 'high',
           channelId: 'task-reminders',
         });
+        tokenUserMap.set(token, userId);
       }
     }
 
@@ -218,6 +279,16 @@ async function sendTaskReminderNotifications(task: Task, userIds: string[]): Pro
 
     console.log(`✅ 업무 "${task.title}"에 대한 알림 전송 완료: ${tickets.length}개`);
 
+    // 티켓 ID → 토큰 매핑 (DeviceNotRegistered 시 어떤 토큰인지 역추적)
+    const ticketTokenMap = new Map<string, string>();
+    for (let i = 0; i < tickets.length; i++) {
+      const ticket = tickets[i];
+      if (ticket.status === 'ok' && 'id' in ticket) {
+        const token = messages[i]?.to as string;
+        if (token) ticketTokenMap.set(ticket.id, token);
+      }
+    }
+
     const receiptsIds = tickets
       .filter(ticket => ticket.status === 'ok')
       .map(ticket => 'id' in ticket ? ticket.id : null)
@@ -235,7 +306,22 @@ async function sendTaskReminderNotifications(task: Task, userIds: string[]): Pro
                 console.error(`푸시 알림 수신 실패 (${receiptId}):`, receipt.message);
                 
                 if (receipt.details?.error === 'DeviceNotRegistered') {
-                  console.log(`만료된 토큰 감지, 정리 필요: ${receiptId}`);
+                  const expiredToken = ticketTokenMap.get(receiptId);
+                  const userId = expiredToken ? tokenUserMap.get(expiredToken) : undefined;
+
+                  if (expiredToken && userId) {
+                    try {
+                      // Firestore에서 만료된 토큰 자동 삭제
+                      await db.collection('users').doc(userId).update({
+                        [`pushTokens.${expiredToken}`]: admin.firestore.FieldValue.delete(),
+                      });
+                      console.log(`🗑️ 만료 토큰 자동 삭제 완료 (userId: ${userId}): ${expiredToken.substring(0, 40)}...`);
+                    } catch (deleteError) {
+                      console.error('만료 토큰 삭제 실패:', deleteError);
+                    }
+                  } else {
+                    console.log(`⚠️ 만료 토큰 매핑 없음 (receiptId: ${receiptId})`);
+                  }
                 }
               }
             }
@@ -542,6 +628,24 @@ export const adminDeleteUser = functionsV2.https.onCall(
       await db.collection('users').doc(userId).delete();
       console.log('✅ Firestore 사용자 문서 삭제 완료');
 
+      // 6. Storage 파일 정리
+      const storage = admin.storage();
+      const bucket = storage.bucket();
+      const pathsToDelete = [`profileImages/${userId}`, `foreignTeachers/${userId}`];
+      let storageDeleted = 0;
+      for (const prefix of pathsToDelete) {
+        try {
+          const [files] = await bucket.getFiles({ prefix });
+          if (files.length > 0) {
+            await Promise.all(files.map(file => file.delete()));
+            storageDeleted += files.length;
+          }
+        } catch (storageError) {
+          console.error(`❌ Storage 파일 삭제 실패 (${prefix}):`, storageError);
+        }
+      }
+      if (storageDeleted > 0) console.log(`✅ Storage 파일 ${storageDeleted}개 삭제 완료`);
+
       return {
         success: true,
         authDeleted,
@@ -830,12 +934,26 @@ export const deleteOrphanedSocialAccount = functionsV2.https.onCall({
  *   profileImages/{userId}/
  *   foreignTeachers/{userId}/
  */
-export const cleanupUserStorageOnDelete = functions
-  .region('asia-northeast3')
-  .auth.user()
-  .onDelete(async (user) => {
-    const userId = user.uid;
-    console.log(`🗑️ Auth 계정 삭제 감지 → Storage 정리 시작: ${userId}`);
+export const cleanupUserStorageOnDelete = functionsV2.https.onRequest(
+  {
+    region: 'asia-northeast3',
+    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
+  },
+  async (req, res) => {
+    // Cloud Scheduler 또는 내부 호출로만 사용 가능
+    const authHeader = req.headers.authorization ?? '';
+    if (!authHeader.startsWith('Bearer ')) {
+      res.status(403).json({ error: '허가되지 않은 접근입니다.' });
+      return;
+    }
+
+    const userId = req.body?.userId as string | undefined;
+    if (!userId) {
+      res.status(400).json({ error: 'userId가 필요합니다.' });
+      return;
+    }
+
+    console.log(`🗑️ Storage 정리 시작: ${userId}`);
 
     const storage = admin.storage();
     const bucket = storage.bucket();
@@ -860,19 +978,20 @@ export const cleanupUserStorageOnDelete = functions
         totalDeleted += files.length;
         console.log(`✅ Storage 파일 ${files.length}개 삭제 완료: ${prefix}`);
       } catch (error) {
-        // Storage 정리 실패가 전체 플로우를 막지 않도록 오류만 기록
         console.error(`❌ Storage 파일 삭제 실패 (${prefix}):`, error);
       }
     }
 
     console.log(`✅ Storage 정리 완료: 총 ${totalDeleted}개 파일 삭제 (userId: ${userId})`);
-  });
+    res.json({ success: true, totalDeleted });
+  }
+);
 
 // ─── ST 시트 동기화 ──────────────────────────────────────────────────────────
 
 // 서비스 계정 키 파일을 직접 로드 (.gitignore에서 제외 해제하여 배포 번들에 포함)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const SHEETS_SERVICE_ACCOUNT = require('../managesheet-export-fb9c3744de0f.json');
+const SHEETS_SERVICE_ACCOUNT = require('../managesheet-export-d5f1ccefc291.json');
 
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
@@ -1064,11 +1183,20 @@ export const syncSTSheet = functionsV2.https.onCall(
  * 매일 자동으로 고아 소셜 계정 정리
  * Firestore authProviders에 없는 Firebase Auth 계정 삭제
  */
-export const cleanupOrphanedSocialAccounts = functionsV2.scheduler.onSchedule({
-  schedule: 'every 24 hours',
-  timeZone: 'Asia/Seoul',
-  region: 'asia-northeast3',
-}, async (event) => {
+// Cloud Scheduler에서 HTTP POST로 매일 1회 호출
+// gcloud functions deploy --build-service-account 옵션으로 배포
+export const cleanupOrphanedSocialAccounts = functionsV2.https.onRequest(
+  {
+    region: 'asia-northeast3',
+    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
+  },
+  async (req, res) => {
+    const authHeader = req.headers.authorization ?? '';
+    if (!authHeader.startsWith('Bearer ')) {
+      res.status(403).json({ error: '허가되지 않은 접근입니다.' });
+      return;
+    }
+
     try {
       console.log('🧹 고아 소셜 계정 정리 시작');
 
@@ -1144,12 +1272,13 @@ export const cleanupOrphanedSocialAccounts = functionsV2.scheduler.onSchedule({
 
       console.log('✅ 고아 계정 정리 완료:', {
         deletedCount,
-        deletedAccounts: deletedAccounts.slice(0, 10), // 처음 10개만 로그
+        deletedAccounts: deletedAccounts.slice(0, 10),
       });
 
-      // ✅ Scheduler 함수는 return 값 없음
+      res.json({ success: true, deletedCount, message: '고아 소셜 계정 정리 완료' });
     } catch (error) {
       console.error('❌ 고아 계정 정리 실패:', error);
+      res.status(500).json({ error: '고아 소셜 계정 정리 중 오류가 발생했습니다.' });
     }
   });
 

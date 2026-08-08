@@ -263,7 +263,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
               </div>
             ) : (
               <div className="bg-white md:rounded-lg md:shadow-sm">
-                <CampPageViewer content={item.content || '<p>내용이 없습니다.</p>'} />
+                <CampPageViewer content={item.content || '<p>내용이 없습니다.</p>'} pageKey={itemId} />
               </div>
             )}
           </>

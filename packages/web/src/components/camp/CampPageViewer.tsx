@@ -2,12 +2,34 @@
 
 import { useEffect, useRef } from 'react';
 
+const TOGGLE_STORAGE_PREFIX = 'smis_toggle_';
+
 interface CampPageViewerProps {
   content: string;
+  pageKey?: string;
 }
 
-export default function CampPageViewer({ content }: CampPageViewerProps) {
+export default function CampPageViewer({ content, pageKey }: CampPageViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // 토글 상태 저장
+  const saveToggleState = (key: string, state: Record<string, boolean>) => {
+    try {
+      localStorage.setItem(`${TOGGLE_STORAGE_PREFIX}${key}`, JSON.stringify(state));
+    } catch {
+      // localStorage 사용 불가 시 무시
+    }
+  };
+
+  // 토글 상태 로드 (없으면 null 반환)
+  const loadToggleState = (key: string): Record<string, boolean> | null => {
+    try {
+      const raw = localStorage.getItem(`${TOGGLE_STORAGE_PREFIX}${key}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
 
   // 테이블 컨트롤 제거 함수
   const removeTableControls = (html: string): string => {
@@ -18,6 +40,10 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    // localStorage 키: pageKey가 있으면 사용, 없으면 pathname 기반
+    const storageKey = pageKey || window.location.pathname;
+    const savedState = loadToggleState(storageKey);
 
     // 링크를 새 탭에서 열기
     const links = containerRef.current.querySelectorAll('a');
@@ -56,9 +82,36 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
       }
     });
 
+    // Tiptap <details> 토글 처리
+    const detailsElements = containerRef.current.querySelectorAll('details');
+    detailsElements.forEach((detail, index) => {
+      const stateKey = `d_${index}`;
+
+      // 기록이 있으면 복원, 없으면 항상 닫힘
+      if (savedState && stateKey in savedState) {
+        if (savedState[stateKey]) {
+          detail.setAttribute('open', '');
+        } else {
+          detail.removeAttribute('open');
+        }
+      } else {
+        detail.removeAttribute('open');
+      }
+
+      // toggle 이벤트로 상태 저장
+      if (detail.getAttribute('data-toggle-bound') === 'true') return;
+      detail.setAttribute('data-toggle-bound', 'true');
+
+      detail.addEventListener('toggle', () => {
+        const current = loadToggleState(storageKey) ?? {};
+        current[stateKey] = detail.open;
+        saveToggleState(storageKey, current);
+      });
+    });
+
     // 레거시 toggle-block 클릭 이벤트 (기존 저장 데이터 호환)
     const toggleHeaders = containerRef.current.querySelectorAll('.toggle-header');
-    toggleHeaders.forEach((header) => {
+    toggleHeaders.forEach((header, index) => {
       // data 속성으로 중복 등록 방지
       if (header.getAttribute('data-toggle-bound') === 'true') return;
       header.setAttribute('data-toggle-bound', 'true');
@@ -66,21 +119,36 @@ export default function CampPageViewer({ content }: CampPageViewerProps) {
       const toggleBlock = header.parentElement;
       if (!toggleBlock) return;
 
+      const stateKey = `t_${index}`;
+
+      // 기록이 있으면 복원, 없으면 항상 닫힘
+      const initialOpen = savedState && stateKey in savedState ? savedState[stateKey] : false;
+      toggleBlock.setAttribute('data-collapsed', initialOpen ? 'false' : 'true');
+      const toggleContent = toggleBlock.querySelector('.toggle-content');
+      if (toggleContent instanceof HTMLElement) {
+        toggleContent.style.display = initialOpen ? 'block' : 'none';
+      }
+
       header.addEventListener('click', () => {
-        const toggleContent = toggleBlock.querySelector('.toggle-content');
+        const toggleContentEl = toggleBlock.querySelector('.toggle-content');
         const isCollapsed = toggleBlock.getAttribute('data-collapsed') === 'true';
 
         if (isCollapsed) {
           toggleBlock.setAttribute('data-collapsed', 'false');
-          if (toggleContent instanceof HTMLElement) {
-            toggleContent.style.display = 'block';
+          if (toggleContentEl instanceof HTMLElement) {
+            toggleContentEl.style.display = 'block';
           }
         } else {
           toggleBlock.setAttribute('data-collapsed', 'true');
-          if (toggleContent instanceof HTMLElement) {
-            toggleContent.style.display = 'none';
+          if (toggleContentEl instanceof HTMLElement) {
+            toggleContentEl.style.display = 'none';
           }
         }
+
+        // 상태 저장
+        const current = loadToggleState(storageKey) ?? {};
+        current[stateKey] = toggleBlock.getAttribute('data-collapsed') === 'false';
+        saveToggleState(storageKey, current);
       });
     });
   }, [content]);

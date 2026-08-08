@@ -76,6 +76,7 @@
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-task-manager": "~14.0.9",
+    "expo-updates": "~29.0.19",
     "expo-web-browser": "~15.0.10",
     "firebase": "^11.5.0",
     "korean-holidays": "^1.0.0",

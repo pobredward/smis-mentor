@@ -20,7 +20,7 @@ import { jobCodesService } from '../services';
 import { User, AuthContextType } from '../types';
 import { ensureActiveJobExperience } from '@smis-mentor/shared';
 import {
-  registerPushTokenIfPermitted,
+  registerForPushNotificationsAsync,
   savePushToken,
   addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
@@ -224,12 +224,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     initGoogleSDK();
   }, []);
 
-  // 이미 알림 권한이 허용된 경우에만 푸시 토큰 갱신
-  // Google Play 정책: 로그인 시 자동으로 requestPermissionsAsync()를 호출하지 않음
-  // 권한 요청은 사용자가 알림 배너/설정에서 명시적으로 탭할 때만 수행
+  // 로그인 후 푸시 토큰 등록 (권한이 없으면 Android에서 권한 요청 포함)
   useEffect(() => {
     if (userData?.userId) {
-      registerPushTokenIfPermitted()
+      registerForPushNotificationsAsync()
         .then(token => {
           if (token) {
             savePushToken(userData.userId, token).catch(error => {
@@ -254,14 +252,31 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const data = response.notification.request.content.data;
       
       if (data?.type === 'task-reminder') {
-        // Camp 탭으로 이동 후 업무 탭 전환
-        try {
-          navigationRef.navigate('MainTabs' as any, { screen: 'Camp' } as any);
-        } catch (e) {
-          logger.warn('Camp 탭 네비게이션 실패:', e);
+        const taskId = data?.taskId as string | undefined;
+        const taskDate = data?.taskDate as string | undefined;
+
+        if (taskId) {
+          // taskId가 있으면 TaskDetail 화면으로 직접 이동
+          setTimeout(() => {
+            try {
+              navigationRef.navigate('TaskDetail', { taskId, taskDate });
+            } catch (e) {
+              logger.warn('TaskDetail 네비게이션 실패, 업무 탭으로 대체 이동:', e);
+              try {
+                navigationRef.navigate('MainTabs' as any, { screen: 'Camp' } as any);
+              } catch {}
+              setTimeout(() => navigateToTasksTab(), 300);
+            }
+          }, 300);
+        } else {
+          // taskId 없으면 Camp 탭 → 업무 탭으로 이동
+          try {
+            navigationRef.navigate('MainTabs' as any, { screen: 'Camp' } as any);
+          } catch (e) {
+            logger.warn('Camp 탭 네비게이션 실패:', e);
+          }
+          setTimeout(() => navigateToTasksTab(), 300);
         }
-        // 약간의 딜레이 후 업무 탭 전환 (화면 마운트 대기)
-        setTimeout(() => navigateToTasksTab(), 300);
       }
     });
 

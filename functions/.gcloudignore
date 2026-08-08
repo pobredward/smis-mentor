@@ -17,3 +17,5 @@ node_modules
 #!include:.gitignore
 # lib/ 폴더는 배포에 필요하므로 제외하지 않음
 !lib/
+# 함수 런타임에 필요한 서비스 계정 파일은 배포에 포함
+!managesheet-export-*.json
