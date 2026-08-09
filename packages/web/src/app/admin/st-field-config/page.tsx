@@ -15,6 +15,7 @@ const CAMP_TYPES: { type: CampType; label: string; description: string }[] = [
   { type: 'S',  label: 'S 캠프',  description: 'S캠프 (여권·단체티 있음)'       },
   { type: 'DG', label: 'DG 캠프', description: 'D·G·K캠프 (레벨 테스트 없음)' },
   { type: 'F',  label: 'F 캠프',  description: 'F캠프 (가족형)'                 },
+  { type: 'W',  label: 'W 캠프',  description: 'W캠프 (설문 포함)'               },
 ];
 
 export default function StFieldConfigPage() {

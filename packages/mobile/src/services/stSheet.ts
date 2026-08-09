@@ -34,8 +34,8 @@ export interface SyncSTSheetResponse {
 
 // 임시 데이터 생성 함수
 const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
-  const campPrefix = campCode.charAt(0); // 'E', 'J', 'S' 추출
-  const campType = campPrefix === 'S' ? 'S' : 'EJ';
+  // CAMP_SHEET_CONFIG에서 실제 campType을 읽어 임시 데이터 생성에 활용
+  const campType: CampType = (CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG]?.type as CampType) ?? 'EJ';
   
   // 학생 이름 풀 (성별 구분 명확하게)
   const maleNames = [

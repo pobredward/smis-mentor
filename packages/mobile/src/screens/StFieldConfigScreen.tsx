@@ -32,6 +32,7 @@ const CAMP_TYPES: { type: CampType; label: string }[] = [
   { type: 'S',  label: 'S'  },
   { type: 'DG', label: 'DG' },
   { type: 'F',  label: 'F'  },
+  { type: 'W',  label: 'W'  },
 ];
 
 const PERMISSION_LABELS: Record<FieldPermission, string> = {

@@ -20,13 +20,20 @@ export interface FieldItemConfig {
 }
 
 /**
+ * 고정 섹션 ID — 하드코딩 없이 fieldConfig로 관리
+ */
+export type FixedSectionId = 'campInfo' | 'basicInfo' | 'guardianInfo';
+
+/**
  * 학생 상세 화면의 한 섹션(예: '상담', '레벨 테스트')
+ * isFixed: true인 섹션은 순서/레이블 변경 불가, 필드별 표시/편집 권한만 변경 가능
  */
 export interface FieldSectionConfig {
   id: string;
   label: string;
   order: number;
   isVisible: boolean;
+  isFixed?: boolean;
   fields: FieldItemConfig[];
 }
 

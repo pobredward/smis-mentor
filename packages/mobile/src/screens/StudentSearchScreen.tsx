@@ -58,6 +58,7 @@ function campTypeBadgeColor(campCode: string): { bg: string; text: string } {
     case 'G':
     case 'K':  return { bg: '#ffedd5', text: '#c2410c' };
     case 'F':  return { bg: '#fce7f3', text: '#be185d' };
+    case 'W':  return { bg: '#ede9fe', text: '#6d28d9' };
     default:   return { bg: '#f3f4f6', text: '#374151' };
   }
 }

@@ -9,6 +9,31 @@ const COLLECTION = 'stSheetFieldConfig';
  * Firestore에 설정이 없을 때 폴백으로 사용 (기존 16개 FIELD_CONFIGS와 동일)
  */
 export function getDefaultFieldConfig(campType: CampType): STSheetFieldConfig {
+  // ── 고정 섹션: 캠프 정보 ─────────────────────────────────
+  const campInfoFields: FieldItemConfig[] = [
+    { sheetHeader: '고유번호',  fieldKey: 'studentId',   label: '고유번호',  isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 0, isVisible: true },
+    { sheetHeader: '반 정보',   fieldKey: 'classInfo',   label: '반 정보',   isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 1, isVisible: true },
+    { sheetHeader: '유닛 정보', fieldKey: 'unitInfo',    label: '유닛 정보', isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 2, isVisible: true },
+  ];
+
+  // ── 고정 섹션: 기본 정보 ─────────────────────────────────
+  const basicInfoFields: FieldItemConfig[] = [
+    { sheetHeader: '신상',           fieldKey: 'profile',        label: '신상',           isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 0, isVisible: true },
+    { sheetHeader: '주민등록번호',   fieldKey: 'ssn',            label: '주민등록번호',   isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 1, isVisible: true },
+    { sheetHeader: '도로명 주소',    fieldKey: 'address',        label: '도로명 주소',    isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 2, isVisible: true },
+    { sheetHeader: '세부 주소',      fieldKey: 'addressDetail',  label: '세부 주소',      isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 3, isVisible: true },
+    { sheetHeader: '입퇴소공항',     fieldKey: 'airport',        label: '입퇴소공항',     isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 4, isVisible: campType === 'EJ' },
+    { sheetHeader: '여권정보',       fieldKey: 'passport',       label: '여권정보',       isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 5, isVisible: campType === 'S' },
+    { sheetHeader: '단체티 사이즈',  fieldKey: 'shirtSize',      label: '단체티 사이즈',  isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 6, isVisible: campType === 'S' },
+  ];
+
+  // ── 고정 섹션: 보호자 정보 ────────────────────────────────
+  const guardianInfoFields: FieldItemConfig[] = [
+    { sheetHeader: '대표 보호자', fieldKey: 'primaryGuardian', label: '대표 보호자', isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 0, isVisible: true },
+    { sheetHeader: '대표 이메일', fieldKey: 'email',           label: '대표 이메일', isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 1, isVisible: true },
+    { sheetHeader: '기타 보호자', fieldKey: 'otherGuardian',   label: '기타 보호자', isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 2, isVisible: true },
+  ];
+
   const detailFields: FieldItemConfig[] = [
     { sheetHeader: '복용약 & 알레르기', fieldKey: 'medication',  label: '복용약 & 알레르기', isLegacy: true, permission: 'mentor', isEditable: true,  fieldType: 'text', order: 0, isVisible: true },
     { sheetHeader: '특이사항',           fieldKey: 'notes',       label: '특이사항',           isLegacy: true, permission: 'mentor', isEditable: true,  fieldType: 'text', order: 1, isVisible: true },
@@ -68,12 +93,27 @@ export function getDefaultFieldConfig(campType: CampType): STSheetFieldConfig {
   ];
 
   const sections: FieldSectionConfig[] = [
-    { id: 'detail', label: '상세 정보', order: 0, isVisible: true, fields: detailFields },
+    { id: 'campInfo',     label: '캠프 정보',   order: 0, isVisible: true, isFixed: true, fields: campInfoFields },
+    { id: 'basicInfo',   label: '기본 정보',   order: 1, isVisible: true, isFixed: true, fields: basicInfoFields },
+    { id: 'guardianInfo', label: '보호자 정보', order: 2, isVisible: true, isFixed: true, fields: guardianInfoFields },
   ];
+
+  // W 캠프: 고정 섹션(캠프/기본/보호자 정보)만 기본 제공.
+  // 상세 정보, 상담, 설문조사 등 나머지 섹션은 관리자가 미배치 헤더에서 직접 추가.
+  if (campType === 'W') {
+    return {
+      campType,
+      sections,
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'system',
+    };
+  }
+
+  sections.push({ id: 'detail', label: '상세 정보', order: sections.length, isVisible: true, fields: detailFields });
 
   // DG·F 캠프는 레벨 테스트 없음
   if (campType !== 'DG' && campType !== 'F') {
-    sections.push({ id: 'placement', label: '레벨 테스트', order: 1, isVisible: true, fields: placementFields });
+    sections.push({ id: 'placement', label: '레벨 테스트', order: sections.length, isVisible: true, fields: placementFields });
   }
 
   // F 캠프는 상담 섹션 없음 (FamilyContent 별도 처리)
@@ -94,15 +134,39 @@ export function getDefaultFieldConfig(campType: CampType): STSheetFieldConfig {
   };
 }
 
+const FIXED_SECTION_IDS = ['campInfo', 'basicInfo', 'guardianInfo'] as const;
+type FixedId = typeof FIXED_SECTION_IDS[number];
+
+/**
+ * Firestore에 저장된 기존 config에 고정 섹션이 빠져 있으면 기본값에서 보충합니다.
+ */
+function mergeFixedSections(stored: STSheetFieldConfig, campType: CampType): STSheetFieldConfig {
+  const defaults = getDefaultFieldConfig(campType);
+  const storedIds = new Set(stored.sections.map(s => s.id));
+  const missingSections = defaults.sections.filter(
+    s => (FIXED_SECTION_IDS as readonly string[]).includes(s.id) && !storedIds.has(s.id)
+  );
+  if (missingSections.length === 0) return stored;
+
+  const fixedSections = stored.sections.filter(s => (FIXED_SECTION_IDS as readonly string[]).includes(s.id));
+  const dynamicSections = stored.sections.filter(s => !(FIXED_SECTION_IDS as readonly string[]).includes(s.id));
+  const allFixed = [...fixedSections, ...missingSections].sort((a, b) => {
+    return FIXED_SECTION_IDS.indexOf(a.id as FixedId) - FIXED_SECTION_IDS.indexOf(b.id as FixedId);
+  });
+  const merged = [...allFixed, ...dynamicSections].map((s, i) => ({ ...s, order: i }));
+  return { ...stored, sections: merged };
+}
+
 /**
  * Firestore에서 캠프 타입별 필드 설정을 가져옴.
  * 설정이 없으면 getDefaultFieldConfig로 폴백.
+ * 기존 저장 데이터에 고정 섹션이 빠진 경우 자동 보충.
  */
 export async function getFieldConfig(db: Firestore, campType: CampType): Promise<STSheetFieldConfig> {
   try {
     const snap = await getDoc(doc(db, COLLECTION, campType));
     if (snap.exists()) {
-      return snap.data() as STSheetFieldConfig;
+      return mergeFixedSections(snap.data() as STSheetFieldConfig, campType);
     }
   } catch {
     // 네트워크 오류 등 → 기본값 반환
@@ -139,4 +203,94 @@ export function getFieldValue(
  */
 export function toDisplayFieldKey(sheetHeader: string): string {
   return sheetHeader;
+}
+
+/**
+ * 고정 섹션의 fieldKey에 따라 학생 데이터를 표시 문자열로 변환.
+ * classInfo, unitInfo, profile 등 복합 필드를 하나의 문자열로 조합한다.
+ *
+ * @param student - ST시트 학생 데이터
+ * @param fieldKey - 고정 필드 키 (isLegacy: true 필드만 해당)
+ * @param campType - 캠프 타입 (EJ, S, DG, F)
+ * @param options.isAdmin - 관리자 여부 (주민번호 마스킹에 사용)
+ * @param options.groupRole - 그룹 역할 (매니저 여부 판단)
+ * @param options.isForeign - 원어민 여부 (웹 전용, 영문 표기 전환)
+ */
+export function getFixedFieldValue(
+  student: STSheetStudent,
+  fieldKey: string,
+  campType: CampType,
+  options: {
+    isAdmin?: boolean;
+    groupRole?: string;
+    isForeign?: boolean;
+  } = {},
+): string | null {
+  const { isAdmin = false, groupRole, isForeign = false } = options;
+
+  // 주민번호 마스킹 (인라인)
+  const maskSSN = (ssn: string): string => {
+    const isManagerRole = groupRole === '매니저' || groupRole === '부매니저';
+    if (isAdmin || isManagerRole) return ssn;
+    const parts = ssn.split('-');
+    if (parts.length !== 2) return ssn;
+    const front = parts[0];
+    const back = parts[1];
+    if (back.length === 0) return ssn;
+    return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
+  };
+
+  switch (fieldKey) {
+    case 'studentId':
+      return student.studentId || null;
+    case 'classInfo': {
+      if (!student.classNumber && !student.className && !student.classMentor) return null;
+      const mentorLabel = isForeign ? 'mentor' : '멘토';
+      const classSuffix = isForeign ? ' class' : '반';
+      return `${student.classNumber || '-'} | ${student.className || '-'}${classSuffix} | ${student.classMentor || '-'} ${mentorLabel}`;
+    }
+    case 'unitInfo': {
+      if (!student.unit && !student.unitMentor && !student.roomNumber) return null;
+      const unitSuffix = isForeign ? ' unit' : '유닛';
+      const roomSuffix = isForeign ? '' : '호';
+      const roomPrefix = isForeign ? 'Room ' : '';
+      return `${student.unit || student.unitMentor || '-'}${unitSuffix} | ${roomPrefix}${student.roomNumber || '-'}${roomSuffix}`;
+    }
+    case 'profile': {
+      const genderLabel = student.gender === 'M' ? (isForeign ? 'M' : '남') : (isForeign ? 'F' : '여');
+      return `${student.name} | ${student.englishName || '-'} | ${student.grade} | ${genderLabel}`;
+    }
+    case 'ssn':
+      return student.ssn ? maskSSN(student.ssn) : null;
+    case 'address':
+      return student.address || null;
+    case 'addressDetail':
+      return student.addressDetail || null;
+    case 'airport': {
+      if (campType !== 'EJ') return null;
+      if (!student.departureRoute && !student.arrivalRoute) return null;
+      return isForeign
+        ? `Arrival: ${student.departureRoute || '-'} | Departure: ${student.arrivalRoute || '-'}`
+        : `${student.departureRoute || '-'} 입소 | ${student.arrivalRoute || '-'} 퇴소`;
+    }
+    case 'passport': {
+      if (campType !== 'S') return null;
+      if (!student.passportName && !student.passportNumber && !student.passportExpiry) return null;
+      return `${student.passportName || '-'} | ${student.passportNumber || '-'} | ${student.passportExpiry || '-'}`;
+    }
+    case 'shirtSize':
+      return campType === 'S' ? (student.shirtSize || null) : null;
+    case 'primaryGuardian': {
+      if (!student.parentPhone && !student.parentName) return null;
+      return `${student.parentPhone || '-'} | ${student.parentName || '-'}`;
+    }
+    case 'email':
+      return student.email || null;
+    case 'otherGuardian': {
+      if (!student.otherPhone && !student.otherName) return null;
+      return `${student.otherPhone || '-'} | ${student.otherName || '-'}`;
+    }
+    default:
+      return null;
+  }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type {
   STSheetFieldConfig,
   FieldSectionConfig,
@@ -26,17 +26,23 @@ function generateSectionId(): string {
   return `section_${Date.now()}`;
 }
 
+function sortedSections(sections: FieldSectionConfig[]): FieldSectionConfig[] {
+  return [...sections]
+    .sort((a, b) => a.order - b.order)
+    .map(s => ({
+      ...s,
+      fields: [...s.fields].sort((a, b) => a.order - b.order),
+    }));
+}
+
 export default function StFieldConfigEditor({ config, availableHeaders, onSave, isSaving }: Props) {
-  const [sections, setSections] = useState<FieldSectionConfig[]>(
-    [...config.sections]
-      .sort((a, b) => a.order - b.order)
-      .map(s => ({
-        ...s,
-        // fields도 order 기준으로 정렬 (ClassContent의 렌더링 순서와 일치시킴)
-        fields: [...s.fields].sort((a, b) => a.order - b.order),
-      })),
-  );
+  const [sections, setSections] = useState<FieldSectionConfig[]>(() => sortedSections(config.sections));
   const [newSectionLabel, setNewSectionLabel] = useState('');
+
+  // config prop이 외부에서 변경될 때(캠프 타입 탭 전환, 저장 후 리로드 등) sections state를 동기화
+  useEffect(() => {
+    setSections(sortedSections(config.sections));
+  }, [config]);
 
   // 섹션에 이미 등록된 헤더 집합
   const registeredHeaders = new Set(
@@ -212,69 +218,93 @@ export default function StFieldConfigEditor({ config, availableHeaders, onSave, 
       </div>
 
       {/* 섹션 목록 */}
-      {sections.map((section, sIdx) => (
-        <div key={section.id} className="border border-gray-200 rounded-lg overflow-hidden">
-          {/* 섹션 헤더 */}
-          <div className="flex items-center gap-2 bg-white px-4 py-3 border-b border-gray-100">
-            <div className="flex flex-col gap-0.5 mr-1">
-              <button
-                onClick={() => handleMoveSectionUp(sIdx)}
-                disabled={sIdx === 0}
-                className="text-gray-400 hover:text-gray-600 disabled:opacity-20 leading-none"
-              >
-                ▲
-              </button>
-              <button
-                onClick={() => handleMoveSectionDown(sIdx)}
-                disabled={sIdx === sections.length - 1}
-                className="text-gray-400 hover:text-gray-600 disabled:opacity-20 leading-none"
-              >
-                ▼
-              </button>
-            </div>
-            <input
-              value={section.label}
-              onChange={(e) => handleSectionLabelChange(section.id, e.target.value)}
-              className="flex-1 text-sm font-semibold text-gray-800 border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1"
-            />
-            <button
-              onClick={() => handleToggleSectionVisible(section.id)}
-              className={`text-xs px-2 py-0.5 rounded ${
-                section.isVisible
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-gray-100 text-gray-500'
-              }`}
-            >
-              {section.isVisible ? '표시' : '숨김'}
-            </button>
-            <button
-              onClick={() => handleDeleteSection(section.id)}
-              className="text-xs text-red-500 hover:text-red-700 px-2 py-0.5 rounded hover:bg-red-50"
-            >
-              섹션 삭제
-            </button>
-          </div>
+      {sections.map((section, sIdx) => {
+        const isFixed = !!section.isFixed;
+        // 고정 섹션이 아닌 섹션의 실제 인덱스 (순서 이동 버튼 활성화 계산용)
+        const dynamicSections = sections.filter(s => !s.isFixed);
+        const dynamicIdx = isFixed ? -1 : dynamicSections.findIndex(s => s.id === section.id);
 
-          {/* 필드 목록 */}
-          <div className="divide-y divide-gray-50 bg-white">
-            {section.fields.length === 0 && (
-              <p className="text-xs text-gray-400 px-4 py-3">필드 없음 — 위 패널에서 헤더를 추가하세요.</p>
-            )}
-            {section.fields.map((field, fIdx) => (
-              <FieldRow
-                key={field.sheetHeader}
-                field={field}
-                idx={fIdx}
-                totalFields={section.fields.length}
-                onMoveUp={() => handleMoveFieldUp(section.id, fIdx)}
-                onMoveDown={() => handleMoveFieldDown(section.id, fIdx)}
-                onChange={(patch) => handleFieldChange(section.id, field.sheetHeader, patch)}
-                onDelete={() => handleDeleteField(section.id, field.sheetHeader)}
-              />
-            ))}
+        return (
+          <div key={section.id} className={`border rounded-lg overflow-hidden ${isFixed ? 'border-indigo-100' : 'border-gray-200'}`}>
+            {/* 섹션 헤더 */}
+            <div className={`flex items-center gap-2 px-4 py-3 border-b ${isFixed ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-gray-100'}`}>
+              {/* 고정 섹션은 순서 변경 불가 */}
+              {isFixed ? (
+                <span className="text-xs px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded shrink-0 mr-1">고정</span>
+              ) : (
+                <div className="flex flex-col gap-0.5 mr-1">
+                  <button
+                    onClick={() => handleMoveSectionUp(sIdx)}
+                    disabled={dynamicIdx === 0}
+                    className="text-gray-400 hover:text-gray-600 disabled:opacity-20 leading-none"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    onClick={() => handleMoveSectionDown(sIdx)}
+                    disabled={dynamicIdx === dynamicSections.length - 1}
+                    className="text-gray-400 hover:text-gray-600 disabled:opacity-20 leading-none"
+                  >
+                    ▼
+                  </button>
+                </div>
+              )}
+
+              {/* 고정 섹션은 이름 변경 불가 */}
+              {isFixed ? (
+                <span className="flex-1 text-sm font-semibold text-indigo-800">{section.label}</span>
+              ) : (
+                <input
+                  value={section.label}
+                  onChange={(e) => handleSectionLabelChange(section.id, e.target.value)}
+                  className="flex-1 text-sm font-semibold text-gray-800 border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1"
+                />
+              )}
+
+              <button
+                onClick={() => handleToggleSectionVisible(section.id)}
+                className={`text-xs px-2 py-0.5 rounded ${
+                  section.isVisible
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {section.isVisible ? '표시' : '숨김'}
+              </button>
+
+              {/* 고정 섹션은 삭제 불가 */}
+              {!isFixed && (
+                <button
+                  onClick={() => handleDeleteSection(section.id)}
+                  className="text-xs text-red-500 hover:text-red-700 px-2 py-0.5 rounded hover:bg-red-50"
+                >
+                  섹션 삭제
+                </button>
+              )}
+            </div>
+
+            {/* 필드 목록 */}
+            <div className="divide-y divide-gray-50 bg-white">
+              {section.fields.length === 0 && (
+                <p className="text-xs text-gray-400 px-4 py-3">필드 없음 — 위 패널에서 헤더를 추가하세요.</p>
+              )}
+              {section.fields.map((field, fIdx) => (
+                <FieldRow
+                  key={field.sheetHeader}
+                  field={field}
+                  idx={fIdx}
+                  totalFields={section.fields.length}
+                  isFixedSection={isFixed}
+                  onMoveUp={() => handleMoveFieldUp(section.id, fIdx)}
+                  onMoveDown={() => handleMoveFieldDown(section.id, fIdx)}
+                  onChange={(patch) => handleFieldChange(section.id, field.sheetHeader, patch)}
+                  onDelete={() => handleDeleteField(section.id, field.sheetHeader)}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* 섹션 추가 */}
       <div className="flex gap-2">
@@ -359,6 +389,7 @@ function FieldRow({
   field,
   idx,
   totalFields,
+  isFixedSection,
   onMoveUp,
   onMoveDown,
   onChange,
@@ -367,6 +398,7 @@ function FieldRow({
   field: FieldItemConfig;
   idx: number;
   totalFields: number;
+  isFixedSection: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onChange: (patch: Partial<FieldItemConfig>) => void;
@@ -374,10 +406,10 @@ function FieldRow({
 }) {
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
-      {/* 순서 변경 */}
+      {/* 순서 변경 — 고정 섹션은 비활성화 */}
       <div className="flex flex-col gap-0.5 shrink-0">
-        <button onClick={onMoveUp} disabled={idx === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs leading-none">▲</button>
-        <button onClick={onMoveDown} disabled={idx === totalFields - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs leading-none">▼</button>
+        <button onClick={onMoveUp} disabled={isFixedSection || idx === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs leading-none">▲</button>
+        <button onClick={onMoveDown} disabled={isFixedSection || idx === totalFields - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 text-xs leading-none">▼</button>
       </div>
 
       {/* 시트 헤더 (읽기 전용) */}
@@ -385,37 +417,47 @@ function FieldRow({
         {field.sheetHeader}
       </span>
 
-      {/* 표시명 */}
-      <input
-        value={field.label}
-        onChange={(e) => onChange({ label: e.target.value })}
-        className="w-36 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-        placeholder="표시명"
-      />
+      {/* 표시명 — 고정 섹션은 읽기 전용 */}
+      {isFixedSection ? (
+        <span className="w-36 text-xs text-gray-700 truncate">{field.label}</span>
+      ) : (
+        <input
+          value={field.label}
+          onChange={(e) => onChange({ label: e.target.value })}
+          className="w-36 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          placeholder="표시명"
+        />
+      )}
 
-      {/* 권한 */}
-      <select
-        value={field.permission}
-        onChange={(e) => onChange({ permission: e.target.value as FieldPermission })}
-        className="w-28 text-xs border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-      >
-        {(Object.keys(PERMISSION_LABELS) as FieldPermission[]).map((p) => (
-          <option key={p} value={p}>{PERMISSION_LABELS[p]}</option>
-        ))}
-      </select>
+      {/* 권한 — 고정 섹션은 읽기 전용으로 고정 (표시 여부만 변경 가능) */}
+      {isFixedSection ? (
+        <span className="w-28 text-xs text-gray-400 px-1">읽기 전용</span>
+      ) : (
+        <select
+          value={field.permission}
+          onChange={(e) => onChange({ permission: e.target.value as FieldPermission })}
+          className="w-28 text-xs border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        >
+          {(Object.keys(PERMISSION_LABELS) as FieldPermission[]).map((p) => (
+            <option key={p} value={p}>{PERMISSION_LABELS[p]}</option>
+          ))}
+        </select>
+      )}
 
-      {/* 필드 타입 */}
-      <select
-        value={field.fieldType}
-        onChange={(e) => onChange({ fieldType: e.target.value as FieldType })}
-        className="w-20 text-xs border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-      >
-        <option value="text">텍스트</option>
-        <option value="score">점수</option>
-      </select>
+      {/* 필드 타입 — 고정 섹션은 숨김 */}
+      {!isFixedSection && (
+        <select
+          value={field.fieldType}
+          onChange={(e) => onChange({ fieldType: e.target.value as FieldType })}
+          className="w-20 text-xs border border-gray-200 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        >
+          <option value="text">텍스트</option>
+          <option value="score">점수</option>
+        </select>
+      )}
 
-      {/* 만점 (score 타입만) */}
-      {field.fieldType === 'score' && (
+      {/* 만점 (score 타입만, 동적 섹션) */}
+      {!isFixedSection && field.fieldType === 'score' && (
         <input
           type="number"
           value={field.maxScore ?? ''}
@@ -426,17 +468,19 @@ function FieldRow({
         />
       )}
 
-      {/* 편집 가능 여부 */}
-      <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer shrink-0">
-        <input
-          type="checkbox"
-          checked={field.isEditable}
-          onChange={(e) => onChange({ isEditable: e.target.checked })}
-          disabled={field.permission === 'readonly'}
-          className="rounded"
-        />
-        편집
-      </label>
+      {/* 편집 가능 여부 — 고정 섹션은 숨김 */}
+      {!isFixedSection && (
+        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer shrink-0">
+          <input
+            type="checkbox"
+            checked={field.isEditable}
+            onChange={(e) => onChange({ isEditable: e.target.checked })}
+            disabled={field.permission === 'readonly'}
+            className="rounded"
+          />
+          편집
+        </label>
+      )}
 
       {/* 표시 여부 */}
       <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer shrink-0">
@@ -450,17 +494,21 @@ function FieldRow({
       </label>
 
       {/* legacy 뱃지 */}
-      {field.isLegacy && (
+      {field.isLegacy && !isFixedSection && (
         <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded shrink-0">기존</span>
       )}
 
-      {/* 삭제 */}
-      <button
-        onClick={onDelete}
-        className="ml-auto text-xs text-red-400 hover:text-red-600 shrink-0"
-      >
-        ✕
-      </button>
+      {/* 삭제 — 고정 섹션의 내장 필드(isLegacy)는 불가, 추가한 신규 필드는 가능 */}
+      {(!isFixedSection || !field.isLegacy) ? (
+        <button
+          onClick={onDelete}
+          className="ml-auto text-xs text-red-400 hover:text-red-600 shrink-0"
+        >
+          ✕
+        </button>
+      ) : (
+        <div className="ml-auto" />
+      )}
     </div>
   );
 }

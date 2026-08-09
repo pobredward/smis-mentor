@@ -332,6 +332,13 @@ export const ST_SHEET_COLUMNS = {
 // 캠프 타입별 스프레드시트 설정
 export const CAMP_SHEET_CONFIG = {
   // 28기
+  W28: {
+    spreadsheetId: '1GtWhAheV9XgU-tKWz0Jx11Yj1GCDQVU6cLFbSVBS2to',
+    sheetName: 'ST',
+    gid: '0',
+    type: 'W' as const,
+    useHeaderMapping: true,
+  },
   S28: {
     spreadsheetId: '1GMqbsYW4p9DTzccNd1Zo9obrQ7j6zj5NPPSidotNudE',
     sheetName: 'ST',
@@ -625,7 +632,8 @@ export type CampCode = keyof typeof CAMP_SHEET_CONFIG;
 // S:  S 캠프   (여권/단체티 있음, 반배정 없음)
 // DG: D/G/K 캠프 (반배정 있음, 여권/여정 없음)
 // F:  F 캠프   (가족형, 원어민+학생 혼합 구조 - 26번 열부터 학생 데이터)
-export type CampType = 'EJ' | 'S' | 'DG' | 'F';
+// W:  W 캠프   (반배정 있음, 여권/여정 없음, 설문 포함)
+export type CampType = 'EJ' | 'S' | 'DG' | 'F' | 'W';
 
 export const MENTORS = [
   '윤수빈',

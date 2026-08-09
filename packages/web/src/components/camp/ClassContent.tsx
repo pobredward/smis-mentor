@@ -1,5 +1,5 @@
 'use client';
-import { logger, toDriveImageUrl, getFieldValue, type STSheetFieldConfig } from '@smis-mentor/shared';
+import { logger, toDriveImageUrl, getFieldValue, getFixedFieldValue, getDefaultFieldConfig, type STSheetFieldConfig } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,22 +15,6 @@ function canEditField(permission: EditPermission, role: string): boolean {
   if (permission === 'mentor') return role === 'mentor' || role === 'mentor_temp';
   return false;
 }
-
-// 주민등록번호 마스킹 함수
-const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: string): string => {
-  if (!ssn) return '-';
-  // admin 또는 mentor 중 매니저/부매니저는 전체 공개
-  const isManagerRole = groupRole === '매니저' || groupRole === '부매니저';
-  if (isAdmin || isManagerRole) return ssn;
-  // 형식: 980619-1****** (앞 6자리 + - + 첫번째 숫자 + 나머지 *)
-  const parts = ssn.split('-');
-  if (parts.length !== 2) return ssn; // 형식이 다르면 원본 반환
-  const front = parts[0];
-  const back = parts[1];
-  if (back.length === 0) return ssn;
-  return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
-};
-
 
 export default function ClassContent() {
   const { userData } = useAuth();
@@ -648,124 +632,43 @@ export default function ClassContent() {
                     );
                   })()}
                 </div>
-              {/* 캠프 정보 */}
-              <div className="mb-5">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Camp Info' : '캠프 정보'}</h4>
-                <div className="space-y-2">
-                  {selectedStudent.studentId && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Student ID' : '고유번호'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.studentId}</span>
-                    </div>
-                  )}
-                  {(selectedStudent.classNumber || selectedStudent.className || selectedStudent.classMentor) && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Class Info' : '반 정보'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {selectedStudent.classNumber || '-'} | {selectedStudent.className || '-'}{isForeign ? ' class' : '반'} | {selectedStudent.classMentor || '-'} {isForeign ? 'mentor' : '멘토'}
-                      </span>
-                    </div>
-                  )}
-                  {(selectedStudent.unit || selectedStudent.unitMentor || selectedStudent.roomNumber) && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Unit Info' : '유닛 정보'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {selectedStudent.unit || selectedStudent.unitMentor || '-'} {isForeign ? 'unit' : '유닛'} | {isForeign ? 'Room' : ''}{selectedStudent.roomNumber || '-'}{isForeign ? '' : '호'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 기본 정보 */}
-              <div className="mb-5">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Basic Info' : '기본 정보'}</h4>
-                <div className="space-y-2">
-                  <div className="flex py-2 border-b border-gray-100">
-                    <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Profile' : '신상'}</span>
-                    <span className="flex-[2] text-xs text-gray-900 font-medium">
-                      {selectedStudent.name} | {selectedStudent.englishName || '-'} | {selectedStudent.grade} | {selectedStudent.gender === 'M' ? (isForeign ? 'M' : '남') : (isForeign ? 'F' : '여')}
-                    </span>
-                  </div>
-                  {selectedStudent.ssn && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'ID Number' : '주민등록번호'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">{maskSSN(selectedStudent.ssn, isAdmin, groupRole)}</span>
-                    </div>
-                  )}
-                  {selectedStudent.address && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Address' : '도로명 주소'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.address}</span>
-                    </div>
-                  )}
-                  {selectedStudent.addressDetail && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Address Detail' : '세부 주소'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.addressDetail}</span>
-                    </div>
-                  )}
-                  {campType === 'EJ' && (selectedStudent.departureRoute || selectedStudent.arrivalRoute) && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Airport' : '입퇴소공항'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {isForeign
-                          ? `Arrival: ${selectedStudent.departureRoute || '-'} | Departure: ${selectedStudent.arrivalRoute || '-'}`
-                          : `${selectedStudent.departureRoute || '-'} 입소 | ${selectedStudent.arrivalRoute || '-'} 퇴소`}
-                      </span>
-                    </div>
-                  )}
-                  {campType === 'S' && selectedStudent.shirtSize && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Shirt Size' : '단체티 사이즈'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.shirtSize}</span>
-                    </div>
-                  )}
-                  {campType === 'S' && (selectedStudent.passportName || selectedStudent.passportNumber || selectedStudent.passportExpiry) && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Passport' : '여권정보'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {selectedStudent.passportName || '-'} | {selectedStudent.passportNumber || '-'} | {selectedStudent.passportExpiry || '-'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 보호자 정보 */}
-              <div className="mb-5">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">{isForeign ? 'Guardian Info' : '보호자 정보'}</h4>
-                <div className="space-y-2">
-                  {(selectedStudent.parentPhone || selectedStudent.parentName) && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Primary Guardian' : '대표 보호자'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {selectedStudent.parentPhone || '-'} | {selectedStudent.parentName || '-'}
-                      </span>
-                    </div>
-                  )}
-                  {selectedStudent.email && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Primary Email' : '대표 이메일'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">{selectedStudent.email}</span>
-                    </div>
-                  )}
-                  {(selectedStudent.otherPhone || selectedStudent.otherName) && (
-                    <div className="flex py-2 border-b border-gray-100">
-                      <span className="flex-1 text-xs text-gray-500">{isForeign ? 'Other Guardian' : '기타 보호자'}</span>
-                      <span className="flex-[2] text-xs text-gray-900 font-medium">
-                        {selectedStudent.otherPhone || '-'} | {selectedStudent.otherName || '-'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 동적 섹션 — fieldConfig 기반 렌더링 */}
-              {fieldConfig && fieldConfig.sections
+              {/* 고정 섹션 (캠프 정보 / 기본 정보 / 보호자 정보) + 동적 섹션 — fieldConfig 기반 통합 렌더링 */}
+              {(fieldConfig ?? getDefaultFieldConfig(campType ?? 'EJ')).sections
                 .filter(sec => sec.isVisible)
                 .sort((a, b) => a.order - b.order)
                 .map(section => {
+                  // ── 고정 섹션: 복합 필드 값을 직접 계산하여 표시 ──
+                  if (section.isFixed) {
+                    const visibleFields = section.fields
+                      .filter(f => f.isVisible)
+                      .sort((a, b) => a.order - b.order);
+                    const rows = visibleFields
+                      .map(f => ({
+                        label: f.label,
+                        // isLegacy: true → 복합 필드 전용 getFixedFieldValue
+                        // isLegacy: false → 관리자가 추가한 신규 필드, 일반 getFieldValue 사용
+                        value: f.isLegacy
+                          ? getFixedFieldValue(selectedStudent!, f.fieldKey, campType ?? 'EJ', { isForeign, isAdmin, groupRole })
+                          : (getFieldValue(selectedStudent!, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: false }) || null),
+                      }))
+                      .filter(r => r.value !== null);
+                    if (rows.length === 0) return null;
+                    return (
+                      <div key={section.id} className="mb-5">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3">{section.label}</h4>
+                        <div className="space-y-2">
+                          {rows.map(r => (
+                            <div key={r.label} className="flex py-2 border-b border-gray-100">
+                              <span className="flex-1 text-xs text-gray-500">{r.label}</span>
+                              <span className="flex-[2] text-xs text-gray-900 font-medium">{r.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // ── 동적 섹션 — 기존 렌더링 로직 ──
                   const userRole = userData?.role ?? '';
                   // readonly + 비편집 필드는 값이 없으면 숨김 (설문조사 등)
                   const visibleFields = section.fields

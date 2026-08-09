@@ -1,6 +1,6 @@
 'use client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { logger, toDriveImageUrl, getFieldConfig, getFieldValue, getDefaultFieldConfig, type STSheetFieldConfig, type FieldItemConfig } from '@smis-mentor/shared';
+import { logger, toDriveImageUrl, getFieldConfig, getFieldValue, getFixedFieldValue, getDefaultFieldConfig, type STSheetFieldConfig, type FieldItemConfig } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -26,19 +26,6 @@ import { db } from '../config/firebase';
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.78;
 const CARD_WIDTH = SCREEN_WIDTH * 0.9;
-
-// 주민등록번호 마스킹
-const maskSSN = (ssn: string | null | undefined, isAdmin: boolean, groupRole?: string): string => {
-  if (!ssn) return '-';
-  const isManagerRole = groupRole === '매니저' || groupRole === '부매니저';
-  if (isAdmin || isManagerRole) return ssn;
-  const parts = ssn.split('-');
-  if (parts.length !== 2) return ssn;
-  const front = parts[0];
-  const back = parts[1];
-  if (back.length === 0) return ssn;
-  return `${front}-${back[0]}${'*'.repeat(back.length - 1)}`;
-};
 
 // ─── 편집 권한 ────────────────────────────────────────────────────────────────
 type EditPermission = 'readonly' | 'all' | 'mentor';
@@ -446,88 +433,60 @@ const StudentCard = React.memo(({
       </View>
 
       <View style={styles.cardContent}>
-        {/* 캠프 정보 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>캠프 정보</Text>
-          <InfoRow label="고유번호" value={s.studentId} />
-          <InfoRow
-            label="반 정보"
-            value={s.classNumber || s.className || s.classMentor
-              ? `${s.classNumber || '-'} | ${s.className || '-'}반 | ${s.classMentor || '-'} 멘토`
-              : undefined}
-          />
-          <InfoRow
-            label="유닛 정보"
-            value={s.unit || s.unitMentor || s.roomNumber
-              ? `${s.unit || s.unitMentor || '-'} 유닛 | ${s.roomNumber || '-'}호`
-              : undefined}
-          />
-        </View>
-
-        {/* 기본 정보 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>기본 정보</Text>
-          <InfoRow label="신상" value={`${s.name} | ${s.englishName || '-'} | ${s.grade} | ${s.gender === 'M' ? '남' : '여'}`} />
-          <InfoRow label="주민등록번호" value={maskSSN(s.ssn, isAdmin, groupRole)} />
-          <InfoRow label="도로명 주소" value={s.address} />
-          <InfoRow label="세부 주소" value={s.addressDetail} />
-          {campType === 'EJ' && (
-            <InfoRow
-              label="입퇴소공항"
-              value={s.departureRoute || s.arrivalRoute
-                ? `${s.departureRoute || '-'} 입소 | ${s.arrivalRoute || '-'} 퇴소`
-                : undefined}
-            />
-          )}
-          {campType === 'S' && (
-            <>
-              <InfoRow label="단체티 사이즈" value={s.shirtSize} />
-              <InfoRow
-                label="여권정보"
-                value={s.passportName || s.passportNumber || s.passportExpiry
-                  ? `${s.passportName || '-'} | ${s.passportNumber || '-'} | ${s.passportExpiry || '-'}`
-                  : undefined}
-              />
-            </>
-          )}
-        </View>
-
-        {/* 보호자 정보 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>보호자 정보</Text>
-            {s.parentPhone && (
-              <TouchableOpacity
-                onPress={() => onSaveContact(s)}
-                style={styles.saveContactBtn}
-                accessibilityLabel="보호자 연락처 저장"
-                accessibilityRole="button"
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="person-add-outline" size={15} color="#10b981" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <InfoRow
-            label="대표 보호자"
-            value={s.parentPhone || s.parentName
-              ? `${s.parentPhone || '-'} | ${s.parentName || '-'}`
-              : undefined}
-          />
-          <InfoRow label="대표 이메일" value={s.email} />
-          <InfoRow
-            label="기타 보호자"
-            value={s.otherPhone || s.otherName
-              ? `${s.otherPhone || '-'} | ${s.otherName || '-'}`
-              : undefined}
-          />
-        </View>
-
-        {/* 동적 섹션 — fieldConfig 기반 렌더링 */}
+        {/* 고정 섹션 (캠프 정보 / 기본 정보 / 보호자 정보) + 동적 섹션 — fieldConfig 기반 통합 렌더링 */}
         {fieldConfig.sections
           .filter(sec => sec.isVisible)
           .sort((a, b) => a.order - b.order)
           .map(section => {
+            if (section.isFixed) {
+              // ── 고정 섹션: 복합 필드 값을 직접 계산하여 표시 ──
+              const visibleFields = section.fields
+                .filter(f => f.isVisible)
+                .sort((a, b) => a.order - b.order);
+              const rows = visibleFields
+                .map(f => ({
+                  label: f.label,
+                  fieldKey: f.fieldKey,
+                  // isLegacy: true → 복합 필드 전용 getFixedFieldValue (shared)
+                  // isLegacy: false → 관리자가 추가한 신규 필드, 일반 getFieldValue 사용
+                  value: f.isLegacy
+                    ? getFixedFieldValue(s, f.fieldKey, campType, { isAdmin, groupRole })
+                    : (getFieldValue(s, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: false }) || null),
+                }))
+                .filter(r => r.value !== null);
+              if (rows.length === 0) return null;
+
+              // 보호자 정보 섹션은 연락처 저장 버튼을 특별히 추가
+              const isGuardianSection = section.id === 'guardianInfo';
+
+              return (
+                <View key={section.id} style={styles.section}>
+                  {isGuardianSection ? (
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>{section.label}</Text>
+                      {s.parentPhone && (
+                        <TouchableOpacity
+                          onPress={() => onSaveContact(s)}
+                          style={styles.saveContactBtn}
+                          accessibilityLabel="보호자 연락처 저장"
+                          accessibilityRole="button"
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="person-add-outline" size={15} color="#10b981" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <Text style={styles.sectionTitle}>{section.label}</Text>
+                  )}
+                  {rows.map(r => (
+                    <InfoRow key={r.fieldKey} label={r.label} value={r.value} />
+                  ))}
+                </View>
+              );
+            }
+
+            // ── 동적 섹션 — 기존 렌더링 로직 ──
             // readonly + 비편집 필드는 값이 없으면 숨김 (설문조사 등)
             const visibleFields = section.fields
               .filter(f => f.isVisible)
