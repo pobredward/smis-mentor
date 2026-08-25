@@ -10,7 +10,7 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
-import { getJobBoardById, deleteJobBoard, getJobCodeById, getAllJobCodes, createApplication } from '@/lib/firebaseService';
+import { getJobBoardById, deleteJobBoard, duplicateJobBoard, getJobCodeById, getAllJobCodes, createApplication } from '@/lib/firebaseService';
 import { JobBoardWithId, JobCodeWithId, ApplicationHistory } from '@/types';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -343,6 +343,23 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
     } catch (error) {
       logger.error('공고 삭제 오류:', error);
       toast.error('공고 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!jobBoard) return;
+    if (!confirm(`"${jobBoard.title}"을 기반으로 새 공고를 생성합니까?\n공고 내용이 그대로 복사되며, 제목 앞에 "[복사] "가 붙습니다. 면접 일정은 초기화됩니다.`)) return;
+
+    try {
+      setIsSubmitting(true);
+      const newId = await duplicateJobBoard(jobBoard.id);
+      toast.success('공고가 복제되었습니다. 새 공고 수정 페이지로 이동합니다.');
+      router.push(`/job-board/${newId}?edit=true`);
+    } catch (error) {
+      logger.error('공고 복제 오류:', error);
+      toast.error('공고 복제 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1049,6 +1066,15 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                   {userData?.role === 'admin' && (
                     <div className="mt-8 pt-6 border-t border-gray-200">
                       <div className="flex justify-end gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={handleDuplicate}
+                          disabled={isSubmitting}
+                          className="px-4"
+                          title="이 공고를 기반으로 새 공고를 생성합니다"
+                        >
+                          이 공고 기반으로 새 공고 만들기
+                        </Button>
                         <Button
                           variant="success"
                           onClick={() => setIsEditing(true)}

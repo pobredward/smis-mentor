@@ -961,6 +961,32 @@ export const deleteJobBoard = async (jobBoardId: string) => {
   return await deleteDoc(doc(db, 'jobBoards', jobBoardId));
 };
 
+/**
+ * 기존 공고를 기반으로 새 공고를 생성합니다.
+ * description(공고 내용 HTML)을 포함한 모든 내용이 그대로 복사되며,
+ * 제목 앞에 "[복사] "가 붙고 상태는 'active'로 초기화됩니다.
+ * 면접 일정(interviewDates)은 초기화됩니다.
+ */
+export const duplicateJobBoard = async (jobBoardId: string): Promise<string> => {
+  const original = await getJobBoardById(jobBoardId);
+  if (!original) throw new Error('복제할 공고를 찾을 수 없습니다.');
+
+  const now = Timestamp.now();
+  const { id: _id, createdAt: _createdAt, ...rest } = original;
+
+  const newDocRef = await addDoc(collection(db, 'jobBoards'), {
+    ...rest,
+    title: `[복사] ${original.title}`,
+    status: 'active',
+    interviewDates: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await clearJobBoardsCache();
+  return newDocRef.id;
+};
+
 // ApplicationHistory 관련 함수
 export const createApplication = async (applicationData: Omit<ApplicationHistory, 'applicationHistoryId' | 'applicationDate'>) => {
   try {

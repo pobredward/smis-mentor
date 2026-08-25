@@ -1,8 +1,10 @@
 'use client';
 import { logger } from '@smis-mentor/shared';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+const RichTextEditor = lazy(() => import('@/components/common/RichTextEditor'));
 import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
@@ -12,6 +14,7 @@ import {
   getApplicationsByJobBoardId, 
   updateJobBoard, 
   createJobBoard,
+  duplicateJobBoard,
   getAllJobCodes,
   clearJobBoardsCache
 } from '@/lib/firebaseService';
@@ -268,7 +271,9 @@ export default function JobBoardManage() {
   // 폼 제출 핸들러
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.description || !formData.refJobCodeId) {
+    // Tiptap 에디터의 빈 상태는 <p></p>이므로 태그를 제거한 순수 텍스트로 체크
+    const descriptionText = formData.description.replace(/<[^>]*>/g, '').trim();
+    if (!formData.title || !descriptionText || !formData.refJobCodeId) {
       toast.error('필수 항목을 모두 입력해주세요.');
       return;
     }
@@ -368,6 +373,24 @@ export default function JobBoardManage() {
     setSelectedJobBoard(null);
     setIsCreating(false);
     router.replace('/admin/job-board-manage');
+  };
+
+  // 공고 복제 핸들러
+  const handleDuplicateJobBoard = async (jobBoard: JobBoardWithApplications, e: React.MouseEvent) => {
+    e.stopPropagation(); // 행 클릭(지원자 보기) 이벤트 전파 방지
+    if (!confirm(`"${jobBoard.title}"을 기반으로 새 공고를 생성합니까?\n공고 내용이 그대로 복사되며, 제목 앞에 "[복사] "가 붙습니다. 면접 일정은 초기화됩니다.`)) return;
+
+    try {
+      setIsSubmitting(true);
+      const newId = await duplicateJobBoard(jobBoard.id);
+      toast.success('공고가 복제되었습니다. 공고 수정 페이지로 이동합니다.');
+      router.push(`/job-board/${newId}?edit=true`);
+    } catch (error) {
+      logger.error('공고 복제 오류:', error);
+      toast.error('공고 복제 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   // 지원자 확인 페이지로 이동
@@ -513,15 +536,13 @@ export default function JobBoardManage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   공고 내용
                 </label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={(e) => handleChange(e)}
-                  rows={6}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="공고 내용을 입력하세요"
-                  required
-                />
+                <Suspense fallback={<div className="w-full p-4 border border-gray-300 rounded-md bg-gray-50 animate-pulse">에디터 로딩 중...</div>}>
+                  <RichTextEditor
+                    content={formData.description}
+                    onChange={(value) => setFormData(prev => ({ ...prev, description: value }))}
+                    placeholder="공고 내용을 입력하세요"
+                  />
+                </Suspense>
               </div>
 
               {/* 면접 날짜 선택 */}
@@ -721,9 +742,16 @@ export default function JobBoardManage() {
                         onClick={() => viewApplicants(board.id)}
                       >
                         <td className="px-4 sm:px-6 py-4">
-                          <div className="flex flex-col">
+                          <div className="flex flex-col gap-1">
                             <span className="font-medium text-gray-900">{board.title}</span>
                             <span className="text-sm text-gray-500">{board.generation} ({board.jobCode})</span>
+                            <button
+                              onClick={(e) => handleDuplicateJobBoard(board, e)}
+                              disabled={isSubmitting}
+                              className="mt-1 self-start text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
+                            >
+                              이 공고 기반으로 새 공고 만들기
+                            </button>
                           </div>
                         </td>
                         <td className="px-4 sm:px-6 py-4">
@@ -799,6 +827,13 @@ export default function JobBoardManage() {
                   <div className="mb-3">
                     <h3 className="font-medium text-gray-900">{board.title}</h3>
                     <p className="text-sm text-gray-500">{board.generation} ({board.jobCode})</p>
+                    <button
+                      onClick={(e) => handleDuplicateJobBoard(board, e)}
+                      disabled={isSubmitting}
+                      className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
+                    >
+                      이 공고 기반으로 새 공고 만들기
+                    </button>
                   </div>
                   
                   <div className="flex flex-wrap gap-2 mb-3">

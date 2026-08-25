@@ -2,6 +2,7 @@
 import { logger } from '@smis-mentor/shared';
 
 import { useEditor, EditorContent } from '@tiptap/react';
+import { useEffect, useRef } from 'react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
@@ -18,7 +19,72 @@ interface RichTextEditorProps {
   placeholder?: string;
 }
 
+/**
+ * 노드를 unwrap합니다 (태그를 제거하고 자식 노드를 부모로 이동).
+ */
+function unwrapElement(el: Element): void {
+  const parent = el.parentNode;
+  if (!parent) return;
+  while (el.firstChild) {
+    parent.insertBefore(el.firstChild, el);
+  }
+  parent.removeChild(el);
+}
+
+/**
+ * 브라우저 렌더링 DOM에서 복사된 HTML을 Tiptap이 올바르게 파싱할 수 있도록 정제합니다.
+ *
+ * 주요 처리:
+ * 1. class, style, data-* 속성 제거 (href, src 유지)
+ * 2. <div> unwrap — 자식을 부모로 올리고 div 제거 (중첩 지원을 위해 반복 처리)
+ * 3. <li> 안의 직계 <p> unwrap — Tiptap이 li>p를 단락으로 분리하는 문제 방지
+ * 4. 빈 블록 요소 제거
+ */
+function sanitizePastedHTML(html: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // 1. 모든 노드에서 class, style, data-* 속성 제거 (href, src는 유지)
+  doc.querySelectorAll('*').forEach((el) => {
+    el.removeAttribute('class');
+    el.removeAttribute('style');
+    Array.from(el.attributes)
+      .filter(attr => attr.name.startsWith('data-'))
+      .forEach(attr => el.removeAttribute(attr.name));
+  });
+
+  // 2. <div> unwrap — querySelectorAll은 스냅샷이므로 div가 없어질 때까지 반복
+  let divs = doc.querySelectorAll('div');
+  while (divs.length > 0) {
+    divs.forEach(unwrapElement);
+    divs = doc.querySelectorAll('div');
+  }
+
+  // 3. <li> 안의 직계 <p> unwrap
+  // Tiptap은 <li><p>텍스트</p></li>를 처리하지 못해 리스트 아이템을 단락으로 분리
+  doc.querySelectorAll('li > p').forEach(unwrapElement);
+
+  // 4. <a> 태그는 href만 남기고 다른 속성 제거 (이미 위에서 class/style 제거됨)
+  // target, rel 등 불필요한 속성 제거하되 href는 반드시 유지
+  doc.querySelectorAll('a').forEach((a) => {
+    const href = a.getAttribute('href');
+    // 속성 전체 제거 후 href만 복원
+    Array.from(a.attributes).forEach(attr => a.removeAttribute(attr.name));
+    if (href) a.setAttribute('href', href);
+  });
+
+  // 5. 빈 <p> 제거 (텍스트도 없고 의미 있는 자식도 없는 경우)
+  doc.querySelectorAll('p').forEach((p) => {
+    if (!p.textContent?.trim() && !p.querySelector('img, a')) {
+      p.remove();
+    }
+  });
+
+  return doc.body.innerHTML;
+}
+
 const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps) => {
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -71,24 +137,38 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
       attributes: {
         class: 'prose prose-slate max-w-none focus:outline-none min-h-[200px] [&>p]:whitespace-pre-wrap [&>p]:break-words [&>p:empty]:h-[1em] [&>p:empty]:block [&>p]:min-h-[1.5em] [&>ul]:list-disc [&>ul]:pl-[1.625em] [&>ol]:list-decimal [&>ol]:pl-[1.625em] [&>h1]:text-4xl [&>h1]:font-bold [&>h1]:mb-4 [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:mb-3 [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:mb-2',
       },
-      handlePaste: (view, event, slice) => {
+      handlePaste: (view, event) => {
         const clipboardData = event.clipboardData;
         if (!clipboardData) return false;
 
         const html = clipboardData.getData('text/html');
         const text = clipboardData.getData('text/plain');
 
-        // iframe, oembed, youtube 관련 내용이면 일반 텍스트로만 삽입
+        // YouTube/iframe 콘텐츠는 plain text로만 삽입
         if ((html && (html.includes('<iframe') || html.includes('<oembed') || html.includes('youtube.com') || html.includes('youtu.be'))) || 
             (text && (text.includes('youtube.com') || text.includes('youtu.be')))) {
           event.preventDefault();
-          
-          // 일반 텍스트로 삽입
           const { state, dispatch } = view;
-          const { $from } = state.selection;
-          const tr = state.tr.insertText(text, $from.pos);
-          dispatch(tr);
-          
+          dispatch(state.tr.insertText(text, state.selection.$from.pos));
+          return true;
+        }
+
+        // 외부 HTML(다른 웹페이지, 공고 복붙 등)이 있을 경우
+        // 브라우저 렌더링 DOM에는 <div>, class, style 등이 포함되어
+        // Tiptap이 빈 단락을 대량으로 만들기 때문에 핵심 태그만 남겨 삽입
+        //
+        // 단, Tiptap 에디터 내부에서 복사한 경우는 Tiptap이 자체 직렬화 포맷을 사용하므로
+        // 기본 처리에 맡겨야 함 (ProseMirror 내부 마커 감지)
+        if (html) {
+          const isTiptapInternal = html.includes('data-pm-slice') || html.includes('data-tiptap');
+          if (isTiptapInternal) {
+            return false; // Tiptap 기본 처리에 위임
+          }
+
+          event.preventDefault();
+          const cleanedHTML = sanitizePastedHTML(html);
+          // handlePaste는 ProseMirror 레벨이라 editor가 아직 null일 수 있으므로 ref 사용
+          editorRef.current?.commands.insertContent(cleanedHTML);
           return true;
         }
 
@@ -96,6 +176,21 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
       },
     },
   });
+
+  // editorRef를 최신 editor 인스턴스로 유지
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  // content prop이 외부에서 변경될 때 에디터 내용을 동기화
+  // (예: 다른 공고 내용 복붙 시 HTML이 에디터에 올바르게 반영되도록)
+  useEffect(() => {
+    if (!editor) return;
+    const currentHTML = editor.getHTML();
+    if (currentHTML !== content) {
+      editor.commands.setContent(content, false);
+    }
+  }, [editor, content]);
 
   if (!editor) {
     return null;
