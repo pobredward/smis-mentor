@@ -14,7 +14,6 @@ import {
   getApplicationsByJobBoardId, 
   updateJobBoard, 
   createJobBoard,
-  duplicateJobBoard,
   getAllJobCodes,
   clearJobBoardsCache
 } from '@/lib/firebaseService';
@@ -375,24 +374,6 @@ export default function JobBoardManage() {
     router.replace('/admin/job-board-manage');
   };
 
-  // 공고 복제 핸들러
-  const handleDuplicateJobBoard = async (jobBoard: JobBoardWithApplications, e: React.MouseEvent) => {
-    e.stopPropagation(); // 행 클릭(지원자 보기) 이벤트 전파 방지
-    if (!confirm(`"${jobBoard.title}"을 기반으로 새 공고를 생성합니까?\n공고 내용이 그대로 복사되며, 제목 앞에 "[복사] "가 붙습니다. 면접 일정은 초기화됩니다.`)) return;
-
-    try {
-      setIsSubmitting(true);
-      const newId = await duplicateJobBoard(jobBoard.id);
-      toast.success('공고가 복제되었습니다. 공고 수정 페이지로 이동합니다.');
-      router.push(`/job-board/${newId}?edit=true`);
-    } catch (error) {
-      logger.error('공고 복제 오류:', error);
-      toast.error('공고 복제 중 오류가 발생했습니다.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
   // 지원자 확인 페이지로 이동
   const viewApplicants = (jobBoardId: string) => {
     router.push(`/admin/job-board-manage/applicants/${jobBoardId}`);
@@ -745,13 +726,6 @@ export default function JobBoardManage() {
                           <div className="flex flex-col gap-1">
                             <span className="font-medium text-gray-900">{board.title}</span>
                             <span className="text-sm text-gray-500">{board.generation} ({board.jobCode})</span>
-                            <button
-                              onClick={(e) => handleDuplicateJobBoard(board, e)}
-                              disabled={isSubmitting}
-                              className="mt-1 self-start text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
-                            >
-                              이 공고 기반으로 새 공고 만들기
-                            </button>
                           </div>
                         </td>
                         <td className="px-4 sm:px-6 py-4">
@@ -827,13 +801,6 @@ export default function JobBoardManage() {
                   <div className="mb-3">
                     <h3 className="font-medium text-gray-900">{board.title}</h3>
                     <p className="text-sm text-gray-500">{board.generation} ({board.jobCode})</p>
-                    <button
-                      onClick={(e) => handleDuplicateJobBoard(board, e)}
-                      disabled={isSubmitting}
-                      className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
-                    >
-                      이 공고 기반으로 새 공고 만들기
-                    </button>
                   </div>
                   
                   <div className="flex flex-wrap gap-2 mb-3">
