@@ -1,3 +1,9 @@
+// =============================================================================
+// ⚠️  이 파일은 자동 생성됩니다. 직접 수정하지 마세요.
+//    단일 소스: packages/shared/src/types/student.ts
+//    동기화:   node scripts/sync-student-types.js  (build:functions 전 자동 실행)
+// =============================================================================
+
 // ST시트 관련 타입 정의
 
 // 헤더 이름과 필드 매핑 (1행의 실제 컬럼 이름)
@@ -97,6 +103,9 @@ export const ST_SHEET_HEADER_MAPPING = {
   '상담(방)1': 'unitCounsel1',
   '상담(방)2': 'unitCounsel2',
   '상담(방)3': 'unitCounsel3',
+
+  // 매니저 상담 (1회성)
+  '상담(매니저)': 'managerCounsel',
 } as const;
 
 /**
@@ -272,6 +281,9 @@ export function mapHeadersToStudent(
     unitCounsel1:           getValue('상담(방)1'),
     unitCounsel2:           getValue('상담(방)2'),
     unitCounsel3:           getValue('상담(방)3'),
+
+    // 매니저 상담 (1회성)
+    managerCounsel:         getValue('상담(매니저)'),
   };
   // 빈 문자열인 필드는 아예 키를 추가하지 않음
   for (const [key, val] of Object.entries(surveyFields)) {
@@ -331,6 +343,36 @@ export const ST_SHEET_COLUMNS = {
 
 // 캠프 타입별 스프레드시트 설정
 export const CAMP_SHEET_CONFIG = {
+  // 29기
+  J29: {
+    spreadsheetId: '13pS50CYt-N-9Afy_HB5K5mK7SjDa3it0LHYnnzyPywE',
+    sheetName: 'ST',
+    gid: '0',
+    type: 'EJ' as const,
+    useHeaderMapping: true,
+  },
+  E29: {
+    spreadsheetId: '1u-a6HCQljLvJc7QKqdTolnDz4Opl7LaDnERo9vWVHsk',
+    sheetName: 'ST',
+    gid: '0',
+    type: 'EJ' as const,
+    useHeaderMapping: true,
+  },
+  S29: {
+    spreadsheetId: '1LxxSmtI8mu_kSYSRMfXkngtpwhrUCjXG_puX9a08G84',
+    sheetName: 'ST',
+    gid: '296268666',
+    type: 'S' as const,
+    useHeaderMapping: true,
+  },
+  F29: {
+    spreadsheetId: '13j_VM37Xue1lWIaH2MtDullLoXL0jF-baT5NevWqj2I',
+    sheetName: 'ST',
+    gid: '0',
+    type: 'F' as const,
+    useHeaderMapping: true,
+  },
+
   // 28기
   W28: {
     spreadsheetId: '1GtWhAheV9XgU-tKWz0Jx11Yj1GCDQVU6cLFbSVBS2to',
@@ -744,7 +786,7 @@ export interface STSheetStudent {
   surveyAcademyCount?: string;
   surveyAcademyTypes?: string;
 
-  // 입소 레벨 테스트 (P-Speaking, P-Reading, P-Writing)
+  // 입소 레벨 테스트
   placementSpeaking?: string;
   placementReading?: string;
   placementWriting?: string;
@@ -763,6 +805,9 @@ export interface STSheetStudent {
   unitCounsel1?: string;
   unitCounsel2?: string;
   unitCounsel3?: string;
+
+  // 매니저 상담 (1회성)
+  managerCounsel?: string;
 
   // 메타 정보
   rowNumber: number;
@@ -809,6 +854,182 @@ export interface STSheetCache {
   totalStudents: number;
 }
 
+/**
+ * F 캠프 시트의 행 배열을 FamilyUnit 배열로 파싱한다.
+ *
+ * 1행 헤더를 기반으로 열 인덱스를 자동 감지하므로
+ * 캠프마다 열 위치가 달라도 안전하게 처리된다.
+ *
+ * 부모 섹션: "가족번호" 헤더가 있는 열 기준
+ * 학생 섹션: "고유번호" 헤더가 등장하는 열부터
+ *   ("가족번호" 도입 이후 구조에서는 첫 번째 "고유번호"가 학생 섹션)
+ *
+ * 데이터 행의 가족번호 패턴:
+ *   P01.1 → 1번 가족 첫 번째 행, P01.2/P01.3 → 동일 가족 추가 행
+ */
+export function parseFamilySheet(rows: string[][], campCode: string): FamilyUnit[] {
+  if (rows.length < 2) return [];
+
+  const header = rows[0].map(h => h?.trim() ?? '');
+
+  // ── 헤더에서 열 인덱스 탐색 헬퍼 ──────────────────────────────────
+  const col = (name: string, startFrom = 0): number => {
+    const idx = header.indexOf(name, startFrom);
+    return idx >= 0 ? idx : -1;
+  };
+
+  // ── 부모 섹션 열 인덱스 ──────────────────────────────────────────
+  const pFamilyId  = col('가족번호');
+  const pType      = col('유형') >= 0 ? col('유형') : col('숙소 형태');
+  const pName      = col('성함') >= 0 ? col('성함') : col('부모님 성함');
+  const pPhone     = col('연락처') >= 0 ? col('연락처') : col('부모님 연락처');
+  const pRegion    = col('지역');
+  const pSsn       = col('주민등록번호');
+  const pPassName  = col('여권상 영문이름');
+  const pPassNum   = col('여권 번호');
+  const pPassExp   = col('여권 만료일자');
+  const pNative    = col('원어민');
+  const pEmail     = col('이메일 주소') >= 0 ? col('이메일 주소') : col('이메일주소');
+  const pAddress   = col('집 주소');
+  const pNotes     = col('기타');
+  const pRoom      = col('방호수');
+
+  // ── 학생 섹션 시작 열 인덱스 감지 ───────────────────────────────
+  // "가족번호"가 있는 신형 구조: 첫 번째 "고유번호"가 학생 섹션
+  // "가족번호" 없는 구형 구조: 두 번째 "고유번호"가 학생 섹션
+  let sStart = -1;
+  {
+    let found = 0;
+    for (let i = 0; i < header.length; i++) {
+      if (header[i] === '고유번호') {
+        found++;
+        if (pFamilyId >= 0 && found === 1) {
+          sStart = i;
+          break;
+        }
+        if (pFamilyId < 0 && found === 2) {
+          sStart = i;
+          break;
+        }
+      }
+    }
+    if (sStart === -1) sStart = col('고유번호'); // 마지막 fallback
+  }
+
+  if (sStart === -1) return [];
+
+  // 학생 섹션 헤더 슬라이스 기준 열 탐색
+  const sh = header.slice(sStart);
+  const sc = (name: string): number => {
+    const idx = sh.indexOf(name);
+    return idx >= 0 ? sStart + idx : -1;
+  };
+
+  const sId        = sStart;
+  const sName      = sc('학생 이름');
+  const sEngName   = sc('영어 닉네임');
+  const sGrade     = sc('학년');
+  const sGender    = sc('성별');
+  const sSsn       = sc('주민등록번호');
+  const sPassName  = sc('여권상 영문이름');
+  const sPassNum   = sc('여권 번호');
+  const sPassExp   = sc('여권 만료일자');
+  const sMed       = sc('학생 건강정보 및 특이사항') >= 0
+    ? sc('학생 건강정보 및 특이사항')
+    : sc('특이사항');
+  const sParPhone  = sc('부모님 연락처');
+  const sReg       = sc('등록처');
+  const sClassNum  = sc('반번호');
+  const sClassName = sc('반이름');
+  const sClassMentor = sc('반멘토');
+
+  // ── 행 파싱 ──────────────────────────────────────────────────────
+  const familyMap = new Map<string, FamilyUnit>();
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every(cell => !cell?.trim())) continue;
+
+    const rawFamilyId = (pFamilyId >= 0 ? row[pFamilyId] : row[0])?.trim() ?? '';
+    if (!rawFamilyId || rawFamilyId === '-') continue;
+
+    const familyMatch = rawFamilyId.match(/^P(\d+)\./);
+    if (!familyMatch) continue;
+    const familyId = familyMatch[1].padStart(2, '0');
+
+    if (!familyMap.has(familyId)) {
+      familyMap.set(familyId, {
+        familyId,
+        familyType: pType >= 0 ? row[pType]?.trim() ?? '' : '',
+        parents: [],
+        students: [],
+        roomNumber: pRoom >= 0 ? row[pRoom]?.trim() ?? '' : '',
+        rowNumber: i + 1,
+        lastSyncedAt: new Date(),
+        campCode,
+      });
+    }
+
+    const unit = familyMap.get(familyId)!;
+    const typeVal = pType >= 0 ? row[pType]?.trim() : '';
+    if (typeVal) unit.familyType = typeVal;
+    const roomVal = pRoom >= 0 ? row[pRoom]?.trim() : '';
+    if (roomVal) unit.roomNumber = roomVal;
+
+    // 부모: 성함 열에 값이 있으면 부모
+    const parentName = pName >= 0 ? row[pName]?.trim() ?? '' : '';
+    if (parentName) {
+      unit.parents.push({
+        id: rawFamilyId,
+        name: parentName,
+        phone:          pPhone    >= 0 ? row[pPhone]?.trim()    ?? '' : '',
+        region:         pRegion   >= 0 ? row[pRegion]?.trim()   ?? '' : '',
+        ssn:            pSsn      >= 0 ? row[pSsn]?.trim()      ?? '' : '',
+        passportName:   pPassName >= 0 ? row[pPassName]?.trim() ?? '' : '',
+        passportNumber: pPassNum  >= 0 ? row[pPassNum]?.trim()  ?? '' : '',
+        passportExpiry: pPassExp  >= 0 ? row[pPassExp]?.trim()  ?? '' : '',
+        nativeEnglish:  pNative   >= 0 ? row[pNative]?.trim()   ?? '' : '',
+        email:          pEmail    >= 0 ? row[pEmail]?.trim()    ?? '' : '',
+        address:        pAddress  >= 0 ? row[pAddress]?.trim()  ?? '' : '',
+        notes:          pNotes    >= 0 ? row[pNotes]?.trim()    ?? '' : '',
+        roomNumber:     pRoom     >= 0 ? row[pRoom]?.trim()     ?? '' : '',
+      });
+    }
+
+    // 학생: 학생 이름이 있으면 학생으로 처리 (고유번호가 비어있어도 인식)
+    const studentIdRaw = row[sId]?.trim() ?? '';
+    const studentName  = sName >= 0 ? row[sName]?.trim() ?? '' : '';
+    // 고유번호가 없는 경우 "가족ID-순번" 형식으로 자동 생성
+    const studentId = (studentIdRaw && studentIdRaw !== '-')
+      ? studentIdRaw
+      : `${familyId}-${unit.students.length + 1}`;
+    if (studentName) {
+      const genderRaw = sGender >= 0 ? row[sGender]?.trim() ?? 'M' : 'M';
+      unit.students.push({
+        id: studentId,
+        name: studentName,
+        englishName:        sEngName     >= 0 ? row[sEngName]?.trim()     ?? '' : '',
+        grade:              sGrade       >= 0 ? row[sGrade]?.trim()       ?? '' : '',
+        gender:             (genderRaw.toUpperCase() === 'F' ? 'F' : 'M') as 'M' | 'F',
+        ssn:                sSsn         >= 0 ? row[sSsn]?.trim()         ?? '' : '',
+        passportName:       sPassName    >= 0 ? row[sPassName]?.trim()    ?? '' : '',
+        passportNumber:     sPassNum     >= 0 ? row[sPassNum]?.trim()     ?? '' : '',
+        passportExpiry:     sPassExp     >= 0 ? row[sPassExp]?.trim()     ?? '' : '',
+        medication:         sMed         >= 0 ? row[sMed]?.trim()         ?? '' : '',
+        parentPhone:        sParPhone    >= 0 ? row[sParPhone]?.trim()    ?? '' : '',
+        registrationSource: sReg         >= 0 ? row[sReg]?.trim()         ?? '' : '',
+        classNumber:        sClassNum    >= 0 ? row[sClassNum]?.trim()    ?? '' : '',
+        className:          sClassName   >= 0 ? row[sClassName]?.trim()   ?? '' : '',
+        classMentor:        sClassMentor >= 0 ? row[sClassMentor]?.trim() ?? '' : '',
+      });
+    }
+  }
+
+  return Array.from(familyMap.values())
+    .filter(f => f.students.length > 0 || f.parents.length > 0)
+    .sort((a, b) => a.familyId.localeCompare(b.familyId));
+}
+
 export interface MentorStudentFilter {
   mentorName: string;
   filterType: 'class' | 'unit';
@@ -817,7 +1038,7 @@ export interface MentorStudentFilter {
 // ─── F 캠프 전용 가족 단위 타입 ─────────────────────────────────────────────
 
 export interface FamilyParent {
-  id: string;
+  id: string;            // P01.1, P01.2(부모2명 경우) 등
   name: string;
   phone: string;
   region?: string;
@@ -825,7 +1046,7 @@ export interface FamilyParent {
   passportName?: string;
   passportNumber?: string;
   passportExpiry?: string;
-  nativeEnglish?: string;
+  nativeEnglish?: string; // 원어민 수업 신청 여부
   email?: string;
   address?: string;
   notes?: string;
@@ -833,7 +1054,7 @@ export interface FamilyParent {
 }
 
 export interface FamilyStudent {
-  id: string;
+  id: string;            // F01, F02 등
   name: string;
   englishName?: string;
   grade: string;
@@ -842,14 +1063,17 @@ export interface FamilyStudent {
   passportName?: string;
   passportNumber?: string;
   passportExpiry?: string;
-  medication?: string;
+  medication?: string;   // 학생 건강정보 및 특이사항
   parentPhone?: string;
   registrationSource?: string;
+  classNumber?: string;  // 반번호
+  className?: string;    // 반이름
+  classMentor?: string;  // 반멘토
 }
 
 export interface FamilyUnit {
-  familyId: string;
-  familyType: string;
+  familyId: string;      // "01", "02" 등 (P01 → "01")
+  familyType: string;    // "2인 가족", "3인 가족" 등
   parents: FamilyParent[];
   students: FamilyStudent[];
   roomNumber?: string;
@@ -868,178 +1092,4 @@ export interface FamilySTSheetCache {
   version: number;
   totalFamilies: number;
   totalStudents: number;
-}
-
-/**
- * F 캠프 시트의 행 배열을 FamilyUnit 배열로 파싱한다.
- *
- * 1행 헤더를 기반으로 열 인덱스를 자동 감지하므로,
- * 캠프마다 열 위치가 달라도 안전하게 처리된다.
- *
- * 부모 섹션: A열(가족번호) 기준 — "가족번호" 헤더가 있는 열
- * 학생 섹션: "고유번호" 헤더가 두 번째로 등장하는 열부터
- *
- * 데이터 행의 가족번호 패턴:
- *   P01.1 → 1번 가족 첫 번째 행 (부모 or 그 이후)
- *   P01.2, P01.3 → 동일 가족 추가 행 (자녀 or 부모2)
- */
-export function parseFamilySheet(rows: string[][], campCode: string): FamilyUnit[] {
-  if (rows.length < 2) return [];
-
-  const header = rows[0].map(h => h?.trim() ?? '');
-
-  // ── 부모 섹션 열 인덱스 (헤더 기반) ──────────────────────────────
-  const col = (name: string, startFrom = 0): number => {
-    const idx = header.indexOf(name, startFrom);
-    return idx >= 0 ? idx : -1;
-  };
-
-  const pFamilyId   = col('가족번호');            // A열
-  const pType       = col('유형');
-  const pName       = col('성함') >= 0 ? col('성함') : col('부모님 성함');
-  const pPhone      = col('연락처') >= 0 ? col('연락처') : col('부모님 연락처');
-  const pRegion     = col('지역');
-  const pSsn        = col('주민등록번호');
-  const pPassName   = col('여권상 영문이름');
-  const pPassNum    = col('여권 번호');
-  const pPassExp    = col('여권 만료일자');
-  const pNative     = col('원어민');
-  const pEmail      = col('이메일 주소') >= 0 ? col('이메일 주소') : col('이메일주소');
-  const pAddress    = col('집 주소');
-  const pNotes      = col('기타');
-  const pRoom       = col('방호수');
-
-  // ── 학생 섹션 열 인덱스 ──────────────────────────────────────────
-  // "고유번호"가 헤더에 두 번 등장: 첫 번째는 부모 섹션(없을 수 있음), 두 번째가 학생 섹션
-  // 또는 "가족번호"와 "고유번호" 분리 이후 구조에서는 고유번호가 한 번만 등장
-  let sStart = -1;
-  {
-    let found = 0;
-    for (let i = 0; i < header.length; i++) {
-      if (header[i] === '고유번호') {
-        found++;
-        // 부모 섹션에 "고유번호"가 없고 "가족번호"가 있으면 첫 번째가 학생 섹션
-        // 부모 섹션에 "고유번호"가 있었던 구형 시트는 두 번째가 학생 섹션
-        if (found === 1 && pFamilyId >= 0) {
-          // "가족번호"가 있는 경우 → 첫 번째 "고유번호"가 학생 섹션
-          sStart = i;
-          break;
-        }
-        if (found === 2) {
-          sStart = i;
-          break;
-        }
-      }
-    }
-    // fallback: "고유번호"가 한 번만 있으면 그게 학생 섹션
-    if (sStart === -1) {
-      sStart = col('고유번호');
-    }
-  }
-
-  if (sStart === -1) return []; // 학생 섹션 헤더 없으면 처리 불가
-
-  // 학생 섹션 헤더 (sStart 이후)
-  const sh = header.slice(sStart);
-  const sc = (name: string): number => {
-    const idx = sh.indexOf(name);
-    return idx >= 0 ? sStart + idx : -1;
-  };
-
-  const sId       = sStart;                          // 고유번호
-  const sName     = sc('학생 이름');
-  const sEngName  = sc('영어 닉네임');
-  const sGrade    = sc('학년');
-  const sGender   = sc('성별');
-  const sSsn      = sc('주민등록번호');
-  const sPassName = sc('여권상 영문이름');
-  const sPassNum  = sc('여권 번호');
-  const sPassExp  = sc('여권 만료일자');
-  // 건강정보: "학생 건강정보 및 특이사항" 또는 "특이사항"
-  const sMed      = sc('학생 건강정보 및 특이사항') >= 0 ? sc('학생 건강정보 및 특이사항') : sc('특이사항');
-  const sParPhone = sc('부모님 연락처');
-  const sReg      = sc('등록처');
-
-  // ── 행 파싱 ──────────────────────────────────────────────────────
-  const familyMap = new Map<string, FamilyUnit>();
-
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.every(cell => !cell?.trim())) continue;
-
-    const rawFamilyId = (pFamilyId >= 0 ? row[pFamilyId] : row[0])?.trim() ?? '';
-    if (!rawFamilyId || rawFamilyId === '-') continue;
-
-    const familyMatch = rawFamilyId.match(/^P(\d+)\./);
-    if (!familyMatch) continue;
-    const familyId = familyMatch[1].padStart(2, '0');
-
-    if (!familyMap.has(familyId)) {
-      const roomVal = pRoom >= 0 ? row[pRoom]?.trim() ?? '' : '';
-      const typeVal = pType >= 0 ? row[pType]?.trim() ?? '' : '';
-      familyMap.set(familyId, {
-        familyId,
-        familyType: typeVal,
-        parents: [],
-        students: [],
-        roomNumber: roomVal,
-        rowNumber: i + 1,
-        lastSyncedAt: new Date(),
-        campCode,
-      });
-    }
-
-    const unit = familyMap.get(familyId)!;
-
-    const typeVal = pType >= 0 ? row[pType]?.trim() : '';
-    if (typeVal) unit.familyType = typeVal;
-
-    const roomVal = pRoom >= 0 ? row[pRoom]?.trim() : '';
-    if (roomVal) unit.roomNumber = roomVal;
-
-    // 부모 정보: 성함(또는 부모님 성함) 열에 값이 있으면 부모
-    const parentName = pName >= 0 ? row[pName]?.trim() ?? '' : '';
-    if (parentName) {
-      unit.parents.push({
-        id: rawFamilyId,
-        name: parentName,
-        phone:         pPhone   >= 0 ? row[pPhone]?.trim()   ?? '' : '',
-        region:        pRegion  >= 0 ? row[pRegion]?.trim()  ?? '' : '',
-        ssn:           pSsn     >= 0 ? row[pSsn]?.trim()     ?? '' : '',
-        passportName:  pPassName >= 0 ? row[pPassName]?.trim() ?? '' : '',
-        passportNumber: pPassNum >= 0 ? row[pPassNum]?.trim() ?? '' : '',
-        passportExpiry: pPassExp >= 0 ? row[pPassExp]?.trim() ?? '' : '',
-        nativeEnglish: pNative  >= 0 ? row[pNative]?.trim()  ?? '' : '',
-        email:         pEmail   >= 0 ? row[pEmail]?.trim()   ?? '' : '',
-        address:       pAddress >= 0 ? row[pAddress]?.trim() ?? '' : '',
-        notes:         pNotes   >= 0 ? row[pNotes]?.trim()   ?? '' : '',
-        roomNumber:    pRoom    >= 0 ? row[pRoom]?.trim()    ?? '' : '',
-      });
-    }
-
-    // 학생 정보: 고유번호(sId) 열에 값이 있으면 학생
-    const studentId   = row[sId]?.trim() ?? '';
-    const studentName = sName >= 0 ? row[sName]?.trim() ?? '' : '';
-    if (studentId && studentId !== '-' && studentName) {
-      const genderRaw = sGender >= 0 ? row[sGender]?.trim() ?? 'M' : 'M';
-      unit.students.push({
-        id: studentId,
-        name: studentName,
-        englishName:      sEngName  >= 0 ? row[sEngName]?.trim()  ?? '' : '',
-        grade:            sGrade    >= 0 ? row[sGrade]?.trim()    ?? '' : '',
-        gender:           (genderRaw.toUpperCase() === 'F' ? 'F' : 'M') as 'M' | 'F',
-        ssn:              sSsn      >= 0 ? row[sSsn]?.trim()      ?? '' : '',
-        passportName:     sPassName >= 0 ? row[sPassName]?.trim() ?? '' : '',
-        passportNumber:   sPassNum  >= 0 ? row[sPassNum]?.trim()  ?? '' : '',
-        passportExpiry:   sPassExp  >= 0 ? row[sPassExp]?.trim()  ?? '' : '',
-        medication:       sMed      >= 0 ? row[sMed]?.trim()      ?? '' : '',
-        parentPhone:      sParPhone >= 0 ? row[sParPhone]?.trim() ?? '' : '',
-        registrationSource: sReg   >= 0 ? row[sReg]?.trim()      ?? '' : '',
-      });
-    }
-  }
-
-  return Array.from(familyMap.values())
-    .filter(f => f.students.length > 0 || f.parents.length > 0)
-    .sort((a, b) => a.familyId.localeCompare(b.familyId));
 }

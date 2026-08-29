@@ -32,6 +32,8 @@ export interface JobCode {
 const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
   // CAMP_SHEET_CONFIG에서 실제 campType을 읽어 임시 데이터 생성에 활용
   const campType: CampType = (CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG]?.type as CampType) ?? 'EJ';
+  // 임시 데이터의 학생ID/반번호 접두사로 campCode를 그대로 사용 (예: J29 → J29.001, J29.01.01)
+  const campPrefix = campCode;
   
   // 학생 이름 풀 (성별 구분 명확하게)
   const maleNames = [
@@ -326,8 +328,8 @@ export const stSheetService = {
       // 실제 캐시도 없으면 임시 데이터로 폴백
       return getTemporaryData(campCode);
     } catch (error) {
-      logger.error('Firestore 데이터 로드 실패:', error);
-      throw error;
+      logger.error('Firestore 데이터 로드 실패, 임시 데이터로 폴백:', error);
+      return getTemporaryData(campCode);
     }
   },
 

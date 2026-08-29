@@ -337,6 +337,36 @@ export const ST_SHEET_COLUMNS = {
 
 // 캠프 타입별 스프레드시트 설정
 export const CAMP_SHEET_CONFIG = {
+  // 29기
+  J29: {
+    spreadsheetId: '13pS50CYt-N-9Afy_HB5K5mK7SjDa3it0LHYnnzyPywE',
+    sheetName: 'ST',
+    gid: '0',
+    type: 'EJ' as const,
+    useHeaderMapping: true,
+  },
+  E29: {
+    spreadsheetId: '1u-a6HCQljLvJc7QKqdTolnDz4Opl7LaDnERo9vWVHsk',
+    sheetName: 'ST',
+    gid: '0',
+    type: 'EJ' as const,
+    useHeaderMapping: true,
+  },
+  S29: {
+    spreadsheetId: '1LxxSmtI8mu_kSYSRMfXkngtpwhrUCjXG_puX9a08G84',
+    sheetName: 'ST',
+    gid: '296268666',
+    type: 'S' as const,
+    useHeaderMapping: true,
+  },
+  F29: {
+    spreadsheetId: '13j_VM37Xue1lWIaH2MtDullLoXL0jF-baT5NevWqj2I',
+    sheetName: 'ST',
+    gid: '0',
+    type: 'F' as const,
+    useHeaderMapping: true,
+  },
+
   // 28기
   W28: {
     spreadsheetId: '1GtWhAheV9XgU-tKWz0Jx11Yj1GCDQVU6cLFbSVBS2to',
