@@ -32,8 +32,10 @@ export interface JobCode {
 const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
   // CAMP_SHEET_CONFIG에서 실제 campType을 읽어 임시 데이터 생성에 활용
   const campType: CampType = (CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG]?.type as CampType) ?? 'EJ';
-  // 임시 데이터의 학생ID/반번호 접두사로 campCode를 그대로 사용 (예: J29 → J29.001, J29.01.01)
+  // 임시 데이터의 캠프 알파벳 접두사 추출 (예: J29 → J, E27 → E)
+  // 반번호는 알파벳 접두사만 사용 (J01.01 형식), 고유번호는 전체 캠프코드 사용 (J29.001 형식)
   const campPrefix = campCode;
+  const campAlpha = campCode.replace(/[0-9_]/g, '');
   
   // 학생 이름 풀 (성별 구분 명확하게)
   const maleNames = [
@@ -128,8 +130,8 @@ const getTemporaryData = (campCode: CampCode): STSheetStudent[] => {
       const globalIndex = (classIndex - 1) * 12 + studentIndex;
       const studentId = `${campPrefix}.${globalIndex.toString().padStart(3, '0')}`;
       
-      // 반번호: J01.01, J01.02 ... (반.학생)
-      const classNumber = `${campPrefix}${classNum}.${studentNum}`;
+      // 반번호: J01.01, J01.02 ... (알파벳접두사.반.학생)
+      const classNumber = `${campAlpha}${classNum}.${studentNum}`;
       
       const nameIndex = (classIndex - 1) * 6 + studentIndex - 1;
       const name = isFemale 
