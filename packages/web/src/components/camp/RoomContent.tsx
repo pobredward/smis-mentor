@@ -229,15 +229,11 @@ export default function RoomContent() {
     }
   };
 
-  // 유닛멘토별로 그룹화
+  // 유닛멘토별로 그룹화 (unitMentor 없으면 '미분류')
   const groupedByMentor = useMemo(() => {
     return students.reduce((acc, student) => {
-      const mentorKey = student.unitMentor || '';
-      if (!mentorKey) return acc;
-      
-      if (!acc[mentorKey]) {
-        acc[mentorKey] = [];
-      }
+      const mentorKey = student.unitMentor || '미정';
+      if (!acc[mentorKey]) acc[mentorKey] = [];
       acc[mentorKey].push(student);
       return acc;
     }, {} as Record<string, STSheetStudent[]>);
@@ -250,9 +246,10 @@ export default function RoomContent() {
     return students[0].gender || null;
   }, [groupedByMentor]);
 
-  // 멘토를 성별로 분류
+  // 멘토를 성별로 분류 ('미정'은 별도 처리)
   const mentorsByGender = useMemo(() => {
     return Object.keys(groupedByMentor).reduce((acc, mentor) => {
+      if (mentor === '미정') return acc;
       const gender = getMentorGender(mentor);
       if (gender === 'M') {
         acc.male.push(mentor);
@@ -285,13 +282,18 @@ export default function RoomContent() {
       }, {} as Record<string, STSheetStudent[]>)
   ).sort(([roomA], [roomB]) => roomA.localeCompare(roomB));
 
-  // 첫 번째 멘토 자동 선택
+  // 첫 번째 멘토 자동 선택 ('미정' 포함)
   useEffect(() => {
-    const allMentors = [...mentorsByGender.male.sort(), ...mentorsByGender.female.sort()];
+    const hasUnclassified = !!groupedByMentor['미정'];
+    const allMentors = [
+      ...mentorsByGender.male.sort(),
+      ...mentorsByGender.female.sort(),
+      ...(hasUnclassified ? ['미정'] : []),
+    ];
     if (allMentors.length > 0 && !selectedMentor && !searchQuery.trim()) {
       setSelectedMentor(allMentors[0]);
     }
-  }, [mentorsByGender.male.length, mentorsByGender.female.length, selectedMentor, searchQuery]);
+  }, [mentorsByGender.male.length, mentorsByGender.female.length, groupedByMentor, selectedMentor, searchQuery]);
 
   if (loading) {
     return (
@@ -468,6 +470,27 @@ export default function RoomContent() {
                     {mentor}
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* 미정 (유닛멘토 없는 학생) */}
+          {groupedByMentor['미정'] && (
+            <div className="overflow-x-auto">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedMentor('미정')}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    selectedMentor === '미정'
+                      ? 'bg-gray-500 text-white'
+                      : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+                  }`}
+                >
+                  <span>{isForeign ? 'TBD' : '미정'}</span>
+                  <span className={`text-[10px] font-normal ${selectedMentor === '미정' ? 'text-gray-200' : 'text-gray-400'}`}>
+                    {groupedByMentor['미정'].length}명
+                  </span>
+                </button>
               </div>
             </div>
           )}

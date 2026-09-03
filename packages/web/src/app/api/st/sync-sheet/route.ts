@@ -186,9 +186,10 @@ export async function POST(request: NextRequest) {
           return student;
         });
 
-      const active = students.filter((s) => !isInactiveStudent(s));
+      // 이름이 없는 빈 슬롯 및 이월자/취소자 제외
+      const active = students.filter((s) => s.name?.trim() && !isInactiveStudent(s));
       const skipped = students.length - active.length;
-      if (skipped > 0) logger.info(`[${campCode}] 이월자/취소자 ${skipped}명 제외`);
+      if (skipped > 0) logger.info(`[${campCode}] 빈 슬롯/이월자/취소자 ${skipped}명 제외`);
 
       // undefined 필드 제거 (Firestore는 undefined 허용 안 함)
       const sanitized = active.map((s) =>

@@ -235,12 +235,9 @@ export default function ClassContent() {
   const groupedByClass = useMemo(() => {
     return students.reduce((acc, student) => {
       const classPrefix = student.classNumber?.substring(0, 3) || '';
-      if (!classPrefix) return acc;
-      
-      if (!acc[classPrefix]) {
-        acc[classPrefix] = [];
-      }
-      acc[classPrefix].push(student);
+      const key = classPrefix || '미정';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(student);
       return acc;
     }, {} as Record<string, STSheetStudent[]>);
   }, [students]);
@@ -257,7 +254,11 @@ export default function ClassContent() {
     return map;
   }, [groupedByClass]);
 
-  const sortedClasses = useMemo(() => Object.keys(groupedByClass).sort(), [groupedByClass]);
+  // '미정'은 항상 맨 뒤에
+  const sortedClasses = useMemo(() => {
+    const keys = Object.keys(groupedByClass);
+    return [...keys.filter(k => k !== '미정').sort(), ...keys.filter(k => k === '미정')];
+  }, [groupedByClass]);
 
   // 검색 필터링 (한글 이름 + 영어 이름 모두 검색)
   const displayStudents = searchQuery.trim()
@@ -414,26 +415,32 @@ export default function ClassContent() {
       {!searchQuery.trim() && (
         <div className="bg-white border-b border-gray-200 px-4 py-2 overflow-x-auto">
           <div className="flex gap-2">
-            {sortedClasses.map(classKey => (
-              <button
-                key={classKey}
-                onClick={() => setSelectedClass(classKey)}
-                className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex flex-col items-center ${
-                  selectedClass === classKey
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <span>{classKey}</span>
-                {classMentorMap[classKey] && (
-                  <span className={`text-[10px] font-normal mt-0.5 ${
-                    selectedClass === classKey ? 'text-blue-100' : 'text-gray-500'
-                  }`}>
-                    {classMentorMap[classKey]}
-                  </span>
-                )}
-              </button>
-            ))}
+            {sortedClasses.map(classKey => {
+              const isUnclassified = classKey === '미정';
+              const isSelected = selectedClass === classKey;
+              return (
+                <button
+                  key={classKey}
+                  onClick={() => setSelectedClass(classKey)}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex flex-col items-center ${
+                    isSelected
+                      ? isUnclassified ? 'bg-gray-500 text-white' : 'bg-blue-600 text-white'
+                      : isUnclassified ? 'bg-gray-200 text-gray-500 hover:bg-gray-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <span>{isForeign && isUnclassified ? 'TBD' : classKey}</span>
+                  {isUnclassified ? (
+                    <span className={`text-[10px] font-normal mt-0.5 ${isSelected ? 'text-gray-200' : 'text-gray-400'}`}>
+                      {groupedByClass[classKey].length}명
+                    </span>
+                  ) : !isUnclassified && classMentorMap[classKey] ? (
+                    <span className={`text-[10px] font-normal mt-0.5 ${isSelected ? 'text-blue-100' : 'text-gray-500'}`}>
+                      {classMentorMap[classKey]}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
