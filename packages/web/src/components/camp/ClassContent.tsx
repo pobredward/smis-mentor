@@ -471,13 +471,13 @@ export default function ClassContent() {
           </div>
         ) : (
           <div className="grid grid-cols-4 gap-1">
-            {displayStudents.map(student => {
+            {displayStudents.map((student, idx) => {
               const gradeNum = student.grade?.replace(/[^0-9]/g, '') ?? '';
               const gradePrefix = student.grade?.replace(/[0-9].*/g, '') ?? 'G';
               const gradeBadge = gradeNum ? `${gradePrefix}${gradeNum}${student.gender === 'M' ? 'M' : 'F'}` : '';
               return (
               <button
-                key={student.studentId}
+                key={student.studentId || `student-${idx}`}
                 onClick={() => handleSelectStudent(student)}
                 className="bg-white rounded-lg p-2.5 border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all text-left"
               >

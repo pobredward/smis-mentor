@@ -45,20 +45,35 @@ export default function AnalyticsProvider({ children }: { children: React.ReactN
           });
         }
 
-        // Navigation Timing API를 사용한 로딩 시간 측정
-        if (window.performance && performance.timing) {
-          window.addEventListener('load', () => {
-            setTimeout(() => {
-              const timing = performance.timing;
-              const pageLoadTime = timing.loadEventEnd - timing.navigationStart;
-              
-              analyticsLogger.trackPerformance(
-                'page_load_time',
-                pageLoadTime,
-                { path: pathname }
-              );
-            }, 0);
-          });
+        // Navigation Timing API를 사용한 로딩 시간 측정 (Level 2 우선, Level 1 폴백)
+        const measurePageLoad = () => {
+          try {
+            const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+            if (navEntries.length > 0) {
+              const nav = navEntries[0];
+              const pageLoadTime = nav.loadEventEnd - nav.startTime;
+              if (pageLoadTime > 0) {
+                analyticsLogger.trackPerformance('page_load_time', pageLoadTime, { path: pathname });
+              }
+            } else if ('timing' in performance) {
+              // Level 1 폴백 (deprecated이지만 구형 브라우저 대응)
+              const timing = (performance as typeof performance & { timing: PerformanceTiming }).timing;
+              if (timing.loadEventEnd > 0 && timing.navigationStart > 0) {
+                const pageLoadTime = timing.loadEventEnd - timing.navigationStart;
+                if (pageLoadTime > 0) {
+                  analyticsLogger.trackPerformance('page_load_time', pageLoadTime, { path: pathname });
+                }
+              }
+            }
+          } catch {
+            // 측정 실패 시 무시
+          }
+        };
+
+        if (document.readyState === 'complete') {
+          setTimeout(measurePageLoad, 0);
+        } else {
+          window.addEventListener('load', () => setTimeout(measurePageLoad, 0), { once: true });
         }
 
         return onPerfEntry;

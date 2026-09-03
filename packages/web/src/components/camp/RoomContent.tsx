@@ -492,17 +492,17 @@ export default function RoomContent() {
             <p className="text-gray-500">{isForeign ? 'Please select a unit.' : '유닛을 선택해주세요.'}</p>
           </div>
         ) : (
-          roomGroups.map(([roomNumber, students]) => (
-            <div key={roomNumber} className="bg-white rounded-lg p-4 border border-gray-200">
+          roomGroups.map(([roomNumber, students], roomIdx) => (
+            <div key={`room-${roomNumber}-${roomIdx}`} className="bg-white rounded-lg p-4 border border-gray-200">
               <h3 className="text-sm font-bold text-gray-700 mb-3">{isForeign ? `Room ${roomNumber}` : `${roomNumber}호`}</h3>
               <div className="grid grid-cols-4 gap-1">
-                {students.map(student => {
+                {students.map((student, studentIdx) => {
                   const gradeNum = student.grade?.replace(/[^0-9]/g, '') ?? '';
                   const gradePrefix = student.grade?.replace(/[0-9].*/g, '') ?? 'G';
                   const gradeBadge = gradeNum ? `${gradePrefix}${gradeNum}${student.gender === 'M' ? 'M' : 'F'}` : '';
                   return (
                   <button
-                    key={student.studentId}
+                    key={student.studentId ? `${student.studentId}-${roomNumber}` : `${roomIdx}-${studentIdx}`}
                     onClick={() => handleSelectStudent(student)}
                     className="bg-white rounded-lg p-2.5 border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all text-left"
                   >
