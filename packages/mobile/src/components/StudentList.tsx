@@ -24,7 +24,7 @@ import { jobCodesService } from '../services';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface StudentListProps {
-  filterType: 'class' | 'room';
+  filterType: 'class' | 'room' | 'departure' | 'arrival';
   onStudentPress: (student: STSheetStudent, index: number, students: STSheetStudent[]) => void;
   onCampTypeChange?: (campType: CampType) => void;
   onCampCodeChange?: (campCode: CampCode) => void;
@@ -347,17 +347,45 @@ export const StudentList: React.FC<StudentListProps> = ({
     );
   };
 
-  // 멘토별/반별로 학생 그룹화
+  // 공항 정렬 우선순위
+  const AIRPORT_ORDER = ['김포', '청주', '광주', '김해', '직접', '공항'];
+  const sortGroupKey = (key: string): [number, string] => {
+    if (key === '미배정') return [99, key];
+    const idx = AIRPORT_ORDER.findIndex(prefix => key.includes(prefix));
+    return [idx >= 0 ? idx : 10, key];
+  };
+
+  // 학생 정렬: 여자 먼저 → 낮은 학년 → 반번호 → 고유번호
+  const sortStudentsByRoster = (list: STSheetStudent[]): STSheetStudent[] => {
+    return [...list].sort((a, b) => {
+      const genderA = a.gender === 'F' ? 0 : 1;
+      const genderB = b.gender === 'F' ? 0 : 1;
+      if (genderA !== genderB) return genderA - genderB;
+      const gradeA = parseInt(a.grade?.replace(/[^0-9]/g, '') || '99', 10);
+      const gradeB = parseInt(b.grade?.replace(/[^0-9]/g, '') || '99', 10);
+      if (gradeA !== gradeB) return gradeA - gradeB;
+      const classA = a.classNumber || '';
+      const classB = b.classNumber || '';
+      if (classA !== classB) return classA.localeCompare(classB, 'ko');
+      return (a.studentId || '').localeCompare(b.studentId || '');
+    });
+  };
+
+  // 멘토별/반별/공항조별로 학생 그룹화
   const groupedByMentor = allStudents.reduce((acc, student) => {
     let mentorKey: string;
     
     if (filterType === 'class') {
-      // classNumber의 앞 3자리 추출 (예: "E03.10" -> "E03")
       const classPrefix = student.classNumber?.substring(0, 3) || '';
       mentorKey = classPrefix;
-    } else {
-      // room 필터의 경우 unitMentor 사용
+    } else if (filterType === 'room') {
       mentorKey = student.unitMentor || '';
+    } else if (filterType === 'departure') {
+      // 입소공항조 필드
+      mentorKey = (student as STSheetStudent & { departureGroup?: string }).departureGroup?.trim() || '미배정';
+    } else {
+      // arrival: 퇴소공항조 필드
+      mentorKey = (student as STSheetStudent & { arrivalGroup?: string }).arrivalGroup?.trim() || '미배정';
     }
     
     if (!mentorKey) return acc;
@@ -414,20 +442,22 @@ export const StudentList: React.FC<StudentListProps> = ({
     ? filteredStudents.sort((a, b) => {
         if (filterType === 'class') {
           return (a.classNumber || '').localeCompare(b.classNumber || '');
-        } else {
+        } else if (filterType === 'room') {
           return (a.roomNumber || '').localeCompare(b.roomNumber || '');
+        } else {
+          return sortStudentsByRoster([a, b]).indexOf(a) - sortStudentsByRoster([a, b]).indexOf(b);
         }
       })
     : selectedMentor
-    ? (groupedByMentor[selectedMentor] || []).sort((a, b) => {
-        if (filterType === 'class') {
-          // 반 탭: classNumber 오름차순 (예: E03.01, E03.02, ...)
-          return (a.classNumber || '').localeCompare(b.classNumber || '');
-        } else {
-          // 방 탭: roomNumber 오름차순
-          return (a.roomNumber || '').localeCompare(b.roomNumber || '');
-        }
-      })
+    ? filterType === 'departure' || filterType === 'arrival'
+      ? sortStudentsByRoster(groupedByMentor[selectedMentor] || [])
+      : (groupedByMentor[selectedMentor] || []).sort((a, b) => {
+          if (filterType === 'class') {
+            return (a.classNumber || '').localeCompare(b.classNumber || '');
+          } else {
+            return (a.roomNumber || '').localeCompare(b.roomNumber || '');
+          }
+        })
     : [];
 
   // disclosure 동의 후 실제 권한 요청 및 동작 수행
@@ -519,7 +549,11 @@ export const StudentList: React.FC<StudentListProps> = ({
         <Text style={styles.headerTitle}>
           {filterType === 'class'
             ? (isForeign ? 'Class Roster' : '반 명단')
-            : (isForeign ? 'Room Roster' : '방 명단')}
+            : filterType === 'room'
+            ? (isForeign ? 'Room Roster' : '방 명단')
+            : filterType === 'departure'
+            ? (isForeign ? 'Arrival Roster' : '입소 명단')
+            : (isForeign ? 'Departure Roster' : '퇴소 명단')}
         </Text>
         <View style={styles.headerActions}>
           {isSearchExpanded ? (
@@ -754,6 +788,53 @@ export const StudentList: React.FC<StudentListProps> = ({
               </ScrollView>
             )}
           </View>
+        ) : filterType === 'departure' || filterType === 'arrival' ? (
+          // 입소/퇴소 명단: 공항 우선순위 정렬
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterContainer}
+            contentContainerStyle={styles.filterContent}
+          >
+            {Object.keys(groupedByMentor)
+              .sort((a, b) => {
+                const [ai, an] = sortGroupKey(a);
+                const [bi, bn] = sortGroupKey(b);
+                if (ai !== bi) return ai - bi;
+                return an.localeCompare(bn, 'ko', { numeric: true });
+              })
+              .map((group) => {
+                const instructor = filterType === 'departure'
+                  ? (groupedByMentor[group][0] as STSheetStudent & { departureInstructor?: string }).departureInstructor
+                  : (groupedByMentor[group][0] as STSheetStudent & { arrivalInstructor?: string }).arrivalInstructor;
+                return (
+                  <TouchableOpacity
+                    key={group}
+                    style={[
+                      styles.filterChip,
+                      styles.filterChipColumn,
+                      selectedMentor === group && styles.filterChipActive
+                    ]}
+                    onPress={() => setSelectedMentor(group)}
+                  >
+                    <Text style={[
+                      styles.filterChipText,
+                      selectedMentor === group && styles.filterChipTextActive
+                    ]}>
+                      {group}
+                    </Text>
+                    {instructor && (
+                      <Text style={[
+                        styles.filterChipSubText,
+                        selectedMentor === group && styles.filterChipSubTextActive
+                      ]}>
+                        {instructor}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+          </ScrollView>
         ) : (
           // 반 명단: 기존 방식 (가로 배치)
           <ScrollView
@@ -805,7 +886,7 @@ export const StudentList: React.FC<StudentListProps> = ({
 
       {/* 학생 목록 */}
       {filterType === 'room' ? (
-        // 방 탭: 호수별로 그룹화하여 표시
+        // 방 탭만 호수별로 그룹화하여 표시
         <ScrollView
           style={styles.scrollContainer}
           refreshControl={
@@ -867,7 +948,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                                 style={styles.studentCardDouble}
                                 onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                               >
-                                <StudentCardContent item={item} isForeign={isForeign} />
+                                <StudentCardContent item={item} isForeign={isForeign} filterType={filterType} />
                               </TouchableOpacity>
                             );
                             })}
@@ -893,7 +974,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                           style={styles.studentCard}
                           onPress={() => onStudentPress(item, globalIndex, displayStudents)}
                         >
-                          <StudentCardContent item={item} isForeign={isForeign} />
+                          <StudentCardContent item={item} isForeign={isForeign} filterType={filterType} />
                         </TouchableOpacity>
                       );
                       })}
@@ -918,7 +999,7 @@ export const StudentList: React.FC<StudentListProps> = ({
               style={styles.studentCardClass}
               onPress={() => onStudentPress(item, index, displayStudents)}
             >
-              <StudentCardContent item={item} isForeign={isForeign} />
+              <StudentCardContent item={item} isForeign={isForeign} filterType={filterType} />
             </TouchableOpacity>
           )}
           contentContainerStyle={styles.listContainer}
@@ -928,7 +1009,13 @@ export const StudentList: React.FC<StudentListProps> = ({
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
-                {searchQuery.trim() ? '검색 결과가 없습니다.' : '반을 선택해주세요.'}
+                {searchQuery.trim()
+                  ? '검색 결과가 없습니다.'
+                  : filterType === 'departure'
+                  ? '입소조를 선택해주세요.'
+                  : filterType === 'arrival'
+                  ? '퇴소조를 선택해주세요.'
+                  : '반을 선택해주세요.'}
               </Text>
             </View>
           }
@@ -941,9 +1028,10 @@ export const StudentList: React.FC<StudentListProps> = ({
 interface StudentCardContentProps {
   item: STSheetStudent;
   isForeign?: boolean;
+  filterType?: 'class' | 'room' | 'departure' | 'arrival';
 }
 
-const StudentCardContent = React.memo(({ item, isForeign }: StudentCardContentProps) => {
+const StudentCardContent = React.memo(({ item, isForeign, filterType }: StudentCardContentProps) => {
   const photoUrl = toDriveImageUrl(item.profilePhoto);
 
   // "홍길동 (G2M)" 형식: grade에서 숫자만 + 성별 (예: "G2" + "M")
@@ -967,6 +1055,23 @@ const StudentCardContent = React.memo(({ item, isForeign }: StudentCardContentPr
     ? `${unitPrefix}:${unitMentorName}${item.roomNumber ? `(${item.roomNumber}호)` : ''}`
     : item.roomNumber
     ? `${unitPrefix}:(${item.roomNumber}호)`
+    : null;
+
+  // 입소/퇴소 조 정보
+  const extItem = item as STSheetStudent & {
+    departureGroup?: string;
+    departureInstructor?: string;
+    arrivalGroup?: string;
+    arrivalInstructor?: string;
+  };
+  const rosterLine = filterType === 'departure'
+    ? (extItem.departureGroup
+        ? `${extItem.departureGroup}${extItem.departureInstructor ? ` (${extItem.departureInstructor})` : ''}`
+        : null)
+    : filterType === 'arrival'
+    ? (extItem.arrivalGroup
+        ? `${extItem.arrivalGroup}${extItem.arrivalInstructor ? ` (${extItem.arrivalInstructor})` : ''}`
+        : null)
     : null;
 
   return (
@@ -1019,6 +1124,11 @@ const StudentCardContent = React.memo(({ item, isForeign }: StudentCardContentPr
       {unitLine ? (
         <Text style={cardStyles.subSmall} numberOfLines={1}>{unitLine}</Text>
       ) : null}
+
+      {/* 입소/퇴소 조 정보 */}
+      {rosterLine ? (
+        <Text style={[cardStyles.subSmall, cardStyles.rosterText]} numberOfLines={1}>{rosterLine}</Text>
+      ) : null}
     </View>
   );
 });
@@ -1061,6 +1171,10 @@ const cardStyles = StyleSheet.create({
     fontSize: 9,
     color: '#64748b',
     textAlign: 'center',
+  },
+  rosterText: {
+    color: '#16a34a',
+    fontWeight: '600' as '600',
   },
 });
 

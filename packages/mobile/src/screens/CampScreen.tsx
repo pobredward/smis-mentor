@@ -3,38 +3,23 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { EducationScreen } from './EducationScreen';
 import { LessonScreen } from './CampTabs';
 import { TasksScreen } from './TasksScreen';
-import { ClassScreen } from './ClassScreen';
-import { RoomScreen } from './RoomScreen';
+import { RosterScreen } from './RosterScreen';
 import { ScheduleScreen } from './ScheduleScreen';
 import { GuideScreen } from './GuideScreen';
 import { LocationSharingScreen } from './LocationSharingScreen';
 import { useAuth } from '../context/AuthContext';
 import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab } from '../context/CampTabContext';
-import { jobCodesService, stSheetService } from '../services';
-import { CampCode } from '@smis-mentor/shared';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room' | 'location';
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'location';
 
 export function CampScreen() {
   const { userData } = useAuth();
   const { activeTab, setActiveTab } = useCampTab();
-  const [isFamilyCamp, setIsFamilyCamp] = useState(false);
 
   useEffect(() => {
     registerNavigateToTasksTab(() => setActiveTab('tasks'));
     return () => unregisterNavigateToTasksTab();
   }, [setActiveTab]);
-
-  // activeJobCodeId가 바뀔 때마다 F캠프 여부를 직접 판단
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
-  useEffect(() => {
-    if (!activeJobCodeId) { setIsFamilyCamp(false); return; }
-    jobCodesService.getJobCodesByIds([activeJobCodeId]).then((codes) => {
-      if (codes.length > 0 && codes[0].code) {
-        setIsFamilyCamp(stSheetService.getCampType(codes[0].code as CampCode) === 'F');
-      }
-    }).catch(() => {});
-  }, [activeJobCodeId]);
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
@@ -48,8 +33,7 @@ export function CampScreen() {
         { id: 'tasks', title: 'Tasks' },
         { id: 'schedule', title: 'Schedule' },
         { id: 'guide', title: 'Guide' },
-        { id: 'class', title: 'Class' },
-        { id: 'room', title: isFamilyCamp ? 'Family' : 'Room' },
+        { id: 'roster', title: 'Roster' },
         { id: 'location', title: 'Map' },
       ]
     : [
@@ -58,8 +42,7 @@ export function CampScreen() {
         { id: 'tasks', title: '업무' },
         { id: 'schedule', title: '시간표' },
         { id: 'guide', title: '인솔표' },
-        { id: 'class', title: '반명단' },
-        { id: 'room', title: isFamilyCamp ? '가족명단' : '방명단' },
+        { id: 'roster', title: '명단' },
         { id: 'location', title: '위치' },
       ];
 
@@ -123,11 +106,8 @@ export function CampScreen() {
         <View style={[styles.tabContent, activeTab !== 'guide' && styles.hiddenTab]} pointerEvents={activeTab !== 'guide' ? 'none' : 'auto'}>
           <GuideScreen />
         </View>
-        <View style={[styles.tabContent, activeTab !== 'class' && styles.hiddenTab]} pointerEvents={activeTab !== 'class' ? 'none' : 'auto'}>
-          <ClassScreen />
-        </View>
-        <View style={[styles.tabContent, activeTab !== 'room' && styles.hiddenTab]} pointerEvents={activeTab !== 'room' ? 'none' : 'auto'}>
-          <RoomScreen />
+        <View style={[styles.tabContent, activeTab !== 'roster' && styles.hiddenTab]} pointerEvents={activeTab !== 'roster' ? 'none' : 'auto'}>
+          <RosterScreen />
         </View>
         <View style={[styles.tabContent, activeTab !== 'location' && styles.hiddenTab]} pointerEvents={activeTab !== 'location' ? 'none' : 'auto'}>
           <LocationSharingScreen />

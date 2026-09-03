@@ -9,13 +9,11 @@ import LessonContent from '@/components/camp/LessonContent';
 import EducationContent from '@/components/camp/EducationContent';
 import ScheduleContent from '@/components/camp/ScheduleContent';
 import GuideContent from '@/components/camp/GuideContent';
-import ClassContent from '@/components/camp/ClassContent';
-import RoomContent from '@/components/camp/RoomContent';
 import TaskContent from '@/components/camp/TaskContent';
+import RosterContent from '@/components/camp/RosterContent';
 import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
-import FamilyContent from '@/components/camp/FamilyContent';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'class' | 'room';
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster';
 
 // localStorage 키 정의
 const LAST_CAMP_TAB_KEY = 'last_camp_tab';
@@ -41,7 +39,9 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
         userData?.activeJobExperienceId
       : undefined;
 
-  // 활성 캠프 타입 로드 (F 캠프 여부 판별용)
+  const [isEJCamp, setIsEJCamp] = useState(false);
+
+  // 활성 캠프 타입 로드 (F 캠프, E/J 캠프 여부 판별용)
   useEffect(() => {
     const activeJobCodeId =
       adminActiveCampId ||
@@ -52,6 +52,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
       if (codes.length > 0 && codes[0].code) {
         const type = stSheetService.getCampType(codes[0].code as CampCode);
         setIsFamilyCamp(type === 'F');
+        setIsEJCamp(type === 'EJ');
       }
     }).catch(() => {});
   }, [adminActiveCampId, userData?.activeJobExperienceId, userData?.jobExperiences]);
@@ -71,14 +72,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
     { id: 'tasks', title: isForeign ? 'Tasks' : '업무', path: '/camp/tasks' },
     { id: 'schedule', title: isForeign ? 'Schedule' : '시간표', path: '/camp/schedule' },
     { id: 'guide', title: isForeign ? 'Guide' : '인솔표', path: '/camp/guide' },
-    { id: 'class', title: isForeign ? 'Class' : '반명단', path: '/camp/class' },
-    {
-      id: 'room',
-      title: isForeign
-        ? (isFamilyCamp ? 'Family' : 'Room')
-        : (isFamilyCamp ? '가족명단' : '방명단'),
-      path: '/camp/room',
-    },
+    { id: 'roster', title: isForeign ? 'Roster' : '명단', path: '/camp/roster' },
   ];
   
   const tabs = isForeign 
@@ -188,13 +182,9 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
             <ScheduleContent />
           ) : activeTab === 'guide' ? (
             <GuideContent />
-          ) : activeTab === 'class' ? (
+          ) : activeTab === 'roster' ? (
             <div className="h-[calc(100vh-120px)]">
-              <ClassContent />
-            </div>
-          ) : activeTab === 'room' ? (
-            <div className="h-[calc(100vh-120px)]">
-              {isFamilyCamp ? <FamilyContent /> : <RoomContent />}
+              <RosterContent isFamilyCamp={isFamilyCamp} isEJCamp={isEJCamp} />
             </div>
           ) : null}
         </div>

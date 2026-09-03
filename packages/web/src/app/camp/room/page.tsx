@@ -1,11 +1,6 @@
-import { Metadata } from 'next';
-import CampClient from '../CampClient';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: '방명단 | SMIS Mentor',
-  description: '캠프 방명단 관리',
-};
-
+// 방명단 URL은 명단 탭으로 리다이렉트
 export default function RoomPage() {
-  return <CampClient initialTab="room" />;
+  redirect('/camp/roster');
 }

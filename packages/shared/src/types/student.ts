@@ -26,6 +26,10 @@ export const ST_SHEET_HEADER_MAPPING = {
   '이메일 주소': 'email',
   '입소여정': 'departureRoute',
   '퇴소여정': 'arrivalRoute',
+  '입소공항조': 'departureGroup',
+  '입소공항인솔': 'departureInstructor',
+  '퇴소공항조': 'arrivalGroup',
+  '퇴소공항인솔': 'arrivalInstructor',
   
   // 기타
   '기타': 'etc',
@@ -204,10 +208,19 @@ export function mapHeadersToStudent(
     displayFields: {},
   };
 
-  // E/J 캠프 전용: 여정
+  // E/J 캠프 전용: 여정 및 공항 조 정보
   if (campType === 'EJ') {
     student.departureRoute = getValue('입소여정');
     student.arrivalRoute   = getValue('퇴소여정');
+    // 입소/퇴소 공항조 배정 필드
+    const depGroup = getValue('입소공항조');
+    const depInstructor = getValue('입소공항인솔');
+    const arrGroup = getValue('퇴소공항조');
+    const arrInstructor = getValue('퇴소공항인솔');
+    if (depGroup) (student as unknown as Record<string, unknown>).departureGroup = depGroup;
+    if (depInstructor) (student as unknown as Record<string, unknown>).departureInstructor = depInstructor;
+    if (arrGroup) (student as unknown as Record<string, unknown>).arrivalGroup = arrGroup;
+    if (arrInstructor) (student as unknown as Record<string, unknown>).arrivalInstructor = arrInstructor;
   }
 
   // S/DG 캠프 전용: 단체티, 여권
@@ -725,8 +738,12 @@ export interface STSheetStudent {
   email?: string;
   
   // E/J 캠프 전용 필드
-  departureRoute?: string;  // 입소공항
-  arrivalRoute?: string;    // 퇴소공항
+  departureRoute?: string;       // 입소여정 (집합장소/교통편)
+  arrivalRoute?: string;         // 퇴소여정 (해산장소)
+  departureGroup?: string;       // 입소공항조 (예: A조, 1조)
+  departureInstructor?: string;  // 입소공항인솔 (담당 멘토명)
+  arrivalGroup?: string;         // 퇴소공항조
+  arrivalInstructor?: string;    // 퇴소공항인솔
   
   // S 캠프 전용 필드
   shirtSize?: string;       // 단체티 사이즈
