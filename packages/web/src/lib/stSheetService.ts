@@ -323,12 +323,13 @@ export const stSheetService = {
       }
 
       // 임시 데이터 설정이 꺼져있고 실제 캐시가 있으면 반환
-      if (cacheSnap.exists()) {
+      if (cacheSnap.exists() && cacheSnap.data()?.data?.length > 0) {
         return cacheSnap.data().data || [];
       }
 
-      // 실제 캐시도 없으면 임시 데이터로 폴백
-      return getTemporaryData(campCode);
+      // 실제 캐시도 없으면 빈 배열 반환 (임시 데이터로 폴백하지 않음)
+      // → useTemporaryData=false 상태에서 실제 데이터가 없으면 빈 화면 표시
+      return [];
     } catch (error) {
       logger.error('Firestore 데이터 로드 실패, 임시 데이터로 폴백:', error);
       return getTemporaryData(campCode);
@@ -341,12 +342,7 @@ export const stSheetService = {
       const useTemporaryData = await stSheetService.getUseTemporaryDataSetting(campCode);
       
       // 임시 데이터 사용 설정이 켜져있으면 무조건 true
-      if (useTemporaryData) {
-        return true;
-      }
-      
-      // 임시 데이터 사용 설정이 꺼져있으면 무조건 false
-      return false;
+      return useTemporaryData;
     } catch (error) {
       logger.error('임시 데이터 확인 실패:', error);
       return true;

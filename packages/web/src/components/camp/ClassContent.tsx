@@ -451,7 +451,21 @@ export default function ClassContent() {
 
       {/* 학생 목록 - 4열 그리드 (모바일 최적화) */}
       <div className="flex-1 overflow-y-auto p-4">
-        {displayStudents.length === 0 ? (
+        {students.length === 0 && !useTemporaryDataSetting ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+            <svg className="w-12 h-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="text-sm font-medium text-gray-600">
+              {isForeign ? 'No real data available.' : '실제 데이터가 없습니다.'}
+            </p>
+            <p className="text-xs text-gray-400">
+              {isForeign
+                ? 'Sync the ST sheet or turn on temporary data to preview.'
+                : 'ST 시트를 동기화하거나 임시 데이터를 켜서 미리 확인하세요.'}
+            </p>
+          </div>
+        ) : displayStudents.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">{isForeign ? 'Please select a class.' : '반을 선택해주세요.'}</p>
           </div>
