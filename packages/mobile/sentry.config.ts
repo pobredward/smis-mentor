@@ -50,8 +50,9 @@ if (!SENTRY_DISABLED) {
     integrations: [
       // React Native 성능 추적
       Sentry.reactNativeTracingIntegration({
-        enableNativeFramesTracking: true,
-        enableStallTracking: true,
+        // SDK 7: enableNativeFramesTracking, enableStallTracking 옵션 제거됨
+        traceFetch: false, // Fetch polyfill 중복 방지
+        traceXHR: true,
       }),
     ],
     

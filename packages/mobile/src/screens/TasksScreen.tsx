@@ -4771,7 +4771,7 @@ const styles = StyleSheet.create({
 
   // 풀 캘린더 바텀시트
   sheetOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.18)',
     justifyContent: 'flex-end',
     zIndex: 100,

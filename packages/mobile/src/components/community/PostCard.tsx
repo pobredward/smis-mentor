@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
   },
   extraOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.45)',
     borderRadius: 7,
     justifyContent: 'center',

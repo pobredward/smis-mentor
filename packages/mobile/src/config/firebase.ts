@@ -5,9 +5,13 @@ import { getStorage } from 'firebase/storage';
 import { 
   getAuth, 
   initializeAuth,
-  getReactNativePersistence,
-  type Auth 
+  type Auth,
+  type Persistence
 } from 'firebase/auth';
+// SDK 57 / Firebase 11: getReactNativePersistence가 firebase/auth 타입에서 제거됨
+// 런타임에서는 정상 동작하므로 타입 캐스팅으로 처리
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
+const { getReactNativePersistence } = require('firebase/auth') as { getReactNativePersistence: (storage: unknown) => Persistence };
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {

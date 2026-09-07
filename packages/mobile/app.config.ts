@@ -114,13 +114,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
-    newArchEnabled: true,
+    // newArchEnabled: SDK 55부터 New Architecture가 기본값이므로 제거
     scheme: 'smismentor',
-    splash: {
-      image: './assets/splash-icon.png',
-      resizeMode: 'contain',
-      backgroundColor: '#ffffff',
-    },
+    // splash는 expo-splash-screen 플러그인에서 관리 (SDK 55+)
+    // 하위 호환을 위해 유지하되 타입 캐스팅 사용
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.smis.smismentor',
@@ -158,7 +155,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
       package: 'com.smis.smismentor',
       versionCode: 1,
-      edgeToEdgeEnabled: true,
+      // edgeToEdgeEnabled: SDK 55부터 Android 16+ 타겟 시 필수 적용되므로 config에서 제거
       predictiveBackGestureEnabled: false,
       softwareKeyboardLayoutMode: 'resize',
       config: {
@@ -224,6 +221,36 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ],
       'expo-web-browser',
       'expo-apple-authentication',
+      '@react-native-community/datetimepicker',
+      [
+        '@sentry/react-native',
+        {
+          url: 'https://sentry.io/',
+          project: process.env.SENTRY_PROJECT || '',
+          organization: process.env.SENTRY_ORG || '',
+        },
+      ],
+      [
+        'expo-image',
+        {
+          // expo-image SDK 57 플러그인 등록
+        },
+      ],
+      [
+        'expo-splash-screen',
+        {
+          // splash screen은 baseConfig.splash에서 설정
+          image: './assets/splash-icon.png',
+          resizeMode: 'contain',
+          backgroundColor: '#ffffff',
+        },
+      ],
+      [
+        'expo-status-bar',
+        {
+          style: 'auto',
+        },
+      ],
       [
         '@react-native-seoul/naver-login',
         {

@@ -117,9 +117,9 @@ export function NotificationTestScreen() {
         `상태: ${status}\n\n권한 세부 정보:\n` +
         `- granted: ${settings.granted}\n` +
         `- canAskAgain: ${settings.canAskAgain}\n` +
-        `- iOS sound: ${settings.ios?.sound}\n` +
-        `- iOS badge: ${settings.ios?.badge}\n` +
-        `- iOS alert: ${settings.ios?.alert}\n` +
+        `- iOS sound: ${settings.ios?.allowsSound}\n` +
+        `- iOS badge: ${settings.ios?.allowsBadge}\n` +
+        `- iOS alert: ${settings.ios?.allowsAlert}\n` +
         `- Android importance: ${settings.android?.importance}`
       );
     } catch (error) {

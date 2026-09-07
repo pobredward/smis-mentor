@@ -1259,7 +1259,7 @@ const styles = StyleSheet.create({
   },
   // 바텀시트 스타일
   sheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.35)',
     zIndex: 100,
   },

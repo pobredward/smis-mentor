@@ -111,7 +111,8 @@ function buildContact(student: STSheetStudent, campCode?: string): Contacts.Cont
     [Contacts.Fields.PhoneNumbers]: phoneNumbers,
     [Contacts.Fields.Note]: note || undefined,
     contactType: Contacts.ContactTypes.Person,
-  } as Contacts.Contact;
+    // SDK 57: 레거시 addContactAsync와의 타입 호환을 위해 캐스팅
+  } as unknown as Contacts.Contact;
 }
 
 /**
@@ -260,7 +261,7 @@ export async function saveSingleParentContact(
     }
 
     const contact = buildContact(student, campCode);
-    await Contacts.addContactAsync(contact);
+    await Contacts.addContactAsync(contact as any);
     Alert.alert('저장 완료', `"${displayName}" 연락처가 저장되었습니다.`);
     return 'saved';
   } catch (error) {
@@ -357,7 +358,7 @@ export async function saveStudentContacts(
       }
 
       const contact = buildContact(student, campCode);
-      await Contacts.addContactAsync(contact);
+      await Contacts.addContactAsync(contact as any);
       result.saved++;
     } catch (error) {
       result.failed++;
