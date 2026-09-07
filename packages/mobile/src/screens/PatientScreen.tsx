@@ -32,6 +32,7 @@ import {
   updateIsolationReturnChecks,
   updateHospitalVisitEntry,
   addParentContactLog,
+  removeParentContactLog,
   updateParentContactAssignee,
   updateProgressStatus,
   addProgressLog,
@@ -55,6 +56,7 @@ import {
   TRANSPORT_SLOTS,
   PARENT_REPORT_METHODS,
   isCarSlot,
+  LOCATION_MODES,
 } from '@smis-mentor/shared';
 import type {
   PatientRecord,
@@ -75,6 +77,7 @@ import type {
   User,
   ContactMethod,
   ContactReportType,
+  LocationMode,
 } from '@smis-mentor/shared';
 import jobCodesService from '../services/jobCodesService';
 import { stSheetService } from '../services/stSheet';
@@ -852,7 +855,6 @@ export function PatientScreen() {
           today={today}
           currentUserName={userData?.name ?? ''}
           onCheck={(record, si, t, checked) => handleMedCheck(record, si, t, checked)}
-          onSkipDate={(record, si, isSkip) => handleSkipDate(record, si, isSkip)}
         />
       ) : (
         <FlatList
@@ -998,6 +1000,7 @@ export function PatientScreen() {
               temperature: quickForm.temperature ? parseFloat(quickForm.temperature) : undefined,
               fever: quickForm.fever || undefined,
               notes: quickForm.actionNote || undefined,
+              locationMode: quickForm.locationMode,
               location: quickForm.location || undefined,
               progressStatus: '최초보고',
               visitDate: Timestamp.now(),
@@ -1086,7 +1089,7 @@ function MedicationListView({
   today: string;
   currentUserName: string;
   onCheck: (record: PatientRecord, si: number, t: MedicationTime, checked: boolean) => void;
-  onSkipDate: (record: PatientRecord, si: number, isCurrentlySkip: boolean) => void;
+  onSkipDate?: (record: PatientRecord, si: number, isCurrentlySkip: boolean) => void;
 }) {
   const [selectedTime, setSelectedTime] = useState<MedicationTime | null>(null);
   const [confirmPending, setConfirmPending] = useState<{
@@ -1282,7 +1285,7 @@ function MedicationListView({
                 barColor="#818cf8"
                 responsibleName={record.unitMentor || undefined}
                 onCheck={(si, t, checked) => onCheck(record, si, t, checked)}
-                onSkipDate={(si, isSkip) => onSkipDate(record, si, isSkip)}
+                onSkipDate={onSkipDate ? (si, isSkip) => onSkipDate(record, si, isSkip) : undefined}
                 onRequestConfirm={(si, time, medName) => setConfirmPending({ record, si, time, medName })}
                 onViewPhoto={setLightboxUrl}
               />
@@ -1313,7 +1316,7 @@ function MedicationListView({
                 barColor="#fb923c"
                 responsibleName={record.classMentor || undefined}
                 onCheck={(si, t, checked) => onCheck(record, si, t, checked)}
-                onSkipDate={(si, isSkip) => onSkipDate(record, si, isSkip)}
+                onSkipDate={onSkipDate ? (si, isSkip) => onSkipDate(record, si, isSkip) : undefined}
                 onRequestConfirm={(si, time, medName) => setConfirmPending({ record, si, time, medName })}
                 onViewPhoto={setLightboxUrl}
               />
@@ -1889,6 +1892,7 @@ function ProgressTabMobile({
 }) {
   const [showForm, setShowForm] = useState(false);
   const [logStatus, setLogStatus] = useState<ProgressStatus>('중간보고');
+  const [logLocationMode, setLogLocationMode] = useState<LocationMode>('일과중');
   const [logLocation, setLogLocation] = useState('');
   const [logFever, setLogFever] = useState<FeverOption | ''>('');
   const [logFeverDirect, setLogFeverDirect] = useState('');
@@ -1918,6 +1922,7 @@ function ProgressTabMobile({
     }
     onAddProgressLog({
       status: logStatus,
+      locationMode: logStatus !== '완치' ? logLocationMode : undefined,
       location: logLocation || undefined,
       fever: feverValue,
       symptom: logSymptom || undefined,
@@ -1927,6 +1932,7 @@ function ProgressTabMobile({
       nextCheckAssigneeName: logStatus === '중간보고' ? nextCheckAssigneeName : undefined,
     });
     setShowForm(false);
+    setLogLocationMode('일과중');
     setLogLocation(''); setLogFever(''); setLogFeverDirect(''); setLogSymptom(''); setLogNote('');
     setNextCheckTime(''); setNextCheckAssigneeId(currentUserId); setNextCheckAssigneeName(currentUserName);
     setNextCheckQuery(''); setShowAssigneeList(false);
@@ -1945,6 +1951,7 @@ function ProgressTabMobile({
     loggedAt: record.visitDate ?? record.createdAt,
     loggedBy: record.recordedBy ?? '',
     status: '최초보고',
+    locationMode: record.locationMode,
     location: parsedNotes.location,
     fever: record.fever ? record.fever : record.temperature != null ? `${record.temperature}` : undefined,
     symptom: record.symptom,
@@ -1996,7 +2003,48 @@ function ProgressTabMobile({
               <>
                 <View>
                   <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>현재 위치</Text>
-                  <TextInput value={logLocation} onChangeText={setLogLocation} placeholder="예) 330호, 보건실" placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
+                  {/* 위치 모드 버튼 */}
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6 }}>
+                    {([
+                      { id: '일과중' as LocationMode, emoji: '🏃', activeColor: '#3b82f6' },
+                      { id: '휴식'   as LocationMode, emoji: '😴', activeColor: '#f59e0b' },
+                      { id: '격리'   as LocationMode, emoji: '🏠', activeColor: '#8b5cf6' },
+                    ] as const).map(opt => {
+                      const selected = logLocationMode === opt.id;
+                      return (
+                        <TouchableOpacity
+                          key={opt.id}
+                          onPress={() => setLogLocationMode(opt.id)}
+                          style={{
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 3,
+                            paddingVertical: 6,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: selected ? opt.activeColor : '#e5e7eb',
+                            backgroundColor: selected ? opt.activeColor : '#fff',
+                          }}
+                        >
+                          <Text style={{ fontSize: 12 }}>{opt.emoji}</Text>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: selected ? '#fff' : '#6b7280' }}>{opt.id}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <TextInput
+                    value={logLocation}
+                    onChangeText={setLogLocation}
+                    placeholder={
+                      logLocationMode === '휴식' ? '예) 110호, 휴게실' :
+                      logLocationMode === '격리' ? '예) 격리실 214호' :
+                      '예) 330호, 보건실'
+                    }
+                    placeholderTextColor="#9ca3af"
+                    style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]}
+                  />
                 </View>
                 <View>
                   <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>열감</Text>
@@ -2087,8 +2135,17 @@ function ProgressTabMobile({
                       </TouchableOpacity>
                     )}
                   </View>
-                  {(log.location || log.fever || log.symptom) && (
+                  {(log.locationMode || log.location || log.fever || log.symptom) && (
                     <View style={{ marginTop: 4, gap: 2 }}>
+                      {log.locationMode && (
+                        <Text style={{
+                          fontSize: 11,
+                          fontWeight: '700',
+                          color: log.locationMode === '격리' ? '#7c3aed' : log.locationMode === '휴식' ? '#d97706' : '#2563eb',
+                        }}>
+                          {log.locationMode === '격리' ? '🏠' : log.locationMode === '휴식' ? '😴' : '🏃'} {log.locationMode}
+                        </Text>
+                      )}
                       {log.location && <Text style={{ fontSize: 11, color: '#6b7280' }}>📍 {log.location}</Text>}
                       {log.fever && <Text style={{ fontSize: 11, color: log.fever === '고열' ? '#dc2626' : '#ea580c' }}>🌡 {log.fever}</Text>}
                       {log.symptom && <Text style={{ fontSize: 11, color: '#374151' }}>{log.symptom}</Text>}
@@ -3286,12 +3343,52 @@ const METHOD_OPTIONS_M: { id: ContactMethod; label: string; emoji: string }[] = 
   { id: '기타',   label: '기타',   emoji: '📝' },
 ];
 
+// 부모연락 담당자: 지정된 담당자 > 반멘토 > '담임' 순서로 fallback
+function getPresetSenderNameM(r: PatientRecord): string {
+  return r.parentContactAssigneeName ?? r.classMentor ?? '담임';
+}
+
+// 복용약: medicationSchedules 약 이름 → medication 메모 → '없음' 순서로 fallback
+function getPresetMedicationM(r: PatientRecord): string {
+  const names = (r.medicationSchedules ?? [])
+    .map(s => s.name?.trim())
+    .filter((n): n is string => !!n);
+  if (names.length > 0) return names.join(', ');
+  const memo = r.medication?.trim();
+  return memo || '없음';
+}
+
+// 값이 없거나 빈 문자열이면 '없음' 반환
+function orFallbackM(value: string | undefined): string {
+  return value?.trim() || '없음';
+}
+
 const SMS_PRESETS_M: { label: string; text: (r: PatientRecord) => string }[] = [
-  { label: '최초 보고', text: (r) => `안녕하세요. ${r.classMentor ?? '담임'} 멘토입니다.\n${r.studentName} 학생이 오늘 ${r.symptom} 증상을 보여\n현재 ${r.treatment ?? '조치 중'}입니다.\n경과를 지켜보며 다시 연락드리겠습니다.` },
-  { label: '경과 보고', text: (r) => `안녕하세요. ${r.classMentor ?? '담임'} 멘토입니다.\n${r.studentName} 학생의 상태가 많이 호전되었습니다.\n현재 정상적으로 생활하고 있으니 안심하세요.` },
-  { label: '내원 예정', text: (r) => `안녕하세요. ${r.classMentor ?? '담임'} 멘토입니다.\n${r.studentName} 학생의 상태를 보다 정확히 확인하기 위해\n병원 진료를 받을 예정입니다. 결과 확인 후 다시 연락드리겠습니다.` },
-  { label: '내원 결과', text: (r) => `안녕하세요. ${r.classMentor ?? '담임'} 멘토입니다.\n${r.studentName} 학생 병원 진료 결과를 안내드립니다.\n진단명: (직접 입력)\n처방: (직접 입력)\n추가 사항은 연락드리겠습니다.` },
-  { label: '완치 보고', text: (r) => `안녕하세요. ${r.classMentor ?? '담임'} 멘토입니다.\n${r.studentName} 학생이 완전히 회복하여 정상 생활 중입니다.\n걱정 끼쳐드려 죄송합니다. 감사합니다.` },
+  {
+    label: '최초 보고',
+    text: (r) =>
+`안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n증상: ${orFallbackM(r.symptom)}\n복용약: ${getPresetMedicationM(r)}\n조치: ${orFallbackM(r.treatment)}\n\n차도 없을 시 다시 연락드리겠습니다.`,
+  },
+  {
+    label: '경과 보고',
+    text: (r) =>
+`안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n${r.studentName} 학생 상태가 많이 호전되었습니다.\n현재 정상적으로 생활하고 있으니 안심하세요.`,
+  },
+  {
+    label: '내원 예정',
+    text: (r) =>
+`안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n${r.studentName} 학생 상태를 보다 정확히 확인하기 위해\n병원 진료를 받을 예정입니다.\n결과 확인 후 다시 연락드리겠습니다.`,
+  },
+  {
+    label: '내원 결과',
+    text: (r) =>
+`안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n${r.studentName} 학생 병원 진료 결과를 안내드립니다.\n진단명: (직접 입력)\n처방: (직접 입력)\n\n추가 사항은 연락드리겠습니다.`,
+  },
+  {
+    label: '완치 보고',
+    text: (r) =>
+`안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n${r.studentName} 학생이 완전히 회복하여 정상 생활 중입니다.\n걱정 끼쳐드려 죄송합니다. 감사합니다.`,
+  },
 ];
 
 function ParentContactSectionMobile({
@@ -3348,7 +3445,21 @@ function ParentContactSectionMobile({
     ...(currentUserName && ![record.classMentor, record.unitMentor, groupManager?.name, groupSubManager?.name, campManager?.name].includes(currentUserName) ? [{ label: '직접(나)', name: currentUserName }] : []),
   ].filter((o, i, arr) => arr.findIndex(x => x.name === o.name) === i);
 
-  const filteredUsers = assigneeSearch.trim() ? campUsers.filter(u => u.name.includes(assigneeSearch.trim())) : campUsers;
+  // 검색어 있을 때만 드롭다운 표시
+  const filteredUsers = campUsers.filter(u => u.name.includes(assigneeSearch.trim()));
+
+  const handleRemoveLog = async (log: (typeof logs)[number]) => {
+    Alert.alert('연락 기록 삭제', '이 연락 기록을 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제', style: 'destructive',
+        onPress: async () => {
+          try { await removeParentContactLog(db, record.id, log); }
+          catch { Alert.alert('오류', '삭제 중 오류가 발생했습니다.'); }
+        },
+      },
+    ]);
+  };
 
   const handleAddLog = async () => {
     const actor = contactorName || effectiveAssigneeName || currentUserName;
@@ -3408,7 +3519,7 @@ function ParentContactSectionMobile({
             <TextInput value={assigneeSearch} onChangeText={setAssigneeSearch}
               placeholder="이름 검색..." placeholderTextColor="#9ca3af"
               style={[styles.formInput, { borderColor: '#fbcfe8' }]} />
-            {filteredUsers.slice(0, 6).map(u => (
+            {assigneeSearch.trim() && filteredUsers.slice(0, 6).map(u => (
               <TouchableOpacity key={u.userId} onPress={() => handleAssignee(u)} disabled={assigneeSaving}
                 style={{ paddingVertical: 8, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: '#fce7f3' }}>
                 <Text style={{ fontSize: 12, color: '#111827' }}>{u.name} <Text style={{ color: '#9ca3af', fontSize: 10 }}>{u.role}</Text></Text>
@@ -3421,7 +3532,10 @@ function ParentContactSectionMobile({
       {/* 프리셋 멘트 */}
       <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#f3f4f6', backgroundColor: '#fff', padding: 12, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151', flex: 1 }}>프리셋 멘트</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151' }}>프리셋 멘트</Text>
+            <Text style={{ fontSize: 10, color: '#9ca3af' }}>발신자: <Text style={{ fontWeight: '700', color: '#db2777' }}>{effectiveAssigneeName || '담임'}</Text> 멘토</Text>
+          </View>
           <TouchableOpacity onPress={() => setPresetTab(presetTab === 'sms' ? null : 'sms')}
             style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
               borderColor: presetTab === 'sms' ? '#db2777' : '#e5e7eb',
@@ -3460,6 +3574,8 @@ function ParentContactSectionMobile({
           {[...logs].reverse().map((log, i) => {
             const rt = REPORT_TYPE_OPTIONS_M.find(r => r.id === log.reportType);
             const mt = METHOD_OPTIONS_M.find(m => m.id === log.method);
+            // 삭제 권한: 기록 추가한 본인 또는 admin
+            const canDelete = currentUserRole === 'admin' || log.contactedById === currentUserId;
             return (
               <View key={i} style={{ backgroundColor: '#fff', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#f3f4f6' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -3477,6 +3593,11 @@ function ParentContactSectionMobile({
                   </View>
                   <Text style={{ fontSize: 11, fontWeight: '600', color: '#374151', flex: 1 }}>{log.contactedBy}</Text>
                   <Text style={{ fontSize: 9, color: '#9ca3af' }}>{formatDate(log.contactedAt)}</Text>
+                  {canDelete && (
+                    <TouchableOpacity onPress={() => handleRemoveLog(log)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={{ fontSize: 12, color: '#f87171' }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
                 {log.isResolved && <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>✓ 완치 보고</Text>}
               </View>
@@ -3567,6 +3688,7 @@ interface QuickReportFormMobile {
   treatment: string;
   temperature: string;
   fever: string;
+  locationMode: LocationMode; // 현재 위치 모드 (일과중 / 휴식 / 격리)
   location: string;
   actionNote: string;
 }
@@ -3582,7 +3704,7 @@ function QuickReportModalMobile({
   const [form, setForm] = useState<QuickReportFormMobile>({
     studentId: '', studentName: '', grade: '', className: '',
     classMentor: '', unitMentor: '', roomNumber: '',
-    types: ['처치전'], symptom: '', treatment: '', temperature: '', fever: '', location: '', actionNote: '',
+    types: ['처치전'], symptom: '', treatment: '', temperature: '', fever: '', locationMode: '일과중', location: '', actionNote: '',
   });
   const setField = <K extends keyof QuickReportFormMobile>(k: K, v: QuickReportFormMobile[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -3720,10 +3842,48 @@ function QuickReportModalMobile({
         {/* ② 현재 위치 */}
         <View>
           <Text style={styles.formSectionTitle}>② 현재 위치</Text>
+          {/* 위치 모드 버튼 */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+            {([
+              { id: '일과중' as LocationMode, emoji: '🏃', activeColor: '#3b82f6' },
+              { id: '휴식'   as LocationMode, emoji: '😴', activeColor: '#f59e0b' },
+              { id: '격리'   as LocationMode, emoji: '🏠', activeColor: '#8b5cf6' },
+            ] as const).map(opt => {
+              const selected = form.locationMode === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  onPress={() => setField('locationMode', opt.id)}
+                  style={{
+                    flex: 1,
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    borderWidth: 1.5,
+                    borderColor: selected ? opt.activeColor : '#e5e7eb',
+                    backgroundColor: selected ? opt.activeColor : '#fff',
+                    gap: 2,
+                  }}
+                >
+                  <Text style={{ fontSize: 18 }}>{opt.emoji}</Text>
+                  <Text style={{
+                    fontSize: 11,
+                    fontWeight: '700',
+                    color: selected ? '#fff' : '#6b7280',
+                  }}>{opt.id}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
           <TextInput
             value={form.location}
             onChangeText={v => setField('location', v)}
-            placeholder="예: 110호, 체육관, 강당, 기타 장소..."
+            placeholder={
+              form.locationMode === '휴식' ? '예: 110호, 휴게실...' :
+              form.locationMode === '격리' ? '예: 격리실 214호...' :
+              '예: 강당, 체육관, 교실...'
+            }
             placeholderTextColor="#9ca3af"
             style={styles.formInput}
           />

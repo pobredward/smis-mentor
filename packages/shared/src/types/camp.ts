@@ -350,11 +350,17 @@ export interface ManagerAction {
   };
 }
 
+// ── 위치 모드 (일과중 / 휴식 / 격리) ──────────────────────────
+export const LOCATION_MODES = ['일과중', '휴식', '격리'] as const;
+export type LocationMode = (typeof LOCATION_MODES)[number];
+
 // ── 경과 로그 ──────────────────────────────────────────────────
 export interface ProgressLog {
   loggedAt: Timestamp;
   loggedBy: string;
   status: ProgressStatus;
+  /** 현재 위치 모드 (일과중 / 휴식 / 격리) */
+  locationMode?: LocationMode;
   /** 현재 위치 (예: 330호, 보건실) */
   location?: string;
   /** 열감 (정상 | 미열 | 고열 | 직접입력 수치) */
@@ -445,6 +451,8 @@ export interface PatientRecord {
 
   visitDate: Timestamp;
   notes?: string;
+  /** 최초보고 시점의 현재 위치 모드 (일과중 / 휴식 / 격리) */
+  locationMode?: LocationMode;
   /** 최초보고 시점의 현재 위치 */
   location?: string;
   recordedBy: string;

@@ -345,6 +345,17 @@ export const addParentContactLog = async (
   });
 };
 
+export const removeParentContactLog = async (
+  db: Firestore,
+  recordId: string,
+  log: ParentContactLog
+): Promise<void> => {
+  await updateDoc(doc(db, 'patientRecords', recordId), {
+    parentContactLogs: arrayRemove(log),
+    updatedAt: Timestamp.now(),
+  });
+};
+
 export const updateParentContactAssignee = async (
   db: Firestore,
   recordId: string,
