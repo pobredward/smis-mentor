@@ -11,9 +11,10 @@ import ScheduleContent from '@/components/camp/ScheduleContent';
 import GuideContent from '@/components/camp/GuideContent';
 import TaskContent from '@/components/camp/TaskContent';
 import RosterContent from '@/components/camp/RosterContent';
+import PatientContent from '@/components/camp/PatientContent';
 import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster';
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient';
 
 // localStorage 키 정의
 const LAST_CAMP_TAB_KEY = 'last_camp_tab';
@@ -73,6 +74,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
     { id: 'schedule', title: isForeign ? 'Schedule' : '시간표', path: '/camp/schedule' },
     { id: 'guide', title: isForeign ? 'Guide' : '인솔표', path: '/camp/guide' },
     { id: 'roster', title: isForeign ? 'Roster' : '명단', path: '/camp/roster' },
+    { id: 'patient', title: isForeign ? 'Patient' : '환자', path: '/camp/patient' },
   ];
   
   const tabs = isForeign 
@@ -185,6 +187,10 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
           ) : activeTab === 'roster' ? (
             <div className="h-[calc(100vh-120px)]">
               <RosterContent isFamilyCamp={isFamilyCamp} isEJCamp={isEJCamp} />
+            </div>
+          ) : activeTab === 'patient' ? (
+            <div className="h-[calc(100vh-120px)]">
+              <PatientContent />
             </div>
           ) : null}
         </div>

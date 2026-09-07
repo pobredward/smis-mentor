@@ -750,6 +750,47 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // patientRecords 컬렉션 (환자 기록)
+    // 역할: 캠프 스태프(읽기/쓰기) — admin, mentor, foreign 모두 허용
+    // 민감한 학생 건강 정보이므로 isCampStaff()로 제한
+    // ──────────────────────────────────────────────────────────────
+    match /patientRecords/{recordId} {
+      // 읽기: 캠프 스태프 전체 (admin, mentor, foreign)
+      allow read: if isCampStaff();
+
+      // 생성: 캠프 스태프 + 필수 필드 검증
+      allow create: if (
+        isCampStaff() &&
+        request.resource.data.keys().hasAll([
+          'campCode', 'studentName', 'types',
+          'symptom', 'progressStatus',
+          'visitDate', 'recordedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.studentName is string &&
+        request.resource.data.studentName.size() <= 50 &&
+        request.resource.data.symptom is string &&
+        request.resource.data.symptom.size() <= 500
+      );
+
+      // 수정: 캠프 스태프 + 핵심 불변 필드 보호
+      allow update: if (
+        isAdmin() ||
+        (
+          isCampStaff() &&
+          fieldUnchanged('campCode') &&
+          fieldUnchanged('studentId') &&
+          fieldUnchanged('createdAt')
+        )
+      );
+
+      // 삭제: admin 또는 본인이 기록한 것만
+      allow delete: if (
+        isAdmin() ||
+        (isCampStaff() && resource.data.recordedBy == request.auth.uid)
+      );
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // 기본 거부 (명시되지 않은 모든 컬렉션)
     // ──────────────────────────────────────────────────────────────
     match /{document=**} {

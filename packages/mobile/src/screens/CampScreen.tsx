@@ -7,10 +7,11 @@ import { RosterScreen } from './RosterScreen';
 import { ScheduleScreen } from './ScheduleScreen';
 import { GuideScreen } from './GuideScreen';
 import { LocationSharingScreen } from './LocationSharingScreen';
+import { PatientScreen } from './PatientScreen';
 import { useAuth } from '../context/AuthContext';
 import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab } from '../context/CampTabContext';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'location';
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient' | 'location';
 
 export function CampScreen() {
   const { userData } = useAuth();
@@ -34,6 +35,7 @@ export function CampScreen() {
         { id: 'schedule', title: 'Schedule' },
         { id: 'guide', title: 'Guide' },
         { id: 'roster', title: 'Roster' },
+        { id: 'patient', title: 'Patient' },
         { id: 'location', title: 'Map' },
       ]
     : [
@@ -43,6 +45,7 @@ export function CampScreen() {
         { id: 'schedule', title: '시간표' },
         { id: 'guide', title: '인솔표' },
         { id: 'roster', title: '명단' },
+        { id: 'patient', title: '환자' },
         { id: 'location', title: '위치' },
       ];
 
@@ -108,6 +111,9 @@ export function CampScreen() {
         </View>
         <View style={[styles.tabContent, activeTab !== 'roster' && styles.hiddenTab]} pointerEvents={activeTab !== 'roster' ? 'none' : 'auto'}>
           <RosterScreen />
+        </View>
+        <View style={[styles.tabContent, activeTab !== 'patient' && styles.hiddenTab]} pointerEvents={activeTab !== 'patient' ? 'none' : 'auto'}>
+          <PatientScreen />
         </View>
         <View style={[styles.tabContent, activeTab !== 'location' && styles.hiddenTab]} pointerEvents={activeTab !== 'location' ? 'none' : 'auto'}>
           <LocationSharingScreen />

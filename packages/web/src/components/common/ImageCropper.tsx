@@ -7,7 +7,7 @@ interface ImageCropperProps {
   file: File;
   onCropComplete: (croppedFile: File) => void;
   onCancel: () => void;
-  aspectRatio?: number; // 추가: 가로세로 비율(기본값: 1)
+  aspectRatio?: number; // 미전달 시 자유 비율
 }
 
 // 이미지가 로드될 때 초기 크롭 영역 계산
@@ -51,9 +51,11 @@ function canvasPreview(
   const scaleX = image.naturalWidth / image.width;
   const scaleY = image.naturalHeight / image.height;
 
-  // 캔버스 크기 설정 (정사각형으로 고정)
-  canvas.width = 128; // 미리보기 크기 고정
-  canvas.height = 128; // 미리보기 크기 고정
+  // 캔버스 크기 설정 (크롭 비율 유지, 최대 128px)
+  const maxSize = 128;
+  const ratio = crop.width / crop.height;
+  canvas.width = ratio >= 1 ? maxSize : Math.round(maxSize * ratio);
+  canvas.height = ratio >= 1 ? Math.round(maxSize / ratio) : maxSize;
 
   // 컨텍스트 초기화
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -154,7 +156,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   file, 
   onCropComplete, 
   onCancel,
-  aspectRatio = 1 // 기본값 1 (정사각형)
+  aspectRatio, // undefined = 자유 비율
 }) => {
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -204,17 +206,30 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   // 이미지 로드 시 초기 크롭 영역 설정
   function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const { width, height } = e.currentTarget;
-    
-    // aspectRatio 프로퍼티 사용
-    const newCrop = centerAspectCrop(width, height, aspectRatio);
-    setCrop(newCrop);
-    setCompletedCrop({
-      unit: 'px',
-      x: newCrop.x,
-      y: newCrop.y,
-      width: newCrop.width,
-      height: newCrop.width / aspectRatio, // aspectRatio 적용
-    } as PixelCrop);
+
+    if (aspectRatio) {
+      // 비율 고정 크롭
+      const newCrop = centerAspectCrop(width, height, aspectRatio);
+      setCrop(newCrop);
+      setCompletedCrop({
+        unit: 'px',
+        x: newCrop.x,
+        y: newCrop.y,
+        width: newCrop.width,
+        height: newCrop.width / aspectRatio,
+      } as PixelCrop);
+    } else {
+      // 자유 비율: 이미지 전체를 초기 선택 영역으로
+      const initCrop: Crop = {
+        unit: 'px',
+        x: 0,
+        y: 0,
+        width,
+        height,
+      };
+      setCrop(initCrop);
+      setCompletedCrop({ unit: 'px', x: 0, y: 0, width, height } as PixelCrop);
+    }
   }
   
   // 크롭 적용 버튼 핸들러
@@ -248,7 +263,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
                 crop={crop}
                 onChange={(percentCrop) => setCrop(percentCrop)}
                 onComplete={(c) => setCompletedCrop(c)}
-                aspect={aspectRatio} // aspectRatio 프로퍼티 사용
+                aspect={aspectRatio} // undefined = 자유 비율
                 circularCrop={false}
                 keepSelection={true}
                 className="max-h-[400px] mx-auto"
@@ -272,11 +287,10 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
                 <p className="text-sm font-medium mb-2">미리보기</p>
                 <canvas
                   ref={previewCanvasRef}
-                  className="w-32 h-32 border rounded-md object-contain"
+                  className="max-w-[128px] max-h-[128px] border rounded-md"
                   style={{
-                    objectFit: 'contain',
                     borderRadius: '0.375rem',
-                    border: '1px solid #d1d5db'
+                    border: '1px solid #d1d5db',
                   }}
                 />
               </div>

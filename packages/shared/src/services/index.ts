@@ -16,3 +16,4 @@ export * from './smsTemplate';
 export * from './socialAuthService';
 export * from './taskService';
 export * from './appConfigService';
+export * from './patient';
