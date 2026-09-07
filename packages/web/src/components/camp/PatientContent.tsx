@@ -1223,7 +1223,7 @@ export default function PatientContent() {
                         </div>
                       )}
                       {/* 반별 ClassGroup */}
-                      <div className="divide-y divide-black/5">
+                      <div className="divide-y divide-black/5 px-0">
                         {classes.map(([className, classRecords]) => (
                           <ClassGroup
                             key={className}
@@ -1511,7 +1511,7 @@ function ClassGroup({
         </div>
       </div>
 
-      <div className="divide-y divide-black/5">
+      <div className="flex flex-col gap-2 px-2 pb-2 pt-1">
         {sorted.map(record => (
           <PatientCard
             key={record.id}
@@ -1660,7 +1660,7 @@ function PatientCard({
   return (
     <div className={
       grouped
-        ? `relative overflow-hidden border-l-2 ${isMyRecord ? `bg-blue-50/70 ${groupBorderColor}` : `bg-white ${groupBorderColor}`}`
+        ? `relative overflow-hidden rounded-lg shadow-sm border-l-4 ${isMyRecord ? `bg-blue-50/70 border-y border-r border-gray-100 ${groupBorderColor}` : `bg-white border-y border-r border-gray-100 ${groupBorderColor}`}`
         : `relative bg-white rounded-xl border shadow-sm overflow-hidden ${isMyRecord ? 'border-blue-200' : 'border-gray-200'}`
     }>
       {/* 카드 헤더 */}
@@ -2023,131 +2023,90 @@ function ProgressTab({
           )}
         </div>
 
-        {/* 보고 추가 폼 */}
+        {/* 보고 추가 모달 */}
         {showForm && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2.5 mb-3">
+          <TabFormModal
+            title="경과 보고 추가"
+            icon="📋"
+            onClose={() => setShowForm(false)}
+            onSubmit={handleAddLog}
+            submitLabel="기록 추가"
+            submitColor={logStatus === '완치' ? 'green' : 'blue'}
+          >
             {/* 보고 유형 */}
-            <div className="flex gap-1.5">
+            <div className="flex gap-1">
               {(PROGRESS_STATUSES as readonly ProgressStatus[])
-                .filter(s => s !== '최초보고') // 최초보고는 QuickReport에서만
+                .filter(s => s !== '최초보고')
                 .map(s => (
-                  <button key={s} type="button"
-                    onClick={() => setLogStatus(s)}
-                    className={`flex-1 py-1 rounded-full text-[11px] font-bold transition-colors ${
-                      logStatus === s
-                        ? `${PROGRESS_STYLE[s].step} text-white`
-                        : 'bg-white text-gray-500 border border-gray-200'
-                    }`}
-                  >{s}</button>
+                  <button key={s} type="button" onClick={() => setLogStatus(s)}
+                    className={`flex-1 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                      logStatus === s ? `${PROGRESS_STYLE[s].step} text-white` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}>{s}</button>
                 ))}
             </div>
 
-            {/* 완치가 아닐 때만 위치/열감/증상 표시 */}
             {logStatus !== '완치' && (
               <>
-                {/* 현재 위치 */}
                 <FormRow label="현재 위치">
                   <input type="text" value={logLocation} onChange={e => setLogLocation(e.target.value)}
                     placeholder="예) 330호, 보건실"
-                    className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-blue-300 bg-white" />
+                    className="flex-1 text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
                 </FormRow>
-
-                {/* 열감 */}
                 <FormRow label="열감">
                   <div className="flex gap-1 flex-wrap flex-1">
                     {FEVER_OPTIONS.map(f => (
                       <button key={f} type="button"
                         onClick={() => { setLogFever(f === logFever ? '' : f); setLogFeverDirect(''); }}
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                        className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
                           logFever === f
                             ? f === '고열' ? 'bg-red-500 text-white' : f === '미열' ? 'bg-orange-400 text-white' : 'bg-green-500 text-white'
-                            : 'bg-white text-gray-500 border border-gray-200'
-                        }`}
-                      >{f}</button>
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}>{f}</button>
                     ))}
                     <input type="text" value={logFeverDirect}
                       onChange={e => { setLogFeverDirect(e.target.value); setLogFever(''); }}
                       placeholder="직접 입력 (37.8)"
-                      className="flex-1 min-w-[80px] text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
+                      className="flex-1 min-w-[70px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none focus:border-blue-300 bg-white" />
                   </div>
                 </FormRow>
-
-                {/* 증상 */}
                 <FormRow label="증상">
                   <input type="text" value={logSymptom} onChange={e => setLogSymptom(e.target.value)}
                     placeholder="현재 증상 요약"
-                    className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-blue-300 bg-white" />
+                    className="flex-1 text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
                 </FormRow>
               </>
             )}
 
-            {/* 다음 체크 지정 (중간보고 필수) */}
             {logStatus === '중간보고' && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 space-y-2">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 space-y-1.5">
                 <p className="text-[10px] font-bold text-amber-700">⏰ 다음 체크 지정</p>
                 <FormRow label="체크 시간">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={nextCheckTime}
-                    onChange={e => {
-                      // "1430" → "14:30" 자동 포맷
-                      const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
-                      if (raw.length >= 3) {
-                        setNextCheckTime(raw.slice(0, 2) + ':' + raw.slice(2));
-                      } else {
-                        setNextCheckTime(raw);
-                      }
-                    }}
+                  <input type="text" inputMode="numeric" value={nextCheckTime}
+                    onChange={e => { const raw = e.target.value.replace(/\D/g, '').slice(0, 4); setNextCheckTime(raw.length >= 3 ? raw.slice(0, 2) + ':' + raw.slice(2) : raw); }}
                     placeholder="1430 → 14:30"
-                    className="flex-1 text-xs border border-amber-200 rounded px-2 py-1.5 outline-none focus:border-amber-400 bg-white"
-                  />
+                    className="flex-1 text-[11px] border border-amber-200 rounded px-2 py-1 outline-none focus:border-amber-400 bg-white" />
                 </FormRow>
                 <FormRow label="담당자">
                   <div className="relative flex-1">
-                    <input
-                      type="text"
-                      value={nextCheckQuery}
-                      onChange={e => {
-                        setNextCheckQuery(e.target.value);
-                        setShowNextCheckDropdown(true);
-                      }}
+                    <input type="text" value={nextCheckQuery}
+                      onChange={e => { setNextCheckQuery(e.target.value); setShowNextCheckDropdown(true); }}
                       onFocus={() => setShowNextCheckDropdown(true)}
                       onBlur={() => setTimeout(() => setShowNextCheckDropdown(false), 150)}
                       placeholder={nextCheckAssigneeName || '이름 검색'}
-                      className="w-full text-xs border border-amber-200 rounded px-2 py-1.5 outline-none focus:border-amber-400 bg-white"
-                    />
-                    {/* 선택된 담당자 표시 */}
+                      className="w-full text-[11px] border border-amber-200 rounded px-2 py-1 outline-none focus:border-amber-400 bg-white" />
                     {nextCheckAssigneeName && !nextCheckQuery && (
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-amber-700 font-semibold pointer-events-none">
-                        {nextCheckAssigneeName}
-                      </span>
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-amber-700 font-semibold pointer-events-none">✓ {nextCheckAssigneeName}</span>
                     )}
-                    {/* 드롭다운 */}
                     {showNextCheckDropdown && (
-                      <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-amber-200 rounded shadow-lg max-h-40 overflow-y-auto">
-                        {[
-                          // 본인 먼저
-                          { userId: currentUserId, name: currentUserName },
-                          ...campUsers.filter(u => u.userId !== currentUserId),
-                        ]
+                      <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-amber-200 rounded shadow-lg max-h-32 overflow-y-auto">
+                        {[{ userId: currentUserId, name: currentUserName }, ...campUsers.filter(u => u.userId !== currentUserId)]
                           .filter(u => !nextCheckQuery || u.name.includes(nextCheckQuery))
                           .map(u => (
                             <button key={u.userId} type="button"
-                              onMouseDown={() => {
-                                setNextCheckAssigneeId(u.userId);
-                                setNextCheckAssigneeName(u.name);
-                                setNextCheckQuery('');
-                                setShowNextCheckDropdown(false);
-                              }}
-                              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-amber-50 ${
-                                nextCheckAssigneeId === u.userId ? 'font-bold text-amber-700 bg-amber-50' : 'text-gray-700'
-                              }`}
-                            >
-                              {u.name}{u.userId === currentUserId ? ' (나)' : ''}
-                            </button>
-                          ))
-                        }
+                              onMouseDown={() => { setNextCheckAssigneeId(u.userId); setNextCheckAssigneeName(u.name); setNextCheckQuery(''); setShowNextCheckDropdown(false); }}
+                              className={`w-full text-left px-2 py-1 text-[11px] hover:bg-amber-50 ${nextCheckAssigneeId === u.userId ? 'font-bold text-amber-700' : 'text-gray-700'}`}
+                            >{u.name}{u.userId === currentUserId ? ' (나)' : ''}</button>
+                          ))}
                       </div>
                     )}
                   </div>
@@ -2155,26 +2114,12 @@ function ProgressTab({
               </div>
             )}
 
-            {/* 메모 */}
             <FormRow label="메모">
               <input type="text" value={logNote} onChange={e => setLogNote(e.target.value)}
                 placeholder={logStatus === '완치' ? '완치 메모 (선택)' : '추가 메모 (선택)'}
-                className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-blue-300 bg-white" />
+                className="flex-1 text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
             </FormRow>
-
-            <div className="flex gap-2 pt-0.5">
-              <button type="button" onClick={() => setShowForm(false)}
-                className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-                취소
-              </button>
-              <button type="button" onClick={handleAddLog}
-                className={`flex-1 py-1.5 text-xs font-bold text-white rounded-lg ${
-                  logStatus === '완치' ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'
-                }`}>
-                기록 추가
-              </button>
-            </div>
-          </div>
+          </TabFormModal>
         )}
 
         {/* 타임라인 */}
@@ -3218,11 +3163,70 @@ function TransportBoard({ allRecords }: { allRecords: PatientRecord[] }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// 공통 탭 폼 모달 (경과·내원·복용약·부모연락 모두 동일 껍데기 사용)
+// ─────────────────────────────────────────────────────────────
+function TabFormModal({
+  title, icon, onClose, onSubmit, submitLabel = '저장', submitColor = 'blue', children,
+}: {
+  title: string;
+  icon?: string;
+  onClose: () => void;
+  onSubmit?: () => void;
+  submitLabel?: string;
+  submitColor?: 'blue' | 'green' | 'orange' | 'red';
+  children: React.ReactNode;
+}) {
+  const colorMap = {
+    blue:   'bg-blue-600 hover:bg-blue-700',
+    green:  'bg-green-600 hover:bg-green-700',
+    orange: 'bg-orange-500 hover:bg-orange-600',
+    red:    'bg-red-500 hover:bg-red-600',
+  };
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl flex flex-col max-h-[80vh]">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-gray-100 flex-shrink-0">
+          <h3 className="text-[13px] font-bold text-gray-800">
+            {icon && <span className="mr-1">{icon}</span>}{title}
+          </h3>
+          <button onClick={onClose} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        {/* 내용 */}
+        <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2.5">
+          {children}
+        </div>
+        {/* 푸터 */}
+        {onSubmit && (
+          <div className="flex gap-2 px-3.5 py-2.5 border-t border-gray-100 flex-shrink-0">
+            <button onClick={onClose}
+              className="flex-1 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition font-medium">
+              취소
+            </button>
+            <button onClick={onSubmit}
+              className={`flex-[2] px-4 py-1.5 rounded-lg text-xs text-white font-bold transition ${colorMap[submitColor]}`}>
+              {submitLabel}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** 내원 폼 행 레이아웃 (외부 선언 → 리렌더마다 새 참조 생성 방지) */
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] text-gray-500 w-20 flex-shrink-0">{label}</span>
+    <div className="flex items-center gap-1.5">
+      <span className="text-[10px] text-gray-500 w-14 flex-shrink-0">{label}</span>
       {children}
     </div>
   );
@@ -3248,7 +3252,7 @@ function getHospitalPresets(campCode: string): string[] {
 }
 
 /** 내원예정 등록/수정 폼 */
-function HospitalScheduleForm({ onSubmit, onCancel, campUsers, allRecords, initialValues, isEdit, classMentor, campCode }: {
+function HospitalScheduleForm({ onSubmit, onCancel, campUsers, allRecords, initialValues, isEdit, classMentor, campCode, submitRef }: {
   onSubmit: (entry: Partial<HospitalVisitEntry>) => void;
   onCancel: () => void;
   campUsers: User[];
@@ -3258,6 +3262,8 @@ function HospitalScheduleForm({ onSubmit, onCancel, campUsers, allRecords, initi
   /** 학부모 보고자 기본값으로 사용할 반 담당 선생님 이름 */
   classMentor?: string;
   campCode?: string;
+  /** 외부에서 submit을 트리거하기 위한 ref */
+  submitRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const [transportSlot, setTransportSlot] = useState<TransportSlot>(initialValues?.transportSlot ?? '차량1');
   const [departureTime, setDepartureTime] = useState(initialValues?.departureTime ?? '');
@@ -3306,122 +3312,80 @@ function HospitalScheduleForm({ onSubmit, onCancel, campUsers, allRecords, initi
 
   const isCar = isCarSlot(transportSlot);
 
-  return (
-    <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 space-y-2.5">
-      <p className="text-xs font-bold text-orange-700">{isEdit ? '내원 정보 수정' : '내원예정 등록'}</p>
+  // 외부(TabFormModal)에서 저장 버튼 클릭 시 호출될 submit 함수 등록
+  const handleSubmitInternal = () => {
+    onSubmit({ transportSlot, departureTime, driver: isCar ? driver : undefined, escort, hospitalName, parentReporter, parentReportMethod });
+  };
+  useEffect(() => {
+    if (submitRef) submitRef.current = handleSubmitInternal;
+  });
 
-      {/* 차량 슬롯 */}
+  return (
+    <div className="space-y-2">
+      {/* 내원 방식 */}
       <FormRow label="내원 방식">
         <div className="flex flex-wrap gap-1">
           {TRANSPORT_SLOTS.map(s => (
-            <button key={s} type="button"
-              onClick={() => handleSlotChange(s)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+            <button key={s} type="button" onClick={() => handleSlotChange(s)}
+              className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                 transportSlot === s ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-orange-300'
-              }`}
-            >{s}</button>
+              }`}>{s}</button>
           ))}
         </div>
       </FormRow>
 
-      {/* 출발 시간 (24시간 텍스트 입력) */}
       <FormRow label="출발 시간">
-        <input
-          type="text"
-          inputMode="numeric"
-          value={departureTime}
-          onChange={e => {
-            const raw = e.target.value.replace(/[^\d:]/g, '');
-            if (/^\d{4}$/.test(raw)) {
-              setDepartureTime(`${raw.slice(0, 2)}:${raw.slice(2)}`);
-            } else {
-              setDepartureTime(raw);
-            }
-          }}
-          placeholder="예) 14:30"
-          maxLength={5}
-          className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-orange-300 bg-white"
-        />
+        <input type="text" inputMode="numeric" value={departureTime}
+          onChange={e => { const raw = e.target.value.replace(/[^\d:]/g, ''); if (/^\d{4}$/.test(raw)) { setDepartureTime(`${raw.slice(0, 2)}:${raw.slice(2)}`); } else { setDepartureTime(raw); } }}
+          placeholder="예) 14:30" maxLength={5}
+          className="flex-1 text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-300 bg-white" />
       </FormRow>
 
-      {/* 운전자 (차량 슬롯만) */}
       {isCar && (
         <FormRow label="운전자">
           <UserSearchInput value={driver} onChange={setDriver} placeholder="이름 검색" campUsers={campUsers} />
         </FormRow>
       )}
 
-      {/* 인솔자 */}
       <FormRow label="인솔자">
         <UserSearchInput value={escort} onChange={setEscort} placeholder="이름 검색" campUsers={campUsers} />
       </FormRow>
 
       {/* 병원 이름 */}
-      <div className="space-y-1.5">
-        <p className="text-[10px] font-semibold text-gray-500">병원 이름</p>
-        {/* 프리셋 버튼 */}
+      <div>
+        <p className="text-[10px] text-gray-500 mb-1">병원 이름</p>
         {(() => {
           const presets = getHospitalPresets(campCode ?? '');
           if (presets.length === 0) return null;
           return (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1 mb-1">
               {presets.map(name => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setHospitalName(name)}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
-                    hospitalName === name
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300 hover:text-orange-600'
-                  }`}
-                >
-                  {name}
-                </button>
+                <button key={name} type="button" onClick={() => setHospitalName(name)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    hospitalName === name ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'
+                  }`}>{name}</button>
               ))}
             </div>
           );
         })()}
-        {/* 직접 입력 */}
-        <input
-          type="text"
-          value={hospitalName}
-          onChange={e => setHospitalName(e.target.value)}
-          placeholder="직접 입력"
-          className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-orange-300 bg-white"
-        />
+        <input type="text" value={hospitalName} onChange={e => setHospitalName(e.target.value)} placeholder="직접 입력"
+          className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-300 bg-white" />
       </div>
 
-      {/* 학부모 내원 보고자 */}
       <FormRow label="학부모 보고자">
         <UserSearchInput value={parentReporter} onChange={setParentReporter} placeholder="이름 검색" campUsers={campUsers} />
       </FormRow>
 
-      {/* 학부모 보고 방식 */}
       <FormRow label="학부모 보고 방식">
         <div className="flex gap-1 flex-wrap">
           {PARENT_REPORT_METHODS.map(m => (
-            <button key={m} type="button"
-              onClick={() => setParentReportMethod(m)}
-              className={`px-2 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+            <button key={m} type="button" onClick={() => setParentReportMethod(m)}
+              className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                 parentReportMethod === m ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200'
-              }`}
-            >{m}</button>
+              }`}>{m}</button>
           ))}
         </div>
       </FormRow>
-
-      <div className="flex gap-2 pt-1">
-        <button type="button" onClick={onCancel}
-          className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-          취소
-        </button>
-        <button type="button"
-          onClick={() => onSubmit({ transportSlot, departureTime, driver: isCar ? driver : undefined, escort, hospitalName, parentReporter, parentReportMethod })}
-          className="flex-1 py-1.5 text-xs font-bold text-white bg-orange-500 rounded-lg hover:bg-orange-600">
-          {isEdit ? '수정 완료' : '내원예정 등록'}
-        </button>
-      </div>
     </div>
   );
 }
@@ -3436,6 +3400,7 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
   const visits = record.hospitalVisits ?? [];
   const [showForm, setShowForm] = useState(false);
   const [editingIdx, setEditingIdx] = useState<number>(-1);
+  const hospitalSubmitRef = useRef<(() => void) | null>(null);
 
   const setVisitField = <K extends keyof HospitalVisitEntry>(
     idx: number, key: K, val: HospitalVisitEntry[K]
@@ -3570,23 +3535,34 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
         </div>
       ))}
 
-      {/* 등록/수정 폼 */}
-      {showForm ? (
-        <HospitalScheduleForm
-          campUsers={campUsers}
-          allRecords={allRecords}
-          onSubmit={handleFormSubmit}
-          onCancel={() => { setShowForm(false); setEditingIdx(-1); }}
-          initialValues={editingIdx >= 0 ? visits[editingIdx] : undefined}
-          isEdit={editingIdx >= 0}
-          classMentor={record.classMentor}
-          campCode={record.campCode}
-        />
-      ) : (
-        <button onClick={() => { setEditingIdx(-1); setShowForm(true); }}
-          className="w-full py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg border border-dashed border-orange-200 transition-colors">
-          + {visits.length === 0 ? '내원예정 등록' : '재내원 추가'}
-        </button>
+      {/* 등록 버튼 */}
+      <button onClick={() => { setEditingIdx(-1); setShowForm(true); }}
+        className="w-full py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg border border-dashed border-orange-200 transition-colors">
+        + {visits.length === 0 ? '내원예정 등록' : '재내원 추가'}
+      </button>
+
+      {/* 등록/수정 모달 */}
+      {showForm && (
+        <TabFormModal
+          title={editingIdx >= 0 ? '내원 정보 수정' : '내원예정 등록'}
+          icon="🏥"
+          onClose={() => { setShowForm(false); setEditingIdx(-1); }}
+          onSubmit={() => hospitalSubmitRef.current?.()}
+          submitLabel={editingIdx >= 0 ? '수정 완료' : '등록'}
+          submitColor="orange"
+        >
+          <HospitalScheduleForm
+            campUsers={campUsers}
+            allRecords={allRecords}
+            onSubmit={handleFormSubmit}
+            onCancel={() => { setShowForm(false); setEditingIdx(-1); }}
+            initialValues={editingIdx >= 0 ? visits[editingIdx] : undefined}
+            isEdit={editingIdx >= 0}
+            classMentor={record.classMentor}
+            campCode={record.campCode}
+            submitRef={hospitalSubmitRef}
+          />
+        </TabFormModal>
       )}
     </div>
   );
@@ -4370,19 +4346,27 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
         </div>
       )}
 
-      {/* ── 약 추가 폼 ───────────────────────────────────── */}
-      {/* 약 추가 폼 */}
-      {showForm ? (
-        <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 space-y-2.5">
-          <p className="text-[11px] font-bold text-orange-700">{editingIdx !== null ? '✏️ 약 수정' : '💊 약 추가'}</p>
+      {/* ── 약 추가/수정 모달 ─────────────────────────────── */}
+      <button type="button" onClick={openAdd}
+        className="w-full py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg border border-dashed border-orange-300 transition-colors">
+        + 복용약 추가
+      </button>
 
+      {showForm && (
+        <TabFormModal
+          title={editingIdx !== null ? '약 수정' : '복용약 추가'}
+          icon="💊"
+          onClose={() => { setShowForm(false); setEditingIdx(null); }}
+          onSubmit={handleSubmit}
+          submitLabel={editingIdx !== null ? '수정 완료' : '추가'}
+          submitColor="orange"
+        >
           {/* 약 이름 */}
           <div>
             <p className="text-[10px] text-gray-500 mb-1">약 이름 *</p>
-            <input type="text" value={formData.name}
-              onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
+            <input type="text" value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
               placeholder="약 이름 입력"
-              className="w-full text-xs border border-orange-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-orange-400 bg-white" />
+              className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400 bg-white" />
           </div>
 
           {/* 종류 */}
@@ -4392,10 +4376,8 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
               {MEDICATION_CATEGORIES.map(cat => (
                 <button key={cat} type="button"
                   onClick={() => setFormData(f => ({ ...f, category: f.category === cat ? undefined : cat }))}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
-                    formData.category === cat
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    formData.category === cat ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}>{cat}</button>
               ))}
             </div>
@@ -4406,12 +4388,9 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
             <p className="text-[10px] text-gray-500 mb-1">복용 시간 * (중복 선택)</p>
             <div className="flex flex-wrap gap-1">
               {MEDICATION_TIMES.map(t => (
-                <button key={t} type="button"
-                  onClick={() => toggleTime(t)}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-                    formData.times.includes(t)
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'
+                <button key={t} type="button" onClick={() => toggleTime(t)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                    formData.times.includes(t) ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}>{t}</button>
               ))}
             </div>
@@ -4421,68 +4400,46 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
           <div>
             <p className="text-[10px] text-gray-500 mb-1">복용 기간</p>
             <div className="flex items-center gap-2 flex-wrap">
-              {/* 캠프 끝까지 토글 */}
-              <label className="flex items-center gap-1.5 cursor-pointer">
+              <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={!!formData.endDateAuto}
                   onChange={e => setFormData(f => ({ ...f, endDateAuto: e.target.checked, lastTime: undefined }))}
-                  className="w-3.5 h-3.5 accent-orange-500" />
+                  className="w-3 h-3 accent-orange-500" />
                 <span className="text-[10px] text-gray-600 font-medium">캠프 끝까지</span>
               </label>
               {!formData.endDateAuto && (
                 <>
                   <div className="flex items-center gap-1">
-                    <input type="number" value={dayCount} min="1" max="30"
-                      onChange={e => handleDayCount(e.target.value)}
-                      className="w-14 text-xs border border-orange-200 rounded px-2 py-1 outline-none focus:border-orange-400 bg-white text-center" />
-                    <span className="text-[11px] text-gray-500">일</span>
+                    <input type="number" value={dayCount} min="1" max="30" onChange={e => handleDayCount(e.target.value)}
+                      className="w-12 text-[11px] border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-orange-400 bg-white text-center" />
+                    <span className="text-[10px] text-gray-500">일</span>
                   </div>
                   <span className="text-[10px] text-gray-400">{formData.startDate} ~ {formData.endDate}</span>
                 </>
               )}
             </div>
 
-            {/* 시작 날 시작 시간 (기간제 + 선택된 시간 있을 때) */}
             {!formData.endDateAuto && formData.times.length > 0 && (
-              <div className="mt-2">
-                <p className="text-[10px] text-gray-500 mb-1">
-                  시작 날({formData.startDate}) 시작 시간
-                  <span className="text-gray-400 ml-1">— 지정 시 이전 시간은 복용 불필요</span>
-                </p>
+              <div className="mt-1.5">
+                <p className="text-[9px] text-gray-400 mb-1">시작 날({formData.startDate}) 시작 시간</p>
                 <div className="flex flex-wrap gap-1">
-                  <button type="button"
-                    onClick={() => setFormData(f => ({ ...f, firstTime: undefined }))}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-                      !formData.firstTime ? 'bg-gray-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
-                    }`}>처음부터</button>
                   {MEDICATION_TIMES.filter(t => formData.times.includes(t)).map(t => (
-                    <button key={t} type="button"
-                      onClick={() => setFormData(f => ({ ...f, firstTime: t }))}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-                        formData.firstTime === t ? 'bg-teal-500 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-teal-300'
+                    <button key={t} type="button" onClick={() => setFormData(f => ({ ...f, firstTime: t }))}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                        formData.firstTime === t ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                       }`}>{t}부터</button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* 마지막 날 마감 시간 (기간제 + 2일 이상일 때) */}
             {!formData.endDateAuto && parseInt(dayCount) > 1 && formData.times.length > 0 && (
-              <div className="mt-2">
-                <p className="text-[10px] text-gray-500 mb-1">
-                  마지막 날({formData.endDate}) 마감 시간
-                  <span className="text-gray-400 ml-1">— 지정 시 이후 시간은 복용 불필요</span>
-                </p>
+              <div className="mt-1.5">
+                <p className="text-[9px] text-gray-400 mb-1">마지막 날({formData.endDate}) 마감 시간</p>
                 <div className="flex flex-wrap gap-1">
-                  <button type="button"
-                    onClick={() => setFormData(f => ({ ...f, lastTime: undefined }))}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-                      !formData.lastTime ? 'bg-gray-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
-                    }`}>끝까지</button>
                   {MEDICATION_TIMES.filter(t => formData.times.includes(t)).map(t => (
-                    <button key={t} type="button"
-                      onClick={() => setFormData(f => ({ ...f, lastTime: t }))}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-                        formData.lastTime === t ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-orange-300'
+                    <button key={t} type="button" onClick={() => setFormData(f => ({ ...f, lastTime: t }))}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                        formData.lastTime === t ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                       }`}>{t}까지</button>
                   ))}
                 </div>
@@ -4492,30 +4449,12 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
 
           {/* 메모 */}
           <div>
-            <p className="text-[10px] text-gray-500 mb-1">메모 (복용 주의사항 등)</p>
-            <input type="text" value={formData.memo ?? ''}
-              onChange={e => setFormData(f => ({ ...f, memo: e.target.value }))}
+            <p className="text-[10px] text-gray-500 mb-1">메모</p>
+            <input type="text" value={formData.memo ?? ''} onChange={e => setFormData(f => ({ ...f, memo: e.target.value }))}
               placeholder="예: 식후 30분, 물 충분히"
-              className="w-full text-xs border border-orange-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-orange-400 bg-white" />
+              className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400 bg-white" />
           </div>
-
-          <div className="flex gap-2 pt-0.5">
-            <button type="button" onClick={() => { setShowForm(false); setEditingIdx(null); }}
-              className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-              취소
-            </button>
-            <button type="button" onClick={handleSubmit}
-              disabled={!formData.name.trim() || formData.times.length === 0}
-              className="flex-1 py-1.5 text-xs font-bold text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
-              {editingIdx !== null ? '수정 완료' : '추가'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button type="button" onClick={openAdd}
-          className="w-full py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg border border-dashed border-orange-300 transition-colors">
-          + 복용약 추가
-        </button>
+        </TabFormModal>
       )}
 
       {schedules.length === 0 && !showForm && (
@@ -5216,80 +5155,62 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
       {/* 연락 기록 추가 */}
       {!isCompleted && (
         <div>
-          {!showLogForm ? (
-            <button onClick={() => setShowLogForm(true)}
-              className="w-full py-2 text-xs font-medium text-pink-600 bg-pink-50 hover:bg-pink-100 rounded-lg border border-pink-100 transition-colors">
-              + 연락 기록 추가
-            </button>
-          ) : (
-            <div className="rounded-lg bg-pink-50 border border-pink-100 p-3 space-y-2.5">
+          <button onClick={() => setShowLogForm(true)}
+            className="w-full py-2 text-xs font-medium text-pink-600 bg-pink-50 hover:bg-pink-100 rounded-lg border border-pink-100 transition-colors">
+            + 연락 기록 추가
+          </button>
 
+          {showLogForm && (
+            <TabFormModal
+              title="연락 기록 추가"
+              icon="📞"
+              onClose={() => setShowLogForm(false)}
+              onSubmit={handleAddLog}
+              submitLabel={saving ? '저장 중...' : '저장'}
+              submitColor="red"
+            >
               {/* ① 보고 유형 */}
               <div>
-                <p className="text-[10px] font-bold text-gray-600 mb-1">① 보고 유형</p>
+                <p className="text-[10px] text-gray-500 mb-1">① 보고 유형</p>
                 <div className="flex gap-1 flex-wrap">
                   {REPORT_TYPE_OPTIONS.map(rt => (
-                    <button key={rt.id} onClick={() => {
-                      setReportType(rt.id);
-                      if (rt.id === '완치보고') setIsResolved(true);
-                      else setIsResolved(false);
-                    }}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
-                        reportType === rt.id
-                          ? `${rt.color} text-white border-transparent`
-                          : 'bg-white text-gray-500 border-gray-200 hover:border-pink-300'
-                      }`}>
-                      {rt.label}
-                    </button>
+                    <button key={rt.id} onClick={() => { setReportType(rt.id); setIsResolved(rt.id === '완치보고'); }}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${
+                        reportType === rt.id ? `${rt.color} text-white` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}>{rt.label}</button>
                   ))}
                 </div>
               </div>
 
               {/* ② 연락한 사람 */}
               <div>
-                <p className="text-[10px] font-bold text-gray-600 mb-1">② 연락한 사람</p>
+                <p className="text-[10px] text-gray-500 mb-1">② 연락한 사람</p>
                 <div className="flex gap-1 flex-wrap">
                   {contactorOptions.map(opt => (
-                    <button key={opt.name} onClick={() =>
-                        setContactorName(prev => prev === opt.name ? '' : opt.name)}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
-                        contactorName === opt.name
-                          ? 'bg-pink-500 text-white border-pink-500'
-                          : 'bg-white text-gray-500 border-gray-200 hover:border-pink-300'
+                    <button key={opt.name} onClick={() => setContactorName(prev => prev === opt.name ? '' : opt.name)}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${
+                        contactorName === opt.name ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                       }`}>
-                      <span className="text-[9px] text-opacity-70 mr-0.5">{opt.label}</span>{opt.name}
+                      <span className="opacity-60 mr-0.5">{opt.label}</span>{opt.name}
                     </button>
                   ))}
                 </div>
-                {contactorName && (
-                  <p className="text-[10px] text-pink-600 mt-1">선택: {contactorName}</p>
-                )}
+                {contactorName && <p className="text-[9px] text-pink-600 mt-0.5">✓ {contactorName}</p>}
               </div>
 
               {/* ③ 연락 방법 */}
               <div>
-                <p className="text-[10px] font-bold text-gray-600 mb-1">③ 연락 방법</p>
-                <div className="flex gap-1.5 flex-wrap">
+                <p className="text-[10px] text-gray-500 mb-1">③ 연락 방법</p>
+                <div className="flex gap-1 flex-wrap">
                   {METHOD_OPTIONS.map(m => (
                     <button key={m.id} onClick={() => setMethod(m.id)}
-                      className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
-                        method === m.id ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-gray-500 border-gray-200 hover:border-pink-300'
-                      }`}>
-                      {m.emoji} {m.label}
-                    </button>
+                      className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${
+                        method === m.id ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}>{m.emoji} {m.label}</button>
                   ))}
                 </div>
               </div>
-
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setShowLogForm(false)}
-                  className="flex-1 py-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200">취소</button>
-                <button onClick={handleAddLog} disabled={saving}
-                  className="flex-1 py-1.5 text-xs text-white bg-pink-500 rounded-lg hover:bg-pink-600 disabled:bg-gray-300">
-                  {saving ? '저장 중...' : '저장'}
-                </button>
-              </div>
-            </div>
+            </TabFormModal>
           )}
         </div>
       )}
