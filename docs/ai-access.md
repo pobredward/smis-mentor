@@ -35,7 +35,7 @@ AI 에게 URL 을 붙여넣으면 내장 fetch 도구가 그 페이지를 GET �
 
 ## 2층 — MCP 서버
 
-구현: `src/lib/mcp/server.ts` (mcp-handler 2.x + MCP SDK v2, Streamable HTTP, stateless). 도구는 모두 **읽기 전용**입니다.
+구현: `src/lib/mcp/server.ts` (mcp-handler 2.x + MCP SDK v2, Streamable HTTP, stateless). 페이지 도구는 읽기 전용이고, 데이터 도구(아래)만 관리자에게 쓰기를 허용합니다.
 
 | 도구 | 설명 |
 | --- | --- |
@@ -49,8 +49,24 @@ AI 에게 URL 을 붙여넣으면 내장 fetch 도구가 그 페이지를 GET �
 | `list_camps` (로그인) | 캠프 코드 목록 (관리자는 전체, 그 외 본인 캠프) |
 | `find_users` (관리자) | 이름·대학·전공으로 사용자 검색 + 지원 이력·평가 요약 |
 | `get_lesson_materials` (로그인) | 선생님의 수업 자료 대주제·섹션별 보기/원본 링크 전체 (관리자는 이름/ID로 아무나, 그 외 본인만; `camp` 로 대주제 필터) |
+| `describe_schema` (로그인) | 데이터 도구가 다루는 컬렉션·필드·권한·쓰기 규칙 + 작업 레시피 (`collection` 지정 시 필드 상세) |
+| `query_documents` (로그인) | 컬렉션 조건 조회 (`where`/`orderBy`/`limit`/`offset`/`fields`/`includeLarge`, 서브컬렉션은 `parentId`) |
+| `get_document` (로그인) | 문서 하나 전체 읽기 (large 필드 포함) |
+| `write_documents` (관리자) | 생성·수정·삭제 배치 (≤50). **기본 dry-run** → `previewHash` + `confirm=true` 로 실행, `mcpAuditLogs` 기록 |
 
 리소스(`resources/list`)로도 레지스트리 페이지가 `https://smis-mentor.com/{path}.md` URI 로 노출됩니다.
+
+### 범용 데이터 도구 (`src/lib/mcp/datamodel.ts`, `data-tools.ts`)
+
+작업(예: "J28 교육 자료를 J29 로 복사")마다 전용 도구를 만들지 않고, AI 가 스키마를 읽고 원시 도구를 조합하도록 했습니다. 규칙은 전부 `datamodel.ts` 한 곳에 선언되어 있습니다.
+
+- **컬렉션 선언** (`COLLECTIONS`): 읽기 권한(`read`), 허용 쓰기(`write.ops`), 멘토 범위 제한(`scope` — 참여 캠프 ID/코드 또는 본인 uid), 필드별 타입·필수·`writable`·`enum`·`ref`(참조 무결성: `jobCodes.id`, `jobCodes.code`, `taskCategories.id` …)·`large`(query 기본 생략)·`adminOnly`, `hidden`(응답 제거 + 쓰기 거부), `serverManaged`(createdAt/updatedAt/createdBy/updatedBy 등 서버가 채움), `forcedOnCreate`(예: `campTasks.completions=[]`, `evaluations` 의 `isFinalized=false / isVisible=false / aiDraft=true / evaluatorName="이름 (AI 초안)"`), `idOnCreate`(auto / uuid / required).
+- **차단 컬렉션** (`EXCLUDED_COLLECTIONS`): 환자 기록, ST시트 원본(학생 연락처·주민번호), 토큰, OAuth 내부 데이터 등은 이름조차 조회되지 않습니다.
+- **개인정보 방어선**: `hidden` 목록과 별개로 `email / phone / address / rrn / passport / birth / bank / account / password / token …` 이 들어간 키는 모든 깊이에서 항상 제거되고, 조건·정렬 필드로도 쓸 수 없습니다 (`isSensitiveKey`).
+- **query**: `==` 전부와 `in` 하나는 Firestore 에 내려보내고(복합 색인 불필요) 나머지 연산자(`!= < <= > >= not-in array-contains contains exists`)·정렬·offset 은 메모리에서 처리합니다 (최대 1,000건 스캔, 넘으면 `warning`). 타임스탬프는 한국시간 ISO(`+09:00`)로 반환, 입력은 `YYYY-MM-DD`(KST 자정) 또는 ISO 8601.
+- **write**: 관리자만. `confirm` 없이 호출하면 검증(스키마·필수·enum·타입·참조·컬렉션별 정합성: 카테고리 캠프 일치, 공고 코드/ID 일치, 평가 점수 범위·중복 초안 등)과 미리보기(`after` / `changes` / `before`)만 돌려주고 아무것도 쓰지 않습니다. 같은 operations + `previewHash` + `confirm=true` 로 재호출하면 재검증 후 한 배치로 실행하고, 같은 배치에 `mcpAuditLogs` 문서(실행자, 메모, 작업 목록)를 남깁니다. 평가(`evaluations`)는 앱과 같은 방식으로 `totalScore`(평균)/`maxTotalScore`(10)/`percentage` 를 서버가 계산합니다.
+- **레시피** (`RECIPES`): 교육 자료 캠프 간 복사, 업무 복사(날짜 이동), 서류 전형 평가 초안, 선생님 수업 자료 링크 추출 — `describe_schema` 응답에 포함되어 AI 가 절차를 따릅니다.
+- 새 컬렉션이나 필드를 열고 싶으면 `datamodel.ts` 에 선언만 추가하면 됩니다. 코드 수정은 필요 없습니다.
 
 ### 접근 권한
 
