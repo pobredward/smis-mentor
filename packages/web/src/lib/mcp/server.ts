@@ -256,8 +256,11 @@ function registerTools(server: McpServer, mode: McpMode) {
         if (!viewer || !canAccess('mentor', viewer)) return text('멘토·원어민·관리자 계정이 필요합니다.');
         const camps = await getCamps();
         const listed = viewer.role === 'admin' ? camps : camps.filter((c) => viewer.jobCodeIds.includes(c.id) || viewer.activeJobCodeId === c.id);
+        // 최근 캠프·활성 캠프만 페이지 URL 을 펼쳐 주고, 나머지는 경로 패턴으로 안내해 응답을 짧게 유지
+        const recent = new Set(listed.slice(0, 10).map((c) => c.id));
         return json({
           total: listed.length,
+          pathPattern: `${SITE_URL}/camp/{education|schedule|guide|tasks|roster|class|room}/{code}.md`,
           camps: listed.map((c) => ({
             code: c.code,
             id: c.id,
@@ -267,13 +270,17 @@ function registerTools(server: McpServer, mode: McpMode) {
             korea: c.korea,
             period: fmtRange(c.startDate, c.endDate),
             active: c.id === viewer.activeJobCodeId,
-            pages: {
-              education: toMarkdownUrl(`/camp/education/${c.code}`),
-              schedule: toMarkdownUrl(`/camp/schedule/${c.code}`),
-              guide: toMarkdownUrl(`/camp/guide/${c.code}`),
-              tasks: toMarkdownUrl(`/camp/tasks/${c.code}`),
-              roster: toMarkdownUrl(`/camp/roster/${c.code}`),
-            },
+            ...(recent.has(c.id) || c.id === viewer.activeJobCodeId
+              ? {
+                  pages: {
+                    education: toMarkdownUrl(`/camp/education/${c.code}`),
+                    schedule: toMarkdownUrl(`/camp/schedule/${c.code}`),
+                    guide: toMarkdownUrl(`/camp/guide/${c.code}`),
+                    tasks: toMarkdownUrl(`/camp/tasks/${c.code}`),
+                    roster: toMarkdownUrl(`/camp/roster/${c.code}`),
+                  },
+                }
+              : {}),
           })),
         });
       }

@@ -46,11 +46,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   }
 
   const isPublic = result.page.access === 'public';
+  // proxy.ts 의 AI 에이전트 콘텐츠 협상으로 들어온 요청은 원래 페이지 URL 로 캐시되면 안 된다
+  // (브라우저 사용자에게 마크다운이 내려가는 캐시 오염 방지)
+  const negotiated = req.headers.get('x-smis-md-negotiated') === '1';
   return new Response(result.markdown, {
     status: 200,
     headers: {
       ...TEXT_HEADERS,
-      'Cache-Control': isPublic ? 'public, s-maxage=300, stale-while-revalidate=3600' : 'private, no-store',
+      'Cache-Control': isPublic && !negotiated ? 'public, s-maxage=300, stale-while-revalidate=3600' : 'private, no-store',
+      ...(negotiated ? { Vary: 'Accept, User-Agent, Authorization' } : {}),
     },
   });
 }

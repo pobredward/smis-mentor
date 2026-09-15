@@ -250,9 +250,10 @@ export async function crawlPages(input: string, viewer: Viewer | null, options: 
     }
     const md = composePage(result, { withPointer: false });
     if (chars + md.length > maxChars) {
+      // 이 페이지는 건너뛰고 더 작은 페이지는 계속 수집한다
       truncated = true;
-      skipped.push({ path, reason: `분량 한도(${maxChars}자) 초과 — read_page 로 개별 조회하세요` });
-      break;
+      skipped.push({ path, reason: `분량 한도(${maxChars}자) 초과(${md.length}자) — read_page 로 개별 조회하세요` });
+      continue;
     }
     chars += md.length;
     docs.push(`<!-- page: ${result.path} (depth ${depth}) -->\n${md}`);
@@ -288,7 +289,7 @@ export async function crawlPages(input: string, viewer: Viewer | null, options: 
     .filter((l) => l !== '')
     .join('\n');
 
-  return { root: rootPath, pages, skipped, truncated, markdown: `${header}${docs.join('\n\n---\n\n')}\n` };
+  return { root: rootPath, pages, skipped, truncated, markdown: `${header}\n\n${docs.join('\n\n---\n\n')}\n` };
 }
 
 // ─── 목록 · 검색 ───────────────────────────────────────────────────────
@@ -429,14 +430,21 @@ export async function searchPages(query: string, viewer: Viewer | null, limit = 
     }
   }
 
-  // 같은 경로는 최고 점수 하나만
-  const best = new Map<string, SearchHit>();
+  // 같은 경로는 하나로 합친다 (최고 점수 항목 + 일치 건수)
+  const best = new Map<string, { hit: SearchHit; count: number; score: number }>();
   hits.forEach((h) => {
-    const key = `${h.path}|${h.title}`;
-    const cur = best.get(key);
-    if (!cur || cur.score < h.score) best.set(key, h);
+    const cur = best.get(h.path);
+    if (!cur) best.set(h.path, { hit: h, count: 1, score: h.score });
+    else {
+      cur.count += 1;
+      cur.score += h.score * 0.25;
+      if (cur.hit.score < h.score) cur.hit = h;
+    }
   });
-  return [...best.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+  return [...best.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ hit, count, score }) => (count > 1 ? { ...hit, title: `${hit.title} 외 ${count - 1}건`, score } : hit));
 }
 
 // ─── llms.txt / llms-full.txt (공개 콘텐츠) ────────────────────────────
