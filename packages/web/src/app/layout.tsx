@@ -17,6 +17,14 @@ export const metadata: Metadata = {
   publisher: '에스엠아이에스',
   creator: '에스엠아이에스',
   metadataBase: new URL('https://www.smis-mentor.com'),
+  // AI 에이전트용 마크다운 전문 (llms-full.txt) — <link rel="alternate" type="text/markdown">
+  alternates: {
+    types: {
+      'text/markdown': [
+        { url: 'https://smis-mentor.com/llms-full.txt', title: 'SMIS 멘토 플랫폼 — AI/LLM용 전체 콘텐츠 (Markdown)' },
+      ],
+    },
+  },
   verification: {
     // 구글 서치 콘솔에서 발급받은 인증 코드로 교체하세요
     google: "vuF1TTsFjNoaKkVBHXKUbgNZRYcHi-S-SmAmn5kWIq0",

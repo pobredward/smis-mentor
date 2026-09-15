@@ -4,7 +4,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Monorepo 환경을 위한 설정
   transpilePackages: ['@smis-mentor/shared'],
-  
+
   // TypeScript 빌드 설정 (타입 오류 해결 후 제거 예정)
   typescript: {
     ignoreBuildErrors: true,
@@ -19,6 +19,17 @@ const nextConfig: NextConfig = {
         has: [{ type: 'host', value: 'www.smis-mentor.com' }],
         destination: 'https://smis-mentor.com/:path*',
         permanent: true,
+      },
+    ];
+  },
+
+  // AI 에이전트용 마크다운 미러: 어떤 페이지든 URL 뒤에 .md 를 붙이면 마크다운으로 제공
+  //   /job-board.md → /api/md/job-board, /index.md → 홈  (구현: src/app/api/md/[[...path]]/route.ts)
+  async rewrites() {
+    return [
+      {
+        source: '/:path*.md',
+        destination: '/api/md/:path*',
       },
     ];
   },
@@ -53,20 +64,20 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  
+
 };
 
 export default withSentryConfig(nextConfig, {
   // Sentry 설정 - 환경변수 또는 기본값 사용
   org: process.env.SENTRY_ORG || "pobredward",
   project: process.env.SENTRY_PROJECT || "smis-mentor-web",
-  
+
   // CI에서만 로그 출력
   silent: !process.env.CI,
-  
+
   // 소스맵 업로드 설정
   widenClientFileUpload: true,
-  
+
   // 브라우저 요청을 Sentry로 라우팅하여 광고 차단기 우회
   tunnelRoute: "/monitoring",
 

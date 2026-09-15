@@ -209,3 +209,7 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## 🤖 AI 에이전트 접근 (llms.txt · .md · MCP)
+
+Claude/ChatGPT 등이 사이트 전체를 읽을 수 있는 마크다운 미러(`/llms.txt`, `/{path}.md`)와 MCP 서버(`/api/mcp`, OAuth 로그인)를 제공합니다. 구조·배포·커넥터 등록 방법은 [docs/ai-access.md](docs/ai-access.md) 참고.

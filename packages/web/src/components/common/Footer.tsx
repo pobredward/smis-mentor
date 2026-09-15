@@ -37,6 +37,15 @@ export default function Footer() {
                   서비스 이용약관
                 </a>
               </li>
+              <li>
+                <a 
+                  href="/llms.txt" 
+                  className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
+                  title="AI 에이전트(Claude, ChatGPT 등)용 사이트 전체 문서"
+                >
+                  AI·LLM용 사이트 문서 (llms.txt)
+                </a>
+              </li>
             </ul>
           </div>
           
