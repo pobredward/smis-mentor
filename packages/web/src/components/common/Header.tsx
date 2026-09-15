@@ -97,7 +97,7 @@ const ProfileDropdown = memo(({
 ProfileDropdown.displayName = 'ProfileDropdown';
 
 const Header = () => {
-  const { isAuthenticated, userData } = useAuth();
+  const { isAuthenticated, userData, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -246,7 +246,10 @@ const Header = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {isAuthenticated ? (
+            {loading ? (
+              /* 인증 확인 중(공개 페이지 SSR): 로그인/프로필 버튼 자리만 유지 */
+              <div className="h-10 w-10 ml-4" aria-hidden="true" />
+            ) : isAuthenticated ? (
               <div className="relative ml-4" ref={dropdownRef}>
                 <button
                   onClick={toggleProfileDropdown}

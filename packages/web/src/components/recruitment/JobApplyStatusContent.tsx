@@ -22,7 +22,7 @@ export default function JobApplyStatusContent() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
-  const { userData } = useAuth();
+  const { userData, loading: authLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -171,6 +171,14 @@ export default function JobApplyStatusContent() {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex justify-center py-10">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
       </div>
     );

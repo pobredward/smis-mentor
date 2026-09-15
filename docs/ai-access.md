@@ -23,6 +23,16 @@ AI 에게 URL 을 붙여넣으면 내장 fetch 도구가 그 페이지를 GET �
 - 모든 마크다운 문서 첫머리에 "전체 목차: /llms.txt 를 먼저 읽으세요" 안내가 붙고, 끝에 "하위 · 관련 페이지" 링크 목록이 붙습니다. 이 두 장치가 "루트만 줘도 전체", "특정 페이지만 줘도 하위까지"를 실제로 동작하게 합니다.
 - HTML 쪽: 푸터에 `llms.txt` 링크, `<link rel="alternate" type="text/markdown" href="/llms-full.txt">`(layout.tsx `alternates.types`), `robots.txt` 에서 AI UA 허용, `sitemap.xml` 에 공고 상세 동적 포함.
 
+### AI 에이전트 콘텐츠 협상 (`src/proxy.ts`)
+
+사이트의 `AuthProvider` 는 인증 확인이 끝나기 전에는 아무것도 렌더하지 않으므로, JS 를 실행하지 않는 클라이언트(AI fetch 도구, 검색엔진 1차 크롤)에게 일반 페이지 HTML 은 본문이 비어 있습니다. 그래서 `proxy.ts` 가 다음 요청에 한해 같은 페이지의 마크다운(`/api/md/...`)을 대신 돌려줍니다.
+
+- User-Agent 가 AI 에이전트인 경우: `Claude-User`, `ClaudeBot`, `Claude-SearchBot`, `ChatGPT-User`, `GPTBot`, `OAI-SearchBot`, `PerplexityBot` 등 (`AI_USER_AGENTS` 정규식)
+- 또는 `Accept: text/markdown` 을 보낸 경우
+- 대상 경로는 마크다운 버전이 있는 페이지 경로만 (`NEGOTIABLE_PATH`). `/api`, `/oauth`, `/.well-known`, 정적 파일은 제외
+
+협상된 응답은 `Cache-Control: private, no-store` + `Vary` 로 내려가서 브라우저 사용자용 CDN 캐시를 오염시키지 않습니다. 확인: `curl -A "Claude-User" https://smis-mentor.com/` → 마크다운, `curl -A "Mozilla/5.0" https://smis-mentor.com/` → HTML.
+
 ## 2층 — MCP 서버
 
 구현: `src/lib/mcp/server.ts` (mcp-handler 2.x + MCP SDK v2, Streamable HTTP, stateless). 도구는 모두 **읽기 전용**입니다.
@@ -38,6 +48,7 @@ AI 에게 URL 을 붙여넣으면 내장 fetch 도구가 그 페이지를 GET �
 | `whoami` (로그인) | 현재 계정·역할·참여 캠프 |
 | `list_camps` (로그인) | 캠프 코드 목록 (관리자는 전체, 그 외 본인 캠프) |
 | `find_users` (관리자) | 이름·대학·전공으로 사용자 검색 + 지원 이력·평가 요약 |
+| `get_lesson_materials` (로그인) | 선생님의 수업 자료 대주제·섹션별 보기/원본 링크 전체 (관리자는 이름/ID로 아무나, 그 외 본인만; `camp` 로 대주제 필터) |
 
 리소스(`resources/list`)로도 레지스트리 페이지가 `https://smis-mentor.com/{path}.md` URI 로 노출됩니다.
 
@@ -68,7 +79,7 @@ Claude.ai 커넥터는 OAuth 2.1 + 동적 클라이언트 등록(DCR)을 요구�
 
 흐름: 커넥터에 `https://smis-mentor.com/api/mcp` 추가 → 401 → 메타데이터 탐색 → DCR → 브라우저에서 `/oauth/authorize` (사이트 로그인 + 허용) → 토큰 발급 → 도구 호출. 액세스 토큰 검증 시마다 `users/{uid}` 를 다시 읽어 현재 역할·상태를 반영합니다(60초 캐시).
 
-Firestore 컬렉션(Admin SDK 전용, 클라이언트 규칙은 기본 거부): `mcpOAuthClients`, `mcpOAuthCodes`, `mcpOAuthRefreshTokens`. 선택: Firestore TTL 정책을 `expiresAt` 필드에 걸어두면 만료 문서가 자동 삭제됩니다.
+Firestore 컬렉션(Admin SDK 전용, 클라이언트 규칙은 기본 거부): `mcpOAuthClients`, `mcpOAuthCodes`, `mcpOAuthRefreshTokens`. 만료된 코드·리프레시 토큰은 토큰 발급 시마다 백그라운드로 최대 50건씩 정리됩니다(`cleanupExpiredOAuthDocs`). 추가로 Firestore 콘솔 → TTL 정책에서 두 컬렉션의 `expiresAt` 필드에 TTL 을 걸어두면 정리 코드 없이도 자동 삭제됩니다 (서비스 계정 권한으로는 설정 불가 → 콘솔 또는 `gcloud firestore fields ttls update expiresAt --collection-group=mcpOAuthCodes`).
 
 ## 배포
 
@@ -92,6 +103,10 @@ curl -si -X POST https://smis-mentor.com/api/mcp -H 'content-type: application/j
 - **ChatGPT**: Settings → Apps & Connectors → Advanced → Developer mode 켜기 → Create → URL 입력, Auth: OAuth (공개 엔드포인트는 None). 딥리서치는 `search`/`fetch` 도구를 사용합니다.
 - **Claude Code**: `claude mcp add --transport http smis-mentor https://smis-mentor.com/api/mcp` → `/mcp` 에서 로그인.
 - **Cursor**: `{"mcpServers":{"smis-mentor":{"url":"https://smis-mentor.com/api/mcp"}}}`
+
+## 공개 페이지 서버 렌더링 (SEO)
+
+`AuthProvider` 는 인증 확인이 끝나기 전에는 자식을 렌더하지 않는데(로그인 상태에 의존하는 페이지들의 전제), `src/lib/publicSsrPaths.ts` 에 열거된 공개 경로(홈, 공고 목록/상세, 지원 안내, 약관)만 예외로 두어 서버 HTML 에 실제 본문과 푸터가 포함됩니다. 이 경로의 컴포넌트는 `loading` 동안 `userData` 가 null 일 수 있으므로 로그인 안내를 바로 띄우지 말고 `loading` 을 먼저 확인해야 합니다(Header, ApplicationSection, JobApplyStatusContent, 공고 상세가 그렇게 되어 있음). `useSearchParams()` 를 쓰는 컴포넌트는 정적 프리렌더 시 Suspense 경계가 필요하므로 본문과 분리된 작은 컴포넌트로 감쌉니다(AnalyticsProvider, /recruitment 참고).
 
 ## 페이지를 추가·수정할 때
 

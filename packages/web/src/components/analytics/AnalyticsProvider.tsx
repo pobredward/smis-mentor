@@ -1,10 +1,26 @@
 'use client';
 
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import useAnalytics from '@/hooks/useAnalytics';
 
+/**
+ * 추적 훅은 자식과 분리된 Suspense 경계 안에서만 돈다.
+ * useSearchParams() 는 정적 프리렌더 시 Suspense 경계가 필요한데, 그 경계로 페이지 본문(children)까지
+ * 감싸면 공개 페이지의 서버 HTML 이 비어 버리므로(SEO·AI 읽기 불가) 추적기만 따로 감싼다.
+ */
 export default function AnalyticsProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <Suspense fallback={null}>
+        <AnalyticsTracker />
+      </Suspense>
+      {children}
+    </>
+  );
+}
+
+function AnalyticsTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const analyticsLogger = useAnalytics();
@@ -137,5 +153,5 @@ export default function AnalyticsProvider({ children }: { children: React.ReactN
     }
   }, [pathname, analyticsLogger]);
 
-  return <>{children}</>;
-} 
+  return null;
+}

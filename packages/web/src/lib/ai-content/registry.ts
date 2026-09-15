@@ -189,11 +189,10 @@ export const PAGE_REGISTRY: PageMeta[] = [
   },
   {
     path: '/camp/lesson',
-    title: '수업 자료',
-    description: '멘토 개인의 수업 자료(대주제/섹션 링크) 관리 페이지.',
+    title: '내 수업 자료',
+    description: '로그인한 멘토 본인의 수업 자료 — 대주제(예: S28 패턴)별 섹션과 보기/원본 링크. 다른 선생님 것은 관리자 도구 get_lesson_materials 또는 /admin/lesson-materials/{userId}',
     access: 'mentor',
-    tags: ['수업', '자료'],
-    hasContent: false,
+    tags: ['수업', '자료', '링크'],
   },
   {
     path: '/camp/patient',
@@ -234,6 +233,14 @@ export const PAGE_REGISTRY: PageMeta[] = [
     description: '모든 채용 공고(진행/마감)와 면접 일정, 지원자 수.',
     access: 'admin',
     tags: ['공고', '관리'],
+  },
+  {
+    path: '/admin/lesson-materials/{userId}',
+    title: '선생님 수업 자료 (관리자)',
+    description: '특정 선생님의 수업 자료 대주제·섹션별 보기/원본 링크 전체 목록.',
+    access: 'admin',
+    params: { userId: '사용자 ID (find_users 로 확인)' },
+    tags: ['수업', '자료', '링크', '관리자'],
   },
   {
     path: '/admin/student-search',

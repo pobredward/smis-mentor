@@ -548,3 +548,89 @@ export async function getEvaluationSummary(uid: string): Promise<EvaluationSumma
       .map(([k, stage]) => ({ stage, averageScore: d[k].averageScore, totalEvaluations: d[k].totalEvaluations ?? 0 })),
   };
 }
+
+// ─── 수업 자료(lessonMaterials · lessonMaterialTemplates) ───────────────
+
+export interface LessonSectionInfo {
+  id: string;
+  title: string;
+  order: number;
+  viewUrl?: string;
+  originalUrl?: string;
+  templateSectionId?: string;
+}
+
+export interface LessonMaterialInfo {
+  id: string;
+  userId: string;
+  title: string;
+  order: number;
+  templateId?: string;
+  userCode?: string;
+  updatedAt: Date | null;
+  sections: LessonSectionInfo[];
+}
+
+export interface LessonTemplateInfo {
+  id: string;
+  title: string;
+  code?: string;
+  links: { label: string; url: string }[];
+  sections: { id: string; title: string; order: number; links: { label: string; url: string }[] }[];
+}
+
+function toLinks(arr: unknown): { label: string; url: string }[] {
+  return Array.isArray(arr) ? arr.filter((l: Doc) => l && typeof l.url === 'string').map((l: Doc) => ({ label: l.label ?? l.url, url: l.url })) : [];
+}
+
+export async function getLessonTemplates(): Promise<Map<string, LessonTemplateInfo>> {
+  return cached('lessonTemplates', 5 * 60_000, async () => {
+    const snap = await getAdminFirestore().collection('lessonMaterialTemplates').get();
+    const map = new Map<string, LessonTemplateInfo>();
+    snap.docs.forEach((d) => {
+      const x = d.data();
+      if (x.deleted) return;
+      map.set(d.id, {
+        id: d.id,
+        title: x.title ?? '',
+        code: x.code || undefined,
+        links: toLinks(x.links),
+        sections: Array.isArray(x.sections)
+          ? x.sections.map((sec: Doc) => ({ id: sec.id ?? '', title: sec.title ?? '', order: Number(sec.order ?? 0), links: toLinks(sec.links) })).sort((a: { order: number }, b: { order: number }) => a.order - b.order)
+          : [],
+      });
+    });
+    return map;
+  });
+}
+
+/** 특정 사용자의 수업 자료(대주제 + 섹션 링크). 섹션은 서브컬렉션이라 대주제별로 읽는다 */
+export async function getLessonMaterialsForUser(uid: string): Promise<LessonMaterialInfo[]> {
+  return cached(`lessonMaterials:${uid}`, 60_000, async () => {
+    const db = getAdminFirestore();
+    const snap = await db.collection('lessonMaterials').where('userId', '==', uid).get();
+    const materials = await Promise.all(
+      snap.docs.map(async (d) => {
+        const x = d.data();
+        const secSnap = await d.ref.collection('sections').get();
+        const sections: LessonSectionInfo[] = secSnap.docs
+          .map((sd) => {
+            const y = sd.data();
+            return { id: sd.id, title: y.title ?? '', order: Number(y.order ?? 0), viewUrl: y.viewUrl || undefined, originalUrl: y.originalUrl || undefined, templateSectionId: y.templateSectionId || undefined };
+          })
+          .sort((a, b) => a.order - b.order);
+        return {
+          id: d.id,
+          userId: x.userId ?? uid,
+          title: x.title ?? '',
+          order: Number(x.order ?? 0),
+          templateId: x.templateId || undefined,
+          userCode: x.userCode || undefined,
+          updatedAt: toDate(x.updatedAt) ?? toDate(x.createdAt),
+          sections,
+        } satisfies LessonMaterialInfo;
+      })
+    );
+    return materials.sort((a, b) => a.order - b.order);
+  });
+}

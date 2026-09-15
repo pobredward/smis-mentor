@@ -33,6 +33,7 @@ import { renderAuthPage, renderHome, renderJobBoard, renderJobBoardList, renderR
 import { isStaticJsxPage, renderStaticJsxPage } from './render/static-pages';
 import { renderCampCategory, renderCampHome, renderCampPage, renderCampRoster, renderCampTasks } from './render/camp';
 import { renderAdminApplications, renderAdminHome, renderAdminJobBoards, renderAdminUsers, renderProfile } from './render/admin';
+import { renderLessonMaterials } from './render/lesson';
 
 // ─── 경로 정규화 ──────────────────────────────────────────────────────
 
@@ -129,6 +130,7 @@ const CAMP_TASKS = /^\/camp\/tasks(?:\/([^/]+))?$/;
 const CAMP_ROSTER = /^\/camp\/(roster|class|room)(?:\/([^/]+))?$/;
 const JOB_BOARD = /^\/job-board\/([^/]+)$/;
 const ADMIN_APPS = /^\/admin\/interview-manage(?:\/([^/]+))?$/;
+const ADMIN_LESSON = /^\/admin\/lesson-materials\/([^/]+)$/;
 
 export async function resolvePage(input: string, viewer: Viewer | null): Promise<ResolveResult> {
   const { path, query } = normalizePath(input);
@@ -156,6 +158,12 @@ export async function resolvePage(input: string, viewer: Viewer | null): Promise
   // 캠프
   if (path === '/camp') {
     return guard('mentor', path, viewer) ?? renderCampHome(viewer!);
+  }
+  if (path === '/camp/lesson') {
+    const g = guard('mentor', path, viewer);
+    if (g) return g;
+    const result = await renderLessonMaterials(viewer!, viewer!.uid);
+    return 'error' in result ? { error: 'not_found', path, message: result.error } : result;
   }
   const cc = path.match(CAMP_CATEGORY);
   if (cc) {
@@ -188,6 +196,13 @@ export async function resolvePage(input: string, viewer: Viewer | null): Promise
     return guard('admin', path, viewer) ?? renderAdminUsers({ role: query.get('role') ?? undefined, query: query.get('q') ?? undefined });
   }
   if (path === '/admin/job-board-manage') return guard('admin', path, viewer) ?? renderAdminJobBoards();
+  const al = path.match(ADMIN_LESSON);
+  if (al) {
+    const g = guard('admin', path, viewer);
+    if (g) return g;
+    const result = await renderLessonMaterials(viewer!, al[1]);
+    return 'error' in result ? { error: 'not_found', path, message: result.error } : result;
+  }
   const aa = path.match(ADMIN_APPS);
   if (aa) {
     const g = guard('admin', path, viewer);

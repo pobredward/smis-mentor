@@ -27,8 +27,9 @@ import {
 } from '@/lib/ai-content/site';
 import { crawlPages, listPages, renderMarkdown, searchPages } from '@/lib/ai-content/resolve';
 import { PAGE_REGISTRY } from '@/lib/ai-content/registry';
-import { getCamps, getUsers } from '@/lib/ai-content/data';
+import { getCamps, getUsers, getUserSummary } from '@/lib/ai-content/data';
 import { renderUserDetail } from '@/lib/ai-content/render/admin';
+import { lessonMaterialsMarkdown } from '@/lib/ai-content/render/lesson';
 import { fmtRange } from '@/lib/ai-content/markdown';
 import { verifyBearer } from '@/lib/mcp-auth/verify';
 
@@ -313,6 +314,55 @@ function registerTools(server: McpServer, mode: McpMode) {
     );
   }
 
+  if (mode === 'auth') {
+    server.registerTool(
+      'get_lesson_materials',
+      {
+        title: '수업 자료 링크 추출',
+        description:
+          '특정 선생님(멘토)의 수업 자료를 대주제(예: "S28 패턴")별로 섹션과 보기/원본(편집) 링크까지 전부 표로 정리합니다. 관리자는 이름 또는 사용자 ID로 아무 선생님이나 조회, 그 외는 본인 것만. 이름이 여러 명과 일치하면 후보 목록을 돌려줍니다.',
+        inputSchema: z.object({
+          user: z.string().optional().describe('선생님 이름 또는 사용자 ID. 생략하면 본인'),
+          camp: z.string().optional().describe('캠프 코드로 대주제 필터 (예: "S28" → 제목에 S28 이 들어간 대주제만)'),
+        }),
+      },
+      async ({ user, camp }, ctx) => {
+        const viewer = viewerOf(ctx as ToolCtx);
+        if (!viewer || !canAccess('mentor', viewer)) return text('멘토·원어민·관리자 계정이 필요합니다.');
+        let targetUid = viewer.uid;
+        if (user && user.trim() && user.trim() !== viewer.uid && user.trim() !== viewer.name) {
+          if (!canAccess('admin', viewer)) return text('다른 선생님의 수업 자료는 관리자만 조회할 수 있습니다.');
+          const q = user.trim();
+          const byId = await getUserSummary(q);
+          if (byId) targetUid = byId.uid;
+          else {
+            const matches = (await getUsers()).filter((u) => u.name === q || u.name.includes(q));
+            if (matches.length === 0) return text(`"${q}" 에 해당하는 사용자가 없습니다.`);
+            if (matches.length > 1) {
+              return text(
+                `"${q}" 에 해당하는 사용자가 ${matches.length}명입니다. 사용자 ID로 다시 요청하세요:\n` +
+                  matches.map((u) => `- ${u.name} (${u.role}${u.university ? `, ${u.university}` : ''}) — ID: ${u.uid}`).join('\n')
+              );
+            }
+            targetUid = matches[0].uid;
+          }
+        }
+        const target = await getUserSummary(targetUid);
+        if (!target) return text('사용자를 찾을 수 없습니다.');
+        let md = await lessonMaterialsMarkdown(target);
+        if (camp) {
+          const code = camp.trim().toLowerCase();
+          // 대주제 섹션(### 제목) 단위로 필터
+          const parts = md.split(/\n(?=### )/);
+          const head = parts.shift() ?? '';
+          const kept = parts.filter((p) => p.split('\n')[0].toLowerCase().includes(code));
+          md = [head, ...(kept.length ? kept : [`_"${camp}" 에 해당하는 대주제가 없습니다._`])].join('\n');
+        }
+        return text(`# 수업 자료 — ${target.name}\n\n${md}`);
+      }
+    );
+  }
+
   // ─── 리소스: 레지스트리 페이지를 마크다운 리소스로 노출 ──────────────
   PAGE_REGISTRY.filter((m) => !m.path.includes('{') && m.hasContent !== false && !m.excluded)
     .filter((m) => (mode === 'public' ? m.access === 'public' : true))
@@ -382,7 +432,7 @@ export function mcpInfo(mode: McpMode) {
       cursor: { mcpServers: { 'smis-mentor': { url: endpoint } } },
     },
     tools: mode === 'auth'
-      ? ['get_site_overview', 'list_pages', 'search', 'fetch', 'read_page', 'crawl', 'whoami', 'list_camps', 'find_users']
+      ? ['get_site_overview', 'list_pages', 'search', 'fetch', 'read_page', 'crawl', 'whoami', 'list_camps', 'find_users', 'get_lesson_materials']
       : ['get_site_overview', 'list_pages', 'search', 'fetch', 'read_page', 'crawl'],
     alsoSee: { llmsTxt: LLMS_TXT_URL, llmsFullTxt: LLMS_FULL_URL, markdownSuffix: `${SITE_URL}/{path}.md` },
   };

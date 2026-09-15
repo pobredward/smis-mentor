@@ -57,7 +57,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   const [newInterviewDate, setNewInterviewDate] = useState('');
   const [newInterviewTime, setNewInterviewTime] = useState('');
 
-  const { userData } = useAuth();
+  const { userData, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1034,7 +1034,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {!userData && jobBoard.status === 'active' && (
+                  {!userData && !authLoading && jobBoard.status === 'active' && (
                     <div className="mt-8 pt-8 border-t border-gray-200">
                       <div className="text-center py-8 bg-gray-50 rounded-lg">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

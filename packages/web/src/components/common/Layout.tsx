@@ -7,6 +7,7 @@ import BottomNavigation from './BottomNavigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import Button from './Button';
+import { isPublicSsrPath } from '@/lib/publicSsrPaths';
 
 type LayoutProps = {
   children: ReactNode;
@@ -26,7 +27,8 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
 
   const shouldHideFooter = pathname.startsWith('/camp') || pathname.startsWith('/admin');
 
-  if (loading) {
+  // 공개 페이지는 인증 확인을 기다리지 않고 바로 렌더 (서버 HTML 에 본문·푸터 포함)
+  if (loading && !isPublicSsrPath(pathname)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>

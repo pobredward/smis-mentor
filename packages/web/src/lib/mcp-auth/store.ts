@@ -208,3 +208,25 @@ export async function consumeRefreshToken(token: string): Promise<RefreshTokenRe
 export async function revokeRefreshToken(token: string): Promise<void> {
   await getAdminFirestore().collection(REFRESH).doc(sha256(token)).delete().catch(() => undefined);
 }
+
+// ─── 만료 문서 정리 ────────────────────────────────────────────────────
+
+/**
+ * 만료된 인가 코드·리프레시 토큰을 조금씩 지운다 (토큰 발급 시 백그라운드로 호출).
+ * Firestore TTL 정책(expiresAt)을 콘솔에서 설정하면 이 함수 없이도 자동 삭제되지만,
+ * 정책이 없어도 컬렉션이 무한히 자라지 않도록 하는 안전장치.
+ */
+export async function cleanupExpiredOAuthDocs(limit = 50): Promise<number> {
+  const db = getAdminFirestore();
+  const now = new Date();
+  let deleted = 0;
+  for (const col of [CODES, REFRESH]) {
+    const snap = await db.collection(col).where('expiresAt', '<', now).limit(limit).get();
+    if (snap.empty) continue;
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    deleted += snap.size;
+  }
+  return deleted;
+}

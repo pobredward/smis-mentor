@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Layout from '@/components/common/Layout';
 import JobBoardListContent from '@/components/recruitment/JobBoardListContent';
@@ -16,19 +16,31 @@ const tabs: { id: TabName; title: string }[] = [
   { id: 'inquiry', title: '채용 문의' },
 ];
 
-export default function RecruitmentPage() {
+/**
+ * ?tab= 쿼리 → 활성 탭. useSearchParams() 는 정적 프리렌더 시 Suspense 경계가 필요하므로
+ * 페이지 본문과 분리된 작은 컴포넌트에서만 읽는다 (본문은 서버 HTML 에 그대로 포함).
+ */
+function TabFromQuery({ onChange }: { onChange: (tab: TabName) => void }) {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as TabName | null;
-  const [activeTab, setActiveTab] = useState<TabName>('jobBoard');
 
   useEffect(() => {
     if (tabParam && tabs.some(tab => tab.id === tabParam)) {
-      setActiveTab(tabParam);
+      onChange(tabParam);
     }
-  }, [tabParam]);
+  }, [tabParam, onChange]);
+
+  return null;
+}
+
+export default function RecruitmentPage() {
+  const [activeTab, setActiveTab] = useState<TabName>('jobBoard');
 
   return (
     <Layout>
+      <Suspense fallback={null}>
+        <TabFromQuery onChange={setActiveTab} />
+      </Suspense>
       <div className="-mx-4 sm:-mx-6 lg:-mx-8 -my-6">
         {/* 커스텀 탭 바 */}
         <div className="bg-white border-b border-gray-200 sticky top-16 z-30">

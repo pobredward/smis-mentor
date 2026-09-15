@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MCP_ENDPOINT } from '@/lib/ai-content/site';
 import { OAUTH_CORS_HEADERS } from '@/lib/mcp-auth/metadata';
 import { ACCESS_TOKEN_TTL_SEC, pkceChallenge, sha256, signAccessToken } from '@/lib/mcp-auth/jwt';
-import { consumeAuthCode, consumeRefreshToken, issueRefreshToken, OAuthClient, resolveClient } from '@/lib/mcp-auth/store';
+import { cleanupExpiredOAuthDocs, consumeAuthCode, consumeRefreshToken, issueRefreshToken, OAuthClient, resolveClient } from '@/lib/mcp-auth/store';
 import { loadViewer } from '@/lib/mcp-auth/verify';
 
 export const dynamic = 'force-dynamic';
@@ -65,6 +65,8 @@ async function issueTokens(uid: string, client: OAuthClient, scope: string) {
     signAccessToken({ uid, clientId: client.clientId, scope, role: viewer.role, name: viewer.name }),
     issueRefreshToken({ uid, clientId: client.clientId, scope }),
   ]);
+  // 만료 문서 정리 (응답을 막지 않도록 결과는 기다리지 않음)
+  cleanupExpiredOAuthDocs().catch(() => undefined);
   return NextResponse.json(
     { access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SEC, refresh_token: refreshToken, scope },
     { headers: NO_STORE }

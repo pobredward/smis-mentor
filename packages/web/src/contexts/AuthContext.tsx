@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
+import { isPublicSsrPath } from '@/lib/publicSsrPaths';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -38,6 +40,7 @@ type AuthProviderProps = {
 };
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
+  const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -311,7 +314,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {/* 공개 페이지(홈·공고·지원 안내·약관)는 인증 확인 전에도 렌더 → 서버 HTML 에 본문 포함 (SEO·AI) */}
+      {(!loading || isPublicSsrPath(pathname)) && children}
     </AuthContext.Provider>
   );
 }; 
