@@ -1,3 +1,5 @@
+import type { TimetableClassColumn, TimetableSubject } from './campTimetable';
+
 // 캠프 관련 타입 정의
 
 import { Timestamp } from 'firebase/firestore';
@@ -115,9 +117,43 @@ export interface CampGroup {
 /**
  * campSettings 문서 구조
  */
+/** 반 하나의 이름·강의실 — 기수마다 다르고, 캠프당 한 벌만 둔다 */
+export interface CampClassInfo {
+  className?: string;   // 반이름 (e.g. "Grit")
+  classroom?: string;   // 강의실 호수 (e.g. "243호")
+  /** ESL 교재 L-Code (e.g. "Bc") — 교재 3권은 이 코드로 조회한다 */
+  bookCode?: string;
+  /** 보조 교재 코드 — 레벨이 안 맞는 학생용. 없는 반이 더 많다 */
+  spareBookCode?: string;
+}
+
+/**
+ * 한 그룹의 모든 Day(정규·스팀·입소…)가 함께 쓰는 시간표 값.
+ *
+ * 반 목록과 선생님 이름, 과목·주제는 Day 가 달라도 같은 게 보통이라
+ * 표마다 따로 두면 같은 값을 Day 수만큼 다시 넣어야 하고 조용히 어긋난다.
+ * 그래서 그룹당 한 벌만 여기 두고, 정말 달라야 하는 Day 만
+ * CampTimetable.own 플래그를 켜서 자기 값을 쓴다.
+ */
+export interface CampTimetableCommon {
+  /** 반 목록 + 직접 넣은 담임 이름 (반 구성 · 이름 수정) */
+  classes?: TimetableClassColumn[];
+  /** 역할키 → 직접 넣은 담당자 이름 (이름 수정의 원어민·스태프 부분) */
+  staffOverrides?: Record<string, string>;
+  /** 과목·주제 */
+  subjects?: TimetableSubject[];
+}
+
 export interface CampSettings {
   campCode: string;
   groups?: CampGroup[];          // 그룹-반 매핑 (없으면 그룹 미설정)
+  /**
+   * 반코드 → 반이름·강의실.
+   * 시간표 문서마다 따로 두면 표끼리 달라지므로 캠프 설정에 한 벌만 둔다.
+   */
+  classInfo?: Record<string, CampClassInfo>;
+  /** 그룹명 → 그 그룹의 모든 Day 가 함께 쓰는 값 */
+  timetableCommon?: Record<string, CampTimetableCommon>;
   useTemporaryData?: boolean;
   updatedAt?: string;
 }

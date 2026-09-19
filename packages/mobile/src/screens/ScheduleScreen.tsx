@@ -1,799 +1,363 @@
-import React, { useState, useEffect } from 'react';
-import { logger } from '@smis-mentor/shared';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput, Platform } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useWebViewCache } from '../context/WebViewCacheContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQuery } from '@tanstack/react-query';
+import {
+  applyClassInfo,
+  findCategory,
+  findInlineSlots,
+  isSameGroup,
+  normalizeGroupKey,
+  resolveTimetable,
+  teacherMapOf,
+  timetableCategories,
+  timetableGroupNames,
+  type CampTimetable,
+} from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
-import { AddLinkModal } from '../components';
-import { generationResourcesService, ResourceLink, ResourceLinkRole } from '../services';
+import { loadScheduleBundle, scheduleQueryKey } from '../services/scheduleBundle';
+import { TimetableView } from '../components/TimetableView';
+import { TimetableEditor } from '../components/TimetableEditor';
+import { BookTable } from '../components/BookTable';
 
-// 권한별 배경색 반환 함수
-const getRoleBgColor = (targetRole?: ResourceLinkRole): string => {
-  switch (targetRole) {
-    case 'mentor':
-      return 'rgba(219, 234, 254, 0.5)'; // 멘토 - 연한 파랑 (Tailwind bg-blue-100/50)
-    case 'foreign':
-      return 'rgba(243, 232, 255, 0.5)'; // 원어민 - 연한 보라 (Tailwind bg-purple-100/50)
-    default:
-      return 'rgba(243, 244, 246, 0.5)'; // 공통 - 연한 회색 (Tailwind bg-gray-100/50)
-  }
-};
+/** 고른 그룹은 캠프별로 기억한다 — 다른 탭 다녀와도 그대로 */
+const GROUP_KEY = (jobCodeId: string) => `SMIS_TIMETABLE_GROUP_${jobCodeId}`;
 
-// 선택된 상태의 배경색 (관리자가 권한별 토글을 선택했을 때)
-const getRoleActiveBgColor = (targetRole?: ResourceLinkRole): string => {
-  switch (targetRole) {
-    case 'mentor':
-      return 'rgb(59, 130, 246)'; // 멘토 - 파랑 (Tailwind bg-blue-500)
-    case 'foreign':
-      return 'rgb(168, 85, 247)'; // 원어민 - 보라 (Tailwind bg-purple-500)
-    default:
-      return 'rgb(59, 130, 246)'; // 공통 - 파랑 (기본 선택 색상)
-  }
-};
+/** 캠프 기간 중이면 지금 시각(분), 아니면 null — web 과 같은 규칙 */
+function useNowMinutes(startMs?: number | null, endMs?: number | null) {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date();
+      if (startMs && d.getTime() < startMs) return setNow(null);
+      if (endMs) {
+        const last = new Date(endMs);
+        last.setHours(23, 59, 59, 999);
+        if (d > last) return setNow(null);
+      }
+      setNow(d.getHours() * 60 + d.getMinutes());
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, [startMs, endMs]);
+  return now;
+}
 
 export function ScheduleScreen() {
-  const { schedules, loadingStates, zoomLevels, setZoomLevel, applyZoom, renderWebView, refreshResources, loading } = useWebViewCache();
   const { userData } = useAuth();
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string | undefined>(undefined);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingSchedule, setEditingSchedule] = useState<ResourceLink | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editUrl, setEditUrl] = useState('');
-  const [editTargetRole, setEditTargetRole] = useState<ResourceLinkRole>('common');
-
-  const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
-  // 사용자 role에 따라 시간표 링크 필터링
-  const filteredSchedules = schedules.filter(link => {
-    if (isAdmin) return true;
-    if (!link.targetRole || link.targetRole === 'common') return true;
-    if (userData?.role === 'mentor' && link.targetRole === 'mentor') return true;
-    if (userData?.role === 'foreign' && link.targetRole === 'foreign') return true;
-    return false;
+  const [category, setCategory] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const isAdmin = userData?.role === 'admin';
+
+  // 지난번에 고른 그룹 복원
+  useEffect(() => {
+    let alive = true;
+    if (!activeJobCodeId) return;
+    AsyncStorage.getItem(GROUP_KEY(activeJobCodeId))
+      .then((v) => {
+        if (alive) setGroupName(v);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [activeJobCodeId]);
+
+  const chooseGroup = (g: string) => {
+    setGroupName(g);
+    if (activeJobCodeId) AsyncStorage.setItem(GROUP_KEY(activeJobCodeId), g).catch(() => {});
+  };
+
+  const { data, isLoading, isRefetching, refetch } = useQuery({
+    queryKey: scheduleQueryKey(activeJobCodeId ?? ''),
+    queryFn: () => loadScheduleBundle(activeJobCodeId!),
+    enabled: !!activeJobCodeId,
   });
 
-  // 필터링된 시간표가 로드되면 첫 번째 항목을 자동 선택
-  useEffect(() => {
-    if (filteredSchedules.length > 0) {
-      // 선택된 ID가 없거나, 선택된 ID가 필터링된 목록에 없으면 첫 번째 항목 선택
-      if (!selectedScheduleId || !filteredSchedules.some(s => s.id === selectedScheduleId)) {
-        setSelectedScheduleId(filteredSchedules[0].id);
-      }
-    }
-  }, [filteredSchedules.length, filteredSchedules.map(s => s.id).join(','), selectedScheduleId]);
+  const campCode = data?.campCode ?? '';
+  const timetables = useMemo(() => data?.timetables ?? [], [data?.timetables]);
+  const derived = useMemo(() => data?.groups ?? [], [data?.groups]);
 
-  const selectedSchedule = filteredSchedules.find(s => s.id === selectedScheduleId) || filteredSchedules[0];
-  
-  // 구글 시트인지 확인하는 함수
-  const isGoogleSheet = (url: string) => {
-    return url.includes('docs.google.com/spreadsheets') || url.includes('sheets.google.com');
-  };
+  const groupOf = (name: string | null) => derived.find((g) => isSameGroup(g.name, name));
+  const teacherByClassCode = useMemo(() => teacherMapOf(derived), [derived]);
 
-  // 선택된 시간표가 구글 시트인지 확인
-  const isSelectedScheduleGoogleSheet = selectedSchedule ? isGoogleSheet(selectedSchedule.url) : false;
-  
-  // 구글 시트가 아닌 경우 기본 줌을 1.0(100%)로 설정, 구글 시트는 플랫폼별로 설정
-  const defaultZoom = isSelectedScheduleGoogleSheet 
-    ? (Platform.OS === 'android' ? 0.8 : 0.6)
-    : 1.0;
-  const currentZoom = selectedScheduleId ? (zoomLevels[selectedScheduleId] || defaultZoom) : defaultZoom;
-  const isLoading = selectedScheduleId ? (loadingStates[selectedScheduleId] ?? true) : true;
+  const myExp = useMemo(
+    () =>
+      userData?.jobExperiences?.find((e: { id: string }) => e.id === activeJobCodeId) as
+        | { classCode?: string; group?: string }
+        | undefined,
+    [userData?.jobExperiences, activeJobCodeId]
+  );
 
-  // 시간표가 변경되었을 때 구글 시트가 아니면 줌을 100%로 자동 설정
-  useEffect(() => {
-    if (selectedScheduleId && selectedSchedule && !isSelectedScheduleGoogleSheet) {
-      // 이미 설정된 줌 레벨이 없는 경우에만 1.0으로 설정
-      if (zoomLevels[selectedScheduleId] === undefined) {
-        setZoomLevel(selectedScheduleId, 1.0);
-        applyZoom(selectedScheduleId, 1.0);
-      }
-    }
-  }, [selectedScheduleId, selectedSchedule, isSelectedScheduleGoogleSheet]);
+  const categories = useMemo(() => timetableCategories(campCode, timetables), [campCode, timetables]);
+  const activeCategory = category ?? categories[0]?.key ?? null;
 
-  const handleZoomIn = () => {
-    if (!selectedScheduleId) return;
-    const newZoom = Math.min(currentZoom + 0.2, 3.0);
-    setZoomLevel(selectedScheduleId, newZoom);
-    applyZoom(selectedScheduleId, newZoom);
-  };
+  const groups = useMemo(() => timetableGroupNames(derived, timetables), [derived, timetables]);
 
-  const handleZoomOut = () => {
-    if (!selectedScheduleId) return;
-    const newZoom = Math.max(currentZoom - 0.2, 0.5);
-    setZoomLevel(selectedScheduleId, newZoom);
-    applyZoom(selectedScheduleId, newZoom);
-  };
+  const defaultGroup = useMemo(() => {
+    const mine = normalizeGroupKey(myExp?.group);
+    return (mine && groups.find((g) => normalizeGroupKey(g) === mine)) || groups[0] || null;
+  }, [myExp?.group, groups]);
 
-  const handleZoomReset = () => {
-    if (!selectedScheduleId) return;
-    setZoomLevel(selectedScheduleId, 1.0);
-    applyZoom(selectedScheduleId, 1.0);
-  };
+  const activeGroup = groupName && groups.includes(groupName) ? groupName : defaultGroup;
 
-  const handleDeleteSchedule = async (scheduleId: string) => {
-    if (!activeJobCodeId) return;
+  const current: CampTimetable | undefined = useMemo(
+    () =>
+      resolveTimetable({
+        timetables,
+        groups: derived,
+        category: activeCategory,
+        groupName: activeGroup,
+        campCode,
+        jobCodeId: activeJobCodeId ?? '',
+        common: data?.timetableCommon,
+      }),
+    [timetables, derived, groups, activeCategory, activeGroup, campCode, activeJobCodeId, data?.timetableCommon]
+  );
 
-    Alert.alert(
-      isForeign ? 'Confirm Delete' : '삭제 확인',
-      isForeign ? 'Are you sure you want to delete this schedule?' : '이 시간표를 삭제하시겠습니까?',
-      [
-        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
-        {
-          text: isForeign ? 'Delete' : '삭제',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await generationResourcesService.deleteLink(activeJobCodeId, 'scheduleLinks', scheduleId);
-              await refreshResources();
-              Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Schedule deleted.' : '시간표가 삭제되었습니다.');
-              if (selectedScheduleId === scheduleId && schedules.length > 1) {
-                setSelectedScheduleId(schedules[0].id);
-              }
-            } catch (error) {
-              logger.error('시간표 삭제 실패:', error);
-              Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to delete schedule.' : '시간표 삭제에 실패했습니다.');
-            }
-          },
-        },
-      ]
-    );
-  };
+  /**
+   * 인문학처럼 "하루를 통째로 쓰지 않고 정규 데이 한 시간대에 들어가는" 표.
+   * 본표에 그 시간대 줄이 있을 때만 아래에 같이 띄운다. (web 과 같은 규칙)
+   */
+  const inlineTables = useMemo(() => {
+    if (!current) return [];
+    return findInlineSlots(current)
+      .map((slot) => ({
+        slot,
+        table: resolveTimetable({
+          timetables,
+          groups: derived,
+          category: slot.category.key,
+          groupName: activeGroup,
+          campCode,
+          jobCodeId: activeJobCodeId ?? '',
+          common: data?.timetableCommon,
+        }),
+      }))
+      .filter((x): x is { slot: (typeof x)['slot']; table: CampTimetable } => !!x.table);
+  }, [current, timetables, derived, groups, activeGroup, campCode, activeJobCodeId, data?.timetableCommon]);
 
-  const handleMoveSchedule = async (index: number, direction: 'left' | 'right') => {
-    if (!activeJobCodeId) return;
-    
-    const newIndex = direction === 'left' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= schedules.length) return;
+  /** 그릴 때 캠프 설정의 반이름·강의실을 입힌다 (기수별 한 벌) */
+  const withClassInfo = (t: CampTimetable | undefined) =>
+    t ? { ...t, classes: applyClassInfo(t.classes, data?.classInfo) } : t;
 
-    try {
-      const newSchedules = [...schedules];
-      const [removed] = newSchedules.splice(index, 1);
-      newSchedules.splice(newIndex, 0, removed);
-
-      await generationResourcesService.reorderLinks(activeJobCodeId, 'scheduleLinks', newSchedules);
-      await refreshResources();
-    } catch (error) {
-      logger.error('순서 변경 실패:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update order.' : '순서 변경에 실패했습니다.');
-    }
-  };
-
-  const openEditModalDirectly = (schedule: ResourceLink) => {
-    setEditingSchedule(schedule);
-    setEditTitle(schedule.title);
-    setEditUrl(schedule.url);
-    setEditTargetRole(schedule.targetRole || 'common');
-    setShowEditModal(true);
-  };
-
-  const handleEditSchedule = async () => {
-    if (!activeJobCodeId || !editingSchedule || !editTitle.trim() || !editUrl.trim()) {
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a title and URL.' : '제목과 URL을 모두 입력해주세요.');
-      return;
-    }
-
-    try {
-      const updatedSchedules = schedules.map(schedule =>
-        schedule.id === editingSchedule.id
-          ? { ...schedule, title: editTitle.trim(), url: editUrl.trim(), targetRole: editTargetRole }
-          : schedule
-      );
-
-      await generationResourcesService.reorderLinks(activeJobCodeId, 'scheduleLinks', updatedSchedules);
-      await refreshResources();
-      setShowEditModal(false);
-      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Schedule updated.' : '시간표가 수정되었습니다.');
-    } catch (error) {
-      logger.error('시간표 수정 실패:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update schedule.' : '시간표 수정에 실패했습니다.');
-    }
-  };
+  const nowMinutes = useNowMinutes(data?.startMs, data?.endMs);
 
   if (!activeJobCodeId) {
     return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
-        <Text style={styles.loginRequiredTitle}>{isForeign ? 'Login Required' : '로그인 필요'}</Text>
-        <Text style={styles.emptyText}>{isForeign ? 'Please log in to access this page.' : '로그인 후 이용 가능합니다.'}</Text>
-      </View>
+      <Empty
+        title={isForeign ? 'No camp selected' : '활성 캠프가 없습니다'}
+        body={
+          isForeign
+            ? 'Activate a camp on My Page to see its timetable.'
+            : '마이페이지에서 참여 중인 캠프를 활성화하면 시간표가 보입니다.'
+        }
+      />
     );
   }
 
-  if (loading) {
+  if (editing && isAdmin) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>{isForeign ? 'Loading schedules...' : '시간표 로딩 중...'}</Text>
-      </View>
+      <TimetableEditor
+        jobCodeId={activeJobCodeId}
+        initialCategory={activeCategory}
+        initialGroup={activeGroup}
+        onClose={() => {
+          setEditing(false);
+          refetch();
+        }}
+      />
     );
   }
 
-  if (filteredSchedules.length === 0) {
+  if (isLoading && !data) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>{isForeign ? 'No schedules registered.' : '등록된 시간표가 없습니다.'}</Text>
-        {isAdmin && (
-          <TouchableOpacity
-            style={styles.addButtonLarge}
-            onPress={() => setShowAddModal(true)}
-          >
-            <Text style={styles.addButtonLargeText}>+ {isForeign ? 'Add first schedule' : '첫 시간표 추가하기'}</Text>
-          </TouchableOpacity>
-        )}
-        {isAdmin && (
-          <AddLinkModal
-            visible={showAddModal}
-            onClose={() => setShowAddModal(false)}
-            jobCodeId={activeJobCodeId}
-            linkType="scheduleLinks"
-            userId={userData?.userId || ''}
-            onSuccess={refreshResources}
-          />
-        )}
+      <View style={s.center}>
+        <ActivityIndicator size="large" color="#2563eb" />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* 시간표 선택 버튼들 */}
-      <View style={[styles.buttonContainer, editMode && styles.buttonContainerEdit]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.buttonContent, editMode && styles.buttonContentEdit]}
-        >
-          {isAdmin && (
-            <>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowAddModal(true)}
-              >
-                <Text style={styles.addButtonText}>+</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.editButton, editMode && styles.editButtonActive]}
-                onPress={() => setEditMode(!editMode)}
-              >
-                <Text style={styles.editButtonText}>✏️</Text>
-              </TouchableOpacity>
-            </>
-          )}
+    <ScrollView
+      style={s.screen}
+      contentContainerStyle={s.content}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
+    >
+      {/* 1단계: 표 종류 */}
+      <View style={s.tabLine}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabRow}>
+        {categories.map((c) => {
+          const on = c.key === activeCategory;
+          const filled = timetables.some((t) => t.dayType === c.key);
+          return (
+            <TouchableOpacity
+              key={c.key}
+              onPress={() => setCategory(c.key)}
+              style={[s.pill, on ? s.pillOn : filled ? s.pillFilled : s.pillEmpty]}
+            >
+              <Text style={[s.pillText, on ? s.pillTextOn : filled ? s.pillTextFilled : s.pillTextEmpty]}>
+                {c.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+        </ScrollView>
+        {isAdmin && (
+          <TouchableOpacity style={s.editBtn} onPress={() => setEditing(true)}>
+            <Text style={s.editBtnText}>편집</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
-          {filteredSchedules.map((schedule, index) => {
-            const actualIndex = schedules.findIndex(s => s.id === schedule.id);
+      {/* 2단계: 그룹 — 전체 너비를 고르게 나눈 세그먼트 */}
+      {groups.length > 0 && (
+        <View style={s.segment}>
+          {groups.map((g) => {
+            const on = g === activeGroup;
             return (
-            <View key={schedule.id} style={[styles.linkWrapper, { marginHorizontal: 3 }]}>
-              {editMode && (
-                <View style={styles.editActionsContainer}>
-                  <View style={styles.editActionsTop}>
-                    <TouchableOpacity
-                      style={styles.editActionButton}
-                      onPress={() => openEditModalDirectly(schedule)}
-                    >
-                      <Text style={styles.editActionIcon}>✏️</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={styles.deleteActionButton}
-                      onPress={() => handleDeleteSchedule(schedule.id)}
-                    >
-                      <Text style={styles.deleteActionIcon}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-              
               <TouchableOpacity
-                style={[
-                  styles.button,
-                  editMode && styles.buttonEdit,
-                  // 선택되지 않았을 때: 관리자는 권한별 배경색, 일반 유저는 기본 회색
-                  selectedScheduleId !== schedule.id && !editMode && { 
-                    backgroundColor: isAdmin ? getRoleBgColor(schedule.targetRole) : '#f3f4f6'
-                  },
-                  // 선택된 상태: 권한별 활성 색상 적용
-                  selectedScheduleId === schedule.id && !editMode && { 
-                    backgroundColor: isAdmin ? getRoleActiveBgColor(schedule.targetRole) : '#3b82f6'
-                  },
-                ]}
-                onPress={() => {
-                  if (!editMode) {
-                    setSelectedScheduleId(schedule.id);
-                  }
-                }}
-                disabled={editMode}
+                key={g}
+                onPress={() => chooseGroup(g)}
+                style={[s.segItem, on && s.segItemOn]}
               >
-                <Text style={[
-                  styles.buttonText,
-                  selectedScheduleId === schedule.id && !editMode && styles.buttonTextActive
-                ]}>
-                  {schedule.title}
+                <Text style={[s.segText, on && s.segTextOn]} numberOfLines={1}>
+                  {g}
                 </Text>
               </TouchableOpacity>
-              
-              {editMode && (
-                <View style={styles.editActionsBottom}>
-                  {actualIndex > 0 && (
-                    <TouchableOpacity
-                      style={styles.moveButton}
-                      onPress={() => handleMoveSchedule(actualIndex, 'left')}
-                    >
-                      <Text style={styles.moveButtonText}>←</Text>
-                    </TouchableOpacity>
-                  )}
-                  {actualIndex < schedules.length - 1 && (
-                    <TouchableOpacity
-                      style={styles.moveButton}
-                      onPress={() => handleMoveSchedule(actualIndex, 'right')}
-                    >
-                      <Text style={styles.moveButtonText}>→</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-            </View>
-          );
+            );
           })}
-        </ScrollView>
-      </View>
-
-      {/* 줌 컨트롤 버튼들 - 구글 시트일 때만 표시 */}
-      {isSelectedScheduleGoogleSheet && (
-        <View style={styles.zoomControls}>
-          <TouchableOpacity style={styles.zoomButton} onPress={handleZoomOut}>
-            <Text style={styles.zoomButtonText}>-</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.zoomResetButton} onPress={handleZoomReset}>
-            <Text style={styles.zoomResetText}>{Math.round(currentZoom * 100)}%</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.zoomButton} onPress={handleZoomIn}>
-            <Text style={styles.zoomButtonText}>+</Text>
-          </TouchableOpacity>
         </View>
       )}
 
-      {/* 웹뷰 컨테이너 */}
-      <View style={styles.webViewContainer}>
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-            <Text style={styles.loadingText}>시간표 로딩 중...</Text>
-          </View>
-        )}
-        
-        {schedules.map((schedule) => (
-          <View
-            key={schedule.id}
-            style={[
-              styles.webViewWrapper,
-              selectedScheduleId !== schedule.id && styles.hidden
-            ]}
-          >
-            {renderWebView(schedule.id, selectedScheduleId === schedule.id)}
-          </View>
-        ))}
-      </View>
+      {current ? (
+        <>
+          <TimetableView
+            timetable={withClassInfo(current)!}
+            teacherByClassCode={teacherByClassCode}
+            foreignBySubject={groupOf(current.groupName)?.staffByRole ?? {}}
+            myClassCode={myExp?.classCode}
+            isForeign={isForeign}
+            nowMinutes={nowMinutes}
+            linkedLabels={inlineTables.map((x) => x.slot.label)}
+            campStartMs={data?.startMs ?? null}
+          />
 
-      {/* 시간표 추가 모달 */}
-      {isAdmin && activeJobCodeId && (
-        <AddLinkModal
-          visible={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          jobCodeId={activeJobCodeId}
-          linkType="scheduleLinks"
-          userId={userData?.userId || ''}
-          onSuccess={refreshResources}
+          {inlineTables.map(({ slot, table }) => (
+            <View key={slot.category.key} style={s.inlineSection}>
+              <View style={s.inlineHead}>
+                <Text style={s.inlineTitle}>{slot.label}</Text>
+                {!!slot.start && (
+                  <Text style={s.inlineTime}>
+                    {slot.start}~{slot.end}
+                  </Text>
+                )}
+              </View>
+              <TimetableView
+                timetable={withClassInfo(table)!}
+                teacherByClassCode={teacherByClassCode}
+                foreignBySubject={groupOf(table.groupName)?.staffByRole ?? {}}
+                myClassCode={myExp?.classCode}
+                isForeign={isForeign}
+                campStartMs={data?.startMs ?? null}
+              />
+            </View>
+          ))}
+
+          {/* 교재는 수업이 있는 날(정규·입소·입소 D+1)에만 */}
+          {findCategory(current.dayType)?.showBooks && (
+            <BookTable
+              classes={withClassInfo(current)!.classes}
+              classInfo={data?.classInfo ?? {}}
+              books={data?.books}
+              subjects={current.subjects}
+              isForeign={isForeign}
+            />
+          )}
+        </>
+      ) : (
+        <Empty
+          title={`${activeGroup ?? ''} 그룹에 배정된 반이 없습니다`}
+          body="관리자가 이 캠프에 멘토를 배정하면서 그룹과 반번호를 넣으면 표가 만들어집니다."
         />
       )}
+    </ScrollView>
+  );
+}
 
-      {/* 시간표 수정 모달 */}
-      <Modal
-        visible={showEditModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowEditModal(false)}
-      >
-        <View style={styles.editModalOverlay}>
-          <View style={styles.editModalContainer}>
-            <View style={styles.editModalHeader}>
-              <Text style={styles.editModalTitle}>시간표 수정</Text>
-              <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <Text style={styles.editModalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.editModalContent}>
-              <Text style={styles.editModalLabel}>제목</Text>
-              <TextInput
-                style={styles.editModalInput}
-                value={editTitle}
-                onChangeText={setEditTitle}
-                placeholder="예: 1주차 시간표"
-              />
-
-              <Text style={styles.editModalLabel}>URL</Text>
-              <TextInput
-                style={styles.editModalInput}
-                value={editUrl}
-                onChangeText={setEditUrl}
-                placeholder="https://..."
-                autoCapitalize="none"
-              />
-
-              <View style={styles.editModalButtons}>
-                <TouchableOpacity
-                  style={[styles.editModalButton, styles.editModalButtonCancel]}
-                  onPress={() => setShowEditModal(false)}
-                >
-                  <Text style={styles.editModalButtonTextCancel}>취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.editModalButton, styles.editModalButtonSave]}
-                  onPress={handleEditSchedule}
-                >
-                  <Text style={styles.editModalButtonTextSave}>저장</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
+function Empty({ title, body }: { title: string; body: string }) {
+  return (
+    <View style={s.empty}>
+      <Ionicons name="calendar-outline" size={36} color="#d1d5db" />
+      <Text style={s.emptyTitle}>{title}</Text>
+      <Text style={s.emptyBody}>{body}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 20,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#64748b',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  loginRequiredTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#374151',
-    marginTop: 16,
-  },
-  addButtonLarge: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  addButtonLargeText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonContainer: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    maxHeight: 42,
-  },
-  buttonContainerEdit: {
-    backgroundColor: '#fef3c7',
-    borderBottomColor: '#f59e0b',
-    borderBottomWidth: 2,
-    maxHeight: 'none' as any,
-  },
-  buttonContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  buttonContentEdit: {
-    paddingTop: 32,
-    paddingBottom: 26,
-    alignItems: 'center',
-  },
-  addButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#3b82f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 6,
-  },
-  addButtonText: {
-    fontSize: 18,
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  editButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  editButtonActive: {
-    backgroundColor: '#f59e0b',
-  },
-  editButtonText: {
-    fontSize: 14,
-  },
-  linkWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    marginHorizontal: 3,
-  },
-  button: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-  },
-  buttonActive: {
-    backgroundColor: '#3b82f6',
-  },
-  buttonEdit: {
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#f59e0b',
-    borderStyle: 'dashed',
-  },
-  buttonText: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  buttonTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  editActionsContainer: {
-    position: 'absolute',
-    top: -24,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  editActionsTop: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  editActionsBottom: {
-    position: 'absolute',
-    bottom: -20,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 3,
-    zIndex: 10,
-  },
-  moveButton: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-    minWidth: 18,
-    alignItems: 'center',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  moveButtonText: {
-    fontSize: 11,
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  editActionButton: {
-    backgroundColor: '#10b981',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  deleteActionButton: {
-    backgroundColor: '#ef4444',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  editActionIcon: {
-    fontSize: 10,
-  },
-  deleteActionIcon: {
-    fontSize: 12,
-    color: '#ffffff',
-    fontWeight: '700',
-    lineHeight: 12,
-  },
-  zoomControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    gap: 6,
-  },
-  zoomButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-    backgroundColor: '#3b82f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  zoomButtonText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  zoomResetButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#f1f5f9',
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#fff' },
+  content: { padding: 12, paddingTop: 8, paddingBottom: 32 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+
+  tabLine: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  tabRow: { flex: 1 },
+  editBtn: {
+    marginLeft: 6,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    minWidth: 60,
-    alignItems: 'center',
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  zoomResetText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  webViewContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  webViewWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  hidden: {
-    opacity: 0,
-    zIndex: -1,
-  },
-  loadingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    zIndex: 10,
-  },
-  editModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  editModalContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  editModalHeader: {
+  editBtnText: { fontSize: 11, color: '#374151' },
+  pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, marginRight: 6 },
+  pillOn: { backgroundColor: '#2563eb' },
+  pillFilled: { backgroundColor: '#f3f4f6' },
+  pillEmpty: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb' },
+  pillText: { fontSize: 12, fontWeight: '500' },
+  pillTextOn: { color: '#fff' },
+  pillTextFilled: { color: '#374151' },
+  pillTextEmpty: { color: '#9ca3af' },
+
+  segment: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  editModalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  editModalClose: {
-    fontSize: 24,
-    color: '#9ca3af',
-    fontWeight: '300',
-  },
-  editModalContent: {
-    padding: 20,
-  },
-  editModalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  editModalInput: {
     backgroundColor: '#f9fafb',
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
-    color: '#1f2937',
+    padding: 2,
+    marginBottom: 10,
   },
-  editModalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 24,
-  },
-  editModalButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 8,
+  segItem: { flex: 1, paddingHorizontal: 4, paddingVertical: 5, borderRadius: 6, alignItems: 'center' },
+  segItemOn: { backgroundColor: '#fff' },
+  segText: { fontSize: 12, color: '#6b7280', fontWeight: '500' },
+  segTextOn: { color: '#111827' },
+
+  inlineSection: { marginTop: 20 },
+  inlineHead: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: 8 },
+  inlineTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  inlineTime: { marginLeft: 6, fontSize: 11, color: '#6b7280' },
+
+  empty: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d1d5db',
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
     alignItems: 'center',
+    margin: 12,
   },
-  editModalButtonCancel: {
-    backgroundColor: '#f3f4f6',
-  },
-  editModalButtonSave: {
-    backgroundColor: '#3b82f6',
-  },
-  editModalButtonTextCancel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  editModalButtonTextSave: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
+  emptyTitle: { marginTop: 10, fontSize: 13, fontWeight: '600', color: '#374151', textAlign: 'center' },
+  emptyBody: { marginTop: 4, fontSize: 11, color: '#6b7280', textAlign: 'center', lineHeight: 16 },
 });
+
+export default ScheduleScreen;

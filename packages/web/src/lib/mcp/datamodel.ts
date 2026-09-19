@@ -200,6 +200,57 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
     serverManaged: AUDIT_FIELDS,
   },
 
+  campTimetables: {
+    name: 'campTimetables',
+    description:
+      '캠프 시간표 — 캠프 × 그룹 × 일과 유형 하나당 문서 1개. 앱의 캠프>시간표 탭이 이 문서를 그대로 표로 그린다. 담임 이름은 저장하지 않고 classes[].classCode 로 users 에서 조인한다.',
+    read: 'mentor',
+    write: { ops: ['create', 'update', 'delete'] },
+    scope: { kind: 'camp-id', field: 'jobCodeId' },
+    idOnCreate: 'uuid',
+    fields: {
+      campCode: str('캠프 코드 (예: J29)', { required: true, writable: true, ref: { collection: 'jobCodes', by: 'code' } }),
+      jobCodeId: str('캠프 jobCodes 문서 ID', { required: true, writable: true, ref: { collection: 'jobCodes', by: 'id' } }),
+      groupName: str('그룹 이름. campSettings.groups[].name 과 맞춘다 (예: Junior)', { required: true, writable: true }),
+      dayType: str('일과 유형 키 (regular | steam | final | arrival | departure | 자유)', { required: true, writable: true }),
+      dayTypeLabel: str('일과 유형 표시 이름 (예: Regular Day)', { required: true, writable: true }),
+      layout: str('표 종류. time=교시 표(Regular/STEAM/Final), date=날짜 표(인문학 프로그램)', { required: true, writable: true, enum: ['time', 'date'] }),
+      order: num('캠프 안에서의 표시 순서', { writable: true }),
+      classes: {
+        type: 'object[]',
+        description: '반 열 [{ classCode, className, classroom, grade }]. classCode 가 users.jobExperiences[].classCode 와 같아야 담임 이름이 자동으로 붙는다.',
+        required: true,
+        writable: true,
+      },
+      extraColumns: { type: 'object[]', description: '반이 아닌 전담 열 [{ key, label, teacherName }] (예: Pattern)', writable: true },
+      subjects: {
+        type: 'object[]',
+        description:
+          '과목·주제 정의 [{ key, partner, ownerClassCode?, color? }]. partner 가 칸의 둘째 줄을 누가 채울지 정한다 — foreign=그 과목 원어민(그룹+groupRole 로 조회), pattern=Pattern 전담, owner=ownerClassCode 의 담임(주제와 함께 로테이션), ownTeacher=그 반 담임, none=둘째 줄 없음.',
+        required: true,
+        writable: true,
+      },
+      blocks: {
+        type: 'object[]',
+        description:
+          '표의 줄 목록. [{ id, kind: "shared"|"class", times: [{start,end}] (layout=time, 2개면 1~2교시 한 세트), dateLabel (layout=date), lines, label (shared), cells (class): { 반코드: { subject, partnerFirst?, texts?, note? } }, color }]. 반별 칸은 과목만 넣으면 둘째 줄이 subjects 규칙으로 자동 채워진다.',
+        required: true,
+        writable: true,
+        large: true,
+      },
+      note: str('표 하단 메모 (교재 코드 안내 등)', { writable: true }),
+    },
+    serverManaged: AUDIT_FIELDS,
+    notes: [
+      '반 개수는 classes 길이로 정해진다. 4반이든 5반이든 열 개수만 달라진다.',
+      '식사·P.E·인문학처럼 그룹 전체가 함께하는 시간은 kind="shared" 에 label 만 넣는다.',
+      '사람 이름은 저장하지 않는다. 담임은 classCode, 원어민은 그룹+담당 과목(groupRole)으로 앱 배정에서 조인된다. 이름을 칸에 직접 쓰지 말 것.',
+      '수업 시간표는 1~2교시가 한 세트다: 1교시 한국인 과목, 2교시 그 과목 원어민(Math 는 Pattern). 인문학·STEAM 은 주제와 담당 담임이 함께 로테이션한다(partner: owner).',
+      '다른 캠프로 복사할 때: campCode·jobCodeId 를 대상 캠프로 바꾸고, classes 의 classCode 를 대상 캠프 반번호로 바꾼 뒤 periods 의 cells 키도 같이 바꾼다.',
+      '그룹·반 구성의 출처는 campSettings/{campCode}.groups 이다. 먼저 그쪽을 확인하면 반번호를 맞추기 쉽다.',
+    ],
+  },
+
   // ─── 수업 자료 ───────────────────────────────────────────────────────
   lessonMaterials: {
     name: 'lessonMaterials',
@@ -537,6 +588,16 @@ export const RECIPES: { title: string; steps: string[] }[] = [
       'B 에 없는 카테고리는 taskCategories create 로 먼저 만들고(dry-run→confirm) ID 확보',
       '각 업무의 date 에 일수 차이를 더하고(요일 어긋남은 표로 보여주고 조정), campCode=B, categoryId 를 B 것으로 매핑, completions 는 서버가 비움',
       'write_documents(create × N) dry-run → 날짜 매핑 표 검토 → confirm',
+    ],
+  },
+  {
+    title: '시간표를 A 캠프에서 B 캠프로 복사',
+    steps: [
+      'query_documents(jobCodes) 로 A·B 의 문서 ID 와 코드 확인',
+      'query_documents(campSettings, where campCode==B) 로 B 의 그룹-반 구성(groups) 확인 — 없으면 사용자에게 반번호를 묻는다',
+      'query_documents(campTimetables, where jobCodeId==A) 로 목록 확인 → get_document(includeLarge=true) 로 periods 까지 읽기',
+      'campCode·jobCodeId 를 B 로 바꾸고, classes 의 classCode 를 B 반번호로 교체한 뒤 periods[].cells 의 키도 같은 규칙으로 교체',
+      'write_documents(create × N) dry-run → 반 매핑 표를 사용자에게 보여주고 확인 → confirm',
     ],
   },
   {

@@ -165,15 +165,26 @@ function deletePath(obj: Record<string, unknown>, path: string) {
 
 // ─── 민감 키 방어선 (hidden 목록과 별개로 항상 적용) ───────────────────────
 
-const SENSITIVE_KEY_PARTS = [
+/**
+ * 키 이름으로 개인정보를 막는 최후 방어선.
+ *
+ * 단순 부분 문자열 비교는 오탐이 난다 (예: "className" 안에 "ssn").
+ * 그래서 키를 낱말 단위(camelCase·snake·kebab)로 쪼개 낱말이 일치할 때만 막고,
+ * 낱말로 안 쪼개지는 합성어만 부분 문자열로 따로 검사한다.
+ */
+const SENSITIVE_SEGMENTS = new Set([
   'email',
   'phone',
   'mobile',
+  'tel',
   'address',
+  'addr',
   'rrn',
   'ssn',
   'passport',
   'birth',
+  'birthday',
+  'bank',
   'bankbook',
   'account',
   'password',
@@ -181,15 +192,28 @@ const SENSITIVE_KEY_PARTS = [
   'token',
   'geocode',
   'medication',
+  'meds',
+  'allergy',
+  'allergies',
   'allerg',
-  'idcard',
-  'cvurl',
-  'residentreg',
-];
+  'resident',
+]);
+
+const SENSITIVE_SUBSTRINGS = ['residentreg', 'idcard', 'cvurl', 'bankbook', 'dateofbirth', 'phonenumber'];
+
+/** 키를 낱말 단위로 분해: "rrnFront" → ["rrn","front"], "parent_phone" → ["parent","phone"] */
+function keySegments(key: string): string[] {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[\s_\-.]+/)
+    .map((s) => s.toLowerCase())
+    .filter(Boolean);
+}
 
 export function isSensitiveKey(key: string): boolean {
   const k = key.toLowerCase();
-  return SENSITIVE_KEY_PARTS.some((p) => k.includes(p));
+  if (SENSITIVE_SUBSTRINGS.some((p) => k.includes(p))) return true;
+  return keySegments(key).some((s) => SENSITIVE_SEGMENTS.has(s));
 }
 
 function scrubSensitive(v: unknown): unknown {

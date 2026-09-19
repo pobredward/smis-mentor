@@ -120,6 +120,21 @@ curl -si -X POST https://smis-mentor.com/api/mcp -H 'content-type: application/j
 - **Claude Code**: `claude mcp add --transport http smis-mentor https://smis-mentor.com/api/mcp` → `/mcp` 에서 로그인.
 - **Cursor**: `{"mcpServers":{"smis-mentor":{"url":"https://smis-mentor.com/api/mcp"}}}`
 
+## 앱 내부 시간표 (campTimetables)
+
+캠프 > 시간표 탭은 구글시트 웹뷰 링크 대신 Firestore 문서를 앱에서 직접 그린다. 로딩이 iframe 대비 즉시이고, 모바일에서도 표가 제대로 보인다.
+
+- 저장 단위: **캠프 × 그룹 × 일과 유형 = 문서 1개** (예: J29 × Junior × Regular Day). `campTimetables` 컬렉션.
+- **반 개수는 데이터로 정해진다.** `classes` 배열 길이가 곧 열 개수라 4반이든 5반이든 코드 변경이 없다.
+- **담임 이름은 저장하지 않는다.** `classes[].classCode` 가 `users.jobExperiences[].classCode` 와 같으면 화면에서 조인해 붙인다. 멘토를 교체하면 앱 배정만 바꿔도 시간표가 따라 바뀐다 (시트의 VLOOKUP 과 같은 역할).
+- 교시는 `shared`(그룹 전체 병합 — 식사·P.E·인문학)와 `class`(반별 칸) 두 종류. 반이 아닌 전담 열(Pattern 등)은 `extraColumns`.
+- 로테이션(과목이 반마다 한 칸씩 밀리는 구조)은 **편집기가 칸을 채워 주는 도구**이고 저장은 항상 칸 단위다. 예외 칸을 자유롭게 덮어쓸 수 있어야 하기 때문.
+- 관리자 편집: 시간표 탭 → 편집. 그룹·반 추가/삭제, 교시 설정, 로테이션 자동 채우기, 다른 그룹·일과로 복사.
+- 그룹-반 구성의 출처는 `campSettings/{campCode}.groups` 이고, 편집기의 "새 시간표" 버튼이 이걸 읽는다.
+- Firestore 규칙: 캠프 스태프 읽기, admin 쓰기. **규칙 배포 필요** (`firebase deploy --only firestore:rules`).
+- 관리시트에서 한 번에 밀어 넣기: `node scripts/seed-timetable.cjs scripts/seed/<camp>-timetable.json [--apply]` (--apply 없으면 드라이런).
+- MCP 로도 다룰 수 있다 — `describe_schema("campTimetables")`, `query_documents`, `write_documents`. 레시피 "시간표를 A 캠프에서 B 캠프로 복사" 참고.
+
 ## 공개 페이지 서버 렌더링 (SEO)
 
 `AuthProvider` 는 인증 확인이 끝나기 전에는 자식을 렌더하지 않는데(로그인 상태에 의존하는 페이지들의 전제), `src/lib/publicSsrPaths.ts` 에 열거된 공개 경로(홈, 공고 목록/상세, 지원 안내, 약관)만 예외로 두어 서버 HTML 에 실제 본문과 푸터가 포함됩니다. 이 경로의 컴포넌트는 `loading` 동안 `userData` 가 null 일 수 있으므로 로그인 안내를 바로 띄우지 말고 `loading` 을 먼저 확인해야 합니다(Header, ApplicationSection, JobApplyStatusContent, 공고 상세가 그렇게 되어 있음). `useSearchParams()` 를 쓰는 컴포넌트는 정적 프리렌더 시 Suspense 경계가 필요하므로 본문과 분리된 작은 컴포넌트로 감쌉니다(AnalyticsProvider, /recruitment 참고).

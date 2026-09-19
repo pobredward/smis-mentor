@@ -13,7 +13,7 @@ export const campQueryKeys = {
   templates: () => ['lessonMaterialTemplates'] as const,
   jobCodesInfo: (jobExperienceIds: string[]) => ['jobCodesInfo', jobExperienceIds] as const,
   tasks: (userId: string) => ['tasks', userId] as const,
-  schedule: (activeJobCodeId: string) => ['schedule', activeJobCodeId] as const,
+  schedule: (activeJobCodeId: string) => ['schedule', activeJobCodeId, 'timetable'] as const,
   guide: (activeJobCodeId: string) => ['guide', activeJobCodeId] as const,
   classData: (activeJobCodeId: string) => ['classData', activeJobCodeId] as const,
   roomData: (activeJobCodeId: string) => ['roomData', activeJobCodeId] as const,
@@ -124,20 +124,18 @@ export function useCampDataPrefetch() {
 
   /**
    * 시간표 데이터 프리페칭
+   * 시간표는 이제 구글시트 웹뷰가 아니라 앱 안에서 그리므로,
+   * 웹뷰 대신 표를 그리는 데 필요한 데이터를 미리 받아 둔다.
    */
   const prefetchScheduleData = async (jobCodeId: string) => {
     try {
-      // ScheduleScreen의 링크 목록 프리페칭
-      const { generationResourcesService } = await import('../services');
-      
+      const { loadScheduleBundle } = await import('../services/scheduleBundle');
+
       await queryClient.prefetchQuery({
         queryKey: campQueryKeys.schedule(jobCodeId),
-        queryFn: async () => {
-          const resources = await generationResourcesService.getResourcesByJobCodeId(jobCodeId);
-          return resources?.scheduleLinks || [];
-        },
+        queryFn: () => loadScheduleBundle(jobCodeId),
       });
-      
+
       logger.info('  ✅ 시간표 데이터 프리페칭 완료');
     } catch (error) {
       logger.error('  ❌ 시간표 데이터 프리페칭 실패', { error });
@@ -274,22 +272,9 @@ export function useCampDataPrefetch() {
         logger.info(`📚 교육 링크: ${resources.educationLinks.length}개 (프리로드 제외)`);
       }
 
-      // 시간표 링크 추가 (구글 시트만)
-      if (resources.scheduleLinks) {
-        logger.info(`📅 시간표 링크: ${resources.scheduleLinks.length}개`);
-        const googleSheetLinks = resources.scheduleLinks.filter(link => 
-          link.url.includes('docs.google.com')
-        );
-        logger.info(`   → 구글 시트만 프리로드: ${googleSheetLinks.length}개`);
-        googleSheetLinks.forEach((link, idx) => {
-          logger.info(`   ${idx + 1}. ${link.title} - ${link.url}`);
-          allLinks.push({
-            id: `schedule-${link.id}`,
-            title: link.title,
-            url: link.url,
-            type: 'schedule',
-          });
-        });
+      // 시간표는 앱 안에서 직접 그리므로 웹뷰 프리로드 대상이 아니다
+      if (resources.scheduleLinks?.length) {
+        logger.info(`📅 시간표 링크: ${resources.scheduleLinks.length}개 (앱 내 시간표 사용 - 프리로드 제외)`);
       }
 
       // 인솔표 링크 추가 (구글 시트만)
@@ -393,7 +378,6 @@ export function useCampDataPrefetch() {
 
       logger.info(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
       logger.info(`📊 총 ${allLinks.length}개 WebView 프리로드 시작 (구글 시트만)`);
-      logger.info(`   - 시간표: ${resources.scheduleLinks?.filter(l => l.url.includes('docs.google.com')).length || 0}개`);
       logger.info(`   - 인솔표: ${resources.guideLinks?.filter(l => l.url.includes('docs.google.com')).length || 0}개`);
       logger.info(`   - 수업: ${allLinks.filter(l => l.type === 'lesson').length}개`);
 

@@ -548,6 +548,16 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // appSettings 컬렉션 (앱 전역 설정 — 캠프·기수와 무관)
+    // 역할: 로그인 사용자(읽기), admin(전체 CRUD)
+    // 용도: eslBooks (학년별 ESL 교재 리스트, L-Code → 교재 3권)
+    // ──────────────────────────────────────────────────────────────
+    match /appSettings/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // campSettings 컬렉션 (캠프별 설정)
     // 역할: admin(전체 CRUD), 캠프 스태프(읽기)
     // 용도: 임시데이터 on/off 설정 (useTemporaryData), sheetColumnMap
@@ -556,6 +566,16 @@ service cloud.firestore {
       allow read: if isCampStaff();
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // campTimetables 컬렉션 (앱 내부 시간표 — 캠프 × 그룹 × 일과 유형)
+    // 역할: 캠프 스태프(읽기), admin(전체 CRUD)
+    // 담임 이름은 저장하지 않고 classes[].classCode 로 users 에서 조인한다.
+    // ──────────────────────────────────────────────────────────────
+    match /campTimetables/{timetableId} {
+      allow read: if isCampStaff();
+      allow create, update, delete: if isAdmin();
     }
 
     // ──────────────────────────────────────────────────────────────

@@ -3,6 +3,8 @@ export * from './student';
 export * from './fieldConfig';
 export * from './camp';
 export * from './campPage';
+export * from './campTimetable';
+export * from './eslBook';
 export * from './permission';
 export * from './evaluation';
 export * from './sms';
