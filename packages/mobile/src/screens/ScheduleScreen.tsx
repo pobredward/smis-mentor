@@ -10,6 +10,9 @@ import {
   isSameGroup,
   normalizeGroupKey,
   resolveTimetable,
+  findGuide,
+  guideKeyOf,
+  hasGuideContent,
   teacherMapOf,
   timetableCategories,
   timetableGroupNames,
@@ -18,6 +21,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { loadScheduleBundle, scheduleQueryKey } from '../services/scheduleBundle';
 import { TimetableView } from '../components/TimetableView';
+import { GuideDetail } from '../components/GuideDetail';
 import { TimetableEditor } from '../components/TimetableEditor';
 import { BookTable } from '../components/BookTable';
 
@@ -86,6 +90,17 @@ export function ScheduleScreen() {
 
   const groupOf = (name: string | null) => derived.find((g) => isSameGroup(g.name, name));
   const teacherByClassCode = useMemo(() => teacherMapOf(derived), [derived]);
+
+  /** 지금 열어 둔 세부페이지의 칸 이름 */
+  const [guideLabel, setGuideLabel] = useState<string | null>(null);
+  /** 설명이 실제로 들어 있는 칸 이름만 — 빈 칸을 눌러 봐야 허탕이라 */
+  const guidedLabels = useMemo(() => {
+    const keys = new Set<string>();
+    Object.entries(data?.timetableGuides ?? {}).forEach(([key, guide]) => {
+      if (hasGuideContent(guide)) keys.add(guideKeyOf(key));
+    });
+    return keys;
+  }, [data?.timetableGuides]);
 
   const myExp = useMemo(
     () =>
@@ -236,7 +251,13 @@ export function ScheduleScreen() {
         </View>
       )}
 
-      {current ? (
+      {current && guideLabel ? (
+        <GuideDetail
+          label={guideLabel}
+          guide={findGuide(guideLabel, data?.timetableGuides)}
+          onBack={() => setGuideLabel(null)}
+        />
+      ) : current ? (
         <>
           <TimetableView
             timetable={withClassInfo(current)!}
@@ -247,6 +268,8 @@ export function ScheduleScreen() {
             nowMinutes={nowMinutes}
             linkedLabels={inlineTables.map((x) => x.slot.label)}
             campStartMs={data?.startMs ?? null}
+            guidedLabels={guidedLabels}
+            onOpenGuide={setGuideLabel}
           />
 
           {inlineTables.map(({ slot, table }) => (
@@ -261,6 +284,8 @@ export function ScheduleScreen() {
               </View>
               <TimetableView
                 timetable={withClassInfo(table)!}
+                guidedLabels={guidedLabels}
+                onOpenGuide={setGuideLabel}
                 teacherByClassCode={teacherByClassCode}
                 foreignBySubject={groupOf(table.groupName)?.staffByRole ?? {}}
                 myClassCode={myExp?.classCode}

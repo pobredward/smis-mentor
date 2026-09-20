@@ -35,6 +35,9 @@ interface TimetableViewProps {
   linkedLabels?: string[];
   /** 캠프 시작일 — 날짜 표는 여기서 실제 날짜를 계산한다 (기수마다 날짜를 다시 넣지 않아도 되게) */
   campStart?: Date | null;
+  /** 설명이 있는 칸 이름 (소문자 키). 이 칸만 눌러서 세부페이지로 간다 */
+  guidedLabels?: Set<string>;
+  onOpenGuide?: (label: string) => void;
 }
 
 /**
@@ -65,10 +68,10 @@ function CellLines({ line }: { line?: RenderedLine }) {
       {/* 강의실 호수가 맨 위 — 이동 수업에서 제일 먼저 봐야 하는 값 */}
       {line.room && <span className="block text-[10px] leading-none text-gray-400">{line.room}</span>}
       <span
+        title={line.manual ? '직접 입력한 이름 (앱 배정과 연동되지 않음)' : undefined}
         className={`${line.isName ? nameClass : line.muted ? 'text-gray-400' : 'text-gray-900'} ${
           line.manual ? MANUAL : ''
         }`}
-        title={line.manual ? '직접 입력한 이름 (앱 배정과 연동되지 않음)' : undefined}
       >
         {line.text}
         {/* 담당자는 줄을 늘리지 않게 괄호로 붙인다 — Math (김서연) */}
@@ -94,9 +97,18 @@ export default function TimetableView({
   nowMinutes = null,
   linkedLabels,
   campStart = null,
+  guidedLabels,
+  onOpenGuide,
 }: TimetableViewProps) {
   const hasMyClass = !!myClassCode && timetable.classes.some((c) => c.classCode === myClassCode);
   const [onlyMine, setOnlyMine] = useState(false);
+
+  /**
+   * 지금 마우스가 올라간 "묶음".
+   * Speaking 처럼 2교시를 통째로 쓰는 수업은 위·아래 칸이 서로 다른 <tr> 에 있어서
+   * CSS 만으로는 같이 반응시킬 수 없다. 그래서 묶음 id 를 상태로 들고 있는다.
+   */
+  const [hoverUnit, setHoverUnit] = useState<string | null>(null);
 
   const layout = timetable.layout ?? 'time';
   const blocks = useMemo(() => sortBlocks(timetable.blocks ?? [], layout), [timetable.blocks, layout]);
@@ -204,7 +216,19 @@ export default function TimetableView({
                 : `${b.times?.[0]?.start}–${b.times?.[n - 1]?.end}`;
             if (b.kind === 'shared') {
               return (
-                <li key={b.id} className="flex items-center gap-3 bg-gray-50 px-4 py-2.5">
+                <li
+                  key={b.id}
+                  onClick={
+                    b.label && onOpenGuide && guidedLabels?.has(b.label.trim().toLowerCase())
+                      ? () => onOpenGuide(b.label as string)
+                      : undefined
+                  }
+                  className={`flex items-center gap-3 bg-gray-50 px-4 py-2.5 ${
+                    b.label && onOpenGuide && guidedLabels?.has(b.label.trim().toLowerCase())
+                      ? 'cursor-pointer hover:bg-blue-50'
+                      : ''
+                  }`}
+                >
                   <span className="w-24 shrink-0 text-xs tabular-nums text-gray-500">{head}</span>
                   <span className="flex-1 text-sm font-medium text-gray-700">{b.label}</span>
                 </li>
@@ -348,10 +372,26 @@ export default function TimetableView({
                         </td>
                       </>
                     )}
+                    {(() => {
+                      const guided = !!guidedLabels?.has((row.label ?? '').trim().toLowerCase());
+                      const openable = guided && !!onOpenGuide && !!row.label;
+                      return (
                     <td
                       colSpan={timetable.classes.length}
-                      className="border-x border-b border-gray-200 border-b-gray-300 px-1 py-0.5 text-center text-[11px] font-medium text-gray-700"
-                      style={{ backgroundColor: first.color ?? '#f3f4f6' }}
+                      onClick={openable ? () => onOpenGuide!(row.label) : undefined}
+                      role={openable ? 'button' : undefined}
+                      title={openable ? '눌러서 설명 보기' : undefined}
+                      onMouseEnter={openable ? () => setHoverUnit(`shared:${first.id}`) : undefined}
+                      onMouseLeave={openable ? () => setHoverUnit(null) : undefined}
+                      className={`border-x border-b border-gray-200 border-b-gray-300 px-1 py-0.5 text-center text-[11px] font-medium text-gray-700 ${
+                        openable ? 'cursor-pointer' : ''
+                      } ${openable && hoverUnit === `shared:${first.id}` ? 'bg-blue-50/60' : ''}`}
+                      style={{
+                        backgroundColor:
+                          openable && hoverUnit === `shared:${first.id}`
+                            ? undefined
+                            : first.color ?? '#f3f4f6',
+                      }}
                     >
                       {row.label}
                       {linkedLabels?.some((k) => row.label.includes(k)) && (
@@ -361,6 +401,8 @@ export default function TimetableView({
                         <span className="ml-1 text-[10px] font-normal text-gray-500">{row.subLabel}</span>
                       )}
                     </td>
+                      );
+                    })()}
                     {(timetable.extraColumns ?? []).map((e) => (
                       <td
                         key={e.key}
@@ -442,15 +484,33 @@ export default function TimetableView({
                     // 같은 수업이 이어지면 가운데 선 없음, 다른 수업이면 얇은 선
                     const joined = isJoinedPair(subjects, cell?.subject);
                     const midRule = !isLast && !joined ? 'border-b border-b-gray-300/70' : '';
+                    // 칸 전체가 클릭 대상. Speaking 처럼 2교시를 통째로 쓰는 수업은
+                    // 위·아래를 한 묶음으로 보고 같이 반응시킨다 (Math+Pattern 은 따로).
+                    const unit = joined && n > 1 ? 0 : i;
+                    const unitId = `${b.id}:${col.key}:${unit}`;
+                    const guideLine = parts[unit];
+                    const openable =
+                      !!guideLine?.text &&
+                      !guideLine.isName &&
+                      !!onOpenGuide &&
+                      !!guidedLabels?.has(guideLine.text.trim().toLowerCase());
+                    const hot = openable && hoverUnit === unitId;
                     return (
                       <td
                         key={col.key}
+                        onClick={openable ? () => onOpenGuide!(guideLine!.text) : undefined}
+                        onMouseEnter={openable ? () => setHoverUnit(unitId) : undefined}
+                        onMouseLeave={openable ? () => setHoverUnit(null) : undefined}
+                        role={openable ? 'button' : undefined}
+                        title={openable ? '눌러서 설명 보기' : undefined}
                         className={`border-x border-gray-200 px-1 text-center align-middle ${
                           layout === 'date' ? 'py-0' : ''
                         } ${
                           isLast ? 'border-b border-b-gray-300' : midRule
-                        } ${col.isMine ? 'ring-1 ring-inset ring-blue-200' : ''}`}
-                        style={{ backgroundColor: bg(cell?.subject, b.color) }}
+                        } ${col.isMine ? 'ring-1 ring-inset ring-blue-200' : ''} ${
+                          openable ? 'cursor-pointer' : ''
+                        } ${hot ? 'bg-blue-50/60' : ''}`}
+                        style={{ backgroundColor: hot ? undefined : bg(cell?.subject, b.color) }}
                       >
                         <div
                           className={`flex ${layout === 'date' ? CELL_MIN_H_DATE : CELL_MIN_H} flex-col items-center ${

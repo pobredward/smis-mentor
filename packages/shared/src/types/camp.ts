@@ -1,4 +1,5 @@
-import type { TimetableClassColumn, TimetableSubject } from './campTimetable';
+import type { TimetableClassColumn } from './campTimetable';
+import type { TimetableGuide } from './timetableGuide';
 
 // 캠프 관련 타입 정의
 
@@ -140,8 +141,6 @@ export interface CampTimetableCommon {
   classes?: TimetableClassColumn[];
   /** 역할키 → 직접 넣은 담당자 이름 (이름 수정의 원어민·스태프 부분) */
   staffOverrides?: Record<string, string>;
-  /** 과목·주제 */
-  subjects?: TimetableSubject[];
 }
 
 export interface CampSettings {
@@ -154,6 +153,11 @@ export interface CampSettings {
   classInfo?: Record<string, CampClassInfo>;
   /** 그룹명 → 그 그룹의 모든 Day 가 함께 쓰는 값 */
   timetableCommon?: Record<string, CampTimetableCommon>;
+  /**
+   * 칸 이름(소문자 정규화) → 그 칸을 눌렀을 때 뜨는 설명.
+   * Day 가 아니라 캠프 단위라, Breakfast 처럼 여러 Day 에 걸치는 것도 한 번만 쓴다.
+   */
+  timetableGuides?: Record<string, TimetableGuide>;
   useTemporaryData?: boolean;
   updatedAt?: string;
 }

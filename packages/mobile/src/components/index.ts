@@ -18,5 +18,6 @@ export { SplashPrefetchScreen } from './SplashPrefetchScreen';
 export { CampContentList } from './CampContentList';
 export { CampPageWebEditor } from './CampPageWebEditor';
 export { TimetableView } from './TimetableView';
+export { GuideDetail } from './GuideDetail';
 export { TimetableEditor } from './TimetableEditor';
 export { BookTable } from './BookTable';

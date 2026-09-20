@@ -8,6 +8,10 @@ import {
   findInlineSlots,
   getCampClassInfo,
   getCampTimetableCommon,
+  getCampTimetableGuides,
+  findGuide,
+  guideKeyOf,
+  hasGuideContent,
   getCampGroups,
   getEslBooks,
   isSameGroup,
@@ -23,6 +27,7 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { campTimetableService } from '@/lib/campTimetableService';
+import GuideDetail from './GuideDetail';
 import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
 import TimetableView from './TimetableView';
 import TimetableEditor from './TimetableEditor';
@@ -124,6 +129,16 @@ export default function ScheduleContent() {
     staleTime: 10 * 60 * 1000,
   });
 
+  /** 칸 설명 — 캠프당 한 벌 */
+  const { data: timetableGuides = {} } = useQuery({
+    queryKey: ['campTimetableGuides', campCode],
+    queryFn: () => getCampTimetableGuides(db, campCode),
+    enabled: !!campCode,
+    staleTime: 10 * 60 * 1000,
+  });
+  /** 지금 열어 둔 세부페이지의 칸 이름 */
+  const [guideLabel, setGuideLabel] = useState<string | null>(null);
+
   /** 교재 리스트는 기수·캠프와 무관한 전사 공용 값 */
   const { data: eslBooks } = useQuery({
     queryKey: ['eslBooks'],
@@ -204,6 +219,18 @@ export default function ScheduleContent() {
       }))
       .filter((x): x is { slot: (typeof x)['slot']; table: CampTimetable } => !!x.table);
   }, [current, timetables, derived, groups, activeGroup, campCode, activeJobCodeId, timetableCommon]);
+
+  /** 설명이 실제로 들어 있는 칸 이름만 — 빈 칸을 눌러 봐야 허탕이라 */
+  const guidedLabels = useMemo(() => {
+    const keys = new Set<string>();
+    Object.entries(timetableGuides).forEach(([key, guide]) => {
+      if (hasGuideContent(guide)) keys.add(guideKeyOf(key));
+    });
+    return keys;
+  }, [timetableGuides]);
+
+  /** Day·그룹을 바꾸면 열어 둔 세부페이지는 닫는다 */
+  useEffect(() => setGuideLabel(null), [activeCategory, activeGroup]);
 
   const campStart = jobCode?.startDate?.toDate?.() ?? null;
   /** 그릴 때 캠프 설정의 반이름·강의실을 입힌다 */
@@ -314,10 +341,18 @@ export default function ScheduleContent() {
         </div>
       )}
 
-      {current ? (
+      {current && guideLabel ? (
+        <GuideDetail
+          label={guideLabel}
+          guide={findGuide(guideLabel, timetableGuides)}
+          onBack={() => setGuideLabel(null)}
+        />
+      ) : current ? (
         <>
           <TimetableView
             timetable={withClassInfo(current)!}
+            guidedLabels={guidedLabels}
+            onOpenGuide={setGuideLabel}
             teacherByClassCode={teacherByClassCode}
             foreignBySubject={groupOf(current.groupName)?.staffByRole ?? {}}
             myClassCode={myExp?.classCode}
@@ -339,6 +374,8 @@ export default function ScheduleContent() {
               </div>
               <TimetableView
                 timetable={withClassInfo(table)!}
+                guidedLabels={guidedLabels}
+                onOpenGuide={setGuideLabel}
                 teacherByClassCode={teacherByClassCode}
                 foreignBySubject={groupOf(table.groupName)?.staffByRole ?? {}}
                 myClassCode={myExp?.classCode}

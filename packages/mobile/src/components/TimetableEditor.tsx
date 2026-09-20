@@ -11,11 +11,18 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_SUBJECTS,
   TIMETABLE_CATEGORIES,
   categoryLabel,
+  findCategory,
+  DEFAULT_GUIDE_SECTIONS,
+  guideKeyOf,
+  hasGuideContent,
+  timetableLabels,
   booksFor,
   buildEmptyTimetable,
   commonFor,
@@ -23,11 +30,14 @@ import {
   firstName,
   getCampClassInfo,
   getCampTimetableCommon,
+  getCampTimetableGuides,
   getCampGroups,
   getEslBooks,
   updateCampClassInfo,
   updateCampTimetableCommon,
-  usesOwn,
+  updateCampTimetableGuides,
+  uploadGuideMedia,
+  hasItemContent,
   isUnsaved,
   isSameGroup,
   isMergedColumn,
@@ -44,10 +54,14 @@ import {
   type CampClassInfo,
   type CampTimetable,
   type SubjectPartner,
+  type TimetableSubject,
+  type TimetableGuide,
+  type GuideSection,
+  type GuideItem,
+  type GuideItemType,
   type TimetableClassColumn,
-  type TimetableOwn,
 } from '@smis-mentor/shared';
-import { db } from '../config/firebase';
+import { db, storage } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { campTimetableService } from '../services/campTimetableService';
 import { getUsersByJobCodeId } from '../services/userService';
@@ -62,13 +76,19 @@ interface Props {
 }
 
 /** web 편집기와 같은 문구 */
+/**
+ * 반별 칸은 윗 칸(1교시) + 아래 칸(2교시) 두 칸이다.
+ *   윗 칸  : 강의실 / 과목 이름 / teacherRole 이름
+ *   아래 칸: 이 값이 정한다 (아래 라벨 그대로)
+ * staff 만 예외로 윗 칸 자체를 사람 이름으로 바꾼다 (과목 이름이 안 나온다).
+ */
 const PARTNER_LABELS: Record<SubjectPartner, string> = {
-  none: '짝 없음 (1줄)',
-  pattern: '짝: Pattern 수업',
-  foreign: '짝: 그 과목 원어민',
-  owner: '짝: 주제 담당 담임',
-  ownTeacher: '짝: 그 반 담임',
-  staff: '짝: 담당자 이름만',
+  none: '아래 칸 없음',
+  pattern: '아래 칸 — 다른 수업 (Pattern)',
+  foreign: '아래 칸 — 이 과목 원어민 이름',
+  owner: '아래 칸 — 정한 반의 담임 이름',
+  ownTeacher: '아래 칸 — 그 반 담임 이름',
+  staff: '과목명 없이 담당자 이름만',
 };
 
 /** 공통 탭의 가짜 카테고리 키 — 실제 Day 가 아니다 */
@@ -124,6 +144,17 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
     staleTime: 10 * 60 * 1000,
   });
 
+  /** 칸 설명 — 캠프당 한 벌 (칸 이름으로 찾는다) */
+  const { data: savedGuides = {}, refetch: refetchGuides } = useQuery({
+    queryKey: ['campTimetableGuides', campCode],
+    queryFn: () => getCampTimetableGuides(db, campCode),
+    enabled: !!campCode,
+    staleTime: 10 * 60 * 1000,
+  });
+  const [guides, setGuides] = useState<Record<string, TimetableGuide>>({});
+  useEffect(() => setGuides(savedGuides), [savedGuides]);
+  const [guideLabel, setGuideLabel] = useState<string | null>(null);
+
   const { data: eslBooks } = useQuery({
     queryKey: ['eslBooks'],
     queryFn: () => getEslBooks(db),
@@ -171,6 +202,10 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   const activeCategory = editCategory ?? COMMON_KEY;
   /** 공통 탭 — 반·이름·과목만 고치고, 고친 값은 그 그룹의 모든 Day 에 적용된다 */
   const isCommon = activeCategory === COMMON_KEY;
+  /** 입소·입소 D+1·퇴소는 칸 내용을 손으로 넣는 날이라 과목·주제가 없다 */
+  const showSubjects = !isCommon && !findCategory(activeCategory)?.noSubjects;
+  /** 주제 로테이션은 인문학에서만 쓴다 */
+  const showRotationFill = !isCommon && !!findCategory(activeCategory)?.rotation;
   const activeGroup = (editGroup && groups.find((g) => isSameGroup(g, editGroup))) || groups[0] || null;
 
   /**
@@ -226,8 +261,23 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
       ...skeleton,
       dayTypeLabel: '공통',
       staffOverrides: shared?.staffOverrides ?? {},
-      subjects: shared?.subjects?.length ? shared.subjects : DEFAULT_SUBJECTS,
+      subjects: rolesSourceSubjects(),
     };
+  }
+
+  /**
+   * 공통 탭의 "이름 수정" 이 보여 줄 역할 목록의 출처.
+   * 이 그룹의 모든 Day 에 쓰인 과목을 합쳐, 어느 Day 에서든 쓰이는 역할이면
+   * 공통에서 이름을 넣을 수 있게 한다. 저장된 표가 없으면 기본 과목.
+   */
+  function rolesSourceSubjects(): TimetableSubject[] {
+    const seen = new Map<string, TimetableSubject>();
+    timetables
+      .filter((x) => isSameGroup(x.groupName, activeGroup))
+      .forEach((x) => (x.subjects ?? []).forEach((sub) => {
+        if (!seen.has(sub.key)) seen.set(sub.key, sub);
+      }));
+    return seen.size ? [...seen.values()] : DEFAULT_SUBJECTS;
   }
 
   /** 아직 저장된 적 없는 표인지 */
@@ -240,10 +290,6 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
       fn(next);
       return next;
     });
-
-  /** 이 섹션이 공통을 따르는 중인지 (공통 탭에서는 늘 편집 가능) */
-  const followsCommon = (part: keyof TimetableOwn) => !isCommon && !!draft && !usesOwn(draft, part);
-  const setOwn = (part: keyof TimetableOwn, own: boolean) => patch((d) => D.setOwn(d, part, own));
 
   /** 이 그룹의 역할별 담당자 — 보기 화면과 같은 규칙(원어민·수업 멘토 모두) */
   const foreignBySubject = useMemo(
@@ -284,6 +330,84 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
 
   const layout = draft?.layout ?? 'time';
   const subjects = draft?.subjects?.length ? draft.subjects : DEFAULT_SUBJECTS;
+  // ── 칸 설명 ───────────────────────────────────────────────────────
+  /** 이 Day 표의 칸에 실제로 찍히는 이름들 — 설명을 붙일 대상 */
+  const guideTargets = useMemo(() => (draft ? timetableLabels(draft) : []), [draft]);
+  const guideOf = (label: string): TimetableGuide => guides[guideKeyOf(label)] ?? {};
+  const patchGuide = (label: string, fn: (g: TimetableGuide) => TimetableGuide) =>
+    setGuides((prev) => {
+      const key = guideKeyOf(label);
+      return { ...prev, [key]: fn(prev[key] ?? {}) };
+    });
+  const newId = () => D.newBlockId().slice(-6);
+  const startGuide = (label: string) => {
+    setGuideLabel(label);
+    if (!guides[guideKeyOf(label)]?.sections?.length) {
+      patchGuide(label, (g) => ({
+        ...g,
+        sections: DEFAULT_GUIDE_SECTIONS.map((title) => ({ id: newId(), title, items: [] })),
+      }));
+    }
+  };
+  const patchSection = (label: string, si: number, fn: (s: GuideSection) => GuideSection) =>
+    patchGuide(label, (g) => ({
+      ...g,
+      sections: (g.sections ?? []).map((s, i) => (i === si ? fn(s) : s)),
+    }));
+
+  const addItem = (label: string, si: number, type: GuideItemType) =>
+    patchSection(label, si, (s) => ({ ...s, items: [...s.items, { id: newId(), type }] }));
+  const patchItem = (label: string, si: number, ii: number, patch: Partial<GuideItem>) =>
+    patchSection(label, si, (s) => ({
+      ...s,
+      items: s.items.map((x, i) => (i === ii ? { ...x, ...patch } : x)),
+    }));
+  const removeItem = (label: string, si: number, ii: number) =>
+    patchSection(label, si, (s) => ({ ...s, items: s.items.filter((_, i) => i !== ii) }));
+
+  /** 사진·동영상은 Storage 에 올리고 주소만 설명에 남긴다 */
+  const [uploading, setUploading] = useState<string | null>(null);
+  const pickMedia = async (label: string, si: number, ii: number) => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('권한 필요', '사진 접근을 허용해 주세요.');
+      return;
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      quality: 0.7,
+    });
+    if (picked.canceled || !picked.assets?.length) return;
+
+    const asset = picked.assets[0];
+    const key = `${si}:${ii}`;
+    setUploading(key);
+    try {
+      const res = await fetch(asset.uri);
+      const blob = await res.blob();
+      const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'file';
+      const { url, storagePath } = await uploadGuideMedia(
+        storage,
+        campCode,
+        guideKeyOf(label),
+        blob,
+        name
+      );
+      patchItem(label, si, ii, {
+        url,
+        storagePath,
+        type: asset.type === 'video' ? 'video' : 'image',
+        text: name,
+      });
+      Alert.alert('올렸습니다', '저장을 눌러야 반영됩니다.');
+    } catch (e) {
+      Alert.alert('오류', '올리지 못했습니다.');
+      console.error(e);
+    } finally {
+      setUploading(null);
+    }
+  };
+
   const sorted = draft ? sortBlocks(draft.blocks, draft.layout) : [];
   /** 이름을 직접 넣을 수 있는 역할 — 과목의 원어민 + 수업(Pattern) 멘토 */
   const staffRoles = useMemo(() => {
@@ -323,12 +447,16 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
       } else {
         await campTimetableService.update(draft.id, D.toUpdatePayload(draft), userData.userId);
       }
-      // 반이름·강의실은 캠프 설정에 — 이 캠프의 모든 표가 같은 값을 쓴다
-      if (campCode) await updateCampClassInfo(db, campCode, classInfo);
+      // 반이름·강의실·칸 설명은 캠프 설정에 — 이 캠프의 모든 표가 같은 값을 쓴다
+      if (campCode) {
+        await updateCampClassInfo(db, campCode, classInfo);
+        await updateCampTimetableGuides(db, campCode, guides, userData.userId);
+      }
       loadedKey.current = null;
-      await Promise.all([refetch(), refetchClassInfo()]);
+      await Promise.all([refetch(), refetchClassInfo(), refetchGuides()]);
       queryClient.invalidateQueries({ queryKey: scheduleQueryKey(jobCodeId) });
       queryClient.invalidateQueries({ queryKey: ['campClassInfo', campCode] });
+      queryClient.invalidateQueries({ queryKey: ['campTimetableGuides', campCode] });
       Alert.alert('저장', '저장했습니다.');
     } catch (e) {
       Alert.alert('오류', '저장에 실패했습니다.');
@@ -436,22 +564,15 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
             <View style={s.commonBanner}>
               <Text style={s.commonBannerText}>
                 여기서 고친 값은 <Text style={{ fontWeight: '700' }}>{draft.groupName}</Text> 그룹의 모든
-                Day(정규·스팀·입소…)에 함께 적용됩니다. 한 Day 만 달라야 하면 그 Day 탭에서 &quot;따로 쓰기&quot; 를
-                누르세요.
+                Day(정규·스팀·입소…)에 함께 적용됩니다. 한 Day 만 달라야 하면 그 Day 탭에서 바로 고치면 됩니다 —
+                고친 Day 만 떨어져 나오고 나머지는 계속 공통을 따라갑니다.
               </Text>
             </View>
           )}
 
-          {/* 이름 수정 — 비우면 앱 배정, 넣으면 그 값 */}
-          <Section title="이름 수정" tag={
-              <CommonTag
-                hidden={isCommon}
-                follows={followsCommon('roster')}
-                onDetach={() => setOwn('roster', true)}
-                onReattach={() => setOwn('roster', false)}
-              />
-            }>
-            <Locked on={followsCommon('roster')}>
+          {/* 이름 수정 · 반 구성 — 공통에서만 고친다 (Day 탭에는 나오지 않는다) */}
+          {isCommon && (
+          <Section title="이름 수정">
             {draft.classes.map((c, i) => {
               const joined = teacherByClassCode[c.classCode];
               const manual = (c.teacherName ?? '').trim();
@@ -496,44 +617,20 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
                 </View>
               );
             })}
-            </Locked>
           </Section>
+          )}
 
-          {/* 반 구성 */}
+          {isCommon && (
           <Section
             title={`반 구성 (${draft.classes.length}반)`}
-            tag={
-              <CommonTag
-                hidden={isCommon}
-                follows={followsCommon('roster')}
-                onDetach={() => setOwn('roster', true)}
-                onReattach={() => setOwn('roster', false)}
-              />
-            }
             action={
               <View style={s.tagRow}>
                 <TouchableOpacity style={s.miniBtn} onPress={() => patch((d) => D.addClass(d, campCode))}>
                   <Text style={s.miniBtnText}>+ 반 추가</Text>
                 </TouchableOpacity>
-                {!isCommon && (
-                  <TouchableOpacity
-                    style={s.miniBtn}
-                    onPress={() =>
-                      patch((d) => {
-                        d.extraColumns = [
-                          ...(d.extraColumns ?? []),
-                          { key: D.newBlockId().slice(-6), label: '새 열' },
-                        ];
-                      })
-                    }
-                  >
-                    <Text style={s.miniBtnText}>+ 열 추가</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             }
           >
-            <Locked on={followsCommon('roster')}>
             <Text style={s.hint}>
               관리시트 SY시트에서 열을 복사해 붙여넣으면 아래 행까지 채워집니다. 반이름·강의실·교재코드는 이
               캠프 전체가 함께 쓰는 값이라, 여기서 고치면 모든 표에 같이 반영됩니다.
@@ -616,8 +713,8 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
                 </View>
               );
             })}
-            </Locked>
           </Section>
+          )}
 
           {/* 당번 순번 — Day 마다 다르므로 공통 탭에는 없다 (web 과 같은 구성) */}
           {!isCommon &&
@@ -701,24 +798,17 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
               </Section>
             ))}
 
-          {/* 과목·주제 */}
+          {/* 과목·주제 — Day 마다 다르다. 입소·퇴소처럼 안 쓰는 Day 는 감춘다 */}
+          {showSubjects && (
           <Section
             title={`과목·주제 (${subjects.length})`}
-            tag={
-              <CommonTag
-                hidden={isCommon}
-                follows={followsCommon('subjects')}
-                onDetach={() => setOwn('subjects', true)}
-                onReattach={() => setOwn('subjects', false)}
-              />
-            }
           >
-            <Locked on={followsCommon('subjects')}>
               <>
-                {/* 두 칸이 각각 무엇을 정하는지 머리글로 구분해 준다 (web 과 같은 규칙) */}
+                {/* 각 칸이 시간표의 어느 자리를 정하는지 머리글로 짚어 준다 (web 과 같은 규칙) */}
+                <Text style={s.hint}>반별 칸은 윗 칸(1교시)·아래 칸(2교시)으로 나뉩니다.</Text>
                 <View style={s.colHead}>
-                  <Text style={[s.colHeadText, s.flex1]}>과목</Text>
-                  <Text style={[s.colHeadText, { width: 130, marginLeft: 6 }]}>둘째 줄</Text>
+                  <Text style={[s.colHeadText, s.flex1]}>과목 이름 (윗 칸)</Text>
+                  <Text style={[s.colHeadText, { width: 130, marginLeft: 6 }]}>아래 칸(2교시)</Text>
                 </View>
                 {subjects.map((sub, i) => (
                   <View key={`${sub.key}-${i}`}>
@@ -742,18 +832,31 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
                         {PARTNER_LABELS[(sub.partner ?? 'none') as SubjectPartner]}
                       </Text>
                     </TouchableOpacity>
-                    <RoleButton
-                      value={sub.teacherRole ?? ''}
-                      roles={staffRoles}
-                      onChange={(v) => patch((d) => D.updateSubject(d, i, { teacherRole: v }))}
-                    />
-                    <TextInput
-                      value={sub.room ?? ''}
-                      onChangeText={(v) => patch((d) => D.updateSubject(d, i, { room: v }))}
-                      style={[s.input, s.roomField]}
-                      placeholder="강의실"
-                      placeholderTextColor="#9ca3af"
-                    />
+                    {/* staff 는 윗 칸 자체가 사람 이름이라 이름·강의실 칸이 쓰이지 않는다 */}
+                    {sub.partner === 'staff' ? (
+                      <RoleButton
+                        value={sub.roleKey ?? ''}
+                        roles={staffRoles}
+                        onChange={(v) => patch((d) => D.updateSubject(d, i, { roleKey: v }))}
+                        emptyLabel="누구 이름?"
+                        allowOwnTeacher={false}
+                      />
+                    ) : (
+                      <>
+                        <RoleButton
+                          value={sub.teacherRole ?? ''}
+                          roles={staffRoles}
+                          onChange={(v) => patch((d) => D.updateSubject(d, i, { teacherRole: v }))}
+                        />
+                        <TextInput
+                          value={sub.room ?? ''}
+                          onChangeText={(v) => patch((d) => D.updateSubject(d, i, { room: v }))}
+                          style={[s.input, s.roomField]}
+                          placeholder="강의실"
+                          placeholderTextColor="#9ca3af"
+                        />
+                      </>
+                    )}
                     <TouchableOpacity onPress={() => patch((d) => D.removeSubject(d, i))} style={s.iconBtn}>
                       <Ionicons name="close" size={16} color="#9ca3af" />
                     </TouchableOpacity>
@@ -762,7 +865,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
                     {/* 짝 수업(Pattern)은 같은 세트지만 다른 수업이라 따로 적는다 */}
                     {sub.partner === 'pattern' && (
                       <View style={[s.subjectRow, s.pairRow]}>
-                        <Text style={s.pairMark}>└ 짝</Text>
+                        <Text style={s.pairMark}>└ 아래</Text>
                         <TextInput
                           value={sub.partnerLabel ?? ''}
                           onChangeText={(v) => patch((d) => D.updateSubject(d, i, { partnerLabel: v }))}
@@ -790,13 +893,198 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
                   <TouchableOpacity style={s.miniBtn} onPress={() => patch((d) => D.addSubject(d))}>
                     <Text style={s.miniBtnText}>+ 과목 추가</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={s.miniBtn} onPress={() => patch((d) => D.resetRotationSubjects(d))}>
-                    <Text style={s.miniBtnText}>주제1~{draft.classes.length} 로 채우기 (인문학용)</Text>
-                  </TouchableOpacity>
+                  {showRotationFill && (
+                    <TouchableOpacity style={s.miniBtn} onPress={() => patch((d) => D.resetRotationSubjects(d))}>
+                      <Text style={s.miniBtnText}>주제1~{draft.classes.length} 로 채우기</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </>
-            </Locked>
           </Section>
+          )}
+
+          {/* 칸 설명 — 시간표에서 그 칸을 눌렀을 때 뜬다 (web 과 같은 구성) */}
+          {!isCommon && guideTargets.length > 0 && (
+            <Section
+              title={`칸 설명 (${guideTargets.filter((l) => hasGuideContent(guideOf(l))).length}/${guideTargets.length})`}
+            >
+              <Text style={s.hint}>
+                써 두면 시간표에서 그 칸을 눌렀을 때 뜹니다. 이름이 같으면 Day 가 달라도 같은 설명을 씁니다.
+              </Text>
+
+              <View style={s.wrapRow}>
+                {guideTargets.map((label) => {
+                  const on = label === guideLabel;
+                  const filled = hasGuideContent(guideOf(label));
+                  return (
+                    <TouchableOpacity
+                      key={label}
+                      onPress={() => (on ? setGuideLabel(null) : startGuide(label))}
+                      style={[s.smallChip, on && s.smallChipOn]}
+                    >
+                      <Text style={[s.smallChipText, on && s.smallChipTextOn]}>
+                        {filled ? '• ' : ''}
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {!!guideLabel && (
+                <View style={s.guideBox}>
+                  <View style={s.tagRow}>
+                    <Text style={s.guideTitle}>{guideLabel}</Text>
+                    <TouchableOpacity onPress={() => setGuideLabel(null)} style={{ marginLeft: 'auto' }}>
+                      <Text style={s.tagLink}>접기</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TextInput
+                    value={guideOf(guideLabel).summary ?? ''}
+                    onChangeText={(v) => patchGuide(guideLabel, (g) => ({ ...g, summary: v }))}
+                    style={[s.input, { marginTop: 8 }]}
+                    placeholder="한 줄 요약"
+                    placeholderTextColor="#9ca3af"
+                  />
+
+                  {(guideOf(guideLabel).sections ?? []).map((sec, si) => (
+                    <View key={sec.id} style={s.guideSection}>
+                      <View style={s.classRow}>
+                        <TextInput
+                          value={sec.title}
+                          onChangeText={(v) => patchSection(guideLabel, si, (x) => ({ ...x, title: v }))}
+                          style={[s.input, s.flex1]}
+                          placeholder="섹션 제목 (예: 진행 방법)"
+                          placeholderTextColor="#9ca3af"
+                        />
+                        <TouchableOpacity
+                          onPress={() =>
+                            patchGuide(guideLabel, (g) => ({
+                              ...g,
+                              sections: (g.sections ?? []).filter((_, i) => i !== si),
+                            }))
+                          }
+                          style={s.iconBtn}
+                        >
+                          <Ionicons name="close" size={16} color="#9ca3af" />
+                        </TouchableOpacity>
+                      </View>
+                      {sec.items.map((item, ii) => (
+                        <View key={item.id} style={s.classRow}>
+                          <Text style={s.bullet}>
+                            {item.type === 'text' ? '•' : item.type === 'link' ? '🔗' : '🖼'}
+                          </Text>
+
+                          {item.type === 'text' ? (
+                            <TextInput
+                              value={item.text ?? ''}
+                              onChangeText={(v) => patchItem(guideLabel, si, ii, { text: v })}
+                              style={[s.input, s.flex1]}
+                              placeholder="한 줄에 하나씩"
+                              placeholderTextColor="#9ca3af"
+                            />
+                          ) : item.type === 'link' ? (
+                            <View style={s.flex1}>
+                              <TextInput
+                                value={item.text ?? ''}
+                                onChangeText={(v) => patchItem(guideLabel, si, ii, { text: v })}
+                                style={s.input}
+                                placeholder="링크 이름"
+                                placeholderTextColor="#9ca3af"
+                              />
+                              <TextInput
+                                value={item.url ?? ''}
+                                onChangeText={(v) => patchItem(guideLabel, si, ii, { url: v })}
+                                style={[s.input, { marginTop: 4 }]}
+                                placeholder="https://"
+                                placeholderTextColor="#9ca3af"
+                                autoCapitalize="none"
+                              />
+                            </View>
+                          ) : item.url ? (
+                            <View style={[s.flex1, s.tagRow]}>
+                              {item.type === 'image' ? (
+                                <Image
+                                  source={{ uri: item.url }}
+                                  style={{ width: 36, height: 36, borderRadius: 4 }}
+                                  contentFit="cover"
+                                />
+                              ) : (
+                                <Ionicons name="play-circle-outline" size={28} color="#9ca3af" />
+                              )}
+                              <TextInput
+                                value={item.text ?? ''}
+                                onChangeText={(v) => patchItem(guideLabel, si, ii, { text: v })}
+                                style={[s.input, s.flex1, { marginLeft: 6 }]}
+                                placeholder="설명 (선택)"
+                                placeholderTextColor="#9ca3af"
+                              />
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              style={[s.pickBtn, s.flex1]}
+                              onPress={() => pickMedia(guideLabel, si, ii)}
+                              disabled={uploading === `${si}:${ii}`}
+                            >
+                              <Text style={s.pickBtnText}>
+                                {uploading === `${si}:${ii}` ? '올리는 중…' : '사진·동영상 고르기'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+
+                          <TouchableOpacity
+                            onPress={() => removeItem(guideLabel, si, ii)}
+                            style={s.iconBtn}
+                          >
+                            <Ionicons name="close" size={14} color="#d1d5db" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                      {!sec.items.length && <Text style={s.hint}>아직 줄이 없습니다.</Text>}
+                      <View style={[s.wrapRow, { marginTop: 2 }]}>
+                        <TouchableOpacity
+                          onPress={() => addItem(guideLabel, si, 'text')}
+                          style={s.miniBtn}
+                        >
+                          <Text style={s.miniBtnText}>+ 줄</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => addItem(guideLabel, si, 'link')}
+                          style={s.miniBtn}
+                        >
+                          <Text style={s.miniBtnText}>+ 링크</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => addItem(guideLabel, si, 'image')}
+                          style={s.miniBtn}
+                        >
+                          <Text style={s.miniBtnText}>+ 사진·동영상</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+
+                  <View style={[s.wrapRow, { marginTop: 6 }]}>
+                    <TouchableOpacity
+                      style={s.miniBtn}
+                      onPress={() =>
+                        patchGuide(guideLabel, (g) => ({
+                          ...g,
+                          sections: [...(g.sections ?? []), { id: newId(), title: '', items: [] }],
+                        }))
+                      }
+                    >
+                      <Text style={s.miniBtnText}>+ 섹션 추가</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={[s.hint, { marginTop: 6 }]}>
+                    줄은 글·링크·사진·동영상을 섞어 넣을 수 있습니다.
+                  </Text>
+                </View>
+              )}
+            </Section>
+          )}
 
           {/* 교시 — 교시·날짜는 Day 마다 다르므로 공통 탭에는 없다 */}
           {!isCommon && (
@@ -1054,21 +1342,31 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
 }
 
 /** 이 수업 아래에 이름이 붙을 담당자 — 탭하면 다음 후보로 넘어간다 */
+/** 탭하면 다음 후보로 넘어간다 — 과목 이름 아래에 작게 붙는 이름 */
 function RoleButton({
   value,
   roles,
   onChange,
+  emptyLabel = '이름 없음',
+  /** staff 의 "누구 이름" 자리에는 그 반 담임이라는 선택지가 없다 */
+  allowOwnTeacher = true,
 }: {
   value: string;
   roles: Array<{ key: string; label: string }>;
   onChange: (v: string) => void;
+  emptyLabel?: string;
+  allowOwnTeacher?: boolean;
 }) {
-  const options = [{ key: '', label: '담당 없음' }, { key: 'ownTeacher', label: '그 반 담임' }, ...roles];
+  const options = [
+    { key: '', label: emptyLabel },
+    ...(allowOwnTeacher ? [{ key: 'ownTeacher', label: '그 반 담임' }] : []),
+    ...roles,
+  ];
   const idx = Math.max(0, options.findIndex((o) => o.key === value));
   return (
     <TouchableOpacity style={s.partnerBtn} onPress={() => onChange(options[(idx + 1) % options.length].key)}>
       <Text style={s.partnerText} numberOfLines={1}>
-        {options[idx]?.label ?? '담당 없음'}
+        {options[idx]?.label ?? emptyLabel}
       </Text>
     </TouchableOpacity>
   );
@@ -1096,40 +1394,6 @@ function Section({
         {action}
       </View>
       {children}
-    </View>
-  );
-}
-
-/** 공통을 따르는 동안은 손대지 못하게 막고 흐리게 보여 준다 */
-function Locked({ on, children }: { on: boolean; children: React.ReactNode }) {
-  return (
-    <View pointerEvents={on ? 'none' : 'auto'} style={on ? s.locked : undefined}>
-      {children}
-    </View>
-  );
-}
-
-/** 섹션 머리의 "공통 따름 / 이 Day 전용" 표시와 전환 버튼 (web 과 같은 규칙) */
-function CommonTag({
-  hidden,
-  follows,
-  onDetach,
-  onReattach,
-}: {
-  hidden: boolean;
-  follows: boolean;
-  onDetach: () => void;
-  onReattach: () => void;
-}) {
-  if (hidden) return null;
-  return (
-    <View style={s.tagRow}>
-      <View style={follows ? s.tagCommon : s.tagOwn}>
-        <Text style={follows ? s.tagCommonText : s.tagOwnText}>{follows ? '공통' : '이 Day 전용'}</Text>
-      </View>
-      <TouchableOpacity onPress={follows ? onDetach : onReattach}>
-        <Text style={s.tagLink}>{follows ? '따로 쓰기' : '공통으로'}</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -1265,7 +1529,6 @@ const s = StyleSheet.create({
   },
   tagOwnText: { fontSize: 10, color: '#b45309' },
   tagLink: { fontSize: 10, color: '#6b7280', textDecorationLine: 'underline' },
-  locked: { opacity: 0.55 },
   colHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   colHeadText: { fontSize: 10, color: '#9ca3af' },
 
@@ -1273,6 +1536,19 @@ const s = StyleSheet.create({
   miniBtnText: { fontSize: 11, color: '#374151' },
 
   dangerLink: { fontSize: 11, color: '#ef4444' },
+  guideBox: { marginTop: 10, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, backgroundColor: '#f9fafb', padding: 10 },
+  guideTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  guideSection: { marginTop: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, backgroundColor: '#fff', padding: 8 },
+  bullet: { width: 16, fontSize: 12, color: '#9ca3af' },
+  pickBtn: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  pickBtnText: { fontSize: 11, color: '#6b7280' },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   checkText: { fontSize: 11, color: '#4b5563' },
 

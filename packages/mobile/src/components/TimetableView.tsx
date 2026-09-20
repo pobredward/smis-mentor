@@ -34,6 +34,9 @@ interface Props {
   linkedLabels?: string[];
   /** 캠프 시작일(ms) — 날짜 표는 여기서 실제 날짜를 계산한다 */
   campStartMs?: number | null;
+  /** 설명이 있는 칸 이름 (소문자 키). 이 칸만 눌러서 세부페이지로 간다 */
+  guidedLabels?: Set<string>;
+  onOpenGuide?: (label: string) => void;
 }
 
 /** 시간 열 너비 — 09:20 / ~10:00 두 줄이 들어갈 만큼 */
@@ -114,8 +117,23 @@ export function TimetableView({
   nowMinutes = null,
   linkedLabels,
   campStartMs = null,
+  guidedLabels,
+  onOpenGuide,
 }: Props) {
   const { width: screenW } = useWindowDimensions();
+
+  /** 이 줄을 눌러 설명을 볼 수 있는지 (사람 이름 줄은 설명 대상이 아니다) */
+  const openableAt = (line?: RenderedLine) =>
+    !!line?.text &&
+    !line.isName &&
+    !!onOpenGuide &&
+    !!guidedLabels?.has(line.text.trim().toLowerCase());
+  /**
+   * 지금 누르고 있는 "묶음".
+   * Speaking 처럼 2교시를 통째로 쓰는 수업은 위·아래가 각각 다른 View 라
+   * 한쪽만 눌린 표시가 나면 어색하다. 그래서 묶음 id 로 같이 반응시킨다.
+   */
+  const [pressedUnit, setPressedUnit] = useState<string | null>(null);
 
   const layout = timetable.layout ?? 'time';
   const blocks = useMemo(() => sortBlocks(timetable.blocks ?? [], layout), [timetable.blocks, layout]);
@@ -314,7 +332,19 @@ export function TimetableView({
                   <TimeCell start={row.start} end={row.end} isNow={isNow} />
                 )}
               </View>
-              <View style={[s.sharedCell, { width: classW * classCount, height: SHARED_H }]}>
+              <TouchableOpacity
+                style={[
+                  s.sharedCell,
+                  { width: classW * classCount, height: SHARED_H },
+                  openableAt({ text: row.label }) && pressedUnit === `shared:${first.id}` && s.pressedCell,
+                ]}
+                activeOpacity={1}
+                onPressIn={
+                  openableAt({ text: row.label }) ? () => setPressedUnit(`shared:${first.id}`) : undefined
+                }
+                onPressOut={openableAt({ text: row.label }) ? () => setPressedUnit(null) : undefined}
+                onPress={openableAt({ text: row.label }) ? () => onOpenGuide!(row.label) : undefined}
+              >
                 <Text style={[s.sharedText, { fontSize: fontOf }]} numberOfLines={2}>
                   {row.label}
                   {linkedLabels?.some((k) => row.label.includes(k)) && (
@@ -324,7 +354,7 @@ export function TimetableView({
                     <Text style={[s.subLabel, { fontSize: fontOf - 2 }]}>  {row.subLabel}</Text>
                   )}
                 </Text>
-              </View>
+              </TouchableOpacity>
               {(timetable.extraColumns ?? []).map((e) => (
                 <View
                   key={e.key}
@@ -398,9 +428,19 @@ export function TimetableView({
                 <View key={col.key} style={{ width: w }}>
                   {Array.from({ length: n }, (_, i) => {
                     const isLast = i === n - 1;
+                    const unit = joined && n > 1 ? 0 : i;
+                    const unitId = `${b.id}:${col.key}:${unit}`;
+                    const guideLine = parts[unit];
+                    const openable = openableAt(guideLine);
                     return (
-                      <View
+                      <TouchableOpacity
                         key={i}
+                        // 칸 전체가 터치 대상. Speaking 처럼 2교시를 통째로 쓰는 수업은
+                        // 위·아래를 한 묶음으로 보고 같이 반응시킨다 (Math+Pattern 은 따로).
+                        activeOpacity={1}
+                        onPressIn={openable ? () => setPressedUnit(unitId) : undefined}
+                        onPressOut={openable ? () => setPressedUnit(null) : undefined}
+                        onPress={openable ? () => onOpenGuide!(guideLine!.text) : undefined}
                         style={[
                           s.cell,
                           { width: w, height: cellH },
@@ -410,10 +450,11 @@ export function TimetableView({
                           joined && n > 1 ? (i === 0 ? s.pairTop : s.pairBottom) : null,
                           isLast ? s.bottomHard : joined ? null : s.bottomSoftDark,
                           col.isMine && s.mineCell,
+                          openable && pressedUnit === unitId && s.pressedCell,
                         ]}
                       >
                         <Lines line={parts[i]} size={fontOf} />
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </View>
@@ -505,6 +546,7 @@ const s = StyleSheet.create({
   cellTight: { paddingVertical: 0 },
   pairTop: { justifyContent: 'flex-end', paddingBottom: 0 },
   pairBottom: { justifyContent: 'flex-start', paddingTop: 0 },
+  pressedCell: { backgroundColor: '#eff6ff' },
   mineCell: { borderWidth: 1, borderColor: '#bfdbfe' },
   bottomHard: { borderBottomWidth: 1, borderBottomColor: BORDER_HARD },
   bottomSoft: { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },

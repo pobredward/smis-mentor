@@ -166,15 +166,14 @@ export interface TimetableClassColumn {
 
 /** 공통에서 분리해 이 표만의 값을 쓰는 항목들 */
 export interface TimetableOwn {
+  /** 반 목록·이름을 공통이 아니라 이 표 것으로 쓴다 */
   roster?: boolean;
-  subjects?: boolean;
 }
 
 /** 공통에 올려 두는 값 (camp.ts 의 CampTimetableCommon 과 같은 모양) */
 export interface TimetableCommonValues {
   classes?: TimetableClassColumn[];
   staffOverrides?: Record<string, string>;
-  subjects?: TimetableSubject[];
 }
 
 export interface CampTimetable {
@@ -204,8 +203,7 @@ export interface CampTimetable {
   /**
    * 공통(그룹 한 벌)에서 떨어져 나와 이 표만의 값을 쓰는 항목.
    * 켜져 있지 않은 항목은 저장값이 남아 있어도 공통 값으로 덮어 읽는다.
-   *  - roster  : classes + staffOverrides (반 구성 · 이름 수정)
-   *  - subjects: 과목·주제 (스팀처럼 그 Day 만 다른 경우)
+   *  - roster: classes + staffOverrides (반 구성 · 이름 수정)
    */
   own?: TimetableOwn;
 
@@ -234,16 +232,26 @@ export interface TimetableCategory {
   inlineSlotMatch?: string;
   /** 이 Day 표 아래에 교재표를 붙일지 (수업이 있는 날만) */
   showBooks?: boolean;
+  /**
+   * 이 Day 는 과목·주제를 쓰지 않는다 (입소·입소 D+1·퇴소).
+   * 칸 내용을 손으로 넣는 날이라 편집기에서 과목·주제 섹션을 감춘다.
+   */
+  noSubjects?: boolean;
+  /**
+   * 반마다 주제가 돌아가는 Day (인문학).
+   * "주제1~N 으로 채우기" 는 이 Day 에서만 쓴다.
+   */
+  rotation?: boolean;
 }
 
 export const TIMETABLE_CATEGORIES: TimetableCategory[] = [
   { key: 'regular', label: '정규', layout: 'time', showBooks: true },
   { key: 'steam', label: '스팀', labelByCampPrefix: { J: '스팀', E: '스팀', S: '고잉업', F: '고잉업' }, layout: 'time' },
-  { key: 'humanities', label: '인문학', layout: 'date', inline: true, inlineSlotMatch: '인문학' },
-  { key: 'arrival', label: '입소', layout: 'time', showBooks: true },
-  { key: 'arrival_d1', label: '입소 D+1', layout: 'time', showBooks: true },
+  { key: 'humanities', label: '인문학', layout: 'date', inline: true, inlineSlotMatch: '인문학', rotation: true },
+  { key: 'arrival', label: '입소', layout: 'time', showBooks: true, noSubjects: true },
+  { key: 'arrival_d1', label: '입소 D+1', layout: 'time', showBooks: true, noSubjects: true },
   { key: 'departure_d1', label: '퇴소 D-1', layout: 'time' },
-  { key: 'departure', label: '퇴소', layout: 'time' },
+  { key: 'departure', label: '퇴소', layout: 'time', noSubjects: true },
 ];
 
 /** 캠프 코드에 맞는 카테고리 이름 */
@@ -949,18 +957,107 @@ export function applyCommon<T extends CampTimetable>(
     if (common.staffOverrides) out.staffOverrides = common.staffOverrides;
   }
 
-  if (!usesOwn(t, 'subjects') && common.subjects?.length) {
-    out.subjects = common.subjects;
-  }
-
   return out;
 }
 
-/** 표에서 공통에 올릴 값만 뽑는다 */
+/** 표에서 공통에 올릴 값만 뽑는다 (과목·주제는 Day 마다 달라 공통이 아니다) */
 export function commonValuesOf(t: CampTimetable): TimetableCommonValues {
   return {
     classes: t.classes,
     staffOverrides: t.staffOverrides ?? {},
-    subjects: t.subjects ?? [],
   };
+}
+
+
+// ── 칸에 찍히는 이름 모으기 ──────────────────────────────────────────
+
+/**
+ * 이 표에서 칸에 실제로 찍히는 이름을 전부 모은다 (중복 없이, 나온 순서대로).
+ *
+ * 설명을 붙일 대상 목록을 편집기에 뿌리는 데 쓴다. 세 갈래를 본다:
+ *   - 반별 칸의 과목 이름과, 짝(Pattern) 줄에 찍히는 이름
+ *   - 공통 줄의 label (Breakfast · P.E · 인문학 프로그램 …)
+ *   - 손으로 넣은 칸의 텍스트 (입소·퇴소처럼 과목이 없는 Day)
+ * 사람 이름이 찍히는 칸(staff·owner·담임)은 설명 대상이 아니라 제외한다.
+ */
+export function timetableLabels(t: Pick<CampTimetable, 'blocks' | 'subjects'>): string[] {
+  const out: string[] = [];
+  const add = (v: string | undefined | null) => {
+    const s = (v ?? '').trim();
+    if (!s) return;
+    if (!out.some((x) => x.toLowerCase() === s.toLowerCase())) out.push(s);
+  };
+
+  const subjects = t.subjects?.length ? t.subjects : DEFAULT_SUBJECTS;
+  const specOf = (key: string) => subjects.find((s) => s.key.toLowerCase() === key.toLowerCase());
+
+  t.blocks.forEach((b) => {
+    if (b.kind === 'shared') {
+      add(b.label);
+      return;
+    }
+    Object.values(b.cells ?? {}).forEach((cell) => {
+      if (cell?.texts?.length) {
+        cell.texts.forEach(add);
+        return;
+      }
+      const key = cell?.subject;
+      if (!key) return;
+      const spec = specOf(key);
+      // 칸이 통째로 사람 이름으로 바뀌는 과목은 설명 대상이 아니다
+      if (spec?.partner === 'staff') return;
+      add(key);
+      if (spec?.partner === 'pattern') add(spec.partnerLabel?.trim() || 'Pattern');
+    });
+  });
+
+  return out;
+}
+
+
+/** 세부페이지에서 자동으로 보여 줄 한 줄 — 어느 반이 언제, 어디서, 누구와 */
+export interface GuideFact {
+  classCode: string;
+  /** 그 칸에 찍히는 담당자 이름 */
+  teacher?: string;
+  room?: string;
+  /** 시간(교시) — "09:20~10:00" */
+  time?: string;
+}
+
+/**
+ * 이 이름이 이 표의 어디에 나오는지 훑어서, 반별로 담당·강의실·시간을 모은다.
+ * 설명은 관리자가 쓰지만 이 값들은 시간표가 이미 아는 것이라 자동으로 채운다.
+ */
+export function guideFactsOf(
+  t: Pick<CampTimetable, 'blocks' | 'subjects' | 'classes' | 'layout'>,
+  label: string,
+  ctx: Omit<RenderContext, 'columnKey' | 'subjects'>
+): GuideFact[] {
+  const target = label.trim().toLowerCase();
+  const subjects = t.subjects?.length ? t.subjects : DEFAULT_SUBJECTS;
+  const out: GuideFact[] = [];
+
+  sortBlocks(t.blocks, t.layout).forEach((b) => {
+    if (b.kind !== 'class') return;
+    const n = lineCountOf(b, t.layout);
+    t.classes.forEach((col) => {
+      const cell = b.cells?.[col.classCode];
+      if (!cell) return;
+      const lines = renderCell(cell, n, { ...ctx, subjects, columnKey: col.classCode });
+      lines.forEach((line, i) => {
+        if ((line.text ?? '').trim().toLowerCase() !== target) return;
+        const slot = b.times?.[i];
+        out.push({
+          classCode: col.classCode,
+          teacher: line.sub,
+          room: line.room,
+          time: slot?.start ? `${slot.start}~${slot.end ?? ''}` : undefined,
+        });
+      });
+    });
+  });
+
+  // 같은 반이 여러 번 나오면 첫 번째만 (시간표에서 반복되는 수업)
+  return out.filter((f, i, a) => a.findIndex((x) => x.classCode === f.classCode) === i);
 }

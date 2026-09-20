@@ -117,6 +117,16 @@ service firebase.storage {
     // 경로: tasks/{taskId}/...
     // 역할: 인증 사용자(읽기), 인증 사용자(업로드), admin(삭제)
     // ──────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────
+    // 시간표 칸 설명에 붙는 사진·동영상
+    // 경로: timetableGuides/{campCode}/{칸 이름}/...
+    // 역할: 인증 사용자(읽기), admin(업로드·삭제)
+    // ──────────────────────────────────────────────────────────────
+    match /timetableGuides/{campCode}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write, delete: if isAdmin() && isUnder50MB();
+    }
+
     match /tasks/{taskId}/{allPaths=**} {
       allow read: if isAuthenticated();
       allow write: if (

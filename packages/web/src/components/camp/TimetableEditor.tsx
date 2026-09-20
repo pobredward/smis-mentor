@@ -5,6 +5,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   categoryLabel,
+  findCategory,
+  DEFAULT_GUIDE_SECTIONS,
+  guideKeyOf,
+  hasGuideContent,
+  timetableLabels,
   DEFAULT_SUBJECTS,
   findSubject,
   dutyByBlock,
@@ -16,11 +21,14 @@ import {
   getCampClassInfo,
   getCampGroups,
   getCampTimetableCommon,
+  getCampTimetableGuides,
   getEslBooks,
   sortedBookCodes,
   updateCampClassInfo,
   updateCampTimetableCommon,
-  usesOwn,
+  updateCampTimetableGuides,
+  uploadGuideMedia,
+  hasItemContent,
   isUnsaved,
   isMergedColumn,
   isSameGroup,
@@ -40,11 +48,14 @@ import {
   TIMETABLE_CATEGORIES,
   type CampClassInfo,
   type EslBookList,
-  type TimetableOwn,
+  type TimetableGuide,
+  type GuideSection,
+  type GuideItem,
+  type GuideItemType,
   type TimetableSubject,
   timetableDraft as D,
 } from '@smis-mentor/shared';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { campTimetableService } from '@/lib/campTimetableService';
 import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
@@ -136,10 +147,10 @@ function RoleSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      title="이 수업 아래에 이름이 붙을 담당자"
+      title="과목 이름 바로 아래에 작게 붙는 이름"
       className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
     >
-      <option value="">담당자 없음</option>
+      <option value="">이름 없음</option>
       <option value="ownTeacher">그 반 담임</option>
       {roles.map((r) => (
         <option key={r.key} value={r.key}>
@@ -147,49 +158,6 @@ function RoleSelect({
         </option>
       ))}
     </select>
-  );
-}
-
-/**
- * 섹션 머리에 붙는 "공통을 따르는 중 / 이 Day 만 따로" 표시와 전환 버튼.
- * 공통 탭에서는 아예 나오지 않는다 (거기선 늘 편집 가능).
- */
-function CommonTag({
-  hidden,
-  follows,
-  onDetach,
-  onReattach,
-}: {
-  hidden: boolean;
-  follows: boolean;
-  onDetach: () => void;
-  onReattach: () => void;
-}) {
-  if (hidden) return null;
-  return follows ? (
-    <span className="flex items-center gap-2">
-      <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700">
-        공통
-      </span>
-      <button
-        onClick={onDetach}
-        className="text-xs text-gray-500 underline-offset-2 hover:text-gray-800 hover:underline"
-      >
-        이 Day만 따로 쓰기
-      </button>
-    </span>
-  ) : (
-    <span className="flex items-center gap-2">
-      <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700">
-        이 Day 전용
-      </span>
-      <button
-        onClick={onReattach}
-        className="text-xs text-gray-500 underline-offset-2 hover:text-gray-800 hover:underline"
-      >
-        공통으로 되돌리기
-      </button>
-    </span>
   );
 }
 
@@ -209,18 +177,25 @@ function NameTag({ manual, joined }: { manual: boolean; joined?: string }) {
 }
 
 /**
- * 첫 번째 dropdown — "이 과목의 둘째 줄을 무엇으로 채울까".
- * 사람을 고르는 게 아니라 짝 수업의 종류를 고르는 자리라서,
- * 직책처럼 읽히지 않게 전부 "짝:" 으로 시작하도록 다시 썼다.
+ * 반별 칸은 윗 칸(1교시) + 아래 칸(2교시) 두 칸이다.
+ *   윗 칸  : 강의실 / 과목 이름 / teacherRole 이름
+ *   아래 칸: 이 dropdown 이 정한다 (아래 라벨 그대로)
+ * staff 만 예외로 윗 칸 자체를 사람 이름으로 바꾼다 (과목 이름이 안 나온다).
  */
 const PARTNER_LABELS: Record<SubjectPartner, string> = {
-  none: '짝 없음 (1줄)',
-  pattern: '짝: Pattern 수업',
-  foreign: '짝: 그 과목 원어민',
-  owner: '짝: 주제 담당 담임',
-  ownTeacher: '짝: 그 반 담임',
-  staff: '짝: 담당자 이름만',
+  none: '아래 칸 없음',
+  pattern: '아래 칸 — 다른 수업 (Pattern)',
+  foreign: '아래 칸 — 이 과목 원어민 이름',
+  owner: '아래 칸 — 정한 반의 담임 이름',
+  ownTeacher: '아래 칸 — 그 반 담임 이름',
+  staff: '과목명 없이 담당자 이름만',
 };
+
+/** 아래 칸을 정하는 값들과, 칸 모양 자체가 다른 값 */
+const PARTNER_GROUPS: Array<{ label: string; keys: SubjectPartner[] }> = [
+  { label: '아래 칸(2교시)에 무엇이 오나', keys: ['none', 'pattern', 'foreign', 'owner', 'ownTeacher'] },
+  { label: '칸 모양이 다름', keys: ['staff'] },
+];
 
 /** 공통 탭의 가짜 카테고리 키 — 실제 Day 가 아니다 */
 const COMMON_KEY = '__common__';
@@ -270,6 +245,18 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
     staleTime: 10 * 60 * 1000,
   });
 
+  /** 칸 설명 — 캠프당 한 벌 (칸 이름으로 찾는다) */
+  const { data: savedGuides = {}, refetch: refetchGuides } = useQuery({
+    queryKey: ['campTimetableGuides', campCode],
+    queryFn: () => getCampTimetableGuides(db, campCode),
+    enabled: !!campCode,
+    staleTime: 10 * 60 * 1000,
+  });
+  const [guides, setGuides] = useState<Record<string, TimetableGuide>>({});
+  useEffect(() => setGuides(savedGuides), [savedGuides]);
+  /** 지금 펼쳐 놓고 고치는 칸 이름 */
+  const [guideLabel, setGuideLabel] = useState<string | null>(null);
+
   const { data: eslBooks } = useQuery({
     queryKey: ['eslBooks'],
     queryFn: () => getEslBooks(db),
@@ -318,6 +305,10 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
   const activeCategory = editCategory ?? COMMON_KEY;
   /** 공통 탭 — 반·이름·과목만 고치고, 고친 값은 그 그룹의 모든 Day 에 적용된다 */
   const isCommon = activeCategory === COMMON_KEY;
+  /** 입소·입소 D+1·퇴소는 칸 내용을 손으로 넣는 날이라 과목·주제가 없다 */
+  const showSubjects = !isCommon && !findCategory(activeCategory)?.noSubjects;
+  /** 주제 로테이션은 인문학에서만 쓴다 */
+  const showRotationFill = !isCommon && !!findCategory(activeCategory)?.rotation;
   const activeGroup = (editGroup && groups.find((g) => isSameGroup(g, editGroup))) || groups[0] || null;
 
   /**
@@ -395,15 +386,25 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
       ...skeleton,
       dayTypeLabel: '공통',
       staffOverrides: shared?.staffOverrides ?? {},
-      subjects: shared?.subjects?.length ? shared.subjects : DEFAULT_SUBJECTS,
+      subjects: rolesSourceSubjects(),
     };
   }
 
-  /** 이 섹션이 공통을 따르는 중인지 (공통 탭에서는 늘 편집 가능) */
-  const followsCommon = (part: keyof TimetableOwn) =>
-    !isCommon && !!draft && !usesOwn(draft, part);
-  const setOwn = (part: keyof TimetableOwn, own: boolean) =>
-    patchDraft((d) => D.setOwn(d, part, own));
+  /**
+   * 공통 탭의 "이름 수정" 이 보여 줄 역할 목록의 출처.
+   * 이 그룹의 모든 Day 에 쓰인 과목을 합쳐, 어느 Day 에서든 쓰이는 역할이면
+   * 공통에서 이름을 넣을 수 있게 한다. 저장된 표가 없으면 기본 과목.
+   */
+  function rolesSourceSubjects(): TimetableSubject[] {
+    const seen = new Map<string, TimetableSubject>();
+    timetables
+      .filter((x) => isSameGroup(x.groupName, activeGroup))
+      .forEach((x) => (x.subjects ?? []).forEach((sub) => {
+        if (!seen.has(sub.key)) seen.set(sub.key, sub);
+      }));
+    return seen.size ? [...seen.values()] : DEFAULT_SUBJECTS;
+  }
+
 
   const patchDraft = (fn: (d: CampTimetable) => void) =>
     setDraft((prev) => {
@@ -454,12 +455,16 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
       } else {
         await campTimetableService.update(draft.id, D.toUpdatePayload(draft), userData.userId);
       }
-      // 반이름·강의실은 캠프 설정에 — 이 캠프의 모든 표가 같은 값을 쓴다
-      if (campCode) await updateCampClassInfo(db, campCode, classInfo);
+      // 반이름·강의실·칸 설명은 캠프 설정에 — 이 캠프의 모든 표가 같은 값을 쓴다
+      if (campCode) {
+        await updateCampClassInfo(db, campCode, classInfo);
+        await updateCampTimetableGuides(db, campCode, guides, userData.userId);
+      }
       loadedKey.current = null;
-      await Promise.all([refetch(), refetchClassInfo()]);
+      await Promise.all([refetch(), refetchClassInfo(), refetchGuides()]);
       queryClient.invalidateQueries({ queryKey: ['campTimetables', jobCodeId] });
       queryClient.invalidateQueries({ queryKey: ['campClassInfo', campCode] });
+      queryClient.invalidateQueries({ queryKey: ['campTimetableGuides', campCode] });
       toast.success('저장했습니다.');
     } catch (e) {
       toast.error('저장에 실패했습니다.');
@@ -563,6 +568,76 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
     void used;
   };
 
+  // ── 칸 설명 ───────────────────────────────────────────────────────
+  /** 이 Day 표의 칸에 실제로 찍히는 이름들 — 설명을 붙일 대상 */
+  const guideTargets = useMemo(() => (draft ? timetableLabels(draft) : []), [draft]);
+  const guideOf = (label: string): TimetableGuide => guides[guideKeyOf(label)] ?? {};
+  const patchGuide = (label: string, fn: (g: TimetableGuide) => TimetableGuide) =>
+    setGuides((prev) => {
+      const key = guideKeyOf(label);
+      return { ...prev, [key]: fn(prev[key] ?? {}) };
+    });
+
+  const newId = () => D.newBlockId().slice(-6);
+  const addGuideSection = (label: string) =>
+    patchGuide(label, (g) => ({
+      ...g,
+      sections: [...(g.sections ?? []), { id: newId(), title: '', items: [] }],
+    }));
+  /** 아직 아무것도 없는 칸은 기본 섹션을 깔아 준다 — 빈 화면보다 낫다 */
+  const startGuide = (label: string) => {
+    setGuideLabel(label);
+    if (!guides[guideKeyOf(label)]?.sections?.length) {
+      patchGuide(label, (g) => ({
+        ...g,
+        sections: DEFAULT_GUIDE_SECTIONS.map((title) => ({ id: newId(), title, items: [] })),
+      }));
+    }
+  };
+  const patchSection = (label: string, si: number, fn: (s: GuideSection) => GuideSection) =>
+    patchGuide(label, (g) => ({
+      ...g,
+      sections: (g.sections ?? []).map((s, i) => (i === si ? fn(s) : s)),
+    }));
+
+  const addItem = (label: string, si: number, type: GuideItemType) =>
+    patchSection(label, si, (s) => ({ ...s, items: [...s.items, { id: newId(), type }] }));
+  const patchItem = (label: string, si: number, ii: number, patch: Partial<GuideItem>) =>
+    patchSection(label, si, (s) => ({
+      ...s,
+      items: s.items.map((x, i) => (i === ii ? { ...x, ...patch } : x)),
+    }));
+  const removeItem = (label: string, si: number, ii: number) =>
+    patchSection(label, si, (s) => ({ ...s, items: s.items.filter((_, i) => i !== ii) }));
+
+  /** 사진·동영상은 Storage 에 올리고 주소만 설명에 남긴다 */
+  const [uploading, setUploading] = useState<string | null>(null);
+  const uploadMedia = async (label: string, si: number, ii: number, file: File) => {
+    const key = `${si}:${ii}`;
+    setUploading(key);
+    try {
+      const { url, storagePath } = await uploadGuideMedia(
+        storage,
+        campCode,
+        guideKeyOf(label),
+        file,
+        file.name
+      );
+      patchItem(label, si, ii, {
+        url,
+        storagePath,
+        type: file.type.startsWith('video/') ? 'video' : 'image',
+        text: file.name,
+      });
+      toast.success('올렸습니다. 저장을 눌러야 반영됩니다.');
+    } catch (e) {
+      toast.error('올리지 못했습니다.');
+      console.error(e);
+    } finally {
+      setUploading(null);
+    }
+  };
+
   const sorted = draft ? sortBlocks(draft.blocks, draft.layout) : [];
 
   return (
@@ -646,23 +721,19 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
           {isCommon && (
             <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
               여기서 고친 값은 <strong>{draft.groupName}</strong> 그룹의 모든 Day(정규·스팀·입소…)에 함께
-              적용됩니다. 한 Day 만 달라야 하면 그 Day 탭에서 &quot;이 Day만 따로 쓰기&quot; 를 누르세요.
+              적용됩니다. 한 Day 만 달라야 하면 그 Day 탭에서 바로 고치면 됩니다 — 고친 Day 만 떨어져 나오고
+              나머지는 계속 공통을 따라갑니다.
             </p>
           )}
 
-          {/* 이름 수정 — 비우면 앱 배정, 넣으면 그 값 */}
+          {/* 이름 수정 · 반 구성 — 공통에서만 고친다 (Day 탭에는 나오지 않는다) */}
+          {isCommon && (
           <section className="rounded-lg border border-gray-200 p-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-gray-900">이름 수정</h3>
-              <CommonTag
-                hidden={isCommon}
-                follows={followsCommon('roster')}
-                onDetach={() => setOwn('roster', true)}
-                onReattach={() => setOwn('roster', false)}
-              />
             </div>
 
-            <fieldset disabled={followsCommon('roster')} className="grid gap-1 disabled:opacity-60 sm:grid-cols-2">
+            <fieldset className="grid gap-1 sm:grid-cols-2">
               {draft.classes.map((c, i) => {
                 const joined = teacherByClassCode[c.classCode];
                 const manual = (c.teacherName ?? '').trim();
@@ -708,19 +779,14 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
               })}
             </fieldset>
           </section>
+          )}
 
-          {/* 반 구성 */}
+          {isCommon && (
           <section className="rounded-lg border border-gray-200 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-gray-900">반 구성 ({draft.classes.length}반)</h3>
-              <CommonTag
-                hidden={isCommon}
-                follows={followsCommon('roster')}
-                onDetach={() => setOwn('roster', true)}
-                onReattach={() => setOwn('roster', false)}
-              />
             </div>
-            <fieldset disabled={followsCommon('roster')} className="disabled:opacity-60">
+            <fieldset>
               <div className="mb-3 flex items-center justify-end">
               <div className="flex gap-2">
                 <button
@@ -728,19 +794,6 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                   className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                 >
                   + 반 추가
-                </button>
-                <button
-                  onClick={() =>
-                    patchDraft((d) => {
-                      d.extraColumns = [
-                        ...(d.extraColumns ?? []),
-                        { key: D.newBlockId().slice(-6), label: '새 열' },
-                      ];
-                    })
-                  }
-                  className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-                >
-                  + 열 추가
                 </button>
               </div>
             </div>
@@ -798,8 +851,8 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
               </div>
             </fieldset>
           </section>
+          )}
 
-          {/* 당번 순번 — 공통이 아니라 Day 마다 다르므로 공통 탭에서는 숨긴다 */}
           {!isCommon && (draft.extraColumns ?? []).map((e, ei) => (
             <section key={e.key} className="rounded-lg border border-gray-200 p-4">
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -887,30 +940,25 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
             </section>
           ))}
 
-          {/* 과목·주제 */}
+          {/* 과목·주제 — 공통이 아니라 Day 마다 다르다. 입소·퇴소처럼 안 쓰는 Day 는 감춘다 */}
+          {showSubjects && (
           <section className="rounded-lg border border-gray-200 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-gray-900">
                 과목·주제 ({subjects.length})
                 <span className="ml-2 text-xs font-normal text-gray-500">
-                  둘째 줄에 무엇이 오는지, 누구 이름이 붙는지, 어느 강의실인지를 정합니다
+                  반별 칸은 윗 칸(1교시)·아래 칸(2교시)으로 나뉩니다
                 </span>
               </h3>
-              <CommonTag
-                hidden={isCommon}
-                follows={followsCommon('subjects')}
-                onDetach={() => setOwn('subjects', true)}
-                onReattach={() => setOwn('subjects', false)}
-              />
             </div>
-            <fieldset disabled={followsCommon('subjects')} className="disabled:opacity-60">
+            <fieldset>
               <div className="mt-3 space-y-2">
-                {/* 두 dropdown 이 각각 무엇을 정하는지 머리글로 구분해 준다 */}
+                {/* 각 칸이 시간표의 어느 자리를 정하는지 머리글로 짚어 준다 */}
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
-                  <span className="w-32">과목</span>
-                  <span className="w-[164px]">둘째 줄</span>
-                  <span className="w-24">강의실</span>
-                  <span>이름</span>
+                  <span className="w-32">과목 이름 (윗 칸)</span>
+                  <span className="w-[150px]">윗 칸 이름</span>
+                  <span className="w-24">윗 칸 강의실</span>
+                  <span>아래 칸(2교시)</span>
                 </div>
                 {subjects.map((s, i) => (
                   <div key={i} className="space-y-1">
@@ -921,21 +969,57 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                       className="w-32 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
                       style={{ backgroundColor: s.color }}
                     />
+                    {/* staff 는 윗 칸 자체가 사람 이름이라 이름·강의실 칸이 쓰이지 않는다 */}
+                    {s.partner === 'staff' ? (
+                      <select
+                        value={s.roleKey ?? ''}
+                        onChange={(e) => updateSubject(i, { roleKey: e.target.value })}
+                        title="이 칸에 이름이 찍힐 담당자"
+                        className="w-[282px] rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                      >
+                        <option value="">누구 이름을 넣을지 고르세요</option>
+                        {staffRoles.map((r) => (
+                          <option key={r.key} value={r.key}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <>
+                        <RoleSelect
+                          value={s.teacherRole ?? ''}
+                          onChange={(v) => updateSubject(i, { teacherRole: v })}
+                          roles={staffRoles}
+                        />
+                        <input
+                          value={s.room ?? ''}
+                          onChange={(e) => updateSubject(i, { room: e.target.value })}
+                          placeholder="강의실"
+                          title="이 과목이 늘 쓰는 강의실 (이동 수업 호수). 칸마다 따로 넣은 값이 있으면 그쪽이 우선합니다."
+                          className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                        />
+                      </>
+                    )}
                     <select
                       value={s.partner}
                       onChange={(e) => updateSubject(i, { partner: e.target.value as SubjectPartner })}
                       className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
                     >
-                      {(Object.keys(PARTNER_LABELS) as SubjectPartner[]).map((p) => (
-                        <option key={p} value={p}>
-                          {PARTNER_LABELS[p]}
-                        </option>
+                      {PARTNER_GROUPS.map((g) => (
+                        <optgroup key={g.label} label={g.label}>
+                          {g.keys.map((p) => (
+                            <option key={p} value={p}>
+                              {PARTNER_LABELS[p]}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                     {s.partner === 'owner' && (
                       <select
                         value={s.ownerClassCode ?? ''}
                         onChange={(e) => updateSubject(i, { ownerClassCode: e.target.value })}
+                        title="아래 칸에 이 반의 담임 이름이 찍힙니다"
                         className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
                       >
                         <option value="">담당 반</option>
@@ -946,18 +1030,6 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                         ))}
                       </select>
                     )}
-                    <input
-                      value={s.room ?? ''}
-                      onChange={(e) => updateSubject(i, { room: e.target.value })}
-                      placeholder="강의실"
-                      title="이 과목이 늘 쓰는 강의실 (이동 수업 호수)"
-                      className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                    />
-                    <RoleSelect
-                      value={s.teacherRole ?? ''}
-                      onChange={(v) => updateSubject(i, { teacherRole: v })}
-                      roles={staffRoles}
-                    />
                     <button onClick={() => removeSubject(i)} className="ml-auto text-xs text-red-500 hover:text-red-700">
                       삭제
                     </button>
@@ -966,7 +1038,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                   {/* 짝 수업(Pattern)은 같은 세트지만 다른 수업이라 따로 적는다 */}
                   {s.partner === 'pattern' && (
                     <div key={`${i}-pair`} className="flex flex-wrap items-center gap-2 pl-6">
-                      <span className="text-xs text-gray-400">└ 짝</span>
+                      <span className="text-xs text-gray-400">└ 아래 칸</span>
                       <input
                         value={s.partnerLabel ?? ''}
                         onChange={(e) => updateSubject(i, { partnerLabel: e.target.value })}
@@ -977,7 +1049,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                         value={s.partnerRoom ?? ''}
                         onChange={(e) => updateSubject(i, { partnerRoom: e.target.value })}
                         placeholder="강의실"
-                        title="짝 수업 강의실 — 보통 같지만 다를 수 있습니다"
+                        title="아래 칸 강의실 — 보통 윗 칸과 같지만 다를 수 있습니다"
                         className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
                       />
                       <RoleSelect
@@ -996,17 +1068,224 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                   >
                     + 과목 추가
                   </button>
-                  <button
-                    onClick={resetRotationSubjects}
-                    className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-                    title="반 수만큼 주제1~N 을 만들고 각 반 담임을 담당으로 지정합니다"
-                  >
-                    주제1~{draft.classes.length} 로 채우기 (인문학용)
-                  </button>
+                  {showRotationFill && (
+                    <button
+                      onClick={resetRotationSubjects}
+                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                      title="반 수만큼 주제1~N 을 만들고 각 반 담임을 담당으로 지정합니다"
+                    >
+                      주제1~{draft.classes.length} 로 채우기
+                    </button>
+                  )}
                 </div>
               </div>
             </fieldset>
           </section>
+          )}
+
+          {/* 칸 설명 — 시간표에서 그 칸을 눌렀을 때 뜬다 */}
+          {!isCommon && guideTargets.length > 0 && (
+          <section className="rounded-lg border border-gray-200 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">
+                칸 설명 ({guideTargets.filter((l) => hasGuideContent(guideOf(l))).length}/{guideTargets.length})
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  써 두면 시간표에서 그 칸을 눌렀을 때 뜹니다
+                </span>
+              </h3>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              이름이 같으면 Day 가 달라도 같은 설명을 씁니다 — Breakfast 를 Day 마다 다시 쓸 필요가 없습니다.
+            </p>
+
+            {/* 이 표에 나오는 칸 이름들 — 설명이 있는 것에는 점을 찍어 둔다 */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {guideTargets.map((label) => {
+                const on = label === guideLabel;
+                const filled = hasGuideContent(guideOf(label));
+                return (
+                  <button
+                    key={label}
+                    onClick={() => (on ? setGuideLabel(null) : startGuide(label))}
+                    className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                      on
+                        ? 'border-gray-900 bg-gray-900 text-white'
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {filled && (
+                      <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-white' : 'bg-blue-500'}`} />
+                    )}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {guideLabel && (
+              <div className="mt-4 space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900">{guideLabel}</span>
+                  <button
+                    onClick={() => setGuideLabel(null)}
+                    className="ml-auto text-xs text-gray-500 hover:text-gray-800"
+                  >
+                    접기
+                  </button>
+                </div>
+
+                <input
+                  value={guideOf(guideLabel).summary ?? ''}
+                  onChange={(e) => patchGuide(guideLabel, (g) => ({ ...g, summary: e.target.value }))}
+                  placeholder="한 줄 요약 — 이 시간이 무엇을 하는 시간인지"
+                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                />
+
+                {/* 섹션 — 제목은 관리자가 정하고, 줄 하나가 항목 하나 */}
+                {(guideOf(guideLabel).sections ?? []).map((sec, si) => (
+                  <div key={sec.id} className="rounded-md border border-gray-200 bg-white p-2.5">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <input
+                        value={sec.title}
+                        onChange={(e) => patchSection(guideLabel, si, (s) => ({ ...s, title: e.target.value }))}
+                        placeholder="섹션 제목 (예: 진행 방법)"
+                        className="w-48 rounded border border-gray-300 px-2 py-1 text-xs font-medium"
+                      />
+                      <button
+                        onClick={() =>
+                          patchGuide(guideLabel, (g) => ({
+                            ...g,
+                            sections: (g.sections ?? []).filter((_, i) => i !== si),
+                          }))
+                        }
+                        className="ml-auto text-xs text-red-500 hover:text-red-700"
+                      >
+                        섹션 삭제
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {sec.items.map((item, ii) => (
+                        <div key={item.id} className="flex items-center gap-1.5">
+                          <span className="w-4 shrink-0 text-center text-xs text-gray-400">
+                            {item.type === 'text' ? '•' : item.type === 'link' ? '🔗' : '🖼'}
+                          </span>
+
+                          {item.type === 'text' ? (
+                            <input
+                              value={item.text ?? ''}
+                              onChange={(e) => patchItem(guideLabel, si, ii, { text: e.target.value })}
+                              onKeyDown={(e) => {
+                                // 엔터로 다음 줄 — 목록을 빠르게 적어 내려가도록
+                                if (e.key !== 'Enter') return;
+                                e.preventDefault();
+                                addItem(guideLabel, si, 'text');
+                              }}
+                              placeholder="한 줄에 하나씩"
+                              className="min-w-0 flex-1 rounded border border-gray-200 px-2 py-1 text-sm"
+                            />
+                          ) : item.type === 'link' ? (
+                            <>
+                              <input
+                                value={item.text ?? ''}
+                                onChange={(e) => patchItem(guideLabel, si, ii, { text: e.target.value })}
+                                placeholder="링크 이름"
+                                className="w-28 shrink-0 rounded border border-gray-200 px-2 py-1 text-sm"
+                              />
+                              <input
+                                value={item.url ?? ''}
+                                onChange={(e) => patchItem(guideLabel, si, ii, { url: e.target.value })}
+                                placeholder="https://"
+                                className="min-w-0 flex-1 rounded border border-gray-200 px-2 py-1 text-sm"
+                              />
+                            </>
+                          ) : (
+                            <>
+                              {item.url ? (
+                                <>
+                                  {item.type === 'image' ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={item.url}
+                                      alt=""
+                                      className="h-10 w-10 shrink-0 rounded border border-gray-200 object-cover"
+                                    />
+                                  ) : (
+                                    <span className="w-10 shrink-0 text-center text-xs text-gray-400">🎬</span>
+                                  )}
+                                  <input
+                                    value={item.text ?? ''}
+                                    onChange={(e) => patchItem(guideLabel, si, ii, { text: e.target.value })}
+                                    placeholder="설명 (선택)"
+                                    className="min-w-0 flex-1 rounded border border-gray-200 px-2 py-1 text-sm"
+                                  />
+                                </>
+                              ) : (
+                                <label className="min-w-0 flex-1 cursor-pointer rounded border border-dashed border-gray-300 px-2 py-1 text-center text-xs text-gray-500 hover:bg-gray-50">
+                                  {uploading === `${si}:${ii}` ? '올리는 중…' : '사진·동영상 고르기'}
+                                  <input
+                                    type="file"
+                                    accept="image/*,video/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (f) void uploadMedia(guideLabel, si, ii, f);
+                                    }}
+                                  />
+                                </label>
+                              )}
+                            </>
+                          )}
+
+                          <button
+                            onClick={() => removeItem(guideLabel, si, ii)}
+                            className="text-xs text-gray-400 hover:text-red-600"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {!sec.items.length && (
+                        <p className="text-[11px] text-gray-400">아직 줄이 없습니다.</p>
+                      )}
+                    </div>
+                    <div className="mt-1.5 flex gap-2">
+                      <button
+                        onClick={() => addItem(guideLabel, si, 'text')}
+                        className="text-xs text-gray-500 hover:text-gray-800"
+                      >
+                        + 줄
+                      </button>
+                      <button
+                        onClick={() => addItem(guideLabel, si, 'link')}
+                        className="text-xs text-gray-500 hover:text-gray-800"
+                      >
+                        + 링크
+                      </button>
+                      <button
+                        onClick={() => addItem(guideLabel, si, 'image')}
+                        className="text-xs text-gray-500 hover:text-gray-800"
+                      >
+                        + 사진·동영상
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => addGuideSection(guideLabel)}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  >
+                    + 섹션 추가
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  줄은 글·링크·사진·동영상을 섞어 넣을 수 있습니다. 사진·동영상은 올리면 주소만 저장됩니다.
+                </p>
+              </div>
+            )}
+          </section>
+          )}
 
           {/* 줄 — 교시·날짜는 Day 마다 다르므로 공통 탭에는 없다 */}
           {!isCommon && (

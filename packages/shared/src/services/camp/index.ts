@@ -8,6 +8,8 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { CampClassInfo, CampGroup, CampSettings, CampTimetableCommon } from '../../types/camp';
+import { cleanGuide, guideMediaPath, type TimetableGuide } from '../../types/timetableGuide';
+import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage';
 
 /**
  * campSettings/{campCode} 에서 그룹-반 매핑 조회
@@ -142,10 +144,66 @@ export const updateCampTimetableCommon = async (
     {
       campCode,
       timetableCommon: {
-        [groupName]: { classes, staffOverrides, subjects: values.subjects ?? [] },
+        [groupName]: { classes, staffOverrides },
       },
       updatedAt: new Date().toISOString(),
     },
     { merge: true }
   );
+};
+
+
+/** campSettings/{campCode}.timetableGuides — 칸 설명 조회 */
+export const getCampTimetableGuides = async (
+  db: Firestore,
+  campCode: string
+): Promise<Record<string, TimetableGuide>> => {
+  if (!campCode) return {};
+  const snap = await getDoc(doc(db, 'campSettings', campCode));
+  if (!snap.exists()) return {};
+  return (snap.data() as CampSettings).timetableGuides ?? {};
+};
+
+/**
+ * 칸 설명 저장.
+ *
+ * 중첩 맵이라 merge 로는 지운 항목이 남는다. 그래서 늘 통째로 바꿔 쓰고,
+ * 내용이 빈 항목은 아예 빼서 설정이 지저분해지지 않게 한다.
+ */
+export const updateCampTimetableGuides = async (
+  db: Firestore,
+  campCode: string,
+  guides: Record<string, TimetableGuide>,
+  userId?: string
+): Promise<void> => {
+  const now = new Date().toISOString();
+  const cleaned: Record<string, TimetableGuide> = {};
+  Object.entries(guides).forEach(([key, guide]) => {
+    const g = cleanGuide(guide);
+    if (!g.summary && !g.sections?.length) return;
+    cleaned[key] = { ...g, updatedAt: now, ...(userId ? { updatedBy: userId } : {}) };
+  });
+  const ref = doc(db, 'campSettings', campCode);
+  // 먼저 문서가 있는지 보장하고(없으면 만들고), 그 다음 맵을 통째로 갈아끼운다.
+  // setDoc(merge) 는 중첩 맵을 합치기만 해서 지운 항목이 그대로 남는다.
+  await setDoc(ref, { campCode, updatedAt: now }, { merge: true });
+  await updateDoc(ref, { timetableGuides: cleaned });
+};
+
+
+/**
+ * 칸 설명에 넣을 사진·동영상을 Storage 에 올린다.
+ * web 은 File, mobile 은 fetch 로 만든 Blob 을 그대로 넘기면 된다.
+ */
+export const uploadGuideMedia = async (
+  storage: FirebaseStorage,
+  campCode: string,
+  guideKey: string,
+  file: Blob,
+  fileName: string
+): Promise<{ url: string; storagePath: string }> => {
+  const storagePath = guideMediaPath(campCode, guideKey, fileName);
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, file);
+  return { url: await getDownloadURL(storageRef), storagePath };
 };

@@ -1,12 +1,14 @@
 import {
   getCampClassInfo,
   getCampTimetableCommon,
+  getCampTimetableGuides,
   getCampGroups,
   getEslBooks,
   resolveGroups,
   type CampClassInfo,
   type CampTimetable,
   type CampTimetableCommon,
+  type TimetableGuide,
   type DerivedGroup,
   type EslBookList,
 } from '@smis-mentor/shared';
@@ -32,6 +34,8 @@ export interface ScheduleBundle {
   classInfo: Record<string, CampClassInfo>;
   /** 그룹명 → 그 그룹의 모든 Day 가 함께 쓰는 값 */
   timetableCommon: Record<string, CampTimetableCommon>;
+  /** 칸 이름 → 그 칸을 눌렀을 때 뜨는 설명 (캠프당 한 벌) */
+  timetableGuides: Record<string, TimetableGuide>;
   /** L-Code → 교재 3권 (전사 공용) */
   books: EslBookList;
 }
@@ -45,14 +49,16 @@ export async function loadScheduleBundle(jobCodeId: string): Promise<ScheduleBun
     | null;
   const campCode = jobCode?.code ?? '';
 
-  const [timetables, members, settingGroups, classInfo, books, timetableCommon] = await Promise.all([
+  const [timetables, members, settingGroups, classInfo, books, timetableCommon, timetableGuides] =
+    await Promise.all([
     campTimetableService.listByJobCodeId(jobCodeId),
     getUsersByJobCodeId(jobCodeId),
     campCode ? getCampGroups(db, campCode) : Promise.resolve([]),
     campCode ? getCampClassInfo(db, campCode) : Promise.resolve({}),
     getEslBooks(db),
     campCode ? getCampTimetableCommon(db, campCode) : Promise.resolve({}),
-  ]);
+    campCode ? getCampTimetableGuides(db, campCode) : Promise.resolve({}),
+    ]);
 
   return {
     campCode,
@@ -62,6 +68,7 @@ export async function loadScheduleBundle(jobCodeId: string): Promise<ScheduleBun
     groups: resolveGroups(members as never[], jobCodeId, settingGroups),
     classInfo,
     timetableCommon,
+    timetableGuides,
     books,
   };
 }
