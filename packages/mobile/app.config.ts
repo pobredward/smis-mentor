@@ -110,7 +110,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: 'SMIS Mentor',
     slug: 'smis-mentor',
-    version: '1.7.1',
+    version: '1.7.2',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
