@@ -393,6 +393,106 @@ export interface ManagerAction {
   };
 }
 
+// ── 복통 위치 (증상에 '복통'이 포함될 때만 추가 선택, 복수 선택) ──
+export const ABDOMINAL_PAIN_SYMPTOM = '복통';
+export const ABDOMINAL_PAIN_SITES = [
+  '명치 / 상복부',
+  '배꼽 주변',
+  '아랫배',
+  '왼쪽 윗배',
+  '오른쪽 윗배',
+  '왼쪽 아랫배',
+  '오른쪽 아랫배',
+  '배 전체',
+  '정확한 위치를 모르겠음',
+] as const;
+export type AbdominalPainSite = (typeof ABDOMINAL_PAIN_SITES)[number];
+
+/** 증상에 복통이 포함되어 있는지 */
+export function hasAbdominalPain(symptoms: string[]): boolean {
+  return symptoms.some(s => s.includes(ABDOMINAL_PAIN_SYMPTOM));
+}
+
+/**
+ * 증상 배열(+복통 위치) → 저장·표시용 한 줄 문자열
+ * 예: ['복통', '구토'] + ['명치 / 상복부', '배꼽 주변'] → "복통(명치 / 상복부, 배꼽 주변), 구토"
+ */
+export function formatSymptomText(symptoms: string[], painSites?: string[]): string {
+  const sites = (painSites ?? []).filter(Boolean);
+  return symptoms
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => (s.includes(ABDOMINAL_PAIN_SYMPTOM) && sites.length > 0 ? `${s}(${sites.join(', ')})` : s))
+    .join(', ');
+}
+
+// ── 체온 기준 (최초보고·경과보고·카드 표시 공통) ──────────────
+// 기준을 바꿀 때는 이 값만 수정하면 모든 화면에 동일하게 반영됨
+export const FEVER_THRESHOLDS = {
+  /** 이 값 이상이면 미열 */
+  slight: 37.5,
+  /** 이 값 이상이면 고열 */
+  high: 38.0,
+} as const;
+
+export const FEVER_LEVELS = ['정상', '미열', '고열'] as const;
+export type FeverLevel = (typeof FEVER_LEVELS)[number];
+
+/** 각 단계의 범위 안내 문구 (버튼 서브 라벨용) */
+export const FEVER_LEVEL_RANGES: Record<FeverLevel, string> = {
+  정상: `36.0–${(FEVER_THRESHOLDS.slight - 0.1).toFixed(1)}°`,
+  미열: `${FEVER_THRESHOLDS.slight.toFixed(1)}–${(FEVER_THRESHOLDS.high - 0.1).toFixed(1)}°`,
+  고열: `${FEVER_THRESHOLDS.high.toFixed(1)}° 이상`,
+};
+
+/** 체온 수치 → 열감 단계. 숫자가 아니면 null */
+export function classifyFever(temp: number | string | null | undefined): FeverLevel | null {
+  const n = typeof temp === 'number' ? temp : parseFloat(String(temp ?? ''));
+  if (isNaN(n)) return null;
+  if (n >= FEVER_THRESHOLDS.high) return '고열';
+  if (n >= FEVER_THRESHOLDS.slight) return '미열';
+  return '정상';
+}
+
+/** 열감 단계인지 (레거시 수치 문자열과 구분) */
+export function isFeverLevel(value: unknown): value is FeverLevel {
+  return typeof value === 'string' && (FEVER_LEVELS as readonly string[]).includes(value);
+}
+
+// ── 약 복용 기록 (재고 자동 연동) ─────────────────────────────
+/**
+ * 최초보고·경과보고에서 실제로 먹인 약 1건.
+ * 저장 시 inventoryItems.stocks[groupId]에서 quantity만큼 차감되고,
+ * 수정 시 차이만큼만, 삭제 시 전량 복구된다 (services/inventory.applyDoseStockChanges).
+ */
+export interface MedicationDose {
+  id: string;
+  /** inventoryItems 문서 ID */
+  itemId: string;
+  /** 약품명 스냅샷 (약품이 나중에 수정/비활성화되어도 기록 유지) */
+  itemName: string;
+  quantity: number;
+  /** 단위 스냅샷 (개, 포, ml 등) */
+  unit?: string;
+  /** 사용한 재고 그룹 (inventoryGroups 문서 ID) */
+  groupId: string;
+  groupName: string;
+  memo?: string;
+  givenAt: Timestamp;
+  givenBy: string;
+  /** 'initial' = 최초보고, 'progress' = 경과보고 */
+  source: 'initial' | 'progress';
+  /** 경과보고 연결 키: 해당 ProgressLog.loggedAt.toMillis() */
+  progressLogAt?: number;
+}
+
+/** 경과 로그에 연결된 복용 기록 필터 */
+export function dosesForProgressLog(doses: MedicationDose[] | undefined, log: ProgressLog): MedicationDose[] {
+  const key = log.loggedAt?.toMillis?.();
+  if (!doses?.length || key == null) return [];
+  return doses.filter(d => d.source === 'progress' && d.progressLogAt === key);
+}
+
 // ── 위치 모드 (일과중 / 휴식 / 격리) ──────────────────────────
 export const LOCATION_MODES = ['일과중', '휴식', '격리'] as const;
 export type LocationMode = (typeof LOCATION_MODES)[number];
@@ -404,10 +504,12 @@ export interface ProgressLog {
   status: ProgressStatus;
   /** 현재 위치 모드 (일과중 / 휴식 / 격리) */
   locationMode?: LocationMode;
-  /** 현재 위치 (예: 330호, 보건실) */
+  /** 현재 위치 (예: 330호, 환자방) */
   location?: string;
-  /** 열감 (정상 | 미열 | 고열 | 직접입력 수치) */
+  /** 열감 단계 (정상 | 미열 | 고열) — classifyFever()로 판정. 레거시 데이터는 수치 문자열일 수 있음 */
   fever?: string;
+  /** 측정 체온 (℃). 입력 시 fever는 FEVER_THRESHOLDS 기준으로 자동 판정 */
+  temperature?: number;
   /** 증상 요약 */
   symptom?: string;
   note?: string;
@@ -434,7 +536,7 @@ export interface IsolationCheckSchedule {
 // ── 복귀 판단 기준 ─────────────────────────────────────────────
 // 격리 및 일반 환자 모두에 적용 가능
 export const RETURN_CRITERIA_LABELS = [
-  '체온계로 정상 체온 (37.5°C 미만)',
+  `체온계로 정상 체온 (${FEVER_THRESHOLDS.slight}°C 미만)`,
   '이마와 목 만졌을 때 정상',
   '수업 들어도 괜찮다고 함',
 ] as const;
@@ -453,13 +555,20 @@ export interface PatientRecord {
 
   // 유형 (복합)
   types: PatientType[];
+  /** 증상 표시 문자열 (symptoms 배열을 formatSymptomText()로 합친 값 — 검색·목록 표시용) */
   symptom: string;
+  /** 선택한 증상 목록 (복수 선택). 프리셋 라벨 + 직접 입력 */
+  symptoms?: string[];
+  /** 복통 위치 (symptoms에 '복통'이 있을 때만, 복수 선택) */
+  abdominalPainSites?: string[];
   treatment: string;
   temperature?: number;
   /** 최초보고 시 열감 단계 ('정상' | '미열' | '고열') — temperature와 별개로 저장 */
   fever?: string;
   medication?: string;           // 단순 투약 메모
   medicationSchedules?: MedicationSchedule[];
+  /** 실제 약 복용 기록 (최초보고·경과보고 누적, 재고 자동 연동) */
+  medicationDoses?: MedicationDose[];
 
   // 경과 상태
   progressStatus: ProgressStatus;

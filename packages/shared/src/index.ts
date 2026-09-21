@@ -2,6 +2,7 @@
 export * from './types';
 export * from './data/timetablePresets';
 export * from './data/lodging';
+export * from './data/inventoryDefaultItems';
 export * as timetableDraft from './utils/timetableDraft';
 export * from './services';
 export * from './utils';

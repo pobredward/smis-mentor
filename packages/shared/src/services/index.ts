@@ -18,4 +18,5 @@ export * from './socialAuthService';
 export * from './taskService';
 export * from './appConfigService';
 export * from './patient';
+export * from './inventory';
 export * from './esl';

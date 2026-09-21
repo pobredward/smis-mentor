@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import { useAuth } from '@/contexts/AuthContext';
@@ -47,6 +47,24 @@ import {
   MANAGER_ACTION_TYPES,
   MANAGER_ACTION_LABELS,
   getUsersByJobCodeId,
+  subscribeInventoryItems,
+  subscribeInventoryGroups,
+  subscribeInventoryStocks,
+  buildInventoryViews,
+  updateMedicationDoses,
+  updateAssignee,
+  newDoseId,
+  getGroupStock,
+  getTotalStock,
+  ABDOMINAL_PAIN_SITES,
+  hasAbdominalPain,
+  formatSymptomText,
+  FEVER_LEVELS,
+  FEVER_LEVEL_RANGES,
+  FEVER_THRESHOLDS,
+  classifyFever,
+  isFeverLevel,
+  dosesForProgressLog,
 } from '@smis-mentor/shared';
 import type {
   PatientRecord,
@@ -71,6 +89,12 @@ import type {
   CampGroup,
   User,
   Camp,
+  MedicationDose,
+  InventoryItem,
+  InventoryItemView,
+  InventoryStock,
+  InventoryGroup,
+  FeverLevel,
 } from '@smis-mentor/shared';
 import { TRANSPORT_SLOTS, PARENT_REPORT_METHODS, isCarSlot, LOCATION_MODES } from '@smis-mentor/shared';
 import type { LocationMode } from '@smis-mentor/shared';
@@ -206,13 +230,6 @@ const SYMPTOM_GUIDES: SymptomGuide[] = [
     medication: '항히스타민제 (지르텍, 페니라민)',
     notes: '호흡 곤란 동반 시 즉시 119 및 운영진 연락.',
   },
-  {
-    label: '멀미',
-    emoji: '🚌',
-    category: '내과',
-    treatment: '신선한 공기, 앞좌석 이동, 눕히기',
-    medication: '멀미약 (키미테, 보나링)',
-  },
   // ── 응급 ────────────────────────────────────────────────
   {
     label: '심정지 의심',
@@ -235,11 +252,30 @@ const SYMPTOM_GUIDES: SymptomGuide[] = [
 const SYMPTOM_CATEGORIES = ['내과', '외과', '응급'] as const;
 type SymptomCategory = (typeof SYMPTOM_CATEGORIES)[number];
 
+// ==================== 재고(약품) 컨텍스트 ====================
+// 최초보고·경과보고의 약 복용 섹션이 같은 목록을 쓰도록 PatientContent에서 한 번만 구독해 내려준다.
+interface PatientInventory {
+  /** 사용 중인 의약품만 (비활성 약품은 새 보고 선택 목록에서 제외) */
+  medicines: InventoryItemView[];
+  groups: InventoryGroup[];
+}
+const PatientInventoryContext = createContext<PatientInventory>({ medicines: [], groups: [] });
+const usePatientInventory = () => useContext(PatientInventoryContext);
+
+/** 다음 체크·담당 지정 후보: 외국인 선생님(foreign, foreign_temp) 제외 — 환자 관리는 한국인 선생님이 담당 */
+function isKoreanStaff(u: Pick<User, 'role'>): boolean {
+  return u.role !== 'foreign' && u.role !== 'foreign_temp';
+}
+
+/** 최초보고 ⑤ 현재 상태 › 추가 메모 안내 */
+const ACTION_NOTE_PLACEHOLDER = '증상이 언제부터 시작되었는지, 얼마나 지속되었는지, 집에서도 자주 나타나는 증상인지, 식사 여부, 이전에도 같은 증상이 있었는지 등 특이사항을 작성해주세요.';
+const ACTION_NOTE_EXAMPLE = '예) 점심식사 후부터 배가 아프다고 함. 약 30분 정도 지속 중이며 집에서도 가끔 비슷한 증상이 있다고 함.';
+
 // ==================== 상수 ====================
 
 const BILLING_METHODS: BillingMethod[] = ['용돈봉투', '부모님청구', '미정'];
 // ISOLATION_RETURN_LABELS는 레거시용 (IsolationManageSection 내부에서만 사용)
-const ISOLATION_RETURN_LABELS = ['열 없음 (37.5°C 미만)', '주요 증상 호전', '담당 매니저 확인'];
+const ISOLATION_RETURN_LABELS = [`열 없음 (${FEVER_THRESHOLDS.slight}°C 미만)`, '주요 증상 호전', '담당 매니저 확인'];
 
 const PROGRESS_STYLE: Record<ProgressStatus, { dot: string; badge: string; step: string; line: string; label: string }> = {
   최초보고: { dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-700',     step: 'bg-gray-400',   line: 'border-gray-300',  label: 'text-gray-700' },
@@ -543,6 +579,25 @@ export default function PatientContent() {
     return () => unsub();
   }, [campCode]);
 
+  // 재고(약품·그룹) 구독 — 약 복용 섹션에서 사용
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [inventoryStocks, setInventoryStocks] = useState<Record<string, InventoryStock>>({});
+  const [inventoryGroups, setInventoryGroups] = useState<InventoryGroup[]>([]);
+  useEffect(() => {
+    if (!campCode) return;
+    const unsubItems = subscribeInventoryItems(db, setInventoryItems);          // 품목 마스터 (회사 공통)
+    const unsubStocks = subscribeInventoryStocks(db, campCode, setInventoryStocks); // 캠프별 수량
+    const unsubGroups = subscribeInventoryGroups(db, campCode, setInventoryGroups); // 캠프별 그룹
+    return () => { unsubItems(); unsubStocks(); unsubGroups(); };
+  }, [campCode]);
+  const patientInventory = useMemo<PatientInventory>(() => ({
+    medicines: buildInventoryViews(
+      inventoryItems.filter(i => i.category === '의약품' && i.isActive !== false),
+      inventoryStocks
+    ),
+    groups: inventoryGroups,
+  }), [inventoryItems, inventoryStocks, inventoryGroups]);
+
   // 현재 환자 (완치 제외) / 완치 환자 분리
   const activeRecords = useMemo(() =>
     records.filter(r => r.progressStatus !== '완치'), [records]);
@@ -834,25 +889,32 @@ export default function PatientContent() {
 
   const handleDelete = useCallback(async (id: string, name: string) => {
     if (!confirm(`"${name}" 환자 기록을 삭제하시겠습니까?`)) return;
-    await deletePatientRecord(db, id);
-  }, []);
+    const target = records.find(r => r.id === id);
+    // 기록 삭제 시 남아 있는 약 복용 수량은 재고에 복구
+    await deletePatientRecord(db, id, target && campCode
+      ? { campCode, currentDoses: target.medicationDoses ?? [], by: userData?.name ?? '', studentName: target.studentName }
+      : undefined);
+  }, [records, campCode, userData]);
 
   const handleProgressChange = useCallback(async (record: PatientRecord, status: ProgressStatus) => {
     if (!userData) return;
     await updateProgressStatus(db, record.id, status, userData.name);
   }, [userData]);
 
-  const handleAddProgressLog = useCallback(async (record: PatientRecord, log: Parameters<typeof addProgressLog>[2]) => {
-    if (!userData) return;
-    await addProgressLog(db, record.id, { ...log, loggedBy: userData.name });
-  }, [userData]);
+  const handleAddProgressLog = useCallback(async (record: PatientRecord, log: Parameters<typeof addProgressLog>[2], doses?: MedicationDose[]) => {
+    if (!userData || !campCode) return;
+    // 경과보고와 함께 기록한 약 복용은 저장 시 1회만 재고 차감
+    await addProgressLog(db, record.id, { ...log, loggedBy: userData.name },
+      doses?.length ? { campCode, doses, by: userData.name, studentName: record.studentName } : undefined);
+  }, [userData, campCode]);
 
   const handleRemoveProgressLog = useCallback(async (record: PatientRecord, logIndex: number) => {
     const logs = record.progressLogs ?? [];
     if (logs.length === 0) return;
-    if (!confirm('이 경과 기록을 삭제할까요?')) return;
-    await removeProgressLog(db, record.id, logs, logIndex);
-  }, []);
+    if (!confirm('이 경과 기록을 삭제할까요? (함께 기록한 약 복용은 재고에 복구됩니다)')) return;
+    await removeProgressLog(db, record.id, logs, logIndex,
+      campCode ? { campCode, currentDoses: record.medicationDoses ?? [], by: userData?.name ?? '', studentName: record.studentName } : undefined);
+  }, [campCode, userData]);
 
   const handleManagerCheck = useCallback(async (record: PatientRecord, memo?: string) => {
     if (!userData) return;
@@ -1048,6 +1110,7 @@ export default function PatientContent() {
   }
 
   return (
+    <PatientInventoryContext.Provider value={patientInventory}>
     <div className="flex flex-col h-full bg-gray-50">
       {/* 헤더 */}
       <div className="bg-white border-b border-gray-200 px-4 pt-0 pb-0">
@@ -1314,7 +1377,7 @@ export default function PatientContent() {
                         onEdit={() => openEditForm(record)}
                         onDelete={() => handleDelete(record.id, record.studentName)}
                         onProgressChange={(s) => handleProgressChange(record, s)}
-                        onAddProgressLog={(log) => handleAddProgressLog(record, log)}
+                        onAddProgressLog={(log, doses) => handleAddProgressLog(record, log, doses)}
                         onRemoveProgressLog={(logIndex) => handleRemoveProgressLog(record, logIndex)}
                         onMedCheck={(si, t, checked) => handleMedCheck(record, si, t, checked)}
                         onAddMedicationSchedule={(s) => handleAddMedicationSchedule(record, s)}
@@ -1366,9 +1429,12 @@ export default function PatientContent() {
                 roomNumber: quickForm.roomNumber || undefined,
                 types: quickForm.types,
                 symptom: quickForm.symptom,
+                ...(quickForm.symptoms?.length ? { symptoms: quickForm.symptoms } : {}),
+                ...(quickForm.abdominalPainSites?.length ? { abdominalPainSites: quickForm.abdominalPainSites } : {}),
                 treatment: quickForm.treatment,
                 temperature: quickForm.temperature ? parseFloat(quickForm.temperature) : undefined,
                 fever: quickForm.fever || undefined,
+                ...(quickForm.doses?.length ? { medicationDoses: quickForm.doses } : {}),
                 notes: quickForm.actionNote || undefined,
                 locationMode: quickForm.locationMode,
                 location: quickForm.location || undefined,
@@ -1401,6 +1467,7 @@ export default function PatientContent() {
         />
       )}
     </div>
+    </PatientInventoryContext.Provider>
   );
 }
 
@@ -1439,7 +1506,7 @@ interface ClassGroupProps {
   onEdit: (record: PatientRecord) => void;
   onDelete: (id: string, name: string) => void;
   onProgressChange: (record: PatientRecord, s: ProgressStatus) => void;
-  onAddProgressLog: (record: PatientRecord, log: Omit<ProgressLog, 'loggedAt'>) => void;
+  onAddProgressLog: (record: PatientRecord, log: Omit<ProgressLog, 'loggedAt'>, doses?: MedicationDose[]) => void;
   onRemoveProgressLog: (record: PatientRecord, logIndex: number) => void;
   onMedCheck: (record: PatientRecord, si: number, t: MedicationTime, checked: boolean) => void;
   onAddMedicationSchedule: (record: PatientRecord, s: Omit<MedicationSchedule, 'checkedTimes'>) => void;
@@ -1533,7 +1600,7 @@ function ClassGroup({
             onEdit={() => onEdit(record)}
             onDelete={() => onDelete(record.id, record.studentName)}
                         onProgressChange={(s) => onProgressChange(record, s)}
-                        onAddProgressLog={(log) => onAddProgressLog(record, log)}
+                        onAddProgressLog={(log, doses) => onAddProgressLog(record, log, doses)}
                         onRemoveProgressLog={(logIndex) => onRemoveProgressLog(record, logIndex)}
                         onMedCheck={(si, t, checked) => onMedCheck(record, si, t, checked)}
                         onAddMedicationSchedule={(s) => onAddMedicationSchedule(record, s)}
@@ -1578,7 +1645,7 @@ interface PatientCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onProgressChange: (s: ProgressStatus) => void;
-  onAddProgressLog: (log: Omit<ProgressLog, 'loggedAt'>) => void;
+  onAddProgressLog: (log: Omit<ProgressLog, 'loggedAt'>, doses?: MedicationDose[]) => void;
   onRemoveProgressLog: (logIndex: number) => void;
   onMedCheck: (si: number, t: MedicationTime, checked: boolean) => void;
   onAddMedicationSchedule: (s: Omit<MedicationSchedule, 'checkedTimes'>) => void;
@@ -1651,7 +1718,8 @@ function PatientCard({
   }, [record.medicationSchedules, today]);
 
   const hospitalVisits = record.hospitalVisits ?? [];
-  const hasHospital = hospitalVisits.length > 0;
+  // 내원 탭 빨간 점: '내원예정'(내원 필요)인 건이 있을 때만. '필요없음'·'내원완료'만 있으면 표시하지 않음
+  const hasHospital = hospitalVisits.some(v => v.hospitalStatus === '내원예정');
   // 현황 탭 복용약 탭 표시: 기간제 약이 있을 때만
   const hasMed = (record.medicationSchedules ?? []).some(s => !s.endDateAuto);
   const parentContactPending = record.progressStatus !== '완치' && record.parentContactAssigneeName &&
@@ -1737,7 +1805,7 @@ function PatientCard({
             </span>
             {record.temperature != null && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                record.temperature >= 37.5 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-600'
+                record.temperature >= FEVER_THRESHOLDS.slight ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-600'
               }`}>
                 {record.temperature}°C
               </span>
@@ -1747,7 +1815,7 @@ function PatientCard({
                 {record.isolationRoom}호 격리
               </span>
             )}
-            {hasHospital && (() => {
+            {hospitalVisits.length > 0 && (() => {
               const latestVisit = hospitalVisits[hospitalVisits.length - 1];
               return (
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
@@ -1820,6 +1888,7 @@ function PatientCard({
                 record={record}
                 currentUserId={currentUserId}
                 currentUserName={currentUserName}
+                currentUserRole={currentUserRole}
                 onAddProgressLog={onAddProgressLog}
                 onRemoveProgressLog={onRemoveProgressLog}
                 onManagerCheck={() => {
@@ -1891,8 +1960,9 @@ interface ProgressTabProps {
   record: PatientRecord;
   currentUserId: string;
   currentUserName: string;
+  currentUserRole?: string;
   campUsers: User[];
-  onAddProgressLog: (log: Omit<ProgressLog, 'loggedAt'>) => void;
+  onAddProgressLog: (log: Omit<ProgressLog, 'loggedAt'>, doses?: MedicationDose[]) => void;
   onRemoveProgressLog: (logIndex: number) => void;
   onManagerCheck: () => void;
   showMemoInput: boolean;
@@ -1911,11 +1981,12 @@ interface ProgressTabProps {
   onUpdateManagerActionFollowUp: (actionId: string, followUp: NonNullable<ManagerAction['followUp']>) => void;
 }
 
-const FEVER_OPTIONS = ['정상', '미열', '고열'] as const;
-type FeverOption = (typeof FEVER_OPTIONS)[number];
+// 열감 단계는 shared의 공통 기준(FEVER_LEVELS / FEVER_THRESHOLDS)을 사용 — 최초보고·경과보고 동일
+const FEVER_OPTIONS = FEVER_LEVELS;
+type FeverOption = FeverLevel;
 
 function ProgressTab({
-  record, currentUserId, currentUserName, campUsers, onAddProgressLog, onRemoveProgressLog, onManagerCheck,
+  record, currentUserId, currentUserName, currentUserRole, campUsers, onAddProgressLog, onRemoveProgressLog, onManagerCheck,
   showMemoInput, managerMemo, onMemoChange, onMemoConfirm, onMemoCancel, onIsolationCheck,
   onAddIsolationCheckSchedule, onCompleteIsolationCheck, onReturnCriteriaCheck, onAssignIsolation,
   onAddManagerAction, onRespondManagerAction, onCompleteManagerAction, onUpdateManagerActionFollowUp,
@@ -1925,9 +1996,14 @@ function ProgressTab({
   const [logLocationMode, setLogLocationMode] = useState<LocationMode>('일과중');
   const [logLocation, setLogLocation] = useState('');
   const [logFever, setLogFever] = useState<FeverOption | ''>('');
-  const [logFeverDirect, setLogFeverDirect] = useState('');
+  const [logFeverDirect, setLogFeverDirect] = useState('');   // 체온 수치 입력 (입력 시 단계 자동 판정)
   const [logSymptom, setLogSymptom] = useState('');
   const [logNote, setLogNote] = useState('');
+  // 경과보고 약 복용 (최초보고와 동일한 섹션·재고 연동)
+  const [logDoses, setLogDoses] = useState<MedicationDose[]>([]);
+  const inventory = usePatientInventory();
+  // 다음 체크 담당자 후보: 외국인 선생님 제외
+  const koreanUsers = useMemo(() => campUsers.filter(isKoreanStaff), [campUsers]);
   // 다음 체크 지정 (중간보고 전용)
   const [nextCheckTime, setNextCheckTime] = useState('');       // "HH:mm" 형태 문자열
   const [nextCheckAssigneeId, setNextCheckAssigneeId] = useState(currentUserId);
@@ -1937,9 +2013,12 @@ function ProgressTab({
 
   const handleAddLog = () => {
     if (!logStatus) return;
-    const feverValue = logFever === '고열' || logFever === '미열' || logFever === '정상'
-      ? logFever
-      : logFeverDirect || undefined;
+    // 체온 수치가 있으면 공통 기준(FEVER_THRESHOLDS)으로 자동 판정, 없으면 선택한 단계
+    const directTemp = parseFloat(logFeverDirect);
+    const hasTemp = !isNaN(directTemp);
+    const feverValue = hasTemp
+      ? (classifyFever(directTemp) ?? undefined)
+      : (logFever || undefined);
 
     // 다음 체크 Timestamp 변환
     let nextCheckAt: Timestamp | undefined;
@@ -1958,12 +2037,13 @@ function ProgressTab({
       locationMode: logStatus !== '완치' ? logLocationMode : undefined,
       location: logLocation || undefined,
       fever: feverValue,
+      ...(hasTemp ? { temperature: directTemp } : {}),
       symptom: logSymptom || undefined,
       note: logNote || undefined,
       nextCheckAt,
       nextCheckAssigneeId: (logStatus === '중간보고' && nextCheckAssigneeId) ? nextCheckAssigneeId : undefined,
       nextCheckAssigneeName: (logStatus === '중간보고' && nextCheckAssigneeName) ? nextCheckAssigneeName : undefined,
-    });
+    }, logDoses.filter(d => d.itemId && d.quantity > 0));
     // 폼 초기화
     setShowForm(false);
     setLogLocationMode('일과중');
@@ -1972,6 +2052,7 @@ function ProgressTab({
     setLogFeverDirect('');
     setLogSymptom('');
     setLogNote('');
+    setLogDoses([]);
     setNextCheckTime('');
     setNextCheckAssigneeId(currentUserId);
     setNextCheckAssigneeName(currentUserName);
@@ -2081,26 +2162,46 @@ function ProgressTab({
                       placeholder={
                         logLocationMode === '휴식' ? '예) 110호, 휴게실' :
                         logLocationMode === '격리' ? '예) 격리실 214호' :
-                        '예) 330호, 보건실'
+                        '예) 330호, 환자방'
                       }
                       className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
                   </div>
                 </FormRow>
                 <FormRow label="열감">
-                  <div className="flex gap-1 flex-wrap flex-1">
-                    {FEVER_OPTIONS.map(f => (
-                      <button key={f} type="button"
-                        onClick={() => { setLogFever(f === logFever ? '' : f); setLogFeverDirect(''); }}
-                        className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
-                          logFever === f
-                            ? f === '고열' ? 'bg-red-500 text-white' : f === '미열' ? 'bg-orange-400 text-white' : 'bg-green-500 text-white'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}>{f}</button>
-                    ))}
-                    <input type="text" value={logFeverDirect}
-                      onChange={e => { setLogFeverDirect(e.target.value); setLogFever(''); }}
-                      placeholder="직접 입력 (37.8)"
-                      className="flex-1 min-w-[70px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none focus:border-blue-300 bg-white" />
+                  <div className="flex-1 space-y-1">
+                    <div className="flex gap-1 flex-wrap">
+                      {FEVER_OPTIONS.map(f => (
+                        <button key={f} type="button"
+                          onClick={() => { setLogFever(f === logFever ? '' : f); setLogFeverDirect(''); }}
+                          className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                            logFever === f
+                              ? f === '고열' ? 'bg-red-500 text-white' : f === '미열' ? 'bg-orange-400 text-white' : 'bg-green-500 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}>{f}</button>
+                      ))}
+                      <input type="number" step="0.1" min="35" max="42" inputMode="decimal" value={logFeverDirect}
+                        onChange={e => {
+                          const v = e.target.value;
+                          setLogFeverDirect(v);
+                          // 체온 입력 시 공통 기준으로 단계 자동 판정 (최초보고와 같은 기준)
+                          const level = classifyFever(v);
+                          setLogFever(level ?? '');
+                        }}
+                        placeholder="체온 (37.8)"
+                        className="flex-1 min-w-[70px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none focus:border-blue-300 bg-white" />
+                    </div>
+                    {(() => {
+                      const level = classifyFever(logFeverDirect);
+                      if (!level) return null;
+                      return (
+                        <p className={`text-[10px] font-semibold ${
+                          level === '고열' ? 'text-red-600' : level === '미열' ? 'text-orange-500' : 'text-green-600'
+                        }`}>
+                          {parseFloat(logFeverDirect).toFixed(1)}℃ → {level === '고열' ? '⚠️ 고열' : level === '미열' ? '🌡 미열' : '✅ 정상'}
+                          <span className="text-gray-400 font-normal"> (미열 {FEVER_THRESHOLDS.slight}℃ 이상 · 고열 {FEVER_THRESHOLDS.high}℃ 이상)</span>
+                        </p>
+                      );
+                    })()}
                   </div>
                 </FormRow>
                 <FormRow label="증상">
@@ -2133,7 +2234,7 @@ function ProgressTab({
                     )}
                     {showNextCheckDropdown && (
                       <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-amber-200 rounded shadow-lg max-h-32 overflow-y-auto">
-                        {[{ userId: currentUserId, name: currentUserName }, ...campUsers.filter(u => u.userId !== currentUserId)]
+                        {[{ userId: currentUserId, name: currentUserName }, ...koreanUsers.filter(u => u.userId !== currentUserId)]
                           .filter(u => !nextCheckQuery || u.name.includes(nextCheckQuery))
                           .map(u => (
                             <button key={u.userId} type="button"
@@ -2146,6 +2247,17 @@ function ProgressTab({
                   </div>
                 </FormRow>
               </div>
+            )}
+
+            {logStatus !== '완치' && (
+              <MedicationDoseEditor
+                doses={logDoses}
+                onChange={setLogDoses}
+                medicines={inventory.medicines}
+                groups={inventory.groups}
+                givenBy={currentUserName}
+                compact
+              />
             )}
 
             <FormRow label="메모">
@@ -2225,12 +2337,28 @@ function ProgressTab({
                               log.fever === '고열' ? 'text-red-600 font-semibold' :
                               log.fever === '미열' ? 'text-orange-500 font-semibold' :
                               log.fever === '정상' ? 'text-green-600' : 'text-orange-500'
-                            }>🌡 {log.fever}{/^\d/.test(log.fever) ? '℃' : ''}</span>
+                            }>🌡 {log.fever}{/^\d/.test(log.fever) ? '℃' : ''}{log.temperature != null && isFeverLevel(log.fever) ? ` ${log.temperature}℃` : ''}</span>
                           )}
                           {log.symptom && <span className="text-gray-600">{log.symptom}</span>}
                         </div>
                       )}
                       {log.note && <p className="text-[11px] text-gray-500 italic">{log.note}</p>}
+                      {/* 이 보고와 함께 기록한 약 복용 */}
+                      {(() => {
+                        const doses = log.status === '최초보고'
+                          ? (record.medicationDoses ?? []).filter(d => d.source === 'initial')
+                          : dosesForProgressLog(record.medicationDoses, log);
+                        if (doses.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {doses.map(d => (
+                              <span key={d.id} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded">
+                                💊 {d.itemName} {d.quantity}{d.unit ?? '개'} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
 
                       {/* 다음 체크 정보 */}
                       {(log.nextCheckAt || log.nextCheckAssigneeName) && (
@@ -2265,6 +2393,9 @@ function ProgressTab({
         )}
       </div>
 
+      {/* 누적 투약 내역 (최초보고 + 경과보고, 시간순) — 수량 수정/삭제 시 재고는 차이만큼만 반영 */}
+      <DoseHistory record={record} currentUserName={currentUserName} />
+
       {/* 격리 환자: 주기 체크 스케줄 + 복귀 기준 */}
       {record.types.includes('격리') && (
         <IsolationManageSection
@@ -2288,12 +2419,182 @@ function ProgressTab({
         record={record}
         currentUserId={currentUserId}
         currentUserName={currentUserName}
+        currentUserRole={currentUserRole}
+        campUsers={campUsers}
         onAddAction={onAddManagerAction}
         onRespond={onRespondManagerAction}
         onComplete={onCompleteManagerAction}
         onFollowUp={onUpdateManagerActionFollowUp}
       />
 
+    </div>
+  );
+}
+
+// ==================== 약 복용 (재고 연동) ====================
+
+/**
+ * 약 복용 입력 섹션 — 최초보고·경과보고 공용.
+ * 약품 목록은 재고 탭에 등록된 의약품(사용 중)만, 재고 그룹은 캠프 재고 그룹을 그대로 사용한다.
+ * 저장 자체는 부모가 하며(addPatientRecord / addProgressLog), 재고 차감은 서비스에서 1회만 처리된다.
+ */
+function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, compact }: {
+  doses: MedicationDose[];
+  onChange: (next: MedicationDose[]) => void;
+  medicines: InventoryItemView[];
+  groups: InventoryGroup[];
+  givenBy: string;
+  compact?: boolean;
+}) {
+  const canAdd = medicines.length > 0 && groups.length > 0;
+  const textCls = compact ? 'text-[11px]' : 'text-xs';
+  const inputCls = `${textCls} border border-emerald-200 rounded-lg px-2 py-1 outline-none focus:border-emerald-400 bg-white`;
+
+  const addRow = () => {
+    if (!canAdd) return;
+    const item = medicines[0];
+    const group = groups[0];
+    onChange([...doses, {
+      id: newDoseId(),
+      itemId: item.id,
+      itemName: item.name,
+      unit: item.unit || '개',
+      quantity: 1,
+      groupId: group.id,
+      groupName: group.name,
+      givenAt: Timestamp.now(),
+      givenBy,
+      source: 'initial',
+    }]);
+  };
+
+  const update = (idx: number, patch: Partial<MedicationDose>) =>
+    onChange(doses.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
+
+  const remove = (idx: number) => onChange(doses.filter((_, i) => i !== idx));
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className={`${textCls} font-bold text-emerald-800`}>💊 약 복용</p>
+          <p className="text-[10px] text-emerald-700/80">실제로 약을 먹인 경우에만 기록 — 저장 시 해당 그룹 재고가 자동 차감됩니다</p>
+        </div>
+        <button type="button" onClick={addRow} disabled={!canAdd}
+          className={`${textCls} font-bold px-2 py-1 rounded-lg transition-colors ${
+            canAdd ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          }`}>
+          + 약 추가
+        </button>
+      </div>
+
+      {!canAdd && (
+        <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5">
+          {medicines.length === 0
+            ? '등록된 약품이 없습니다. 재고 탭에서 관리자가 약품(의약품)을 등록하면 여기서 선택할 수 있습니다.'
+            : '재고 그룹이 없습니다. 재고 탭에서 관리자가 그룹(A그룹 등)을 등록해주세요.'}
+        </p>
+      )}
+
+      {doses.map((d, idx) => {
+        const item = medicines.find(m => m.id === d.itemId);
+        const groupStock = item ? getGroupStock(item, d.groupId) : 0;
+        const total = item ? getTotalStock(item) : 0;
+        const short = item ? d.quantity > groupStock : false;
+        return (
+          <div key={d.id} className="bg-white rounded-lg border border-emerald-100 p-2 space-y-1.5">
+            <div className="flex gap-1.5 items-center">
+              <select value={d.itemId}
+                onChange={e => {
+                  const next = medicines.find(m => m.id === e.target.value);
+                  if (next) update(idx, { itemId: next.id, itemName: next.name, unit: next.unit || '개' });
+                }}
+                className={`${inputCls} flex-1 min-w-0`}>
+                {medicines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              <div className="flex items-center gap-1">
+                <input type="number" min={1} step={1} value={d.quantity}
+                  onChange={e => update(idx, { quantity: Math.max(1, parseInt(e.target.value || '1', 10) || 1) })}
+                  className={`${inputCls} w-14 text-center`} />
+                <span className={`${textCls} text-gray-500`}>{d.unit ?? '개'}</span>
+              </div>
+              <select value={d.groupId}
+                onChange={e => {
+                  const g = groups.find(x => x.id === e.target.value);
+                  if (g) update(idx, { groupId: g.id, groupName: g.name });
+                }}
+                className={`${inputCls} w-24`}>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+              <button type="button" onClick={() => remove(idx)} className="text-gray-300 hover:text-red-500 px-1" title="삭제">🗑️</button>
+            </div>
+            <input type="text" value={d.memo ?? ''} onChange={e => update(idx, { memo: e.target.value || undefined })}
+              placeholder="메모 (예: 식사 후 복용)" className={`${inputCls} w-full`} />
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+              {item?.description && <span className="text-gray-600">ℹ️ {item.description}</span>}
+              {item && (
+                <span className={short ? 'text-red-600 font-semibold' : 'text-gray-500'}>
+                  재고 {d.groupName} {groupStock}{d.unit ?? '개'} · 전체 {total}{d.unit ?? '개'}{short ? ' — 재고 부족' : ''}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 환자별 누적 투약 내역 (시간순). 수량 ±/삭제 시 재고는 변경된 차이만큼만 반영 */
+function DoseHistory({ record, currentUserName }: { record: PatientRecord; currentUserName: string }) {
+  const doses = useMemo(() =>
+    [...(record.medicationDoses ?? [])].sort((a, b) => (a.givenAt?.toMillis?.() ?? 0) - (b.givenAt?.toMillis?.() ?? 0)),
+  [record.medicationDoses]);
+  const [busy, setBusy] = useState(false);
+  if (doses.length === 0) return null;
+
+  const commit = async (next: MedicationDose[]) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateMedicationDoses(db, record.id,
+        { campCode: record.campCode, currentDoses: record.medicationDoses ?? [], by: currentUserName, studentName: record.studentName }, next);
+    } catch (e) {
+      console.error('약 복용 기록 수정 오류:', e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const changeQty = (id: string, delta: number) => {
+    const next = (record.medicationDoses ?? []).map(d => d.id === id ? { ...d, quantity: Math.max(1, d.quantity + delta) } : d);
+    if (JSON.stringify(next) === JSON.stringify(record.medicationDoses ?? [])) return;
+    commit(next);
+  };
+  const removeDose = (id: string) => {
+    if (!confirm('이 약 복용 기록을 삭제할까요? 해당 수량은 재고에 복구됩니다.')) return;
+    commit((record.medicationDoses ?? []).filter(d => d.id !== id));
+  };
+
+  return (
+    <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-2.5">
+      <p className="text-[11px] font-semibold text-emerald-800 mb-1.5">💊 투약 내역 <span className="text-gray-400 font-normal">({doses.length}건 · 시간순)</span></p>
+      <div className="space-y-1">
+        {doses.map(d => (
+          <div key={d.id} className="flex items-center gap-2 bg-white rounded border border-emerald-100 px-2 py-1 text-[11px]">
+            <span className="text-gray-400 w-10 shrink-0">{d.givenAt?.toDate ? d.givenAt.toDate().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''}</span>
+            <span className={`text-[9px] px-1 rounded shrink-0 ${d.source === 'initial' ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-600'}`}>{d.source === 'initial' ? '최초' : '경과'}</span>
+            <span className="flex-1 min-w-0 truncate text-gray-800"><b>{d.itemName}</b> · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</span>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button type="button" disabled={busy || d.quantity <= 1} onClick={() => changeQty(d.id, -1)}
+                className="w-5 h-5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">−</button>
+              <span className="w-8 text-center font-bold text-gray-800">{d.quantity}{d.unit ?? '개'}</span>
+              <button type="button" disabled={busy} onClick={() => changeQty(d.id, 1)}
+                className="w-5 h-5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">+</button>
+              <button type="button" disabled={busy} onClick={() => removeDose(d.id)} className="ml-1 text-gray-300 hover:text-red-500" title="삭제">🗑️</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2305,11 +2606,13 @@ function ProgressTab({
  * 역할 구분: 매니저(issuedById)는 버튼 발행, 담당자(assigneeId)는 응답
  */
 function ManagerActionPanel({
-  record, currentUserId, currentUserName, onAddAction, onRespond, onComplete, onFollowUp,
+  record, currentUserId, currentUserName, currentUserRole, campUsers, onAddAction, onRespond, onComplete, onFollowUp,
 }: {
   record: PatientRecord;
   currentUserId: string;
   currentUserName: string;
+  currentUserRole?: string;
+  campUsers: User[];
   onAddAction: (action: Omit<ManagerAction, 'id' | 'isDone' | 'response'>) => void;
   onRespond: (actionId: string, response: { medicationName?: string; medicationTime?: string; currentLocation?: string; note?: string }) => void;
   onComplete: (actionId: string) => void;
@@ -2321,6 +2624,9 @@ function ManagerActionPanel({
   const [medTime, setMedTime] = useState('');
   const [meetingPlace, setMeetingPlace] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  // 지시 받을 담당자 (기본: 현재 담당자). 관리자는 최초보고 때 '직접 조치 예정'을 골랐어도 다른 담당자에게 지시 가능
+  const [targetAssigneeName, setTargetAssigneeName] = useState(record.assigneeName ?? '');
+  const assignableUsers = useMemo(() => campUsers.filter(isKoreanStaff), [campUsers]);
 
   // 응답 폼 상태
   const [respondingId, setRespondingId] = useState<string | null>(null);
@@ -2340,8 +2646,9 @@ function ManagerActionPanel({
   const pendingActions = actions.filter(a => !a.isDone);
   const doneActions = actions.filter(a => a.isDone);
   const isAssignee = record.assigneeId === currentUserId; // 담당자(유저)
-  // 매니저: issuedById가 나인 액션이 있거나, 아직 아무도 발행 안 한 상태면 발행 가능
-  const canIssue = !isAssignee || actions.length === 0;
+  const isAdmin = currentUserRole === 'admin';
+  // 관리자는 언제든(본인이 최초보고 담당자여도) 지시 가능, 그 외에는 담당자가 아닐 때만
+  const canIssue = isAdmin || !isAssignee;
 
   const now = () => {
     const d = new Date();
@@ -2350,6 +2657,11 @@ function ManagerActionPanel({
 
   const handleIssue = () => {
     if (!issuingType) return;
+    // 지시 대상 담당자가 바뀌었으면 담당자 먼저 변경 (기존 assigneeId/assigneeName 필드 재사용)
+    const target = assignableUsers.find(u => u.name === targetAssigneeName.trim());
+    if (target && target.userId !== record.assigneeId) {
+      updateAssignee(db, record.id, target.userId, target.name).catch(e => console.error('담당자 변경 오류:', e));
+    }
     onAddAction({
       actionType: issuingType,
       issuedAt: Timestamp.now(),
@@ -2566,8 +2878,8 @@ function ManagerActionPanel({
         );
       })}
 
-      {/* 매니저 액션 발행 버튼 */}
-      {!isAssignee && (
+      {/* 매니저 액션 발행 버튼 — 관리자는 최초보고의 '직접 조치 예정' 선택과 무관하게 언제든 사용 가능 */}
+      {canIssue && (
         <div>
           {!showIssuePicker ? (
             <button
@@ -2603,6 +2915,16 @@ function ManagerActionPanel({
                 <p className="text-xs font-bold text-blue-800">{MANAGER_ACTION_LABELS[issuingType]}</p>
                 <button onClick={() => setIssuingType(null)} className="text-blue-400 hover:text-blue-600 text-xs">← 뒤로</button>
               </div>
+
+              {/* 지시 받을 담당자 (한국인 선생님만, 변경 시 담당자도 함께 바뀜) */}
+              <div className="flex gap-2 items-center">
+                <label className="text-[10px] text-blue-700 whitespace-nowrap">담당자</label>
+                <UserSearchInput value={targetAssigneeName} onChange={setTargetAssigneeName}
+                  placeholder={record.assigneeName ? `현재: ${record.assigneeName}` : '담당자 이름 검색'} campUsers={assignableUsers} />
+              </div>
+              {targetAssigneeName.trim() && targetAssigneeName.trim() !== (record.assigneeName ?? '') && assignableUsers.some(u => u.name === targetAssigneeName.trim()) && (
+                <p className="text-[10px] text-amber-700">전송 시 담당자가 {record.assigneeName || '미지정'} → {targetAssigneeName.trim()} 으로 변경됩니다.</p>
+              )}
 
               {issuingType === 'medication' && (
                 <>
@@ -3164,39 +3486,37 @@ function TransportBoard({ allRecords }: { allRecords: PatientRecord[] }) {
 
   if (groupMap.size === 0) return null;
 
-  // TRANSPORT_SLOTS 순서대로, 같은 슬롯 내에서는 escort 이름순
-  const sorted = TRANSPORT_SLOTS.flatMap(slot =>
-    [...groupMap.values()]
-      .filter(g => g.slot === slot)
-      .sort((a, b) => a.escort.localeCompare(b.escort, 'ko'))
-  );
+  // 등록된 transportSlot(차량1/차량2/택시…) 값을 그대로 사용해 차량별로 먼저 묶고,
+  // 같은 차량 안에서는 인솔자별로 한 줄씩 (인솔자 이름순)
+  const bySlot = TRANSPORT_SLOTS
+    .map(slot => ({
+      slot,
+      rows: [...groupMap.values()]
+        .filter(g => g.slot === slot)
+        .sort((a, b) => a.escort.localeCompare(b.escort, 'ko')),
+    }))
+    .filter(s => s.rows.length > 0);
 
   return (
     <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 mb-1">
       <p className="text-[11px] font-bold text-orange-700 mb-2">🚗 내원 차량 현황</p>
-      <div className="space-y-1.5">
-        {sorted.map((g, i) => (
-          <div key={i} className="bg-white rounded-lg border border-orange-100 p-2">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="text-[11px] font-bold text-orange-600">{g.slot}</span>
-              {g.departureTime && (
-                <span className="text-[10px] text-gray-500">출발 <b className="text-gray-700">{g.departureTime}</b></span>
-              )}
-              {g.driver && (
-                <span className="text-[10px] text-gray-500">운전 <b className="text-gray-700">{g.driver}</b></span>
-              )}
-              {g.escort && (
-                <span className="text-[10px] text-gray-500">인솔 <b className="text-gray-700">{g.escort}</b></span>
-              )}
-              {g.hospitalName && (
-                <span className="text-[10px] text-gray-400 ml-auto">→ {g.hospitalName}</span>
+      <div className="space-y-2">
+        {bySlot.map(({ slot, rows }) => (
+          <div key={slot} className="bg-white rounded-lg border border-orange-100 p-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-bold text-orange-600">{slot}</span>
+              {rows[0]?.driver && (
+                <span className="text-[10px] text-gray-500">운전 <b className="text-gray-700">{rows[0].driver}</b></span>
               )}
             </div>
-            <div className="flex flex-wrap gap-1">
-              {g.students.map((name, j) => (
-                <span key={j} className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">
-                  {name}
-                </span>
+            <div className="space-y-0.5">
+              {rows.map((g, i) => (
+                <p key={i} className="text-[11px] text-gray-700 leading-snug">
+                  <b className="text-gray-900">{g.escort || '인솔자 미정'}</b>
+                  {' '}<span className="text-orange-700">({g.students.join(', ')})</span>
+                  {g.hospitalName && <span className="text-gray-500"> : {g.hospitalName}</span>}
+                  {g.departureTime && <span className="text-[10px] text-gray-400"> · {g.departureTime} 출발</span>}
+                </p>
               ))}
             </div>
           </div>
@@ -5436,6 +5756,12 @@ interface QuickReportForm {
   locationMode: LocationMode; // 현재 위치 모드 (일과중 / 휴식 / 격리)
   location: string;       // 현재 위치 (텍스트)
   actionNote: string;     // 조치 메모
+  /** 선택한 증상 목록 (복수) — symptom은 이 배열을 합친 표시 문자열 */
+  symptoms?: string[];
+  /** 복통 위치 (복수) */
+  abdominalPainSites?: string[];
+  /** 약 복용 기록 (재고 연동) */
+  doses?: MedicationDose[];
 }
 
 // 조치 상태 (최초보고 전용)
@@ -5465,9 +5791,14 @@ function QuickReportModal({
   const [studentLocked, setStudentLocked] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // 증상 검색
+  // 증상 검색 · 복수 선택
   const [symptomSearch, setSymptomSearch] = useState('');
-  const [selectedGuide, setSelectedGuide] = useState<SymptomGuide | null>(null);
+  const [selectedGuides, setSelectedGuides] = useState<SymptomGuide[]>([]);
+  // 복통 위치 (증상에 복통이 있을 때만, 복수 선택)
+  const [painSites, setPainSites] = useState<string[]>([]);
+  // 약 복용 (재고 연동)
+  const [doses, setDoses] = useState<MedicationDose[]>([]);
+  const inventory = usePatientInventory();
 
   // 조치 상태
   const [actionStatus, setActionStatus] = useState<QuickActionId>('직접조치');
@@ -5511,18 +5842,24 @@ function QuickReportModal({
     );
   }, [symptomSearch]);
 
+  // 프리셋 토글 (복수 선택). 처치는 선택한 증상들의 기본 처치를 이어 붙임
   const selectGuide = (guide: SymptomGuide) => {
-    if (selectedGuide?.label === guide.label) {
-      setSelectedGuide(null);
-      return;
-    }
-    setSelectedGuide(guide);
-    setForm(f => ({
-      ...f,
-      symptom: guide.label,
-      treatment: guide.treatment,
-    }));
+    const has = selectedGuides.some(g => g.label === guide.label);
+    const next = has ? selectedGuides.filter(g => g.label !== guide.label) : [...selectedGuides, guide];
+    setSelectedGuides(next);
+    setForm(f => ({ ...f, treatment: next.map(g => g.treatment).join(' / ') }));
+    if (!next.some(g => g.label.includes('복통'))) setPainSites([]);
   };
+
+  // 선택 증상 + 직접 입력 → 배열
+  const symptomList = useMemo(() => {
+    const custom = form.symptom.split(',').map(s => s.trim()).filter(Boolean);
+    return [...selectedGuides.map(g => g.label), ...custom];
+  }, [selectedGuides, form.symptom]);
+  const showPainSites = hasAbdominalPain(symptomList);
+
+  const togglePainSite = (site: string) =>
+    setPainSites(prev => prev.includes(site) ? prev.filter(s => s !== site) : [...prev, site]);
 
   const toggleType = (t: PatientType) => {
     setForm(f => {
@@ -5532,7 +5869,7 @@ function QuickReportModal({
     });
   };
 
-  const canSubmit = form.studentName && form.symptom;
+  const canSubmit = !!form.studentName && symptomList.length > 0;
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
@@ -5545,7 +5882,16 @@ function QuickReportModal({
       const feverLabel =
         feverLevel === 'normal' ? '정상' :
         feverLevel === 'slight' ? '미열' : '고열';
-      await onSubmit({ ...form, fever: feverLabel, actionNote });
+      const sites = showPainSites ? painSites : [];
+      await onSubmit({
+        ...form,
+        symptom: formatSymptomText(symptomList, sites),
+        symptoms: symptomList,
+        abdominalPainSites: sites,
+        doses: doses.filter(d => d.itemId && d.quantity > 0).map(d => ({ ...d, source: 'initial' as const })),
+        fever: feverLabel,
+        actionNote,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -5714,9 +6060,9 @@ function QuickReportModal({
             {/* 열감 단계 선택 — 정상 선택 시 체온 입력 불필요 */}
             <div className="grid grid-cols-3 gap-2 mb-2">
               {[
-                { id: 'normal',  label: '정상',  sub: '36.0–37.4°', color: 'bg-green-500',  border: 'border-green-500' },
-                { id: 'slight',  label: '미열',  sub: '37.5–37.9°', color: 'bg-orange-400', border: 'border-orange-400' },
-                { id: 'high',    label: '고열',  sub: '38.0° 이상', color: 'bg-red-500',    border: 'border-red-500' },
+                { id: 'normal',  label: '정상',  sub: FEVER_LEVEL_RANGES.정상, color: 'bg-green-500',  border: 'border-green-500' },
+                { id: 'slight',  label: '미열',  sub: FEVER_LEVEL_RANGES.미열, color: 'bg-orange-400', border: 'border-orange-400' },
+                { id: 'high',    label: '고열',  sub: FEVER_LEVEL_RANGES.고열, color: 'bg-red-500',    border: 'border-red-500' },
               ].map(opt => {
                 const temp = parseFloat(form.temperature);
                 const selected =
@@ -5736,10 +6082,10 @@ function QuickReportModal({
                       } else if (opt.id === 'slight') {
                         setFeverLevel('slight');
                         // 이미 미열 범위면 유지, 아니면 기본값
-                        if (!form.temperature || temp < 37.5 || temp >= 38.0) setField('temperature', '37.5');
+                        if (!form.temperature || classifyFever(temp) !== '미열') setField('temperature', FEVER_THRESHOLDS.slight.toFixed(1));
                       } else {
                         setFeverLevel('high');
-                        if (!form.temperature || temp < 38.0) setField('temperature', '38.0');
+                        if (!form.temperature || classifyFever(temp) !== '고열') setField('temperature', FEVER_THRESHOLDS.high.toFixed(1));
                       }
                     }}
                     className={`flex flex-col items-center gap-0.5 py-2.5 rounded-xl border text-xs font-bold transition-all ${
@@ -5769,11 +6115,9 @@ function QuickReportModal({
                       // 수치 입력 시 단계 자동 동기화
                       // — 단, 직접 입력 중 정상 범위로 내려가도 normal로 전환하지 않음
                       //   (백스페이스 도중 feverLevel이 바뀌어 입력 필드가 사라지는 버그 방지)
-                      const n = parseFloat(val);
-                      if (!isNaN(n) && n >= 37.5) {
-                        if (n >= 38.0) setFeverLevel('high');
-                        else setFeverLevel('slight');
-                      }
+                      const level = classifyFever(val);
+                      if (level === '고열') setFeverLevel('high');
+                      else if (level === '미열') setFeverLevel('slight');
                     }}
                     placeholder="체온 직접 입력 (예: 37.8)"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 pr-8"
@@ -5816,10 +6160,12 @@ function QuickReportModal({
               )}
             </div>
 
+            <p className="text-[10px] text-gray-400 mb-1">여러 증상이 있으면 모두 선택하세요 (복수 선택)</p>
+
             {/* 프리셋 그리드 */}
             <div className="grid grid-cols-4 gap-1.5 max-h-44 overflow-y-auto">
               {filteredGuides.map(guide => {
-                const isSelected = selectedGuide?.label === guide.label;
+                const isSelected = selectedGuides.some(g => g.label === guide.label);
                 const isEmg = guide.category === '응급';
                 return (
                   <button key={guide.label} type="button" onClick={() => selectGuide(guide)}
@@ -5836,32 +6182,55 @@ function QuickReportModal({
               })}
             </div>
 
-            {/* 선택된 가이드 → 조치 미리보기 */}
-            {selectedGuide && (
-              <div className={`mt-2 rounded-xl p-3 border text-[11px] space-y-1 ${
-                selectedGuide.category === '응급' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-100'
-              }`}>
-                <p className="font-bold text-gray-800">{selectedGuide.emoji} {selectedGuide.label} 조치</p>
-                <p className="text-gray-700">🩺 {selectedGuide.treatment}</p>
-                {selectedGuide.medication !== '(약 불필요)' && (
-                  <p className="text-orange-700">💊 {selectedGuide.medication}</p>
-                )}
-                {selectedGuide.notes && (
-                  <p className={`font-medium ${selectedGuide.category === '응급' ? 'text-red-700' : 'text-amber-700'}`}>
-                    ⚠️ {selectedGuide.notes}
-                  </p>
-                )}
+            {/* 복통 위치 — 증상에 복통이 있을 때만 (복수 선택) */}
+            {showPainSites && (
+              <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5">
+                <p className="text-[11px] font-bold text-amber-800 mb-1.5">🫃 복통 위치 <span className="font-normal text-amber-700/80">(여러 곳이면 모두 선택)</span></p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ABDOMINAL_PAIN_SITES.map(site => {
+                    const on = painSites.includes(site);
+                    return (
+                      <button key={site} type="button" onClick={() => togglePainSite(site)}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                          on ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-amber-200 text-amber-800 hover:bg-amber-100'
+                        }`}>
+                        {site}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* 직접 입력 */}
+            {/* 선택된 가이드 → 조치 미리보기 (선택한 증상마다) */}
+            {selectedGuides.map(guide => (
+              <div key={guide.label} className={`mt-2 rounded-xl p-3 border text-[11px] space-y-1 ${
+                guide.category === '응급' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-100'
+              }`}>
+                <p className="font-bold text-gray-800">{guide.emoji} {guide.label} 조치</p>
+                <p className="text-gray-700">🩺 {guide.treatment}</p>
+                {guide.medication !== '(약 불필요)' && (
+                  <p className="text-orange-700">💊 {guide.medication}</p>
+                )}
+                {guide.notes && (
+                  <p className={`font-medium ${guide.category === '응급' ? 'text-red-700' : 'text-amber-700'}`}>
+                    ⚠️ {guide.notes}
+                  </p>
+                )}
+              </div>
+            ))}
+
+            {/* 직접 입력 (프리셋에 없는 증상 추가, 쉼표로 여러 개) */}
             <input
               type="text"
               value={form.symptom}
               onChange={e => setField('symptom', e.target.value)}
-              placeholder="프리셋에 없으면 직접 입력..."
+              placeholder="프리셋에 없으면 직접 입력... (여러 개는 쉼표로 구분)"
               className="w-full mt-2 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
             />
+            {symptomList.length > 0 && (
+              <p className="text-[10px] text-blue-600 mt-1">선택된 증상: {formatSymptomText(symptomList, showPainSites ? painSites : [])}</p>
+            )}
           </div>
 
           {/* ⑤ 현재 상태 */}
@@ -5882,12 +6251,25 @@ function QuickReportModal({
                 </button>
               ))}
             </div>
-            <input
-              type="text"
+            <textarea
               value={form.actionNote}
               onChange={e => setField('actionNote', e.target.value)}
-              placeholder="추가 메모 (선택)"
-              className="w-full mt-2 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
+              placeholder={ACTION_NOTE_PLACEHOLDER}
+              rows={3}
+              className="w-full mt-2 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none leading-relaxed"
+            />
+            <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{ACTION_NOTE_EXAMPLE}</p>
+          </div>
+
+          {/* ⑥ 약 복용 (실제로 먹인 경우) — 저장 시 재고 자동 차감 */}
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">⑥ 약 복용 <span className="font-normal text-gray-400">(선택)</span></p>
+            <MedicationDoseEditor
+              doses={doses}
+              onChange={setDoses}
+              medicines={inventory.medicines}
+              groups={inventory.groups}
+              givenBy={reporterName}
             />
           </div>
 

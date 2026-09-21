@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from 'react';
 import {
   View,
   Text,
@@ -57,6 +57,23 @@ import {
   PARENT_REPORT_METHODS,
   isCarSlot,
   LOCATION_MODES,
+  subscribeInventoryItems,
+  subscribeInventoryGroups,
+  subscribeInventoryStocks,
+  buildInventoryViews,
+  updateMedicationDoses,
+  newDoseId,
+  getGroupStock,
+  getTotalStock,
+  ABDOMINAL_PAIN_SITES,
+  hasAbdominalPain,
+  formatSymptomText,
+  FEVER_LEVELS,
+  FEVER_LEVEL_RANGES,
+  FEVER_THRESHOLDS,
+  classifyFever,
+  isFeverLevel,
+  dosesForProgressLog,
 } from '@smis-mentor/shared';
 import type {
   PatientRecord,
@@ -78,6 +95,12 @@ import type {
   ContactMethod,
   ContactReportType,
   LocationMode,
+  MedicationDose,
+  InventoryItem,
+  InventoryItemView,
+  InventoryStock,
+  InventoryGroup,
+  FeverLevel,
 } from '@smis-mentor/shared';
 import jobCodesService from '../services/jobCodesService';
 import { stSheetService } from '../services/stSheet';
@@ -136,8 +159,25 @@ const GROUP_BORDER_COLORS: Record<string, string> = {
   manager: '#cbd5e1',
 };
 
-const FEVER_OPTIONS = ['정상', '미열', '고열'] as const;
-type FeverOption = (typeof FEVER_OPTIONS)[number];
+// 열감 단계는 shared 공통 기준(FEVER_LEVELS / FEVER_THRESHOLDS) 사용 — 최초보고·경과보고 동일
+const FEVER_OPTIONS = FEVER_LEVELS;
+type FeverOption = FeverLevel;
+
+// 재고(약품) 컨텍스트 — 최초보고·경과보고 약 복용 섹션이 같은 목록 사용
+interface PatientInventory {
+  medicines: InventoryItemView[];
+  groups: InventoryGroup[];
+}
+const PatientInventoryContext = createContext<PatientInventory>({ medicines: [], groups: [] });
+const usePatientInventory = () => useContext(PatientInventoryContext);
+
+/** 다음 체크 담당자 후보: 외국인 선생님(foreign, foreign_temp) 제외 */
+function isKoreanStaff(u: Pick<User, 'role'>): boolean {
+  return u.role !== 'foreign' && u.role !== 'foreign_temp';
+}
+
+const ACTION_NOTE_PLACEHOLDER = '증상이 언제부터 시작되었는지, 얼마나 지속되었는지, 집에서도 자주 나타나는 증상인지, 식사 여부, 이전에도 같은 증상이 있었는지 등 특이사항을 작성해주세요.';
+const ACTION_NOTE_EXAMPLE = '예) 점심식사 후부터 배가 아프다고 함. 약 30분 정도 지속 중이며 집에서도 가끔 비슷한 증상이 있다고 함.';
 
 const QUICK_ACTION_OPTIONS = [
   { id: '직접조치',   label: '직접 조치 예정', color: '#3b82f6', desc: '조치사항대로 직접 조치할게요' },
@@ -164,7 +204,6 @@ const SYMPTOM_GUIDES: SymptomGuide[] = [
   { label: '구토/메스꺼움',      emoji: '🤮',  category: '내과', treatment: '옆으로 눕히기, 음식물 섭취 중단, 수분 서서히 보충', medication: '소화제, 정로환' },
   { label: '두드러기',           emoji: '🔴',  category: '내과', treatment: '알레르기 원인 제거, 냉찜질, 긁지 않기', medication: '항히스타민제 (지르텍, 페니라민)', notes: '호흡 곤란 동반 시 즉시 119 및 운영진 연락.' },
   { label: '구내염',             emoji: '👄',  category: '내과', treatment: '구강 위생 유지, 자극적 음식 금지, 충분한 수분', medication: '알보칠, 구강연고' },
-  { label: '멀미',               emoji: '🚌',  category: '내과', treatment: '신선한 공기, 앞좌석 이동, 눕히기', medication: '멀미약 (키미테, 보나링)' },
   { label: '근육통',             emoji: '💪',  category: '외과', treatment: '냉찜질(24시간 내) → 온찜질(24시간 후), 충분한 휴식', medication: '에어파스, 멘소래담' },
   { label: '코피',               emoji: '🩸',  category: '외과', treatment: '고개를 앞으로 숙이고 코날개 양쪽을 5~10분 압박. 절대 뒤로 젖히지 않기.', medication: '(약 불필요)', notes: '10분 이상 지속되면 즉시 내원.' },
   { label: '베임/찰과상',        emoji: '🩹',  category: '외과', treatment: '흐르는 물로 세척 → 소독약 → 밴드 또는 후시딘/마데카솔 도포', medication: '소독약, 후시딘, 마데카솔', notes: '깊은 상처나 출혈이 멈추지 않으면 내원.' },
@@ -379,6 +418,25 @@ export function PatientScreen() {
     return () => unsub();
   }, [campCode]);
 
+  // 재고(약품·그룹) 구독 — 약 복용 섹션에서 사용
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [inventoryStocks, setInventoryStocks] = useState<Record<string, InventoryStock>>({});
+  const [inventoryGroups, setInventoryGroups] = useState<InventoryGroup[]>([]);
+  useEffect(() => {
+    if (!campCode) return;
+    const unsubItems = subscribeInventoryItems(db, setInventoryItems);          // 품목 마스터 (회사 공통)
+    const unsubStocks = subscribeInventoryStocks(db, campCode, setInventoryStocks); // 캠프별 수량
+    const unsubGroups = subscribeInventoryGroups(db, campCode, setInventoryGroups); // 캠프별 그룹
+    return () => { unsubItems(); unsubStocks(); unsubGroups(); };
+  }, [campCode]);
+  const patientInventory = useMemo<PatientInventory>(() => ({
+    medicines: buildInventoryViews(
+      inventoryItems.filter(i => i.category === '의약품' && i.isActive !== false),
+      inventoryStocks
+    ),
+    groups: inventoryGroups,
+  }), [inventoryItems, inventoryStocks, inventoryGroups]);
+
   // 현재 환자 / 완치 분리
   const activeRecords = useMemo(() =>
     records.filter(r => r.progressStatus !== '완치'), [records]);
@@ -592,11 +650,15 @@ export function PatientScreen() {
   }, [campCode, userData, editingId, form, records]);
 
   const handleDelete = useCallback((id: string, name: string) => {
+    const target = records.find(r => r.id === id);
     Alert.alert('삭제 확인', `"${name}" 환자 기록을 삭제하시겠습니까?`, [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => deletePatientRecord(db, id) },
+      // 기록 삭제 시 남아 있는 약 복용 수량은 재고에 복구
+      { text: '삭제', style: 'destructive', onPress: () => deletePatientRecord(db, id, target && campCode
+        ? { campCode, currentDoses: target.medicationDoses ?? [], by: userData?.name ?? '', studentName: target.studentName }
+        : undefined) },
     ]);
-  }, []);
+  }, [records, campCode, userData]);
 
   const handleProgressChange = useCallback(async (record: PatientRecord, status: ProgressStatus) => {
     if (!userData) return;
@@ -605,20 +667,24 @@ export function PatientScreen() {
 
   const handleAddProgressLog = useCallback(async (
     record: PatientRecord,
-    log: Omit<ProgressLog, 'loggedAt' | 'loggedBy'>
+    log: Omit<ProgressLog, 'loggedAt' | 'loggedBy'>,
+    doses?: MedicationDose[]
   ) => {
-    if (!userData) return;
-    await addProgressLog(db, record.id, { ...log, loggedBy: userData.name });
-  }, [userData]);
+    if (!userData || !campCode) return;
+    // 경과보고와 함께 기록한 약 복용은 저장 시 1회만 재고 차감
+    await addProgressLog(db, record.id, { ...log, loggedBy: userData.name },
+      doses?.length ? { campCode, doses, by: userData.name, studentName: record.studentName } : undefined);
+  }, [userData, campCode]);
 
   const handleRemoveProgressLog = useCallback(async (record: PatientRecord, logIndex: number) => {
     const logs = record.progressLogs ?? [];
     if (logs.length === 0) return;
-    Alert.alert('삭제 확인', '이 경과 기록을 삭제할까요?', [
+    Alert.alert('삭제 확인', '이 경과 기록을 삭제할까요? (함께 기록한 약 복용은 재고에 복구됩니다)', [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => removeProgressLog(db, record.id, logs, logIndex) },
+      { text: '삭제', style: 'destructive', onPress: () => removeProgressLog(db, record.id, logs, logIndex,
+        campCode ? { campCode, currentDoses: record.medicationDoses ?? [], by: userData?.name ?? '', studentName: record.studentName } : undefined) },
     ]);
-  }, []);
+  }, [campCode, userData]);
 
   const handleManagerCheck = useCallback(async (record: PatientRecord, memo?: string) => {
     if (!userData) return;
@@ -759,6 +825,7 @@ export function PatientScreen() {
   }
 
   return (
+    <PatientInventoryContext.Provider value={patientInventory}>
     <View style={styles.container}>
       {/* 헤더 */}
       <View style={styles.header}>
@@ -901,7 +968,7 @@ export function PatientScreen() {
                     onEdit={openEditForm}
                     onDelete={(id, name) => handleDelete(id, name)}
                     onProgressChange={(record, s) => handleProgressChange(record, s)}
-                    onAddProgressLog={(record, log) => handleAddProgressLog(record, log)}
+                    onAddProgressLog={(record, log, doses) => handleAddProgressLog(record, log, doses)}
                     onRemoveProgressLog={(record, idx) => handleRemoveProgressLog(record, idx)}
                     onMedCheck={(record, si, t, checked) => handleMedCheck(record, si, t, checked)}
                     onAddMedSchedule={(record, s) => handleMedScheduleAdd(record, s)}
@@ -956,7 +1023,7 @@ export function PatientScreen() {
                   onEdit={() => openEditForm(record)}
                   onDelete={() => handleDelete(record.id, record.studentName)}
                   onProgressChange={(s) => handleProgressChange(record, s)}
-                  onAddProgressLog={(log) => handleAddProgressLog(record, log)}
+                  onAddProgressLog={(log, doses) => handleAddProgressLog(record, log, doses)}
                   onRemoveProgressLog={(idx) => handleRemoveProgressLog(record, idx)}
                   onMedCheck={(si, t, checked) => handleMedCheck(record, si, t, checked)}
                   onAddMedSchedule={(s) => handleMedScheduleAdd(record, s)}
@@ -996,9 +1063,12 @@ export function PatientScreen() {
               roomNumber: quickForm.roomNumber || undefined,
               types: quickForm.types,
               symptom: quickForm.symptom,
+              ...(quickForm.symptoms?.length ? { symptoms: quickForm.symptoms } : {}),
+              ...(quickForm.abdominalPainSites?.length ? { abdominalPainSites: quickForm.abdominalPainSites } : {}),
               treatment: quickForm.treatment,
               temperature: quickForm.temperature ? parseFloat(quickForm.temperature) : undefined,
               fever: quickForm.fever || undefined,
+              ...(quickForm.doses?.length ? { medicationDoses: quickForm.doses } : {}),
               notes: quickForm.actionNote || undefined,
               locationMode: quickForm.locationMode,
               location: quickForm.location || undefined,
@@ -1027,6 +1097,7 @@ export function PatientScreen() {
         />
       </Modal>
     </View>
+    </PatientInventoryContext.Provider>
   );
 }
 
@@ -1521,7 +1592,7 @@ interface ClassGroupProps {
   onEdit: (record: PatientRecord) => void;
   onDelete: (id: string, name: string) => void;
   onProgressChange: (record: PatientRecord, s: ProgressStatus) => void;
-  onAddProgressLog: (record: PatientRecord, log: Omit<ProgressLog, 'loggedAt' | 'loggedBy'>) => void;
+  onAddProgressLog: (record: PatientRecord, log: Omit<ProgressLog, 'loggedAt' | 'loggedBy'>, doses?: MedicationDose[]) => void;
   onRemoveProgressLog: (record: PatientRecord, logIndex: number) => void;
   onMedCheck: (record: PatientRecord, si: number, t: MedicationTime, checked: boolean) => void;
   onAddMedSchedule: (record: PatientRecord, s: Omit<MedicationSchedule, 'checkedTimes'>) => void;
@@ -1592,7 +1663,7 @@ function ClassGroup({
             onEdit={() => onEdit(record)}
             onDelete={() => onDelete(record.id, record.studentName)}
             onProgressChange={(s) => onProgressChange(record, s)}
-            onAddProgressLog={(log) => onAddProgressLog(record, log)}
+            onAddProgressLog={(log, doses) => onAddProgressLog(record, log, doses)}
             onRemoveProgressLog={(idx) => onRemoveProgressLog(record, idx)}
             onMedCheck={(si, t, checked) => onMedCheck(record, si, t, checked)}
             onAddMedSchedule={(s) => onAddMedSchedule(record, s)}
@@ -1630,7 +1701,7 @@ interface PatientCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onProgressChange: (s: ProgressStatus) => void;
-  onAddProgressLog: (log: Omit<ProgressLog, 'loggedAt' | 'loggedBy'>) => void;
+  onAddProgressLog: (log: Omit<ProgressLog, 'loggedAt' | 'loggedBy'>, doses?: MedicationDose[]) => void;
   onRemoveProgressLog: (logIndex: number) => void;
   onMedCheck: (si: number, t: MedicationTime, checked: boolean) => void;
   onAddMedSchedule: (s: Omit<MedicationSchedule, 'checkedTimes'>) => void;
@@ -1692,7 +1763,8 @@ function PatientCard({
   }, [record.medicationSchedules, today]);
 
   const hospitalVisits = record.hospitalVisits ?? [];
-  const hasHospital = hospitalVisits.length > 0;
+  // 내원 탭 빨간 점: '내원예정'(내원 필요)인 건이 있을 때만 — '필요없음'·'내원완료'만 있으면 표시 안 함
+  const hasHospital = hospitalVisits.some(v => v.hospitalStatus === '내원예정');
   const hasMed = (record.medicationSchedules ?? []).some(s => !s.endDateAuto);
   const parentContactPending = record.progressStatus !== '완치' && !!record.parentContactAssigneeName &&
     !(record.parentContactLogs?.some(l => l.isResolved));
@@ -1756,13 +1828,13 @@ function PatientCard({
               </Text>
             </View>
             {record.temperature != null && (
-              <View style={{ backgroundColor: record.temperature >= 37.5 ? '#fef2f2' : '#f3f4f6', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                <Text style={{ fontSize: 9, color: record.temperature >= 37.5 ? '#b91c1c' : '#4b5563', fontWeight: '600' }}>
+              <View style={{ backgroundColor: record.temperature >= FEVER_THRESHOLDS.slight ? '#fef2f2' : '#f3f4f6', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 9, color: record.temperature >= FEVER_THRESHOLDS.slight ? '#b91c1c' : '#4b5563', fontWeight: '600' }}>
                   {record.temperature}°C
                 </Text>
               </View>
             )}
-            {hasHospital && (() => {
+            {hospitalVisits.length > 0 && (() => {
               const latest = hospitalVisits[hospitalVisits.length - 1];
               const hs = HOSPITAL_STATUS_COLOR[latest.hospitalStatus];
               return (
@@ -1883,7 +1955,7 @@ function ProgressTabMobile({
   currentUserId: string;
   currentUserName: string;
   campUsers: User[];
-  onAddProgressLog: (log: Omit<ProgressLog, 'loggedAt' | 'loggedBy'>) => void;
+  onAddProgressLog: (log: Omit<ProgressLog, 'loggedAt' | 'loggedBy'>, doses?: MedicationDose[]) => void;
   onRemoveProgressLog: (logIndex: number) => void;
   onIsolationCheck: (i: number, v: boolean) => void;
   onAddIsolationCheckSchedule: (minutesLater: number) => void;
@@ -1895,9 +1967,12 @@ function ProgressTabMobile({
   const [logLocationMode, setLogLocationMode] = useState<LocationMode>('일과중');
   const [logLocation, setLogLocation] = useState('');
   const [logFever, setLogFever] = useState<FeverOption | ''>('');
-  const [logFeverDirect, setLogFeverDirect] = useState('');
+  const [logFeverDirect, setLogFeverDirect] = useState('');   // 체온 수치 (입력 시 단계 자동 판정)
   const [logSymptom, setLogSymptom] = useState('');
   const [logNote, setLogNote] = useState('');
+  // 경과보고 약 복용 (최초보고와 동일 섹션·재고 연동)
+  const [logDoses, setLogDoses] = useState<MedicationDose[]>([]);
+  const inventory = usePatientInventory();
   const [nextCheckTime, setNextCheckTime] = useState('');
   const [nextCheckAssigneeId, setNextCheckAssigneeId] = useState(currentUserId);
   const [nextCheckAssigneeName, setNextCheckAssigneeName] = useState(currentUserName);
@@ -1909,9 +1984,10 @@ function ProgressTabMobile({
       Alert.alert('입력 필요', '중간보고 시 다음 체크 시간과 담당자를 지정해주세요.');
       return;
     }
-    const feverValue = logFever === '고열' || logFever === '미열' || logFever === '정상'
-      ? logFever
-      : logFeverDirect || undefined;
+    // 체온 수치가 있으면 공통 기준(FEVER_THRESHOLDS)으로 자동 판정, 없으면 선택한 단계
+    const directTemp = parseFloat(logFeverDirect);
+    const hasTemp = !isNaN(directTemp);
+    const feverValue = hasTemp ? (classifyFever(directTemp) ?? undefined) : (logFever || undefined);
     let nextCheckAt: Timestamp | undefined;
     if (logStatus === '중간보고' && nextCheckTime) {
       const [hh, mm] = nextCheckTime.split(':').map(Number);
@@ -1925,15 +2001,16 @@ function ProgressTabMobile({
       locationMode: logStatus !== '완치' ? logLocationMode : undefined,
       location: logLocation || undefined,
       fever: feverValue,
+      ...(hasTemp ? { temperature: directTemp } : {}),
       symptom: logSymptom || undefined,
       note: logNote || undefined,
       nextCheckAt,
       nextCheckAssigneeId: logStatus === '중간보고' ? nextCheckAssigneeId : undefined,
       nextCheckAssigneeName: logStatus === '중간보고' ? nextCheckAssigneeName : undefined,
-    });
+    }, logDoses.filter(d => d.itemId && d.quantity > 0));
     setShowForm(false);
     setLogLocationMode('일과중');
-    setLogLocation(''); setLogFever(''); setLogFeverDirect(''); setLogSymptom(''); setLogNote('');
+    setLogLocation(''); setLogFever(''); setLogFeverDirect(''); setLogSymptom(''); setLogNote(''); setLogDoses([]);
     setNextCheckTime(''); setNextCheckAssigneeId(currentUserId); setNextCheckAssigneeName(currentUserName);
     setNextCheckQuery(''); setShowAssigneeList(false);
   };
@@ -1962,9 +2039,10 @@ function ProgressTabMobile({
   if (syntheticInitial) allEntries.push({ log: syntheticInitial, isSynthetic: true, rawIndex: -1 });
   const logs = allEntries.reverse();
 
+  // 다음 체크 담당자 후보: 외국인 선생님 제외 (환자 관리·병원 인솔은 한국인 선생님 담당)
   const assigneeCandidates = [
     { userId: currentUserId, name: currentUserName },
-    ...campUsers.filter(u => u.userId !== currentUserId),
+    ...campUsers.filter(isKoreanStaff).filter(u => u.userId !== currentUserId),
   ].filter(u => !nextCheckQuery || u.name.includes(nextCheckQuery));
 
   return (
@@ -2040,7 +2118,7 @@ function ProgressTabMobile({
                     placeholder={
                       logLocationMode === '휴식' ? '예) 110호, 휴게실' :
                       logLocationMode === '격리' ? '예) 격리실 214호' :
-                      '예) 330호, 보건실'
+                      '예) 330호, 환자방'
                     }
                     placeholderTextColor="#9ca3af"
                     style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]}
@@ -2056,10 +2134,26 @@ function ProgressTabMobile({
                         <Text style={{ fontSize: 11, color: logFever === f ? '#fff' : '#6b7280', fontWeight: '600' }}>{f}</Text>
                       </TouchableOpacity>
                     ))}
-                    <TextInput value={logFeverDirect} onChangeText={v => { setLogFeverDirect(v); setLogFever(''); }}
-                      placeholder="직접입력 (37.8)" placeholderTextColor="#9ca3af" keyboardType="decimal-pad"
+                    <TextInput value={logFeverDirect}
+                      onChangeText={v => {
+                        setLogFeverDirect(v);
+                        // 체온 입력 시 공통 기준으로 단계 자동 판정 (최초보고와 같은 기준)
+                        setLogFever(classifyFever(v) ?? '');
+                      }}
+                      placeholder="체온 (37.8)" placeholderTextColor="#9ca3af" keyboardType="decimal-pad"
                       style={[styles.formInput, { flex: 1, minWidth: 80, fontSize: 12, paddingVertical: 5 }]} />
                   </View>
+                  {(() => {
+                    const level = classifyFever(logFeverDirect);
+                    if (!level) return null;
+                    const color = level === '고열' ? '#dc2626' : level === '미열' ? '#ea580c' : '#16a34a';
+                    return (
+                      <Text style={{ fontSize: 10, fontWeight: '600', color, marginTop: 4 }}>
+                        {parseFloat(logFeverDirect).toFixed(1)}℃ → {level === '고열' ? '⚠️ 고열' : level === '미열' ? '🌡 미열' : '✅ 정상'}
+                        <Text style={{ color: '#9ca3af', fontWeight: '400' }}> (미열 {FEVER_THRESHOLDS.slight}℃ 이상 · 고열 {FEVER_THRESHOLDS.high}℃ 이상)</Text>
+                      </Text>
+                    );
+                  })()}
                 </View>
                 <View>
                   <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>증상</Text>
@@ -2098,6 +2192,16 @@ function ProgressTabMobile({
                   )}
                 </View>
               </View>
+            )}
+
+            {logStatus !== '완치' && (
+              <MedicationDoseEditorMobile
+                doses={logDoses}
+                onChange={setLogDoses}
+                medicines={inventory.medicines}
+                groups={inventory.groups}
+                givenBy={currentUserName}
+              />
             )}
 
             <View>
@@ -2147,11 +2251,30 @@ function ProgressTabMobile({
                         </Text>
                       )}
                       {log.location && <Text style={{ fontSize: 11, color: '#6b7280' }}>📍 {log.location}</Text>}
-                      {log.fever && <Text style={{ fontSize: 11, color: log.fever === '고열' ? '#dc2626' : '#ea580c' }}>🌡 {log.fever}</Text>}
+                      {log.fever && (
+                        <Text style={{ fontSize: 11, color: log.fever === '고열' ? '#dc2626' : log.fever === '정상' ? '#16a34a' : '#ea580c' }}>
+                          🌡 {log.fever}{log.temperature != null && isFeverLevel(log.fever) ? ` ${log.temperature}℃` : ''}
+                        </Text>
+                      )}
                       {log.symptom && <Text style={{ fontSize: 11, color: '#374151' }}>{log.symptom}</Text>}
                     </View>
                   )}
                   {log.note && <Text style={{ fontSize: 11, color: '#6b7280', fontStyle: 'italic', marginTop: 2 }}>{log.note}</Text>}
+                  {(() => {
+                    const doses = log.status === '최초보고'
+                      ? (record.medicationDoses ?? []).filter(d => d.source === 'initial')
+                      : dosesForProgressLog(record.medicationDoses, log);
+                    if (doses.length === 0) return null;
+                    return (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+                        {doses.map(d => (
+                          <View key={d.id} style={{ backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#d1fae5', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+                            <Text style={{ fontSize: 10, color: '#047857' }}>💊 {d.itemName} {d.quantity}{d.unit ?? '개'} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    );
+                  })()}
                   {(log.nextCheckAt || log.nextCheckAssigneeName) && (
                     <View style={{ marginTop: 4, backgroundColor: '#fffbeb', borderRadius: 6, padding: 6 }}>
                       <Text style={{ fontSize: 10, color: '#b45309' }}>
@@ -2166,10 +2289,184 @@ function ProgressTabMobile({
         )}
       </View>
 
+      {/* 누적 투약 내역 — 수량 ±/삭제 시 재고는 차이만큼만 반영 */}
+      <DoseHistoryMobile record={record} currentUserName={currentUserName} />
+
       {record.types.includes('격리') && (
         <IsolationManageMobile record={record} onIsolationCheck={onIsolationCheck} onAddSchedule={onAddIsolationCheckSchedule} onCompleteSchedule={onCompleteIsolationCheck} />
       )}
       <ReturnCriteriaMobile record={record} onReturnCriteriaCheck={onReturnCriteriaCheck} />
+    </View>
+  );
+}
+
+// ==================== 약 복용 (재고 연동, 모바일) ====================
+
+/** 약 복용 입력 섹션 — 최초보고·경과보고 공용. 약품·그룹은 재고 탭 데이터 그대로 사용 */
+function MedicationDoseEditorMobile({ doses, onChange, medicines, groups, givenBy }: {
+  doses: MedicationDose[];
+  onChange: (next: MedicationDose[]) => void;
+  medicines: InventoryItemView[];
+  groups: InventoryGroup[];
+  givenBy: string;
+}) {
+  const canAdd = medicines.length > 0 && groups.length > 0;
+  const addRow = () => {
+    if (!canAdd) return;
+    const item = medicines[0];
+    const group = groups[0];
+    onChange([...doses, {
+      id: newDoseId(), itemId: item.id, itemName: item.name, unit: item.unit || '개', quantity: 1,
+      groupId: group.id, groupName: group.name, givenAt: Timestamp.now(), givenBy, source: 'initial',
+    }]);
+  };
+  const update = (idx: number, patch: Partial<MedicationDose>) =>
+    onChange(doses.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
+  const remove = (idx: number) => onChange(doses.filter((_, i) => i !== idx));
+
+  return (
+    <View style={{ backgroundColor: '#ecfdf5', borderRadius: 10, borderWidth: 1, borderColor: '#a7f3d0', padding: 10, gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>💊 약 복용</Text>
+          <Text style={{ fontSize: 9, color: '#047857' }}>실제로 먹인 경우만 기록 — 저장 시 그룹 재고 자동 차감</Text>
+        </View>
+        <TouchableOpacity onPress={addRow} disabled={!canAdd}
+          style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: canAdd ? '#059669' : '#e5e7eb' }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: canAdd ? '#fff' : '#9ca3af' }}>+ 약 추가</Text>
+        </TouchableOpacity>
+      </View>
+
+      {!canAdd && (
+        <Text style={{ fontSize: 10, color: '#b45309', backgroundColor: '#fffbeb', borderRadius: 6, padding: 6 }}>
+          {medicines.length === 0
+            ? '등록된 약품이 없습니다. 재고 탭에서 관리자가 약품(의약품)을 등록하면 선택할 수 있습니다.'
+            : '재고 그룹이 없습니다. 재고 탭에서 관리자가 그룹(A그룹 등)을 등록해주세요.'}
+        </Text>
+      )}
+
+      {doses.map((d, idx) => {
+        const item = medicines.find(m => m.id === d.itemId);
+        const groupStock = item ? getGroupStock(item, d.groupId) : 0;
+        const total = item ? getTotalStock(item) : 0;
+        const short = item ? d.quantity > groupStock : false;
+        return (
+          <View key={d.id} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#d1fae5', padding: 8, gap: 6 }}>
+            {/* 약품 선택 */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5 }}>
+              {medicines.map(m => {
+                const on = m.id === d.itemId;
+                return (
+                  <TouchableOpacity key={m.id} onPress={() => update(idx, { itemId: m.id, itemName: m.name, unit: m.unit || '개' })}
+                    style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: on ? '#059669' : '#e5e7eb', backgroundColor: on ? '#059669' : '#fff' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: on ? '#fff' : '#374151' }}>{m.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {/* 수량 + 그룹 */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity onPress={() => update(idx, { quantity: Math.max(1, d.quantity - 1) })}
+                style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 14, color: '#374151' }}>−</Text>
+              </TouchableOpacity>
+              <Text style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: '700', color: '#111827' }}>{d.quantity}{d.unit ?? '개'}</Text>
+              <TouchableOpacity onPress={() => update(idx, { quantity: d.quantity + 1 })}
+                style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 14, color: '#374151' }}>+</Text>
+              </TouchableOpacity>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} style={{ flex: 1 }}>
+                {groups.map(g => {
+                  const on = g.id === d.groupId;
+                  return (
+                    <TouchableOpacity key={g.id} onPress={() => update(idx, { groupId: g.id, groupName: g.name })}
+                      style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: on ? '#fef3c7' : '#f3f4f6', borderWidth: 1, borderColor: on ? '#f59e0b' : '#f3f4f6' }}>
+                      <Text style={{ fontSize: 10, fontWeight: '600', color: on ? '#92400e' : '#6b7280' }}>{g.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <TouchableOpacity onPress={() => remove(idx)} style={{ padding: 2 }}>
+                <Text style={{ fontSize: 12 }}>🗑️</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput value={d.memo ?? ''} onChangeText={v => update(idx, { memo: v || undefined })}
+              placeholder="메모 (예: 식사 후 복용)" placeholderTextColor="#9ca3af"
+              style={[styles.formInput, { fontSize: 11, paddingVertical: 5 }]} />
+            {item?.description ? <Text style={{ fontSize: 10, color: '#4b5563' }}>ℹ️ {item.description}</Text> : null}
+            {item && (
+              <Text style={{ fontSize: 10, color: short ? '#dc2626' : '#6b7280', fontWeight: short ? '600' : '400' }}>
+                재고 {d.groupName} {groupStock}{d.unit ?? '개'} · 전체 {total}{d.unit ?? '개'}{short ? ' — 재고 부족' : ''}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** 환자별 누적 투약 내역 (시간순). 수량 ±/삭제 시 재고는 변경된 차이만큼만 반영 */
+function DoseHistoryMobile({ record, currentUserName }: { record: PatientRecord; currentUserName: string }) {
+  const doses = useMemo(() =>
+    [...(record.medicationDoses ?? [])].sort((a, b) => (a.givenAt?.toMillis?.() ?? 0) - (b.givenAt?.toMillis?.() ?? 0)),
+  [record.medicationDoses]);
+  const [busy, setBusy] = useState(false);
+  if (doses.length === 0) return null;
+
+  const commit = async (next: MedicationDose[]) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateMedicationDoses(db, record.id,
+        { campCode: record.campCode, currentDoses: record.medicationDoses ?? [], by: currentUserName, studentName: record.studentName }, next);
+    } catch (e) {
+      console.error('약 복용 기록 수정 오류:', e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const changeQty = (id: string, delta: number) => {
+    const current = record.medicationDoses ?? [];
+    const next = current.map(d => d.id === id ? { ...d, quantity: Math.max(1, d.quantity + delta) } : d);
+    if (JSON.stringify(next) === JSON.stringify(current)) return;
+    commit(next);
+  };
+  const removeDose = (id: string) => {
+    Alert.alert('삭제 확인', '이 약 복용 기록을 삭제할까요? 해당 수량은 재고에 복구됩니다.', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => commit((record.medicationDoses ?? []).filter(d => d.id !== id)) },
+    ]);
+  };
+
+  return (
+    <View style={{ backgroundColor: '#f0fdf4', borderRadius: 10, borderWidth: 1, borderColor: '#d1fae5', padding: 10, marginTop: 10 }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46', marginBottom: 6 }}>💊 투약 내역 <Text style={{ color: '#9ca3af', fontWeight: '400' }}>({doses.length}건 · 시간순)</Text></Text>
+      <View style={{ gap: 4 }}>
+        {doses.map(d => (
+          <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#d1fae5', paddingHorizontal: 8, paddingVertical: 5 }}>
+            <Text style={{ fontSize: 10, color: '#9ca3af', width: 34 }}>{d.givenAt?.toDate ? formatTime(d.givenAt) : ''}</Text>
+            <View style={{ backgroundColor: d.source === 'initial' ? '#f3f4f6' : '#eff6ff', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
+              <Text style={{ fontSize: 9, color: d.source === 'initial' ? '#4b5563' : '#2563eb' }}>{d.source === 'initial' ? '최초' : '경과'}</Text>
+            </View>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 11, color: '#1f2937' }}>
+              <Text style={{ fontWeight: '700' }}>{d.itemName}</Text> · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
+            </Text>
+            <TouchableOpacity disabled={busy || d.quantity <= 1} onPress={() => changeQty(d.id, -1)}
+              style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', opacity: busy || d.quantity <= 1 ? 0.4 : 1 }}>
+              <Text style={{ fontSize: 12, color: '#374151' }}>−</Text>
+            </TouchableOpacity>
+            <Text style={{ minWidth: 30, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#111827' }}>{d.quantity}{d.unit ?? '개'}</Text>
+            <TouchableOpacity disabled={busy} onPress={() => changeQty(d.id, 1)}
+              style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.4 : 1 }}>
+              <Text style={{ fontSize: 12, color: '#374151' }}>+</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={busy} onPress={() => removeDose(d.id)} style={{ padding: 2 }}>
+              <Text style={{ fontSize: 12 }}>🗑️</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -2249,7 +2546,7 @@ function IsolationManageMobile({
   const schedules = record.isolationCheckSchedules ?? [];
   const pending = schedules.filter(s => !s.completedAt);
   const done = schedules.filter(s => !!s.completedAt);
-  const ISOLATION_RETURN_LABELS = ['열 없음 (37.5°C 미만)', '주요 증상 호전', '담당 매니저 확인'];
+  const ISOLATION_RETURN_LABELS = [`열 없음 (${FEVER_THRESHOLDS.slight}°C 미만)`, '주요 증상 호전', '담당 매니저 확인'];
 
   const isOverdue = (ts: Timestamp) => ts.toDate() < new Date();
 
@@ -2692,38 +2989,34 @@ function TransportBoardMobile({ allRecords }: { allRecords: PatientRecord[] }) {
     });
   });
   if (groupMap.size === 0) return null;
-  const sorted = TRANSPORT_SLOTS.flatMap(slot =>
-    [...groupMap.values()].filter(g => g.slot === slot).sort((a, b) => a.escort.localeCompare(b.escort, 'ko'))
-  );
+  // 등록된 transportSlot 값 그대로 차량별로 먼저 묶고, 같은 차량 안에서는 인솔자별 한 줄씩
+  const bySlot = TRANSPORT_SLOTS
+    .map(slot => ({
+      slot,
+      rows: [...groupMap.values()].filter(g => g.slot === slot).sort((a, b) => a.escort.localeCompare(b.escort, 'ko')),
+    }))
+    .filter(s => s.rows.length > 0);
   return (
     <View style={{ backgroundColor: '#fff7ed', borderRadius: 12, borderWidth: 1, borderColor: '#fed7aa', marginBottom: 12, overflow: 'hidden' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#fed7aa' }}>
         <Text style={{ fontSize: 11, fontWeight: '700', color: '#c2410c' }}>🚗 내원 차량 현황</Text>
       </View>
-      {sorted.map((g, i) => (
-        <View key={i} style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: i < sorted.length - 1 ? 1 : 0, borderBottomColor: '#fed7aa' }}>
-          {/* 슬롯 정보 행 */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#ea580c' }}>{g.slot}</Text>
-            {g.departureTime && (
-              <Text style={{ fontSize: 11, color: '#374151' }}>출발 <Text style={{ fontWeight: '600' }}>{g.departureTime}</Text></Text>
-            )}
-            {g.driver && (
-              <Text style={{ fontSize: 11, color: '#374151' }}>운전 <Text style={{ fontWeight: '600' }}>{g.driver}</Text></Text>
-            )}
-            {g.escort && (
-              <Text style={{ fontSize: 11, color: '#374151' }}>인솔 <Text style={{ fontWeight: '600' }}>{g.escort}</Text></Text>
-            )}
-            {g.hospitalName && (
-              <Text style={{ fontSize: 10, color: '#9ca3af', marginLeft: 'auto' }}>→ {g.hospitalName}</Text>
+      {bySlot.map(({ slot, rows }, i) => (
+        <View key={slot} style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: i < bySlot.length - 1 ? 1 : 0, borderBottomColor: '#fed7aa' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#ea580c' }}>{slot}</Text>
+            {rows[0]?.driver && (
+              <Text style={{ fontSize: 11, color: '#374151' }}>운전 <Text style={{ fontWeight: '600' }}>{rows[0].driver}</Text></Text>
             )}
           </View>
-          {/* 학생 이름 */}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-            {g.students.map((name, si) => (
-              <View key={si} style={{ backgroundColor: '#ffedd5', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
-                <Text style={{ fontSize: 11, color: '#c2410c', fontWeight: '600' }}>{name}</Text>
-              </View>
+          <View style={{ gap: 3 }}>
+            {rows.map((g, ri) => (
+              <Text key={ri} style={{ fontSize: 11, color: '#374151', lineHeight: 16 }}>
+                <Text style={{ fontWeight: '700', color: '#111827' }}>{g.escort || '인솔자 미정'}</Text>
+                {' '}<Text style={{ color: '#c2410c' }}>({g.students.join(', ')})</Text>
+                {g.hospitalName ? <Text style={{ color: '#6b7280' }}> : {g.hospitalName}</Text> : null}
+                {g.departureTime ? <Text style={{ fontSize: 10, color: '#9ca3af' }}> · {g.departureTime} 출발</Text> : null}
+              </Text>
             ))}
           </View>
         </View>
@@ -3691,6 +3984,12 @@ interface QuickReportFormMobile {
   locationMode: LocationMode; // 현재 위치 모드 (일과중 / 휴식 / 격리)
   location: string;
   actionNote: string;
+  /** 선택한 증상 목록 (복수) — symptom은 이 배열을 합친 표시 문자열 */
+  symptoms?: string[];
+  /** 복통 위치 (복수) */
+  abdominalPainSites?: string[];
+  /** 약 복용 기록 (재고 연동) */
+  doses?: MedicationDose[];
 }
 
 function QuickReportModalMobile({
@@ -3713,9 +4012,14 @@ function QuickReportModalMobile({
   const [studentLocked, setStudentLocked] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // 증상 검색
+  // 증상 검색 · 복수 선택
   const [symptomSearch, setSymptomSearch] = useState('');
-  const [selectedGuide, setSelectedGuide] = useState<SymptomGuide | null>(null);
+  const [selectedGuides, setSelectedGuides] = useState<SymptomGuide[]>([]);
+  // 복통 위치 (증상에 복통이 있을 때만, 복수 선택)
+  const [painSites, setPainSites] = useState<string[]>([]);
+  // 약 복용 (재고 연동)
+  const [doses, setDoses] = useState<MedicationDose[]>([]);
+  const inventory = usePatientInventory();
 
   const [actionStatus, setActionStatus] = useState<QuickActionId>('직접조치');
   const [feverLevel, setFeverLevel] = useState<'normal' | 'slight' | 'high'>('normal');
@@ -3750,16 +4054,25 @@ function QuickReportModalMobile({
     setShowDropdown(false);
   };
 
+  // 프리셋 토글 (복수 선택). 처치는 선택한 증상들의 기본 처치를 이어 붙임
   const selectGuide = (guide: SymptomGuide) => {
-    if (selectedGuide?.label === guide.label) {
-      setSelectedGuide(null);
-      return;
-    }
-    setSelectedGuide(guide);
-    setForm(f => ({ ...f, symptom: guide.label, treatment: guide.treatment }));
+    const has = selectedGuides.some(g => g.label === guide.label);
+    const next = has ? selectedGuides.filter(g => g.label !== guide.label) : [...selectedGuides, guide];
+    setSelectedGuides(next);
+    setForm(f => ({ ...f, treatment: next.map(g => g.treatment).join(' / ') }));
+    if (!next.some(g => g.label.includes('복통'))) setPainSites([]);
   };
 
-  const canSubmit = !!(form.studentName && form.symptom);
+  // 선택 증상 + 직접 입력(쉼표 구분) → 배열
+  const symptomList = useMemo(() => {
+    const custom = form.symptom.split(',').map(s => s.trim()).filter(Boolean);
+    return [...selectedGuides.map(g => g.label), ...custom];
+  }, [selectedGuides, form.symptom]);
+  const showPainSites = hasAbdominalPain(symptomList);
+  const togglePainSite = (site: string) =>
+    setPainSites(prev => prev.includes(site) ? prev.filter(s => s !== site) : [...prev, site]);
+
+  const canSubmit = !!form.studentName && symptomList.length > 0;
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
@@ -3767,8 +4080,13 @@ function QuickReportModalMobile({
     try {
       const feverLabel = feverLevel === 'normal' ? '정상' : feverLevel === 'slight' ? '미열' : '고열';
       const temp = feverLevel === 'normal' ? '' : form.temperature;
+      const sites = showPainSites ? painSites : [];
       await onSubmit({
         ...form,
+        symptom: formatSymptomText(symptomList, sites),
+        symptoms: symptomList,
+        abdominalPainSites: sites,
+        doses: doses.filter(d => d.itemId && d.quantity > 0).map(d => ({ ...d, source: 'initial' as const })),
         temperature: temp,
         fever: feverLabel,
         actionNote: [`[${actionStatus}]`, form.actionNote.trim()].filter(Boolean).join(' '),
@@ -3923,9 +4241,9 @@ function QuickReportModalMobile({
           {/* 열감 단계 선택 */}
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
             {([
-              { id: 'normal' as const, label: '정상',  sub: '36.0–37.4°', activeColor: '#22c55e' },
-              { id: 'slight' as const, label: '미열',  sub: '37.5–37.9°', activeColor: '#f97316' },
-              { id: 'high'   as const, label: '고열',  sub: '38.0° 이상', activeColor: '#ef4444' },
+              { id: 'normal' as const, label: '정상',  sub: FEVER_LEVEL_RANGES.정상, activeColor: '#22c55e' },
+              { id: 'slight' as const, label: '미열',  sub: FEVER_LEVEL_RANGES.미열, activeColor: '#f97316' },
+              { id: 'high'   as const, label: '고열',  sub: FEVER_LEVEL_RANGES.고열, activeColor: '#ef4444' },
             ]).map(opt => {
               const selected = feverLevel === opt.id;
               return (
@@ -3935,12 +4253,10 @@ function QuickReportModalMobile({
                     if (opt.id === 'normal') { setFeverLevel('normal'); setField('temperature', ''); }
                     else if (opt.id === 'slight') {
                       setFeverLevel('slight');
-                      const n = parseFloat(form.temperature);
-                      if (!form.temperature || n < 37.5 || n >= 38.0) setField('temperature', '37.5');
+                      if (!form.temperature || classifyFever(form.temperature) !== '미열') setField('temperature', FEVER_THRESHOLDS.slight.toFixed(1));
                     } else {
                       setFeverLevel('high');
-                      const n = parseFloat(form.temperature);
-                      if (!form.temperature || n < 38.0) setField('temperature', '38.0');
+                      if (!form.temperature || classifyFever(form.temperature) !== '고열') setField('temperature', FEVER_THRESHOLDS.high.toFixed(1));
                     }
                   }}
                   style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', borderWidth: 1.5, borderColor: selected ? opt.activeColor : '#e5e7eb', backgroundColor: selected ? opt.activeColor : '#fff' }}
@@ -3960,11 +4276,9 @@ function QuickReportModalMobile({
                   value={form.temperature}
                   onChangeText={v => {
                     setField('temperature', v);
-                    const n = parseFloat(v);
-                    if (!isNaN(n) && n >= 37.5) {
-                      if (n >= 38.0) setFeverLevel('high');
-                      else setFeverLevel('slight');
-                    }
+                    const level = classifyFever(v);
+                    if (level === '고열') setFeverLevel('high');
+                    else if (level === '미열') setFeverLevel('slight');
                   }}
                   placeholder="체온 직접 입력 (예: 37.8)"
                   placeholderTextColor="#9ca3af"
@@ -4006,10 +4320,12 @@ function QuickReportModalMobile({
             style={[styles.formInput, { marginBottom: 8 }]}
           />
 
+          <Text style={{ fontSize: 10, color: '#9ca3af', marginBottom: 6 }}>여러 증상이 있으면 모두 선택하세요 (복수 선택)</Text>
+
           {/* 프리셋 그리드 */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             {filteredGuides.map(guide => {
-              const isSelected = selectedGuide?.label === guide.label;
+              const isSelected = selectedGuides.some(g => g.label === guide.label);
               const isEmg = guide.category === '응급';
               return (
                 <TouchableOpacity
@@ -4029,32 +4345,53 @@ function QuickReportModalMobile({
             })}
           </View>
 
-          {/* 선택된 가이드 → 조치 미리보기 */}
-          {selectedGuide && (
-            <View style={{
-              borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8,
-              borderColor: selectedGuide.category === '응급' ? '#fca5a5' : '#bfdbfe',
-              backgroundColor: selectedGuide.category === '응급' ? '#fef2f2' : '#eff6ff',
-            }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827', marginBottom: 6 }}>{selectedGuide.emoji} {selectedGuide.label} 조치</Text>
-              <Text style={{ fontSize: 11, color: '#374151', marginBottom: 4 }}>🩺 {selectedGuide.treatment}</Text>
-              {selectedGuide.medication !== '(약 불필요)' && (
-                <Text style={{ fontSize: 11, color: '#ea580c', marginBottom: 4 }}>💊 {selectedGuide.medication}</Text>
-              )}
-              {selectedGuide.notes && (
-                <Text style={{ fontSize: 11, fontWeight: '600', color: selectedGuide.category === '응급' ? '#dc2626' : '#b45309' }}>⚠️ {selectedGuide.notes}</Text>
-              )}
+          {/* 복통 위치 — 증상에 복통이 있을 때만 (복수 선택) */}
+          {showPainSites && (
+            <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#fde68a', backgroundColor: '#fffbeb', padding: 10, marginBottom: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e', marginBottom: 6 }}>🫃 복통 위치 <Text style={{ fontWeight: '400', color: '#b45309' }}>(여러 곳이면 모두 선택)</Text></Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {ABDOMINAL_PAIN_SITES.map(site => {
+                  const on = painSites.includes(site);
+                  return (
+                    <TouchableOpacity key={site} onPress={() => togglePainSite(site)}
+                      style={{ paddingHorizontal: 9, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: on ? '#f59e0b' : '#fde68a', backgroundColor: on ? '#f59e0b' : '#fff' }}>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: on ? '#fff' : '#92400e' }}>{site}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
           )}
 
-          {/* 직접 입력 */}
+          {/* 선택된 가이드 → 조치 미리보기 (선택한 증상마다) */}
+          {selectedGuides.map(guide => (
+            <View key={guide.label} style={{
+              borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8,
+              borderColor: guide.category === '응급' ? '#fca5a5' : '#bfdbfe',
+              backgroundColor: guide.category === '응급' ? '#fef2f2' : '#eff6ff',
+            }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827', marginBottom: 6 }}>{guide.emoji} {guide.label} 조치</Text>
+              <Text style={{ fontSize: 11, color: '#374151', marginBottom: 4 }}>🩺 {guide.treatment}</Text>
+              {guide.medication !== '(약 불필요)' && (
+                <Text style={{ fontSize: 11, color: '#ea580c', marginBottom: 4 }}>💊 {guide.medication}</Text>
+              )}
+              {guide.notes && (
+                <Text style={{ fontSize: 11, fontWeight: '600', color: guide.category === '응급' ? '#dc2626' : '#b45309' }}>⚠️ {guide.notes}</Text>
+              )}
+            </View>
+          ))}
+
+          {/* 직접 입력 (프리셋에 없는 증상 추가, 쉼표로 여러 개) */}
           <TextInput
             value={form.symptom}
             onChangeText={v => setField('symptom', v)}
-            placeholder="프리셋에 없으면 직접 입력..."
+            placeholder="프리셋에 없으면 직접 입력... (여러 개는 쉼표로 구분)"
             placeholderTextColor="#9ca3af"
             style={styles.formInput}
           />
+          {symptomList.length > 0 && (
+            <Text style={{ fontSize: 10, color: '#2563eb', marginTop: 4 }}>선택된 증상: {formatSymptomText(symptomList, showPainSites ? painSites : [])}</Text>
+          )}
         </View>
 
         {/* ⑤ 현재 상태 */}
@@ -4082,10 +4419,24 @@ function QuickReportModalMobile({
           <TextInput
             value={form.actionNote}
             onChangeText={v => setField('actionNote', v)}
-            placeholder="추가 메모 (선택)"
+            placeholder={ACTION_NOTE_PLACEHOLDER}
             placeholderTextColor="#9ca3af"
             multiline
-            style={[styles.formInput, { minHeight: 60 }]}
+            textAlignVertical="top"
+            style={[styles.formInput, { minHeight: 72, lineHeight: 18 }]}
+          />
+          <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 4, lineHeight: 14 }}>{ACTION_NOTE_EXAMPLE}</Text>
+        </View>
+
+        {/* ⑥ 약 복용 (실제로 먹인 경우) — 저장 시 재고 자동 차감 */}
+        <View>
+          <Text style={styles.formSectionTitle}>⑥ 약 복용 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text>
+          <MedicationDoseEditorMobile
+            doses={doses}
+            onChange={setDoses}
+            medicines={inventory.medicines}
+            groups={inventory.groups}
+            givenBy={reporterName}
           />
         </View>
 

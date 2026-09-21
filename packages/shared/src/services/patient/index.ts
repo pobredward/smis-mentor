@@ -28,8 +28,21 @@ import {
   ManagerAction,
   ManagerActionType,
   ManagerActionResponse,
+  MedicationDose,
 } from '../../types/camp';
 import { logger } from '../../utils/logger';
+import { applyDoseStockChanges } from '../inventory';
+
+/** 약 복용 기록 → 재고 연동에 필요한 컨텍스트 */
+export interface DoseStockContext {
+  campCode: string;
+  /** 변경 전 record.medicationDoses (재고 차이 계산용) */
+  currentDoses?: MedicationDose[];
+  /** 재고 변동 기록자 이름 */
+  by: string;
+  /** 재고 이력에 남길 학생 이름 (예: "김윤아") */
+  studentName?: string;
+}
 
 /**
  * Firestore에서 배열 필드가 dot-notation 업데이트로 인해
@@ -86,6 +99,9 @@ export const subscribePatientRecords = (
           progressLogs: normalizeArray(data.progressLogs),
           isolationCheckSchedules: normalizeArray(data.isolationCheckSchedules),
           types: normalizeArray(data.types),
+          medicationDoses: normalizeArray(data.medicationDoses),
+          ...(data.symptoms !== undefined ? { symptoms: normalizeArray(data.symptoms) } : {}),
+          ...(data.abdominalPainSites !== undefined ? { abdominalPainSites: normalizeArray(data.abdominalPainSites) } : {}),
         };
       }) as PatientRecord[]).sort(
         (a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()
@@ -128,7 +144,40 @@ export const addPatientRecord = async (
     updatedAt: now,
   });
   logger.info('환자 기록 추가:', docRef.id);
+  // 최초보고에 약 복용 기록이 있으면 재고 차감 (기록 저장 후 1회만)
+  if (record.medicationDoses?.length) {
+    await applyDoseStockChanges(db, record.campCode, [], record.medicationDoses, record.recordedBy, docRef.id, record.studentName);
+  }
   return docRef.id;
+};
+
+/**
+ * 약 복용 기록 전체 교체 + 재고는 변경된 차이만큼만 반영.
+ * 보고서를 다시 열거나 다른 내용을 수정해도 이 함수를 같은 배열로 호출하면 재고는 변하지 않는다.
+ */
+export const updateMedicationDoses = async (
+  db: Firestore,
+  recordId: string,
+  ctx: DoseStockContext,
+  nextDoses: MedicationDose[]
+): Promise<void> => {
+  await updateDoc(doc(db, 'patientRecords', recordId), {
+    medicationDoses: nextDoses,
+    updatedAt: Timestamp.now(),
+  });
+  await applyDoseStockChanges(db, ctx.campCode, ctx.currentDoses ?? [], nextDoses, ctx.by, recordId, ctx.studentName);
+  logger.info(`약 복용 기록 갱신: ${recordId} (${nextDoses.length}건)`);
+};
+
+/** 복용 기록 1건 삭제 → 해당 수량 재고 복구 */
+export const removeMedicationDose = async (
+  db: Firestore,
+  recordId: string,
+  ctx: DoseStockContext,
+  doseId: string
+): Promise<void> => {
+  const current = ctx.currentDoses ?? [];
+  await updateMedicationDoses(db, recordId, ctx, current.filter(d => d.id !== doseId));
 };
 
 export const updatePatientRecord = async (
@@ -144,10 +193,15 @@ export const updatePatientRecord = async (
 
 export const deletePatientRecord = async (
   db: Firestore,
-  recordId: string
+  recordId: string,
+  /** 전달 시 기록에 남은 약 복용 수량을 재고에 복구 */
+  ctx?: DoseStockContext
 ): Promise<void> => {
   await deleteDoc(doc(db, 'patientRecords', recordId));
   logger.info('환자 기록 삭제:', recordId);
+  if (ctx?.currentDoses?.length) {
+    await applyDoseStockChanges(db, ctx.campCode, ctx.currentDoses, [], ctx.by, recordId, ctx.studentName);
+  }
 };
 
 // ── 경과 상태 ──────────────────────────────────────────────────
@@ -180,18 +234,30 @@ export const updateProgressStatus = async (
 export const addProgressLog = async (
   db: Firestore,
   recordId: string,
-  log: Omit<ProgressLog, 'loggedAt'>
+  log: Omit<ProgressLog, 'loggedAt'>,
+  /** 경과보고와 함께 기록하는 약 복용 (재고 자동 차감) */
+  doseCtx?: DoseStockContext & { doses: MedicationDose[] }
 ): Promise<void> => {
+  const loggedAt = Timestamp.now();
   const fullLog: ProgressLog = {
     ...log,
-    loggedAt: Timestamp.now(),
+    loggedAt,
   };
+  const newDoses: MedicationDose[] = (doseCtx?.doses ?? []).map(d => ({
+    ...d,
+    source: 'progress',
+    progressLogAt: loggedAt.toMillis(),
+  }));
   await updateDoc(doc(db, 'patientRecords', recordId), {
     progressStatus: log.status,
     progressLogs: arrayUnion(fullLog),
+    ...(newDoses.length ? { medicationDoses: arrayUnion(...newDoses) } : {}),
     updatedAt: Timestamp.now(),
   });
   logger.info(`경과 로그 추가: ${recordId} → ${log.status}`);
+  if (doseCtx && newDoses.length) {
+    await applyDoseStockChanges(db, doseCtx.campCode, [], newDoses, doseCtx.by, recordId, doseCtx.studentName);
+  }
 };
 
 /**
@@ -202,20 +268,33 @@ export const removeProgressLog = async (
   db: Firestore,
   recordId: string,
   currentLogs: ProgressLog[],
-  logIndex: number
+  logIndex: number,
+  /** 전달 시 이 로그에 연결된 약 복용 기록도 함께 삭제하고 재고 복구 */
+  doseCtx?: DoseStockContext
 ): Promise<void> => {
   if (currentLogs.length === 0 || logIndex < 0 || logIndex >= currentLogs.length) return;
+  const removed = currentLogs[logIndex];
   const newLogs = currentLogs.filter((_, i) => i !== logIndex);
   // 남은 로그 중 가장 마지막(최신) status로 복원
   const prevStatus: ProgressStatus = newLogs.length > 0
     ? newLogs[newLogs.length - 1].status
     : '최초보고';
+  const removedKey = removed.loggedAt?.toMillis?.();
+  const currentDoses = doseCtx?.currentDoses ?? [];
+  const nextDoses = removedKey != null
+    ? currentDoses.filter(d => !(d.source === 'progress' && d.progressLogAt === removedKey))
+    : currentDoses;
+  const dosesChanged = doseCtx && nextDoses.length !== currentDoses.length;
   await updateDoc(doc(db, 'patientRecords', recordId), {
     progressLogs: newLogs,
     progressStatus: prevStatus,
+    ...(dosesChanged ? { medicationDoses: nextDoses } : {}),
     updatedAt: Timestamp.now(),
   });
   logger.info(`경과 로그 삭제: ${recordId} index=${logIndex}, 복원 → ${prevStatus}`);
+  if (dosesChanged) {
+    await applyDoseStockChanges(db, doseCtx.campCode, currentDoses, nextDoses, doseCtx.by, recordId, doseCtx.studentName);
+  }
 };
 
 // ── 내원 ───────────────────────────────────────────────────────

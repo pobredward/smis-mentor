@@ -811,6 +811,82 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // 캠프 재고 (inventoryGroups / inventoryItems / inventoryMovements)
+    // 역할: 관리자가 물품·그룹 등록/수정/삭제, 캠프 스태프는 조회 +
+    //       환자 탭 약 복용 기록으로 인한 수량(stocks) 증감·이력 기록만 허용
+    // ──────────────────────────────────────────────────────────────
+    // 품목 마스터 (회사 공통) · 그룹(캠프별) · 그룹 패키지(회사 공통): 관리자만 쓰기
+    match /inventoryItems/{itemId} {
+      allow read: if isCampStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /inventoryGroups/{groupId} {
+      allow read: if isCampStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /inventoryPackages/{packageId} {
+      allow read: if isCampStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 캠프별 수량 (문서 ID = campCode__itemId): 관리자 전체,
+    // 스태프는 약 복용 차감/복구로 인한 stocks 변경(문서 생성 포함)만 가능
+    match /inventoryStocks/{stockId} {
+      allow read: if isCampStaff();
+      allow create: if (
+        isAdmin() ||
+        (
+          isCampStaff() &&
+          request.resource.data.keys().hasOnly(['campCode', 'itemId', 'stocks', 'updatedAt'])
+        )
+      );
+      allow update: if (
+        isAdmin() ||
+        (
+          isCampStaff() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stocks', 'updatedAt'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 재고 요청(관리자 생성) · 선생님별 입력(본인 문서만, 문서 ID = requestId__uid) · 구매 목록(관리자)
+    match /inventoryRequests/{requestId} {
+      allow read: if isCampStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /inventoryRequestEntries/{entryId} {
+      allow read: if isCampStaff();
+      allow create, update: if (
+        isAdmin() ||
+        (
+          isCampStaff() &&
+          request.resource.data.userId == request.auth.uid &&
+          entryId == request.resource.data.requestId + '__' + request.auth.uid
+        )
+      );
+      allow delete: if isAdmin() || (isCampStaff() && resource.data.userId == request.auth.uid);
+    }
+
+    match /purchaseItems/{purchaseId} {
+      allow read: if isCampStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if isCampStaff();
+      allow create: if (
+        isCampStaff() &&
+        request.resource.data.keys().hasAll(['campCode', 'itemId', 'groupId', 'delta', 'reason', 'at', 'by']) &&
+        request.resource.data.delta is number
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // 기본 거부 (명시되지 않은 모든 컬렉션)
     // ──────────────────────────────────────────────────────────────
     match /{document=**} {
