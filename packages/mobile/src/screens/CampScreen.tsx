@@ -8,10 +8,14 @@ import { ScheduleScreen } from './ScheduleScreen';
 import { LodgingScreen } from './LodgingScreen';
 import { LocationSharingScreen } from './LocationSharingScreen';
 import { PatientScreen } from './PatientScreen';
+import { InventoryScreen } from './InventoryScreen';
 import { useAuth } from '../context/AuthContext';
 import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab } from '../context/CampTabContext';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient' | 'location';
+// 위치 탭은 잠시 숨겨 둔다 — 다시 열려면 true (화면 코드는 그대로 있다)
+const SHOW_LOCATION_TAB = false;
+
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient' | 'location' | 'inventory';
 
 export function CampScreen() {
   const { userData } = useAuth();
@@ -36,7 +40,8 @@ export function CampScreen() {
         { id: 'guide', title: 'Lodging' },
         { id: 'roster', title: 'Roster' },
         { id: 'patient', title: 'Patient' },
-        { id: 'location', title: 'Map' },
+        ...(SHOW_LOCATION_TAB ? [{ id: 'location' as const, title: 'Map' }] : []),
+        { id: 'inventory', title: 'Inventory' },
       ]
     : [
         { id: 'education', title: '교육' },
@@ -46,7 +51,8 @@ export function CampScreen() {
         { id: 'guide', title: '숙소' },
         { id: 'roster', title: '명단' },
         { id: 'patient', title: '환자' },
-        { id: 'location', title: '위치' },
+        ...(SHOW_LOCATION_TAB ? [{ id: 'location' as const, title: '위치' }] : []),
+        { id: 'inventory', title: '재고' },
       ];
 
   const tabs = allTabs;
@@ -115,8 +121,13 @@ export function CampScreen() {
         <View style={[styles.tabContent, activeTab !== 'patient' && styles.hiddenTab]} pointerEvents={activeTab !== 'patient' ? 'none' : 'auto'}>
           <PatientScreen />
         </View>
-        <View style={[styles.tabContent, activeTab !== 'location' && styles.hiddenTab]} pointerEvents={activeTab !== 'location' ? 'none' : 'auto'}>
-          <LocationSharingScreen />
+        {SHOW_LOCATION_TAB && (
+          <View style={[styles.tabContent, activeTab !== 'location' && styles.hiddenTab]} pointerEvents={activeTab !== 'location' ? 'none' : 'auto'}>
+            <LocationSharingScreen />
+          </View>
+        )}
+        <View style={[styles.tabContent, activeTab !== 'inventory' && styles.hiddenTab]} pointerEvents={activeTab !== 'inventory' ? 'none' : 'auto'}>
+          <InventoryScreen />
         </View>
       </View>
     </View>

@@ -12,9 +12,10 @@ import LodgingContent from '@/components/camp/lodging/LodgingContent';
 import TaskContent from '@/components/camp/TaskContent';
 import RosterContent from '@/components/camp/RosterContent';
 import PatientContent from '@/components/camp/PatientContent';
+import InventoryContent from '@/components/camp/InventoryContent';
 import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient';
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient' | 'inventory';
 
 // localStorage 키 정의
 const LAST_CAMP_TAB_KEY = 'last_camp_tab';
@@ -75,6 +76,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
     { id: 'guide', title: isForeign ? 'Lodging' : '숙소', path: '/camp/guide' },
     { id: 'roster', title: isForeign ? 'Roster' : '명단', path: '/camp/roster' },
     { id: 'patient', title: isForeign ? 'Patient' : '환자', path: '/camp/patient' },
+    { id: 'inventory', title: isForeign ? 'Inventory' : '재고', path: '/camp/inventory' },
   ];
   
   const tabs = isForeign 
@@ -192,6 +194,8 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
             <div className="h-[calc(100vh-120px)]">
               <PatientContent />
             </div>
+          ) : activeTab === 'inventory' ? (
+            <InventoryContent />
           ) : null}
         </div>
       </div>

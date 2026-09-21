@@ -6,7 +6,7 @@ import { logger } from '@smis-mentor/shared';
 const LAST_TAB_KEY = 'SMIS_LAST_CAMP_TAB';
 const LAST_PRELOAD_LINKS_KEY = 'SMIS_LAST_PRELOAD_LINKS';
 
-type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient' | 'location';
+type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient' | 'location' | 'inventory';
 
 interface CampTabContextType {
   activeTab: TabName;
@@ -68,8 +68,9 @@ export const CampTabProvider = ({ children }: { children: ReactNode }) => {
     try {
       const lastTab = await AsyncStorage.getItem(LAST_TAB_KEY);
       if (lastTab) {
-        // 이전 버전에서 저장된 class/room 탭은 roster로 마이그레이션
-        const migratedTab = (lastTab === 'class' || lastTab === 'room') ? 'roster' : lastTab;
+        // 이전 버전에서 저장된 class/room 탭은 roster로, 숨긴 위치 탭은 기본(시간표)으로
+        const migratedTab =
+          lastTab === 'class' || lastTab === 'room' ? 'roster' : lastTab === 'location' ? 'schedule' : lastTab;
         setActiveTabState(migratedTab as TabName);
         logger.info('✅ 마지막 캠프 탭 복원:', migratedTab);
       }
