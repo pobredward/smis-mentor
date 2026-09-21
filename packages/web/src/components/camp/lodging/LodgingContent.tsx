@@ -20,6 +20,7 @@ import {
   setAllLodgingHidden,
   toggleLodgingHidden,
   lodgingPurposeColor,
+  lodgingMyRooms,
   updateCampLodging,
   type CampLodging,
   type LodgingOccupant,
@@ -207,6 +208,9 @@ export default function LodgingContent() {
   const savePlace = async (id: string, setting: LodgingPlaceSetting) =>
     persist({ ...lodging, places: { ...(lodging.places ?? {}), [id]: setting } });
 
+
+  // 내 방·내가 담당인 방 — 초록 테두리
+  const mine = useMemo(() => lodgingMyRooms(rooms, userData?.name), [rooms, userData?.name]);
 
   // 검색: 이름·호수·선생님
   const q = query.trim().toLowerCase();
@@ -420,6 +424,7 @@ export default function LodgingContent() {
                     rooms={shownRooms}
                     compact
                     highlight={hits}
+                    mine={mine}
                     selected={target?.kind === 'room' ? target.room.num : null}
                     onRoom={openRoom}
                   />
@@ -465,6 +470,7 @@ export default function LodgingContent() {
             floor={floorOf(view)!}
             rooms={shownRooms}
             highlight={hits}
+            mine={mine}
             selected={target?.kind === 'room' ? target.room.num : null}
             onRoom={openRoom}
           />
@@ -502,6 +508,12 @@ export default function LodgingContent() {
             <i className="inline-block h-3 w-3 rounded-sm bg-blue-100" />
             본관↔별관 통로
           </span>
+          {mine.size > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <i className="inline-block h-3 w-3 rounded-sm border-2 border-emerald-500 bg-white" />
+              {isForeign ? 'My room' : '내 방·담당'}
+            </span>
+          )}
         </div>
       )}
 

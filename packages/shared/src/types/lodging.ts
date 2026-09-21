@@ -159,6 +159,43 @@ export function lodgingRoomCaption(room: ToneInput & { unitMentor?: string }): s
   return lodgingRoomTone(room);
 }
 
+// ── 내 방 ────────────────────────────────────────────────────────────────
+
+/** 이름 맞대기용 — 괄호·공백·'멘토/선생님/쌤' 같은 꼬리를 떼고 소문자로 */
+export function lodgingPersonKey(raw: string | undefined | null): string {
+  return (raw ?? '')
+    .replace(/\(.*?\)|\[.*?\]/g, '')
+    .trim()
+    .replace(/([가-힣])\s*T$/, '$1')
+    .replace(/\s*(멘토|선생님|선생|쌤|매니저|코치|님)$/, '')
+    .toLowerCase()
+    .replace(/[^0-9a-z가-힣]/g, '');
+}
+
+/**
+ * 내 이름이 방 선생님 명단에 있거나, 그 방 학생들의 담당(유닛 멘토)이 나인 방.
+ * 원어민은 명단에 이름만(Adam) 적는 일이 많아 영어 이름은 첫 단어도 맞춰 본다.
+ */
+export function lodgingMyRooms(
+  rooms: Map<string, LodgingRoomView>,
+  myName: string | undefined | null
+): Set<string> {
+  const out = new Set<string>();
+  const full = lodgingPersonKey(myName);
+  if (full.length < 2) return out;
+  const keys = new Set([full]);
+  const first = lodgingPersonKey((myName ?? '').trim().split(/\s+/)[0]);
+  if (first.length >= 2 && /^[a-z]+$/.test(first)) keys.add(first);
+  const isMe = (name: string | undefined) => {
+    const k = lodgingPersonKey(name);
+    return !!k && keys.has(k);
+  };
+  rooms.forEach((r) => {
+    if (r.teachers.some(isMe) || (r.allStudents ?? r.students).some((s) => isMe(s.unitMentor))) out.add(r.num);
+  });
+  return out;
+}
+
 export const LODGING_PLACE_KIND_LABEL: Record<LodgingPlaceKind, string> = {
   hall: '홀·강당',
   dining: '식당',

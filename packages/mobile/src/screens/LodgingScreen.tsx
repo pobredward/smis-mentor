@@ -27,6 +27,7 @@ import {
   toggleLodgingHidden,
   setAllLodgingHidden,
   lodgingPurposeColor,
+  lodgingMyRooms,
   updateCampLodging,
   type CampLodging,
   type LodgingOccupant,
@@ -189,6 +190,9 @@ export function LodgingScreen() {
     if (index >= 0) setStudentModal({ list, index });
   };
 
+  // 내 방·내가 담당인 방 — 초록 테두리
+  const mine = useMemo(() => lodgingMyRooms(rooms, userData?.name), [rooms, userData?.name]);
+
   const q = query.trim().toLowerCase();
   const hits = useMemo(() => {
     const s = new Set<string>();
@@ -316,6 +320,7 @@ export function LodgingScreen() {
                 rooms={shownRooms}
                 compact
                 highlight={hits}
+                mine={mine}
                 selected={selectedRoom}
                 onRoom={openRoom}
                 onLayout={(e) => {
@@ -365,6 +370,7 @@ export function LodgingScreen() {
           floor={floor}
           rooms={shownRooms}
           highlight={hits}
+          mine={mine}
           selected={selectedRoom}
           onRoom={openRoom}
           onLayout={(e) => {
@@ -532,6 +538,12 @@ export function LodgingScreen() {
                 <View style={[styles.legendSwatch, { backgroundColor: '#dbeafe' }]} />
                 <Text style={styles.legendText}>본관↔별관 통로</Text>
               </View>
+              {mine.size > 0 && (
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, styles.legendMine]} />
+                  <Text style={styles.legendText}>{isForeign ? 'My room' : '내 방·담당'}</Text>
+                </View>
+              )}
             </ScrollView>
           )}
         </>
@@ -548,17 +560,19 @@ export function LodgingScreen() {
         onStudent={openStudent}
         onSaveRoom={saveRoom}
         onSavePlace={savePlace}
-      />
-      {studentModal && data.campType && (
-        <StudentDetailModal
-          visible
-          students={studentModal.list}
-          initialIndex={studentModal.index}
-          onClose={() => setStudentModal(null)}
-          campType={data.campType}
-          campCode={data.campCode}
-        />
-      )}
+      >
+        {/* 방 시트 안에서 띄워야 누르자마자 뜬다 (iOS 는 모달 위에 바깥 모달을 못 올린다) */}
+        {studentModal && data.campType && (
+          <StudentDetailModal
+            visible
+            students={studentModal.list}
+            initialIndex={studentModal.index}
+            onClose={() => setStudentModal(null)}
+            campType={data.campType}
+            campCode={data.campCode}
+          />
+        )}
+      </LodgingRoomSheet>
     </View>
   );
 }
@@ -627,4 +641,5 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendSwatch: { width: 12, height: 12, borderRadius: 2, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
   legendText: { fontSize: 11, color: '#4b5563' },
+  legendMine: { backgroundColor: '#fff', borderWidth: 2, borderColor: '#10b981' },
 });

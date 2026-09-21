@@ -18,6 +18,8 @@ interface Props {
   names?: boolean;
   selected?: string | null;
   highlight?: Set<string>;
+  /** 내 방·내가 담당인 방 — 초록 테두리 */
+  mine?: Set<string>;
   onRoom: (num: string) => void;
   /** 격자가 놓인 자리 (부모 기준) — 검색한 방으로 화면을 옮길 때 쓴다 */
   onLayout?: (e: LayoutChangeEvent) => void;
@@ -94,6 +96,7 @@ export function LodgingFloorGrid({
   names = true,
   selected,
   highlight,
+  mine,
   onRoom,
   onLayout,
 }: Props) {
@@ -118,6 +121,7 @@ export function LodgingFloorGrid({
             names={names}
             selected={selected === num}
             highlighted={!!highlight?.has(num)}
+            mine={!!mine?.has(num)}
             onPress={() => onRoom(num)}
           />
         ),
@@ -191,7 +195,7 @@ export function LodgingFloorGrid({
     main.upper.forEach((n, i) => roomAt(n, mainColX(offU + i), rowY[corridorRow - 1], S.mainW, S.roomH));
     main.lower.forEach((n, i) => roomAt(n, mainColX(offL + i), rowY[corridorRow + 1], S.mainW, S.roomH));
     return { items, width, height };
-  }, [building, floor, rooms, compact, names, selected, highlight, onRoom, S]);
+  }, [building, floor, rooms, compact, names, selected, highlight, mine, onRoom, S]);
 
   return (
     <View style={{ width, height }} onLayout={onLayout}>
@@ -210,10 +214,11 @@ interface CellProps {
   names: boolean;
   selected: boolean;
   highlighted: boolean;
+  mine?: boolean;
   onPress: () => void;
 }
 
-export function RoomCell({ room, compact, names, selected, highlighted, onPress }: CellProps) {
+export function RoomCell({ room, compact, names, selected, highlighted, mine, onPress }: CellProps) {
   const c = lodgingRoomColor(room);
   const dimmed = isLodgingRoomDimmed(room);
   // 학생방은 (필터를 거친) 학생, 학생이 없는 방은 선생님
@@ -235,6 +240,7 @@ export function RoomCell({ room, compact, names, selected, highlighted, onPress 
         { backgroundColor: c.bg },
         dimmed && styles.cellDim,
         selected && styles.cellSelected,
+        mine && !selected && !highlighted && styles.cellMine,
         highlighted && !selected && styles.cellHighlighted,
       ]}
     >
@@ -278,6 +284,7 @@ const styles = StyleSheet.create({
   cellDim: { opacity: 0.32 },
   cellSelected: { borderColor: '#2563eb', borderWidth: 2 },
   cellHighlighted: { borderColor: '#f59e0b', borderWidth: 2 },
+  cellMine: { borderColor: '#10b981', borderWidth: 2 },
   cellHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 2 },
   num: { fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] },
   numCompact: { fontSize: 10 },

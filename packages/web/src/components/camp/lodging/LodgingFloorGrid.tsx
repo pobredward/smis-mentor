@@ -22,6 +22,8 @@ interface Props {
   selected?: string | null;
   /** 검색에 걸린 방 — 테두리 강조 */
   highlight?: Set<string>;
+  /** 내 방·내가 담당인 방 — 초록 테두리 */
+  mine?: Set<string>;
   onRoom: (num: string) => void;
 }
 
@@ -37,6 +39,7 @@ export default function LodgingFloorGrid({
   names = true,
   selected,
   highlight,
+  mine,
   onRoom,
 }: Props) {
   const annex = building.layout.annex[floor] ?? [];
@@ -69,6 +72,7 @@ export default function LodgingFloorGrid({
         names={names}
         selected={selected === num}
         highlighted={!!highlight?.has(num)}
+        mine={!!mine?.has(num)}
         style={style}
         onClick={() => onRoom(num)}
       />
@@ -158,11 +162,12 @@ interface CellProps {
   names: boolean;
   selected: boolean;
   highlighted: boolean;
+  mine?: boolean;
   style: CSSProperties;
   onClick: () => void;
 }
 
-export function RoomCell({ room, compact, names, selected, highlighted, style, onClick }: CellProps) {
+export function RoomCell({ room, compact, names, selected, highlighted, mine, style, onClick }: CellProps) {
   const c = lodgingRoomColor(room);
   const tone = lodgingRoomTone(room);
   const dimmed = isLodgingRoomDimmed(room);
@@ -187,7 +192,9 @@ export function RoomCell({ room, compact, names, selected, highlighted, style, o
           ? 'border-blue-600 ring-2 ring-blue-500'
           : highlighted
             ? 'border-amber-500 ring-2 ring-amber-400'
-            : 'border-black/10 hover:shadow-md'
+            : mine
+              ? 'border-emerald-500 ring-2 ring-emerald-400'
+              : 'border-black/10 hover:shadow-md'
       }`}
       title={`${room.num} ${tone}`}
     >

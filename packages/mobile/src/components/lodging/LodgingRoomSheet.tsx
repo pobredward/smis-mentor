@@ -43,6 +43,8 @@ interface Props {
   onStudent?: (student: LodgingOccupant, room: LodgingRoomView) => void;
   onSaveRoom: (num: string, setting: LodgingRoomSetting) => Promise<void>;
   onSavePlace: (id: string, setting: LodgingPlaceSetting) => Promise<void>;
+  /** 시트 위에 띄울 모달 (학생 카드) — iOS 는 모달이 떠 있는 동안 바깥의 다른 모달을 못 띄우므로 이 안에 둔다 */
+  children?: React.ReactNode;
 }
 
 /** 방·장소 상세 — 아래에서 올라오는 시트. 명단은 시트에서, 용도·선생님은 관리자가 여기서 */
@@ -57,6 +59,7 @@ export function LodgingRoomSheet({
   onStudent,
   onSaveRoom,
   onSavePlace,
+  children,
 }: Props) {
   return (
     <Modal visible={!!target} transparent animationType="fade" onRequestClose={onClose}>
@@ -84,6 +87,7 @@ export function LodgingRoomSheet({
           )}
           </View>
         </KeyboardAvoidingView>
+        {children}
       </View>
     </Modal>
   );
