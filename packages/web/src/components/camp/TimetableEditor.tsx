@@ -28,6 +28,7 @@ import {
   updateCampTimetableCommon,
   updateCampTimetableGuides,
   uploadGuideMedia,
+  guideUploadError,
   hasItemContent,
   isUnsaved,
   isMergedColumn,
@@ -59,6 +60,10 @@ import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { campTimetableService } from '@/lib/campTimetableService';
 import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
+
+// 불러오는 동안 쓰는 빈 값 — 렌더마다 새 [] / {} 를 만들면 그걸 따르는 effect(setGuides 등)가 끝없이 돈다
+const NO_LIST: never[] = [];
+const NO_MAP: Record<string, never> = {};
 
 interface TimetableEditorProps {
   jobCodeId: string;
@@ -211,7 +216,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
   const [saving, setSaving] = useState(false);
   const [showRooms, setShowRooms] = useState(false);
 
-  const { data: timetables = [], refetch } = useQuery({
+  const { data: timetables = NO_LIST, refetch } = useQuery({
     queryKey: ['campTimetables', jobCodeId],
     queryFn: () => campTimetableService.listByJobCodeId(jobCodeId),
   });
@@ -223,7 +228,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
   });
   const campCode = jobCode?.code ?? '';
 
-  const { data: campGroups = [] } = useQuery({
+  const { data: campGroups = NO_LIST } = useQuery({
     queryKey: ['campGroups', campCode],
     queryFn: () => getCampGroups(db, campCode),
     enabled: !!campCode,
@@ -231,14 +236,14 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
   });
 
   /** 반이름·강의실은 기수별 한 벌 — 표가 아니라 캠프 설정에 저장한다 */
-  const { data: savedClassInfo = {}, refetch: refetchClassInfo } = useQuery({
+  const { data: savedClassInfo = NO_MAP, refetch: refetchClassInfo } = useQuery({
     queryKey: ['campClassInfo', campCode],
     queryFn: () => getCampClassInfo(db, campCode),
     enabled: !!campCode,
     staleTime: 10 * 60 * 1000,
   });
   /** 그룹별 공통 값 — 같은 그룹의 모든 Day 가 함께 쓴다 */
-  const { data: commonByGroup = {}, refetch: refetchCommon } = useQuery({
+  const { data: commonByGroup = NO_MAP, refetch: refetchCommon } = useQuery({
     queryKey: ['campTimetableCommon', campCode],
     queryFn: () => getCampTimetableCommon(db, campCode),
     enabled: !!campCode,
@@ -246,7 +251,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
   });
 
   /** 칸 설명 — 캠프당 한 벌 (칸 이름으로 찾는다) */
-  const { data: savedGuides = {}, refetch: refetchGuides } = useQuery({
+  const { data: savedGuides = NO_MAP, refetch: refetchGuides } = useQuery({
     queryKey: ['campTimetableGuides', campCode],
     queryFn: () => getCampTimetableGuides(db, campCode),
     enabled: !!campCode,
@@ -271,7 +276,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
   const setInfo = (code: string, patch: CampClassInfo) =>
     setClassInfo((prev) => ({ ...prev, [code]: { ...prev[code], ...patch } }));
 
-  const { data: members = [] } = useQuery({
+  const { data: members = NO_LIST } = useQuery({
     queryKey: ['campMembers', jobCodeId],
     queryFn: () => getUsersByJobCodeId(jobCodeId),
     staleTime: 5 * 60 * 1000,
@@ -621,7 +626,8 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
         campCode,
         guideKeyOf(label),
         file,
-        file.name
+        file.name,
+        file.type
       );
       patchItem(label, si, ii, {
         url,
@@ -631,7 +637,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
       });
       toast.success('올렸습니다. 저장을 눌러야 반영됩니다.');
     } catch (e) {
-      toast.error('올리지 못했습니다.');
+      toast.error(guideUploadError(e));
       console.error(e);
     } finally {
       setUploading(null);
@@ -1089,14 +1095,8 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-gray-900">
                 칸 설명 ({guideTargets.filter((l) => hasGuideContent(guideOf(l))).length}/{guideTargets.length})
-                <span className="ml-2 text-xs font-normal text-gray-500">
-                  써 두면 시간표에서 그 칸을 눌렀을 때 뜹니다
-                </span>
               </h3>
             </div>
-            <p className="mt-1 text-xs text-gray-500">
-              이름이 같으면 Day 가 달라도 같은 설명을 씁니다 — Breakfast 를 Day 마다 다시 쓸 필요가 없습니다.
-            </p>
 
             {/* 이 표에 나오는 칸 이름들 — 설명이 있는 것에는 점을 찍어 둔다 */}
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1244,9 +1244,6 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                           </button>
                         </div>
                       ))}
-                      {!sec.items.length && (
-                        <p className="text-[11px] text-gray-400">아직 줄이 없습니다.</p>
-                      )}
                     </div>
                     <div className="mt-1.5 flex gap-2">
                       <button
@@ -1279,9 +1276,6 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                     + 섹션 추가
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-400">
-                  줄은 글·링크·사진·동영상을 섞어 넣을 수 있습니다. 사진·동영상은 올리면 주소만 저장됩니다.
-                </p>
               </div>
             )}
           </section>

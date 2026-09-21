@@ -6,6 +6,7 @@ export * from './campPage';
 export * from './campTimetable';
 export * from './eslBook';
 export * from './timetableGuide';
+export * from './lodging';
 export * from './permission';
 export * from './evaluation';
 export * from './sms';

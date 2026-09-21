@@ -8,7 +8,7 @@ import { safeGetItem, safeSetItem } from '@/lib/cacheUtils';
 import LessonContent from '@/components/camp/LessonContent';
 import EducationContent from '@/components/camp/EducationContent';
 import ScheduleContent from '@/components/camp/ScheduleContent';
-import GuideContent from '@/components/camp/GuideContent';
+import LodgingContent from '@/components/camp/lodging/LodgingContent';
 import TaskContent from '@/components/camp/TaskContent';
 import RosterContent from '@/components/camp/RosterContent';
 import PatientContent from '@/components/camp/PatientContent';
@@ -72,7 +72,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
     { id: 'lesson', title: '수업', path: '/camp/lesson' },
     { id: 'tasks', title: isForeign ? 'Tasks' : '업무', path: '/camp/tasks' },
     { id: 'schedule', title: isForeign ? 'Schedule' : '시간표', path: '/camp/schedule' },
-    { id: 'guide', title: isForeign ? 'Guide' : '인솔표', path: '/camp/guide' },
+    { id: 'guide', title: isForeign ? 'Lodging' : '숙소', path: '/camp/guide' },
     { id: 'roster', title: isForeign ? 'Roster' : '명단', path: '/camp/roster' },
     { id: 'patient', title: isForeign ? 'Patient' : '환자', path: '/camp/patient' },
   ];
@@ -172,8 +172,8 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
           </div>
         </div>
 
-        {/* 탭 컨텐츠 */}
-        <div className="max-w-2xl mx-auto">
+        {/* 탭 컨텐츠 — 숙소는 도면이 넓어서 더 넓게 */}
+        <div className={`${activeTab === 'guide' ? 'max-w-6xl px-3' : 'max-w-2xl'} mx-auto`}>
           {activeTab === 'education' ? (
             <EducationContent />
           ) : activeTab === 'lesson' ? (
@@ -183,7 +183,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
           ) : activeTab === 'schedule' ? (
             <ScheduleContent />
           ) : activeTab === 'guide' ? (
-            <GuideContent />
+            <LodgingContent />
           ) : activeTab === 'roster' ? (
             <div className="h-[calc(100vh-120px)]">
               <RosterContent isFamilyCamp={isFamilyCamp} isEJCamp={isEJCamp} />

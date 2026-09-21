@@ -1,3 +1,4 @@
+import type { CampLodging } from './lodging';
 import type { TimetableClassColumn } from './campTimetable';
 import type { TimetableGuide } from './timetableGuide';
 
@@ -158,6 +159,8 @@ export interface CampSettings {
    * Day 가 아니라 캠프 단위라, Breakfast 처럼 여러 Day 에 걸치는 것도 한 번만 쓴다.
    */
   timetableGuides?: Record<string, TimetableGuide>;
+  /** 숙소 — 방 용도·선생님 배치·장소 용도 (건물 자체는 shared/data/lodging 에 고정) */
+  lodging?: CampLodging;
   useTemporaryData?: boolean;
   updatedAt?: string;
 }

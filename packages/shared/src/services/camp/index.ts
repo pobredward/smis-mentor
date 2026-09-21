@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { CampClassInfo, CampGroup, CampSettings, CampTimetableCommon } from '../../types/camp';
 import { cleanGuide, guideMediaPath, type TimetableGuide } from '../../types/timetableGuide';
+import { cleanLodging, type CampLodging } from '../../types/lodging';
 import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage';
 
 /**
@@ -194,16 +195,75 @@ export const updateCampTimetableGuides = async (
 /**
  * 칸 설명에 넣을 사진·동영상을 Storage 에 올린다.
  * web 은 File, mobile 은 fetch 로 만든 Blob 을 그대로 넘기면 된다.
+ *
+ * 파일 종류(contentType)를 꼭 붙인다 — 폰에서 fetch 로 만든 Blob 은 종류가 비어 있을 때가 있고,
+ * 저장소 규칙이 사진·동영상만 받기 때문이다.
  */
 export const uploadGuideMedia = async (
   storage: FirebaseStorage,
   campCode: string,
   guideKey: string,
   file: Blob,
-  fileName: string
+  fileName: string,
+  contentType?: string
 ): Promise<{ url: string; storagePath: string }> => {
   const storagePath = guideMediaPath(campCode, guideKey, fileName);
   const storageRef = ref(storage, storagePath);
-  await uploadBytes(storageRef, file);
+  const type = contentType || file.type || guessMediaType(fileName);
+  await uploadBytes(storageRef, file, type ? { contentType: type } : undefined);
   return { url: await getDownloadURL(storageRef), storagePath };
+};
+
+/** 확장자로 사진·동영상 종류 짐작 */
+function guessMediaType(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',
+    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', webm: 'video/webm', '3gp': 'video/3gpp',
+  };
+  return map[ext] ?? '';
+}
+
+/** 칸 설명 사진·동영상 올리기 실패 — 사용자에게 보여 줄 한 줄 */
+export function guideUploadError(e: unknown): string {
+  const code = (e as { code?: string } | null)?.code ?? '';
+  if (code === 'storage/unauthorized') return '저장소 권한이 없습니다. 관리자 계정으로 로그인했는지, 저장소 규칙(storage.rules)이 배포됐는지 확인해 주세요.';
+  if (code === 'storage/canceled') return '올리기를 취소했습니다.';
+  if (code === 'storage/quota-exceeded') return '저장소 용량이 부족합니다.';
+  if (code === 'storage/retry-limit-exceeded' || code === 'storage/network-error') return '네트워크가 불안정해 올리지 못했습니다. 다시 시도해 주세요.';
+  return '올리지 못했습니다.' + (code ? ` (${code})` : '');
+}
+
+
+/** campSettings/{campCode}.lodging — 숙소 방 용도·선생님 배치 조회 */
+export const getCampLodging = async (
+  db: Firestore,
+  campCode: string
+): Promise<CampLodging> => {
+  if (!campCode) return {};
+  const snap = await getDoc(doc(db, 'campSettings', campCode));
+  if (!snap.exists()) return {};
+  return (snap.data() as CampSettings).lodging ?? {};
+};
+
+/**
+ * 숙소 설정 저장 — 칸 설명과 같은 이유로 맵을 통째로 갈아끼운다.
+ * (setDoc merge 는 지운 방의 값을 남긴다)
+ */
+export const updateCampLodging = async (
+  db: Firestore,
+  campCode: string,
+  lodging: CampLodging,
+  userId?: string
+): Promise<CampLodging> => {
+  const now = new Date().toISOString();
+  const cleaned: CampLodging = {
+    ...cleanLodging(lodging),
+    updatedAt: now,
+    ...(userId ? { updatedBy: userId } : {}),
+  };
+  const ref = doc(db, 'campSettings', campCode);
+  await setDoc(ref, { campCode, updatedAt: now }, { merge: true });
+  await updateDoc(ref, { lodging: cleaned });
+  return cleaned;
 };

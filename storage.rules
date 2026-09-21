@@ -124,7 +124,11 @@ service firebase.storage {
     // ──────────────────────────────────────────────────────────────
     match /timetableGuides/{campCode}/{allPaths=**} {
       allow read: if isAuthenticated();
-      allow write, delete: if isAdmin() && isUnder50MB();
+      // 올리기·바꾸기는 사진·동영상만 (50MB 까지)
+      allow create, update: if isAdmin() && isUnder50MB() &&
+        (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('video/.*'));
+      // 지우기에는 request.resource 가 없다 — 크기 검사를 같이 걸면 늘 거부된다
+      allow delete: if isAdmin();
     }
 
     match /tasks/{taskId}/{allPaths=**} {

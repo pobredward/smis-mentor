@@ -619,6 +619,14 @@ export function deriveGroupsFromMembers(members: MemberLike[], jobCodeId: string
 /** 배정이 아직 없을 때 쓰는 기본 그룹 구성 */
 export const FALLBACK_GROUPS = ['Junior', 'Middle', 'Senior'];
 
+/** 그룹 이름 차례 — Junior, Middle, Senior, Spring, Summer, Autumn, Winter, 그 밖은 가나다 (시간표 탭과 같은 규칙) */
+export function compareGroupNames(a: string, b: string): number {
+  const ia = GROUP_ORDER.indexOf(normalizeGroupKey(a));
+  const ib = GROUP_ORDER.indexOf(normalizeGroupKey(b));
+  if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  return a.localeCompare(b, 'ko');
+}
+
 /**
  * 2교시 세트의 위·아래가 "같은 수업"인지.
  * Speaking + 원어민처럼 이어지는 수업은 true(가운데 선 없음),

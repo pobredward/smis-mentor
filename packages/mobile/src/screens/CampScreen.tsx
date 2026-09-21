@@ -5,7 +5,7 @@ import { LessonScreen } from './CampTabs';
 import { TasksScreen } from './TasksScreen';
 import { RosterScreen } from './RosterScreen';
 import { ScheduleScreen } from './ScheduleScreen';
-import { GuideScreen } from './GuideScreen';
+import { LodgingScreen } from './LodgingScreen';
 import { LocationSharingScreen } from './LocationSharingScreen';
 import { PatientScreen } from './PatientScreen';
 import { useAuth } from '../context/AuthContext';
@@ -33,7 +33,7 @@ export function CampScreen() {
         { id: 'education', title: 'Edu' },
         { id: 'tasks', title: 'Tasks' },
         { id: 'schedule', title: 'Schedule' },
-        { id: 'guide', title: 'Guide' },
+        { id: 'guide', title: 'Lodging' },
         { id: 'roster', title: 'Roster' },
         { id: 'patient', title: 'Patient' },
         { id: 'location', title: 'Map' },
@@ -43,7 +43,7 @@ export function CampScreen() {
         { id: 'lesson', title: '수업' },
         { id: 'tasks', title: '업무' },
         { id: 'schedule', title: '시간표' },
-        { id: 'guide', title: '인솔표' },
+        { id: 'guide', title: '숙소' },
         { id: 'roster', title: '명단' },
         { id: 'patient', title: '환자' },
         { id: 'location', title: '위치' },
@@ -107,7 +107,7 @@ export function CampScreen() {
           <ScheduleScreen />
         </View>
         <View style={[styles.tabContent, activeTab !== 'guide' && styles.hiddenTab]} pointerEvents={activeTab !== 'guide' ? 'none' : 'auto'}>
-          <GuideScreen />
+          <LodgingScreen />
         </View>
         <View style={[styles.tabContent, activeTab !== 'roster' && styles.hiddenTab]} pointerEvents={activeTab !== 'roster' ? 'none' : 'auto'}>
           <RosterScreen />

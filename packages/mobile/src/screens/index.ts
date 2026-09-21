@@ -6,6 +6,7 @@ export * from './ClassScreen';
 export * from './RoomScreen';
 export * from './ScheduleScreen';
 export * from './GuideScreen';
+export * from './LodgingScreen';
 export * from './CampTabs';
 export * from './OtherScreens';
 export * from './ProfileScreen';

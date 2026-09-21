@@ -54,6 +54,7 @@ export function QueryClientProvider({ children }: QueryClientProviderProps) {
               'education',
               'jobCodesInfo',
               'students', // 반명단/방명단 데이터
+              'lodging', // 숙소 (건물·방 명단·용도)
             ];
             
             return persistKeys.includes(queryKey);

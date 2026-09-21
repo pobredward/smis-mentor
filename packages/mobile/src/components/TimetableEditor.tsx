@@ -37,6 +37,7 @@ import {
   updateCampTimetableCommon,
   updateCampTimetableGuides,
   uploadGuideMedia,
+  guideUploadError,
   hasItemContent,
   isUnsaved,
   isSameGroup,
@@ -67,6 +68,10 @@ import { campTimetableService } from '../services/campTimetableService';
 import { getUsersByJobCodeId } from '../services/userService';
 import jobCodesService from '../services/jobCodesService';
 import { scheduleQueryKey } from '../services/scheduleBundle';
+
+// 불러오는 동안 쓰는 빈 값 — 렌더마다 새 [] / {} 를 만들면 그걸 따르는 effect(setGuides 등)가 끝없이 돈다
+const NO_LIST: never[] = [];
+const NO_MAP: Record<string, never> = {};
 
 interface Props {
   jobCodeId: string;
@@ -110,7 +115,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   /** 교무실조 순번 고르기 모달 — {colKey, index} */
   const [pickingDuty, setPickingDuty] = useState<{ colKey: string; index: number } | null>(null);
 
-  const { data: timetables = [], refetch, isLoading } = useQuery({
+  const { data: timetables = NO_LIST, refetch, isLoading } = useQuery({
     queryKey: ['campTimetables', jobCodeId],
     queryFn: () => campTimetableService.listByJobCodeId(jobCodeId),
   });
@@ -122,7 +127,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   });
   const campCode = (jobCode as { code?: string } | null)?.code ?? '';
 
-  const { data: campGroups = [] } = useQuery({
+  const { data: campGroups = NO_LIST } = useQuery({
     queryKey: ['campGroups', campCode],
     queryFn: () => getCampGroups(db, campCode),
     enabled: !!campCode,
@@ -130,14 +135,14 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   });
 
   /** 반이름·강의실은 기수별 한 벌 — 표가 아니라 캠프 설정에 저장한다 */
-  const { data: savedClassInfo = {}, refetch: refetchClassInfo } = useQuery({
+  const { data: savedClassInfo = NO_MAP, refetch: refetchClassInfo } = useQuery({
     queryKey: ['campClassInfo', campCode],
     queryFn: () => getCampClassInfo(db, campCode),
     enabled: !!campCode,
     staleTime: 10 * 60 * 1000,
   });
   /** 그룹별 공통 값 — 같은 그룹의 모든 Day 가 함께 쓴다 */
-  const { data: commonByGroup = {}, refetch: refetchCommon } = useQuery({
+  const { data: commonByGroup = NO_MAP, refetch: refetchCommon } = useQuery({
     queryKey: ['campTimetableCommon', campCode],
     queryFn: () => getCampTimetableCommon(db, campCode),
     enabled: !!campCode,
@@ -145,7 +150,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   });
 
   /** 칸 설명 — 캠프당 한 벌 (칸 이름으로 찾는다) */
-  const { data: savedGuides = {}, refetch: refetchGuides } = useQuery({
+  const { data: savedGuides = NO_MAP, refetch: refetchGuides } = useQuery({
     queryKey: ['campTimetableGuides', campCode],
     queryFn: () => getCampTimetableGuides(db, campCode),
     enabled: !!campCode,
@@ -168,7 +173,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   const setInfo = (code: string, patch: CampClassInfo) =>
     setClassInfo((prev) => ({ ...prev, [code]: { ...prev[code], ...patch } }));
 
-  const { data: members = [] } = useQuery({
+  const { data: members = NO_LIST } = useQuery({
     queryKey: ['campMembers', jobCodeId],
     queryFn: () => getUsersByJobCodeId(jobCodeId),
     staleTime: 5 * 60 * 1000,
@@ -391,7 +396,8 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
         campCode,
         guideKeyOf(label),
         blob,
-        name
+        name,
+        asset.mimeType ?? (asset.type === 'video' ? 'video/mp4' : 'image/jpeg')
       );
       patchItem(label, si, ii, {
         url,
@@ -401,7 +407,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
       });
       Alert.alert('올렸습니다', '저장을 눌러야 반영됩니다.');
     } catch (e) {
-      Alert.alert('오류', '올리지 못했습니다.');
+      Alert.alert('올리지 못했습니다', guideUploadError(e));
       console.error(e);
     } finally {
       setUploading(null);
@@ -908,10 +914,6 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
             <Section
               title={`칸 설명 (${guideTargets.filter((l) => hasGuideContent(guideOf(l))).length}/${guideTargets.length})`}
             >
-              <Text style={s.hint}>
-                써 두면 시간표에서 그 칸을 눌렀을 때 뜹니다. 이름이 같으면 Day 가 달라도 같은 설명을 씁니다.
-              </Text>
-
               <View style={s.wrapRow}>
                 {guideTargets.map((label) => {
                   const on = label === guideLabel;
@@ -1041,7 +1043,6 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
                           </TouchableOpacity>
                         </View>
                       ))}
-                      {!sec.items.length && <Text style={s.hint}>아직 줄이 없습니다.</Text>}
                       <View style={[s.wrapRow, { marginTop: 2 }]}>
                         <TouchableOpacity
                           onPress={() => addItem(guideLabel, si, 'text')}
