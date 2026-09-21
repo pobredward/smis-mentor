@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+
+const CARD_GAP = 4;
 import {
   View,
   Text,
@@ -27,7 +29,9 @@ import {
   type LodgingPlaceView,
   type LodgingRoomSetting,
   type LodgingRoomView,
+  type STSheetStudent,
 } from '@smis-mentor/shared';
+import { StudentCardContent } from '../StudentCardContent';
 
 export type LodgingTarget = { kind: 'room'; room: LodgingRoomView } | { kind: 'place'; place: LodgingPlaceView };
 
@@ -41,6 +45,8 @@ interface Props {
   saving: boolean;
   onClose: () => void;
   onStudent?: (student: LodgingOccupant, room: LodgingRoomView) => void;
+  /** 명단 칸의 학생 → 시트 원본 (사진 등). 없으면 방 명단 값으로만 카드를 그린다 */
+  studentOf?: (student: LodgingOccupant) => STSheetStudent | undefined;
   onSaveRoom: (num: string, setting: LodgingRoomSetting) => Promise<void>;
   onSavePlace: (id: string, setting: LodgingPlaceSetting) => Promise<void>;
   /** 시트 위에 띄울 모달 (학생 카드) — iOS 는 모달이 떠 있는 동안 바깥의 다른 모달을 못 띄우므로 이 안에 둔다 */
@@ -57,6 +63,7 @@ export function LodgingRoomSheet({
   saving,
   onClose,
   onStudent,
+  studentOf,
   onSaveRoom,
   onSavePlace,
   children,
@@ -79,6 +86,7 @@ export function LodgingRoomSheet({
               saving={saving}
               onClose={onClose}
               onStudent={onStudent}
+              studentOf={studentOf}
               onSave={onSaveRoom}
             />
           )}
@@ -102,6 +110,7 @@ function RoomBody({
   saving,
   onClose,
   onStudent,
+  studentOf,
   onSave,
 }: {
   room: LodgingRoomView;
@@ -113,9 +122,13 @@ function RoomBody({
   saving: boolean;
   onClose: () => void;
   onStudent?: (student: LodgingOccupant, room: LodgingRoomView) => void;
+  studentOf?: (student: LodgingOccupant) => STSheetStudent | undefined;
   onSave: (num: string, setting: LodgingRoomSetting) => Promise<void>;
 }) {
   const c = lodgingRoomColor(room);
+  // 한 줄 4칸이 폭을 꽉 채우도록 칸 너비를 잰다
+  const [cardsW, setCardsW] = useState(0);
+  const cardW = cardsW ? Math.floor((cardsW - CARD_GAP * 3) / 4) : undefined;
   const [editing, setEditing] = useState(false);
   const [purpose, setPurpose] = useState('');
   const [label, setLabel] = useState('');
@@ -180,42 +193,25 @@ function RoomBody({
         {!!room.settingNote && <Text style={styles.note}>{room.settingNote}</Text>}
 
         {room.students.length > 0 ? (
-          <View style={styles.table}>
-            <View style={[styles.tr, styles.th]}>
-              <Text style={[styles.td, styles.thText, { flex: 2 }]}>{isForeign ? 'Name' : '이름'}</Text>
-              <Text style={[styles.td, styles.thText]}>{isForeign ? 'Grade' : '학년'}</Text>
-              <Text style={[styles.td, styles.thText, { flex: 1.4 }]}>{isForeign ? 'Class' : '반'}</Text>
-              <Text style={[styles.td, styles.thText, { flex: 1.4 }]}>{isForeign ? 'Mentor' : '담임'}</Text>
-            </View>
-            {room.students.map((s) => (
-              <TouchableOpacity
-                key={s.studentId + s.rowNumber}
-                style={styles.tr}
-                disabled={!onStudent}
-                onPress={() => onStudent?.(s, room)}
-              >
-                <View style={{ flex: 2 }}>
-                  <Text style={[styles.td, { color: '#111827' }]} numberOfLines={1}>
-                    {s.name}
-                    {s.englishName ? <Text style={styles.eng}>  {s.englishName}</Text> : null}
-                  </Text>
-                  {(columns ?? []).length > 0 && (
-                    <Text style={styles.subLine} numberOfLines={1}>
-                      {(columns ?? [])
-                        .map((k) => (k === 'airport' ? s.departureGroup || occupantFilterValue(s, k) : occupantFilterValue(s, k)) || LODGING_FILTER_EMPTY_LABEL[k])
-                        .join(' · ')}
-                    </Text>
-                  )}
-                </View>
-                <Text style={styles.td}>{s.grade}</Text>
-                <Text style={[styles.td, { flex: 1.4 }]} numberOfLines={1}>
-                  {s.className || s.classNumber}
-                </Text>
-                <Text style={[styles.td, { flex: 1.4 }]} numberOfLines={1}>
-                  {s.classMentor}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          // 명단 탭 호수 보기와 같은 학생 카드 — 한 줄에 4명까지
+          <View style={styles.cards} onLayout={(e) => setCardsW(e.nativeEvent.layout.width)}>
+            {room.students.map((s) => {
+              const card = studentOf?.(s) ?? ({ ...s, roomNumber: room.num } as unknown as STSheetStudent);
+              const extra = (columns ?? [])
+                .map((k) => (k === 'airport' ? s.departureGroup || occupantFilterValue(s, k) : occupantFilterValue(s, k)) || LODGING_FILTER_EMPTY_LABEL[k])
+                .join(' · ');
+              return (
+                <TouchableOpacity
+                  key={s.studentId + s.rowNumber}
+                  style={[styles.card, cardW ? { width: cardW } : null]}
+                  activeOpacity={0.7}
+                  disabled={!onStudent}
+                  onPress={() => onStudent?.(s, room)}
+                >
+                  <StudentCardContent item={card} isForeign={isForeign} extraLine={extra || null} />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         ) : (
           <Text style={styles.empty}>{isForeign ? 'No students in this room.' : '시트에 이 방으로 배정된 학생이 없습니다.'}</Text>
@@ -395,7 +391,7 @@ function Chip({ on, onPress, label }: { on: boolean; onPress: () => void; label:
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16, pointerEvents: 'box-none' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 12, pointerEvents: 'box-none' },
   sheet: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -414,18 +410,25 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   close: { padding: 4 },
   closeText: { fontSize: 16, color: '#9ca3af' },
-  body: { paddingHorizontal: 16, paddingTop: 10 },
+  body: { paddingHorizontal: 12, paddingTop: 10 },
   kv: { marginBottom: 8, gap: 2 },
   kvText: { fontSize: 13, color: '#111827' },
   kvKey: { color: '#6b7280' },
   note: { backgroundColor: '#fffbeb', color: '#92400e', fontSize: 12, padding: 8, borderRadius: 6, marginBottom: 8 },
-  table: { marginBottom: 12 },
-  tr: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  th: { borderTopWidth: 0, paddingVertical: 4 },
-  td: { flex: 1, fontSize: 13, color: '#4b5563' },
-  thText: { fontSize: 10, color: '#9ca3af', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  eng: { fontSize: 11, color: '#9ca3af' },
-  subLine: { fontSize: 11, color: '#6b7280', marginTop: 1 },
+  cards: { flexDirection: 'row', flexWrap: 'wrap', gap: CARD_GAP, marginBottom: 12 },
+  card: {
+    width: '23%',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
   empty: { fontSize: 13, color: '#6b7280', marginBottom: 12 },
   ghostBtn: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginBottom: 8, flex: 1 },
   ghostBtnText: { fontSize: 13, color: '#374151' },

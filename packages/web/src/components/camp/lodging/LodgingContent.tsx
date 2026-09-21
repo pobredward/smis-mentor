@@ -29,6 +29,7 @@ import {
   type LodgingPlaceSetting,
   type LodgingRoomSetting,
   type LodgingRoomView,
+  type STSheetStudent,
 } from '@smis-mentor/shared';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -208,6 +209,17 @@ export default function LodgingContent() {
   const savePlace = async (id: string, setting: LodgingPlaceSetting) =>
     persist({ ...lodging, places: { ...(lodging.places ?? {}), [id]: setting } });
 
+
+  // 방 모달의 학생 카드에 사진까지 — 명단 칸 → 시트 원본
+  const studentByKey = useMemo(() => {
+    const m = new Map<string, STSheetStudent>();
+    students.forEach((s: STSheetStudent) => m.set(`${s.rowNumber}|${s.studentId}`, s));
+    return m;
+  }, [students]);
+  const studentOf = useCallback(
+    (o: LodgingOccupant) => studentByKey.get(`${o.rowNumber}|${o.studentId}`),
+    [studentByKey]
+  );
 
   // 내 방·내가 담당인 방 — 초록 테두리
   const mine = useMemo(() => lodgingMyRooms(rooms, userData?.name), [rooms, userData?.name]);
@@ -528,6 +540,7 @@ export default function LodgingContent() {
           memberNames={memberNames}
           saving={saving}
           onClose={closeDetail}
+          studentOf={studentOf}
           onSaveRoom={saveRoom}
           onSavePlace={savePlace}
         />

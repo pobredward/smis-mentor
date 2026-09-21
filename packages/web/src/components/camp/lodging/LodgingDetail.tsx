@@ -10,12 +10,14 @@ import {
   lodgingRoomTone,
   occupantFilterValue,
   LODGING_FILTER_EMPTY_LABEL,
-  LODGING_FILTER_LABEL,
+  toDriveImageUrl,
   type LodgingFilterKey,
+  type LodgingOccupant,
   type LodgingPlaceSetting,
   type LodgingPlaceView,
   type LodgingRoomSetting,
   type LodgingRoomView,
+  type STSheetStudent,
 } from '@smis-mentor/shared';
 
 export type LodgingTarget = { kind: 'room'; room: LodgingRoomView } | { kind: 'place'; place: LodgingPlaceView };
@@ -30,6 +32,8 @@ interface Props {
   memberNames: string[];
   saving: boolean;
   onClose: () => void;
+  /** 명단 칸의 학생 → 시트 원본 (사진 등) */
+  studentOf?: (student: LodgingOccupant) => STSheetStudent | undefined;
   onSaveRoom: (num: string, setting: LodgingRoomSetting) => Promise<void>;
   onSavePlace: (id: string, setting: LodgingPlaceSetting) => Promise<void>;
 }
@@ -45,6 +49,7 @@ export default function LodgingDetail({
   memberNames,
   saving,
   onClose,
+  studentOf,
   onSaveRoom,
   onSavePlace,
 }: Props) {
@@ -60,7 +65,7 @@ export default function LodgingDetail({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
       <div
-        className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className={`relative flex max-h-[85vh] w-full ${target.kind === 'room' && target.room.students.length ? 'max-w-2xl' : 'max-w-lg'} flex-col overflow-hidden rounded-2xl bg-white shadow-2xl`}
         role="dialog"
         aria-modal
       >
@@ -83,6 +88,7 @@ export default function LodgingDetail({
               columns={columns}
               memberNames={memberNames}
               saving={saving}
+              studentOf={studentOf}
               onSave={onSaveRoom}
             />
           ) : (
@@ -139,6 +145,7 @@ function RoomBody({
   columns,
   memberNames,
   saving,
+  studentOf,
   onSave,
 }: {
   room: LodgingRoomView;
@@ -147,6 +154,7 @@ function RoomBody({
   columns?: LodgingFilterKey[];
   memberNames: string[];
   saving: boolean;
+  studentOf?: (student: LodgingOccupant) => STSheetStudent | undefined;
   onSave: (num: string, setting: LodgingRoomSetting) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -203,42 +211,21 @@ function RoomBody({
       {room.settingNote && <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">{room.settingNote}</p>}
 
       {room.students.length > 0 ? (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-gray-400">
-              <th className="py-1 font-semibold">{isForeign ? 'Name' : '이름'}</th>
-              <th className="py-1 font-semibold">{isForeign ? 'Grade' : '학년'}</th>
-              <th className="py-1 font-semibold">{isForeign ? 'Class' : '반'}</th>
-              <th className="py-1 font-semibold">{isForeign ? 'Mentor' : '담임'}</th>
-              {(columns ?? []).map((k) => (
-                <th key={k} className="py-1 font-semibold">
-                  {isForeign ? (k === 'group' ? 'Group' : 'Airport') : LODGING_FILTER_LABEL[k]}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {room.students.map((s) => (
-              <tr key={s.studentId + s.rowNumber} className="border-t border-gray-100">
-                <td className="py-1.5 text-gray-900">
-                  {s.name}
-                  {s.englishName && <span className="ml-1 text-xs text-gray-400">{s.englishName}</span>}
-                </td>
-                <td className="py-1.5 text-gray-600">{s.grade}</td>
-                <td className="py-1.5 text-gray-600">{s.className || s.classNumber}</td>
-                <td className="py-1.5 text-gray-600">{s.classMentor}</td>
-                {(columns ?? []).map((k) => {
-                  const v = occupantFilterValue(s, k);
-                  return (
-                    <td key={k} className="py-1.5 text-gray-600">
-                      {k === 'airport' ? s.departureGroup || v || '—' : v || LODGING_FILTER_EMPTY_LABEL[k]}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        // 명단 탭 호수 보기와 같은 학생 카드 — 한 줄에 4명까지
+        <div className="grid grid-cols-4 gap-1.5">
+          {room.students.map((s) => (
+            <StudentCard
+              key={s.studentId + s.rowNumber}
+              occ={s}
+              student={studentOf?.(s)}
+              roomNum={room.num}
+              isForeign={isForeign}
+              extra={(columns ?? [])
+                .map((k) => (k === 'airport' ? s.departureGroup || occupantFilterValue(s, k) : occupantFilterValue(s, k)) || LODGING_FILTER_EMPTY_LABEL[k])
+                .join(' · ')}
+            />
+          ))}
+        </div>
       ) : (
         <p className="text-sm text-gray-500">
           {isForeign ? 'No students in this room.' : '시트에 이 방으로 배정된 학생이 없습니다.'}
@@ -455,5 +442,73 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
     >
       {children}
     </button>
+  );
+}
+
+/** 명단 탭(호수)의 학생 카드와 같은 모양 — 사진·이름(학년·성별)·반번호·영어 이름·반·방 */
+function StudentCard({
+  occ,
+  student,
+  roomNum,
+  isForeign,
+  extra,
+}: {
+  occ: LodgingOccupant;
+  student?: STSheetStudent;
+  roomNum: string;
+  isForeign: boolean;
+  extra?: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  const photo = broken ? null : toDriveImageUrl(student?.profilePhoto);
+  const male = occ.gender === 'M';
+  const gradeNum = occ.grade?.replace(/[^0-9]/g, '') ?? '';
+  const gradePrefix = occ.grade?.replace(/[0-9].*/g, '') || 'G';
+  const gradeBadge = gradeNum ? `${gradePrefix}${gradeNum}${male ? 'M' : 'F'}` : '';
+  return (
+    <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white">
+      {photo ? (
+        <img
+          src={photo}
+          alt={occ.name}
+          className="aspect-square w-full object-cover"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <div
+          className="flex aspect-square w-full items-center justify-center"
+          style={{ backgroundColor: male ? '#dbeafe' : '#fef9c3' }}
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-1/2 w-1/2" style={{ color: male ? '#93c5fd' : '#fcd34d' }}>
+            <path
+              fillRule="evenodd"
+              d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </div>
+      )}
+      <div className="px-1.5 pt-1.5 pb-1.5">
+      <p className={`truncate text-xs font-bold leading-tight ${male ? 'text-blue-600' : 'text-yellow-600'}`}>
+        {occ.name}
+        {gradeBadge ? ` (${gradeBadge})` : ''}
+      </p>
+      <p className="truncate text-[10px] font-medium text-gray-900">
+        {occ.classNumber || '-'} | {occ.studentId || '-'}
+      </p>
+      <div className="my-1 h-px bg-gray-200" />
+      <div className="space-y-0.5 text-[10px] text-gray-600">
+        <p className="truncate">{occ.englishName || '-'}</p>
+        <p className="truncate text-[9px]">
+          {isForeign ? 'Class' : '반'}:{occ.classMentor || '-'}
+          {occ.className ? `(${occ.className}반)` : ''}
+        </p>
+        <p className="truncate text-[9px]">
+          {isForeign ? 'Room' : '방'}:{occ.unitMentor || '-'}({roomNum}호)
+        </p>
+        {extra && <p className="truncate text-[9px] font-semibold text-green-600">{extra}</p>}
+      </div>
+      </div>
+    </div>
   );
 }

@@ -181,6 +181,17 @@ export function LodgingScreen() {
     persist({ ...lodging, places: { ...(lodging.places ?? {}), [id]: setting } });
 
 
+  // 방 시트의 학생 카드에 사진까지 — 명단 칸 → 시트 원본
+  const studentByKey = useMemo(() => {
+    const m = new Map<string, STSheetStudent>();
+    students.forEach((s) => m.set(`${s.rowNumber}|${s.studentId}`, s));
+    return m;
+  }, [students]);
+  const studentOf = useCallback(
+    (o: LodgingOccupant) => studentByKey.get(`${o.rowNumber}|${o.studentId}`),
+    [studentByKey]
+  );
+
   // 방 명단에서 학생을 누르면 학생 카드 (명단 탭과 같은 모달)
   const openStudent = (occ: LodgingOccupant, room: LodgingRoomView) => {
     const list = room.students
@@ -558,6 +569,7 @@ export function LodgingScreen() {
         saving={saving}
         onClose={() => setTarget(null)}
         onStudent={openStudent}
+        studentOf={studentOf}
         onSaveRoom={saveRoom}
         onSavePlace={savePlace}
       >

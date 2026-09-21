@@ -370,7 +370,7 @@ export default function DepartureContent() {
                 <button
                   key={student.studentId || `student-${idx}`}
                   onClick={() => handleSelectStudent(student)}
-                  className="bg-white rounded-lg p-2.5 border border-gray-200 hover:border-green-300 hover:shadow-md transition-all text-left"
+                  className="bg-white rounded-lg overflow-hidden border border-gray-200 hover:border-green-300 hover:shadow-md transition-all text-left"
                 >
                   {/* 프로필 사진 */}
                   {(() => {
@@ -379,7 +379,7 @@ export default function DepartureContent() {
                       <img
                         src={photoUrl}
                         alt={student.name}
-                        className="w-full aspect-square rounded-md object-cover mb-2 border border-gray-100"
+                        className="w-full aspect-square object-cover"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                           e.currentTarget.nextElementSibling?.classList.remove('hidden');
@@ -388,7 +388,7 @@ export default function DepartureContent() {
                     ) : null;
                   })()}
                   <div
-                    className={`w-full aspect-square rounded-md flex items-center justify-center mb-2 border border-gray-100 ${toDriveImageUrl(student.profilePhoto) ? 'hidden' : ''}`}
+                    className={`w-full aspect-square flex items-center justify-center ${toDriveImageUrl(student.profilePhoto) ? 'hidden' : ''}`}
                     style={{ backgroundColor: student.gender === 'M' ? '#dbeafe' : '#fef9c3' }}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
@@ -399,6 +399,7 @@ export default function DepartureContent() {
                     </svg>
                   </div>
 
+                  <div className="px-2 pt-1.5 pb-2">
                   <div className="mb-1.5">
                     <h3 className={`text-sm font-bold truncate leading-tight ${
                       student.gender === 'M' ? 'text-blue-600' : 'text-yellow-600'
@@ -423,6 +424,7 @@ export default function DepartureContent() {
                     <p className="truncate text-[8px] text-green-600 font-medium">
                       {student.departureGroup || '-'}{student.departureInstructor ? ` (${student.departureInstructor})` : ''}
                     </p>
+                  </div>
                   </div>
                 </button>
               );
