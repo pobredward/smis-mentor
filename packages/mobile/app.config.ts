@@ -126,7 +126,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       associatedDomains: [
         'applinks:smis-mentor.com',
         'applinks:www.smis-mentor.com',
-      ],
+      ], 
       // ios.config.googleMapsApiKey(구형 설정)는 Podfile에 지금은 없는 'react-native-google-maps' pod을 넣어
       // iOS 빌드가 pod install에서 실패한다. 대신 아래 plugins의 react-native-maps 플러그인으로 키를 넘긴다.
       infoPlist: {
