@@ -65,6 +65,12 @@ import {
   newDoseId,
   getGroupStock,
   getTotalStock,
+  getItemUsage,
+  itemLabel,
+  getDoseWarnings,
+  doseLabel,
+  findGroupByClassCode,
+  TREATMENT_USAGES,
   ABDOMINAL_PAIN_SITES,
   hasAbdominalPain,
   formatSymptomText,
@@ -100,10 +106,22 @@ import type {
   InventoryItemView,
   InventoryStock,
   InventoryGroup,
+  InventoryUsage,
   FeverLevel,
 } from '@smis-mentor/shared';
 import jobCodesService from '../services/jobCodesService';
 import { stSheetService } from '../services/stSheet';
+import { authenticatedFetch } from '../utils/apiClient';
+
+/**
+ * 약 복용 기록 → 재고 정산 요청 (서버가 원장과 비교해 차이만 반영, 여러 번 호출해도 안전).
+ * 실패해도 저장은 유지되고, 다음 저장 때 다시 맞춰진다.
+ */
+function syncDoseStock(recordId: string | undefined, campCode?: string | null) {
+  if (!recordId) return;
+  authenticatedFetch('/api/inventory/sync-dose', { method: 'POST', body: JSON.stringify({ recordId, campCode: campCode ?? undefined }) })
+    .catch(e => console.warn('재고 정산 요청 실패 (다음 저장 때 다시 맞춰짐):', e));
+}
 import { STSheetStudent, CampCode } from '@smis-mentor/shared';
 
 // ==================== 상수 ====================
@@ -165,10 +183,16 @@ type FeverOption = FeverLevel;
 
 // 재고(약품) 컨텍스트 — 최초보고·경과보고 약 복용 섹션이 같은 목록 사용
 interface PatientInventory {
+  /** 처치에 쓰는 사용 중 품목만 (먹는 약·바르는 약·처치 소모품) */
   medicines: InventoryItemView[];
   groups: InventoryGroup[];
+  defaultGroupIdForClass: (classCode?: string) => string;
+  dosesForStudent: (studentId?: string) => MedicationDose[];
+  studentNote: (studentId?: string) => string | undefined;
 }
-const PatientInventoryContext = createContext<PatientInventory>({ medicines: [], groups: [] });
+const PatientInventoryContext = createContext<PatientInventory>({
+  medicines: [], groups: [], defaultGroupIdForClass: () => '', dosesForStudent: () => [], studentNote: () => undefined,
+});
 const usePatientInventory = () => useContext(PatientInventoryContext);
 
 /** 다음 체크 담당자 후보: 외국인 선생님(foreign, foreign_temp) 제외 */
@@ -429,13 +453,31 @@ export function PatientScreen() {
     const unsubGroups = subscribeInventoryGroups(db, campCode, setInventoryGroups); // 캠프별 그룹
     return () => { unsubItems(); unsubStocks(); unsubGroups(); };
   }, [campCode]);
-  const patientInventory = useMemo<PatientInventory>(() => ({
-    medicines: buildInventoryViews(
-      inventoryItems.filter(i => i.category === '의약품' && i.isActive !== false),
-      inventoryStocks
-    ),
-    groups: inventoryGroups,
-  }), [inventoryItems, inventoryStocks, inventoryGroups]);
+  const patientInventory = useMemo<PatientInventory>(() => {
+    const byCampGroup = new Map(
+      inventoryGroups.filter(g => g.campGroupName).map(g => [g.campGroupName!.toLowerCase(), g.id] as const)
+    );
+    return {
+      medicines: buildInventoryViews(
+        inventoryItems.filter(i => i.isActive !== false && TREATMENT_USAGES.includes(getItemUsage(i))),
+        inventoryStocks,
+        inventoryGroups
+      ),
+      groups: inventoryGroups,
+      defaultGroupIdForClass: (classCode) => {
+        if (!classCode) return '';
+        const cg = findGroupByClassCode(campGroups, classCode);
+        return cg ? byCampGroup.get(cg.name.toLowerCase()) ?? '' : '';
+      },
+      dosesForStudent: (studentId) =>
+        studentId ? records.filter(r => r.studentId === studentId).flatMap(r => r.medicationDoses ?? []) : [],
+      studentNote: (studentId) => {
+        const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string; notes?: string }) | undefined;
+        const parts = [st?.medication && `복용약 ${st.medication}`, st?.notes && `특이사항 ${st.notes}`].filter(Boolean);
+        return parts.length ? parts.join(' · ') : undefined;
+      },
+    };
+  }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students]);
 
   // 현재 환자 / 완치 분리
   const activeRecords = useMemo(() =>
@@ -654,9 +696,13 @@ export function PatientScreen() {
     Alert.alert('삭제 확인', `"${name}" 환자 기록을 삭제하시겠습니까?`, [
       { text: '취소', style: 'cancel' },
       // 기록 삭제 시 남아 있는 약 복용 수량은 재고에 복구
-      { text: '삭제', style: 'destructive', onPress: () => deletePatientRecord(db, id, target && campCode
-        ? { campCode, currentDoses: target.medicationDoses ?? [], by: userData?.name ?? '', studentName: target.studentName }
-        : undefined) },
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        await deletePatientRecord(db, id, target && campCode
+          ? { campCode, currentDoses: target.medicationDoses ?? [], by: userData?.name ?? '', studentName: target.studentName }
+          : undefined);
+        // 삭제된 기록에 남아 있던 복용 수량은 서버가 원장 기준으로 재고에 복구
+        if (target?.medicationDoses?.length) syncDoseStock(id, campCode);
+      } },
     ]);
   }, [records, campCode, userData]);
 
@@ -674,6 +720,7 @@ export function PatientScreen() {
     // 경과보고와 함께 기록한 약 복용은 저장 시 1회만 재고 차감
     await addProgressLog(db, record.id, { ...log, loggedBy: userData.name },
       doses?.length ? { campCode, doses, by: userData.name, studentName: record.studentName } : undefined);
+    if (doses?.length) syncDoseStock(record.id, campCode);
   }, [userData, campCode]);
 
   const handleRemoveProgressLog = useCallback(async (record: PatientRecord, logIndex: number) => {
@@ -681,8 +728,11 @@ export function PatientScreen() {
     if (logs.length === 0) return;
     Alert.alert('삭제 확인', '이 경과 기록을 삭제할까요? (함께 기록한 약 복용은 재고에 복구됩니다)', [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => removeProgressLog(db, record.id, logs, logIndex,
-        campCode ? { campCode, currentDoses: record.medicationDoses ?? [], by: userData?.name ?? '', studentName: record.studentName } : undefined) },
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        await removeProgressLog(db, record.id, logs, logIndex,
+          campCode ? { campCode, currentDoses: record.medicationDoses ?? [], by: userData?.name ?? '', studentName: record.studentName } : undefined);
+        if (record.medicationDoses?.length) syncDoseStock(record.id, campCode);
+      } },
     ]);
   }, [campCode, userData]);
 
@@ -1052,7 +1102,7 @@ export function PatientScreen() {
           onClose={() => setShowQuickReport(false)}
           onSubmit={async (quickForm) => {
             if (!campCode || !userData) return;
-            await addPatientRecord(db, {
+            const newRecordId = await addPatientRecord(db, {
               campCode,
               studentId: quickForm.studentId,
               studentName: quickForm.studentName,
@@ -1077,7 +1127,9 @@ export function PatientScreen() {
               assigneeName: userData.name,
               assigneeId: userData.userId,
               recordedBy: userData.name,
+              recordedById: userData.userId,
             });
+            if (quickForm.doses?.length) syncDoseStock(newRecordId, campCode);
             setShowQuickReport(false);
           }}
         />
@@ -1980,6 +2032,7 @@ function ProgressTabMobile({
   const [showAssigneeList, setShowAssigneeList] = useState(false);
 
   const handleAddLog = () => {
+    if (logDoses.some(d => !d.itemId || !d.groupId)) { Alert.alert('확인 필요', '약·처치 물품 사용에서 약과 그룹을 모두 선택하거나 빈 줄을 삭제해주세요.'); return; }
     if (logStatus === '중간보고' && (!nextCheckTime || !nextCheckAssigneeName)) {
       Alert.alert('입력 필요', '중간보고 시 다음 체크 시간과 담당자를 지정해주세요.');
       return;
@@ -2201,6 +2254,9 @@ function ProgressTabMobile({
                 medicines={inventory.medicines}
                 groups={inventory.groups}
                 givenBy={currentUserName}
+                defaultGroupId={inventory.defaultGroupIdForClass(record.className)}
+                history={inventory.dosesForStudent(record.studentId)}
+                studentNote={inventory.studentNote(record.studentId)}
               />
             )}
 
@@ -2269,7 +2325,7 @@ function ProgressTabMobile({
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
                         {doses.map(d => (
                           <View key={d.id} style={{ backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#d1fae5', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                            <Text style={{ fontSize: 10, color: '#047857' }}>💊 {d.itemName} {d.quantity}{d.unit ?? '개'} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</Text>
+                            <Text style={{ fontSize: 10, color: '#047857' }}>💊 {doseLabel(d)} {d.quantity}{d.unit ?? '개'} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</Text>
                           </View>
                         ))}
                       </View>
@@ -2302,106 +2358,157 @@ function ProgressTabMobile({
 
 // ==================== 약 복용 (재고 연동, 모바일) ====================
 
-/** 약 복용 입력 섹션 — 최초보고·경과보고 공용. 약품·그룹은 재고 탭 데이터 그대로 사용 */
-function MedicationDoseEditorMobile({ doses, onChange, medicines, groups, givenBy }: {
+/** 약·처치 물품 사용 입력 — 최초보고·경과보고 공용. 품목·그룹은 재고 탭 데이터 그대로 사용 */
+function MedicationDoseEditorMobile({ doses, onChange, medicines, groups, givenBy, defaultGroupId, history, studentNote }: {
   doses: MedicationDose[];
   onChange: (next: MedicationDose[]) => void;
   medicines: InventoryItemView[];
   groups: InventoryGroup[];
   givenBy: string;
+  defaultGroupId?: string;
+  history?: MedicationDose[];
+  studentNote?: string;
 }) {
   const canAdd = medicines.length > 0 && groups.length > 0;
   const addRow = () => {
     if (!canAdd) return;
-    const item = medicines[0];
-    const group = groups[0];
+    // 기본값을 비워 둔다 — 확인 없이 저장해 엉뚱한 약이 차감되는 것을 막기 위해
+    const g = groups.find(x => x.id === defaultGroupId);
     onChange([...doses, {
-      id: newDoseId(), itemId: item.id, itemName: item.name, unit: item.unit || '개', quantity: 1,
-      groupId: group.id, groupName: group.name, givenAt: Timestamp.now(), givenBy, source: 'initial',
+      id: newDoseId(), itemId: '', itemName: '', unit: '개', quantity: 1,
+      groupId: g?.id ?? '', groupName: g?.name ?? '', givenAt: Timestamp.now(), givenBy, source: 'initial',
     }]);
   };
   const update = (idx: number, patch: Partial<MedicationDose>) =>
     onChange(doses.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
   const remove = (idx: number) => onChange(doses.filter((_, i) => i !== idx));
+  const past = (history ?? []).filter(h => !doses.some(d => d.id === h.id));
 
   return (
     <View style={{ backgroundColor: '#ecfdf5', borderRadius: 10, borderWidth: 1, borderColor: '#a7f3d0', padding: 10, gap: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>💊 약 복용</Text>
-          <Text style={{ fontSize: 9, color: '#047857' }}>실제로 먹인 경우만 기록 — 저장 시 그룹 재고 자동 차감</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>💊 약·처치 물품 사용</Text>
+          <Text style={{ fontSize: 9, color: '#047857' }}>실제로 먹이거나 쓴 경우만 기록 — 저장 시 그룹 재고 자동 차감</Text>
         </View>
         <TouchableOpacity onPress={addRow} disabled={!canAdd}
           style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: canAdd ? '#059669' : '#e5e7eb' }}>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: canAdd ? '#fff' : '#9ca3af' }}>+ 약 추가</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: canAdd ? '#fff' : '#9ca3af' }}>+ 추가</Text>
         </TouchableOpacity>
       </View>
+
+      {studentNote ? (
+        <Text style={{ fontSize: 10, color: '#be123c', backgroundColor: '#fff1f2', borderRadius: 6, padding: 6 }}>⚠️ 학생 정보 — {studentNote}</Text>
+      ) : null}
 
       {!canAdd && (
         <Text style={{ fontSize: 10, color: '#b45309', backgroundColor: '#fffbeb', borderRadius: 6, padding: 6 }}>
           {medicines.length === 0
-            ? '등록된 약품이 없습니다. 재고 탭에서 관리자가 약품(의약품)을 등록하면 선택할 수 있습니다.'
-            : '재고 그룹이 없습니다. 재고 탭에서 관리자가 그룹(A그룹 등)을 등록해주세요.'}
+            ? '등록된 약·처치 물품이 없습니다. 재고 탭에서 관리자가 품목을 등록하면 선택할 수 있습니다.'
+            : '재고 그룹이 없습니다. 재고 탭에서 관리자가 그룹(Spring 등)을 등록해주세요.'}
         </Text>
       )}
 
-      {doses.map((d, idx) => {
-        const item = medicines.find(m => m.id === d.itemId);
-        const groupStock = item ? getGroupStock(item, d.groupId) : 0;
-        const total = item ? getTotalStock(item) : 0;
-        const short = item ? d.quantity > groupStock : false;
-        return (
-          <View key={d.id} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#d1fae5', padding: 8, gap: 6 }}>
-            {/* 약품 선택 */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5 }}>
-              {medicines.map(m => {
-                const on = m.id === d.itemId;
-                return (
-                  <TouchableOpacity key={m.id} onPress={() => update(idx, { itemId: m.id, itemName: m.name, unit: m.unit || '개' })}
-                    style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: on ? '#059669' : '#e5e7eb', backgroundColor: on ? '#059669' : '#fff' }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: on ? '#fff' : '#374151' }}>{m.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            {/* 수량 + 그룹 */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <TouchableOpacity onPress={() => update(idx, { quantity: Math.max(1, d.quantity - 1) })}
-                style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 14, color: '#374151' }}>−</Text>
-              </TouchableOpacity>
-              <Text style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: '700', color: '#111827' }}>{d.quantity}{d.unit ?? '개'}</Text>
-              <TouchableOpacity onPress={() => update(idx, { quantity: d.quantity + 1 })}
-                style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 14, color: '#374151' }}>+</Text>
-              </TouchableOpacity>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} style={{ flex: 1 }}>
-                {groups.map(g => {
-                  const on = g.id === d.groupId;
-                  return (
-                    <TouchableOpacity key={g.id} onPress={() => update(idx, { groupId: g.id, groupName: g.name })}
-                      style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: on ? '#fef3c7' : '#f3f4f6', borderWidth: 1, borderColor: on ? '#f59e0b' : '#f3f4f6' }}>
-                      <Text style={{ fontSize: 10, fontWeight: '600', color: on ? '#92400e' : '#6b7280' }}>{g.name}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-              <TouchableOpacity onPress={() => remove(idx)} style={{ padding: 2 }}>
-                <Text style={{ fontSize: 12 }}>🗑️</Text>
-              </TouchableOpacity>
-            </View>
-            <TextInput value={d.memo ?? ''} onChangeText={v => update(idx, { memo: v || undefined })}
-              placeholder="메모 (예: 식사 후 복용)" placeholderTextColor="#9ca3af"
-              style={[styles.formInput, { fontSize: 11, paddingVertical: 5 }]} />
-            {item?.description ? <Text style={{ fontSize: 10, color: '#4b5563' }}>ℹ️ {item.description}</Text> : null}
-            {item && (
-              <Text style={{ fontSize: 10, color: short ? '#dc2626' : '#6b7280', fontWeight: short ? '600' : '400' }}>
-                재고 {d.groupName} {groupStock}{d.unit ?? '개'} · 전체 {total}{d.unit ?? '개'}{short ? ' — 재고 부족' : ''}
-              </Text>
-            )}
+      {doses.map((d, idx) => (
+        <DoseRowMobile key={d.id} dose={d} idx={idx} doses={doses} medicines={medicines} groups={groups} past={past}
+          onUpdate={patch => update(idx, patch)} onRemove={() => remove(idx)} />
+      ))}
+    </View>
+  );
+}
+
+function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate, onRemove }: {
+  dose: MedicationDose; idx: number; doses: MedicationDose[]; medicines: InventoryItemView[]; groups: InventoryGroup[];
+  past: MedicationDose[]; onUpdate: (patch: Partial<MedicationDose>) => void; onRemove: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [picking, setPicking] = useState(!d.itemId);
+  const item = medicines.find(m => m.id === d.itemId);
+  const groupStock = item && d.groupId ? getGroupStock(item, d.groupId) : 0;
+  const total = item ? getTotalStock(item) : 0;
+  const candidates = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const order: InventoryUsage[] = ['oral', 'topical', 'supply'];
+    return medicines
+      .filter(m => !q || [m.name, m.kind, m.spec, m.ingredient].some(f => f?.toLowerCase().includes(q)))
+      .sort((a, b) => order.indexOf(getItemUsage(a)) - order.indexOf(getItemUsage(b)))
+      .slice(0, 12);
+  }, [medicines, query]);
+  const sameKey = (x: MedicationDose) => (item?.ingredient ? x.ingredient === item.ingredient : x.itemId === d.itemId);
+  const pending = item ? doses.slice(0, idx + 1).filter(x => x.itemId && sameKey(x)).length : 0;
+  const warnings = item && getItemUsage(item) === 'oral' ? getDoseWarnings(item, past, pending) : [];
+  const incomplete = !d.itemId || !d.groupId;
+
+  return (
+    <View style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: incomplete ? '#fcd34d' : '#d1fae5', padding: 8, gap: 6 }}>
+      {/* 약·물품 선택 */}
+      {picking || !item ? (
+        <View style={{ gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TextInput value={query} onChangeText={setQuery} placeholder="약·물품 검색 (타이레놀, 감기, 밴드…)" placeholderTextColor="#9ca3af"
+              style={[styles.formInput, { flex: 1, fontSize: 12, paddingVertical: 6 }]} />
+            {item && <TouchableOpacity onPress={() => setPicking(false)}><Text style={{ fontSize: 11, color: '#6b7280' }}>취소</Text></TouchableOpacity>}
+            <TouchableOpacity onPress={onRemove} style={{ padding: 2 }}><Text style={{ fontSize: 12 }}>🗑️</Text></TouchableOpacity>
           </View>
-        );
-      })}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+            {candidates.map(m => (
+              <TouchableOpacity key={m.id}
+                onPress={() => { onUpdate({ itemId: m.id, itemName: m.name, itemKind: m.kind, ingredient: m.ingredient, unit: m.unit || '개' }); setPicking(false); setQuery(''); }}
+                style={{ paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: m.id === d.itemId ? '#059669' : '#e5e7eb', backgroundColor: m.id === d.itemId ? '#059669' : '#fff' }}>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: m.id === d.itemId ? '#fff' : '#374151' }}>{itemLabel(m)}</Text>
+              </TouchableOpacity>
+            ))}
+            {candidates.length === 0 && <Text style={{ fontSize: 10, color: '#9ca3af' }}>검색 결과가 없습니다</Text>}
+          </View>
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity onPress={() => setPicking(true)} style={{ flex: 1 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#065f46' }}>{itemLabel(item)} <Text style={{ fontSize: 10, fontWeight: '400', color: '#6b7280' }}>변경</Text></Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onRemove} style={{ padding: 2 }}><Text style={{ fontSize: 12 }}>🗑️</Text></TouchableOpacity>
+        </View>
+      )}
+
+      {/* 수량 + 그룹 */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <TouchableOpacity onPress={() => onUpdate({ quantity: Math.max(1, d.quantity - 1) })}
+          style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 14, color: '#374151' }}>−</Text>
+        </TouchableOpacity>
+        <Text style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: '700', color: '#111827' }}>{d.quantity}{d.unit ?? '개'}</Text>
+        <TouchableOpacity onPress={() => onUpdate({ quantity: d.quantity + 1 })}
+          style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 14, color: '#374151' }}>+</Text>
+        </TouchableOpacity>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} style={{ flex: 1 }}>
+          {groups.map(g => {
+            const on = g.id === d.groupId;
+            return (
+              <TouchableOpacity key={g.id} onPress={() => onUpdate({ groupId: g.id, groupName: g.name })}
+                style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: on ? '#fef3c7' : '#f3f4f6', borderWidth: 1, borderColor: on ? '#f59e0b' : '#f3f4f6' }}>
+                <Text style={{ fontSize: 10, fontWeight: '600', color: on ? '#92400e' : '#6b7280' }}>{g.name}{item ? ` ${getGroupStock(item, g.id)}` : ''}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+      <TextInput value={d.memo ?? ''} onChangeText={v => onUpdate({ memo: v })}
+        placeholder="메모 (예: 식사 후 복용)" placeholderTextColor="#9ca3af"
+        style={[styles.formInput, { fontSize: 11, paddingVertical: 5 }]} />
+      {incomplete && <Text style={{ fontSize: 10, color: '#b45309' }}>약·물품과 사용한 그룹을 선택해주세요</Text>}
+      {warnings.map((w, i) => (
+        <Text key={i} style={{ fontSize: 10, fontWeight: w.level === 'warn' ? '700' : '400', color: w.level === 'warn' ? '#b91c1c' : '#1d4ed8', backgroundColor: w.level === 'warn' ? '#fef2f2' : 'transparent', borderRadius: 4, padding: w.level === 'warn' ? 4 : 0 }}>
+          {w.level === 'warn' ? '⚠️ ' : 'ℹ️ '}{w.message}
+        </Text>
+      ))}
+      {item?.dosageNote ? <Text style={{ fontSize: 10, color: '#065f46' }}>📋 {item.dosageNote}</Text> : null}
+      {item?.description ? <Text style={{ fontSize: 10, color: '#4b5563' }}>ℹ️ {item.description}</Text> : null}
+      {item && d.groupId ? (
+        <Text style={{ fontSize: 10, color: groupStock - d.quantity < 0 ? '#dc2626' : '#6b7280', fontWeight: groupStock - d.quantity < 0 ? '600' : '400' }}>
+          재고 {d.groupName} {groupStock}{d.unit ?? '개'} · 전체 {total}{d.unit ?? '개'}{groupStock - d.quantity < 0 ? ' — 기록상 부족 (저장 가능, 실사 필요 표시)' : ''}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -2420,6 +2527,7 @@ function DoseHistoryMobile({ record, currentUserName }: { record: PatientRecord;
     try {
       await updateMedicationDoses(db, record.id,
         { campCode: record.campCode, currentDoses: record.medicationDoses ?? [], by: currentUserName, studentName: record.studentName }, next);
+      syncDoseStock(record.id, record.campCode);
     } catch (e) {
       console.error('약 복용 기록 수정 오류:', e);
     } finally {
@@ -2450,7 +2558,7 @@ function DoseHistoryMobile({ record, currentUserName }: { record: PatientRecord;
               <Text style={{ fontSize: 9, color: d.source === 'initial' ? '#4b5563' : '#2563eb' }}>{d.source === 'initial' ? '최초' : '경과'}</Text>
             </View>
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 11, color: '#1f2937' }}>
-              <Text style={{ fontWeight: '700' }}>{d.itemName}</Text> · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
+              <Text style={{ fontWeight: '700' }}>{doseLabel(d)}</Text> · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
             </Text>
             <TouchableOpacity disabled={busy || d.quantity <= 1} onPress={() => changeQty(d.id, -1)}
               style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', opacity: busy || d.quantity <= 1 ? 0.4 : 1 }}>
@@ -4076,6 +4184,7 @@ function QuickReportModalMobile({
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
+    if (doses.some(d => !d.itemId || !d.groupId)) { Alert.alert('확인 필요', '약·처치 물품 사용에서 약과 그룹을 모두 선택하거나 빈 줄을 삭제해주세요.'); return; }
     setSubmitting(true);
     try {
       const feverLabel = feverLevel === 'normal' ? '정상' : feverLevel === 'slight' ? '미열' : '고열';
@@ -4430,13 +4539,16 @@ function QuickReportModalMobile({
 
         {/* ⑥ 약 복용 (실제로 먹인 경우) — 저장 시 재고 자동 차감 */}
         <View>
-          <Text style={styles.formSectionTitle}>⑥ 약 복용 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text>
+          <Text style={styles.formSectionTitle}>⑥ 약·처치 물품 사용 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text>
           <MedicationDoseEditorMobile
             doses={doses}
             onChange={setDoses}
             medicines={inventory.medicines}
             groups={inventory.groups}
             givenBy={reporterName}
+            defaultGroupId={inventory.defaultGroupIdForClass(form.className)}
+            history={inventory.dosesForStudent(form.studentId)}
+            studentNote={inventory.studentNote(form.studentId)}
           />
         </View>
 

@@ -471,6 +471,10 @@ export interface MedicationDose {
   itemId: string;
   /** 약품명 스냅샷 (약품이 나중에 수정/비활성화되어도 기록 유지) */
   itemName: string;
+  /** 종류 스냅샷 (같은 이름 구분: 모드코프 종합감기약/목감기약) */
+  itemKind?: string;
+  /** 주성분 스냅샷 (같은 성분 중복 복용 경고용) */
+  ingredient?: string;
   quantity: number;
   /** 단위 스냅샷 (개, 포, ml 등) */
   unit?: string;
@@ -484,6 +488,11 @@ export interface MedicationDose {
   source: 'initial' | 'progress';
   /** 경과보고 연결 키: 해당 ProgressLog.loggedAt.toMillis() */
   progressLogAt?: number;
+}
+
+/** 복용 기록 표시명: "모드코프(종합감기약)" */
+export function doseLabel(d: Pick<MedicationDose, 'itemName' | 'itemKind'>): string {
+  return d.itemKind ? `${d.itemName}(${d.itemKind})` : d.itemName;
 }
 
 /** 경과 로그에 연결된 복용 기록 필터 */
@@ -608,6 +617,8 @@ export interface PatientRecord {
   /** 최초보고 시점의 현재 위치 */
   location?: string;
   recordedBy: string;
+  /** 기록자 UID (삭제 권한 확인용) */
+  recordedById?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

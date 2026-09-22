@@ -761,8 +761,8 @@ export default function EvaluationStageCards({ userId, targetUserName, evaluator
                         </div>
                       )}
 
-                      {/* 수정/삭제 버튼 (본인 평가만) */}
-                      {currentUserId === evaluation.evaluatorId && (
+                      {/* 수정/삭제 버튼 (본인 평가 + AI 초안은 모든 관리자) */}
+                      {(currentUserId === evaluation.evaluatorId || evaluation.aiDraft) && (
                         <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
                           <button
                             onClick={() => setEditingEvaluation(evaluation)}

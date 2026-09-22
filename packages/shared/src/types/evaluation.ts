@@ -69,6 +69,7 @@ export interface Evaluation {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   isFinalized: boolean;        // 평가 완료 여부
+  aiDraft?: boolean;           // MCP 로 만든 AI 평가 초안 (평가자 "이름 (AI)", 모든 관리자가 수정·삭제 가능)
   isVisible: boolean;          // 평가 대상자에게 공개 여부
 }
 

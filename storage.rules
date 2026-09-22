@@ -17,6 +17,12 @@ service firebase.storage {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    // 캠프 스태프 여부 (admin / mentor / foreign)
+    function isCampStaff() {
+      return request.auth != null &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'mentor', 'foreign'];
+    }
+
     // admin 여부 (Firestore users 문서의 role 필드 확인)
     function isAdmin() {
       return request.auth != null &&
@@ -198,6 +204,21 @@ service firebase.storage {
         isUnder10MB()
       );
       allow delete: if isAuthenticated();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 분실물 사진·영상
+    // 경로: lostItems/{campCode}/{lostItemId}/...
+    // 역할: 인증 사용자(읽기/업로드/삭제), 이미지 또는 영상 50MB 이하
+    // ──────────────────────────────────────────────────────────────
+    match /lostItems/{campCode}/{lostItemId}/{allPaths=**} {
+      allow read: if isCampStaff();
+      allow write: if (
+        isCampStaff() &&
+        (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('video/.*')) &&
+        isUnder50MB()
+      );
+      allow delete: if isCampStaff();
     }
 
     // ──────────────────────────────────────────────────────────────

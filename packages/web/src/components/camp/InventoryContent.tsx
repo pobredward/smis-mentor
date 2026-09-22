@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { FiBox, FiSearch, FiPlus, FiShoppingCart, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCheck } from 'react-icons/fi';
+import { FiBox, FiSearch, FiPlus, FiShoppingCart, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCheck, FiCamera, FiImage, FiVideo } from 'react-icons/fi';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { useAuth } from '@/contexts/AuthContext';
-import { db } from '@/lib/firebase';
-import { jobCodesService, CampCode } from '@/lib/stSheetService';
+import { db, storage } from '@/lib/firebase';
+import { authenticatedPost } from '@/lib/apiClient';
+import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
+import type { STSheetStudent } from '@/lib/stSheetService';
 import {
   subscribeInventoryItems,
   subscribeInventoryStocks,
@@ -23,6 +26,13 @@ import {
   setGroupMinStock,
   restock,
   adjustStockTo,
+  setStockLevels,
+  getCampGroups,
+  findGroupByClassCode,
+  itemLabel,
+  getItemUsage,
+  INVENTORY_USAGES,
+  INVENTORY_USAGE_LABELS,
   subscribeInventoryRequests,
   subscribeInventoryRequestEntries,
   subscribePurchaseItems,
@@ -36,6 +46,16 @@ import {
   receivePurchaseItem,
   summarizeRequestEntries,
   PURCHASE_STATUS_LABELS,
+  subscribeLostItems,
+  addLostItem,
+  updateLostItem,
+  setLostItemStatus,
+  addLostItemMedia,
+  removeLostItemMedia,
+  deleteLostItem,
+  lostItemMediaPath,
+  LOST_ITEM_STATUSES,
+  LOST_ITEM_STATUS_LABELS,
   buildInventoryViews,
   computePurchaseNeeds,
   getGroupStock,
@@ -59,9 +79,14 @@ import type {
   InventoryRequestEntry,
   InventoryRequestLine,
   PurchaseItem,
+  LostItem,
+  LostItemMedia,
+  LostItemStatus,
+  InventoryUsage,
+  CampGroup,
 } from '@smis-mentor/shared';
 
-type SubTab = 'stock' | 'request' | 'purchase' | 'manage';
+type SubTab = 'stock' | 'request' | 'purchase' | 'lost' | 'manage';
 
 function todayStr(): string {
   const d = new Date();
@@ -76,7 +101,7 @@ const CATEGORY_STYLE: Record<InventoryCategory, string> = {
   기타: 'bg-gray-50 text-gray-600 border-gray-200',
 };
 
-function fmtDateTime(ts: InventoryMovement['at']): string {
+function fmtDateTime(ts: InventoryMovement['at'] | undefined): string {
   if (!ts?.toDate) return '';
   const d = ts.toDate();
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -103,6 +128,15 @@ export default function InventoryContent() {
     }).catch(() => {});
   }, [activeJobCodeId]);
 
+  // 캠프 그룹(Spring 등 · 반 코드)과 학생 명단 — 재고 그룹 연결, 분실물 이름표 알림에 사용
+  const [campGroups, setCampGroups] = useState<CampGroup[]>([]);
+  const [students, setStudents] = useState<STSheetStudent[]>([]);
+  useEffect(() => {
+    if (!campCode) return;
+    getCampGroups(db, campCode).then(setCampGroups).catch(() => {});
+    stSheetService.getCachedData(campCode).then(s => setStudents((s ?? []) as STSheetStudent[])).catch(() => {});
+  }, [campCode]);
+
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [stocks, setStocks] = useState<Record<string, InventoryStock>>({});
   const [groups, setGroups] = useState<InventoryGroup[]>([]);
@@ -117,14 +151,17 @@ export default function InventoryContent() {
   useEffect(() => { if (isAdmin) return subscribeInventoryPackages(db, setPackages); }, [isAdmin]);
   const [requests, setRequests] = useState<InventoryRequest[]>([]);
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
+  const [lostItems, setLostItems] = useState<LostItem[]>([]);
   useEffect(() => {
     if (!campCode) return;
     const u1 = subscribeInventoryRequests(db, campCode, setRequests);
     const u2 = subscribePurchaseItems(db, campCode, setPurchases);
-    return () => { u1(); u2(); };
+    const u3 = subscribeLostItems(db, campCode, setLostItems);
+    return () => { u1(); u2(); u3(); };
   }, [campCode]);
+  const keptLostCount = useMemo(() => lostItems.filter(l => l.status === 'found').length, [lostItems]);
 
-  const views = useMemo(() => buildInventoryViews(items, stocks), [items, stocks]);
+  const views = useMemo(() => buildInventoryViews(items, stocks, groups), [items, stocks, groups]);
   const needs = useMemo(() => computePurchaseNeeds(views, groups), [views, groups]);
   const openRequests = useMemo(() => requests.filter(r => r.status === 'open'), [requests]);
   const pendingPurchases = useMemo(() => purchases.filter(p => p.status !== 'received').length, [purchases]);
@@ -146,6 +183,7 @@ export default function InventoryContent() {
     { id: 'stock', title: isForeign ? 'Stock' : '재고 현황', icon: <FiBox className="w-3.5 h-3.5" /> },
     { id: 'request', title: isForeign ? 'Request' : '재고 요청', icon: <FiClipboard className="w-3.5 h-3.5" />, badge: openRequests.length },
     { id: 'purchase', title: isForeign ? 'To buy' : '구매 필요', icon: <FiShoppingCart className="w-3.5 h-3.5" />, badge: needs.length + pendingPurchases },
+    { id: 'lost', title: isForeign ? 'Lost & Found' : '분실물', icon: <FiSearch className="w-3.5 h-3.5" />, badge: keptLostCount },
     ...(isAdmin ? [{ id: 'manage' as SubTab, title: '관리', icon: <FiSettings className="w-3.5 h-3.5" /> }] : []),
   ];
 
@@ -187,8 +225,11 @@ export default function InventoryContent() {
         {subTab === 'purchase' && (
           <PurchaseTab needs={needs} groups={groups} purchases={purchases} items={items} campCode={campCode} isAdmin={isAdmin} userName={userName} onSelect={setSelectedId} />
         )}
+        {subTab === 'lost' && (
+          <LostTab campCode={campCode} jobCodeId={activeJobCodeId ?? ''} students={students} campGroups={campGroups} lostItems={lostItems} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
+        )}
         {subTab === 'manage' && isAdmin && (
-          <ManageTab campCode={campCode} items={items} views={views} groups={groups} packages={packages} userName={userName} onSelect={setSelectedId} />
+          <ManageTab campCode={campCode} items={items} views={views} groups={groups} packages={packages} campGroups={campGroups} userName={userName} onSelect={setSelectedId} />
         )}
       </div>
 
@@ -219,6 +260,9 @@ function StockTab({ views, groups, needs, isAdmin, onSelect }: {
   const [category, setCategory] = useState<InventoryCategory | '전체'>('전체');
   const [groupFilter, setGroupFilter] = useState<string>('전체');
   const [showInactive, setShowInactive] = useState(false);
+  // 기본: 이 캠프 그룹에 둔 적 있는 품목만 (기본 세트 전체 140여 개가 다 보이지 않게)
+  const [placedOnly, setPlacedOnly] = useState(true);
+  const anyPlaced = useMemo(() => views.some(v => Object.keys(v.stocks).length > 0), [views]);
 
   const shortItems = useMemo(() => new Set(needs.map(n => n.itemId)), [needs]);
 
@@ -226,12 +270,13 @@ function StockTab({ views, groups, needs, isAdmin, onSelect }: {
     const q = search.trim().toLowerCase();
     return views.filter(v => {
       if (!showInactive && v.isActive === false) return false;
+      if (placedOnly && anyPlaced && Object.keys(v.stocks).length === 0) return false;
       if (category !== '전체' && v.category !== category) return false;
       if (groupFilter !== '전체' && getGroupStock(v, groupFilter) <= 0) return false;
       if (!q) return true;
       return [v.name, v.kind, v.subCategory, v.spec, v.description].some(f => f?.toLowerCase().includes(q));
     });
-  }, [views, search, category, groupFilter, showInactive]);
+  }, [views, search, category, groupFilter, showInactive, placedOnly, anyPlaced]);
 
   // 세부 분류별로 묶어서 표시
   const sections = useMemo(() => {
@@ -270,8 +315,13 @@ function StockTab({ views, groups, needs, isAdmin, onSelect }: {
                   groupFilter === g.id ? 'bg-amber-100 text-amber-800 border-amber-300 font-semibold' : 'bg-white text-gray-500 border-gray-200'
                 }`}>{g.name}</button>
             ))}
-            {isAdmin && (
+            {anyPlaced && (
               <label className="ml-auto flex items-center gap-1 text-[10px] text-gray-400 shrink-0 cursor-pointer">
+                <input type="checkbox" checked={!placedOnly} onChange={e => setPlacedOnly(!e.target.checked)} className="w-3 h-3" />전체 품목 보기
+              </label>
+            )}
+            {isAdmin && (
+              <label className="flex items-center gap-1 text-[10px] text-gray-400 shrink-0 cursor-pointer">
                 <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="w-3 h-3" />사용 안 함 포함
               </label>
             )}
@@ -332,11 +382,11 @@ function ItemCard({ view, groups, isShort, onClick }: {
             {groups.map(g => {
               const n = getGroupStock(view, g.id);
               const min = getMinStock(view, g.id);
-              const low = min > 0 && n < min;
+              const low = n < 0 || (min > 0 && n < min);
               return (
                 <span key={g.id} className={`text-[10px] px-1.5 py-0.5 rounded border ${
                   low ? 'bg-red-50 text-red-700 border-red-200 font-semibold' : n > 0 ? 'bg-gray-50 text-gray-700 border-gray-100' : 'bg-white text-gray-300 border-gray-100'
-                }`}>{g.name} {n}</span>
+                }`}>{g.name} {n}{n < 0 ? ' · 실사 필요' : ''}</span>
               );
             })}
           </div>
@@ -679,7 +729,7 @@ function PurchaseRow({ purchase: p, items, groups, campCode, isAdmin, userName }
           <div className="flex gap-1.5 flex-wrap items-center">
             <select value={itemId} onChange={e => setItemId(e.target.value)} className="text-[11px] border border-emerald-200 rounded-lg px-2 py-1 bg-white flex-1 min-w-[120px]">
               <option value="">품목 선택</option>
-              {items.filter(i => i.isActive !== false).map(i => <option key={i.id} value={i.id}>{i.name}{i.spec ? ` (${i.spec})` : ''}</option>)}
+              {items.filter(i => i.isActive !== false).map(i => <option key={i.id} value={i.id}>{itemLabel(i)}</option>)}
             </select>
             <select value={groupId} onChange={e => setGroupId(e.target.value)} className="text-[11px] border border-emerald-200 rounded-lg px-2 py-1 bg-white w-28">
               {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -790,7 +840,11 @@ function RequestDetail({ request, items, isAdmin, userId, userName, onBack }: {
   const newLine = (): InventoryRequestLine => ({ id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: '', quantity: 1, unit: '개' });
   const update = (id: string, patch: Partial<InventoryRequestLine>) => { setDirty(true); setLines(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l)); };
   const onNameChange = (id: string, name: string) => {
-    const matched = items.find(i => i.name === name.trim());
+    // 같은 이름 품목이 여럿이면 "이름 (종류·규격)"으로 골라야 연결됨
+    const t = name.trim();
+    const byLabel = items.find(i => itemLabel(i) === t);
+    const sameName = items.filter(i => i.name === t);
+    const matched = byLabel ?? (sameName.length === 1 ? sameName[0] : undefined);
     update(id, { name, itemId: matched?.id, ...(matched ? { unit: matched.unit } : {}) });
   };
   const save = async () => {
@@ -861,7 +915,7 @@ function RequestDetail({ request, items, isAdmin, userId, userName, onBack }: {
             {isOpen && <button onClick={() => { setDirty(true); setLines(ls => ls.filter(x => x.id !== l.id)); }} className="text-gray-300 hover:text-red-500 text-xs">🗑️</button>}
           </div>
         ))}
-        <datalist id="inv-item-names">{items.filter(i => i.isActive !== false).map(i => <option key={i.id} value={i.name} />)}</datalist>
+        <datalist id="inv-item-names">{items.filter(i => i.isActive !== false).map(i => <option key={i.id} value={itemLabel(i)} />)}</datalist>
         <datalist id="inv-req-units">{['개', '박스', '통', '팩', '병', '정', '세트', '묶음'].map(u => <option key={u} value={u} />)}</datalist>
         {isOpen && (
           <div className="flex items-center justify-end gap-2 pt-1">
@@ -913,35 +967,577 @@ function RequestDetail({ request, items, isAdmin, userId, userName, onBack }: {
   );
 }
 
+// ==================== 🔍 분실물 ====================
+
+const LOST_STATUS_STYLE: Record<LostItemStatus, string> = {
+  found: 'bg-blue-100 text-blue-700',
+  claimed: 'bg-emerald-100 text-emerald-700',
+  discarded: 'bg-gray-100 text-gray-500',
+};
+
+/** 파일 → Storage 업로드 → 미디어 메타 */
+async function uploadLostMedia(campCode: string, lostItemId: string, files: File[]): Promise<LostItemMedia[]> {
+  const out: LostItemMedia[] = [];
+  for (const f of files) {
+    const path = lostItemMediaPath(campCode, lostItemId, f.name || 'media');
+    const r = storageRef(storage, path);
+    await uploadBytes(r, f, { contentType: f.type || undefined });
+    const url = await getDownloadURL(r);
+    out.push({ url, path, type: f.type.startsWith('video/') ? 'video' : 'image', name: f.name, size: f.size });
+  }
+  return out;
+}
+
+function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin, userId, userName }: {
+  campCode: string; jobCodeId: string; students: STSheetStudent[]; campGroups: CampGroup[];
+  lostItems: LostItem[]; isAdmin: boolean; userId: string; userName: string;
+}) {
+  const [filter, setFilter] = useState<LostItemStatus | '전체'>('found');
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = lostItems.find(l => l.id === openId) ?? null;
+
+  const list = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return lostItems.filter(l =>
+      (filter === '전체' || l.status === filter) &&
+      (!q || [l.name, l.description, l.foundPlace, l.keptAt, l.claimedBy, l.reportedBy].some(f => f?.toLowerCase().includes(q)))
+    );
+  }, [lostItems, filter, search]);
+  const counts = useMemo(() => ({
+    found: lostItems.filter(l => l.status === 'found').length,
+    claimed: lostItems.filter(l => l.status === 'claimed').length,
+    discarded: lostItems.filter(l => l.status === 'discarded').length,
+  }), [lostItems]);
+
+  return (
+    <div className="px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-bold text-gray-800">분실물 <span className="text-blue-600">{counts.found}</span><span className="text-[10px] text-gray-400 font-normal ml-1">보관 중</span></p>
+          <p className="text-[10px] text-gray-400">누구나 등록·확인할 수 있습니다. 주인을 찾으면 "주인 찾음"으로 바꿔주세요.</p>
+        </div>
+        <button onClick={() => setShowForm(true)} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shrink-0"><FiPlus className="w-3 h-3" />분실물 등록</button>
+      </div>
+      <div className="relative">
+        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="물품명 · 장소 · 학생 이름 검색"
+          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-blue-400" />
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto">
+        {([['found', `보관 중 ${counts.found}`], ['claimed', `주인 찾음 ${counts.claimed}`], ['discarded', `폐기 ${counts.discarded}`], ['전체', '전체']] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setFilter(id)}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border ${filter === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200'}`}>{label}</button>
+        ))}
+      </div>
+
+      {list.length === 0 ? (
+        <div className="flex flex-col items-center py-14 text-center">
+          <FiSearch className="h-9 w-9 text-gray-300 mb-2" />
+          <p className="text-sm text-gray-500">{lostItems.length === 0 ? '등록된 분실물이 없습니다.' : '해당하는 분실물이 없습니다.'}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {list.map(l => {
+            const thumb = l.media.find(m => m.type === 'image');
+            const video = l.media.find(m => m.type === 'video');
+            return (
+              <button key={l.id} onClick={() => setOpenId(l.id)} className={`text-left bg-white rounded-xl border shadow-sm overflow-hidden hover:border-blue-300 flex ${l.status === 'found' ? 'border-blue-100' : 'border-gray-200 opacity-80'}`}>
+                <div className="w-20 h-20 bg-gray-100 shrink-0 flex items-center justify-center overflow-hidden">
+                  {thumb ? <img src={thumb.url} alt={l.name} className="w-full h-full object-cover" />
+                    : video ? <video src={video.url} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+                    : <FiImage className="w-6 h-6 text-gray-300" />}
+                </div>
+                <div className="flex-1 min-w-0 px-3 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${LOST_STATUS_STYLE[l.status]}`}>{LOST_ITEM_STATUS_LABELS[l.status]}</span>
+                    <span className="text-sm font-bold text-gray-900 truncate">{l.name}</span>
+                    {l.ownerName && <span className="text-[10px] text-rose-600 shrink-0">🏷️ {l.ownerName}</span>}
+                    {l.media.length > 1 && <span className="text-[9px] text-gray-400 shrink-0">+{l.media.length - 1}</span>}
+                  </div>
+                  <p className="text-[11px] text-gray-600 mt-0.5 truncate">📍 {l.foundPlace || '장소 미상'} · {l.foundDate}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{l.keptAt ? `보관: ${l.keptAt} · ` : ''}등록 {l.reportedBy}{l.status === 'claimed' && l.claimedBy ? ` · → ${l.claimedBy}` : ''}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {showForm && <LostItemFormModal campCode={campCode} jobCodeId={jobCodeId} students={students} campGroups={campGroups} userId={userId} userName={userName} onClose={() => setShowForm(false)} onCreated={id => { setShowForm(false); setOpenId(id); }} />}
+      {opened && <LostItemDetailModal item={opened} isAdmin={isAdmin} userId={userId} userName={userName} onClose={() => setOpenId(null)} />}
+    </div>
+  );
+}
+
+/** 사진·영상 선택 + 미리보기 (등록·추가 공용) */
+function MediaPicker({ files, onChange, disabled }: { files: File[]; onChange: (f: File[]) => void; disabled?: boolean }) {
+  const previews = useMemo(() => files.map(f => ({ f, url: URL.createObjectURL(f) })), [files]);
+  useEffect(() => () => previews.forEach(p => URL.revokeObjectURL(p.url)), [previews]);
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <label className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed text-xs font-semibold cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : 'border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100'}`}>
+          <FiCamera className="w-4 h-4" />사진 · 영상 추가
+          <input type="file" accept="image/*,video/*" multiple disabled={disabled} className="hidden"
+            onChange={e => { const picked = Array.from(e.target.files ?? []); if (picked.length) onChange([...files, ...picked]); e.target.value = ''; }} />
+        </label>
+      </div>
+      {previews.length > 0 && (
+        <div className="grid grid-cols-4 gap-1.5">
+          {previews.map(({ f, url }, i) => (
+            <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+              {f.type.startsWith('video/') ? <video src={url} className="w-full h-full object-cover" muted playsInline /> : <img src={url} alt="" className="w-full h-full object-cover" />}
+              {f.type.startsWith('video/') && <span className="absolute bottom-1 left-1 text-[9px] px-1 rounded bg-black/60 text-white flex items-center gap-0.5"><FiVideo className="w-2.5 h-2.5" />영상</span>}
+              {!disabled && <button type="button" onClick={() => onChange(files.filter((_, j) => j !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center">✕</button>}
+              {f.size > 50 * 1024 * 1024 && <span className="absolute inset-x-0 bottom-0 text-[9px] text-center bg-red-600 text-white">50MB 초과</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-gray-400">사진·영상 각 50MB 이하. 여러 개 첨부 가능합니다.</p>
+    </div>
+  );
+}
+
+function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, userName, onClose, onCreated }: {
+  campCode: string; jobCodeId: string; students: STSheetStudent[]; campGroups: CampGroup[];
+  userId: string; userName: string; onClose: () => void; onCreated: (id: string) => void;
+}) {
+  // 이름표(주인)가 있으면 담임·방 담당·그룹 매니저에게, 없으면 캠프 전체에 알림 — 끌 수 있음
+  const [owner, setOwner] = useState<STSheetStudent | null>(null);
+  const [ownerQuery, setOwnerQuery] = useState('');
+  const [notify, setNotify] = useState(true);
+  const ownerResults = useMemo(() => {
+    const q = ownerQuery.trim();
+    return q ? students.filter(s => s.name.includes(q)).slice(0, 6) : [];
+  }, [ownerQuery, students]);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [foundPlace, setFoundPlace] = useState('');
+  const [foundDate, setFoundDate] = useState(todayStr());
+  const [keptAt, setKeptAt] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
+  const tooBig = files.some(f => f.size > 50 * 1024 * 1024);
+
+  const submit = async () => {
+    if (!name.trim() || busy || tooBig) return;
+    setBusy(true);
+    try {
+      setProgress('등록 중...');
+      const ownerGroup = owner?.className ? findGroupByClassCode(campGroups, owner.className)?.name.toLowerCase() : undefined;
+      const id = await addLostItem(db, {
+        campCode, name: name.trim(), description: description.trim() || undefined, foundPlace: foundPlace.trim() || undefined,
+        foundDate, keptAt: keptAt.trim() || undefined, reportedBy: userName, reportedById: userId,
+        jobCodeId: jobCodeId || undefined, notify,
+        ownerStudentId: owner?.studentId, ownerName: owner?.name, ownerClassCode: owner?.className,
+        ownerClassMentor: owner?.classMentor, ownerUnitMentor: owner?.unitMentor, ownerGroup,
+      });
+      if (files.length) {
+        setProgress(`사진·영상 ${files.length}개 업로드 중...`);
+        const media = await uploadLostMedia(campCode, id, files);
+        await addLostItemMedia(db, id, media);
+      }
+      if (notify) authenticatedPost('/api/inventory/notify-lost', { lostItemId: id }).catch(e => console.warn('분실물 알림 요청 실패:', e));
+      onCreated(id);
+    } catch (e) {
+      console.error('분실물 등록 오류:', e);
+      alert('등록 중 오류가 발생했습니다.');
+    } finally { setBusy(false); setProgress(''); }
+  };
+
+  const inputCls = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-400';
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[60]" onClick={busy ? undefined : onClose}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">🔍 분실물 등록</h2>
+          <button onClick={onClose} disabled={busy} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <MediaPicker files={files} onChange={setFiles} disabled={busy} />
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1">물품명 *</p>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 파란색 물통, 안경, 후드집업" className={inputCls} autoFocus />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-xs font-bold text-gray-700 mb-1">발견 장소</p>
+              <input value={foundPlace} onChange={e => setFoundPlace(e.target.value)} placeholder="예: 강당, 3층 복도" className={inputCls} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-700 mb-1">발견일</p>
+              <input type="date" value={foundDate} max={todayStr()} onChange={e => setFoundDate(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1">보관 장소</p>
+            <input value={keptAt} onChange={e => setKeptAt(e.target.value)} placeholder="예: 2층 교무실 분실물 박스" className={inputCls} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1">설명 <span className="font-normal text-gray-400">(특징, 이름표 여부 등)</span></p>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="예: 뚜껑에 스티커 붙어 있음, 이름 없음" className={`${inputCls} resize-none`} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1">🏷️ 이름표 (주인을 아는 경우)</p>
+            {owner ? (
+              <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+                <span className="text-sm font-semibold text-rose-800">{owner.name}</span>
+                <span className="text-[11px] text-rose-700/80">{[owner.className, owner.classMentor && `담임 ${owner.classMentor}`, owner.unitMentor && `방 ${owner.unitMentor}`].filter(Boolean).join(' · ')}</span>
+                <button type="button" onClick={() => setOwner(null)} className="ml-auto text-rose-400 hover:text-rose-600 text-xs">✕</button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input value={ownerQuery} onChange={e => setOwnerQuery(e.target.value)} placeholder="학생 이름 검색 (모르면 비워두세요)" className={inputCls} />
+                {ownerResults.length > 0 && (
+                  <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    {ownerResults.map(s => (
+                      <button key={s.studentId} type="button" onClick={() => { setOwner(s); setOwnerQuery(''); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-rose-50">
+                        {s.name} <span className="text-[11px] text-gray-400">{s.className}{s.classMentor ? ` · 담임 ${s.classMentor}` : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <label className="flex items-start gap-2 rounded-xl border border-gray-200 px-3 py-2 cursor-pointer">
+            <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} className="w-4 h-4 mt-0.5" />
+            <span className="text-[12px] text-gray-700">
+              푸시 알림 보내기
+              <span className="block text-[10px] text-gray-400">
+                {owner ? '담임 · 방 담당 · 그룹 매니저에게 보냅니다' : '캠프 선생님 전체에게 보냅니다 — 중요하지 않은 물품이면 끄세요'}
+              </span>
+            </span>
+          </label>
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100 space-y-1.5">
+          {progress && <p className="text-[11px] text-blue-600 text-center">{progress}</p>}
+          <div className="flex gap-2">
+            <button onClick={onClose} disabled={busy} className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl disabled:opacity-40">취소</button>
+            <button onClick={submit} disabled={!name.trim() || busy || tooBig} className="flex-1 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:opacity-40">{busy ? '등록 중...' : '등록'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LostItemDetailModal({ item, isAdmin, userId, userName, onClose }: {
+  item: LostItem; isAdmin: boolean; userId: string; userName: string; onClose: () => void;
+}) {
+  const canDelete = isAdmin || item.reportedById === userId;
+  const [claimName, setClaimName] = useState(item.claimedBy ?? item.ownerName ?? '');
+  const [claiming, setClaiming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(item.name);
+  const [description, setDescription] = useState(item.description ?? '');
+  const [foundPlace, setFoundPlace] = useState(item.foundPlace ?? '');
+  const [foundDate, setFoundDate] = useState(item.foundDate);
+  const [keptAt, setKeptAt] = useState(item.keptAt ?? '');
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [viewer, setViewer] = useState<LostItemMedia | null>(null);
+
+  const saveEdit = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try {
+      await updateLostItem(db, item.id, { name: name.trim(), description: description.trim() || undefined, foundPlace: foundPlace.trim() || undefined, foundDate, keptAt: keptAt.trim() || undefined });
+      setEditing(false);
+    } finally { setBusy(false); }
+  };
+  const uploadMore = async () => {
+    if (newFiles.length === 0 || busy) return;
+    setBusy(true);
+    try {
+      const media = await uploadLostMedia(item.campCode, item.id, newFiles);
+      await addLostItemMedia(db, item.id, media);
+      setNewFiles([]);
+    } catch (e) { console.error('첨부 추가 오류:', e); alert('업로드 중 오류가 발생했습니다.'); }
+    finally { setBusy(false); }
+  };
+  const removeMedia = async (m: LostItemMedia) => {
+    if (!confirm('이 첨부를 삭제할까요?')) return;
+    try { await deleteObject(storageRef(storage, m.path)); } catch { /* 이미 없으면 무시 */ }
+    await removeLostItemMedia(db, item.id, item.media, m.path);
+  };
+  const setStatus = async (status: LostItemStatus) => {
+    if (busy) return;
+    if (status === 'claimed' && !claimName.trim()) { setClaiming(true); return; }
+    setBusy(true);
+    try { await setLostItemStatus(db, item.id, status, userName, claimName); setClaiming(false); }
+    finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!confirm('이 분실물 기록과 첨부를 삭제할까요?')) return;
+    setBusy(true);
+    try {
+      await Promise.all(item.media.map(m => deleteObject(storageRef(storage, m.path)).catch(() => undefined)));
+      await deleteLostItem(db, item.id);
+      onClose();
+    } finally { setBusy(false); }
+  };
+
+  const inputCls = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-400';
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[60]" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
+          <div className="min-w-0">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${LOST_STATUS_STYLE[item.status]}`}>{LOST_ITEM_STATUS_LABELS[item.status]}</span>
+            <h2 className="text-base font-bold text-gray-900 mt-1">{item.name}</h2>
+            <p className="text-[10px] text-gray-400">등록 {item.reportedBy} · {fmtDateTime(item.createdAt)}{item.status !== 'found' && item.claimedHandler ? ` · ${LOST_ITEM_STATUS_LABELS[item.status]} 처리 ${item.claimedHandler} ${fmtDateTime(item.claimedAt)}` : ''}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* 미디어 */}
+          {item.media.length > 0 && (
+            <div className="grid grid-cols-3 gap-1.5">
+              {item.media.map(m => (
+                <div key={m.path} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                  <button type="button" onClick={() => setViewer(m)} className="w-full h-full">
+                    {m.type === 'video' ? <video src={m.url} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={m.url} alt="" className="w-full h-full object-cover" />}
+                  </button>
+                  {m.type === 'video' && <span className="absolute bottom-1 left-1 text-[9px] px-1 rounded bg-black/60 text-white flex items-center gap-0.5 pointer-events-none"><FiVideo className="w-2.5 h-2.5" />영상</span>}
+                  {canDelete && <button type="button" onClick={() => removeMedia(m)} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center">✕</button>}
+                </div>
+              ))}
+            </div>
+          )}
+          <div>
+            <MediaPicker files={newFiles} onChange={setNewFiles} disabled={busy} />
+            {newFiles.length > 0 && (
+              <button onClick={uploadMore} disabled={busy} className="mt-1.5 w-full py-2 text-xs font-bold text-white bg-blue-600 rounded-xl disabled:opacity-40">{busy ? '업로드 중...' : `${newFiles.length}개 첨부 업로드`}</button>
+            )}
+          </div>
+
+          {/* 정보 */}
+          {editing ? (
+            <div className="space-y-2">
+              <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder="물품명" />
+              <div className="grid grid-cols-2 gap-2">
+                <input value={foundPlace} onChange={e => setFoundPlace(e.target.value)} className={inputCls} placeholder="발견 장소" />
+                <input type="date" value={foundDate} onChange={e => setFoundDate(e.target.value)} className={inputCls} />
+              </div>
+              <input value={keptAt} onChange={e => setKeptAt(e.target.value)} className={inputCls} placeholder="보관 장소" />
+              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className={`${inputCls} resize-none`} placeholder="설명" />
+              <div className="flex gap-2">
+                <button onClick={() => setEditing(false)} className="flex-1 py-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg">취소</button>
+                <button onClick={saveEdit} disabled={busy} className="flex-1 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg disabled:opacity-40">저장</button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-[12px] text-gray-700 space-y-1">
+              <p>📍 발견 장소: <b>{item.foundPlace || '—'}</b> · 발견일 <b>{item.foundDate}</b></p>
+              <p>📦 보관 장소: <b>{item.keptAt || '—'}</b></p>
+              {item.description && <p className="text-gray-600">📝 {item.description}</p>}
+              {item.ownerName && <p className="text-rose-700">🏷️ 이름표: <b>{item.ownerName}</b>{item.ownerClassCode ? ` (${item.ownerClassCode})` : ''}</p>}
+              {item.status === 'claimed' && <p className="text-emerald-700">✅ {item.claimedBy || '주인'}에게 돌려줌</p>}
+              <button onClick={() => setEditing(true)} className="text-[11px] text-blue-600 hover:underline">정보 수정</button>
+            </div>
+          )}
+
+          {/* 상태 */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-gray-700">상태 변경</p>
+            <div className="flex gap-1.5">
+              {LOST_ITEM_STATUSES.map(s => (
+                <button key={s} onClick={() => setStatus(s)} disabled={busy}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${item.status === s ? `${LOST_STATUS_STYLE[s]} border-transparent` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                  {LOST_ITEM_STATUS_LABELS[s]}
+                </button>
+              ))}
+            </div>
+            {(claiming || item.status === 'claimed') && (
+              <div className="flex gap-2 items-center">
+                <input value={claimName} onChange={e => setClaimName(e.target.value)} placeholder="돌려준 학생(사람) 이름" className={`${inputCls} flex-1`} autoFocus={claiming} />
+                <button onClick={() => setStatus('claimed')} disabled={busy || !claimName.trim()} className="px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{item.status === 'claimed' ? '이름 저장' : '주인 찾음 처리'}</button>
+              </div>
+            )}
+          </div>
+
+          {canDelete && (
+            <button onClick={remove} disabled={busy} className="w-full py-2 text-[11px] text-red-500 hover:bg-red-50 rounded-lg">기록 삭제</button>
+          )}
+        </div>
+      </div>
+
+      {viewer && (
+        <div className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4" onClick={e => { e.stopPropagation(); setViewer(null); }}>
+          <button className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center"><FiX className="w-5 h-5" /></button>
+          {viewer.type === 'video'
+            ? <video src={viewer.url} controls autoPlay playsInline className="max-w-full max-h-full rounded-lg" onClick={e => e.stopPropagation()} />
+            : <img src={viewer.url} alt="" className="max-w-full max-h-full object-contain rounded-lg" onClick={e => e.stopPropagation()} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== 📋 일괄 입력 · 실사 (관리자) ====================
+
+/**
+ * 구글시트처럼 행=품목, 열=그룹 표에서 수량을 바로 입력.
+ * 저장하면 바뀐 칸만 품목별 트랜잭션으로 "최종 수량" 설정 (입력 중 약 복용 차감이 있어도 덮어쓰지 않음)
+ */
+function BulkStockEditor({ campCode, views, groups, userName }: {
+  campCode: string; views: InventoryItemView[]; groups: InventoryGroup[]; userName: string;
+}) {
+  const [category, setCategory] = useState<InventoryCategory | '전체'>('의약품');
+  const [search, setSearch] = useState('');
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [mode, setMode] = useState<'restock' | 'adjust'>('restock');
+  const [memo, setMemo] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return views.filter(v => v.isActive !== false && (category === '전체' || v.category === category) &&
+      (!q || [v.name, v.kind, v.subCategory, v.spec].some(f => f?.toLowerCase().includes(q))));
+  }, [views, category, search]);
+
+  const key = (itemId: string, groupId: string) => `${itemId}|${groupId}`;
+  const changed = useMemo(() => {
+    const out: { itemId: string; itemName: string; groupId: string; groupName: string; target: number }[] = [];
+    Object.entries(edits).forEach(([k, val]) => {
+      if (val.trim() === '') return;
+      const [itemId, groupId] = k.split('|');
+      const v = views.find(x => x.id === itemId);
+      const g = groups.find(x => x.id === groupId);
+      const n = parseInt(val, 10);
+      if (!v || !g || isNaN(n) || n === getGroupStock(v, groupId)) return;
+      out.push({ itemId, itemName: v.name, groupId, groupName: g.name, target: n });
+    });
+    return out;
+  }, [edits, views, groups]);
+
+  const save = async () => {
+    if (changed.length === 0 || busy) return;
+    if (mode === 'adjust' && !memo.trim()) { alert('실사 조정 사유를 입력해주세요. (예: 29기 종료 실사)'); return; }
+    if (!confirm(`${changed.length}칸을 ${mode === 'restock' ? '입고(기수 시작·보충)' : '실사 조정'}으로 저장할까요?`)) return;
+    setBusy(true);
+    try {
+      const n = await setStockLevels(db, campCode, changed, {
+        reason: mode, refLabel: mode === 'restock' ? '일괄 입고' : '실사', memo: memo.trim() || undefined,
+      }, userName);
+      alert(`${n}칸을 저장했습니다.`);
+      setEdits({});
+    } catch (e) {
+      console.error('일괄 저장 오류:', e);
+      alert('저장 중 오류가 발생했습니다.');
+    } finally { setBusy(false); }
+  };
+
+  if (groups.length === 0) return <p className="text-[11px] text-gray-400">먼저 그룹 · 패키지에서 재고 그룹을 만들어주세요.</p>;
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+        <p className="text-xs font-bold text-gray-800">📋 일괄 입력 · 실사</p>
+        <p className="text-[10px] text-gray-400">칸에 <b>지금 실제 수량(낱개)</b>을 적고 저장하세요. 바뀐 칸만 기록되고, 차이는 변동 내역에 남습니다.</p>
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {([['restock', '입고 (기수 시작·보충)'], ['adjust', '실사 조정']] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setMode(id)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${mode === id ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200'}`}>{label}</button>
+          ))}
+          <input value={memo} onChange={e => setMemo(e.target.value)} placeholder={mode === 'adjust' ? '사유 (필수, 예: 29기 종료 실사)' : '메모 (선택, 예: 이마트 구매분)'}
+            className="flex-1 min-w-[160px] text-[11px] border border-gray-200 rounded-lg px-2 py-1 outline-none" />
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto items-center">
+          {(['전체', ...INVENTORY_CATEGORIES] as const).map(c => (
+            <button key={c} onClick={() => setCategory(c)}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap border ${category === c ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{c}</button>
+          ))}
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="품목 검색" className="ml-auto w-32 text-[11px] border border-gray-200 rounded-lg px-2 py-1 outline-none" />
+        </div>
+      </div>
+
+      <div className="overflow-auto max-h-[60vh] rounded-xl border border-gray-200 bg-white">
+        <table className="text-[11px] min-w-full">
+          <thead className="bg-gray-50 text-gray-500 sticky top-0 z-10">
+            <tr>
+              <th className="text-left px-2 py-1.5 font-semibold sticky left-0 bg-gray-50 min-w-[150px]">품목</th>
+              {groups.map(g => <th key={g.id} className="px-1.5 py-1.5 font-semibold whitespace-nowrap">{g.name}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(v => (
+              <tr key={v.id} className="border-t border-gray-100">
+                <td className="px-2 py-1 sticky left-0 bg-white">
+                  <span className="font-semibold text-gray-800">{v.name}</span>
+                  {(v.kind || v.spec) && <span className="text-gray-400 ml-1 text-[10px]">{[v.kind, v.spec].filter(Boolean).join(' · ')}</span>}
+                  <span className="text-gray-300 ml-1 text-[10px]">{v.unit}</span>
+                </td>
+                {groups.map(g => {
+                  const k = key(v.id, g.id);
+                  const cur = getGroupStock(v, g.id);
+                  const val = edits[k];
+                  const dirty = val !== undefined && val.trim() !== '' && parseInt(val, 10) !== cur;
+                  return (
+                    <td key={g.id} className="px-1 py-0.5 text-center">
+                      <input type="number" inputMode="numeric" value={val ?? (g.id in v.stocks ? String(cur) : '')}
+                        placeholder="–"
+                        onChange={e => setEdits(prev => ({ ...prev, [k]: e.target.value }))}
+                        className={`w-14 text-center rounded border px-1 py-0.5 outline-none ${dirty ? 'border-emerald-400 bg-emerald-50 font-bold text-emerald-800' : cur < 0 ? 'border-red-300 text-red-600' : 'border-gray-200'}`} />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 sticky bottom-0 bg-gray-50 py-2">
+        <span className="text-[11px] text-gray-500">바뀐 칸 <b className="text-emerald-700">{changed.length}</b></span>
+        <div className="flex gap-1.5">
+          <button onClick={() => setEdits({})} disabled={busy || Object.keys(edits).length === 0} className="px-3 py-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg disabled:opacity-40">되돌리기</button>
+          <button onClick={save} disabled={busy || changed.length === 0} className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40">{busy ? '저장 중...' : '저장'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ==================== ⚙️ 관리 (관리자) ====================
 
-function ManageTab({ campCode, items, views, groups, packages, userName, onSelect }: {
+function ManageTab({ campCode, items, views, groups, packages, campGroups, userName, onSelect }: {
   campCode: string;
   items: InventoryItem[];
   views: InventoryItemView[];
   groups: InventoryGroup[];
   packages: InventoryPackage[];
+  campGroups: CampGroup[];
   userName: string;
   onSelect: (id: string) => void;
 }) {
-  const [section, setSection] = useState<'items' | 'groups'>('groups');
+  const [section, setSection] = useState<'items' | 'groups' | 'bulk'>('groups');
   return (
     <div className="px-4 py-3 space-y-3">
       <div className="flex gap-1.5">
-        {([['groups', '그룹 · 패키지'], ['items', '품목 관리']] as const).map(([id, label]) => (
+        {([['groups', '그룹 · 패키지'], ['bulk', '일괄 입력 · 실사'], ['items', '품목 관리']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setSection(id)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${section === id ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{label}</button>
         ))}
       </div>
       {section === 'groups'
-        ? <GroupManager campCode={campCode} groups={groups} packages={packages} userName={userName} />
-        : <ItemManager items={items} views={views} userName={userName} onSelect={onSelect} />}
+        ? <GroupManager campCode={campCode} groups={groups} packages={packages} campGroups={campGroups} views={views} userName={userName} />
+        : section === 'bulk'
+          ? <BulkStockEditor campCode={campCode} views={views} groups={groups} userName={userName} />
+          : <ItemManager items={items} views={views} userName={userName} onSelect={onSelect} />}
     </div>
   );
 }
 
-function GroupManager({ campCode, groups, packages, userName }: {
-  campCode: string; groups: InventoryGroup[]; packages: InventoryPackage[]; userName: string;
+function GroupManager({ campCode, groups, packages, campGroups, views, userName }: {
+  campCode: string; groups: InventoryGroup[]; packages: InventoryPackage[]; campGroups: CampGroup[]; views: InventoryItemView[]; userName: string;
 }) {
   const [newName, setNewName] = useState('');
   const [newLoc, setNewLoc] = useState('');
@@ -957,7 +1553,12 @@ function GroupManager({ campCode, groups, packages, userName }: {
     } finally { setBusy(false); }
   };
   const remove = async (g: InventoryGroup) => {
-    if (!confirm(`"${g.name}" 그룹을 삭제할까요?\n이 그룹에 남아 있는 수량은 총 재고 계산에서 빠집니다.`)) return;
+    const left = views.filter(v => getGroupStock(v, g.id) !== 0);
+    if (left.length > 0) {
+      alert(`"${g.name}" 그룹에 재고가 남아 있습니다 (${left.length}개 품목: ${left.slice(0, 3).map(v => v.name).join(', ')}${left.length > 3 ? ' …' : ''}).\n일괄 입력·실사에서 다른 그룹으로 옮기거나 0으로 맞춘 뒤 삭제해주세요.`);
+      return;
+    }
+    if (!confirm(`"${g.name}" 그룹을 삭제할까요?`)) return;
     await deleteInventoryGroup(db, g.id);
   };
   const savePkg = async () => {
@@ -978,7 +1579,8 @@ function GroupManager({ campCode, groups, packages, userName }: {
       <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
         <p className="text-xs font-bold text-gray-800">{campCode} 재고 그룹 <span className="text-gray-400 font-normal">({groups.length})</span></p>
         <p className="text-[10px] text-gray-400">보관 장소/키트 단위. 그룹명과 호실(보관 장소)은 기수마다 바꿔 쓰면 됩니다.</p>
-        {groups.map(g => <GroupRow key={g.id} group={g} onDelete={() => remove(g)} />)}
+        {groups.map(g => <GroupRow key={g.id} group={g} campGroups={campGroups} onDelete={() => remove(g)} />)}
+        {campGroups.length > 0 && <p className="text-[10px] text-gray-400">"캠프 그룹"을 연결하면 환자 탭에서 학생 반에 맞는 그룹이 자동 선택됩니다.</p>}
         <div className="flex gap-1.5 items-center pt-1">
           <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="그룹명 (예: Spring)" className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
           <input value={newLoc} onChange={e => setNewLoc(e.target.value)} placeholder="보관 장소 (예: 2층 교무실)" className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
@@ -1008,7 +1610,7 @@ function GroupManager({ campCode, groups, packages, userName }: {
   );
 }
 
-function GroupRow({ group, onDelete }: { group: InventoryGroup; onDelete: () => void }) {
+function GroupRow({ group, campGroups, onDelete }: { group: InventoryGroup; campGroups: CampGroup[]; onDelete: () => void }) {
   const [name, setName] = useState(group.name);
   const [loc, setLoc] = useState(group.location ?? '');
   useEffect(() => { setName(group.name); setLoc(group.location ?? ''); }, [group.name, group.location]);
@@ -1022,6 +1624,13 @@ function GroupRow({ group, onDelete }: { group: InventoryGroup; onDelete: () => 
       <span className="text-[10px] text-gray-300 w-4 text-right">{group.order + 1}</span>
       <input value={name} onChange={e => setName(e.target.value)} onBlur={save} className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none font-semibold" />
       <input value={loc} onChange={e => setLoc(e.target.value)} onBlur={save} placeholder="보관 장소 / 호실" className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
+      {campGroups.length > 0 && (
+        <select value={group.campGroupName ?? ''} onChange={e => updateInventoryGroup(db, group.id, { campGroupName: e.target.value })}
+          className="w-24 text-[11px] border border-gray-200 rounded-lg px-1.5 py-1.5 bg-white" title="연결할 캠프 그룹">
+          <option value="">캠프 그룹 —</option>
+          {campGroups.map(cg => <option key={cg.name} value={cg.name}>{cg.name}</option>)}
+        </select>
+      )}
       {dirty && <button onClick={save} className="text-[10px] font-semibold text-emerald-700">저장</button>}
       <button onClick={onDelete} className="text-gray-300 hover:text-red-500 text-xs px-1">🗑️</button>
     </div>
@@ -1058,7 +1667,7 @@ function ItemManager({ items, views, userName, onSelect }: {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="품목 검색" className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white outline-none" />
         </div>
         <button onClick={() => setShowForm(true)} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg"><FiPlus className="w-3 h-3" />품목 추가</button>
-        <button onClick={importDefaults} disabled={busy} className="px-2.5 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-lg disabled:opacity-40" title="시트 기준 기본 품목 93개">기본 세트 불러오기</button>
+        <button onClick={importDefaults} disabled={busy} className="px-2.5 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-lg disabled:opacity-40" title="시트 품목 + 상비약 대표 브랜드">기본 세트 불러오기</button>
       </div>
       <p className="text-[10px] text-gray-400">품목은 회사 공통입니다 — 여기서 바꾸면 모든 캠프에 반영됩니다. 수량은 캠프별로 품목 상세에서 입고합니다.</p>
       <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
@@ -1070,7 +1679,7 @@ function ItemManager({ items, views, userName, onSelect }: {
               <b className="text-gray-900">{v.name}</b>
               {v.kind && <span className="text-gray-500 ml-1">{v.kind}</span>}
               {v.spec && <span className="text-gray-400 ml-1">{v.spec}</span>}
-              <span className="text-gray-400 ml-1">· {v.unit} · 최소 {v.minStockDefault ?? 0}</span>
+              <span className="text-gray-400 ml-1">· {INVENTORY_USAGE_LABELS[getItemUsage(v)]} · {v.unit} · 최소 {v.minStockDefault ?? 0}{v.ingredient ? ` · ${v.ingredient}` : ''}</span>
             </button>
             {v.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500 shrink-0">사용 안 함</span>}
             <button onClick={() => setEditing(v)} className="text-gray-400 hover:text-emerald-700 shrink-0">✏️</button>
@@ -1098,6 +1707,11 @@ function ItemFormModal({ item, userName, onClose }: { item?: InventoryItem; user
   const [description, setDescription] = useState(item?.description ?? '');
   const [minStockDefault, setMinStockDefault] = useState(item?.minStockDefault != null ? String(item.minStockDefault) : '');
   const [isActive, setIsActive] = useState(item?.isActive !== false);
+  const [usage, setUsage] = useState<InventoryUsage>(item ? getItemUsage(item) : 'oral');
+  const [ingredient, setIngredient] = useState(item?.ingredient ?? '');
+  const [intervalHours, setIntervalHours] = useState(item?.intervalHours != null ? String(item.intervalHours) : '');
+  const [maxPerDay, setMaxPerDay] = useState(item?.maxPerDay != null ? String(item.maxPerDay) : '');
+  const [dosageNote, setDosageNote] = useState(item?.dosageNote ?? '');
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
@@ -1115,6 +1729,11 @@ function ItemFormModal({ item, userName, onClose }: { item?: InventoryItem; user
         description: description.trim() || undefined,
         minStockDefault: minStockDefault === '' ? undefined : Math.max(0, parseInt(minStockDefault, 10) || 0),
         isActive,
+        usage,
+        ingredient: ingredient.trim() || undefined,
+        intervalHours: intervalHours === '' ? undefined : Math.max(0, parseFloat(intervalHours) || 0),
+        maxPerDay: maxPerDay === '' ? undefined : Math.max(0, parseInt(maxPerDay, 10) || 0),
+        dosageNote: dosageNote.trim() || undefined,
       };
       if (item) await updateInventoryItem(db, item.id, data);
       else await addInventoryItem(db, { ...data, createdBy: userName });
@@ -1175,6 +1794,37 @@ function ItemFormModal({ item, userName, onClose }: { item?: InventoryItem; user
               <input type="number" min={1} value={packSize} onChange={e => setPackSize(e.target.value)} placeholder="예: 4" className={inputCls} />
             </div>
           </div>
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1">유형 *</p>
+            <div className="flex gap-1.5 flex-wrap">
+              {INVENTORY_USAGES.map(u => (
+                <button key={u} type="button" onClick={() => setUsage(u)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${usage === u ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
+              ))}
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">먹는 약·바르는 약·처치 소모품은 환자 탭에서 사용 기록할 수 있고, 비품은 위치·수량만 관리합니다.</p>
+          </div>
+          {usage === 'oral' && (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2">
+              <p className="text-xs font-bold text-emerald-800">복용 안내 · 경고 <span className="font-normal text-emerald-700/70">(포장 설명서 기준으로 관리자가 입력)</span></p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-3 sm:col-span-1">
+                  <p className="text-[11px] text-gray-600 mb-0.5">주성분</p>
+                  <input value={ingredient} onChange={e => setIngredient(e.target.value)} placeholder="아세트아미노펜" className={inputCls} />
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-600 mb-0.5">최소 간격(시간)</p>
+                  <input type="number" min={0} step={0.5} value={intervalHours} onChange={e => setIntervalHours(e.target.value)} placeholder="예: 4" className={inputCls} />
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-600 mb-0.5">1일 최대(회)</p>
+                  <input type="number" min={0} value={maxPerDay} onChange={e => setMaxPerDay(e.target.value)} placeholder="예: 4" className={inputCls} />
+                </div>
+              </div>
+              <textarea value={dosageNote} onChange={e => setDosageNote(e.target.value)} rows={2} placeholder="예: 만 7~12세 1정, 만 12세 이상 1~2정 (포장 설명서 확인)" className={`${inputCls} resize-none`} />
+              <p className="text-[10px] text-gray-500">같은 주성분끼리 간격·횟수를 계산합니다 (예: 타이레놀과 판콜에이는 둘 다 아세트아미노펜).</p>
+            </div>
+          )}
           <div>
             <p className="text-xs font-bold text-gray-700 mb-1">설명 · 안내 <span className="font-normal text-gray-400">(약 선택 시 그대로 표시)</span></p>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="예: 해열·진통제로 사용하는 약품. 식후 복용" className={`${inputCls} resize-none`} />

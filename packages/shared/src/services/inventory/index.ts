@@ -8,8 +8,10 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  arrayUnion,
   onSnapshot,
   writeBatch,
+  runTransaction,
   increment,
   Timestamp,
   Firestore,
@@ -26,6 +28,9 @@ import type {
   InventoryRequest,
   InventoryRequestEntry,
   PurchaseItem,
+  LostItem,
+  LostItemMedia,
+  LostItemStatus,
 } from '../../types/inventory';
 import { stockDocId, sortInventoryItems, requestEntryDocId } from '../../types/inventory';
 import type { MedicationDose } from '../../types/camp';
@@ -238,6 +243,7 @@ export const savePackageFromGroups = async (
     key: g.slotKey || `slot${i + 1}`,
     label: g.name,
     ...(g.location ? { location: g.location } : {}),
+    ...(g.campGroupName ? { campGroupName: g.campGroupName } : {}),
   }));
   return addInventoryPackage(db, { name, slots, createdBy: by });
 };
@@ -257,7 +263,7 @@ export const applyPackageToCamp = async (
   pkg.slots.forEach(slot => {
     if (usedKeys.has(slot.key)) return;
     batch.set(doc(collection(db, GROUPS)), stripUndefined({
-      campCode, name: slot.label, location: slot.location, order: order++, slotKey: slot.key, createdAt: now, updatedAt: now,
+      campCode, name: slot.label, location: slot.location, campGroupName: slot.campGroupName, order: order++, slotKey: slot.key, createdAt: now, updatedAt: now,
     }));
     created++;
   });
@@ -360,19 +366,72 @@ export const restock = async (
 ): Promise<void> =>
   applyStockChanges(db, campCode, [{ ...change, delta: Math.abs(change.quantity), reason: 'restock', refLabel: change.refLabel ?? '재고 입고' }], by);
 
-/** 수량 직접 조정 (관리자) — 조정 후 수량을 받아 차이만 반영, 사유 기록 */
+export interface StockLevelEntry {
+  itemId: string;
+  itemName: string;
+  groupId: string;
+  groupName: string;
+  /** 설정할 최종 수량 */
+  target: number;
+}
+
+/**
+ * 그룹별 수량을 "최종 값"으로 설정 (관리자: 일괄 입력·실사·수량 조정).
+ * 품목마다 트랜잭션으로 **현재 값을 다시 읽어** 차이만 기록하므로,
+ * 입력하는 동안 약 복용으로 수량이 바뀌어도 그 차감이 덮어써지지 않는다.
+ * @returns 실제로 바뀐 칸 수
+ */
+export const setStockLevels = async (
+  db: Firestore,
+  campCode: string,
+  entries: StockLevelEntry[],
+  opts: { reason: 'restock' | 'adjust'; refLabel: string; memo?: string },
+  by: string
+): Promise<number> => {
+  const byItem = new Map<string, StockLevelEntry[]>();
+  entries.forEach(e => {
+    if (!byItem.has(e.itemId)) byItem.set(e.itemId, []);
+    byItem.get(e.itemId)!.push(e);
+  });
+  let changed = 0;
+  for (const [itemId, list] of byItem) {
+    changed += await runTransaction(db, async tx => {
+      const ref = doc(db, STOCKS, stockDocId(campCode, itemId));
+      const snap = await tx.get(ref);
+      const current = (snap.exists() ? (snap.data().stocks ?? {}) : {}) as Record<string, number>;
+      const now = Timestamp.now();
+      const nextStocks: Record<string, number> = { ...current };
+      let n = 0;
+      list.forEach(e => {
+        const target = Math.round(Number(e.target));
+        if (isNaN(target)) return;
+        const delta = target - (Number(current[e.groupId]) || 0);
+        if (delta === 0) return;
+        nextStocks[e.groupId] = target;
+        n++;
+        tx.set(doc(collection(db, MOVEMENTS)), stripUndefined({
+          campCode, itemId, itemName: e.itemName, groupId: e.groupId, groupName: e.groupName,
+          delta, reason: opts.reason, refLabel: opts.refLabel, memo: opts.memo, at: now, by,
+        }));
+      });
+      if (n > 0) tx.set(ref, { campCode, itemId, stocks: nextStocks, updatedAt: now }, { merge: true });
+      return n;
+    });
+  }
+  logger.info(`재고 수량 설정 ${changed}칸 (${campCode}, ${opts.refLabel})`);
+  return changed;
+};
+
+/** 수량 직접 조정 (관리자) — 조정 후 수량으로 설정, 사유 기록. current는 참고용(트랜잭션이 다시 읽음) */
 export const adjustStockTo = async (
   db: Firestore,
   campCode: string,
-  change: Omit<StockChange, 'reason' | 'delta' | 'memo'> & { current: number; target: number; reason: string },
+  change: Omit<StockChange, 'reason' | 'delta' | 'memo'> & { current?: number; target: number; reason: string },
   by: string
 ): Promise<void> => {
-  const delta = Math.max(0, change.target) - change.current;
-  if (delta === 0) return;
-  await applyStockChanges(db, campCode, [{
-    itemId: change.itemId, itemName: change.itemName, groupId: change.groupId, groupName: change.groupName,
-    delta, reason: 'adjust', refLabel: '수량 조정', memo: change.reason,
-  }], by);
+  await setStockLevels(db, campCode, [{
+    itemId: change.itemId, itemName: change.itemName, groupId: change.groupId, groupName: change.groupName, target: change.target,
+  }], { reason: 'adjust', refLabel: '수량 조정', memo: change.reason }, by);
 };
 
 /**
@@ -624,13 +683,109 @@ export const receivePurchaseItem = async (
   target: { itemId: string; itemName: string; groupId: string; groupName: string; quantity: number },
   by: string
 ): Promise<void> => {
-  if (target.quantity > 0) {
-    await restock(db, campCode, {
-      itemId: target.itemId, itemName: target.itemName, groupId: target.groupId, groupName: target.groupName,
-      quantity: target.quantity,
-      refLabel: purchase.requestTitle ? `${purchase.requestTitle} 입고` : '구매 입고',
-      memo: purchase.memo,
-    }, by);
-  }
-  await updatePurchaseItem(db, purchase.id, { status: 'received', groupId: target.groupId, groupName: target.groupName });
+  // 한 트랜잭션: 이미 입고 완료면 중단 → 두 명이 동시에 눌러도 한 번만 입고
+  await runTransaction(db, async tx => {
+    const pRef = doc(db, PURCHASES, purchase.id);
+    const pSnap = await tx.get(pRef);
+    if (!pSnap.exists()) throw new Error('구매 항목이 삭제되었습니다.');
+    if (pSnap.data().status === 'received') throw new Error('이미 입고 처리된 항목입니다.');
+    const now = Timestamp.now();
+    if (target.quantity > 0) {
+      tx.set(doc(db, STOCKS, stockDocId(campCode, target.itemId)), {
+        campCode, itemId: target.itemId, stocks: { [target.groupId]: increment(target.quantity) }, updatedAt: now,
+      }, { merge: true });
+      tx.set(doc(collection(db, MOVEMENTS)), stripUndefined({
+        campCode, itemId: target.itemId, itemName: target.itemName, groupId: target.groupId, groupName: target.groupName,
+        delta: target.quantity, reason: 'restock', refLabel: purchase.requestTitle ? `${purchase.requestTitle} 입고` : '구매 입고',
+        memo: purchase.memo, at: now, by,
+      }));
+    }
+    tx.update(pRef, { status: 'received', groupId: target.groupId, groupName: target.groupName, receivedAt: now, updatedAt: now });
+  });
+};
+
+// ==================== 분실물 ====================
+
+const LOST_ITEMS = 'lostItems';
+
+/** 캠프 분실물 구독 (보관 중 먼저, 최신순) */
+export const subscribeLostItems = (
+  db: Firestore,
+  campCode: string,
+  onData: (items: LostItem[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe =>
+  onSnapshot(
+    query(collection(db, LOST_ITEMS), where('campCode', '==', campCode)),
+    (snap) => {
+      const rank: Record<string, number> = { found: 0, claimed: 1, discarded: 2 };
+      onData(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data(), media: Array.isArray(d.data().media) ? d.data().media : [] }) as LostItem)
+          .sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+      );
+    },
+    (error) => { logger.error('분실물 구독 오류:', error); onError?.(error); }
+  );
+
+/** 분실물 등록 (미디어는 문서 생성 후 업로드해서 addLostItemMedia로 붙임) */
+export const addLostItem = async (
+  db: Firestore,
+  data: Omit<LostItem, 'id' | 'status' | 'media' | 'createdAt' | 'updatedAt' | 'claimedBy' | 'claimedHandler' | 'claimedAt'> & { status?: LostItemStatus; media?: LostItemMedia[] }
+): Promise<string> => {
+  const now = Timestamp.now();
+  const ref = await addDoc(collection(db, LOST_ITEMS), stripUndefined({
+    ...data,
+    status: data.status ?? 'found',
+    media: data.media ?? [],
+    createdAt: now,
+    updatedAt: now,
+  }));
+  logger.info('분실물 등록:', ref.id);
+  return ref.id;
+};
+
+export const updateLostItem = async (
+  db: Firestore,
+  lostItemId: string,
+  updates: Partial<Omit<LostItem, 'id' | 'campCode' | 'createdAt' | 'reportedById'>>
+): Promise<void> => {
+  await updateDoc(doc(db, LOST_ITEMS, lostItemId), stripUndefined({ ...updates, updatedAt: Timestamp.now() }));
+};
+
+/** 상태 변경 — 주인 찾음이면 누구에게 돌려줬는지 기록 */
+export const setLostItemStatus = async (
+  db: Firestore,
+  lostItemId: string,
+  status: LostItemStatus,
+  handler: string,
+  claimedBy?: string
+): Promise<void> => {
+  await updateDoc(doc(db, LOST_ITEMS, lostItemId), stripUndefined({
+    status,
+    claimedBy: status === 'claimed' ? (claimedBy?.trim() || undefined) : undefined,
+    claimedHandler: status === 'found' ? undefined : handler,
+    claimedAt: status === 'found' ? undefined : Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  }));
+};
+
+export const addLostItemMedia = async (db: Firestore, lostItemId: string, media: LostItemMedia[]): Promise<void> => {
+  if (media.length === 0) return;
+  await updateDoc(doc(db, LOST_ITEMS, lostItemId), {
+    media: arrayUnion(...media.map(m => stripUndefined({ ...m }))),
+    updatedAt: Timestamp.now(),
+  });
+};
+
+export const removeLostItemMedia = async (db: Firestore, lostItemId: string, current: LostItemMedia[], path: string): Promise<void> => {
+  await updateDoc(doc(db, LOST_ITEMS, lostItemId), {
+    media: current.filter(m => m.path !== path),
+    updatedAt: Timestamp.now(),
+  });
+};
+
+export const deleteLostItem = async (db: Firestore, lostItemId: string): Promise<void> => {
+  await deleteDoc(doc(db, LOST_ITEMS, lostItemId));
+  logger.info('분실물 삭제:', lostItemId);
 };

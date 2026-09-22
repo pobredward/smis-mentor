@@ -6,7 +6,7 @@
  * 새 작업이 생겨도 코드를 바꿀 필요 없이 AI 가 스키마를 읽고 조합한다.
  */
 import { createHash, randomUUID } from 'crypto';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { CollectionReference, DocumentData, Firestore, Query } from 'firebase-admin/firestore';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { ACCESS_LABEL, canAccess, type Viewer } from '@/lib/ai-content/site';
@@ -72,6 +72,8 @@ interface PreparedOp {
   spec?: CollectionSpec;
   id: string | null;
   payload?: Record<string, unknown>;
+  /** update/delete 전 원본 (평가 요약 재계산 대상 파악용) */
+  before?: Record<string, unknown>;
 }
 
 // ─── 날짜/직렬화 유틸 ─────────────────────────────────────────────────────
@@ -726,7 +728,8 @@ async function crossChecks(
     if (camp.exists && camp.data()?.code !== merged.jobCode) errors.push(`jobCode(${str('jobCode')}) 와 refJobCodeId 의 캠프 코드(${camp.data()?.code}) 가 다릅니다`);
   }
 
-  if (spec.name === 'evaluations' && mode === 'create') {
+  if (spec.name === 'evaluations') {
+    // create 와 update 모두 템플릿 기준으로 점수 검증·합계 재계산 (update 는 기존 scores 와 병합된 값 기준)
     const tplSnap = str('criteriaTemplateId') ? await db.collection('evaluationCriteria').doc(str('criteriaTemplateId')).get() : null;
     const tpl = tplSnap?.exists ? tplSnap.data() ?? {} : null;
     if (tpl) {
@@ -759,7 +762,7 @@ async function crossChecks(
         merged.percentage = (totalScore / 10) * 100;
       }
     }
-    if (str('refUserId') && str('evaluationStage')) {
+    if (mode === 'create' && str('refUserId') && str('evaluationStage')) {
       const dup = await db.collection('evaluations').where('refUserId', '==', merged.refUserId).where('evaluationStage', '==', merged.evaluationStage).get();
       const same = dup.docs.filter((d) => !merged.refJobBoardId || d.data()?.refJobBoardId === merged.refJobBoardId);
       if (same.some((d) => d.data()?.aiDraft)) errors.push('같은 지원자·공고·단계의 AI 초안이 이미 있습니다. 관리자가 확정하거나 삭제한 뒤 다시 만드세요.');
@@ -803,8 +806,9 @@ async function prepareOp(db: Firestore, op: WriteOperation, index: number, viewe
     const before = snap.data() ?? {};
     result.before = previewOf(before, spec, viewer);
     result.summary = summaryOf('delete', before);
+    if (spec.name === 'evaluations' && before.aiDraft !== true) return fail('사람이 작성한 평가는 삭제할 수 없습니다 (AI 초안만 가능)');
     result.ok = true;
-    return { result, spec, id: op.id };
+    return { result, spec, id: op.id, before };
   }
 
   if (!isPlainObject(op.data) || Object.keys(op.data).length === 0) return fail('data 가 비어 있습니다');
@@ -838,10 +842,19 @@ async function prepareOp(db: Firestore, op: WriteOperation, index: number, viewe
   if (!snap.exists) return fail(`${spec.name}/${op.id} 문서가 없습니다`);
   const before = snap.data() ?? {};
   if (!errors.length && Object.keys(coerced).length === 0) errors.push('변경할 필드가 없습니다');
+  if (spec.name === 'evaluations' && before.aiDraft !== true) errors.push('사람이 작성한 평가는 수정할 수 없습니다 (AI 초안만 가능)');
   await checkRefs(db, spec, coerced, errors, cache);
   const merged: Record<string, unknown> = { ...before, ...coerced };
   if (!errors.length) await crossChecks(db, spec, 'update', op.id, merged, errors, warnings);
-  const payload = { ...coerced, ...serverFields(spec, 'update', viewer) };
+  const payload: Record<string, unknown> = { ...coerced, ...serverFields(spec, 'update', viewer) };
+  if (spec.name === 'evaluations') {
+    if ('scores' in coerced) for (const k of ['scores', 'totalScore', 'maxTotalScore', 'percentage']) payload[k] = merged[k];
+    // 예전 표기 "이름 (AI 초안)" → "이름 (AI)"
+    if (typeof before.evaluatorName === 'string' && before.evaluatorName.endsWith(' (AI 초안)')) {
+      payload.evaluatorName = merged.evaluatorName = before.evaluatorName.replace(/ \(AI 초안\)$/, ' (AI)');
+      coerced.evaluatorName = payload.evaluatorName;
+    }
+  }
   const beforeView = previewOf(before, spec, viewer) as Record<string, unknown>;
   const afterView = previewOf(merged, spec, viewer) as Record<string, unknown>;
   const changed = Object.keys(coerced).filter((k) => JSON.stringify(beforeView[k] ?? null) !== JSON.stringify(afterView[k] ?? null));
@@ -849,7 +862,7 @@ async function prepareOp(db: Firestore, op: WriteOperation, index: number, viewe
   if (!changed.length && !errors.length) warnings.push('실제로 바뀌는 값이 없습니다');
   result.summary = summaryOf('update', before, changed);
   result.ok = errors.length === 0;
-  return { result, spec, id: op.id, payload };
+  return { result, spec, id: op.id, payload, before };
 }
 
 function canonical(v: unknown): string {
@@ -935,6 +948,21 @@ export async function writeDocuments(input: WriteInput, viewer: Viewer) {
   await batch.commit();
   clearAiContentCache();
 
+  // 평가를 바꿨으면 앱(EvaluationService.updateUserEvaluationSummary)과 같은 방식으로 지원자 평가 요약 재계산
+  const evalUsers = new Set<string>();
+  for (const p of prepared) {
+    if (p.spec?.name !== 'evaluations') continue;
+    for (const src of [p.payload, p.before]) if (typeof src?.refUserId === 'string' && src.refUserId) evalUsers.add(src.refUserId);
+  }
+  const summaryErrors: string[] = [];
+  for (const uid of evalUsers) {
+    try {
+      await recomputeEvaluationSummary(db, uid);
+    } catch (e) {
+      summaryErrors.push(`${uid}: ${(e as Error).message}`);
+    }
+  }
+
   return {
     mode: 'executed' as const,
     ok: true,
@@ -942,5 +970,59 @@ export async function writeDocuments(input: WriteInput, viewer: Viewer) {
     auditLogId: auditRef.id,
     counts,
     results: executed,
+    ...(evalUsers.size ? { evaluationSummariesUpdated: evalUsers.size - summaryErrors.length } : {}),
+    ...(summaryErrors.length ? { evaluationSummaryErrors: summaryErrors } : {}),
   };
+}
+
+const SUMMARY_STAGES = [
+  ['documentReview', '서류 전형'],
+  ['interview', '면접 전형'],
+  ['faceToFaceEducation', '대면 교육'],
+  ['campLife', '캠프 생활'],
+] as const;
+
+/** shared EvaluationService.updateUserEvaluationSummary 의 Admin SDK 판 — 계산 방식을 그대로 맞춘다 */
+async function recomputeEvaluationSummary(db: Firestore, userId: string) {
+  const snap = await db.collection('evaluations').where('refUserId', '==', userId).get();
+  const evaluations = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) })) as Array<{
+    id: string;
+    evaluationStage?: string;
+    totalScore?: number;
+    evaluationDate?: Timestamp;
+  }>;
+  const userRef = db.collection('users').doc(userId);
+  const summaryRef = db.collection('userEvaluationSummaries').doc(userId);
+  const userExists = (await userRef.get()).exists;
+
+  if (evaluations.length === 0) {
+    if (userExists) await userRef.update({ evaluationSummary: FieldValue.delete(), updatedAt: Timestamp.now() });
+    await summaryRef.delete().catch(() => undefined);
+    return;
+  }
+
+  const summary: Record<string, unknown> = { overallAverage: 0, totalEvaluations: evaluations.length, lastUpdatedAt: Timestamp.now() };
+  let totalScoreSum = 0;
+  let totalCount = 0;
+  for (const [key, stage] of SUMMARY_STAGES) {
+    const list = evaluations.filter((e) => e.evaluationStage === stage);
+    if (!list.length) continue;
+    const scores = list.map((e) => Number(e.totalScore ?? 0));
+    const average = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const sorted = [...list].sort((a, b) => (b.evaluationDate?.seconds ?? 0) - (a.evaluationDate?.seconds ?? 0));
+    summary[key] = {
+      averageScore: average,
+      totalEvaluations: list.length,
+      highestScore: Math.max(...scores),
+      lowestScore: Math.min(...scores),
+      lastEvaluatedAt: sorted[0].evaluationDate ?? Timestamp.now(),
+      evaluations: sorted.map((e) => e.id),
+    };
+    totalScoreSum += average * list.length;
+    totalCount += list.length;
+  }
+  summary.overallAverage = totalCount ? totalScoreSum / totalCount : 0;
+
+  if (userExists) await userRef.update({ evaluationSummary: summary, updatedAt: Timestamp.now() });
+  await summaryRef.set({ userId, ...summary }, { merge: true });
 }

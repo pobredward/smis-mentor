@@ -23,6 +23,38 @@ export const INVENTORY_SUBCATEGORIES: Record<InventoryCategory, readonly string[
 /** 낱개 단위 후보 (수량은 항상 낱개 기준) */
 export const INVENTORY_UNITS = ['개', '정', '포', '병', '통', '장', '매', '팩', '세트', 'ml'] as const;
 
+/**
+ * 품목 유형 — 어디에 표시되고 어떻게 줄어드는지 결정
+ * - oral       먹는 약: 환자 탭 "약·처치 물품 사용"에 표시, 복용 간격·1일 최대 경고 대상
+ * - topical    바르는·붙이는·넣는 약 (연고, 파스, 안약)
+ * - supply     처치 소모품 (밴드, 면봉, 알콜솜, 해열시트)
+ * - equipment  비품 (체온계, 가위, 멀티탭) — 차감 없이 위치·수량만
+ * - operational 운영 소모품 (보드마카, A4, 물티슈) — 실사·요청으로 관리
+ */
+export const INVENTORY_USAGES = ['oral', 'topical', 'supply', 'equipment', 'operational'] as const;
+export type InventoryUsage = (typeof INVENTORY_USAGES)[number];
+export const INVENTORY_USAGE_LABELS: Record<InventoryUsage, string> = {
+  oral: '먹는 약',
+  topical: '바르는·붙이는 약',
+  supply: '처치 소모품',
+  equipment: '비품',
+  operational: '운영 소모품',
+};
+/** 환자 처치에 쓰이는 유형 (환자 탭 사용 기록 대상) */
+export const TREATMENT_USAGES: readonly InventoryUsage[] = ['oral', 'topical', 'supply'];
+
+/** usage가 없는 옛 품목은 분류로 추정 */
+export function getItemUsage(item: Pick<InventoryItem, 'usage' | 'category'>): InventoryUsage {
+  if (item.usage) return item.usage;
+  return item.category === '의약품' ? 'oral' : 'operational';
+}
+
+/** 같은 이름 품목 구분용 표시명: "모드코프 (종합감기약)" */
+export function itemLabel(item: Pick<InventoryItem, 'name' | 'kind' | 'spec'>): string {
+  const extra = [item.kind, item.spec].filter(Boolean).join(' · ');
+  return extra ? `${item.name} (${extra})` : item.name;
+}
+
 /** 품목 마스터 (회사 공통) */
 export interface InventoryItem {
   id: string;
@@ -35,6 +67,16 @@ export interface InventoryItem {
   name: string;
   /** 규격·비고 (알약 500mg, 액상 …) */
   spec?: string;
+  /** 품목 유형 (없으면 분류로 추정 — getItemUsage) */
+  usage?: InventoryUsage;
+  /** 주성분 (같은 성분 중복 복용 경고용, 예: 아세트아미노펜) */
+  ingredient?: string;
+  /** 관리자 입력: 같은 성분 최소 복용 간격(시간) */
+  intervalHours?: number;
+  /** 관리자 입력: 같은 성분 1일 최대 복용 횟수 */
+  maxPerDay?: number;
+  /** 관리자 입력: 복용 안내 (연령별 용량 등) — 약 선택 시 그대로 표시 */
+  dosageNote?: string;
   /** 낱개 단위 (개, 정, 병 …) */
   unit: string;
   /** 포장 단위당 낱개 수 (예: 1박스 = 4정). 요청서의 '박스' 환산용 */
@@ -63,6 +105,8 @@ export interface InventoryGroup {
   order: number;
   /** 패키지 슬롯 키 (패키지에서 적용된 그룹인 경우) */
   slotKey?: string;
+  /** 연결된 캠프 그룹 이름 (campSettings 그룹, 예: Spring) — 학생 반 → 이 그룹 키트 자동 선택 */
+  campGroupName?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -73,6 +117,7 @@ export interface InventoryPackageSlot {
   /** 기본 그룹명 (적용 시 그대로 들어가며 관리자가 변경) */
   label: string;
   location?: string;
+  campGroupName?: string;
 }
 export interface InventoryPackage {
   id: string;
@@ -153,23 +198,83 @@ export function getGroupStock(item: { stocks?: Record<string, number> } | undefi
   return Number(item?.stocks?.[groupId] ?? 0) || 0;
 }
 
-/** 특정 그룹의 최소 보유 수량 (그룹 예외 → 품목 기본값 → 0) */
-export function getMinStock(item: Pick<InventoryItemView, 'minStocks' | 'minStockDefault'>, groupId: string): number {
+/**
+ * 특정 그룹의 최소 보유 수량
+ * 그룹 예외 → (그 그룹에 둔 적 있는 품목이면) 품목 기본값 → 0
+ * 기숙사·공통처럼 약을 두지 않는 그룹까지 "구매 필요"로 뜨지 않게, 기본값은 재고 칸이 있는 그룹에만 적용
+ */
+export function getMinStock(item: Pick<InventoryItemView, 'minStocks' | 'minStockDefault' | 'stocks'>, groupId: string): number {
   const override = item.minStocks?.[groupId];
   if (override != null && !isNaN(Number(override))) return Number(override);
+  if (!(groupId in (item.stocks ?? {}))) return 0;
   return Number(item.minStockDefault ?? 0) || 0;
 }
 
-/** 품목 마스터 + 캠프 재고 → 화면용 뷰 */
+/**
+ * 품목 마스터 + 캠프 재고 → 화면용 뷰.
+ * groups를 주면 총량은 **현재 존재하는 그룹만** 합산 (삭제된 그룹에 남은 숫자는 제외)
+ */
 export function buildInventoryViews(
   items: InventoryItem[],
-  stocksByItem: Record<string, InventoryStock | undefined>
+  stocksByItem: Record<string, InventoryStock | undefined>,
+  groups?: Pick<InventoryGroup, 'id'>[]
 ): InventoryItemView[] {
+  const ids = groups ? new Set(groups.map(g => g.id)) : null;
   return items.map(item => {
     const s = stocksByItem[item.id];
-    const stocks = s?.stocks ?? {};
+    const raw = s?.stocks ?? {};
+    const stocks = ids ? Object.fromEntries(Object.entries(raw).filter(([k]) => ids.has(k))) : raw;
     return { ...item, stocks, minStocks: s?.minStocks ?? {}, total: getTotalStock({ stocks }) };
   });
+}
+
+/** 수량이 음수인 그룹이 있는지 (약은 먹였는데 재고 기록이 부족 → 실사 필요) */
+export function needsStocktake(item: { stocks?: Record<string, number> }): boolean {
+  return Object.values(item.stocks ?? {}).some(n => Number(n) < 0);
+}
+
+// ── 복용 경고 (관리자가 입력한 간격·최대 횟수만 사용, 같은 성분 기준) ──
+
+export interface DoseWarning {
+  level: 'warn' | 'info';
+  message: string;
+}
+
+/**
+ * 약 선택 시 경고 계산
+ * @param item    선택한 품목
+ * @param history 이 학생의 기존 복용 기록 (최근 24시간 이상 포함 가능)
+ * @param pendingCount 지금 폼에서 같은 성분으로 추가 중인 건수 (이 건 포함)
+ */
+export function getDoseWarnings(
+  item: Pick<InventoryItem, 'id' | 'name' | 'ingredient' | 'intervalHours' | 'maxPerDay'>,
+  history: Array<Pick<import('./camp').MedicationDose, 'itemId' | 'ingredient' | 'givenAt' | 'itemName'>>,
+  pendingCount = 1,
+  now: Date = new Date()
+): DoseWarning[] {
+  const key = item.ingredient?.trim();
+  const same = history.filter(d => (key ? d.ingredient?.trim() === key : d.itemId === item.id));
+  const dayAgo = now.getTime() - 24 * 3600 * 1000;
+  const last24 = same.filter(d => (d.givenAt?.toMillis?.() ?? 0) >= dayAgo);
+  const out: DoseWarning[] = [];
+  const latest = last24.reduce<number>((m, d) => Math.max(m, d.givenAt?.toMillis?.() ?? 0), 0);
+  const label = key || item.name;
+  if (latest > 0) {
+    const mins = Math.max(0, Math.round((now.getTime() - latest) / 60000));
+    const ago = mins >= 60 ? `${Math.floor(mins / 60)}시간 ${mins % 60}분` : `${mins}분`;
+    if (item.intervalHours && mins < item.intervalHours * 60) {
+      out.push({ level: 'warn', message: `${label} ${ago} 전 복용 — 최소 간격 ${item.intervalHours}시간` });
+    } else {
+      out.push({ level: 'info', message: `${label} ${ago} 전 복용` });
+    }
+  }
+  const count = last24.length + pendingCount;
+  if (item.maxPerDay && count > item.maxPerDay) {
+    out.push({ level: 'warn', message: `24시간 내 ${label} ${count}회째 — 1일 최대 ${item.maxPerDay}회` });
+  } else if (last24.length > 0) {
+    out.push({ level: 'info', message: `24시간 내 ${count}회째${item.maxPerDay ? ` / 최대 ${item.maxPerDay}회` : ''}` });
+  }
+  return out;
 }
 
 /** 구매 필요 항목 (그룹별 현재 < 최소) */
@@ -317,4 +422,66 @@ export interface PurchaseItem {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   receivedAt?: Timestamp;
+}
+
+// ==================== 분실물 ====================
+
+export const LOST_ITEM_STATUSES = ['found', 'claimed', 'discarded'] as const;
+export type LostItemStatus = (typeof LOST_ITEM_STATUSES)[number];
+export const LOST_ITEM_STATUS_LABELS: Record<LostItemStatus, string> = {
+  found: '보관 중',
+  claimed: '주인 찾음',
+  discarded: '폐기',
+};
+
+/** 첨부 사진/영상 (Firebase Storage) */
+export interface LostItemMedia {
+  url: string;
+  /** Storage 경로 (삭제용) */
+  path: string;
+  type: 'image' | 'video';
+  name?: string;
+  size?: number;
+}
+
+/** 분실물 1건 — 캠프별, 모든 스태프가 등록·조회·상태 변경 */
+export interface LostItem {
+  id: string;
+  campCode: string;
+  name: string;
+  description?: string;
+  /** 발견 장소 */
+  foundPlace?: string;
+  /** 발견일 "YYYY-MM-DD" */
+  foundDate: string;
+  /** 현재 보관 장소 (예: 2층 교무실) */
+  keptAt?: string;
+  status: LostItemStatus;
+  media: LostItemMedia[];
+  reportedBy: string;
+  reportedById: string;
+  /** 알림 대상 조회용 캠프 jobCode 문서 ID */
+  jobCodeId?: string;
+  /** false면 등록 시 푸시 알림을 보내지 않음 (중요하지 않은 물품) */
+  notify?: boolean;
+  /** 이름표 등으로 주인을 아는 경우 — 담임·방 담당·그룹 매니저에게 알림 */
+  ownerStudentId?: string;
+  ownerName?: string;
+  ownerClassCode?: string;
+  ownerClassMentor?: string;
+  ownerUnitMentor?: string;
+  /** 캠프 그룹 키 (users.jobExperiences[].group 과 같은 값, 예: spring) */
+  ownerGroup?: string;
+  /** 주인 찾음 처리: 학생(또는 사람) 이름 · 처리자 · 시각 */
+  claimedBy?: string;
+  claimedHandler?: string;
+  claimedAt?: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** Storage 업로드 경로: lostItems/{campCode}/{lostItemId}/{timestamp}_{name} */
+export function lostItemMediaPath(campCode: string, lostItemId: string, fileName: string): string {
+  const safe = fileName.replace(/[^\w.\-가-힣]/g, '_').slice(-80);
+  return `lostItems/${campCode}/${lostItemId}/${Date.now()}_${safe}`;
 }

@@ -405,9 +405,9 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
 
   evaluations: {
     name: 'evaluations',
-    description: '지원자 단계별 평가. AI 는 초안(isFinalized=false, isVisible=false, aiDraft=true)만 만들 수 있고 확정은 관리자가 화면에서 한다.',
+    description: '지원자 단계별 평가. AI 는 초안(isFinalized=false, isVisible=false, aiDraft=true, 평가자 "이름 (AI)")만 만들고, AI 초안에 한해 수정·삭제할 수 있다. 저장 후 지원자 평가 요약(users.evaluationSummary)을 서버가 다시 계산한다.',
     read: 'admin',
-    write: { ops: ['create'] },
+    write: { ops: ['create', 'update', 'delete'] },
     scope: { kind: 'none' },
     idOnCreate: 'auto',
     fields: {
@@ -422,8 +422,8 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
       percentage: num('서버 계산: totalScore / 10 × 100'),
       feedback: str('종합 코멘트', { writable: true }),
       criteriaFeedback: { type: 'object', description: '{ [criteriaId]: string } 항목별 근거', writable: true },
-      evaluatorId: str('평가자 uid (서버 설정)'),
-      evaluatorName: str('평가자 이름 (서버 설정, "이름 (AI 초안)")'),
+      evaluatorId: str('평가자 uid (서버 설정 — 실행한 관리자)'),
+      evaluatorName: str('평가자 이름 (서버 설정, "이름 (AI)")'),
       evaluatorRole: str('평가자 역할 (서버 설정)'),
       isFinalized: bool('확정 여부 (AI 초안은 항상 false)'),
       isVisible: bool('지원자 공개 여부 (AI 초안은 항상 false)'),
@@ -431,9 +431,10 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
       evaluationDate: ts('평가 일시 (서버 설정)'),
     },
     serverManaged: [...AUDIT_FIELDS, 'evaluatorId', 'evaluatorName', 'evaluatorRole', 'isFinalized', 'isVisible', 'aiDraft', 'evaluationDate', 'totalScore', 'maxTotalScore', 'percentage'],
+    // AI 초안은 실행한 관리자 명의 + "(AI)" 표시. 화면에서는 aiDraft 이면 모든 관리자가 수정·삭제 가능.
     forcedOnCreate: (viewer) => ({
       evaluatorId: viewer.uid,
-      evaluatorName: `${viewer.name} (AI 초안)`,
+      evaluatorName: `${viewer.name} (AI)`,
       evaluatorRole: '관리자',
       isFinalized: false,
       isVisible: false,
@@ -442,7 +443,8 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
     }),
     notes: [
       '서류 전형 초안 만들기: evaluationCriteria 에서 stage="서류 전형", isActive=true 템플릿을 읽고 → 지원자 users 문서(selfIntroduction, jobMotivation, 학력, 경력) → criteria 별 score 와 근거(criteriaFeedback) 작성 → create. 점수 합계·백분율은 서버가 계산한다. 같은 지원자·공고·단계에 AI 초안이 이미 있으면 거부되고, 사람이 쓴 평가가 있으면 경고만 표시된다.',
-      'userEvaluationSummaries(집계)는 관리자가 확정할 때 앱이 갱신하므로 AI 초안은 집계에 반영되지 않는다.',
+      'update/delete 는 aiDraft=true 문서만 가능(사람이 쓴 평가는 거부). update 에서 scores 를 바꾸면 합계·백분율을 서버가 다시 계산한다.',
+      '평가를 만들거나 고치거나 지우면 앱과 같은 방식으로 users.evaluationSummary 와 userEvaluationSummaries 를 서버가 다시 계산한다 → 지원자 목록 카드의 단계별 평균에 바로 반영.',
     ],
   },
 

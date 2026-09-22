@@ -806,7 +806,7 @@ service cloud.firestore {
       // 삭제: admin 또는 본인이 기록한 것만
       allow delete: if (
         isAdmin() ||
-        (isCampStaff() && resource.data.recordedBy == request.auth.uid)
+        (isCampStaff() && resource.data.recordedById == request.auth.uid)
       );
     }
 
@@ -831,25 +831,17 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // 캠프별 수량 (문서 ID = campCode__itemId): 관리자 전체,
-    // 스태프는 약 복용 차감/복구로 인한 stocks 변경(문서 생성 포함)만 가능
+    // 캠프별 수량 (문서 ID = campCode__itemId): 관리자만 직접 쓰기.
+    // 약 복용에 따른 차감/복구는 서버(Cloud Function onPatientRecordWritten)가 원장 기준으로 처리
     match /inventoryStocks/{stockId} {
       allow read: if isCampStaff();
-      allow create: if (
-        isAdmin() ||
-        (
-          isCampStaff() &&
-          request.resource.data.keys().hasOnly(['campCode', 'itemId', 'stocks', 'updatedAt'])
-        )
-      );
-      allow update: if (
-        isAdmin() ||
-        (
-          isCampStaff() &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stocks', 'updatedAt'])
-        )
-      );
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 약 복용 재고 원장 (서버 전용)
+    match /inventoryDoseLedger/{recordId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // 재고 요청(관리자 생성) · 선생님별 입력(본인 문서만, 문서 ID = requestId__uid) · 구매 목록(관리자)
@@ -865,7 +857,9 @@ service cloud.firestore {
         (
           isCampStaff() &&
           request.resource.data.userId == request.auth.uid &&
-          entryId == request.resource.data.requestId + '__' + request.auth.uid
+          entryId == request.resource.data.requestId + '__' + request.auth.uid &&
+          // 마감된 요청에는 입력 불가
+          get(/databases/$(database)/documents/inventoryRequests/$(request.resource.data.requestId)).data.status == 'open'
         )
       );
       allow delete: if isAdmin() || (isCampStaff() && resource.data.userId == request.auth.uid);
@@ -876,10 +870,28 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    match /inventoryMovements/{movementId} {
+    // 분실물: 모든 캠프 스태프가 등록·조회·상태 변경, 삭제는 등록자 또는 관리자
+    match /lostItems/{lostItemId} {
       allow read: if isCampStaff();
       allow create: if (
         isCampStaff() &&
+        request.resource.data.reportedById == request.auth.uid &&
+        request.resource.data.keys().hasAll(['campCode', 'name', 'foundDate', 'status', 'media', 'reportedBy', 'reportedById', 'createdAt', 'updatedAt'])
+      );
+      allow update: if (
+        isCampStaff() &&
+        fieldUnchanged('campCode') &&
+        fieldUnchanged('reportedById') &&
+        fieldUnchanged('createdAt')
+      );
+      allow delete: if isAdmin() || (isCampStaff() && resource.data.reportedById == request.auth.uid);
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if isCampStaff();
+      // 관리자(입고·조정·실사)만 직접 기록, 약 복용 내역은 서버가 기록
+      allow create: if (
+        isAdmin() &&
         request.resource.data.keys().hasAll(['campCode', 'itemId', 'groupId', 'delta', 'reason', 'at', 'by']) &&
         request.resource.data.delta is number
       );

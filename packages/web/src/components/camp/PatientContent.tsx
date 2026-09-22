@@ -56,6 +56,13 @@ import {
   newDoseId,
   getGroupStock,
   getTotalStock,
+  getItemUsage,
+  itemLabel,
+  getDoseWarnings,
+  doseLabel,
+  findGroupByClassCode,
+  TREATMENT_USAGES,
+  INVENTORY_USAGE_LABELS,
   ABDOMINAL_PAIN_SITES,
   hasAbdominalPain,
   formatSymptomText,
@@ -94,12 +101,24 @@ import type {
   InventoryItemView,
   InventoryStock,
   InventoryGroup,
+  InventoryUsage,
   FeverLevel,
 } from '@smis-mentor/shared';
 import { TRANSPORT_SLOTS, PARENT_REPORT_METHODS, isCarSlot, LOCATION_MODES } from '@smis-mentor/shared';
 import type { LocationMode } from '@smis-mentor/shared';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
+import { authenticatedPost } from '@/lib/apiClient';
+
+/**
+ * 약 복용 기록 → 재고 정산 요청 (서버가 원장과 비교해 차이만 반영, 여러 번 호출해도 안전).
+ * 실패해도 저장은 유지되고, 다음 저장 때 다시 맞춰진다.
+ */
+function syncDoseStock(recordId: string | undefined, campCode?: string | null) {
+  if (!recordId) return;
+  authenticatedPost('/api/inventory/sync-dose', { recordId, campCode: campCode ?? undefined })
+    .catch(e => console.warn('재고 정산 요청 실패 (다음 저장 때 다시 맞춰짐):', e));
+}
 import type { STSheetStudent } from '@/lib/stSheetService';
 
 // ==================== 매뉴얼 데이터 (하드코딩, 딜레이 없음) ====================
@@ -255,11 +274,19 @@ type SymptomCategory = (typeof SYMPTOM_CATEGORIES)[number];
 // ==================== 재고(약품) 컨텍스트 ====================
 // 최초보고·경과보고의 약 복용 섹션이 같은 목록을 쓰도록 PatientContent에서 한 번만 구독해 내려준다.
 interface PatientInventory {
-  /** 사용 중인 의약품만 (비활성 약품은 새 보고 선택 목록에서 제외) */
+  /** 처치에 쓰는 사용 중 품목만 (먹는 약·바르는 약·처치 소모품, 비활성 제외) */
   medicines: InventoryItemView[];
   groups: InventoryGroup[];
+  /** 학생 반 코드 → 연결된 재고 그룹 ID (캠프 그룹 ↔ 재고 그룹, 없으면 '') */
+  defaultGroupIdForClass: (classCode?: string) => string;
+  /** 학생의 모든 환자 기록에 걸친 복용 기록 (같은 성분 간격·횟수 경고용) */
+  dosesForStudent: (studentId?: string) => MedicationDose[];
+  /** ST 시트 복용약·특이사항 */
+  studentNote: (studentId?: string) => string | undefined;
 }
-const PatientInventoryContext = createContext<PatientInventory>({ medicines: [], groups: [] });
+const PatientInventoryContext = createContext<PatientInventory>({
+  medicines: [], groups: [], defaultGroupIdForClass: () => '', dosesForStudent: () => [], studentNote: () => undefined,
+});
 const usePatientInventory = () => useContext(PatientInventoryContext);
 
 /** 다음 체크·담당 지정 후보: 외국인 선생님(foreign, foreign_temp) 제외 — 환자 관리는 한국인 선생님이 담당 */
@@ -590,13 +617,31 @@ export default function PatientContent() {
     const unsubGroups = subscribeInventoryGroups(db, campCode, setInventoryGroups); // 캠프별 그룹
     return () => { unsubItems(); unsubStocks(); unsubGroups(); };
   }, [campCode]);
-  const patientInventory = useMemo<PatientInventory>(() => ({
-    medicines: buildInventoryViews(
-      inventoryItems.filter(i => i.category === '의약품' && i.isActive !== false),
-      inventoryStocks
-    ),
-    groups: inventoryGroups,
-  }), [inventoryItems, inventoryStocks, inventoryGroups]);
+  const patientInventory = useMemo<PatientInventory>(() => {
+    const byCampGroup = new Map(
+      inventoryGroups.filter(g => g.campGroupName).map(g => [g.campGroupName!.toLowerCase(), g.id] as const)
+    );
+    return {
+      medicines: buildInventoryViews(
+        inventoryItems.filter(i => i.isActive !== false && TREATMENT_USAGES.includes(getItemUsage(i))),
+        inventoryStocks,
+        inventoryGroups
+      ),
+      groups: inventoryGroups,
+      defaultGroupIdForClass: (classCode) => {
+        if (!classCode) return '';
+        const cg = findGroupByClassCode(campGroups, classCode);
+        return cg ? byCampGroup.get(cg.name.toLowerCase()) ?? '' : '';
+      },
+      dosesForStudent: (studentId) =>
+        studentId ? records.filter(r => r.studentId === studentId).flatMap(r => r.medicationDoses ?? []) : [],
+      studentNote: (studentId) => {
+        const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string; notes?: string }) | undefined;
+        const parts = [st?.medication && `복용약 ${st.medication}`, st?.notes && `특이사항 ${st.notes}`].filter(Boolean);
+        return parts.length ? parts.join(' · ') : undefined;
+      },
+    };
+  }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students]);
 
   // 현재 환자 (완치 제외) / 완치 환자 분리
   const activeRecords = useMemo(() =>
@@ -894,6 +939,8 @@ export default function PatientContent() {
     await deletePatientRecord(db, id, target && campCode
       ? { campCode, currentDoses: target.medicationDoses ?? [], by: userData?.name ?? '', studentName: target.studentName }
       : undefined);
+    // 삭제된 기록에 남아 있던 복용 수량은 서버가 원장 기준으로 재고에 복구
+    if (target?.medicationDoses?.length) syncDoseStock(id, campCode);
   }, [records, campCode, userData]);
 
   const handleProgressChange = useCallback(async (record: PatientRecord, status: ProgressStatus) => {
@@ -906,6 +953,7 @@ export default function PatientContent() {
     // 경과보고와 함께 기록한 약 복용은 저장 시 1회만 재고 차감
     await addProgressLog(db, record.id, { ...log, loggedBy: userData.name },
       doses?.length ? { campCode, doses, by: userData.name, studentName: record.studentName } : undefined);
+    if (doses?.length) syncDoseStock(record.id, campCode);
   }, [userData, campCode]);
 
   const handleRemoveProgressLog = useCallback(async (record: PatientRecord, logIndex: number) => {
@@ -914,6 +962,7 @@ export default function PatientContent() {
     if (!confirm('이 경과 기록을 삭제할까요? (함께 기록한 약 복용은 재고에 복구됩니다)')) return;
     await removeProgressLog(db, record.id, logs, logIndex,
       campCode ? { campCode, currentDoses: record.medicationDoses ?? [], by: userData?.name ?? '', studentName: record.studentName } : undefined);
+    if (record.medicationDoses?.length) syncDoseStock(record.id, campCode);
   }, [campCode, userData]);
 
   const handleManagerCheck = useCallback(async (record: PatientRecord, memo?: string) => {
@@ -1418,7 +1467,7 @@ export default function PatientContent() {
           onSubmit={async (quickForm) => {
             try {
               if (!campCode) return;
-              await addPatientRecord(db, {
+              const newRecordId = await addPatientRecord(db, {
                 campCode,
                 studentId: quickForm.studentId,
                 studentName: quickForm.studentName,
@@ -1443,7 +1492,9 @@ export default function PatientContent() {
                 assigneeName: userData?.name ?? '',
                 assigneeId: userData?.id ?? '',
                 recordedBy: userData?.name ?? '',
+                recordedById: userData?.userId ?? '',
               });
+              if (quickForm.doses?.length) syncDoseStock(newRecordId, campCode);
               setShowQuickReport(false);
             } catch (e) {
               console.error('최초보고 제출 오류:', e);
@@ -2013,6 +2064,7 @@ function ProgressTab({
 
   const handleAddLog = () => {
     if (!logStatus) return;
+    if (logDoses.some(d => !d.itemId || !d.groupId)) { alert('약·처치 물품 사용에서 약과 그룹을 모두 선택하거나 빈 줄을 삭제해주세요.'); return; }
     // 체온 수치가 있으면 공통 기준(FEVER_THRESHOLDS)으로 자동 판정, 없으면 선택한 단계
     const directTemp = parseFloat(logFeverDirect);
     const hasTemp = !isNaN(directTemp);
@@ -2257,6 +2309,9 @@ function ProgressTab({
                 groups={inventory.groups}
                 givenBy={currentUserName}
                 compact
+                defaultGroupId={inventory.defaultGroupIdForClass(record.className)}
+                history={inventory.dosesForStudent(record.studentId)}
+                studentNote={inventory.studentNote(record.studentId)}
               />
             )}
 
@@ -2353,7 +2408,7 @@ function ProgressTab({
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             {doses.map(d => (
                               <span key={d.id} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded">
-                                💊 {d.itemName} {d.quantity}{d.unit ?? '개'} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
+                                💊 {doseLabel(d)} {d.quantity}{d.unit ?? '개'} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
                               </span>
                             ))}
                           </div>
@@ -2438,103 +2493,134 @@ function ProgressTab({
  * 약품 목록은 재고 탭에 등록된 의약품(사용 중)만, 재고 그룹은 캠프 재고 그룹을 그대로 사용한다.
  * 저장 자체는 부모가 하며(addPatientRecord / addProgressLog), 재고 차감은 서비스에서 1회만 처리된다.
  */
-function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, compact }: {
+function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, compact, defaultGroupId, history, studentNote }: {
   doses: MedicationDose[];
   onChange: (next: MedicationDose[]) => void;
   medicines: InventoryItemView[];
   groups: InventoryGroup[];
   givenBy: string;
   compact?: boolean;
+  /** 학생 반에 연결된 재고 그룹 (캠프 그룹 ↔ 재고 그룹) */
+  defaultGroupId?: string;
+  /** 이 학생의 기존 복용 기록 (같은 성분 간격·횟수 경고용) */
+  history?: MedicationDose[];
+  /** ST 시트 복용약·특이사항 (알레르기 등) */
+  studentNote?: string;
 }) {
   const canAdd = medicines.length > 0 && groups.length > 0;
   const textCls = compact ? 'text-[11px]' : 'text-xs';
-  const inputCls = `${textCls} border border-emerald-200 rounded-lg px-2 py-1 outline-none focus:border-emerald-400 bg-white`;
+  const inputCls = `${textCls} border rounded-lg px-2 py-1 outline-none focus:border-emerald-400 bg-white`;
+
+  // 유형 · 종류별로 묶은 선택 목록 (같은 이름은 "이름 (종류·규격)"으로 구분)
+  const grouped = useMemo(() => {
+    const order: InventoryUsage[] = ['oral', 'topical', 'supply'];
+    const map = new Map<string, InventoryItemView[]>();
+    [...medicines]
+      .sort((a, b) => order.indexOf(getItemUsage(a)) - order.indexOf(getItemUsage(b)))
+      .forEach(it => {
+        const key = `${INVENTORY_USAGE_LABELS[getItemUsage(it)]}${it.kind ? ` · ${it.kind}` : ''}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(it);
+      });
+    return [...map.entries()];
+  }, [medicines]);
 
   const addRow = () => {
     if (!canAdd) return;
-    const item = medicines[0];
-    const group = groups[0];
+    // 기본값을 비워 둔다 — 확인 없이 저장해 엉뚱한 약이 차감되는 것을 막기 위해
+    const g = groups.find(x => x.id === defaultGroupId);
     onChange([...doses, {
-      id: newDoseId(),
-      itemId: item.id,
-      itemName: item.name,
-      unit: item.unit || '개',
-      quantity: 1,
-      groupId: group.id,
-      groupName: group.name,
-      givenAt: Timestamp.now(),
-      givenBy,
-      source: 'initial',
+      id: newDoseId(), itemId: '', itemName: '', unit: '개', quantity: 1,
+      groupId: g?.id ?? '', groupName: g?.name ?? '',
+      givenAt: Timestamp.now(), givenBy, source: 'initial',
     }]);
   };
-
   const update = (idx: number, patch: Partial<MedicationDose>) =>
     onChange(doses.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
-
   const remove = (idx: number) => onChange(doses.filter((_, i) => i !== idx));
+  const past = (history ?? []).filter(h => !doses.some(d => d.id === h.id));
 
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
       <div className="flex items-center justify-between">
         <div>
-          <p className={`${textCls} font-bold text-emerald-800`}>💊 약 복용</p>
-          <p className="text-[10px] text-emerald-700/80">실제로 약을 먹인 경우에만 기록 — 저장 시 해당 그룹 재고가 자동 차감됩니다</p>
+          <p className={`${textCls} font-bold text-emerald-800`}>💊 약·처치 물품 사용</p>
+          <p className="text-[10px] text-emerald-700/80">실제로 먹이거나 쓴 경우에만 기록 — 저장하면 해당 그룹 재고에서 자동으로 빠집니다</p>
         </div>
         <button type="button" onClick={addRow} disabled={!canAdd}
           className={`${textCls} font-bold px-2 py-1 rounded-lg transition-colors ${
             canAdd ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
           }`}>
-          + 약 추가
+          + 추가
         </button>
       </div>
+
+      {studentNote && (
+        <p className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1.5">⚠️ 학생 정보 — {studentNote}</p>
+      )}
 
       {!canAdd && (
         <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5">
           {medicines.length === 0
-            ? '등록된 약품이 없습니다. 재고 탭에서 관리자가 약품(의약품)을 등록하면 여기서 선택할 수 있습니다.'
-            : '재고 그룹이 없습니다. 재고 탭에서 관리자가 그룹(A그룹 등)을 등록해주세요.'}
+            ? '등록된 약·처치 물품이 없습니다. 재고 탭에서 관리자가 품목을 등록하면 여기서 선택할 수 있습니다.'
+            : '재고 그룹이 없습니다. 재고 탭에서 관리자가 그룹(Spring 등)을 등록해주세요.'}
         </p>
       )}
 
       {doses.map((d, idx) => {
         const item = medicines.find(m => m.id === d.itemId);
-        const groupStock = item ? getGroupStock(item, d.groupId) : 0;
+        const groupStock = item && d.groupId ? getGroupStock(item, d.groupId) : 0;
         const total = item ? getTotalStock(item) : 0;
-        const short = item ? d.quantity > groupStock : false;
+        const incomplete = !d.itemId || !d.groupId;
+        const sameKey = (x: MedicationDose) => (item?.ingredient ? x.ingredient === item.ingredient : x.itemId === d.itemId);
+        const pending = item ? doses.slice(0, idx + 1).filter(x => x.itemId && sameKey(x)).length : 0;
+        const warnings = item && getItemUsage(item) === 'oral' ? getDoseWarnings(item, past, pending) : [];
         return (
-          <div key={d.id} className="bg-white rounded-lg border border-emerald-100 p-2 space-y-1.5">
+          <div key={d.id} className={`bg-white rounded-lg border p-2 space-y-1.5 ${incomplete ? 'border-amber-300' : 'border-emerald-100'}`}>
             <div className="flex gap-1.5 items-center">
               <select value={d.itemId}
                 onChange={e => {
                   const next = medicines.find(m => m.id === e.target.value);
-                  if (next) update(idx, { itemId: next.id, itemName: next.name, unit: next.unit || '개' });
+                  if (next) update(idx, { itemId: next.id, itemName: next.name, itemKind: next.kind, ingredient: next.ingredient, unit: next.unit || '개' });
                 }}
-                className={`${inputCls} flex-1 min-w-0`}>
-                {medicines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                className={`${inputCls} flex-1 min-w-0 ${d.itemId ? 'border-emerald-200' : 'border-amber-300 text-gray-400'}`}>
+                <option value="">약·물품 선택</option>
+                {grouped.map(([label, list]) => (
+                  <optgroup key={label} label={label}>
+                    {list.map(m => <option key={m.id} value={m.id}>{itemLabel(m)}</option>)}
+                  </optgroup>
+                ))}
               </select>
               <div className="flex items-center gap-1">
-                <input type="number" min={1} step={1} value={d.quantity}
-                  onChange={e => update(idx, { quantity: Math.max(1, parseInt(e.target.value || '1', 10) || 1) })}
-                  className={`${inputCls} w-14 text-center`} />
-                <span className={`${textCls} text-gray-500`}>{d.unit ?? '개'}</span>
+                <button type="button" onClick={() => update(idx, { quantity: Math.max(1, d.quantity - 1) })} className="w-6 h-6 rounded border border-gray-200 text-gray-500 hover:bg-gray-50">−</button>
+                <span className={`${textCls} w-9 text-center font-bold text-gray-800`}>{d.quantity}{d.unit ?? '개'}</span>
+                <button type="button" onClick={() => update(idx, { quantity: d.quantity + 1 })} className="w-6 h-6 rounded border border-gray-200 text-gray-500 hover:bg-gray-50">+</button>
               </div>
               <select value={d.groupId}
                 onChange={e => {
                   const g = groups.find(x => x.id === e.target.value);
                   if (g) update(idx, { groupId: g.id, groupName: g.name });
                 }}
-                className={`${inputCls} w-24`}>
-                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                className={`${inputCls} w-28 ${d.groupId ? 'border-emerald-200' : 'border-amber-300 text-gray-400'}`}>
+                <option value="">그룹 선택</option>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}{item ? ` (${getGroupStock(item, g.id)})` : ''}</option>)}
               </select>
               <button type="button" onClick={() => remove(idx)} className="text-gray-300 hover:text-red-500 px-1" title="삭제">🗑️</button>
             </div>
-            <input type="text" value={d.memo ?? ''} onChange={e => update(idx, { memo: e.target.value || undefined })}
-              placeholder="메모 (예: 식사 후 복용)" className={`${inputCls} w-full`} />
+            <input type="text" value={d.memo ?? ''} onChange={e => update(idx, { memo: e.target.value })}
+              placeholder="메모 (예: 식사 후 복용)" className={`${inputCls} border-emerald-100 w-full`} />
+            {incomplete && <p className="text-[10px] text-amber-700">약·물품과 사용한 그룹을 선택해주세요</p>}
+            {warnings.map((w, i) => (
+              <p key={i} className={`text-[10px] ${w.level === 'warn' ? 'text-red-700 bg-red-50 border border-red-100 rounded px-1.5 py-1 font-semibold' : 'text-blue-700'}`}>
+                {w.level === 'warn' ? '⚠️ ' : 'ℹ️ '}{w.message}
+              </p>
+            ))}
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+              {item?.dosageNote && <span className="text-emerald-800">📋 {item.dosageNote}</span>}
               {item?.description && <span className="text-gray-600">ℹ️ {item.description}</span>}
-              {item && (
-                <span className={short ? 'text-red-600 font-semibold' : 'text-gray-500'}>
-                  재고 {d.groupName} {groupStock}{d.unit ?? '개'} · 전체 {total}{d.unit ?? '개'}{short ? ' — 재고 부족' : ''}
+              {item && d.groupId && (
+                <span className={groupStock - d.quantity < 0 ? 'text-red-600 font-semibold' : 'text-gray-500'}>
+                  재고 {d.groupName} {groupStock}{d.unit ?? '개'} · 전체 {total}{d.unit ?? '개'}{groupStock - d.quantity < 0 ? ' — 기록상 부족 (저장은 가능, 실사 필요로 표시)' : ''}
                 </span>
               )}
             </div>
@@ -2559,6 +2645,7 @@ function DoseHistory({ record, currentUserName }: { record: PatientRecord; curre
     try {
       await updateMedicationDoses(db, record.id,
         { campCode: record.campCode, currentDoses: record.medicationDoses ?? [], by: currentUserName, studentName: record.studentName }, next);
+      syncDoseStock(record.id, record.campCode);
     } catch (e) {
       console.error('약 복용 기록 수정 오류:', e);
     } finally {
@@ -2583,7 +2670,7 @@ function DoseHistory({ record, currentUserName }: { record: PatientRecord; curre
           <div key={d.id} className="flex items-center gap-2 bg-white rounded border border-emerald-100 px-2 py-1 text-[11px]">
             <span className="text-gray-400 w-10 shrink-0">{d.givenAt?.toDate ? d.givenAt.toDate().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''}</span>
             <span className={`text-[9px] px-1 rounded shrink-0 ${d.source === 'initial' ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-600'}`}>{d.source === 'initial' ? '최초' : '경과'}</span>
-            <span className="flex-1 min-w-0 truncate text-gray-800"><b>{d.itemName}</b> · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</span>
+            <span className="flex-1 min-w-0 truncate text-gray-800"><b>{doseLabel(d)}</b> · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</span>
             <div className="flex items-center gap-0.5 shrink-0">
               <button type="button" disabled={busy || d.quantity <= 1} onClick={() => changeQty(d.id, -1)}
                 className="w-5 h-5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">−</button>
@@ -5873,6 +5960,7 @@ function QuickReportModal({
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
+    if (doses.some(d => !d.itemId || !d.groupId)) { alert('약·처치 물품 사용에서 약과 그룹을 모두 선택하거나 빈 줄을 삭제해주세요.'); return; }
     setSubmitting(true);
     try {
       const actionPart = `[${actionStatus}]`;
@@ -6263,13 +6351,16 @@ function QuickReportModal({
 
           {/* ⑥ 약 복용 (실제로 먹인 경우) — 저장 시 재고 자동 차감 */}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1.5">⑥ 약 복용 <span className="font-normal text-gray-400">(선택)</span></p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">⑥ 약·처치 물품 사용 <span className="font-normal text-gray-400">(선택)</span></p>
             <MedicationDoseEditor
               doses={doses}
               onChange={setDoses}
               medicines={inventory.medicines}
               groups={inventory.groups}
               givenBy={reporterName}
+              defaultGroupId={inventory.defaultGroupIdForClass(form.className)}
+              history={inventory.dosesForStudent(form.studentId)}
+              studentNote={inventory.studentNote(form.studentId)}
             />
           </div>
 

@@ -131,7 +131,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY_FOR_IOS || '',
       },
       infoPlist: {
-        NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
+        NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진과 분실물 사진·영상을 업로드하기 위해 사진 라이브러리에 접근합니다.',
         NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
         NSLocationWhenInUseUsageDescription: '사용자 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.',
         NSLocationAlwaysAndWhenInUseUsageDescription: '캠프 위치 공유를 위해 항상 위치 접근 권한이 필요합니다.',
@@ -204,8 +204,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       [
         'expo-image-picker',
         {
-          photosPermission: '이 앱은 프로필 사진을 업로드하기 위해 사진 라이브러리에 접근합니다.',
-          cameraPermission: '이 앱은 프로필 사진을 촬영하기 위해 카메라에 접근합니다.',
+          photosPermission: '이 앱은 프로필 사진과 분실물 사진·영상을 업로드하기 위해 사진 라이브러리에 접근합니다.',
+          cameraPermission: '이 앱은 프로필 사진과 분실물 사진·영상을 촬영하기 위해 카메라에 접근합니다.',
+          microphonePermission: '이 앱은 분실물 영상을 촬영할 때 소리를 녹음하기 위해 마이크에 접근합니다.',
         },
       ],
       [
