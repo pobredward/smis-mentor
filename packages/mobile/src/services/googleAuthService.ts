@@ -5,6 +5,7 @@ import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import type { SocialUserData } from '@smis-mentor/shared';
 import Constants from 'expo-constants';
+import { isExpoGo } from '../utils/runtime';
 import { logger } from '@smis-mentor/shared';
 
 // WebBrowser 설정 (로그인 완료 후 브라우저 자동 닫기)
@@ -48,7 +49,8 @@ export async function signInWithGoogleDirect(): Promise<{
   try {
     // Native SDK 사용 가능 여부 확인
     let GoogleSignin: any = null;
-    try {
+    // Expo Go에서는 네이티브 모듈을 import 하지 않는다 (import 순간 오류 화면이 뜸) → 바로 OAuth
+    if (!isExpoGo()) try {
       const GoogleSignInModule = await import('@react-native-google-signin/google-signin');
       GoogleSignin = GoogleSignInModule.GoogleSignin;
       

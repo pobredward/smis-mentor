@@ -32,6 +32,7 @@ import { RootStackParamList } from '../navigation/types';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 import Constants from 'expo-constants';
+import { isExpoGo } from '../utils/runtime';
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
@@ -146,6 +147,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Expo Go에서는 Native SDK를 사용할 수 없음!
   useEffect(() => {
     const initNaverSDK = async () => {
+      if (isExpoGo()) return; // Expo Go에는 네이티브 모듈 없음
       try {
         const NaverLoginModule = await import('@react-native-seoul/naver-login');
         const NaverLogin = NaverLoginModule.default;
@@ -189,6 +191,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Google Sign-In SDK 초기화 (Development Build)
   useEffect(() => {
     const initGoogleSDK = async () => {
+      // Expo Go에는 네이티브 모듈이 없어 import만 해도 오류 화면이 뜬다 → 아예 불러오지 않음
+      if (isExpoGo()) { logger.info('ℹ️ Expo Go: Google Native SDK 건너뜀 (OAuth 방식 사용)'); return; }
       try {
         const GoogleSignInModule = await import('@react-native-google-signin/google-signin');
         const { GoogleSignin } = GoogleSignInModule;
