@@ -127,9 +127,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'applinks:smis-mentor.com',
         'applinks:www.smis-mentor.com',
       ],
-      config: {
-        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY_FOR_IOS || '',
-      },
+      // ios.config.googleMapsApiKey(구형 설정)는 Podfile에 지금은 없는 'react-native-google-maps' pod을 넣어
+      // iOS 빌드가 pod install에서 실패한다. 대신 아래 plugins의 react-native-maps 플러그인으로 키를 넘긴다.
       infoPlist: {
         NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진과 분실물 사진·영상을 업로드하기 위해 사진 라이브러리에 접근합니다.',
         NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
@@ -201,6 +200,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       favicon: './assets/favicon.png',
     },
     plugins: [
+      [
+        'react-native-maps',
+        {
+          // iOS는 여기서 Google Maps(pod 'react-native-maps/Google')를 붙인다
+          iosGoogleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY_FOR_IOS || '',
+        },
+      ],
       [
         'expo-image-picker',
         {
