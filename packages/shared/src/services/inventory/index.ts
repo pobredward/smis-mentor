@@ -14,6 +14,7 @@ import {
   writeBatch,
   runTransaction,
   increment,
+  deleteField,
   Timestamp,
   Firestore,
   Unsubscribe,
@@ -29,14 +30,17 @@ import type {
   SupplyRequest,
   SupplyRequestStatus,
   SupplyComment,
-  SupplyStore,
+  SupplySettings,
+  SupplyLineDone,
+  SupplyGuide,
+  ItemMedia,
   PurchaseNeed,
   PurchaseItem,
   LostItem,
   LostItemMedia,
   LostItemStatus,
 } from '../../types/inventory';
-import { stockDocId, sortInventoryItems, supplyStoreLabel, defaultStoreForItem } from '../../types/inventory';
+import { stockDocId, sortInventoryItems } from '../../types/inventory';
 import type { MedicationDose } from '../../types/camp';
 import { logger } from '../../utils/logger';
 
@@ -140,6 +144,16 @@ export const addInventoryItem = async (
   const ref = await addDoc(collection(db, ITEMS), stripUndefined({ ...data, createdAt: now, updatedAt: now }));
   logger.info('재고 품목 추가:', ref.id);
   return ref.id;
+};
+
+/** 품목 사진·영상 추가 (스태프 누구나) */
+export const addInventoryItemMedia = async (db: Firestore, itemId: string, media: ItemMedia[]): Promise<void> => {
+  if (media.length === 0) return;
+  await updateDoc(doc(db, ITEMS, itemId), { media: arrayUnion(...media.map(m => stripUndefined({ ...m }))), updatedAt: Timestamp.now() });
+};
+/** 품목 사진·영상 삭제 (관리자) — Storage 파일은 호출한 쪽에서 지움 */
+export const removeInventoryItemMedia = async (db: Firestore, itemId: string, current: ItemMedia[], path: string): Promise<void> => {
+  await updateDoc(doc(db, ITEMS, itemId), { media: current.filter(m => m.path !== path), updatedAt: Timestamp.now() });
 };
 
 export const updateInventoryItem = async (
@@ -370,6 +384,62 @@ export const restock = async (
 ): Promise<void> =>
   applyStockChanges(db, campCode, [{ ...change, delta: Math.abs(change.quantity), reason: 'restock', refLabel: change.refLabel ?? '재고 입고' }], by);
 
+/**
+ * 그룹별 유효기간 · 세부 위치 설정. null/빈 값이면 지움.
+ * 유효기간은 관리자, 세부 위치는 스태프 누구나 (보안 규칙).
+ */
+export const setStockMeta = async (
+  db: Firestore,
+  campCode: string,
+  itemId: string,
+  groupId: string,
+  meta: { expiry?: string | null; location?: string | null }
+): Promise<void> => {
+  const ref = doc(db, STOCKS, stockDocId(campCode, itemId));
+  const data: Record<string, unknown> = { updatedAt: Timestamp.now() };
+  if (meta.expiry !== undefined) data[`expiries.${groupId}`] = meta.expiry ? meta.expiry : deleteField();
+  if (meta.location !== undefined) data[`locations.${groupId}`] = meta.location?.trim() ? meta.location.trim() : deleteField();
+  try { await updateDoc(ref, data); }
+  catch {
+    // 문서가 없으면 (관리자) 새로 만든다
+    await setDoc(ref, {
+      campCode, itemId, stocks: {}, updatedAt: Timestamp.now(),
+      ...(meta.expiry ? { expiries: { [groupId]: meta.expiry } } : {}),
+      ...(meta.location?.trim() ? { locations: { [groupId]: meta.location.trim() } } : {}),
+    }, { merge: true });
+  }
+};
+
+/**
+ * 사용 기록 (스태프 누구나) — 그룹 재고에서 quantity만큼 빼고 이력에 '사용'으로 남김.
+ * 보안 규칙이 lastUse 값으로 "한 그룹에서 정확히 그만큼만 뺐는지" 검사한다.
+ */
+export const recordStockUse = async (
+  db: Firestore,
+  campCode: string,
+  change: { itemId: string; itemName: string; groupId: string; groupName: string; quantity: number; memo?: string },
+  by: { uid: string; name: string }
+): Promise<void> => {
+  const q = Math.round(change.quantity);
+  if (!(q > 0)) return;
+  await runTransaction(db, async tx => {
+    const ref = doc(db, STOCKS, stockDocId(campCode, change.itemId));
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('이 캠프에 둔 재고가 없는 품목입니다.');
+    const cur = Number((snap.data().stocks ?? {})[change.groupId]) || 0;
+    const now = Timestamp.now();
+    tx.update(ref, {
+      [`stocks.${change.groupId}`]: cur - q,
+      lastUse: { groupId: change.groupId, qty: q, byId: by.uid, at: now },
+      updatedAt: now,
+    });
+    tx.set(doc(collection(db, MOVEMENTS)), stripUndefined({
+      campCode, itemId: change.itemId, itemName: change.itemName, groupId: change.groupId, groupName: change.groupName,
+      delta: -q, reason: 'use', refLabel: '사용', memo: change.memo?.trim() || undefined, at: now, by: by.name, byId: by.uid,
+    }));
+  });
+};
+
 export interface StockLevelEntry {
   itemId: string;
   itemName: string;
@@ -550,7 +620,7 @@ function cleanLines(items: SupplyRequest['items']) {
 /** 구매 요청 올리기 (멘토·외국인 선생님·관리자 모두) */
 export const addSupplyRequest = async (
   db: Firestore,
-  data: Pick<SupplyRequest, 'campCode' | 'forType' | 'studentId' | 'studentName' | 'studentClass' | 'store' | 'storeEtc' | 'items' | 'note' | 'requesterId' | 'requesterName'>
+  data: Pick<SupplyRequest, 'campCode' | 'forType' | 'studentId' | 'studentName' | 'studentClass' | 'studentClassCode' | 'classMentor' | 'store' | 'storeEtc' | 'items' | 'note' | 'requesterId' | 'requesterName' | 'requesterGroup'>
 ): Promise<string> => {
   const now = Timestamp.now();
   const ref = await addDoc(collection(db, SUPPLY_REQUESTS), stripUndefined({
@@ -565,12 +635,12 @@ export const addSupplyRequest = async (
 export const updateSupplyRequest = async (
   db: Firestore,
   requestId: string,
-  updates: Partial<Pick<SupplyRequest, 'forType' | 'studentId' | 'studentName' | 'studentClass' | 'store' | 'storeEtc' | 'items' | 'note'>>
+  updates: Partial<Pick<SupplyRequest, 'forType' | 'studentId' | 'studentName' | 'studentClass' | 'studentClassCode' | 'classMentor' | 'store' | 'storeEtc' | 'items' | 'note'>>
 ): Promise<void> => {
   const data: Record<string, unknown> = { ...updates, updatedAt: Timestamp.now() };
   if (updates.items) data.items = cleanLines(updates.items);
   // 학생 → 멘토·캠프 공용으로 바꾸면 학생 정보 제거
-  if (updates.forType && updates.forType !== 'student') { data.studentId = null; data.studentName = null; data.studentClass = null; }
+  if (updates.forType && updates.forType !== 'student') { data.studentId = null; data.studentName = null; data.studentClass = null; data.studentClassCode = null; data.classMentor = null; }
   if (updates.store && updates.store !== '기타') data.storeEtc = null;
   await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), stripUndefined(data));
 };
@@ -633,7 +703,7 @@ export const receiveSupplyRequest = async (
     lines.filter(l => l.quantity > 0).forEach(l => {
       tx.set(doc(collection(db, MOVEMENTS)), {
         campCode, itemId: l.itemId, itemName: l.itemName, groupId: l.groupId, groupName: l.groupName,
-        delta: l.quantity, reason: 'restock', refLabel: `구매 요청 입고 (${supplyStoreLabel(r)})`, at: now, by,
+        delta: l.quantity, reason: 'restock', refLabel: `구매 요청 입고${r.forType === 'camp' ? ' (캠프 공용)' : ''}`, at: now, by,
       });
     });
     tx.update(rRef, stripUndefined({
@@ -643,38 +713,58 @@ export const receiveSupplyRequest = async (
   });
 };
 
-/** 재고 부족분 → 캠프 공용 요청으로 (구매처별 1건씩) */
+/** 재고 부족분 → 캠프 공용 요청 1건으로 */
 export const addCampRequestsFromNeeds = async (
   db: Firestore,
   campCode: string,
   needs: PurchaseNeed[],
-  items: InventoryItem[],
+  _items: InventoryItem[],
   requester: { uid: string; name: string }
 ): Promise<number> => {
-  const byStore = new Map<SupplyStore, SupplyRequest['items']>();
-  needs.forEach((n, i) => {
-    const item = items.find(x => x.id === n.itemId);
-    const store = item ? defaultStoreForItem(item) : '다이소';
-    if (!byStore.has(store)) byStore.set(store, []);
-    byStore.get(store)!.push({
-      id: `${Date.now().toString(36)}-${i}`, itemId: n.itemId, name: n.itemName, quantity: n.shortage, unit: n.unit,
-      groupId: n.groupId, groupName: n.groupName, memo: `최소 ${n.min} · 현재 ${n.current}`,
-    });
+  if (needs.length === 0) return 0;
+  const lines: SupplyRequest['items'] = needs.map((n, i) => ({
+    id: `${Date.now().toString(36)}-${i}`, itemId: n.itemId, name: n.itemName, quantity: n.shortage, unit: n.unit,
+    groupId: n.groupId, groupName: n.groupName, memo: `최소 ${n.min} · 현재 ${n.current}`,
+  }));
+  await addSupplyRequest(db, {
+    campCode, forType: 'camp', items: lines, note: '재고 부족 자동 계산',
+    requesterId: requester.uid, requesterName: requester.name,
   });
-  for (const [store, lines] of byStore) {
-    await addSupplyRequest(db, {
-      campCode, forType: 'camp', store, items: lines, note: '재고 부족 자동 계산',
-      requesterId: requester.uid, requesterName: requester.name,
-    });
-  }
-  return byStore.size;
+  return 1;
 };
 
-/** "제가 사올게요" / 취소 (buyer = null) — 여러 건 한 번에 */
+// ---------- 구매 담당 ----------
+
+const SUPPLY_SETTINGS = 'supplySettings';
+
+/** 캠프 구매 설정 (기본 구매 담당) 구독 */
+export const subscribeSupplySettings = (
+  db: Firestore,
+  campCode: string,
+  onData: (s: SupplySettings | null) => void
+): Unsubscribe =>
+  onSnapshot(doc(db, SUPPLY_SETTINGS, campCode),
+    snap => onData(snap.exists() ? ({ campCode, ...snap.data() } as SupplySettings) : null),
+    error => { logger.error('구매 설정 구독 오류:', error); onData(null); });
+
+/** 기본 구매 담당 지정 (관리자) — 담당이 따로 지정되지 않은 모든 요청을 이 사람이 처리 */
+export const setSupplyDefaultBuyer = async (
+  db: Firestore,
+  campCode: string,
+  buyer: { uid: string; name: string } | null,
+  by: string
+): Promise<void> => {
+  await setDoc(doc(db, SUPPLY_SETTINGS, campCode), {
+    campCode, defaultBuyerId: buyer?.uid ?? null, defaultBuyerName: buyer?.name ?? null, updatedBy: by, updatedAt: Timestamp.now(),
+  }, { merge: true });
+};
+
+/** 요청별 구매 담당 지정 / 해제(null → 기본 담당) (관리자) — 여러 건 한 번에 */
 export const setSupplyBuyer = async (
   db: Firestore,
   requestIds: string[],
-  buyer: { uid: string; name: string } | null
+  buyer: { uid: string; name: string } | null,
+  assignedBy: string
 ): Promise<void> => {
   const now = Timestamp.now();
   const batch = writeBatch(db);
@@ -682,9 +772,107 @@ export const setSupplyBuyer = async (
     buyerId: buyer?.uid ?? null,
     buyerName: buyer?.name ?? null,
     buyerAt: buyer ? now : null,
+    buyerAssignedBy: buyer ? assignedBy : null,
     updatedAt: now,
   }));
   await batch.commit();
+};
+
+// ---------- 품목별 구매 완료 · 정산 ----------
+
+/**
+ * 품목(줄)별 구매 완료 — 구매한 사람이 직접. 금액·송금받을 곳 기록.
+ * 모든 품목이 완료되면 요청 상태도 '구매 완료'로 바뀐다. (동시에 눌러도 안전하게 트랜잭션)
+ */
+export const completeSupplyLines = async (
+  db: Firestore,
+  requestId: string,
+  entries: Array<{ lineId: string; amount?: number; payTo?: string }>,
+  by: { uid: string; name: string }
+): Promise<void> => {
+  await runTransaction(db, async tx => {
+    const ref = doc(db, SUPPLY_REQUESTS, requestId);
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('요청이 삭제되었습니다.');
+    const r = { id: snap.id, ...snap.data() } as SupplyRequest;
+    const now = Timestamp.now();
+    const done: Record<string, SupplyLineDone> = { ...(r.done ?? {}) };
+    const update: Record<string, unknown> = { updatedAt: now };
+    entries.forEach(e => {
+      const d: SupplyLineDone = stripUndefined({
+        at: now, by: by.name, byId: by.uid,
+        amount: e.amount && e.amount > 0 ? Math.round(e.amount) : undefined,
+        payTo: e.payTo?.trim() || undefined,
+      });
+      done[e.lineId] = d;
+      update[`done.${e.lineId}`] = d;
+    });
+    const total = Object.values(done).reduce((a, d) => a + (d.amount ?? 0), 0);
+    update.amount = total > 0 ? total : null;
+    const all = r.items.length > 0 && r.items.every(l => done[l.id]);
+    if (all && r.status !== 'purchased') Object.assign(update, { status: 'purchased', handledBy: by.name, handledAt: now, statusNote: null, holdUntil: null });
+    tx.update(ref, update);
+  });
+};
+
+/** 품목 구매 완료 취소 — 요청이 '구매 완료'였다면 다시 '요청'으로 */
+export const undoSupplyLine = async (
+  db: Firestore,
+  requestId: string,
+  lineId: string
+): Promise<void> => {
+  await runTransaction(db, async tx => {
+    const ref = doc(db, SUPPLY_REQUESTS, requestId);
+    const snap = await tx.get(ref);
+    if (!snap.exists()) return;
+    const r = snap.data() as SupplyRequest;
+    const done = { ...(r.done ?? {}) };
+    delete done[lineId];
+    const total = Object.values(done).reduce((a, d) => a + (d.amount ?? 0), 0);
+    const update: Record<string, unknown> = { [`done.${lineId}`]: deleteField(), amount: total > 0 ? total : null, updatedAt: Timestamp.now() };
+    if (r.status === 'purchased' && !r.stockApplied) Object.assign(update, { status: 'requested', handledBy: null, handledAt: null });
+    tx.update(ref, update);
+  });
+};
+
+/** 정산 완료 / 취소(settler = null) — 학생: 담임이 봉투에서 빼서 전달, 선생님: 본인이 송금 */
+export const settleSupplyLines = async (
+  db: Firestore,
+  requestId: string,
+  lineIds: string[],
+  settler: { uid: string; name: string } | null
+): Promise<void> => {
+  const now = Timestamp.now();
+  const update: Record<string, unknown> = { updatedAt: now };
+  lineIds.forEach(id => { update[`settlements.${id}`] = settler ? { at: now, by: settler.name, byId: settler.uid } : deleteField(); });
+  await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), update);
+};
+
+// ---------- 관리자 지정 품목 가이드 (쿠팡 · 학부모 청구 등) ----------
+
+const SUPPLY_GUIDES = 'supplyGuides';
+
+export const subscribeSupplyGuides = (db: Firestore, onData: (g: SupplyGuide[]) => void): Unsubscribe =>
+  onSnapshot(collection(db, SUPPLY_GUIDES),
+    snap => onData(snap.docs.map(d => ({ id: d.id, ...d.data() }) as SupplyGuide).sort((a, b) => a.name.localeCompare(b.name, 'ko'))),
+    error => { logger.error('품목 가이드 구독 오류:', error); onData([]); });
+
+export const saveSupplyGuide = async (
+  db: Firestore,
+  data: Pick<SupplyGuide, 'name' | 'keywords' | 'channel' | 'parentBill' | 'guide' | 'isActive'>,
+  id?: string
+): Promise<void> => {
+  const now = Timestamp.now();
+  const clean = stripUndefined({
+    name: data.name.trim(), keywords: (data.keywords ?? []).map(k => k.trim()).filter(Boolean),
+    channel: data.channel.trim() || '쿠팡', parentBill: !!data.parentBill, guide: data.guide.trim(), isActive: data.isActive !== false, updatedAt: now,
+  });
+  if (id) await updateDoc(doc(db, SUPPLY_GUIDES, id), clean);
+  else await addDoc(collection(db, SUPPLY_GUIDES), { ...clean, createdAt: now });
+};
+
+export const deleteSupplyGuide = async (db: Firestore, id: string): Promise<void> => {
+  await deleteDoc(doc(db, SUPPLY_GUIDES, id));
 };
 
 /** 메모·댓글 달기 (누구나) */

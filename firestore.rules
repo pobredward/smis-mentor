@@ -819,6 +819,10 @@ service cloud.firestore {
     match /inventoryItems/{itemId} {
       allow read: if isCampStaff();
       allow create, update, delete: if isAdmin();
+      // 스태프 누구나 사진·영상 추가·삭제 (사진 목록만 바꿀 수 있음)
+      allow update: if isCampStaff() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['media', 'updatedAt']) &&
+        request.resource.data.media is list;
     }
 
     match /inventoryGroups/{groupId} {
@@ -836,6 +840,18 @@ service cloud.firestore {
     match /inventoryStocks/{stockId} {
       allow read: if isCampStaff();
       allow create, update, delete: if isAdmin();
+      // 스태프 누구나 세부 위치 적기
+      allow update: if isCampStaff() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['locations', 'updatedAt']);
+      // 스태프 누구나 '사용' — 한 그룹에서 lastUse.qty 만큼만 줄일 수 있음
+      allow update: if isCampStaff() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stocks', 'lastUse', 'updatedAt']) &&
+        request.resource.data.lastUse.byId == request.auth.uid &&
+        request.resource.data.lastUse.qty is int &&
+        request.resource.data.lastUse.qty > 0 &&
+        request.resource.data.stocks.diff(resource.data.stocks).affectedKeys().hasOnly([request.resource.data.lastUse.groupId]) &&
+        request.resource.data.stocks[request.resource.data.lastUse.groupId] ==
+          resource.data.stocks.get(request.resource.data.lastUse.groupId, 0) - request.resource.data.lastUse.qty;
     }
 
     // 약 복용 재고 원장 (서버 전용)
@@ -852,8 +868,9 @@ service cloud.firestore {
         isCampStaff() &&
         request.resource.data.requesterId == request.auth.uid &&
         request.resource.data.status == 'requested' &&
-        request.resource.data.store in ['다이소', '약국', '마트', '기타'] &&
-        request.resource.data.items is list
+        request.resource.data.forType in ['student', 'mentor', 'camp'] &&
+        request.resource.data.items is list &&
+        !('buyerId' in request.resource.data) && !('done' in request.resource.data) && !('settlements' in request.resource.data)
       );
       function supplyOpen(s) { return s in ['requested', 'onhold']; }
       function supplyChanged() { return request.resource.data.diff(resource.data).affectedKeys(); }
@@ -862,8 +879,8 @@ service cloud.firestore {
         (
           resource.data.requesterId == request.auth.uid &&
           supplyOpen(resource.data.status) &&
-          supplyChanged().hasOnly(['forType', 'studentId', 'studentName', 'studentClass', 'store', 'storeEtc', 'items', 'note', 'updatedAt']) &&
-          request.resource.data.store in ['다이소', '약국', '마트', '기타'] &&
+          supplyChanged().hasOnly(['forType', 'studentId', 'studentName', 'studentClass', 'studentClassCode', 'classMentor', 'store', 'storeEtc', 'items', 'note', 'updatedAt']) &&
+          request.resource.data.forType in ['student', 'mentor', 'camp'] &&
           request.resource.data.items is list
         ) ||
         // ② 누구나 — 댓글 1개 추가 (본인 이름으로)
@@ -873,24 +890,37 @@ service cloud.firestore {
           request.resource.data.comments.size() == resource.data.get('comments', []).size() + 1 &&
           request.resource.data.comments[request.resource.data.comments.size() - 1].uid == request.auth.uid
         ) ||
-        // ③ 누구나 — "제가 사올게요" / 본인이 한 것 취소
+        // ③ 구매 담당(요청별 지정, 없으면 캠프 기본 담당) — 품목별 구매 완료·취소 + 금액·송금 계좌
         (
-          supplyOpen(resource.data.status) &&
-          supplyChanged().hasOnly(['buyerId', 'buyerName', 'buyerAt', 'updatedAt']) &&
           (
-            (resource.data.get('buyerId', null) == null && request.resource.data.buyerId == request.auth.uid) ||
-            (resource.data.get('buyerId', null) == request.auth.uid && request.resource.data.get('buyerId', null) == null)
-          )
+            resource.data.get('buyerId', null) == request.auth.uid ||
+            (resource.data.get('buyerId', null) == null &&
+              get(/databases/$(database)/documents/supplySettings/$(resource.data.campCode)).data.get('defaultBuyerId', null) == request.auth.uid)
+          ) &&
+          resource.data.status in ['requested', 'onhold', 'purchased'] &&
+          request.resource.data.status in ['requested', 'onhold', 'purchased'] &&
+          resource.data.get('stockApplied', false) != true &&
+          supplyChanged().hasOnly(['done', 'status', 'handledBy', 'handledAt', 'statusNote', 'holdUntil', 'amount', 'updatedAt'])
         ) ||
-        // ④ 사오기로 한 사람 — 구매 완료 처리
+        // ④ 정산 체크 — 학생: 담임이 봉투에서 빼서 전달 / 선생님: 본인 송금 (누가 누르는지는 앱에서 확인)
         (
-          resource.data.get('buyerId', null) == request.auth.uid &&
-          supplyOpen(resource.data.status) &&
-          request.resource.data.status == 'purchased' &&
-          supplyChanged().hasOnly(['status', 'handledBy', 'handledAt', 'statusNote', 'holdUntil', 'updatedAt'])
+          resource.data.forType in ['student', 'mentor'] &&
+          supplyChanged().hasOnly(['settlements', 'updatedAt'])
         )
       ));
       allow delete: if isAdmin() || (isCampStaff() && resource.data.requesterId == request.auth.uid && resource.data.status in ['requested', 'onhold']);
+    }
+
+    // 관리자 지정 품목 가이드 (쿠팡·학부모 청구 등, 회사 공통) — 조회 스태프, 변경 관리자
+    match /supplyGuides/{guideId} {
+      allow read: if isCampStaff();
+      allow write: if isAdmin();
+    }
+
+    // 캠프별 구매 설정 (기본 구매 담당) — 조회 스태프, 변경 관리자
+    match /supplySettings/{campCode} {
+      allow read: if isCampStaff();
+      allow write: if isAdmin();
     }
 
     match /purchaseItems/{purchaseId} {
@@ -922,6 +952,14 @@ service cloud.firestore {
         isAdmin() &&
         request.resource.data.keys().hasAll(['campCode', 'itemId', 'groupId', 'delta', 'reason', 'at', 'by']) &&
         request.resource.data.delta is number
+      );
+      // 스태프: 본인 이름의 '사용' 기록 (감소만)
+      allow create: if (
+        isCampStaff() &&
+        request.resource.data.reason == 'use' &&
+        request.resource.data.byId == request.auth.uid &&
+        request.resource.data.delta is number &&
+        request.resource.data.delta < 0
       );
       allow update, delete: if isAdmin();
     }

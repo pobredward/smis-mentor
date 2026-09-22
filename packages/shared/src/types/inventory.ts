@@ -8,7 +8,7 @@ import { Timestamp } from 'firebase/firestore';
 //   다음 기수에는 적용 후 그룹명·호실만 바꾸면 됨
 // - 모든 수량 변동은 inventoryMovements 에 남김 (약 복용 차감/복구, 입고, 수기 조정)
 
-export const INVENTORY_CATEGORIES = ['의약품', '문구류', '전자제품', '위생도구', '기타'] as const;
+export const INVENTORY_CATEGORIES = ['의약품', '문구류', '전자제품', '위생도구', '생활용품', '서류', '교구', '기타'] as const;
 export type InventoryCategory = (typeof INVENTORY_CATEGORIES)[number];
 
 /** 분류별 세부 분류 (시트 기준). 자유 입력도 허용 */
@@ -17,6 +17,9 @@ export const INVENTORY_SUBCATEGORIES: Record<InventoryCategory, readonly string[
   문구류: ['필기', '커팅'],
   전자제품: [],
   위생도구: [],
+  생활용품: ['세탁', '식기', '포장'],
+  서류: ['테스트', '생활지도', '게시물'],
+  교구: ['STEAM', '체육'],
   기타: [],
 };
 
@@ -58,6 +61,8 @@ export function itemLabel(item: Pick<InventoryItem, 'name' | 'kind' | 'spec'>): 
 /** 품목 마스터 (회사 공통) */
 export interface InventoryItem {
   id: string;
+  /** 품목 사진·영상 — 어떻게 생겼는지 (회사 공통, 스태프 누구나 추가) */
+  media?: ItemMedia[];
   category: InventoryCategory;
   /** 세부 분류 (복통, 내상, 필기 …) */
   subCategory?: string;
@@ -137,6 +142,10 @@ export interface InventoryStock {
   stocks: Record<string, number>;
   /** 그룹별 최소 보유 수량 예외 { [groupId]: n } (없으면 품목 minStockDefault) */
   minStocks?: Record<string, number>;
+  /** 그룹별 유효기간 (가장 빠른 것, YYYY-MM-DD) */
+  expiries?: Record<string, string>;
+  /** 그룹 안 세부 위치 (예: 약통 2번 칸, 교무실 선반 위) */
+  locations?: Record<string, string>;
   updatedAt: Timestamp;
 }
 
@@ -150,8 +159,16 @@ export const INVENTORY_MOVEMENT_REASONS = [
   'dose_revert', // 복용 기록 삭제 → 복구
   'restock',     // 입고
   'adjust',      // 수기 조정
+  'use',         // 사용 (스태프 누구나)
 ] as const;
 export type InventoryMovementReason = (typeof INVENTORY_MOVEMENT_REASONS)[number];
+
+/** 수량 조정 사유 — 버튼으로 빠르게 고르기 (직접 입력도 가능) */
+export const ADJUST_REASONS = ['실사 차이', '사용 후 기록 누락', '파손·폐기', '유효기간 만료', '분실', '다른 그룹으로 옮김', '입력 실수 정정'] as const;
+/** 사용 메모 — 버튼으로 빠르게 (선택) */
+export const USE_REASONS = ['수업', '레크·행사', '생활', '학생 지급', '처치'] as const;
+/** 일괄 실사 사유 */
+export const STOCKTAKE_REASONS = ['기수 시작 실사', '중간 점검', '기수 종료 실사', '입력 실수 정정'] as const;
 
 export const INVENTORY_MOVEMENT_LABELS: Record<InventoryMovementReason, string> = {
   dose: '약 복용',
@@ -159,6 +176,7 @@ export const INVENTORY_MOVEMENT_LABELS: Record<InventoryMovementReason, string> 
   dose_revert: '복용 기록 삭제(복구)',
   restock: '입고',
   adjust: '수기 조정',
+  use: '사용',
 };
 
 /** 입출고 이력 1건 (delta > 0 입고/복구, delta < 0 출고/차감) */
@@ -185,7 +203,31 @@ export interface InventoryMovement {
 export interface InventoryItemView extends InventoryItem {
   stocks: Record<string, number>;
   minStocks: Record<string, number>;
+  expiries: Record<string, string>;
+  locations: Record<string, string>;
   total: number;
+}
+
+/** 유효기간 상태 — 지남 / 30일 이내 임박 / 여유 */
+export type ExpiryState = 'expired' | 'soon' | 'ok';
+export function expiryState(date?: string, today = new Date()): ExpiryState | null {
+  if (!date) return null;
+  const d = new Date(`${date}T23:59:59`);
+  if (isNaN(d.getTime())) return null;
+  const days = (d.getTime() - today.getTime()) / 86400000;
+  return days < 0 ? 'expired' : days <= 30 ? 'soon' : 'ok';
+}
+export function fmtExpiry(date?: string): string {
+  if (!date) return '';
+  const [y, m, d] = date.split('-');
+  return `${y.slice(2)}.${m}${d ? `.${d}` : ''}`;
+}
+/** 재고가 있는 그룹 중 가장 빠른 유효기간 */
+export function earliestExpiry(v: Pick<InventoryItemView, 'expiries' | 'stocks'>, groupId?: string): string | undefined {
+  const list = Object.entries(v.expiries ?? {})
+    .filter(([g, d]) => d && (groupId ? g === groupId : true) && (Number(v.stocks?.[g]) || 0) > 0)
+    .map(([, d]) => d).sort();
+  return list[0];
 }
 
 /** 전체 재고 = 그룹별 수량 합 */
@@ -224,7 +266,7 @@ export function buildInventoryViews(
     const s = stocksByItem[item.id];
     const raw = s?.stocks ?? {};
     const stocks = ids ? Object.fromEntries(Object.entries(raw).filter(([k]) => ids.has(k))) : raw;
-    return { ...item, stocks, minStocks: s?.minStocks ?? {}, total: getTotalStock({ stocks }) };
+    return { ...item, stocks, minStocks: s?.minStocks ?? {}, expiries: s?.expiries ?? {}, locations: s?.locations ?? {}, total: getTotalStock({ stocks }) };
   });
 }
 
@@ -319,9 +361,11 @@ export function sortInventoryItems<T extends InventoryItem>(items: T[]): T[] {
 }
 
 // ==================== 구매 요청 (멘토가 올림) ====================
-// 멘토가 "누가(학생/멘토) · 어디서(다이소/약국/마트/기타) · 무엇이" 필요한지 올리면
-// 관리자(구매 담당)가 구매처별로 모아 보고 구매 완료/반려 처리한다.
+// 멘토가 "누가(학생/멘토/캠프 공용) · 무엇이" 필요한지 올리면
+// 구매 담당(관리자가 지정 — 캠프 기본 담당 또는 요청별 담당)이 사 와서 **품목별로** 완료(금액·송금 계좌)를 누른다.
+// 이후 정산: 학생 물품은 담임이 용돈봉투에서 빼서 구매자에게, 선생님 물품은 본인이 구매자에게 송금.
 
+/** (구) 구매처 — 이제 요청 시 고르지 않음. 예전 데이터 표시용 */
 export const SUPPLY_STORES = ['다이소', '약국', '마트', '기타'] as const;
 export type SupplyStore = (typeof SUPPLY_STORES)[number];
 
@@ -336,30 +380,10 @@ export const SUPPLY_REQUEST_STATUS_LABELS: Record<SupplyRequestStatus, string> =
 /** 누구를 위한 요청인가: 학생 / 멘토 / 캠프 공용 재고(구매 후 재고에 입고) */
 export type SupplyForType = 'student' | 'mentor' | 'camp';
 
-/** 캠프 공용 요청인데 구매 완료 후 아직 재고 입고를 안 한 상태 */
-export const needsStockIntake = (r: Pick<SupplyRequest, 'forType' | 'status' | 'stockApplied' | 'items'>): boolean =>
-  r.forType === 'camp' && r.status === 'purchased' && !r.stockApplied && r.items.some(l => l.itemId && l.groupId);
-
-/** 품목 → 기본 구매처 (의약품은 약국, 그 외 다이소) */
-export function defaultStoreForItem(item: Pick<InventoryItem, 'usage' | 'category'>): SupplyStore {
-  const u = getItemUsage(item);
-  return u === 'oral' || u === 'topical' ? '약국' : '다이소';
-}
-
-/** 재고 부족분 중 아직 진행 중인 캠프 공용 요청에 들어가 있지 않은 것 */
-export function uncoveredPurchaseNeeds(needs: PurchaseNeed[], requests: SupplyRequest[]): PurchaseNeed[] {
-  const covered = new Set<string>();
-  requests.forEach(r => {
-    if (r.forType !== 'camp' || !isSupplyOpen(r.status)) return;
-    r.items.forEach(l => { if (l.itemId) covered.add(`${l.itemId}|${l.groupId ?? ''}`); });
-  });
-  return needs.filter(n => !covered.has(`${n.itemId}|${n.groupId}`));
-}
-
 /** 아직 끝나지 않은 요청 (요청 · 보류) */
 export const isSupplyOpen = (s: SupplyRequestStatus): boolean => s === 'requested' || s === 'onhold';
 
-/** 요청에 달리는 메모·댓글 — 누구나 ("나도 필요해요", "캠프 재고로 대체", "다음 주에 살게요") */
+/** 요청에 달리는 메모·댓글 — 누구나 */
 export interface SupplyComment {
   id: string;
   uid: string;
@@ -383,36 +407,99 @@ export interface SupplyRequestLine {
   /** 캠프 공용 요청: 입고할 재고 그룹 */
   groupId?: string;
   groupName?: string;
+  /** 관리자 지정 품목(쿠팡 등)에서 담은 줄 */
+  guideId?: string;
+  /** 구매 경로 (예: 쿠팡) */
+  channel?: string;
+  /** 학부모님께 따로 청구 — 용돈봉투·송금 정산 대신 관리자가 청구 */
+  parentBill?: boolean;
+}
+
+/**
+ * 관리자 지정 품목 가이드 (회사 공통) — 예: 책가방·슬리퍼·손목시계는 쿠팡에서 사고 학부모님께 청구.
+ * 요청 작성 중 검색하면 맨 위에 가이드와 함께 뜬다.
+ */
+export interface SupplyGuide {
+  id: string;
+  name: string;
+  /** 검색어 (예: 가방, 백팩) */
+  keywords?: string[];
+  /** 구매 경로 (기본 '쿠팡') */
+  channel: string;
+  /** 학부모님께 따로 청구 */
+  parentBill: boolean;
+  /** 멘토에게 보여줄 안내 */
+  guide: string;
+  isActive?: boolean;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+/** 검색어에 맞는 가이드 */
+export function matchSupplyGuides(guides: SupplyGuide[], q: string): SupplyGuide[] {
+  const t = q.trim().toLowerCase();
+  if (!t) return [];
+  return guides.filter(g => g.isActive !== false && [g.name, ...(g.keywords ?? [])].some(k => {
+    const s = k.trim().toLowerCase();
+    return !!s && (s.includes(t) || (t.length >= 2 && t.includes(s)));
+  }));
+}
+
+/** 품목 1줄 구매 완료 기록 — 구매한 사람이 직접 */
+export interface SupplyLineDone {
+  at: Timestamp;
+  by: string;
+  byId: string;
+  /** 실제 금액 (원) */
+  amount?: number;
+  /** 선생님 물품: 송금받을 곳 (예: "카카오뱅크 3333-01-1234567 신선웅") */
+  payTo?: string;
+}
+/** 품목 1줄 정산 완료 — 학생: 담임이 봉투에서 빼서 전달 / 선생님: 본인이 송금 */
+export interface SupplyLineSettle {
+  at: Timestamp;
+  by: string;
+  byId: string;
 }
 
 /** 멘토 구매 요청 1건 — 캠프별 */
 export interface SupplyRequest {
   id: string;
   campCode: string;
-  /** 누구를 위한 것인지: 학생 / 멘토(선생님) */
   forType: SupplyForType;
   studentId?: string;
   studentName?: string;
   studentClass?: string;
-  /** 어디서 */
-  store: SupplyStore;
-  /** 기타 구매처 이름 */
+  /** 학생 요청: 요청 당시 담임(반멘토) 이름 — 용돈봉투 정산 담당 */
+  classMentor?: string;
+  /** 학생 반코드 (예: J05) — 그룹 분류용 */
+  studentClassCode?: string;
+  /** (구) 구매처 */
+  store?: SupplyStore;
   storeEtc?: string;
   items: SupplyRequestLine[];
   note?: string;
   status: SupplyRequestStatus;
   requesterId: string;
   requesterName: string;
+  /** 요청한 멘토의 그룹 (그룹별 분류용, 요청 당시) */
+  requesterGroup?: string;
   handledBy?: string;
   handledAt?: Timestamp;
   /** 반려·보류 사유 */
   statusNote?: string;
   /** 보류 시 구매 예정일 (YYYY-MM-DD) */
   holdUntil?: string;
-  /** "제가 사올게요" — 사오기로 한 사람 */
+  /** 요청별 구매 담당 (없으면 캠프 기본 담당) */
   buyerId?: string;
   buyerName?: string;
   buyerAt?: Timestamp;
+  buyerAssignedBy?: string;
+  /** 품목(줄 ID)별 구매 완료 */
+  done?: Record<string, SupplyLineDone>;
+  /** 품목(줄 ID)별 정산 완료 */
+  settlements?: Record<string, SupplyLineSettle>;
+  /** 구매 금액 합계 (품목 금액 합) */
+  amount?: number;
   comments?: SupplyComment[];
   /** 캠프 공용: 구매 후 재고에 입고 반영했는지 */
   stockApplied?: boolean;
@@ -422,7 +509,19 @@ export interface SupplyRequest {
   updatedAt: Timestamp;
 }
 
+/** 캠프별 구매 설정 — 기본 구매 담당 (요청마다 지정하지 않아도 되게) */
+export interface SupplySettings {
+  campCode: string;
+  defaultBuyerId?: string;
+  defaultBuyerName?: string;
+  updatedBy?: string;
+  updatedAt?: Timestamp;
+}
+
+export const fmtWon = (n?: number): string => `${(n ?? 0).toLocaleString('ko-KR')}원`;
+
 export function supplyStoreLabel(r: Pick<SupplyRequest, 'store' | 'storeEtc'>): string {
+  if (!r.store) return '';
   return r.store === '기타' && r.storeEtc?.trim() ? r.storeEtc.trim() : r.store;
 }
 
@@ -433,33 +532,134 @@ export function supplyForLabel(r: Pick<SupplyRequest, 'forType' | 'studentName' 
   return `${r.requesterName} 쌤`;
 }
 
-/** 구매처별 · 품목(연결된 품목 ID 또는 이름)+단위별 합산 — 장보기 목록용 */
-export interface SupplyStoreSummary {
-  store: string;
-  requestIds: string[];
-  lines: Array<{ key: string; itemId?: string; name: string; unit: string; total: number; who: string[] }>;
+/** 실제 구매 담당: 요청별 지정 → 없으면 캠프 기본 담당 */
+export function supplyBuyerOf(r: Pick<SupplyRequest, 'buyerId' | 'buyerName'>, settings?: SupplySettings | null): { uid: string; name: string; isDefault: boolean } | null {
+  if (r.buyerId) return { uid: r.buyerId, name: r.buyerName ?? '', isDefault: false };
+  if (settings?.defaultBuyerId) return { uid: settings.defaultBuyerId, name: settings.defaultBuyerName ?? '', isDefault: true };
+  return null;
 }
-export function summarizeSupplyRequests(requests: SupplyRequest[]): SupplyStoreSummary[] {
-  const byStore = new Map<string, SupplyStoreSummary>();
+
+export const supplyLineDone = (r: Pick<SupplyRequest, 'done'>, lineId: string): SupplyLineDone | undefined => r.done?.[lineId];
+export const supplyDoneCount = (r: Pick<SupplyRequest, 'done' | 'items'>): number => r.items.filter(l => r.done?.[l.id]).length;
+export const supplyAllDone = (r: Pick<SupplyRequest, 'done' | 'items'>): boolean => r.items.length > 0 && r.items.every(l => r.done?.[l.id]);
+export const supplyDoneTotal = (r: Pick<SupplyRequest, 'done'>): number => Object.values(r.done ?? {}).reduce((a, d) => a + (d.amount ?? 0), 0);
+
+/** 정산 방식: 학생 = 담임이 용돈봉투에서 / 선생님 = 본인 송금 / 캠프 공용 = 없음 */
+export type SupplySettleKind = 'envelope' | 'transfer' | null;
+export const supplySettleKind = (r: Pick<SupplyRequest, 'forType'>): SupplySettleKind =>
+  r.forType === 'student' ? 'envelope' : r.forType === 'mentor' ? 'transfer' : null;
+/** 품목별 정산 방식 — 학부모 청구 품목은 'parent' (관리자가 청구) */
+export type SupplyLineSettleKind = 'envelope' | 'transfer' | 'parent';
+export const supplyLineSettleKind = (r: Pick<SupplyRequest, 'forType'>, line: Pick<SupplyRequestLine, 'parentBill'>): SupplyLineSettleKind | null =>
+  line.parentBill ? 'parent' : supplySettleKind(r);
+export const SUPPLY_SETTLE_LABELS: Record<SupplyLineSettleKind, { title: string; verb: string; icon: string }> = {
+  envelope: { title: '용돈봉투', verb: '봉투에서 빼서 전달', icon: '📒' },
+  transfer: { title: '본인 송금', verb: '송금', icon: '💸' },
+  parent: { title: '학부모 청구', verb: '학부모님께 청구', icon: '🧾' },
+};
+
+/** 정산할 품목 1줄 (구매 완료 + 금액 있음) */
+export interface SupplySettleLine {
+  req: SupplyRequest;
+  line: SupplyRequestLine;
+  done: SupplyLineDone;
+  kind: SupplyLineSettleKind;
+  settled?: SupplyLineSettle;
+}
+export function supplySettleLines(requests: SupplyRequest[]): SupplySettleLine[] {
+  const out: SupplySettleLine[] = [];
   requests.forEach(r => {
-    const store = supplyStoreLabel(r);
-    if (!byStore.has(store)) byStore.set(store, { store, requestIds: [], lines: [] });
-    const g = byStore.get(store)!;
-    g.requestIds.push(r.id);
-    (r.items ?? []).forEach(l => {
-      if (!l.name?.trim() || !(l.quantity > 0)) return;
-      const unit = (l.unit || '개').trim();
-      const key = `${l.itemId ?? `name:${l.name.trim()}`}|${unit}`;
-      let line = g.lines.find(x => x.key === key);
-      if (!line) { line = { key, itemId: l.itemId, name: l.name.trim(), unit, total: 0, who: [] }; g.lines.push(line); }
-      line.total += l.quantity;
-      line.who.push(r.forType === 'camp' ? `공용${l.groupName ? `(${l.groupName})` : ''} ${l.quantity}` : `${supplyForLabel(r)} ${l.quantity}`);
+    if (r.status === 'rejected') return;
+    r.items.forEach(line => {
+      const kind = supplyLineSettleKind(r, line);
+      const done = r.done?.[line.id];
+      if (!kind || !done || !(done.amount && done.amount > 0)) return;
+      out.push({ req: r, line, done, kind, settled: r.settlements?.[line.id] });
     });
   });
-  const order = (s: string) => { const i = (SUPPLY_STORES as readonly string[]).indexOf(s); return i < 0 ? 3.5 : i; };
-  return [...byStore.values()]
-    .map(g => ({ ...g, lines: g.lines.sort((a, b) => a.name.localeCompare(b.name, 'ko')) }))
-    .sort((a, b) => order(a.store) - order(b.store) || a.store.localeCompare(b.store, 'ko'));
+  return out;
+}
+
+/**
+ * 그룹 순서대로 분류 — 학생은 반 → 캠프 그룹, 멘토는 요청 당시 그룹, 캠프 공용은 맨 끝.
+ * campGroups 순서(캠프 설정 순서)를 따른다.
+ */
+export interface SupplyGroupSection<T> { key: string; label: string; items: T[] }
+export function groupSupplyByCampGroup<T>(
+  list: T[],
+  reqOf: (t: T) => SupplyRequest,
+  campGroups: Array<{ name: string; classCodes: string[] }>,
+  students: Array<{ studentId: string; classNumber?: string }>
+): SupplyGroupSection<T>[] {
+  const order = campGroups.map(g => g.name);
+  const byLower = new Map(order.map(n => [n.toLowerCase(), n]));
+  const groupOf = (r: SupplyRequest): string => {
+    if (r.forType === 'camp') return '__camp';
+    if (r.forType === 'student') {
+      // 반코드(J01 …)는 반번호 앞 3자리 — campSettings.groups[].classCodes 와 매칭
+      const code = r.studentClassCode || studentClassCode(students.find(s => s.studentId === r.studentId)?.classNumber);
+      const g = code ? campGroups.find(cg => cg.classCodes.includes(code)) : undefined;
+      return g?.name ?? '__etc';
+    }
+    return (r.requesterGroup && byLower.get(r.requesterGroup.toLowerCase())) || '__etc';
+  };
+  const map = new Map<string, T[]>();
+  list.forEach(t => { const k = groupOf(reqOf(t)); if (!map.has(k)) map.set(k, []); map.get(k)!.push(t); });
+  const keys = [...order.filter(n => map.has(n)), ...(map.has('__etc') ? ['__etc'] : []), ...(map.has('__camp') ? ['__camp'] : [])];
+  return keys.map(k => ({ key: k, label: k === '__camp' ? '캠프 공용' : k === '__etc' ? '그 외 (그룹 설정에 없는 반)' : k, items: map.get(k)! }));
+}
+
+/** 학생 반번호(예: "J05-12") → 반코드("J05"). campSettings 그룹의 classCodes 와 같은 형식 */
+export function studentClassCode(classNumber?: string): string {
+  return (classNumber ?? '').trim().slice(0, 3).toUpperCase();
+}
+
+/** 캠프 공용 요청인데 구매 완료 후 아직 재고 입고를 안 한 상태 */
+export const needsStockIntake = (r: Pick<SupplyRequest, 'forType' | 'status' | 'stockApplied' | 'items'>): boolean =>
+  r.forType === 'camp' && r.status === 'purchased' && !r.stockApplied && r.items.some(l => l.itemId && l.groupId);
+
+/** 재고 부족분 중 아직 진행 중인 캠프 공용 요청에 들어가 있지 않은 것 */
+export function uncoveredPurchaseNeeds(needs: PurchaseNeed[], requests: SupplyRequest[]): PurchaseNeed[] {
+  const covered = new Set<string>();
+  requests.forEach(r => {
+    if (r.forType !== 'camp' || !isSupplyOpen(r.status)) return;
+    r.items.forEach(l => { if (l.itemId) covered.add(`${l.itemId}|${l.groupId ?? ''}`); });
+  });
+  return needs.filter(n => !covered.has(`${n.itemId}|${n.groupId}`));
+}
+
+/** 구매 담당 후보: 관리자 → 그룹매니저 → 그 외 캠프 인원 */
+export interface SupplyBuyerCandidate { uid: string; name: string; tag: string; rank: number }
+const MANAGER_ROLES = ['매니저', '부매니저', 'Manager', 'Sub Manager'];
+export function supplyBuyerCandidates(
+  users: Array<{ userId?: string; id?: string; name?: string; role?: string; jobExperiences?: Array<{ id: string; group?: string; groupRole?: string }> }>,
+  jobCodeId: string
+): SupplyBuyerCandidate[] {
+  return users
+    .filter(u => (u.userId || u.id) && u.name)
+    .map(u => {
+      const exp = u.jobExperiences?.find(e => e.id === jobCodeId);
+      const isMgr = !!exp?.groupRole && MANAGER_ROLES.includes(exp.groupRole);
+      const tag = u.role === 'admin' ? '관리자' : isMgr ? `${exp?.group ? `${exp.group} ` : ''}${exp?.groupRole}` : (exp?.groupRole ?? '');
+      return { uid: (u.userId || u.id)!, name: u.name!, tag, rank: u.role === 'admin' ? 0 : isMgr ? 1 : 2 };
+    })
+    .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'ko'));
+}
+
+/** 장보기 목록 — 아직 안 산 품목을 품목(연결 ID 또는 이름)+단위로 합산 */
+export interface SupplyShoppingLine { key: string; itemId?: string; name: string; unit: string; total: number; who: string[] }
+export function supplyShoppingList(requests: SupplyRequest[]): SupplyShoppingLine[] {
+  const map = new Map<string, SupplyShoppingLine>();
+  requests.forEach(r => (r.items ?? []).forEach(l => {
+    if (r.done?.[l.id] || !l.name?.trim() || !(l.quantity > 0)) return;
+    const unit = (l.unit || '개').trim();
+    const key = `${l.itemId ?? `name:${l.name.trim()}`}|${unit}`;
+    let line = map.get(key);
+    if (!line) { line = { key, itemId: l.itemId, name: l.name.trim(), unit, total: 0, who: [] }; map.set(key, line); }
+    line.total += l.quantity;
+    line.who.push(r.forType === 'camp' ? `공용${l.groupName ? `(${l.groupName})` : ''} ${l.quantity}` : `${supplyForLabel(r)} ${l.quantity}`);
+  }));
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
 
 export const PURCHASE_STATUSES = ['needed', 'ordered', 'received'] as const;
@@ -549,6 +749,23 @@ export interface LostItem {
 }
 
 /** Storage 업로드 경로: lostItems/{campCode}/{lostItemId}/{timestamp}_{name} */
+/** 품목 사진·영상 1개 */
+export interface ItemMedia {
+  url: string;
+  path: string;
+  type: 'image' | 'video';
+  name?: string;
+  size?: number;
+  by?: string;
+}
+/** 품목 사진·영상 Storage 경로 */
+export function inventoryItemMediaPath(itemId: string, fileName: string): string {
+  const safe = fileName.replace(/[^\w.\-가-힣]/g, '_').slice(-80);
+  return `inventoryItems/${itemId}/${Date.now()}_${safe}`;
+}
+/** 목록 썸네일용 첫 사진 */
+export const itemThumb = (i: Pick<InventoryItem, 'media'>): string | undefined => i.media?.find(m => m.type === 'image')?.url;
+
 export function lostItemMediaPath(campCode: string, lostItemId: string, fileName: string): string {
   const safe = fileName.replace(/[^\w.\-가-힣]/g, '_').slice(-80);
   return `lostItems/${campCode}/${lostItemId}/${Date.now()}_${safe}`;

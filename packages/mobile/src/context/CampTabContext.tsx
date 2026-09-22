@@ -51,6 +51,12 @@ export const navigateToTasksTab = () => {
   navigateToTasksTabCallback?.();
 };
 
+// 알림 클릭 시 캠프 세부 탭(재고 등)으로 이동
+let navigateToCampTabCallback: ((tab: TabName) => void) | null = null;
+export const registerNavigateToCampTab = (callback: (tab: TabName) => void) => { navigateToCampTabCallback = callback; };
+export const unregisterNavigateToCampTab = () => { navigateToCampTabCallback = null; };
+export const navigateToCampTab = (tab: TabName) => { navigateToCampTabCallback?.(tab); };
+
 export const CampTabProvider = ({ children }: { children: ReactNode }) => {
   const [activeTab, setActiveTabState] = useState<TabName>('schedule');
   const [preloadLinks, setPreloadLinksState] = useState<PreloadLink[]>([]);
@@ -141,4 +147,25 @@ export const CampTabProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </CampTabContext.Provider>
   );
+};
+
+// ── 재고 탭 딥링크 (푸시 알림 클릭 → 재고 요청 열기) ──
+export interface InventoryDeepLink { requestId?: string; view?: 'buy' | 'settle'; itemId?: string }
+let pendingInventoryDeepLink: InventoryDeepLink | null = null;
+let inventoryDeepLinkListener: ((t: InventoryDeepLink) => void) | null = null;
+
+/** 알림 클릭 시 호출 — 재고 화면이 떠 있으면 바로 전달, 아니면 보관했다가 다음에 전달 */
+export const setInventoryDeepLink = (target: InventoryDeepLink) => {
+  if (inventoryDeepLinkListener) inventoryDeepLinkListener(target);
+  else pendingInventoryDeepLink = target;
+};
+/** 재고 화면이 뜰 때 보관된 값 가져오기 (한 번만) */
+export const takeInventoryDeepLink = (): InventoryDeepLink | null => {
+  const t = pendingInventoryDeepLink;
+  pendingInventoryDeepLink = null;
+  return t;
+};
+export const subscribeInventoryDeepLink = (cb: (t: InventoryDeepLink) => void) => {
+  inventoryDeepLinkListener = cb;
+  return () => { if (inventoryDeepLinkListener === cb) inventoryDeepLinkListener = null; };
 };

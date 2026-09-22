@@ -25,7 +25,7 @@ import {
   addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
 } from '../services/notificationService';
-import { navigateToTasksTab } from './CampTabContext';
+import { navigateToTasksTab, navigateToCampTab, setInventoryDeepLink } from './CampTabContext';
 import * as Notifications from 'expo-notifications';
 import { createNavigationContainerRef } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
@@ -255,6 +255,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       logger.info('알림 응답:', response);
       const data = response.notification.request.content.data;
       
+      // 재고·구매 요청·분실물 알림 → 캠프 › 재고 탭
+      if (data?.type === 'supply' || data?.type === 'stock' || data?.type === 'lost-item') {
+        setInventoryDeepLink({
+          requestId: typeof data?.requestId === 'string' ? data.requestId : undefined,
+          view: data?.view === 'buy' || data?.view === 'settle' ? data.view : undefined,
+          itemId: typeof data?.itemId === 'string' ? data.itemId : undefined,
+        });
+        try { navigationRef.navigate('MainTabs' as any, { screen: 'Camp' } as any); }
+        catch (e) { logger.warn('Camp 탭 네비게이션 실패:', e); }
+        setTimeout(() => navigateToCampTab('inventory'), 300);
+        return;
+      }
+
       if (data?.type === 'task-reminder') {
         const taskId = data?.taskId as string | undefined;
         const taskDate = data?.taskDate as string | undefined;

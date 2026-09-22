@@ -10,7 +10,7 @@ import { LocationSharingScreen } from './LocationSharingScreen';
 import { PatientScreen } from './PatientScreen';
 import { InventoryScreen } from './InventoryScreen';
 import { useAuth } from '../context/AuthContext';
-import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab } from '../context/CampTabContext';
+import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab, registerNavigateToCampTab, unregisterNavigateToCampTab } from '../context/CampTabContext';
 
 // 위치 탭은 잠시 숨겨 둔다 — 다시 열려면 true (화면 코드는 그대로 있다)
 const SHOW_LOCATION_TAB = false;
@@ -23,7 +23,8 @@ export function CampScreen() {
 
   useEffect(() => {
     registerNavigateToTasksTab(() => setActiveTab('tasks'));
-    return () => unregisterNavigateToTasksTab();
+    registerNavigateToCampTab(tab => setActiveTab(tab));
+    return () => { unregisterNavigateToTasksTab(); unregisterNavigateToCampTab(); };
   }, [setActiveTab]);
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';

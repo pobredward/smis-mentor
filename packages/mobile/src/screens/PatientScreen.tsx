@@ -2553,7 +2553,7 @@ function DoseHistoryMobile({ record, currentUserName }: { record: PatientRecord;
       <View style={{ gap: 4 }}>
         {doses.map(d => (
           <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#d1fae5', paddingHorizontal: 8, paddingVertical: 5 }}>
-            <Text style={{ fontSize: 10, color: '#9ca3af', width: 34 }}>{d.givenAt?.toDate ? formatTime(d.givenAt) : ''}</Text>
+            <Text style={{ fontSize: 10, color: '#9ca3af', width: 34 }}>{d.givenAt ? formatTime(d.givenAt) : ''}</Text>
             <View style={{ backgroundColor: d.source === 'initial' ? '#f3f4f6' : '#eff6ff', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
               <Text style={{ fontSize: 9, color: d.source === 'initial' ? '#4b5563' : '#2563eb' }}>{d.source === 'initial' ? '최초' : '경과'}</Text>
             </View>
