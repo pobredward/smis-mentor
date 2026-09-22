@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, Alert, KeyboardAvoidingView, Platform, Linking, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SectionList, Modal, Alert, KeyboardAvoidingView, Platform, Linking, Dimensions, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,10 +15,24 @@ import {
   subscribeInventoryStocks,
   subscribeInventoryGroups,
   subscribeInventoryMovements,
-  subscribeInventoryRequests,
-  subscribeInventoryRequestEntries,
-  saveInventoryRequestEntry,
-  summarizeRequestEntries,
+  subscribeSupplyRequests,
+  addSupplyRequest,
+  updateSupplyRequest,
+  setSupplyRequestStatus,
+  setSupplyBuyer,
+  addSupplyComment,
+  deleteSupplyComment,
+  deleteSupplyRequest,
+  summarizeSupplyRequests,
+  isSupplyOpen,
+  supplyStoreLabel,
+  supplyForLabel,
+  SUPPLY_STORES,
+  SUPPLY_REQUEST_STATUS_LABELS,
+  receiveSupplyRequest,
+  addCampRequestsFromNeeds,
+  needsStockIntake,
+  uncoveredPurchaseNeeds,
   subscribeLostItems,
   addLostItem,
   updateLostItem,
@@ -51,9 +65,12 @@ import type {
   InventoryMovement,
   InventoryCategory,
   PurchaseNeed,
-  InventoryRequest,
-  InventoryRequestEntry,
-  InventoryRequestLine,
+  SupplyRequest,
+  SupplyRequestLine,
+  SupplyRequestStatus,
+  SupplyStore,
+  SupplyStoreSummary,
+  SupplyForType,
   LostItem,
   LostItemMedia,
   LostItemStatus,
@@ -61,14 +78,14 @@ import type {
   STSheetStudent,
 } from '@smis-mentor/shared';
 
-type SubTab = 'stock' | 'request' | 'purchase' | 'lost';
+type SubTab = 'stock' | 'request' | 'lost';
 
 function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function fmtDateTime(ts: InventoryMovement['at']): string {
+function fmtDateTime(ts: InventoryMovement['at'] | undefined): string {
   if (!ts?.toDate) return '';
   const d = ts.toDate();
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -115,9 +132,8 @@ export function InventoryScreen() {
     return () => { u1(); u2(); };
   }, [campCode]);
 
-  const [requests, setRequests] = useState<InventoryRequest[]>([]);
-  useEffect(() => { if (campCode) return subscribeInventoryRequests(db, campCode, setRequests); }, [campCode]);
-  const openRequests = useMemo(() => requests.filter(r => r.status === 'open'), [requests]);
+  const [requests, setRequests] = useState<SupplyRequest[]>([]);
+  useEffect(() => { if (campCode) return subscribeSupplyRequests(db, campCode, setRequests); }, [campCode]);
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
   useEffect(() => { if (campCode) return subscribeLostItems(db, campCode, setLostItems); }, [campCode]);
   const keptLostCount = useMemo(() => lostItems.filter(l => l.status === 'found').length, [lostItems]);
@@ -125,6 +141,11 @@ export function InventoryScreen() {
   const views = useMemo(() => buildInventoryViews(items, stocks, groups), [items, stocks, groups]);
   const needs = useMemo(() => computePurchaseNeeds(views, groups), [views, groups]);
   const shortItems = useMemo(() => new Set(needs.map(n => n.itemId)), [needs]);
+  // 탭 배지: 관리자는 새 요청 + 재고 입고 대기 + 아직 요청 안 된 재고 부족분, 그 외는 내가 올렸거나 사오기로 한 진행 중 요청
+  const requestBadge = useMemo(() => isAdmin
+    ? requests.filter(r => r.status === 'requested' || needsStockIntake(r)).length + uncoveredPurchaseNeeds(needs, requests).length
+    : requests.filter(r => isSupplyOpen(r.status) && (r.requesterId === userData?.userId || r.buyerId === userData?.userId)).length,
+  [requests, needs, isAdmin, userData?.userId]);
 
   const [subTab, setSubTab] = useState<SubTab>('stock');
   const [search, setSearch] = useState('');
@@ -132,15 +153,23 @@ export function InventoryScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(() => views.find(v => v.id === selectedId) ?? null, [views, selectedId]);
 
+  // 목록 필터: 보유 중인 품목만(기본) · 부족만 · 전체
+  const [groupFilter, setGroupFilter] = useState<string>('');
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const anyPlaced = useMemo(() => views.some(v => Object.keys(v.stocks).length > 0), [views]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return views.filter(v => {
       if (v.isActive === false) return false;
       if (category !== '전체' && v.category !== category) return false;
+      // 검색어가 없으면 이 캠프에 둔 품목만, 검색하면 전체 품목에서 찾음
+      if (!q && anyPlaced && Object.keys(v.stocks).length === 0) return false;
+      if (!q && groupFilter && !(groupFilter in v.stocks)) return false;
       if (!q) return true;
-      return [v.name, v.kind, v.subCategory, v.spec, v.description].some(f => f?.toLowerCase().includes(q));
+      return [v.name, v.kind, v.subCategory, v.spec, v.description, v.ingredient].some(f => f?.toLowerCase().includes(q));
     });
-  }, [views, search, category]);
+  }, [views, search, category, anyPlaced, groupFilter]);
 
   const sections = useMemo(() => {
     const map = new Map<string, InventoryItemView[]>();
@@ -149,8 +178,12 @@ export function InventoryScreen() {
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(v);
     });
-    return [...map.entries()];
+    return [...map.entries()].map(([title, data]) => ({ title, count: data.length, data }));
   }, [filtered]);
+  // 열려 있는 분류만 목록에 표시 (닫힌 분류는 헤더도 숨김 — 버튼으로만 여닫음)
+  const visibleSections = useMemo(() => sections.filter(sec => !collapsed[sec.title]), [sections, collapsed]);
+  const allOpen = sections.every(sec => !collapsed[sec.title]);
+  const toggleAll = () => setCollapsed(allOpen ? Object.fromEntries(sections.map(sec => [sec.title, true])) : {});
 
   if (!activeJobCodeId || !campCode) {
     return (
@@ -167,8 +200,7 @@ export function InventoryScreen() {
       <View style={styles.tabRow}>
         {([
           { id: 'stock' as SubTab, title: isForeign ? 'Stock' : '재고 현황', icon: 'cube-outline' as const },
-          { id: 'request' as SubTab, title: isForeign ? 'Request' : '재고 요청', icon: 'clipboard-outline' as const, badge: openRequests.length },
-          { id: 'purchase' as SubTab, title: isForeign ? 'To buy' : '구매 필요', icon: 'cart-outline' as const, badge: needs.length },
+          { id: 'request' as SubTab, title: isForeign ? 'Request' : '재고 요청', icon: 'clipboard-outline' as const, badge: requestBadge },
           { id: 'lost' as SubTab, title: isForeign ? 'Lost' : '분실물', icon: 'search-outline' as const, badge: keptLostCount },
         ]).map(tab => (
           <TouchableOpacity key={tab.id} onPress={() => setSubTab(tab.id)} style={styles.tabBtn}>
@@ -183,87 +215,103 @@ export function InventoryScreen() {
       </View>
 
       {subTab === 'stock' ? (
-        <ScrollView contentContainerStyle={{ padding: 14, gap: 10 }} keyboardShouldPersistTaps="handled">
-          {openRequests.length > 0 && (
-            <TouchableOpacity onPress={() => setSubTab('request')} style={{ backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 10, padding: 10 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: '#1e40af' }}>📝 {openRequests.map(r => r.title).join(', ')} 진행 중</Text>
-              <Text style={{ fontSize: 10, color: '#1d4ed8', marginTop: 2 }}>필요한 물품과 수량을 재고 요청 탭에서 입력해주세요 →</Text>
-            </TouchableOpacity>
-          )}
-          <View style={styles.searchBox}>
-            <Ionicons name="search" size={15} color="#9ca3af" />
-            <TextInput value={search} onChangeText={setSearch} placeholder="품목명 · 종류 · 규격 검색" placeholderTextColor="#9ca3af" style={styles.searchInput} />
+        <View style={{ flex: 1 }}>
+          {/* 고정 툴바: 검색 · 분류 · 범위/그룹 */}
+          <View style={styles.toolbar}>
+            <View style={styles.searchBox}>
+              <Ionicons name="search" size={14} color="#9ca3af" />
+              <TextInput value={search} onChangeText={setSearch} placeholder="품목 · 종류 · 성분 검색" placeholderTextColor="#9ca3af" style={styles.searchInput} returnKeyType="search" />
+              {search ? <TouchableOpacity onPress={() => setSearch('')}><Ionicons name="close-circle" size={15} color="#cbd5e1" /></TouchableOpacity> : null}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5, alignItems: 'center' }}>
+              {(['전체', ...INVENTORY_CATEGORIES] as const).map(c => (
+                <TouchableOpacity key={c} onPress={() => setCategory(c)} style={[styles.chip, category === c && styles.chipActive]}>
+                  <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5, alignItems: 'center' }}>
+              {groups.length > 0 && (
+                <TouchableOpacity onPress={() => setGroupFilter('')} style={[styles.miniChip, !groupFilter && styles.miniChipAmber]}>
+                  <Text style={[styles.miniChipText, !groupFilter && { color: '#92400e' }]}>모든 그룹</Text>
+                </TouchableOpacity>
+              )}
+              {groups.map(g => (
+                <TouchableOpacity key={g.id} onPress={() => setGroupFilter(groupFilter === g.id ? '' : g.id)} style={[styles.miniChip, groupFilter === g.id && styles.miniChipAmber]}>
+                  <Text style={[styles.miniChipText, groupFilter === g.id && { color: '#92400e' }]}>{g.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {sections.length > 1 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5, alignItems: 'center' }}>
+                <TouchableOpacity onPress={toggleAll} style={styles.secAllBtn}>
+                  <Ionicons name={allOpen ? 'contract-outline' : 'expand-outline'} size={12} color="#fff" />
+                  <Text style={styles.secAllBtnText}>{allOpen ? '모두 접기' : '모두 펼치기'}</Text>
+                </TouchableOpacity>
+                {sections.map(sec => {
+                  const open = !collapsed[sec.title];
+                  return (
+                    <TouchableOpacity key={sec.title} onPress={() => setCollapsed(c => ({ ...c, [sec.title]: open }))}
+                      style={[styles.secBtn, open ? styles.secBtnOn : styles.secBtnOff]}>
+                      <Text style={[styles.secBtnText, open ? { color: '#065f46' } : { color: '#9ca3af' }]}>
+                        {sec.title.replace(/^(.+) · /, '')} <Text style={{ fontWeight: '400' }}>{sec.count}</Text>
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-            {(['전체', ...INVENTORY_CATEGORIES] as const).map(c => (
-              <TouchableOpacity key={c} onPress={() => setCategory(c)} style={[styles.chip, category === c && styles.chipActive]}>
-                <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
 
           {groups.length === 0 && (
-            <View style={styles.notice}><Text style={styles.noticeText}>이 캠프에 재고 그룹이 아직 없습니다. 관리자가 웹 재고 탭 › 관리에서 그룹(패키지)을 적용하면 수량이 표시됩니다.</Text></View>
+            <View style={[styles.notice, { marginHorizontal: 12, marginTop: 8 }]}><Text style={styles.noticeText}>이 캠프에 재고 그룹이 아직 없습니다. 관리자가 웹 재고 탭 › 관리에서 그룹을 만들면 수량이 표시됩니다.</Text></View>
           )}
 
-          {views.length === 0 ? (
-            <View style={styles.centered}>
-              <Ionicons name="cube-outline" size={40} color="#cbd5e1" />
-              <Text style={styles.emptyTitle}>등록된 품목이 없습니다.</Text>
-              <Text style={styles.emptyBody}>관리자가 웹 재고 탭 › 관리에서 품목을 등록하면 여기에 표시됩니다.</Text>
-            </View>
-          ) : filtered.length === 0 ? (
-            <Text style={[styles.emptyBody, { textAlign: 'center', paddingVertical: 30 }]}>검색 결과가 없습니다.</Text>
-          ) : (
-            sections.map(([title, list]) => (
-              <View key={title}>
-                <Text style={styles.sectionTitle}>{title} <Text style={{ color: '#d1d5db', fontWeight: '400' }}>{list.length}</Text></Text>
-                <View style={{ gap: 6 }}>
-                  {list.map(v => {
-                    const isShort = shortItems.has(v.id);
-                    return (
-                      <TouchableOpacity key={v.id} onPress={() => setSelectedId(v.id)} style={[styles.card, isShort && { borderColor: '#fecaca' }]}>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                            <Text style={styles.itemName}>{v.name}</Text>
-                            {v.kind ? <Text style={styles.itemMeta}>{v.kind}</Text> : null}
-                            {v.spec ? <Text style={[styles.itemMeta, { color: '#9ca3af' }]}>{v.spec}</Text> : null}
-                          </View>
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                            {groups.map(g => {
-                              const n = getGroupStock(v, g.id);
-                              const min = getMinStock(v, g.id);
-                              const low = n < 0 || (min > 0 && n < min);
-                              return (
-                                <View key={g.id} style={[styles.groupChip, low ? styles.groupChipLow : n === 0 ? styles.groupChipEmpty : null]}>
-                                  <Text style={[styles.groupChipText, low && { color: '#b91c1c', fontWeight: '700' }, n === 0 && !low && { color: '#d1d5db' }]}>{g.name} {n}{n < 0 ? ' · 실사 필요' : ''}</Text>
-                                </View>
-                              );
-                            })}
-                          </View>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                          <Text style={[styles.total, isShort && { color: '#dc2626' }]}>{v.total}<Text style={styles.totalUnit}>{v.unit}</Text></Text>
-                          <Text style={styles.totalLabel}>총 재고</Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
+          <SectionList
+            sections={visibleSections}
+            keyExtractor={v => v.id}
+            stickySectionHeadersEnabled
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            initialNumToRender={30}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            ListEmptyComponent={
+              sections.length > 0 && visibleSections.length === 0 ? (
+                <View style={styles.centered}>
+                  <Text style={styles.emptyBody}>모든 분류가 접혀 있습니다.</Text>
+                  <TouchableOpacity onPress={() => setCollapsed({})} style={{ marginTop: 6 }}><Text style={{ fontSize: 12, color: '#047857', fontWeight: '600' }}>모두 펼치기</Text></TouchableOpacity>
                 </View>
+              ) : views.length === 0 ? (
+                <View style={styles.centered}>
+                  <Ionicons name="cube-outline" size={36} color="#cbd5e1" />
+                  <Text style={styles.emptyTitle}>등록된 품목이 없습니다.</Text>
+                </View>
+              ) : (
+                <View style={styles.centered}>
+                  <Text style={styles.emptyBody}>{search ? '검색 결과가 없습니다.' : '이 캠프에 둔 품목이 없습니다. 검색하면 전체 품목에서 찾습니다.'}</Text>
+                </View>
+              )
+            }
+            renderSectionHeader={({ section }) => (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{section.title}</Text>
+                <Text style={styles.sectionHeaderCount}>{section.count}</Text>
               </View>
-            ))
-          )}
-          <View style={{ height: 20 }} />
-        </ScrollView>
+            )}
+            renderItem={({ item: v, index, section }) => (
+              <StockRowMobile view={v} groups={groups} focusGroupId={groupFilter}
+                isShort={shortItems.has(v.id)} isLast={index === section.data.length - 1}
+                onPress={() => setSelectedId(v.id)} />
+            )}
+          />
+        </View>
       ) : subTab === 'request' ? (
-        <RequestListMobile requests={requests} items={items} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
-      ) : subTab === 'lost' ? (
-        <LostListMobile campCode={campCode} jobCodeId={activeJobCodeId ?? ''} students={students} campGroups={campGroups} lostItems={lostItems} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
+        <SupplyRequestTabMobile campCode={campCode} requests={requests} items={items} views={views} groups={groups} needs={needs} students={students} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
       ) : (
-        <PurchaseListMobile needs={needs} groups={groups} onSelect={setSelectedId} />
+        <LostListMobile campCode={campCode} jobCodeId={activeJobCodeId ?? ''} students={students} campGroups={campGroups} lostItems={lostItems} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
       )}
 
-      <Modal visible={!!selected} animationType="slide" transparent onRequestClose={() => setSelectedId(null)}>
+      <Modal visible={!!selected} animationType="fade" transparent onRequestClose={() => setSelectedId(null)}>
         {selected && (
           <ItemDetailMobile view={selected} groups={groups} campCode={campCode} isAdmin={isAdmin} userName={userName} onClose={() => setSelectedId(null)} />
         )}
@@ -272,189 +320,677 @@ export function InventoryScreen() {
   );
 }
 
-// ==================== 구매 필요 ====================
+// ==================== 재고 행 (컴팩트) ====================
 
-function PurchaseListMobile({ needs, groups, onSelect }: { needs: PurchaseNeed[]; groups: InventoryGroup[]; onSelect: (id: string) => void }) {
-  const byItem = useMemo(() => {
-    const map = new Map<string, PurchaseNeed[]>();
-    needs.forEach(n => { if (!map.has(n.itemId)) map.set(n.itemId, []); map.get(n.itemId)!.push(n); });
-    return [...map.entries()];
-  }, [needs]);
+/** 한 줄 요약: 이름·종류 | 그룹별 수량(있는 그룹만) | 총량. 그룹을 고르면 그 그룹 수량을 크게 */
+const StockRowMobile = React.memo(function StockRowMobile({ view: v, groups, focusGroupId, isShort, isLast, onPress }: {
+  view: InventoryItemView; groups: InventoryGroup[]; focusGroupId: string; isShort: boolean; isLast: boolean; onPress: () => void;
+}) {
+  const parts = groups
+    .map(g => {
+      const n = getGroupStock(v, g.id);
+      const min = getMinStock(v, g.id);
+      return { g, n, low: n < 0 || (min > 0 && n < min), placed: g.id in v.stocks };
+    })
+    .filter(x => x.placed || x.low);
+  const focus = focusGroupId ? parts.find(x => x.g.id === focusGroupId) ?? { g: groups.find(g => g.id === focusGroupId)!, n: getGroupStock(v, focusGroupId), low: false, placed: false } : null;
+  const negative = parts.some(x => x.n < 0);
+  const big = focus ? focus.n : v.total;
+  const bigLow = focus ? focus.low : isShort;
   return (
-    <ScrollView contentContainerStyle={{ padding: 14, gap: 8 }}>
-      <Text style={{ fontSize: 13, fontWeight: '700', color: '#1f2937' }}>구매 필요 <Text style={{ color: '#dc2626' }}>{needs.length}</Text></Text>
-      <Text style={{ fontSize: 10, color: '#9ca3af' }}>그룹별 현재 수량이 최소 보유 수량보다 적은 항목 (전체가 충분해도 표시)</Text>
-      {groups.length === 0 ? (
-        <Text style={styles.emptyBody}>재고 그룹이 없어 계산할 수 없습니다.</Text>
-      ) : needs.length === 0 ? (
-        <View style={styles.centered}>
-          <Ionicons name="cart-outline" size={36} color="#cbd5e1" />
-          <Text style={styles.emptyTitle}>모든 그룹의 재고가 최소 수량 이상입니다.</Text>
-        </View>
-      ) : byItem.map(([itemId, list]) => (
-        <TouchableOpacity key={itemId} onPress={() => onSelect(itemId)} style={[styles.card, { borderColor: '#fecaca', flexDirection: 'column', alignItems: 'stretch' }]}>
-          <Text style={styles.itemName}>{list[0].itemName}</Text>
-          {list.map(n => (
-            <Text key={n.groupId} style={{ fontSize: 11, color: '#4b5563', marginTop: 3 }}>
-              <Text style={{ fontWeight: '700', color: '#b91c1c' }}>{n.groupName}</Text> · 현재 {n.current}{n.unit} / 최소 {n.min}{n.unit} → <Text style={{ fontWeight: '700', color: '#dc2626' }}>부족 {n.shortage}{n.unit}</Text>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={[styles.row, isLast && { borderBottomWidth: 0 }]}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.rowName} numberOfLines={1}>
+          {v.name}
+          {v.kind || v.spec ? <Text style={styles.rowMeta}>  {[v.kind, v.spec].filter(Boolean).join(' · ')}</Text> : null}
+        </Text>
+        <Text style={styles.rowGroups} numberOfLines={1}>
+          {parts.length === 0 ? <Text style={{ color: '#d1d5db' }}>재고 없음</Text> : parts.map((x, i) => (
+            <Text key={x.g.id} style={x.low ? styles.rowGroupLow : x.g.id === focusGroupId ? styles.rowGroupFocus : undefined}>
+              {i > 0 ? '  ' : ''}{x.g.name} {x.n}
             </Text>
           ))}
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+        </Text>
+      </View>
+      {negative && <View style={styles.badgeWarn}><Text style={styles.badgeWarnText}>실사</Text></View>}
+      {!negative && bigLow && <View style={styles.badgeLow}><Text style={styles.badgeLowText}>부족</Text></View>}
+      <View style={{ alignItems: 'flex-end', minWidth: 44 }}>
+        <Text style={[styles.rowTotal, bigLow && { color: '#dc2626' }]}>{big}<Text style={styles.rowUnit}>{v.unit}</Text></Text>
+        {focus ? <Text style={styles.rowTotalSub}>총 {v.total}</Text> : null}
+      </View>
+    </TouchableOpacity>
   );
+});
+
+// ==================== 📝 재고 요청 (멘토 구매 요청 · 모두 공유) ====================
+
+type SupplyFilter = 'open' | 'mine' | 'done';
+type SupplyEditing = { mode: 'new'; prefill?: SupplyRequest } | { mode: 'edit'; req: SupplyRequest };
+
+function addDaysStr(n: number): string {
+  const d = new Date(); d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+function fmtHoldDate(s?: string): string {
+  if (!s) return '';
+  const [, m, d] = s.split('-');
+  return `${Number(m)}/${Number(d)}`;
+}
+function supplyStatusLine(r: SupplyRequest): string {
+  if (r.status === 'onhold') return `⏸ 보류${r.holdUntil ? ` · ${fmtHoldDate(r.holdUntil)} 구매 예정` : ''}${r.statusNote ? ` · ${r.statusNote}` : ''}`;
+  if (r.status === 'rejected') return `반려${r.statusNote ? ` · ${r.statusNote}` : ''}`;
+  if (r.status === 'purchased') return `구매 완료${r.handledBy ? ` · ${r.handledBy}` : ''}${r.forType === 'camp' ? (r.stockApplied ? ' · 재고 입고됨' : needsStockIntake(r) ? ' · 📥 재고 입고 대기' : '') : ''}`;
+  return r.buyerName ? `🙋 ${r.buyerName} 쌤이 사올 예정` : '';
+}
+const failAlert = () => Alert.alert('오류', '처리하지 못했습니다. 권한을 확인해주세요.');
 
-// ==================== 재고 요청 (내 요청 입력) ====================
-
-function RequestListMobile({ requests, items, isAdmin, userId, userName }: {
-  requests: InventoryRequest[]; items: InventoryItem[]; isAdmin: boolean; userId: string; userName: string;
+function SupplyRequestTabMobile({ campCode, requests, items, views, groups, needs, students, isAdmin, userId, userName }: {
+  campCode: string; requests: SupplyRequest[]; items: InventoryItem[]; views: InventoryItemView[]; groups: InventoryGroup[]; needs: PurchaseNeed[];
+  students: STSheetStudent[]; isAdmin: boolean; userId: string; userName: string;
 }) {
+  // 재고 부족분 중 아직 캠프 공용 요청에 안 올라간 것 · 구매했지만 재고 입고 전인 캠프 공용 요청
+  const shortage = useMemo(() => uncoveredPurchaseNeeds(needs, requests), [needs, requests]);
+  const intakeWaiting = useMemo(() => requests.filter(needsStockIntake), [requests]);
+  const [showNeeds, setShowNeeds] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const postNeeds = async () => {
+    if (posting || shortage.length === 0) return;
+    setPosting(true);
+    try {
+      const n = await addCampRequestsFromNeeds(db, campCode, shortage, items, { uid: userId, name: userName });
+      Alert.alert('요청 등록', `캠프 공용 요청 ${n}건(구매처별)으로 올렸습니다. 필요하면 열어서 수량·구매처를 고치세요.`);
+    } catch (e) { console.error(e); Alert.alert('오류', '요청을 만들지 못했습니다.'); }
+    finally { setPosting(false); }
+  };
+  const [filter, setFilter] = useState<SupplyFilter>('open');
+  const [byStore, setByStore] = useState(false);
+  const [editing, setEditing] = useState<SupplyEditing | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const opened = requests.find(r => r.id === openId) ?? null;
-  if (opened) return <RequestDetailMobile request={opened} items={items} isAdmin={isAdmin} userId={userId} userName={userName} onBack={() => setOpenId(null)} />;
-  return (
-    <ScrollView contentContainerStyle={{ padding: 14, gap: 8 }}>
-      <Text style={{ fontSize: 13, fontWeight: '700', color: '#1f2937' }}>재고 요청</Text>
-      <Text style={{ fontSize: 10, color: '#9ca3af' }}>관리자가 만든 요청에 각자 필요한 물품과 수량을 입력합니다. 요청 만들기·취합·구매 목록 추가는 웹에서 합니다.</Text>
-      {requests.length === 0 ? (
-        <View style={styles.centered}>
-          <Ionicons name="clipboard-outline" size={36} color="#cbd5e1" />
-          <Text style={styles.emptyTitle}>진행 중인 재고 요청이 없습니다.</Text>
-        </View>
-      ) : requests.map(r => (
-        <TouchableOpacity key={r.id} onPress={() => setOpenId(r.id)} style={[styles.card, { flexDirection: 'column', alignItems: 'stretch', borderColor: r.status === 'open' ? '#bfdbfe' : '#e5e7eb', opacity: r.status === 'open' ? 1 : 0.7 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ backgroundColor: r.status === 'open' ? '#dbeafe' : '#f3f4f6', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-              <Text style={{ fontSize: 9, fontWeight: '700', color: r.status === 'open' ? '#1d4ed8' : '#6b7280' }}>{r.status === 'open' ? '진행 중' : '마감'}</Text>
-            </View>
-            <Text style={[styles.itemName, { flex: 1 }]} numberOfLines={1}>{r.title}</Text>
-            {r.dueDate ? <Text style={{ fontSize: 10, color: '#9ca3af' }}>~{r.dueDate}</Text> : null}
-          </View>
-          {r.note ? <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 3 }}>{r.note}</Text> : null}
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
-  );
-}
 
-function RequestDetailMobile({ request, items, isAdmin, userId, userName, onBack }: {
-  request: InventoryRequest; items: InventoryItem[]; isAdmin: boolean; userId: string; userName: string; onBack: () => void;
-}) {
-  const [entries, setEntries] = useState<InventoryRequestEntry[]>([]);
-  useEffect(() => subscribeInventoryRequestEntries(db, request.id, setEntries), [request.id]);
-  const mine = entries.find(e => e.userId === userId);
-  const isOpen = request.status === 'open';
+  const open = useMemo(() => requests.filter(r => isSupplyOpen(r.status)), [requests]);
+  const pending = useMemo(() => open.filter(r => r.status === 'requested'), [open]);
+  const mine = useMemo(() => requests.filter(r => r.requesterId === userId), [requests, userId]);
+  const list = filter === 'open' ? open : filter === 'mine' ? mine : requests.filter(r => !isSupplyOpen(r.status));
+  const storeSummary = useMemo(() => summarizeSupplyRequests(pending), [pending]);
+  const onholdCount = open.length - pending.length;
 
-  const [lines, setLines] = useState<InventoryRequestLine[]>([]);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [pickerFor, setPickerFor] = useState<string | null>(null);
-  const [pickerQuery, setPickerQuery] = useState('');
-  useEffect(() => { if (!dirty) setLines(mine?.items ?? []); }, [mine, dirty]);
-
-  const newLine = (): InventoryRequestLine => ({ id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: '', quantity: 1, unit: '개' });
-  const update = (id: string, patch: Partial<InventoryRequestLine>) => { setDirty(true); setLines(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l)); };
-  const save = async () => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      await saveInventoryRequestEntry(db, { requestId: request.id, campCode: request.campCode, userId, userName, items: lines });
-      setDirty(false);
-      Alert.alert('저장됨', '내 요청을 저장했습니다.');
-    } catch (e) { console.error('요청 저장 오류:', e); Alert.alert('오류', '저장 중 오류가 발생했습니다.'); }
-    finally { setSaving(false); }
+  const shareStore = (g: SupplyStoreSummary) => {
+    Share.share({ message: `[${g.store} 장보기]\n${g.lines.map(l => `• ${l.name} ${l.total}${l.unit}  (${l.who.join(', ')})`).join('\n')}` });
   };
-  const summary = useMemo(() => summarizeRequestEntries(entries), [entries]);
-  const pickerItems = useMemo(() => {
-    const q = pickerQuery.trim().toLowerCase();
-    return items.filter(i => i.isActive !== false && (!q || i.name.toLowerCase().includes(q) || i.kind?.toLowerCase().includes(q))).slice(0, 12);
-  }, [items, pickerQuery]);
-  const UNITS = ['개', '박스', '통', '팩', '병', '정', '세트'];
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }} keyboardShouldPersistTaps="handled">
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-          <TouchableOpacity onPress={onBack}><Text style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>← 목록</Text></TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.itemName}>{request.title} <Text style={{ fontSize: 10, fontWeight: '600', color: isOpen ? '#1d4ed8' : '#6b7280' }}>{isOpen ? '진행 중' : '마감'}</Text></Text>
-            {request.note ? <Text style={{ fontSize: 11, color: '#6b7280' }}>{request.note}</Text> : null}
-            <Text style={{ fontSize: 10, color: '#9ca3af' }}>{request.dueDate ? `~${request.dueDate} · ` : ''}{entries.length}명 입력</Text>
-          </View>
-        </View>
-
-        {/* 내 요청 */}
-        <View style={[styles.card, { flexDirection: 'column', alignItems: 'stretch', gap: 8 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1f2937' }}>내 요청 <Text style={{ color: '#9ca3af', fontWeight: '400' }}>({userName})</Text></Text>
-            {isOpen && (
-              <TouchableOpacity onPress={() => { setDirty(true); const l = newLine(); setLines(ls => [...ls, l]); setPickerFor(l.id); setPickerQuery(''); }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>+ 항목 추가</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {lines.length === 0 && <Text style={styles.emptyBody}>{isOpen ? '필요한 물품을 추가해주세요.' : '입력한 항목이 없습니다.'}</Text>}
-          {lines.map(l => (
-            <View key={l.id} style={{ borderWidth: 1, borderColor: '#f3f4f6', borderRadius: 8, padding: 8, gap: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <TouchableOpacity disabled={!isOpen} onPress={() => { setPickerFor(pickerFor === l.id ? null : l.id); setPickerQuery(l.name); }} style={[styles.input, { flex: 1, justifyContent: 'center' }]}>
-                  <Text style={{ fontSize: 12, color: l.name ? '#111827' : '#9ca3af' }}>{l.name || '품목 선택 / 입력'}</Text>
-                </TouchableOpacity>
-                {isOpen && <TouchableOpacity onPress={() => { setDirty(true); setLines(ls => ls.filter(x => x.id !== l.id)); }}><Text style={{ fontSize: 12 }}>🗑️</Text></TouchableOpacity>}
-              </View>
-              {pickerFor === l.id && isOpen && (
-                <View style={{ gap: 6 }}>
-                  <TextInput value={pickerQuery} onChangeText={v => { setPickerQuery(v); update(l.id, { name: v, itemId: undefined }); }} placeholder="품목명 검색 또는 직접 입력" placeholderTextColor="#9ca3af" autoFocus style={styles.input} />
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                    {pickerItems.map(i => (
-                      <TouchableOpacity key={i.id} onPress={() => { update(l.id, { name: itemLabel(i), itemId: i.id, unit: i.unit }); setPickerFor(null); }}
-                        style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: l.itemId === i.id ? '#059669' : '#f3f4f6' }}>
-                        <Text style={{ fontSize: 11, color: l.itemId === i.id ? '#fff' : '#374151' }}>{itemLabel(i)}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <TouchableOpacity disabled={!isOpen} onPress={() => update(l.id, { quantity: Math.max(1, l.quantity - 1) })} style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14 }}>−</Text></TouchableOpacity>
-                <Text style={{ minWidth: 28, textAlign: 'center', fontSize: 12, fontWeight: '700' }}>{l.quantity}</Text>
-                <TouchableOpacity disabled={!isOpen} onPress={() => update(l.id, { quantity: l.quantity + 1 })} style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14 }}>+</Text></TouchableOpacity>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }} style={{ flex: 1 }}>
-                  {[...new Set([l.unit, ...UNITS])].map(u => (
-                    <TouchableOpacity key={u} disabled={!isOpen} onPress={() => update(l.id, { unit: u })} style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: l.unit === u ? '#fef3c7' : '#f3f4f6', borderWidth: 1, borderColor: l.unit === u ? '#f59e0b' : '#f3f4f6' }}>
-                      <Text style={{ fontSize: 10, fontWeight: '600', color: l.unit === u ? '#92400e' : '#6b7280' }}>{u}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              <TextInput value={l.memo ?? ''} onChangeText={v => update(l.id, { memo: v || undefined })} editable={isOpen} placeholder="메모 (선택)" placeholderTextColor="#9ca3af" style={[styles.input, { paddingVertical: 5, fontSize: 11 }]} />
-            </View>
+    <View style={{ flex: 1 }}>
+      <View style={styles.toolbar}>
+        <TouchableOpacity onPress={() => setEditing({ mode: 'new' })} style={styles.primaryBtn}>
+          <Ionicons name="add-circle" size={18} color="#fff" />
+          <Text style={styles.primaryBtnText}>필요한 물품 요청하기</Text>
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          {([['open', `진행 중 ${open.length}`], ['mine', `내 요청 ${mine.length}`], ['done', '완료·반려']] as const).map(([id, label]) => (
+            <TouchableOpacity key={id} onPress={() => setFilter(id)} style={[styles.miniChip, filter === id && styles.miniChipDark]}>
+              <Text style={[styles.miniChipText, filter === id && { color: '#fff' }]}>{label}</Text>
+            </TouchableOpacity>
           ))}
-          {isOpen && (
-            <TouchableOpacity onPress={save} disabled={!dirty || saving} style={[styles.btn, { backgroundColor: '#059669', opacity: !dirty || saving ? 0.4 : 1 }]}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{saving ? '저장 중...' : '내 요청 저장'}</Text>
+          {filter === 'open' && pending.length > 0 && (
+            <TouchableOpacity onPress={() => setByStore(v => !v)} style={[styles.miniChip, { marginLeft: 'auto' }, byStore && styles.miniChipAmber]}>
+              <Text style={[styles.miniChipText, byStore && { color: '#92400e' }]}>🛍 장보기</Text>
             </TouchableOpacity>
           )}
         </View>
+      </View>
 
-        {/* 취합 (관리자, 읽기 전용) */}
-        {isAdmin && (
-          <View style={[styles.card, { flexDirection: 'column', alignItems: 'stretch', gap: 6 }]}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1f2937' }}>취합 결과 <Text style={{ color: '#9ca3af', fontWeight: '400' }}>(구매 목록 추가는 웹에서)</Text></Text>
-            {summary.length === 0 ? <Text style={styles.emptyBody}>아직 입력된 요청이 없습니다.</Text> : summary.map(s => (
-              <View key={s.key} style={{ borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 6 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ flex: 1, fontSize: 12, fontWeight: '600', color: '#111827' }}>{s.name}</Text>
-                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#b45309' }}>총 {s.total}{s.unit}</Text>
-                </View>
-                <Text style={{ fontSize: 10, color: '#6b7280' }}>{s.requesters.map(r => `${r.userName} ${r.quantity}${s.unit}${r.memo ? `(${r.memo})` : ''}`).join(' · ')}</Text>
-              </View>
+      <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 30 }}>
+        {isAdmin && filter === 'open' && intakeWaiting.length > 0 && (
+          <View style={{ borderWidth: 1, borderColor: '#fcd34d', backgroundColor: '#fffbeb', borderRadius: 10, padding: 10, gap: 4 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#78350f' }}>📥 구매했지만 재고 입고 전 {intakeWaiting.length}건</Text>
+            {intakeWaiting.map(r => (
+              <TouchableOpacity key={r.id} onPress={() => setOpenId(r.id)}>
+                <Text style={{ fontSize: 11, color: '#78350f' }} numberOfLines={1}>{STORE_ICON[r.store] ?? '📦'} {r.items.map(l => `${l.name} ${l.quantity}${l.unit}`).join(', ')} <Text style={{ color: '#b45309', fontWeight: '700' }}>→ 입고</Text></Text>
+              </TouchableOpacity>
             ))}
           </View>
         )}
-        <View style={{ height: 30 }} />
+        {isAdmin && filter === 'open' && shortage.length > 0 && (
+          <View style={{ borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2', borderRadius: 10, padding: 10, gap: 6 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#991b1b' }}>📉 최소 수량 미만 {shortage.length}건 <Text style={{ fontWeight: '400', color: '#dc2626' }}>· 아직 요청 안 됨</Text></Text>
+            {showNeeds && shortage.map(n => (
+              <Text key={`${n.itemId}|${n.groupId}`} style={{ fontSize: 11, color: '#374151' }}><Text style={{ fontWeight: '700' }}>{n.itemName}</Text> · {n.groupName} {n.current}/{n.min} → <Text style={{ fontWeight: '700', color: '#dc2626' }}>{n.shortage}{n.unit}</Text></Text>
+            ))}
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <TouchableOpacity onPress={() => setShowNeeds(v => !v)} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fecaca', paddingVertical: 7 }]}>
+                <Text style={{ fontSize: 11, color: '#b91c1c' }}>{showNeeds ? '접기' : '목록 보기'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={postNeeds} disabled={posting} style={[styles.btn, { backgroundColor: '#ef4444', paddingVertical: 7, opacity: posting ? 0.5 : 1 }]}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{posting ? '올리는 중...' : '요청으로 올리기'}</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 10, color: '#ef4444' }}>의약품은 약국, 나머지는 다이소로 나눠 '캠프 공용' 요청이 만들어지고, 구매 완료 후 입고하면 재고에 반영됩니다.</Text>
+          </View>
+        )}
+        {filter === 'open' && byStore ? (
+          <>
+            {storeSummary.map(g => {
+              const reqs = pending.filter(r => g.requestIds.includes(r.id));
+              const unclaimed = reqs.filter(r => !r.buyerId).map(r => r.id);
+              const buyers = [...new Set(reqs.map(r => r.buyerName).filter(Boolean))] as string[];
+              const completable = reqs.filter(r => isAdmin || r.buyerId === userId).map(r => r.id);
+              return (
+                <View key={g.store} style={styles.listBox}>
+                  <View style={{ backgroundColor: '#fffbeb', paddingHorizontal: 10, paddingVertical: 8, gap: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.blockTitle, { flex: 1 }]}>{STORE_ICON[g.store] ?? '📦'} {g.store} <Text style={{ fontSize: 11, fontWeight: '400', color: '#92400e' }}>{g.requestIds.length}건 · {g.lines.length}품목</Text></Text>
+                      <TouchableOpacity onPress={() => shareStore(g)} style={styles.actBtn}><Text style={styles.actBtnText}>공유</Text></TouchableOpacity>
+                    </View>
+                    <Text style={{ fontSize: 11, color: '#4b5563' }}>{buyers.length ? `🙋 사올 사람: ${buyers.join(', ')}` : '아직 사오기로 한 사람이 없어요'}</Text>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {unclaimed.length > 0 && (
+                        <TouchableOpacity onPress={() => setSupplyBuyer(db, unclaimed, { uid: userId, name: userName }).catch(failAlert)} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fcd34d', paddingVertical: 7 }]}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>🙋 제가 사올게요 ({unclaimed.length})</Text>
+                        </TouchableOpacity>
+                      )}
+                      {completable.length > 0 && (
+                        <TouchableOpacity onPress={() => Alert.alert(`${g.store} 구매 완료`, `${completable.length}건을 구매 완료로 처리할까요?`, [
+                          { text: '취소', style: 'cancel' },
+                          { text: '구매 완료', onPress: () => setSupplyRequestStatus(db, completable, 'purchased', userName).catch(failAlert) },
+                        ])} style={[styles.btn, { backgroundColor: '#059669', paddingVertical: 7 }]}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>✓ 구매 완료 ({completable.length})</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                  {g.lines.map((l, i) => {
+                    const stock = l.itemId ? views.find(v => v.id === l.itemId) : undefined;
+                    return (
+                      <View key={l.key} style={[styles.row, i === g.lines.length - 1 && { borderBottomWidth: 0 }]}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.rowName} numberOfLines={1}>{l.name}</Text>
+                          <Text style={styles.rowGroups} numberOfLines={2}>{l.who.join(' · ')}{isAdmin && stock ? `  ·  재고 ${stock.total}${stock.unit}` : ''}</Text>
+                        </View>
+                        <Text style={[styles.rowTotal, { color: '#b45309', fontSize: 15 }]}>{l.total}<Text style={styles.rowUnit}>{l.unit}</Text></Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })}
+            {onholdCount > 0 && <Text style={{ fontSize: 10, color: '#9ca3af' }}>⏸ 보류 중인 요청 {onholdCount}건은 장보기 목록에서 빠져 있습니다.</Text>}
+          </>
+        ) : list.length === 0 ? (
+          <View style={styles.centered}>
+            <Ionicons name="clipboard-outline" size={36} color="#cbd5e1" />
+            <Text style={styles.emptyTitle}>{filter === 'mine' ? '올린 요청이 없습니다.' : filter === 'open' ? '진행 중인 요청이 없습니다.' : '완료된 요청이 없습니다.'}</Text>
+            {filter !== 'done' && <Text style={styles.emptyBody}>학생이나 본인에게 필요한 물품을 위 버튼으로 요청하세요.</Text>}
+          </View>
+        ) : (
+          <>
+            {filter === 'open' && <Text style={{ fontSize: 10, color: '#9ca3af' }}>다른 선생님 요청도 함께 보여요. 같은 게 필요하면 '나도 필요해요', 사러 갈 땐 '제가 사올게요'.</Text>}
+            <View style={styles.listBox}>
+              {list.map((r, i) => <SupplyRowMobile key={r.id} req={r} isLast={i === list.length - 1} onPress={() => setOpenId(r.id)} />)}
+            </View>
+          </>
+        )}
       </ScrollView>
+
+      <Modal visible={!!editing} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
+        {editing && (
+          <SupplyRequestFormMobile campCode={campCode} existing={editing.mode === 'edit' ? editing.req : undefined} prefill={editing.mode === 'new' ? editing.prefill : undefined}
+            groups={groups} items={items} views={views} students={students} userId={userId} userName={userName} onClose={() => setEditing(null)} />
+        )}
+      </Modal>
+      <Modal visible={!!opened && !editing} transparent animationType="fade" onRequestClose={() => setOpenId(null)}>
+        {opened && (
+          <SupplyRequestDetailMobile req={opened} campCode={campCode} groups={groups} views={views} isAdmin={isAdmin} userId={userId} userName={userName}
+            onEdit={() => setEditing({ mode: 'edit', req: opened })}
+            onMetoo={() => { setEditing({ mode: 'new', prefill: opened }); setOpenId(null); }}
+            onClose={() => setOpenId(null)} />
+        )}
+      </Modal>
+    </View>
+  );
+}
+
+const SUPPLY_STATUS_COLOR: Record<SupplyRequestStatus, { bg: string; fg: string }> = {
+  requested: { bg: '#dbeafe', fg: '#1d4ed8' },
+  onhold: { bg: '#fef3c7', fg: '#92400e' },
+  purchased: { bg: '#d1fae5', fg: '#047857' },
+  rejected: { bg: '#f3f4f6', fg: '#6b7280' },
+};
+const STORE_ICON: Record<string, string> = { 다이소: '🛍', 약국: '💊', 마트: '🛒', 기타: '📦' };
+
+function SupplyRowMobile({ req: r, isLast, onPress }: { req: SupplyRequest; isLast: boolean; onPress: () => void }) {
+  const c = SUPPLY_STATUS_COLOR[r.status];
+  const what = r.items.map(l => `${l.name} ${l.quantity}${l.unit}`).join(', ');
+  const status = supplyStatusLine(r);
+  const last = r.comments?.[r.comments.length - 1];
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={[styles.row, isLast && { borderBottomWidth: 0 }, { alignItems: 'flex-start' }]}>
+      <Text style={{ fontSize: 18, marginTop: 1 }}>{STORE_ICON[r.store] ?? '📦'}</Text>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          <Text style={styles.rowName} numberOfLines={1}>{supplyForLabel(r)}</Text>
+          <Text style={styles.rowMeta}>{supplyStoreLabel(r)}</Text>
+        </View>
+        <Text style={[styles.rowGroups, { color: '#374151' }]} numberOfLines={2}>{what || '물품 없음'}</Text>
+        {status ? <Text style={[styles.rowGroups, { fontSize: 10, color: r.status === 'onhold' ? '#b45309' : r.buyerName && isSupplyOpen(r.status) ? '#047857' : '#6b7280' }]} numberOfLines={1}>{status}</Text> : null}
+        {last ? <Text style={[styles.rowGroups, { fontSize: 10 }]} numberOfLines={1}>💬 {r.comments!.length} · <Text style={{ fontWeight: '700', color: last.admin ? '#4338ca' : '#374151' }}>{last.name}</Text> {last.text}</Text> : null}
+        <Text style={[styles.rowGroups, { fontSize: 10 }]}>{r.requesterName} · {fmtDateTime(r.createdAt)}</Text>
+      </View>
+      <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
+        <Text style={{ fontSize: 9, fontWeight: '700', color: c.fg }}>{SUPPLY_REQUEST_STATUS_LABELS[r.status]}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+/** 요청 올리기 / 수정 / 나도 필요해요 — 누가 · 어디서 · 무엇 */
+function SupplyRequestFormMobile({ campCode, existing, prefill, groups, items, views, students, userId, userName, onClose }: {
+  campCode: string; existing?: SupplyRequest; prefill?: SupplyRequest; groups: InventoryGroup[]; items: InventoryItem[]; views: InventoryItemView[]; students: STSheetStudent[];
+  userId: string; userName: string; onClose: () => void;
+}) {
+  const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const base = existing ?? prefill;
+  const [forType, setForType] = useState<SupplyForType>(existing?.forType ?? (prefill?.forType === 'camp' ? 'camp' : 'student'));
+  const defaultGroup = groups[0];
+  const [student, setStudent] = useState<{ id?: string; name: string; cls?: string } | null>(
+    existing?.studentName ? { id: existing.studentId, name: existing.studentName, cls: existing.studentClass } : null);
+  const [studentQuery, setStudentQuery] = useState('');
+  const [store, setStore] = useState<SupplyStore>(base?.store ?? '다이소');
+  const [storeEtc, setStoreEtc] = useState(base?.storeEtc ?? '');
+  const [lines, setLines] = useState<SupplyRequestLine[]>(
+    existing?.items ?? (prefill ? prefill.items.map(l => ({ ...l, id: newId(), quantity: 1, memo: undefined })) : []));
+  const [q, setQ] = useState('');
+  const [note, setNote] = useState(existing?.note ?? '');
+  const [busy, setBusy] = useState(false);
+  const UNITS = ['개', '박스', '통', '팩', '병', '세트'];
+
+  const studentResults = useMemo(() => {
+    const t = studentQuery.trim();
+    return t ? students.filter(s => s.name.includes(t)).slice(0, 6) : [];
+  }, [students, studentQuery]);
+  const results = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return [];
+    return items.filter(i => i.isActive !== false && [i.name, i.kind, i.spec, i.ingredient, i.subCategory].some(f => f?.toLowerCase().includes(t))).slice(0, 12);
+  }, [items, q]);
+  const addItem = (i: InventoryItem) => {
+    const had = lines.find(l => l.itemId === i.id);
+    if (had) setLines(ls => ls.map(l => l.id === had.id ? { ...l, quantity: l.quantity + 1 } : l));
+    else setLines(ls => [...ls, { id: newId(), itemId: i.id, name: itemLabel(i), quantity: 1, unit: i.unit, groupId: defaultGroup?.id, groupName: defaultGroup?.name }]);
+    setQ(''); // 고르면 검색 목록 닫기
+  };
+  const upd = (id: string, patch: Partial<SupplyRequestLine>) => setLines(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l));
+
+  const submit = async () => {
+    if (forType === 'student' && !student) { Alert.alert('확인 필요', '어떤 학생을 위한 물품인지 선택해주세요.'); return; }
+    if (store === '기타' && !storeEtc.trim()) { Alert.alert('확인 필요', '구매처를 입력해주세요.'); return; }
+    if (lines.length === 0) { Alert.alert('확인 필요', '필요한 물품을 하나 이상 담아주세요.'); return; }
+    setBusy(true);
+    try {
+      const payload = {
+        forType,
+        studentId: forType === 'student' ? student?.id : undefined,
+        studentName: forType === 'student' ? student?.name : undefined,
+        studentClass: forType === 'student' ? student?.cls : undefined,
+        store, storeEtc: store === '기타' ? storeEtc.trim() : undefined,
+        // 캠프 공용만 입고 그룹을 가진다
+        items: lines.map(l => forType === 'camp' && l.itemId
+          ? { ...l, groupId: l.groupId ?? defaultGroup?.id, groupName: l.groupName ?? defaultGroup?.name }
+          : { ...l, groupId: undefined, groupName: undefined }),
+        note,
+      };
+      if (existing) await updateSupplyRequest(db, existing.id, payload);
+      else await addSupplyRequest(db, { campCode, requesterId: userId, requesterName: userName, ...payload });
+      onClose();
+    } catch (e) { console.error('구매 요청 저장 오류:', e); Alert.alert('오류', '요청을 저장하지 못했습니다.'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.modalCard}>
+        <View style={styles.modalHeader}>
+          <Text style={[styles.modalTitle, { flex: 1 }]}>{existing ? '요청 수정' : prefill ? '🙋 나도 필요해요' : '📝 필요한 물품 요청'}</Text>
+          <TouchableOpacity onPress={onClose} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 14 }} keyboardShouldPersistTaps="handled">
+          {prefill ? <Text style={{ fontSize: 11, color: '#6b7280', backgroundColor: '#fffbeb', borderRadius: 8, padding: 8 }}>{supplyForLabel(prefill)} 요청과 같은 구매처·물품을 담았어요. 누구 것인지와 수량만 바꿔 올리면 장보기 목록에 합쳐집니다.</Text> : null}
+          {/* 누가 */}
+          <View>
+            <Text style={styles.formLabel}>① 누가 필요한가요?</Text>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {([['student', '👧 학생'], ['mentor', '🧑‍🏫 멘토(나)'], ['camp', '🏕 캠프 공용']] as const).map(([id, label]) => (
+                <TouchableOpacity key={id} onPress={() => setForType(id)} style={[styles.segBtn, forType === id && styles.segBtnOn]}>
+                  <Text style={[styles.segBtnText, forType === id && { color: '#fff' }]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {forType === 'camp' && <Text style={{ fontSize: 10, color: '#6b7280', marginTop: 5 }}>상비약·소모품처럼 캠프 재고로 쓰는 물건. 재고 품목을 검색해 담고 넣을 그룹을 고르면, 구매 후 관리자가 입고할 때 재고에 반영됩니다.</Text>}
+            {forType === 'student' && (student ? (
+              <View style={[styles.pickedBox, { marginTop: 6 }]}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e3a8a', flex: 1 }}>{student.name}{student.cls ? <Text style={{ fontWeight: '400', color: '#3b82f6' }}>  {student.cls}</Text> : null}</Text>
+                <TouchableOpacity onPress={() => setStudent(null)}><Text style={{ fontSize: 12, color: '#6b7280' }}>변경</Text></TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ marginTop: 6, gap: 4 }}>
+                <TextInput value={studentQuery} onChangeText={setStudentQuery} placeholder="학생 이름 검색" placeholderTextColor="#9ca3af" style={styles.input} />
+                {studentResults.map(s => (
+                  <TouchableOpacity key={s.studentId} onPress={() => { setStudent({ id: s.studentId, name: s.name, cls: s.className }); setStudentQuery(''); }}
+                    style={{ paddingHorizontal: 10, paddingVertical: 7, borderRadius: 6, backgroundColor: '#f9fafb' }}>
+                    <Text style={{ fontSize: 12, color: '#111827' }}>{s.name} <Text style={{ fontSize: 10, color: '#9ca3af' }}>{s.className}{s.classMentor ? ` · 담임 ${s.classMentor}` : ''}</Text></Text>
+                  </TouchableOpacity>
+                ))}
+                {studentQuery.trim() !== '' && studentResults.length === 0 && (
+                  <TouchableOpacity onPress={() => { setStudent({ name: studentQuery.trim() }); setStudentQuery(''); }} style={{ paddingHorizontal: 10, paddingVertical: 7 }}>
+                    <Text style={{ fontSize: 12, color: '#374151' }}>명단에 없으면 <Text style={{ fontWeight: '700' }}>"{studentQuery.trim()}"</Text>로 입력</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+          </View>
+
+          {/* 어디서 */}
+          <View>
+            <Text style={styles.formLabel}>② 어디서 사야 하나요?</Text>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {SUPPLY_STORES.map(s => (
+                <TouchableOpacity key={s} onPress={() => setStore(s)} style={[styles.segBtn, store === s && styles.segBtnOn]}>
+                  <Text style={[styles.segBtnText, store === s && { color: '#fff' }]}>{STORE_ICON[s]} {s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {store === '기타' && <TextInput value={storeEtc} onChangeText={setStoreEtc} placeholder="구매처 (예: 편의점, 쿠팡)" placeholderTextColor="#9ca3af" style={[styles.input, { marginTop: 6 }]} />}
+          </View>
+
+          {/* 무엇 */}
+          <View style={{ gap: 6 }}>
+            <Text style={styles.formLabel}>③ 무엇이 필요한가요? <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{lines.length}개 담음</Text></Text>
+            <View style={styles.searchBox}>
+              <Ionicons name="search" size={14} color="#9ca3af" />
+              <TextInput value={q} onChangeText={setQ} placeholder="물품 검색 (예: 밴드, 치약, 보드마카)" placeholderTextColor="#9ca3af" style={styles.searchInput} />
+              {q ? <TouchableOpacity onPress={() => setQ('')}><Ionicons name="close-circle" size={15} color="#cbd5e1" /></TouchableOpacity> : null}
+            </View>
+            {q.trim() !== '' && (
+              <View style={[styles.listBox, { borderColor: '#d1fae5' }]}>
+                {results.map((i, idx) => {
+                  const had = lines.find(l => l.itemId === i.id);
+                  const stock = views.find(v => v.id === i.id);
+                  return (
+                    <TouchableOpacity key={i.id} onPress={() => addItem(i)} activeOpacity={0.6} style={[styles.row, idx === results.length - 1 && { borderBottomWidth: 0 }]}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.rowName} numberOfLines={1}>{i.name}{i.kind || i.spec ? <Text style={styles.rowMeta}>  {[i.kind, i.spec].filter(Boolean).join(' · ')}</Text> : null}</Text>
+                        {stock && stock.total > 0 ? <Text style={styles.rowGroups}>캠프 재고 {stock.total}{stock.unit} 있음</Text> : null}
+                      </View>
+                      {had ? <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669' }}>{had.quantity} +1</Text> : <Ionicons name="add-circle" size={22} color="#059669" />}
+                    </TouchableOpacity>
+                  );
+                })}
+                <TouchableOpacity onPress={() => { setLines(ls => [...ls, { id: newId(), name: q.trim(), quantity: 1, unit: '개' }]); setQ(''); }}
+                  style={[styles.row, { borderBottomWidth: 0, backgroundColor: '#f9fafb' }]}>
+                  <Text style={{ flex: 1, fontSize: 12, color: '#374151' }}><Text style={{ fontWeight: '700' }}>"{q.trim()}"</Text> 직접 추가</Text>
+                  <Ionicons name="create-outline" size={18} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+            )}
+            {lines.length > 0 && (
+              <View style={styles.listBox}>
+                {lines.map((l, idx) => (
+                  <View key={l.id} style={[{ paddingHorizontal: 10, paddingVertical: 7, gap: 5 }, idx < lines.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.rowName, { flex: 1 }]} numberOfLines={1}>{l.name}</Text>
+                      <TouchableOpacity onPress={() => upd(l.id, { quantity: Math.max(1, l.quantity - 1) })} style={styles.qtyBtn}><Text style={styles.qtyBtnText}>−</Text></TouchableOpacity>
+                      <Text style={{ minWidth: 22, textAlign: 'center', fontSize: 13, fontWeight: '800' }}>{l.quantity}</Text>
+                      <TouchableOpacity onPress={() => upd(l.id, { quantity: l.quantity + 1 })} style={styles.qtyBtn}><Text style={styles.qtyBtnText}>+</Text></TouchableOpacity>
+                      <TouchableOpacity onPress={() => setLines(ls => ls.filter(x => x.id !== l.id))} style={{ paddingLeft: 2 }}><Ionicons name="trash-outline" size={16} color="#9ca3af" /></TouchableOpacity>
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
+                      {[...new Set([l.unit, ...UNITS])].map(u => (
+                        <TouchableOpacity key={u} onPress={() => upd(l.id, { unit: u })} style={[styles.miniChip, l.unit === u && styles.miniChipAmber]}>
+                          <Text style={[styles.miniChipText, l.unit === u && { color: '#92400e' }]}>{u}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    <TextInput value={l.memo ?? ''} onChangeText={v => upd(l.id, { memo: v || undefined })} placeholder="메모 (색상·사이즈 등)" placeholderTextColor="#9ca3af" style={[styles.input, { paddingVertical: 4, fontSize: 11 }]} />
+                    {forType === 'camp' && (l.itemId ? (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 10, color: '#6b7280' }}>입고 그룹</Text>
+                        {groups.map(g => {
+                          const on = (l.groupId ?? defaultGroup?.id) === g.id;
+                          return (
+                            <TouchableOpacity key={g.id} onPress={() => upd(l.id, { groupId: g.id, groupName: g.name })} style={[styles.miniChip, on && { backgroundColor: '#d1fae5' }]}>
+                              <Text style={[styles.miniChipText, on && { color: '#065f46' }]}>{g.name}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    ) : <Text style={{ fontSize: 10, color: '#9ca3af' }}>재고 품목이 아니라 입고되지 않아요</Text>)}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View>
+            <Text style={styles.formLabel}>메모 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text>
+            <TextInput value={note} onChangeText={setNote} multiline placeholder="예: 오늘 저녁까지 필요해요, 학생 개인 비용" placeholderTextColor="#9ca3af" style={[styles.input, { minHeight: 44 }]} />
+          </View>
+
+          <TouchableOpacity onPress={submit} disabled={busy} style={[styles.btn, { backgroundColor: '#059669', paddingVertical: 12, opacity: busy ? 0.5 : 1 }]}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{busy ? '저장 중...' : existing ? '수정 저장' : '요청 올리기'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+function SupplyRequestDetailMobile({ req: r, campCode, groups, views, isAdmin, userId, userName, onEdit, onMetoo, onClose }: {
+  req: SupplyRequest; campCode: string; groups: InventoryGroup[]; views: InventoryItemView[]; isAdmin: boolean; userId: string; userName: string;
+  onEdit: () => void; onMetoo: () => void; onClose: () => void;
+}) {
+  const mine = r.requesterId === userId;
+  const isOpen = isSupplyOpen(r.status);
+  const iAmBuyer = r.buyerId === userId;
+  const [mode, setMode] = useState<'none' | 'reject' | 'hold'>('none');
+  const isCamp = r.forType === 'camp';
+  const canIntake = isAdmin && isCamp && !r.stockApplied && r.status !== 'rejected';
+  const [intake, setIntake] = useState(false);
+  const [intakeLines, setIntakeLines] = useState(() => r.items.filter(l => l.itemId).map(l => ({
+    lineId: l.id, itemId: l.itemId!, itemName: l.name,
+    groupId: l.groupId ?? groups[0]?.id ?? '', quantity: String(l.quantity),
+  })));
+  const [reason, setReason] = useState('');
+  const [holdUntil, setHoldUntil] = useState(addDaysStr(7));
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const c = SUPPLY_STATUS_COLOR[r.status];
+  const run = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try { await fn(); } catch (e) { console.error(e); failAlert(); } finally { setBusy(false); }
+  };
+  const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
+    run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); setMode('none'); setReason(''); });
+  const send = () => run(async () => { await addSupplyComment(db, r.id, { uid: userId, name: userName, text: comment, admin: isAdmin }); setComment(''); });
+  const doIntake = () => run(async () => {
+    const lines = intakeLines.map(l => ({
+      itemId: l.itemId, itemName: l.itemName, groupId: l.groupId,
+      groupName: groups.find(g => g.id === l.groupId)?.name ?? '', quantity: Math.max(0, parseInt(l.quantity, 10) || 0),
+    }));
+    if (lines.some(l => !l.groupId)) { Alert.alert('확인 필요', '입고할 그룹을 골라주세요.'); return; }
+    await receiveSupplyRequest(db, campCode, r.id, lines, userName);
+    setIntake(false);
+  });
+  const purchase = () => (isCamp && isAdmin ? setIntake(true) : act('purchased'));
+  const remove = () => Alert.alert('요청 취소', '이 요청을 취소할까요?', [
+    { text: '아니요', style: 'cancel' },
+    { text: '취소하기', style: 'destructive', onPress: () => run(async () => { await deleteSupplyRequest(db, r.id); onClose(); }) },
+  ]);
+  const status = supplyStatusLine(r);
+  const HOLD_CHIPS: Array<[string, string]> = [['내일', addDaysStr(1)], ['3일 뒤', addDaysStr(3)], ['1주 뒤', addDaysStr(7)], ['2주 뒤', addDaysStr(14)], ['미정', '']];
+
+  return (
+    <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.modalCard}>
+        <View style={styles.modalHeader}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}><Text style={{ fontSize: 9, fontWeight: '700', color: c.fg }}>{SUPPLY_REQUEST_STATUS_LABELS[r.status]}</Text></View>
+              <Text style={styles.modalTitle}>{STORE_ICON[r.store]} {supplyStoreLabel(r)}</Text>
+            </View>
+            <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{r.requesterName} · {fmtDateTime(r.createdAt)}</Text>
+          </View>
+          <TouchableOpacity onPress={onClose} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 10 }} keyboardShouldPersistTaps="handled">
+          <View style={styles.pickedBox}>
+            <Text style={{ fontSize: 11, color: '#6b7280' }}>누구</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1e3a8a', flex: 1 }}>{r.forType === 'student' ? '👧 ' : '🧑‍🏫 '}{supplyForLabel(r)}</Text>
+          </View>
+          <View style={styles.listBox}>
+            {r.items.map((l, i) => {
+              const stock = l.itemId ? views.find(v => v.id === l.itemId) : undefined;
+              return (
+                <View key={l.id} style={[styles.row, i === r.items.length - 1 && { borderBottomWidth: 0 }]}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.rowName} numberOfLines={1}>{l.name}{isCamp && l.groupName ? <Text style={{ fontSize: 11, fontWeight: '400', color: '#047857' }}>  → {l.groupName}</Text> : null}</Text>
+                    {(l.memo || (isAdmin && stock)) ? <Text style={styles.rowGroups} numberOfLines={2}>{[l.memo, isAdmin && stock ? `캠프 재고 ${stock.total}${stock.unit}` : ''].filter(Boolean).join(' · ')}</Text> : null}
+                  </View>
+                  <Text style={[styles.rowTotal, { color: '#b45309', fontSize: 15 }]}>{l.quantity}<Text style={styles.rowUnit}>{l.unit}</Text></Text>
+                </View>
+              );
+            })}
+          </View>
+          {r.note ? <Text style={{ fontSize: 12, color: '#374151', backgroundColor: '#f9fafb', borderRadius: 8, padding: 10 }}>📝 {r.note}</Text> : null}
+          {(!isOpen || r.status === 'onhold') && (
+            <Text style={{ fontSize: 11, color: r.status === 'onhold' ? '#92400e' : '#4b5563', backgroundColor: r.status === 'onhold' ? '#fffbeb' : '#f9fafb', borderRadius: 8, padding: 8 }}>
+              {status}{r.handledBy && r.status !== 'purchased' ? ` · ${r.handledBy}` : ''} · {fmtDateTime(r.handledAt)}
+            </Text>
+          )}
+
+          {/* 사오기 */}
+          {isOpen && (r.buyerId ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ecfdf5', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }}>
+              <Text style={{ flex: 1, fontSize: 12, fontWeight: '700', color: '#065f46' }}>🙋 {iAmBuyer ? '제가' : `${r.buyerName} 쌤이`} 사오기로 했어요</Text>
+              {iAmBuyer && <TouchableOpacity onPress={() => run(() => setSupplyBuyer(db, [r.id], null))}><Text style={{ fontSize: 11, color: '#6b7280' }}>취소</Text></TouchableOpacity>}
+              {(iAmBuyer || isAdmin) && (
+                <TouchableOpacity onPress={purchase} disabled={busy} style={{ backgroundColor: '#059669', borderRadius: 6, paddingHorizontal: 9, paddingVertical: 5 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>✓ 사왔어요</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <TouchableOpacity onPress={() => run(() => setSupplyBuyer(db, [r.id], { uid: userId, name: userName }))} disabled={busy}
+              style={[styles.btn, { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0', flex: 0 }]}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#047857' }}>🙋 제가 사올게요</Text>
+            </TouchableOpacity>
+          ))}
+          {isOpen && (
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {!mine && <TouchableOpacity onPress={onMetoo} style={[styles.btn, { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a' }]}><Text style={{ fontSize: 12, fontWeight: '700', color: '#92400e' }}>🙋 나도 필요해요</Text></TouchableOpacity>}
+              {mine && <TouchableOpacity onPress={onEdit} style={[styles.btn, { backgroundColor: '#f3f4f6' }]}><Text style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>수정</Text></TouchableOpacity>}
+              {mine && <TouchableOpacity onPress={remove} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fecaca' }]}><Text style={{ fontSize: 12, color: '#ef4444' }}>요청 취소</Text></TouchableOpacity>}
+            </View>
+          )}
+
+          {/* 캠프 공용 → 재고 입고 */}
+          {canIntake && (intake ? (
+            <View style={{ borderWidth: 1, borderColor: '#6ee7b7', backgroundColor: '#ecfdf5', borderRadius: 10, padding: 9, gap: 7 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>📥 재고 입고 — 실제로 산 수량(낱개)과 넣을 그룹을 확인하세요</Text>
+              {intakeLines.map((l, idx) => (
+                <View key={l.lineId} style={{ gap: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.rowName, { flex: 1 }]} numberOfLines={1}>{l.itemName}</Text>
+                    <TextInput value={l.quantity} keyboardType="number-pad" onChangeText={v => setIntakeLines(ls => ls.map((x, i) => i === idx ? { ...x, quantity: v } : x))}
+                      style={[styles.input, { width: 64, textAlign: 'right', backgroundColor: '#fff', paddingVertical: 4 }]} />
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
+                    {groups.map(g => (
+                      <TouchableOpacity key={g.id} onPress={() => setIntakeLines(ls => ls.map((x, i) => i === idx ? { ...x, groupId: g.id } : x))} style={[styles.miniChip, l.groupId === g.id && { backgroundColor: '#a7f3d0' }]}>
+                        <Text style={[styles.miniChipText, l.groupId === g.id && { color: '#065f46' }]}>{g.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              ))}
+              {r.items.some(l => !l.itemId) && <Text style={{ fontSize: 10, color: '#6b7280' }}>재고 품목이 아닌 {r.items.filter(l => !l.itemId).map(l => l.name).join(', ')}은(는) 입고하지 않아요.</Text>}
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                <TouchableOpacity onPress={() => setIntake(false)} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#6b7280' }}>취소</Text></TouchableOpacity>
+                <TouchableOpacity onPress={doIntake} disabled={busy} style={[styles.btn, { backgroundColor: '#059669', paddingVertical: 7, flex: 2, opacity: busy ? 0.5 : 1 }]}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{r.status === 'purchased' ? '재고에 입고' : '구매 완료 + 재고 입고'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : r.status === 'purchased' ? (
+            <TouchableOpacity onPress={() => setIntake(true)} style={[styles.btn, { backgroundColor: '#f59e0b', flex: 0 }]}><Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>📥 재고에 입고하기</Text></TouchableOpacity>
+          ) : null)}
+
+          {/* 관리자 처리 */}
+          {isAdmin && (mode !== 'none' || isOpen || !r.stockApplied) && (
+            <View style={{ borderWidth: 1, borderColor: '#e0e7ff', backgroundColor: '#f5f7ff', borderRadius: 10, padding: 9, gap: 7 }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#4338ca' }}>관리자 처리</Text>
+              {mode === 'none' ? (
+                isOpen ? (
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity onPress={() => setMode('reject')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#6b7280' }}>반려</Text></TouchableOpacity>
+                    {r.status === 'onhold'
+                      ? <TouchableOpacity onPress={() => act('requested')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fde68a', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#92400e' }}>보류 해제</Text></TouchableOpacity>
+                      : <TouchableOpacity onPress={() => setMode('hold')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fde68a', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#92400e' }}>⏸ 보류</Text></TouchableOpacity>}
+                    <TouchableOpacity onPress={purchase} disabled={busy} style={[styles.btn, { backgroundColor: '#059669', paddingVertical: 7, flex: 1.4 }]}><Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>✓ 구매 완료{isCamp ? ' + 입고' : ''}</Text></TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={() => act('requested')} disabled={busy} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 7, flex: 0 }]}><Text style={{ fontSize: 11, color: '#374151' }}>다시 진행 중으로</Text></TouchableOpacity>
+                )
+              ) : (
+                <View style={{ gap: 6 }}>
+                  <TextInput value={reason} onChangeText={setReason} autoFocus placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]}
+                    placeholder={mode === 'reject' ? '반려 사유 (예: 캠프 재고로 대체, 살 필요 없음)' : '보류 사유 (예: 이번 장보기엔 못 사요)'} />
+                  {mode === 'hold' && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                      <Text style={{ fontSize: 10, color: '#6b7280', marginRight: 2 }}>구매 예정</Text>
+                      {HOLD_CHIPS.map(([label, val]) => (
+                        <TouchableOpacity key={label} onPress={() => setHoldUntil(val)} style={[styles.miniChip, holdUntil === val && styles.miniChipAmber]}>
+                          <Text style={[styles.miniChipText, holdUntil === val && { color: '#92400e' }]}>{label}{val ? ` ${fmtHoldDate(val)}` : ''}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity onPress={() => setMode('none')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#6b7280' }}>취소</Text></TouchableOpacity>
+                    <TouchableOpacity onPress={() => act(mode === 'reject' ? 'rejected' : 'onhold', { note: reason, holdUntil })} disabled={busy}
+                      style={[styles.btn, { backgroundColor: mode === 'reject' ? '#6b7280' : '#f59e0b', paddingVertical: 7 }]}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{mode === 'reject' ? '반려' : '보류'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* 메모·댓글 */}
+          <View style={{ gap: 6 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151' }}>💬 메모·댓글 {r.comments?.length ? r.comments.length : ''}</Text>
+            {(r.comments ?? []).map(cm => (
+              <View key={cm.id} style={{ backgroundColor: cm.admin ? '#eef2ff' : '#f9fafb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: cm.admin ? '#4338ca' : '#1f2937' }}>{cm.name}</Text>
+                  {cm.admin && <Text style={{ fontSize: 9, fontWeight: '700', color: '#4338ca', backgroundColor: '#e0e7ff', borderRadius: 3, paddingHorizontal: 3 }}>관리자</Text>}
+                  <Text style={{ fontSize: 10, color: '#9ca3af', flex: 1 }}>{fmtDateTime(cm.at)}</Text>
+                  {isAdmin && <TouchableOpacity onPress={() => run(() => deleteSupplyComment(db, r.id, cm))}><Text style={{ fontSize: 10, color: '#cbd5e1' }}>삭제</Text></TouchableOpacity>}
+                </View>
+                <Text style={{ fontSize: 12, color: '#374151', marginTop: 1 }}>{cm.text}</Text>
+              </View>
+            ))}
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <TextInput value={comment} onChangeText={setComment} placeholderTextColor="#9ca3af" style={[styles.input, { flex: 1 }]} multiline
+                placeholder={isAdmin ? '예: 이번엔 못 사고 다음 주에 살게요' : '예: 저희 반도 2개 필요해요'} />
+              <TouchableOpacity onPress={send} disabled={busy || !comment.trim()} style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy || !comment.trim() ? 0.3 : 1 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>등록</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -579,8 +1115,8 @@ function LostListMobile({ campCode, jobCodeId, students, campGroups, lostItems, 
           const c = LOST_STATUS_COLOR[l.status];
           return (
             <TouchableOpacity key={l.id} onPress={() => setOpenId(l.id)} style={[styles.card, { padding: 0, overflow: 'hidden', alignItems: 'stretch', borderColor: l.status === 'found' ? '#bfdbfe' : '#e5e7eb', opacity: l.status === 'found' ? 1 : 0.8 }]}>
-              <View style={{ width: 84, height: 84, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
-                {thumb ? <Image source={{ uri: thumb.url }} style={{ width: 84, height: 84 }} contentFit="cover" />
+              <View style={{ width: 60, height: 60, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
+                {thumb ? <Image source={{ uri: thumb.url }} style={{ width: 60, height: 60 }} contentFit="cover" />
                   : l.media.length > 0 ? <Ionicons name="videocam" size={24} color="#9ca3af" /> : <Ionicons name="image-outline" size={24} color="#d1d5db" />}
               </View>
               <View style={{ flex: 1, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center' }}>
@@ -598,10 +1134,10 @@ function LostListMobile({ campCode, jobCodeId, students, campGroups, lostItems, 
         <View style={{ height: 20 }} />
       </ScrollView>
 
-      <Modal visible={showForm} animationType="slide" transparent onRequestClose={() => setShowForm(false)}>
+      <Modal visible={showForm} animationType="fade" transparent onRequestClose={() => setShowForm(false)}>
         <LostItemFormMobile campCode={campCode} jobCodeId={jobCodeId} students={students} campGroups={campGroups} userId={userId} userName={userName} onClose={() => setShowForm(false)} onCreated={id => { setShowForm(false); setOpenId(id); }} />
       </Modal>
-      <Modal visible={!!opened} animationType="slide" transparent onRequestClose={() => setOpenId(null)}>
+      <Modal visible={!!opened} animationType="fade" transparent onRequestClose={() => setOpenId(null)}>
         {opened && <LostItemDetailMobile item={opened} isAdmin={isAdmin} userId={userId} userName={userName} onClose={() => setOpenId(null)} />}
       </Modal>
     </View>
@@ -1006,9 +1542,9 @@ const styles = StyleSheet.create({
   tabIndicator: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: '#059669' },
   badge: { minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f3f4f6', borderRadius: 9, paddingHorizontal: 9, paddingVertical: Platform.OS === 'ios' ? 7 : 3 },
   searchInput: { flex: 1, fontSize: 13, color: '#111827', padding: 0 },
-  chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
   chipActive: { backgroundColor: '#059669', borderColor: '#059669' },
   chipText: { fontSize: 11, fontWeight: '600', color: '#4b5563' },
   chipTextActive: { color: '#fff' },
@@ -1025,13 +1561,61 @@ const styles = StyleSheet.create({
   total: { fontSize: 18, fontWeight: '800', color: '#047857', lineHeight: 22 },
   totalUnit: { fontSize: 10, fontWeight: '600', color: '#9ca3af' },
   totalLabel: { fontSize: 9, color: '#9ca3af' },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '92%' },
+  modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 40, backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalCard: { backgroundColor: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '88%', overflow: 'hidden' },
   modalHeader: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', gap: 8 },
   modalTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 },
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 12, color: '#111827', backgroundColor: '#fff' },
   btn: { flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: 'center' },
   label: { fontSize: 11, fontWeight: '700', color: '#374151', marginBottom: 4 },
+  toolbar: { backgroundColor: '#fff', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8, gap: 7, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  requestBanner: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#eff6ff', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6 },
+  requestBannerText: { flex: 1, fontSize: 11, fontWeight: '600', color: '#1e40af' },
+  miniChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: '#f3f4f6' },
+  miniChipDark: { backgroundColor: '#1f2937' },
+  miniChipRed: { backgroundColor: '#dc2626' },
+  miniChipAmber: { backgroundColor: '#fef3c7' },
+  miniChipText: { fontSize: 11, fontWeight: '600', color: '#4b5563' },
+  vDivider: { width: 1, height: 14, backgroundColor: '#e5e7eb', marginHorizontal: 2 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 5, backgroundColor: '#f1f5f9' },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#059669', borderRadius: 10, paddingVertical: 10 },
+  primaryBtnText: { fontSize: 13, fontWeight: '800', color: '#fff' },
+  formLabel: { fontSize: 12, fontWeight: '800', color: '#1f2937', marginBottom: 6 },
+  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 9, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  segBtnOn: { backgroundColor: '#1f2937', borderColor: '#1f2937' },
+  segBtnText: { fontSize: 12, fontWeight: '700', color: '#374151' },
+  pickedBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#eff6ff', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9 },
+  qtyBtn: { width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  qtyBtnText: { fontSize: 15, color: '#374151' },
+  statBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 1, backgroundColor: '#fff', borderWidth: 1, borderRadius: 10, paddingVertical: 8 },
+  statNum: { fontSize: 18, fontWeight: '800' },
+  statLabel: { fontSize: 10, color: '#6b7280', fontWeight: '600' },
+  blockHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
+  blockTitle: { fontSize: 13, fontWeight: '800', color: '#1f2937' },
+  listBox: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden' },
+  actBtn: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  actBtnText: { fontSize: 11, fontWeight: '700', color: '#4b5563' },
+  secAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, backgroundColor: '#475569' },
+  secAllBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  secBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, borderWidth: 1 },
+  secBtnOn: { backgroundColor: '#ecfdf5', borderColor: '#6ee7b7' },
+  secBtnOff: { backgroundColor: '#fff', borderColor: '#e5e7eb', borderStyle: 'dashed' },
+  secBtnText: { fontSize: 11, fontWeight: '700' },
+  sectionHeaderText: { fontSize: 11, fontWeight: '700', color: '#475569' },
+  sectionHeaderCount: { fontSize: 10, color: '#94a3b8' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
+  rowName: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  rowMeta: { fontSize: 11, fontWeight: '400', color: '#9ca3af' },
+  rowGroups: { fontSize: 11, color: '#6b7280', marginTop: 1 },
+  rowGroupLow: { color: '#dc2626', fontWeight: '700' },
+  rowGroupFocus: { color: '#92400e', fontWeight: '700' },
+  rowTotal: { fontSize: 16, fontWeight: '800', color: '#047857' },
+  rowUnit: { fontSize: 10, fontWeight: '600', color: '#9ca3af' },
+  rowTotalSub: { fontSize: 9, color: '#9ca3af' },
+  badgeLow: { backgroundColor: '#fef2f2', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  badgeLowText: { fontSize: 9, fontWeight: '700', color: '#dc2626' },
+  badgeWarn: { backgroundColor: '#fff7ed', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1, borderColor: '#fdba74' },
+  badgeWarnText: { fontSize: 9, fontWeight: '700', color: '#c2410c' },
   mediaBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: '#93c5fd', backgroundColor: '#eff6ff' },
   mediaBtnText: { fontSize: 11, fontWeight: '700', color: '#1d4ed8' },
   thumb: { width: 72, height: 72, borderRadius: 8, overflow: 'hidden', backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },

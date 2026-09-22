@@ -318,80 +318,148 @@ export function sortInventoryItems<T extends InventoryItem>(items: T[]): T[] {
   );
 }
 
-// ==================== 재고 요청 취합 · 구매 목록 ====================
+// ==================== 구매 요청 (멘토가 올림) ====================
+// 멘토가 "누가(학생/멘토) · 어디서(다이소/약국/마트/기타) · 무엇이" 필요한지 올리면
+// 관리자(구매 담당)가 구매처별로 모아 보고 구매 완료/반려 처리한다.
 
-export const INVENTORY_REQUEST_STATUSES = ['open', 'closed'] as const;
-export type InventoryRequestStatus = (typeof INVENTORY_REQUEST_STATUSES)[number];
+export const SUPPLY_STORES = ['다이소', '약국', '마트', '기타'] as const;
+export type SupplyStore = (typeof SUPPLY_STORES)[number];
 
-/** 관리자가 만든 재고 요청 (예: "9월 재고 요청") — 캠프별 */
-export interface InventoryRequest {
-  id: string;
-  campCode: string;
-  title: string;
-  status: InventoryRequestStatus;
-  /** 마감일 "YYYY-MM-DD" (선택) */
-  dueDate?: string;
-  note?: string;
-  createdBy: string;
-  createdById: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  closedAt?: Timestamp;
+export const SUPPLY_REQUEST_STATUSES = ['requested', 'onhold', 'purchased', 'rejected'] as const;
+export type SupplyRequestStatus = (typeof SUPPLY_REQUEST_STATUSES)[number];
+export const SUPPLY_REQUEST_STATUS_LABELS: Record<SupplyRequestStatus, string> = {
+  requested: '요청',
+  onhold: '보류',
+  purchased: '구매 완료',
+  rejected: '반려',
+};
+/** 누구를 위한 요청인가: 학생 / 멘토 / 캠프 공용 재고(구매 후 재고에 입고) */
+export type SupplyForType = 'student' | 'mentor' | 'camp';
+
+/** 캠프 공용 요청인데 구매 완료 후 아직 재고 입고를 안 한 상태 */
+export const needsStockIntake = (r: Pick<SupplyRequest, 'forType' | 'status' | 'stockApplied' | 'items'>): boolean =>
+  r.forType === 'camp' && r.status === 'purchased' && !r.stockApplied && r.items.some(l => l.itemId && l.groupId);
+
+/** 품목 → 기본 구매처 (의약품은 약국, 그 외 다이소) */
+export function defaultStoreForItem(item: Pick<InventoryItem, 'usage' | 'category'>): SupplyStore {
+  const u = getItemUsage(item);
+  return u === 'oral' || u === 'topical' ? '약국' : '다이소';
 }
 
-/** 요청 항목 1줄 */
-export interface InventoryRequestLine {
+/** 재고 부족분 중 아직 진행 중인 캠프 공용 요청에 들어가 있지 않은 것 */
+export function uncoveredPurchaseNeeds(needs: PurchaseNeed[], requests: SupplyRequest[]): PurchaseNeed[] {
+  const covered = new Set<string>();
+  requests.forEach(r => {
+    if (r.forType !== 'camp' || !isSupplyOpen(r.status)) return;
+    r.items.forEach(l => { if (l.itemId) covered.add(`${l.itemId}|${l.groupId ?? ''}`); });
+  });
+  return needs.filter(n => !covered.has(`${n.itemId}|${n.groupId}`));
+}
+
+/** 아직 끝나지 않은 요청 (요청 · 보류) */
+export const isSupplyOpen = (s: SupplyRequestStatus): boolean => s === 'requested' || s === 'onhold';
+
+/** 요청에 달리는 메모·댓글 — 누구나 ("나도 필요해요", "캠프 재고로 대체", "다음 주에 살게요") */
+export interface SupplyComment {
+  id: string;
+  uid: string;
+  name: string;
+  text: string;
+  at: Timestamp;
+  /** 관리자 메모 여부 (강조 표시) */
+  admin?: boolean;
+}
+
+/** 요청 물품 1줄 */
+export interface SupplyRequestLine {
   id: string;
   /** 재고 품목과 연결된 경우 (직접 입력이면 없음) */
   itemId?: string;
   name: string;
   quantity: number;
-  /** 요청 단위는 자유 (개, 박스, 통 …) — 입고 시 낱개로 환산 */
+  /** 요청 단위는 자유 (개, 박스, 통 …) */
   unit: string;
   memo?: string;
+  /** 캠프 공용 요청: 입고할 재고 그룹 */
+  groupId?: string;
+  groupName?: string;
 }
 
-/** 선생님 1명의 요청 — 문서 ID = `${requestId}__${userId}` */
-export interface InventoryRequestEntry {
+/** 멘토 구매 요청 1건 — 캠프별 */
+export interface SupplyRequest {
   id: string;
-  requestId: string;
   campCode: string;
-  userId: string;
-  userName: string;
-  items: InventoryRequestLine[];
+  /** 누구를 위한 것인지: 학생 / 멘토(선생님) */
+  forType: SupplyForType;
+  studentId?: string;
+  studentName?: string;
+  studentClass?: string;
+  /** 어디서 */
+  store: SupplyStore;
+  /** 기타 구매처 이름 */
+  storeEtc?: string;
+  items: SupplyRequestLine[];
+  note?: string;
+  status: SupplyRequestStatus;
+  requesterId: string;
+  requesterName: string;
+  handledBy?: string;
+  handledAt?: Timestamp;
+  /** 반려·보류 사유 */
+  statusNote?: string;
+  /** 보류 시 구매 예정일 (YYYY-MM-DD) */
+  holdUntil?: string;
+  /** "제가 사올게요" — 사오기로 한 사람 */
+  buyerId?: string;
+  buyerName?: string;
+  buyerAt?: Timestamp;
+  comments?: SupplyComment[];
+  /** 캠프 공용: 구매 후 재고에 입고 반영했는지 */
+  stockApplied?: boolean;
+  stockAppliedAt?: Timestamp;
+  stockAppliedBy?: string;
+  createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
-export function requestEntryDocId(requestId: string, userId: string): string {
-  return `${requestId}__${userId}`;
+export function supplyStoreLabel(r: Pick<SupplyRequest, 'store' | 'storeEtc'>): string {
+  return r.store === '기타' && r.storeEtc?.trim() ? r.storeEtc.trim() : r.store;
 }
 
-/** 품목·단위별 합산 결과 */
-export interface InventoryRequestSummary {
-  key: string;
-  itemId?: string;
-  name: string;
-  unit: string;
-  total: number;
-  /** 누가 얼마나 요청했는지 */
-  requesters: Array<{ userName: string; quantity: number; memo?: string }>;
+/** "누구" 표시: 학생이면 이름(반), 멘토면 요청자(멘토) */
+export function supplyForLabel(r: Pick<SupplyRequest, 'forType' | 'studentName' | 'studentClass' | 'requesterName'>): string {
+  if (r.forType === 'camp') return '캠프 공용';
+  if (r.forType === 'student') return `${r.studentName ?? '학생'}${r.studentClass ? `(${r.studentClass})` : ''}`;
+  return `${r.requesterName} 쌤`;
 }
 
-/** 여러 선생님의 요청을 같은 품목(연결된 품목 ID 또는 이름)+단위로 자동 합산 */
-export function summarizeRequestEntries(entries: InventoryRequestEntry[]): InventoryRequestSummary[] {
-  const map = new Map<string, InventoryRequestSummary>();
-  entries.forEach(e => {
-    (e.items ?? []).forEach(line => {
-      if (!line.name?.trim() || !(line.quantity > 0)) return;
-      const unit = (line.unit || '개').trim();
-      const key = `${line.itemId ?? `name:${line.name.trim()}`}|${unit}`;
-      if (!map.has(key)) map.set(key, { key, itemId: line.itemId, name: line.name.trim(), unit, total: 0, requesters: [] });
-      const s = map.get(key)!;
-      s.total += line.quantity;
-      s.requesters.push({ userName: e.userName, quantity: line.quantity, ...(line.memo ? { memo: line.memo } : {}) });
+/** 구매처별 · 품목(연결된 품목 ID 또는 이름)+단위별 합산 — 장보기 목록용 */
+export interface SupplyStoreSummary {
+  store: string;
+  requestIds: string[];
+  lines: Array<{ key: string; itemId?: string; name: string; unit: string; total: number; who: string[] }>;
+}
+export function summarizeSupplyRequests(requests: SupplyRequest[]): SupplyStoreSummary[] {
+  const byStore = new Map<string, SupplyStoreSummary>();
+  requests.forEach(r => {
+    const store = supplyStoreLabel(r);
+    if (!byStore.has(store)) byStore.set(store, { store, requestIds: [], lines: [] });
+    const g = byStore.get(store)!;
+    g.requestIds.push(r.id);
+    (r.items ?? []).forEach(l => {
+      if (!l.name?.trim() || !(l.quantity > 0)) return;
+      const unit = (l.unit || '개').trim();
+      const key = `${l.itemId ?? `name:${l.name.trim()}`}|${unit}`;
+      let line = g.lines.find(x => x.key === key);
+      if (!line) { line = { key, itemId: l.itemId, name: l.name.trim(), unit, total: 0, who: [] }; g.lines.push(line); }
+      line.total += l.quantity;
+      line.who.push(r.forType === 'camp' ? `공용${l.groupName ? `(${l.groupName})` : ''} ${l.quantity}` : `${supplyForLabel(r)} ${l.quantity}`);
     });
   });
-  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko') || a.unit.localeCompare(b.unit, 'ko'));
+  const order = (s: string) => { const i = (SUPPLY_STORES as readonly string[]).indexOf(s); return i < 0 ? 3.5 : i; };
+  return [...byStore.values()]
+    .map(g => ({ ...g, lines: g.lines.sort((a, b) => a.name.localeCompare(b.name, 'ko')) }))
+    .sort((a, b) => order(a.store) - order(b.store) || a.store.localeCompare(b.store, 'ko'));
 }
 
 export const PURCHASE_STATUSES = ['needed', 'ordered', 'received'] as const;

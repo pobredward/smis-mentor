@@ -844,25 +844,53 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // 재고 요청(관리자 생성) · 선생님별 입력(본인 문서만, 문서 ID = requestId__uid) · 구매 목록(관리자)
-    match /inventoryRequests/{requestId} {
+    // 구매 요청: 캠프 스태프 누구나 올림(본인 명의). 본인은 '요청' 상태일 때만 수정·삭제,
+    // 처리(구매 완료/반려)는 관리자
+    match /supplyRequests/{requestId} {
       allow read: if isCampStaff();
-      allow create, update, delete: if isAdmin();
-    }
-
-    match /inventoryRequestEntries/{entryId} {
-      allow read: if isCampStaff();
-      allow create, update: if (
-        isAdmin() ||
-        (
-          isCampStaff() &&
-          request.resource.data.userId == request.auth.uid &&
-          entryId == request.resource.data.requestId + '__' + request.auth.uid &&
-          // 마감된 요청에는 입력 불가
-          get(/databases/$(database)/documents/inventoryRequests/$(request.resource.data.requestId)).data.status == 'open'
-        )
+      allow create: if (
+        isCampStaff() &&
+        request.resource.data.requesterId == request.auth.uid &&
+        request.resource.data.status == 'requested' &&
+        request.resource.data.store in ['다이소', '약국', '마트', '기타'] &&
+        request.resource.data.items is list
       );
-      allow delete: if isAdmin() || (isCampStaff() && resource.data.userId == request.auth.uid);
+      function supplyOpen(s) { return s in ['requested', 'onhold']; }
+      function supplyChanged() { return request.resource.data.diff(resource.data).affectedKeys(); }
+      allow update: if isAdmin() || (isCampStaff() && (
+        // ① 작성자 — 진행 중일 때 내용 수정
+        (
+          resource.data.requesterId == request.auth.uid &&
+          supplyOpen(resource.data.status) &&
+          supplyChanged().hasOnly(['forType', 'studentId', 'studentName', 'studentClass', 'store', 'storeEtc', 'items', 'note', 'updatedAt']) &&
+          request.resource.data.store in ['다이소', '약국', '마트', '기타'] &&
+          request.resource.data.items is list
+        ) ||
+        // ② 누구나 — 댓글 1개 추가 (본인 이름으로)
+        (
+          supplyChanged().hasOnly(['comments', 'updatedAt']) &&
+          request.resource.data.comments is list &&
+          request.resource.data.comments.size() == resource.data.get('comments', []).size() + 1 &&
+          request.resource.data.comments[request.resource.data.comments.size() - 1].uid == request.auth.uid
+        ) ||
+        // ③ 누구나 — "제가 사올게요" / 본인이 한 것 취소
+        (
+          supplyOpen(resource.data.status) &&
+          supplyChanged().hasOnly(['buyerId', 'buyerName', 'buyerAt', 'updatedAt']) &&
+          (
+            (resource.data.get('buyerId', null) == null && request.resource.data.buyerId == request.auth.uid) ||
+            (resource.data.get('buyerId', null) == request.auth.uid && request.resource.data.get('buyerId', null) == null)
+          )
+        ) ||
+        // ④ 사오기로 한 사람 — 구매 완료 처리
+        (
+          resource.data.get('buyerId', null) == request.auth.uid &&
+          supplyOpen(resource.data.status) &&
+          request.resource.data.status == 'purchased' &&
+          supplyChanged().hasOnly(['status', 'handledBy', 'handledAt', 'statusNote', 'holdUntil', 'updatedAt'])
+        )
+      ));
+      allow delete: if isAdmin() || (isCampStaff() && resource.data.requesterId == request.auth.uid && resource.data.status in ['requested', 'onhold']);
     }
 
     match /purchaseItems/{purchaseId} {

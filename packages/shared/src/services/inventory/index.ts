@@ -9,6 +9,7 @@ import {
   deleteDoc,
   getDocs,
   arrayUnion,
+  arrayRemove,
   onSnapshot,
   writeBatch,
   runTransaction,
@@ -25,14 +26,17 @@ import type {
   InventoryStock,
   InventoryMovement,
   InventoryMovementReason,
-  InventoryRequest,
-  InventoryRequestEntry,
+  SupplyRequest,
+  SupplyRequestStatus,
+  SupplyComment,
+  SupplyStore,
+  PurchaseNeed,
   PurchaseItem,
   LostItem,
   LostItemMedia,
   LostItemStatus,
 } from '../../types/inventory';
-import { stockDocId, sortInventoryItems, requestEntryDocId } from '../../types/inventory';
+import { stockDocId, sortInventoryItems, supplyStoreLabel, defaultStoreForItem } from '../../types/inventory';
 import type { MedicationDose } from '../../types/camp';
 import { logger } from '../../utils/logger';
 
@@ -509,45 +513,203 @@ function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
   return out as T;
 }
 
-// ==================== 재고 요청 취합 · 구매 목록 ====================
+// ==================== 구매 요청 (멘토) · 구매 목록 ====================
 
-const REQUESTS = 'inventoryRequests';
-const REQUEST_ENTRIES = 'inventoryRequestEntries';
+const SUPPLY_REQUESTS = 'supplyRequests';
 const PURCHASES = 'purchaseItems';
 
-/** 캠프의 재고 요청 목록 구독 (진행 중 먼저, 최신순) */
-export const subscribeInventoryRequests = (
+/** 캠프 구매 요청 구독 (요청 → 완료/반려, 최신순) */
+export const subscribeSupplyRequests = (
   db: Firestore,
   campCode: string,
-  onData: (requests: InventoryRequest[]) => void,
+  onData: (requests: SupplyRequest[]) => void,
   onError?: (error: Error) => void
 ): Unsubscribe =>
   onSnapshot(
-    query(collection(db, REQUESTS), where('campCode', '==', campCode)),
-    (snap) => onData(
-      snap.docs
-        .map(d => ({ id: d.id, ...d.data() }) as InventoryRequest)
-        .sort((a, b) => (a.status === b.status ? 0 : a.status === 'open' ? -1 : 1) || (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
-    ),
-    (error) => { logger.error('재고 요청 구독 오류:', error); onError?.(error); }
+    query(collection(db, SUPPLY_REQUESTS), where('campCode', '==', campCode)),
+    (snap) => {
+      const rank: Record<string, number> = { requested: 0, onhold: 1, purchased: 2, rejected: 3 };
+      onData(
+        snap.docs
+          .map(d => {
+            const x = d.data();
+            return { id: d.id, ...x, items: Array.isArray(x.items) ? x.items : [], comments: Array.isArray(x.comments) ? x.comments : [] } as SupplyRequest;
+          })
+          .sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+      );
+    },
+    (error) => { logger.error('구매 요청 구독 오류:', error); onError?.(error); }
   );
 
-/** 특정 요청의 선생님별 입력 구독 */
-export const subscribeInventoryRequestEntries = (
+function cleanLines(items: SupplyRequest['items']) {
+  return items
+    .filter(l => l.name?.trim() && l.quantity > 0)
+    .map(l => stripUndefined({ ...l, name: l.name.trim(), unit: (l.unit || '개').trim(), memo: l.memo?.trim() || undefined }));
+}
+
+/** 구매 요청 올리기 (멘토·외국인 선생님·관리자 모두) */
+export const addSupplyRequest = async (
+  db: Firestore,
+  data: Pick<SupplyRequest, 'campCode' | 'forType' | 'studentId' | 'studentName' | 'studentClass' | 'store' | 'storeEtc' | 'items' | 'note' | 'requesterId' | 'requesterName'>
+): Promise<string> => {
+  const now = Timestamp.now();
+  const ref = await addDoc(collection(db, SUPPLY_REQUESTS), stripUndefined({
+    ...data, items: cleanLines(data.items), note: data.note?.trim() || undefined,
+    status: 'requested', createdAt: now, updatedAt: now,
+  }));
+  logger.info('구매 요청 등록:', ref.id);
+  return ref.id;
+};
+
+/** 요청 수정 (본인, '요청' 상태일 때) */
+export const updateSupplyRequest = async (
   db: Firestore,
   requestId: string,
-  onData: (entries: InventoryRequestEntry[]) => void,
-  onError?: (error: Error) => void
-): Unsubscribe =>
-  onSnapshot(
-    query(collection(db, REQUEST_ENTRIES), where('requestId', '==', requestId)),
-    (snap) => onData(
-      snap.docs
-        .map(d => ({ id: d.id, ...d.data(), items: Array.isArray(d.data().items) ? d.data().items : [] }) as InventoryRequestEntry)
-        .sort((a, b) => a.userName.localeCompare(b.userName, 'ko'))
-    ),
-    (error) => { logger.error('재고 요청 입력 구독 오류:', error); onError?.(error); }
-  );
+  updates: Partial<Pick<SupplyRequest, 'forType' | 'studentId' | 'studentName' | 'studentClass' | 'store' | 'storeEtc' | 'items' | 'note'>>
+): Promise<void> => {
+  const data: Record<string, unknown> = { ...updates, updatedAt: Timestamp.now() };
+  if (updates.items) data.items = cleanLines(updates.items);
+  // 학생 → 멘토·캠프 공용으로 바꾸면 학생 정보 제거
+  if (updates.forType && updates.forType !== 'student') { data.studentId = null; data.studentName = null; data.studentClass = null; }
+  if (updates.store && updates.store !== '기타') data.storeEtc = null;
+  await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), stripUndefined(data));
+};
+
+/**
+ * 상태 변경: 구매 완료 / 보류 / 반려 / 다시 요청으로
+ * - 관리자: 모두
+ * - 사오기로 한 사람(buyer): 자기 요청을 구매 완료로 (보안 규칙에서 검사)
+ */
+export const setSupplyRequestStatus = async (
+  db: Firestore,
+  requestIds: string[],
+  status: SupplyRequestStatus,
+  handledBy: string,
+  opts?: { note?: string; holdUntil?: string }
+): Promise<void> => {
+  const now = Timestamp.now();
+  const batch = writeBatch(db);
+  requestIds.forEach(id => batch.update(doc(db, SUPPLY_REQUESTS, id), {
+    status,
+    handledBy: status === 'requested' ? null : handledBy,
+    handledAt: status === 'requested' ? null : now,
+    statusNote: status === 'rejected' || status === 'onhold' ? (opts?.note?.trim() || null) : null,
+    holdUntil: status === 'onhold' ? (opts?.holdUntil || null) : null,
+    updatedAt: now,
+  }));
+  await batch.commit();
+};
+
+/**
+ * 캠프 공용 요청 → 재고 입고 (관리자). 한 트랜잭션:
+ * 이미 입고했으면 중단 → 두 명이 동시에 눌러도 한 번만 반영. 아직 구매 완료 전이면 구매 완료로 함께 바꾼다.
+ */
+export const receiveSupplyRequest = async (
+  db: Firestore,
+  campCode: string,
+  requestId: string,
+  lines: Array<{ itemId: string; itemName: string; groupId: string; groupName: string; quantity: number }>,
+  by: string
+): Promise<void> => {
+  await runTransaction(db, async tx => {
+    const rRef = doc(db, SUPPLY_REQUESTS, requestId);
+    const rSnap = await tx.get(rRef);
+    if (!rSnap.exists()) throw new Error('요청이 삭제되었습니다.');
+    const r = rSnap.data() as SupplyRequest;
+    if (r.stockApplied) throw new Error('이미 재고에 입고된 요청입니다.');
+    const now = Timestamp.now();
+    // 같은 품목은 재고 문서 한 번에 쓰기
+    const perItem = new Map<string, Record<string, number>>();
+    lines.filter(l => l.quantity > 0).forEach(l => {
+      const acc = perItem.get(l.itemId) ?? {};
+      acc[l.groupId] = (acc[l.groupId] ?? 0) + l.quantity;
+      perItem.set(l.itemId, acc);
+    });
+    perItem.forEach((groups, itemId) => {
+      const stocks: Record<string, ReturnType<typeof increment>> = {};
+      Object.entries(groups).forEach(([g, n]) => { stocks[g] = increment(n); });
+      tx.set(doc(db, STOCKS, stockDocId(campCode, itemId)), { campCode, itemId, stocks, updatedAt: now }, { merge: true });
+    });
+    lines.filter(l => l.quantity > 0).forEach(l => {
+      tx.set(doc(collection(db, MOVEMENTS)), {
+        campCode, itemId: l.itemId, itemName: l.itemName, groupId: l.groupId, groupName: l.groupName,
+        delta: l.quantity, reason: 'restock', refLabel: `구매 요청 입고 (${supplyStoreLabel(r)})`, at: now, by,
+      });
+    });
+    tx.update(rRef, stripUndefined({
+      stockApplied: true, stockAppliedAt: now, stockAppliedBy: by, updatedAt: now,
+      ...(r.status !== 'purchased' ? { status: 'purchased', handledBy: by, handledAt: now, statusNote: null, holdUntil: null } : {}),
+    }));
+  });
+};
+
+/** 재고 부족분 → 캠프 공용 요청으로 (구매처별 1건씩) */
+export const addCampRequestsFromNeeds = async (
+  db: Firestore,
+  campCode: string,
+  needs: PurchaseNeed[],
+  items: InventoryItem[],
+  requester: { uid: string; name: string }
+): Promise<number> => {
+  const byStore = new Map<SupplyStore, SupplyRequest['items']>();
+  needs.forEach((n, i) => {
+    const item = items.find(x => x.id === n.itemId);
+    const store = item ? defaultStoreForItem(item) : '다이소';
+    if (!byStore.has(store)) byStore.set(store, []);
+    byStore.get(store)!.push({
+      id: `${Date.now().toString(36)}-${i}`, itemId: n.itemId, name: n.itemName, quantity: n.shortage, unit: n.unit,
+      groupId: n.groupId, groupName: n.groupName, memo: `최소 ${n.min} · 현재 ${n.current}`,
+    });
+  });
+  for (const [store, lines] of byStore) {
+    await addSupplyRequest(db, {
+      campCode, forType: 'camp', store, items: lines, note: '재고 부족 자동 계산',
+      requesterId: requester.uid, requesterName: requester.name,
+    });
+  }
+  return byStore.size;
+};
+
+/** "제가 사올게요" / 취소 (buyer = null) — 여러 건 한 번에 */
+export const setSupplyBuyer = async (
+  db: Firestore,
+  requestIds: string[],
+  buyer: { uid: string; name: string } | null
+): Promise<void> => {
+  const now = Timestamp.now();
+  const batch = writeBatch(db);
+  requestIds.forEach(id => batch.update(doc(db, SUPPLY_REQUESTS, id), {
+    buyerId: buyer?.uid ?? null,
+    buyerName: buyer?.name ?? null,
+    buyerAt: buyer ? now : null,
+    updatedAt: now,
+  }));
+  await batch.commit();
+};
+
+/** 메모·댓글 달기 (누구나) */
+export const addSupplyComment = async (
+  db: Firestore,
+  requestId: string,
+  c: { uid: string; name: string; text: string; admin?: boolean }
+): Promise<void> => {
+  const text = c.text.trim();
+  if (!text) return;
+  const comment: SupplyComment = stripUndefined({
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    uid: c.uid, name: c.name, text, at: Timestamp.now(), admin: c.admin || undefined,
+  });
+  await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), { comments: arrayUnion(comment), updatedAt: Timestamp.now() });
+};
+
+/** 댓글 삭제 (관리자) */
+export const deleteSupplyComment = async (db: Firestore, requestId: string, comment: SupplyComment): Promise<void> => {
+  await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), { comments: arrayRemove(comment), updatedAt: Timestamp.now() });
+};
+
+export const deleteSupplyRequest = async (db: Firestore, requestId: string): Promise<void> => {
+  await deleteDoc(doc(db, SUPPLY_REQUESTS, requestId));
+};
 
 /** 캠프 구매 목록 구독 (필요 → 주문 → 입고 순, 최신순) */
 export const subscribePurchaseItems = (
@@ -569,64 +731,13 @@ export const subscribePurchaseItems = (
     (error) => { logger.error('구매 목록 구독 오류:', error); onError?.(error); }
   );
 
-/** 재고 요청 만들기 (관리자) */
-export const createInventoryRequest = async (
-  db: Firestore,
-  data: Omit<InventoryRequest, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'closedAt'>
-): Promise<string> => {
-  const now = Timestamp.now();
-  const ref = await addDoc(collection(db, REQUESTS), stripUndefined({ ...data, status: 'open', createdAt: now, updatedAt: now }));
-  logger.info('재고 요청 생성:', ref.id);
-  return ref.id;
-};
-
-export const updateInventoryRequest = async (
-  db: Firestore,
-  requestId: string,
-  updates: Partial<Pick<InventoryRequest, 'title' | 'dueDate' | 'note' | 'status'>>
-): Promise<void> => {
-  await updateDoc(doc(db, REQUESTS, requestId), stripUndefined({
-    ...updates,
-    ...(updates.status === 'closed' ? { closedAt: Timestamp.now() } : {}),
-    updatedAt: Timestamp.now(),
-  }));
-};
-
-export const deleteInventoryRequest = async (db: Firestore, requestId: string): Promise<void> => {
-  // 입력들도 함께 삭제
-  const snap = await getDocs(query(collection(db, REQUEST_ENTRIES), where('requestId', '==', requestId)));
-  const batch = writeBatch(db);
-  snap.docs.forEach(d => batch.delete(d.ref));
-  batch.delete(doc(db, REQUESTS, requestId));
-  await batch.commit();
-  logger.info('재고 요청 삭제:', requestId);
-};
-
-/** 내 요청 저장 (문서 ID = requestId__userId, 덮어쓰기) */
-export const saveInventoryRequestEntry = async (
-  db: Firestore,
-  data: Omit<InventoryRequestEntry, 'id' | 'updatedAt'>
-): Promise<void> => {
-  const items = data.items
-    .filter(l => l.name.trim() && l.quantity > 0)
-    .map(l => stripUndefined({ ...l, name: l.name.trim(), unit: (l.unit || '개').trim(), memo: l.memo?.trim() || undefined }));
-  await setDoc(doc(db, REQUEST_ENTRIES, requestEntryDocId(data.requestId, data.userId)), {
-    requestId: data.requestId,
-    campCode: data.campCode,
-    userId: data.userId,
-    userName: data.userName,
-    items,
-    updatedAt: Timestamp.now(),
-  });
-};
-
-/** 취합 결과를 구매 목록에 추가 (관리자) */
+/** 구매 목록에 추가 (관리자) */
 export const addPurchaseItems = async (
   db: Firestore,
   campCode: string,
   lines: Array<Pick<PurchaseItem, 'itemId' | 'name' | 'quantity' | 'unit' | 'memo' | 'groupId' | 'groupName'> & { source?: PurchaseItem['source'] }>,
   by: string,
-  request?: Pick<InventoryRequest, 'id' | 'title'>
+  request?: { id: string; title: string }
 ): Promise<number> => {
   const now = Timestamp.now();
   const batch = writeBatch(db);

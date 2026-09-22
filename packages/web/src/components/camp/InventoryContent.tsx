@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { FiBox, FiSearch, FiPlus, FiShoppingCart, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCheck, FiCamera, FiImage, FiVideo } from 'react-icons/fi';
+import { FiBox, FiSearch, FiPlus, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCamera, FiImage, FiVideo } from 'react-icons/fi';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { db, storage } from '@/lib/firebase';
@@ -33,19 +33,24 @@ import {
   getItemUsage,
   INVENTORY_USAGES,
   INVENTORY_USAGE_LABELS,
-  subscribeInventoryRequests,
-  subscribeInventoryRequestEntries,
-  subscribePurchaseItems,
-  createInventoryRequest,
-  updateInventoryRequest,
-  deleteInventoryRequest,
-  saveInventoryRequestEntry,
-  addPurchaseItems,
-  updatePurchaseItem,
-  deletePurchaseItem,
-  receivePurchaseItem,
-  summarizeRequestEntries,
-  PURCHASE_STATUS_LABELS,
+  subscribeSupplyRequests,
+  addSupplyRequest,
+  updateSupplyRequest,
+  setSupplyRequestStatus,
+  setSupplyBuyer,
+  addSupplyComment,
+  deleteSupplyComment,
+  deleteSupplyRequest,
+  summarizeSupplyRequests,
+  isSupplyOpen,
+  supplyStoreLabel,
+  supplyForLabel,
+  SUPPLY_STORES,
+  SUPPLY_REQUEST_STATUS_LABELS,
+  receiveSupplyRequest,
+  addCampRequestsFromNeeds,
+  needsStockIntake,
+  uncoveredPurchaseNeeds,
   subscribeLostItems,
   addLostItem,
   updateLostItem,
@@ -75,10 +80,12 @@ import type {
   InventoryMovement,
   InventoryCategory,
   PurchaseNeed,
-  InventoryRequest,
-  InventoryRequestEntry,
-  InventoryRequestLine,
-  PurchaseItem,
+  SupplyRequest,
+  SupplyRequestLine,
+  SupplyRequestStatus,
+  SupplyStore,
+  SupplyStoreSummary,
+  SupplyForType,
   LostItem,
   LostItemMedia,
   LostItemStatus,
@@ -86,7 +93,7 @@ import type {
   CampGroup,
 } from '@smis-mentor/shared';
 
-type SubTab = 'stock' | 'request' | 'purchase' | 'lost' | 'manage';
+type SubTab = 'stock' | 'request' | 'lost' | 'manage';
 
 function todayStr(): string {
   const d = new Date();
@@ -149,22 +156,24 @@ export default function InventoryContent() {
     return () => { u1(); u2(); };
   }, [campCode]);
   useEffect(() => { if (isAdmin) return subscribeInventoryPackages(db, setPackages); }, [isAdmin]);
-  const [requests, setRequests] = useState<InventoryRequest[]>([]);
-  const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
+  const [requests, setRequests] = useState<SupplyRequest[]>([]);
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
   useEffect(() => {
     if (!campCode) return;
-    const u1 = subscribeInventoryRequests(db, campCode, setRequests);
-    const u2 = subscribePurchaseItems(db, campCode, setPurchases);
+    const u1 = subscribeSupplyRequests(db, campCode, setRequests);
     const u3 = subscribeLostItems(db, campCode, setLostItems);
-    return () => { u1(); u2(); u3(); };
+    return () => { u1(); u3(); };
   }, [campCode]);
   const keptLostCount = useMemo(() => lostItems.filter(l => l.status === 'found').length, [lostItems]);
 
   const views = useMemo(() => buildInventoryViews(items, stocks, groups), [items, stocks, groups]);
   const needs = useMemo(() => computePurchaseNeeds(views, groups), [views, groups]);
-  const openRequests = useMemo(() => requests.filter(r => r.status === 'open'), [requests]);
-  const pendingPurchases = useMemo(() => purchases.filter(p => p.status !== 'received').length, [purchases]);
+  // 탭 배지: 관리자는 새 요청(보류 제외) 전체, 그 외는 내가 올렸거나 사오기로 한 진행 중 요청
+  // 관리자는 여기에 재고 입고 대기 + 아직 요청 안 된 재고 부족분도 더함
+  const requestBadge = useMemo(() => isAdmin
+    ? requests.filter(r => r.status === 'requested' || needsStockIntake(r)).length + uncoveredPurchaseNeeds(needs, requests).length
+    : requests.filter(r => isSupplyOpen(r.status) && (r.requesterId === userData?.userId || r.buyerId === userData?.userId)).length,
+  [requests, needs, isAdmin, userData?.userId]);
 
   const [subTab, setSubTab] = useState<SubTab>('stock');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -181,8 +190,7 @@ export default function InventoryContent() {
 
   const tabs: { id: SubTab; title: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'stock', title: isForeign ? 'Stock' : '재고 현황', icon: <FiBox className="w-3.5 h-3.5" /> },
-    { id: 'request', title: isForeign ? 'Request' : '재고 요청', icon: <FiClipboard className="w-3.5 h-3.5" />, badge: openRequests.length },
-    { id: 'purchase', title: isForeign ? 'To buy' : '구매 필요', icon: <FiShoppingCart className="w-3.5 h-3.5" />, badge: needs.length + pendingPurchases },
+    { id: 'request', title: isForeign ? 'Request' : '재고 요청', icon: <FiClipboard className="w-3.5 h-3.5" />, badge: requestBadge },
     { id: 'lost', title: isForeign ? 'Lost & Found' : '분실물', icon: <FiSearch className="w-3.5 h-3.5" />, badge: keptLostCount },
     ...(isAdmin ? [{ id: 'manage' as SubTab, title: '관리', icon: <FiSettings className="w-3.5 h-3.5" /> }] : []),
   ];
@@ -210,20 +218,11 @@ export default function InventoryContent() {
       <div className="flex-1 overflow-y-auto">
         {subTab === 'stock' && (
           <>
-            {openRequests.length > 0 && (
-              <button onClick={() => setSubTab('request')} className="mx-4 mt-3 w-[calc(100%-2rem)] text-left rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 hover:bg-blue-100 transition-colors">
-                <p className="text-[11px] font-bold text-blue-800">📝 {openRequests.map(r => r.title).join(', ')} 진행 중</p>
-                <p className="text-[10px] text-blue-700">필요한 물품과 수량을 재고 요청 탭에서 입력해주세요 →</p>
-              </button>
-            )}
             <StockTab views={views} groups={groups} needs={needs} isAdmin={isAdmin} onSelect={setSelectedId} />
           </>
         )}
         {subTab === 'request' && (
-          <RequestTab campCode={campCode} requests={requests} items={items} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
-        )}
-        {subTab === 'purchase' && (
-          <PurchaseTab needs={needs} groups={groups} purchases={purchases} items={items} campCode={campCode} isAdmin={isAdmin} userName={userName} onSelect={setSelectedId} />
+          <SupplyRequestTab campCode={campCode} requests={requests} items={items} views={views} groups={groups} needs={needs} students={students} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
         )}
         {subTab === 'lost' && (
           <LostTab campCode={campCode} jobCodeId={activeJobCodeId ?? ''} students={students} campGroups={campGroups} lostItems={lostItems} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
@@ -586,383 +585,540 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userName, onClose }:
   );
 }
 
-// ==================== 🛒 구매 필요 ====================
+// ==================== 📝 재고 요청 (멘토 구매 요청 · 모두 공유) ====================
 
-function PurchaseTab({ needs, groups, purchases, items, campCode, isAdmin, userName, onSelect }: {
-  needs: PurchaseNeed[]; groups: InventoryGroup[]; purchases: PurchaseItem[]; items: InventoryItem[];
-  campCode: string; isAdmin: boolean; userName: string; onSelect: (id: string) => void;
+const SUPPLY_STATUS_STYLE: Record<SupplyRequestStatus, string> = {
+  requested: 'bg-blue-100 text-blue-700',
+  onhold: 'bg-amber-100 text-amber-800',
+  purchased: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-gray-100 text-gray-500',
+};
+const STORE_ICON_WEB: Record<string, string> = { 다이소: '🛍', 약국: '💊', 마트: '🛒', 기타: '📦' };
+
+function addDaysStr(n: number): string {
+  const d = new Date(); d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function fmtHoldDate(s?: string): string {
+  if (!s) return '';
+  const [, m, d] = s.split('-');
+  return `${Number(m)}/${Number(d)}`;
+}
+/** 목록·상세에 쓰는 상태 한 줄 설명 */
+function supplyStatusLine(r: SupplyRequest): string {
+  if (r.status === 'onhold') return `⏸ 보류${r.holdUntil ? ` · ${fmtHoldDate(r.holdUntil)} 구매 예정` : ''}${r.statusNote ? ` · ${r.statusNote}` : ''}`;
+  if (r.status === 'rejected') return `반려${r.statusNote ? ` · ${r.statusNote}` : ''}`;
+  if (r.status === 'purchased') return `구매 완료${r.handledBy ? ` · ${r.handledBy}` : ''}${r.forType === 'camp' ? (r.stockApplied ? ' · 재고 입고됨' : needsStockIntake(r) ? ' · 📥 재고 입고 대기' : '') : ''}`;
+  return r.buyerName ? `🙋 ${r.buyerName} 쌤이 사올 예정` : '';
+}
+
+type SupplyEditing = { mode: 'new'; prefill?: SupplyRequest } | { mode: 'edit'; req: SupplyRequest };
+
+function SupplyRequestTab({ campCode, requests, items, views, groups, needs, students, isAdmin, userId, userName }: {
+  campCode: string; requests: SupplyRequest[]; items: InventoryItem[]; views: InventoryItemView[]; groups: InventoryGroup[]; needs: PurchaseNeed[];
+  students: STSheetStudent[]; isAdmin: boolean; userId: string; userName: string;
 }) {
-  const [copied, setCopied] = useState(false);
-  const activePurchases = useMemo(() => purchases.filter(p => p.status !== 'received'), [purchases]);
-  const receivedPurchases = useMemo(() => purchases.filter(p => p.status === 'received'), [purchases]);
-  const text = useMemo(() => {
-    const a = needs.map(n => `${n.itemName} / ${n.groupName} / 현재 ${n.current}${n.unit} / 최소 ${n.min}${n.unit} / 부족 ${n.shortage}${n.unit}`);
-    const b = activePurchases.map(p => `${p.name} / ${p.quantity}${p.unit}${p.requestTitle ? ` / ${p.requestTitle}` : ''}${p.status === 'ordered' ? ' / 주문함' : ''}`);
-    return [a.length ? `[최소 수량 미만]\n${a.join('\n')}` : '', b.length ? `[구매 목록]\n${b.join('\n')}` : ''].filter(Boolean).join('\n\n');
-  }, [needs, activePurchases]);
-
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* noop */ }
+  // 재고 부족분 중 아직 캠프 공용 요청에 안 올라간 것 · 구매했지만 재고 입고 전인 캠프 공용 요청
+  const shortage = useMemo(() => uncoveredPurchaseNeeds(needs, requests), [needs, requests]);
+  const intakeWaiting = useMemo(() => requests.filter(needsStockIntake), [requests]);
+  const [showNeeds, setShowNeeds] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const postNeeds = async () => {
+    if (posting || shortage.length === 0) return;
+    setPosting(true);
+    try {
+      const n = await addCampRequestsFromNeeds(db, campCode, shortage, items, { uid: userId, name: userName });
+      alert(`캠프 공용 요청 ${n}건(구매처별)으로 올렸습니다. 필요하면 요청을 열어 수량·구매처를 고치세요.`);
+    } catch (e) { console.error(e); alert('요청을 만들지 못했습니다.'); }
+    finally { setPosting(false); }
   };
+  const [filter, setFilter] = useState<'open' | 'mine' | 'done'>('open');
+  const [byStore, setByStore] = useState(false);
+  const [editing, setEditing] = useState<SupplyEditing | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = requests.find(r => r.id === openId) ?? null;
+  const open = useMemo(() => requests.filter(r => isSupplyOpen(r.status)), [requests]);
+  const pending = useMemo(() => open.filter(r => r.status === 'requested'), [open]);
+  const mine = useMemo(() => requests.filter(r => r.requesterId === userId), [requests, userId]);
+  const list = filter === 'open' ? open : filter === 'mine' ? mine : requests.filter(r => !isSupplyOpen(r.status));
+  const summary = useMemo(() => summarizeSupplyRequests(pending), [pending]);
+  const [copied, setCopied] = useState('');
+  const me = { uid: userId, name: userName };
 
-  // 품목별로 묶기
-  const byItem = useMemo(() => {
-    const map = new Map<string, PurchaseNeed[]>();
-    needs.forEach(n => { if (!map.has(n.itemId)) map.set(n.itemId, []); map.get(n.itemId)!.push(n); });
-    return [...map.entries()];
-  }, [needs]);
+  const copyStore = async (g: SupplyStoreSummary) => {
+    const text = `[${g.store} 장보기]\n${g.lines.map(l => `• ${l.name} ${l.total}${l.unit}  (${l.who.join(', ')})`).join('\n')}`;
+    try { await navigator.clipboard.writeText(text); setCopied(g.store); setTimeout(() => setCopied(''), 1500); } catch { /* noop */ }
+  };
+  const run = async (fn: () => Promise<void>) => { try { await fn(); } catch (e) { console.error(e); alert('처리하지 못했습니다. 권한을 확인해주세요.'); } };
 
   return (
     <div className="px-4 py-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-bold text-gray-800">최소 수량 미만 <span className="text-red-600">{needs.length}</span></p>
-          <p className="text-[10px] text-gray-400">그룹별 현재 수량이 최소 보유 수량보다 적은 항목 (전체가 충분해도 표시)</p>
-        </div>
-        {(needs.length > 0 || activePurchases.length > 0) && (
-          <button onClick={copy} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:border-emerald-300">
-            <FiCopy className="w-3 h-3" />{copied ? '복사됨' : '텍스트 복사'}
-          </button>
+      <button onClick={() => setEditing({ mode: 'new' })} className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+        <FiPlus className="w-4 h-4" />필요한 물품 요청하기
+      </button>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {([['open', `진행 중 ${open.length}`], ['mine', `내 요청 ${mine.length}`], ['done', '완료·반려']] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setFilter(id)} className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold ${filter === id ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'}`}>{label}</button>
+        ))}
+        {filter === 'open' && pending.length > 0 && (
+          <button onClick={() => setByStore(v => !v)} className={`ml-auto px-2.5 py-1 rounded-lg text-[11px] font-semibold ${byStore ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>🛍 구매처별 장보기</button>
         )}
       </div>
-      {groups.length === 0 ? (
-        <p className="text-[11px] text-gray-400">재고 그룹이 없어 계산할 수 없습니다.</p>
-      ) : needs.length === 0 ? (
-        <div className="flex flex-col items-center py-14 text-center">
-          <FiShoppingCart className="h-9 w-9 text-gray-300 mb-2" />
-          <p className="text-sm text-gray-500">모든 그룹의 재고가 최소 수량 이상입니다.</p>
-          <p className="text-[10px] text-gray-400 mt-1">최소 수량은 품목 수정 또는 품목 상세의 그룹별 "최소"에서 설정합니다.</p>
-        </div>
-      ) : (
-        <div className="space-y-1.5">
-          {byItem.map(([itemId, list]) => (
-            <button key={itemId} onClick={() => onSelect(itemId)} className="w-full text-left bg-white rounded-xl border border-red-100 px-3 py-2 hover:border-red-300">
-              <p className="text-sm font-bold text-gray-900">{list[0].itemName}</p>
-              <div className="mt-1 space-y-0.5">
-                {list.map(n => (
-                  <p key={n.groupId} className="text-[11px] text-gray-600">
-                    <span className="font-semibold text-red-700">{n.groupName}</span> · 현재 {n.current}{n.unit} / 최소 {n.min}{n.unit} → <b className="text-red-600">부족 {n.shortage}{n.unit}</b>
-                  </p>
-                ))}
-              </div>
+      {isAdmin && filter === 'open' && intakeWaiting.length > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 space-y-1">
+          <p className="text-[12px] font-bold text-amber-900">📥 구매했지만 재고 입고 전 {intakeWaiting.length}건</p>
+          {intakeWaiting.map(r => (
+            <button key={r.id} onClick={() => setOpenId(r.id)} className="w-full text-left text-[11px] text-amber-900 hover:underline truncate">
+              {STORE_ICON_WEB[r.store] ?? '📦'} {r.items.map(l => `${l.name} ${l.quantity}${l.unit}`).join(', ')} <span className="text-amber-700">→ 입고 처리</span>
             </button>
           ))}
         </div>
       )}
-
-      {/* 구매 목록 (요청 취합분 · 수동) */}
-      <div className="pt-2">
-        <p className="text-sm font-bold text-gray-800">구매 목록 <span className="text-amber-600">{activePurchases.length}</span></p>
-        <p className="text-[10px] text-gray-400 mb-2">재고 요청 취합에서 추가된 항목. {isAdmin ? '주문 → 입고 처리하면 해당 그룹 재고에 반영됩니다.' : '상태는 관리자가 관리합니다.'}</p>
-        {activePurchases.length === 0 ? (
-          <p className="text-[11px] text-gray-400">구매 목록이 비어 있습니다.</p>
-        ) : (
-          <div className="space-y-1.5">
-            {activePurchases.map(p => (
-              <PurchaseRow key={p.id} purchase={p} items={items} groups={groups} campCode={campCode} isAdmin={isAdmin} userName={userName} />
-            ))}
+      {isAdmin && filter === 'open' && shortage.length > 0 && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <p className="flex-1 text-[12px] font-bold text-red-800">📉 최소 수량 미만 {shortage.length}건 <span className="font-normal text-red-600">· 아직 요청 안 됨</span></p>
+            <button onClick={() => setShowNeeds(v => !v)} className="px-2 py-1 text-[11px] text-red-700 bg-white border border-red-200 rounded-lg">{showNeeds ? '접기' : '목록 보기'}</button>
+            <button onClick={postNeeds} disabled={posting} className="px-2 py-1 text-[11px] font-bold text-white bg-red-500 rounded-lg disabled:opacity-40">{posting ? '올리는 중...' : '요청으로 올리기'}</button>
           </div>
-        )}
-        {receivedPurchases.length > 0 && (
-          <details className="mt-2 group">
-            <summary className="cursor-pointer text-[10px] text-gray-400 hover:text-gray-600 list-none flex items-center gap-1">
-              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>입고 완료 {receivedPurchases.length}건
-            </summary>
-            <div className="mt-1 space-y-1">
-              {receivedPurchases.map(p => (
-                <div key={p.id} className="flex items-center gap-2 text-[11px] text-gray-400 bg-gray-50 rounded-lg px-2.5 py-1.5">
-                  <FiCheck className="w-3 h-3 text-emerald-500" />
-                  <span className="flex-1 truncate line-through">{p.name} {p.quantity}{p.unit}{p.groupName ? ` → ${p.groupName}` : ''}</span>
-                  {isAdmin && <button onClick={() => deletePurchaseItem(db, p.id)} className="hover:text-red-500">🗑️</button>}
+          {showNeeds && shortage.map(n => (
+            <p key={`${n.itemId}|${n.groupId}`} className="text-[11px] text-gray-700"><b>{n.itemName}</b> · {n.groupName} 현재 {n.current}/최소 {n.min} → <b className="text-red-600">{n.shortage}{n.unit}</b></p>
+          ))}
+          <p className="text-[10px] text-red-500">의약품은 약국, 나머지는 다이소로 나눠 '캠프 공용' 요청이 만들어지고, 구매 완료 후 입고하면 재고에 반영됩니다.</p>
+        </div>
+      )}
+      {filter === 'open' && !byStore && open.length > 0 && (
+        <p className="text-[10px] text-gray-400">다른 선생님 요청도 함께 보입니다. 같은 게 필요하면 <b>나도 필요해요</b>, 사러 갈 때는 <b>제가 사올게요</b>를 눌러주세요.</p>
+      )}
+
+      {filter === 'open' && byStore ? (
+        <div className="space-y-2">
+          {summary.map(g => {
+            const reqs = pending.filter(r => g.requestIds.includes(r.id));
+            const unclaimed = reqs.filter(r => !r.buyerId).map(r => r.id);
+            const buyers = [...new Set(reqs.map(r => r.buyerName).filter(Boolean))] as string[];
+            const completable = reqs.filter(r => isAdmin || r.buyerId === userId).map(r => r.id);
+            return (
+              <div key={g.store} className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+                <div className="px-3 py-2 bg-amber-50 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <p className="flex-1 text-sm font-bold text-gray-900">{STORE_ICON_WEB[g.store] ?? '📦'} {g.store} <span className="text-[11px] font-normal text-amber-800">{g.requestIds.length}건 · {g.lines.length}품목</span></p>
+                    <button onClick={() => copyStore(g)} className="px-2 py-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg"><FiCopy className="inline w-3 h-3 mr-0.5" />{copied === g.store ? '복사됨' : '복사'}</button>
+                  </div>
+                  <p className="text-[11px] text-gray-600">{buyers.length ? `🙋 사올 사람: ${buyers.join(', ')}` : '아직 사오기로 한 사람이 없어요'}</p>
+                  <div className="flex gap-1.5">
+                    {unclaimed.length > 0 && (
+                      <button onClick={() => run(() => setSupplyBuyer(db, unclaimed, me))} className="flex-1 py-1.5 text-[11px] font-bold text-amber-800 bg-white border border-amber-300 rounded-lg">🙋 제가 사올게요 ({unclaimed.length}건)</button>
+                    )}
+                    {completable.length > 0 && (
+                      <button onClick={() => { if (confirm(`${g.store} 요청 ${completable.length}건을 구매 완료로 처리할까요?`)) run(() => setSupplyRequestStatus(db, completable, 'purchased', userName)); }}
+                        className="flex-1 py-1.5 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">✓ 구매 완료 ({completable.length}건)</button>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </details>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PurchaseRow({ purchase: p, items, groups, campCode, isAdmin, userName }: {
-  purchase: PurchaseItem; items: InventoryItem[]; groups: InventoryGroup[]; campCode: string; isAdmin: boolean; userName: string;
-}) {
-  const [receiving, setReceiving] = useState(false);
-  const linked = items.find(i => i.id === p.itemId);
-  const [itemId, setItemId] = useState(p.itemId ?? '');
-  const [groupId, setGroupId] = useState(p.groupId ?? groups[0]?.id ?? '');
-  const [qty, setQty] = useState(String(linked?.packSize ? p.quantity * linked.packSize : p.quantity));
-  const [busy, setBusy] = useState(false);
-  const target = items.find(i => i.id === itemId);
-  const group = groups.find(g => g.id === groupId);
-
-  const receive = async () => {
-    if (busy) return;
-    const n = parseInt(qty, 10);
-    if (!target || !group || isNaN(n) || n < 0) { alert('품목·그룹·수량을 확인해주세요.'); return; }
-    setBusy(true);
-    try {
-      await receivePurchaseItem(db, campCode, p, { itemId: target.id, itemName: target.name, groupId: group.id, groupName: group.name, quantity: n }, userName);
-      setReceiving(false);
-    } catch (e) { console.error('입고 처리 오류:', e); alert('입고 처리 중 오류가 발생했습니다.'); }
-    finally { setBusy(false); }
-  };
-
-  return (
-    <div className={`bg-white rounded-xl border px-3 py-2 ${p.status === 'ordered' ? 'border-blue-200' : 'border-amber-200'}`}>
-      <div className="flex items-center gap-2">
-        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${p.status === 'ordered' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-800'}`}>{PURCHASE_STATUS_LABELS[p.status]}</span>
-        <span className="flex-1 min-w-0 text-[12px] text-gray-800 truncate"><b>{p.name}</b> {p.quantity}{p.unit}{p.memo ? <span className="text-gray-400"> · {p.memo}</span> : null}</span>
-        {p.requestTitle && <span className="text-[10px] text-gray-400 shrink-0">{p.requestTitle}</span>}
-        {isAdmin && !receiving && (
-          <div className="flex items-center gap-1 shrink-0">
-            {p.status === 'needed' && <button onClick={() => updatePurchaseItem(db, p.id, { status: 'ordered' })} className="text-[10px] font-semibold text-blue-700 hover:underline">주문함</button>}
-            {p.status === 'ordered' && <button onClick={() => updatePurchaseItem(db, p.id, { status: 'needed' })} className="text-[10px] text-gray-400 hover:underline">주문 취소</button>}
-            <button onClick={() => setReceiving(true)} className="text-[10px] font-semibold text-emerald-700 hover:underline">입고 처리</button>
-            <button onClick={() => { if (confirm('구매 목록에서 삭제할까요?')) deletePurchaseItem(db, p.id); }} className="text-gray-300 hover:text-red-500 text-[11px]">🗑️</button>
-          </div>
-        )}
-      </div>
-      {receiving && (
-        <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 space-y-1.5">
-          <p className="text-[10px] font-bold text-emerald-800">📥 입고 처리 — 어느 품목·그룹에 낱개 몇 개를 넣을까요?</p>
-          <div className="flex gap-1.5 flex-wrap items-center">
-            <select value={itemId} onChange={e => setItemId(e.target.value)} className="text-[11px] border border-emerald-200 rounded-lg px-2 py-1 bg-white flex-1 min-w-[120px]">
-              <option value="">품목 선택</option>
-              {items.filter(i => i.isActive !== false).map(i => <option key={i.id} value={i.id}>{itemLabel(i)}</option>)}
-            </select>
-            <select value={groupId} onChange={e => setGroupId(e.target.value)} className="text-[11px] border border-emerald-200 rounded-lg px-2 py-1 bg-white w-28">
-              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-            <input type="number" min={0} value={qty} onChange={e => setQty(e.target.value)} className="text-[11px] border border-emerald-200 rounded-lg px-2 py-1 bg-white w-20" />
-            <span className="text-[10px] text-gray-500">{target?.unit ?? '개'}{target?.packSize ? ` (1포장 = ${target.packSize}${target.unit})` : ''}</span>
-          </div>
-          <div className="flex gap-1.5">
-            <button onClick={() => setReceiving(false)} className="px-2.5 py-1 text-[11px] text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
-            <button onClick={receive} disabled={busy} className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-50">{busy ? '처리 중...' : '입고 + 완료'}</button>
-          </div>
+                {g.lines.map(l => {
+                  const stock = l.itemId ? views.find(v => v.id === l.itemId) : undefined;
+                  return (
+                    <div key={l.key} className="flex items-center gap-2 px-3 py-1.5 border-t border-gray-100 text-[12px]">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">{l.name}</p>
+                        <p className="text-[10px] text-gray-500 truncate">{l.who.join(' · ')}{isAdmin && stock ? ` · 캠프 재고 ${stock.total}${stock.unit}` : ''}</p>
+                      </div>
+                      <span className="font-extrabold text-amber-700">{l.total}<span className="text-[10px] text-gray-400 ml-0.5">{l.unit}</span></span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+          {open.some(r => r.status === 'onhold') && <p className="text-[10px] text-gray-400">⏸ 보류 중인 요청 {open.filter(r => r.status === 'onhold').length}건은 장보기 목록에서 빠져 있습니다.</p>}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ==================== 📝 재고 요청 (취합) ====================
-
-function RequestTab({ campCode, requests, items, isAdmin, userId, userName }: {
-  campCode: string; requests: InventoryRequest[]; items: InventoryItem[]; isAdmin: boolean; userId: string; userName: string;
-}) {
-  const [showCreate, setShowCreate] = useState(false);
-  const [title, setTitle] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [note, setNote] = useState('');
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const opened = requests.find(r => r.id === openId) ?? null;
-
-  const create = async () => {
-    if (!title.trim() || busy) return;
-    setBusy(true);
-    try {
-      const id = await createInventoryRequest(db, { campCode, title: title.trim(), dueDate: dueDate || undefined, note: note.trim() || undefined, createdBy: userName, createdById: userId });
-      setTitle(''); setDueDate(''); setNote(''); setShowCreate(false); setOpenId(id);
-    } finally { setBusy(false); }
-  };
-
-  if (opened) {
-    return <RequestDetail request={opened} items={items} isAdmin={isAdmin} userId={userId} userName={userName} onBack={() => setOpenId(null)} />;
-  }
-
-  return (
-    <div className="px-4 py-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-bold text-gray-800">재고 요청</p>
-          <p className="text-[10px] text-gray-400">관리자가 요청을 만들면 선생님들이 각자 필요한 물품과 수량을 입력하고, 관리자가 한 화면에서 합산해 구매 목록에 추가합니다.</p>
-        </div>
-        {isAdmin && !showCreate && (
-          <button onClick={() => { setShowCreate(true); setTitle(`${new Date().getMonth() + 1}월 재고 요청`); }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg shrink-0"><FiPlus className="w-3 h-3" />재고 요청 만들기</button>
-        )}
-      </div>
-
-      {showCreate && (
-        <div className="bg-white rounded-xl border border-emerald-200 p-3 space-y-2">
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="제목 (예: 9월 재고 요청)" className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none" autoFocus />
-          <div className="flex gap-2">
-            <input type="date" value={dueDate} min={todayStr()} onChange={e => setDueDate(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
-            <input value={note} onChange={e => setNote(e.target.value)} placeholder="안내 (선택, 예: 수요일까지 입력해주세요)" className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setShowCreate(false)} className="flex-1 py-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg">취소</button>
-            <button onClick={create} disabled={!title.trim() || busy} className="flex-1 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40">만들기</button>
-          </div>
-        </div>
-      )}
-
-      {requests.length === 0 ? (
+      ) : list.length === 0 ? (
         <div className="flex flex-col items-center py-14 text-center">
           <FiClipboard className="h-9 w-9 text-gray-300 mb-2" />
-          <p className="text-sm text-gray-500">진행 중인 재고 요청이 없습니다.</p>
+          <p className="text-sm text-gray-500">{filter === 'mine' ? '올린 요청이 없습니다.' : filter === 'open' ? '진행 중인 요청이 없습니다.' : '완료된 요청이 없습니다.'}</p>
         </div>
       ) : (
-        <div className="space-y-1.5">
-          {requests.map(r => (
-            <button key={r.id} onClick={() => setOpenId(r.id)} className={`w-full text-left bg-white rounded-xl border px-3 py-2.5 hover:border-emerald-300 ${r.status === 'open' ? 'border-blue-200' : 'border-gray-200 opacity-70'}`}>
-              <div className="flex items-center gap-2">
-                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${r.status === 'open' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{r.status === 'open' ? '진행 중' : '마감'}</span>
-                <span className="text-sm font-bold text-gray-900 flex-1 truncate">{r.title}</span>
-                {r.dueDate && <span className="text-[10px] text-gray-400">~{r.dueDate}</span>}
-              </div>
-              {r.note && <p className="text-[11px] text-gray-500 mt-0.5">{r.note}</p>}
-            </button>
-          ))}
+        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+          {list.map(r => {
+            const last = r.comments?.[r.comments.length - 1];
+            const status = supplyStatusLine(r);
+            return (
+              <button key={r.id} onClick={() => setOpenId(r.id)} className="w-full text-left flex items-start gap-2.5 px-3 py-2 hover:bg-gray-50">
+                <span className="text-lg leading-none mt-0.5">{STORE_ICON_WEB[r.store] ?? '📦'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-gray-900 truncate">{supplyForLabel(r)} <span className="text-[11px] font-normal text-gray-400">{supplyStoreLabel(r)}</span></p>
+                  <p className="text-[12px] text-gray-700 truncate">{r.items.map(l => `${l.name} ${l.quantity}${l.unit}`).join(', ')}</p>
+                  {status && <p className={`text-[10px] truncate ${r.status === 'onhold' ? 'text-amber-700' : r.buyerName && isSupplyOpen(r.status) ? 'text-emerald-700' : 'text-gray-500'}`}>{status}</p>}
+                  {last && <p className="text-[10px] text-gray-500 truncate">💬 {r.comments!.length} · <b className={last.admin ? 'text-indigo-700' : ''}>{last.name}</b> {last.text}</p>}
+                  <p className="text-[10px] text-gray-400">{r.requesterName} · {fmtDateTime(r.createdAt)}</p>
+                </div>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${SUPPLY_STATUS_STYLE[r.status]}`}>{SUPPLY_REQUEST_STATUS_LABELS[r.status]}</span>
+              </button>
+            );
+          })}
         </div>
+      )}
+
+      {editing && (
+        <SupplyRequestFormModal campCode={campCode} existing={editing.mode === 'edit' ? editing.req : undefined} prefill={editing.mode === 'new' ? editing.prefill : undefined}
+          groups={groups} items={items} views={views} students={students} userId={userId} userName={userName} onClose={() => setEditing(null)} />
+      )}
+      {opened && !editing && (
+        <SupplyRequestDetailModal req={opened} campCode={campCode} groups={groups} views={views} isAdmin={isAdmin} userId={userId} userName={userName}
+          onEdit={() => setEditing({ mode: 'edit', req: opened })} onMetoo={() => { setEditing({ mode: 'new', prefill: opened }); setOpenId(null); }} onClose={() => setOpenId(null)} />
       )}
     </div>
   );
 }
 
-function RequestDetail({ request, items, isAdmin, userId, userName, onBack }: {
-  request: InventoryRequest; items: InventoryItem[]; isAdmin: boolean; userId: string; userName: string; onBack: () => void;
+function SupplyRequestFormModal({ campCode, existing, prefill, groups, items, views, students, userId, userName, onClose }: {
+  campCode: string; existing?: SupplyRequest; prefill?: SupplyRequest; groups: InventoryGroup[]; items: InventoryItem[]; views: InventoryItemView[]; students: STSheetStudent[];
+  userId: string; userName: string; onClose: () => void;
 }) {
-  const [entries, setEntries] = useState<InventoryRequestEntry[]>([]);
-  useEffect(() => subscribeInventoryRequestEntries(db, request.id, setEntries), [request.id]);
-  const mine = entries.find(e => e.userId === userId);
-  const isOpen = request.status === 'open';
-
-  // 내 요청 편집
-  const [lines, setLines] = useState<InventoryRequestLine[]>([]);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  useEffect(() => { if (!dirty) setLines(mine?.items ?? []); }, [mine, dirty]);
-
-  const newLine = (): InventoryRequestLine => ({ id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name: '', quantity: 1, unit: '개' });
-  const update = (id: string, patch: Partial<InventoryRequestLine>) => { setDirty(true); setLines(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l)); };
-  const onNameChange = (id: string, name: string) => {
-    // 같은 이름 품목이 여럿이면 "이름 (종류·규격)"으로 골라야 연결됨
-    const t = name.trim();
-    const byLabel = items.find(i => itemLabel(i) === t);
-    const sameName = items.filter(i => i.name === t);
-    const matched = byLabel ?? (sameName.length === 1 ? sameName[0] : undefined);
-    update(id, { name, itemId: matched?.id, ...(matched ? { unit: matched.unit } : {}) });
+  const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const base = existing ?? prefill;
+  const [forType, setForType] = useState<SupplyForType>(existing?.forType ?? (prefill?.forType === 'camp' ? 'camp' : 'student'));
+  const [student, setStudent] = useState<{ id?: string; name: string; cls?: string } | null>(
+    existing?.studentName ? { id: existing.studentId, name: existing.studentName, cls: existing.studentClass } : null);
+  const [studentQuery, setStudentQuery] = useState('');
+  const defaultGroup = groups[0];
+  const [store, setStore] = useState<SupplyStore>(base?.store ?? '다이소');
+  const [storeEtc, setStoreEtc] = useState(base?.storeEtc ?? '');
+  // "나도 필요해요": 같은 구매처·물품을 새 줄 ID로 복사 (수량은 1부터)
+  const [lines, setLines] = useState<SupplyRequestLine[]>(
+    existing?.items ?? (prefill ? prefill.items.map(l => ({ ...l, id: newId(), quantity: 1, memo: undefined })) : []));
+  const [q, setQ] = useState('');
+  const [note, setNote] = useState(existing?.note ?? '');
+  const [busy, setBusy] = useState(false);
+  const UNITS = ['개', '박스', '통', '팩', '병', '세트'];
+  const studentResults = useMemo(() => { const t = studentQuery.trim(); return t ? students.filter(s => s.name.includes(t)).slice(0, 6) : []; }, [students, studentQuery]);
+  const results = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return t ? items.filter(i => i.isActive !== false && [i.name, i.kind, i.spec, i.ingredient, i.subCategory].some(f => f?.toLowerCase().includes(t))).slice(0, 12) : [];
+  }, [items, q]);
+  const addItem = (i: InventoryItem) => {
+    const had = lines.find(l => l.itemId === i.id);
+    if (had) setLines(ls => ls.map(l => l.id === had.id ? { ...l, quantity: l.quantity + 1 } : l));
+    else setLines(ls => [...ls, { id: newId(), itemId: i.id, name: itemLabel(i), quantity: 1, unit: i.unit, groupId: defaultGroup?.id, groupName: defaultGroup?.name }]);
+    setQ(''); // 고르면 검색 목록 닫기
   };
-  const save = async () => {
-    if (saving) return;
-    setSaving(true);
+  const upd = (id: string, patch: Partial<SupplyRequestLine>) => setLines(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l));
+  const submit = async () => {
+    if (forType === 'student' && !student) { alert('어떤 학생을 위한 물품인지 선택해주세요.'); return; }
+    if (store === '기타' && !storeEtc.trim()) { alert('구매처를 입력해주세요.'); return; }
+    if (lines.length === 0) { alert('필요한 물품을 하나 이상 담아주세요.'); return; }
+    setBusy(true);
     try {
-      await saveInventoryRequestEntry(db, { requestId: request.id, campCode: request.campCode, userId, userName, items: lines });
-      setDirty(false); setSavedAt(Date.now());
-    } catch (e) { console.error('요청 저장 오류:', e); alert('저장 중 오류가 발생했습니다.'); }
-    finally { setSaving(false); }
+      const payload = {
+        forType,
+        studentId: forType === 'student' ? student?.id : undefined,
+        studentName: forType === 'student' ? student?.name : undefined,
+        studentClass: forType === 'student' ? student?.cls : undefined,
+        store, storeEtc: store === '기타' ? storeEtc.trim() : undefined,
+        // 캠프 공용만 입고 그룹을 가진다
+        items: lines.map(l => forType === 'camp' && l.itemId
+          ? { ...l, groupId: l.groupId ?? defaultGroup?.id, groupName: l.groupName ?? defaultGroup?.name }
+          : { ...l, groupId: undefined, groupName: undefined }),
+        note,
+      };
+      if (existing) await updateSupplyRequest(db, existing.id, payload);
+      else await addSupplyRequest(db, { campCode, requesterId: userId, requesterName: userName, ...payload });
+      onClose();
+    } catch (e) { console.error('구매 요청 저장 오류:', e); alert('요청을 저장하지 못했습니다.'); }
+    finally { setBusy(false); }
   };
-
-  // 취합 (관리자)
-  const summary = useMemo(() => summarizeRequestEntries(entries), [entries]);
-  const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [adding, setAdding] = useState(false);
-  const addToPurchase = async () => {
-    const sel = summary.filter(s => checked.has(s.key));
-    if (sel.length === 0 || adding) return;
-    setAdding(true);
-    try {
-      const n = await addPurchaseItems(db, request.campCode, sel.map(s => ({
-        itemId: s.itemId, name: s.name, quantity: s.total, unit: s.unit,
-        memo: s.requesters.map(r => `${r.userName} ${r.quantity}${s.unit}${r.memo ? `(${r.memo})` : ''}`).join(', '),
-      })), userName, { id: request.id, title: request.title });
-      alert(`${n}개 항목을 구매 목록에 추가했습니다.`);
-      setChecked(new Set());
-    } finally { setAdding(false); }
-  };
-
-  const inputCls = 'text-[11px] border border-gray-200 rounded-lg px-2 py-1.5 outline-none bg-white';
+  const seg = (on: boolean) => `flex-1 py-2 rounded-xl text-xs font-bold border ${on ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`;
+  const inputCls = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400';
 
   return (
-    <div className="px-4 py-3 space-y-4">
-      <div className="flex items-start gap-2">
-        <button onClick={onBack} className="text-xs text-gray-500 hover:text-gray-800 mt-0.5">← 목록</button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${isOpen ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{isOpen ? '진행 중' : '마감'}</span>
-            <h3 className="text-sm font-bold text-gray-900 truncate">{request.title}</h3>
-            {request.dueDate && <span className="text-[10px] text-gray-400">~{request.dueDate}</span>}
-          </div>
-          {request.note && <p className="text-[11px] text-gray-500 mt-0.5">{request.note}</p>}
-          <p className="text-[10px] text-gray-400 mt-0.5">{entries.length}명 입력 · 만든 사람 {request.createdBy}</p>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">{existing ? '요청 수정' : prefill ? '🙋 나도 필요해요' : '📝 필요한 물품 요청'}</h2>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
-        {isAdmin && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button onClick={() => updateInventoryRequest(db, request.id, { status: isOpen ? 'closed' : 'open' })}
-              className={`px-2 py-1 text-[10px] font-semibold rounded-lg border ${isOpen ? 'text-gray-700 bg-white border-gray-200' : 'text-blue-700 bg-blue-50 border-blue-200'}`}>{isOpen ? '요청 마감' : '다시 열기'}</button>
-            <button onClick={() => { if (confirm('이 재고 요청과 모든 입력을 삭제할까요?')) { deleteInventoryRequest(db, request.id); onBack(); } }} className="text-gray-300 hover:text-red-500 text-xs">🗑️</button>
-          </div>
-        )}
-      </div>
-
-      {/* 내 요청 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-bold text-gray-800">내 요청 <span className="text-gray-400 font-normal">({userName})</span></p>
-          {isOpen && <button onClick={() => { setDirty(true); setLines(ls => [...ls, newLine()]); }} className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700"><FiPlus className="w-3 h-3" />항목 추가</button>}
-        </div>
-        {lines.length === 0 && <p className="text-[11px] text-gray-400">{isOpen ? '필요한 물품을 추가해주세요. 품목명을 입력하면 등록된 품목이 자동 완성됩니다.' : '입력한 항목이 없습니다.'}</p>}
-        {lines.map(l => (
-          <div key={l.id} className="flex gap-1.5 items-center">
-            <input list="inv-item-names" value={l.name} onChange={e => onNameChange(l.id, e.target.value)} disabled={!isOpen} placeholder="품목명 (예: 밴드)" className={`${inputCls} flex-1 min-w-0`} />
-            <input type="number" min={1} value={l.quantity} onChange={e => update(l.id, { quantity: Math.max(1, parseInt(e.target.value || '1', 10) || 1) })} disabled={!isOpen} className={`${inputCls} w-14 text-center`} />
-            <input list="inv-req-units" value={l.unit} onChange={e => update(l.id, { unit: e.target.value })} disabled={!isOpen} className={`${inputCls} w-14`} />
-            <input value={l.memo ?? ''} onChange={e => update(l.id, { memo: e.target.value || undefined })} disabled={!isOpen} placeholder="메모" className={`${inputCls} w-24`} />
-            {isOpen && <button onClick={() => { setDirty(true); setLines(ls => ls.filter(x => x.id !== l.id)); }} className="text-gray-300 hover:text-red-500 text-xs">🗑️</button>}
-          </div>
-        ))}
-        <datalist id="inv-item-names">{items.filter(i => i.isActive !== false).map(i => <option key={i.id} value={itemLabel(i)} />)}</datalist>
-        <datalist id="inv-req-units">{['개', '박스', '통', '팩', '병', '정', '세트', '묶음'].map(u => <option key={u} value={u} />)}</datalist>
-        {isOpen && (
-          <div className="flex items-center justify-end gap-2 pt-1">
-            {savedAt && !dirty && <span className="text-[10px] text-emerald-600">저장됨</span>}
-            <button onClick={save} disabled={!dirty || saving} className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40">{saving ? '저장 중...' : '내 요청 저장'}</button>
-          </div>
-        )}
-      </div>
-
-      {/* 취합 (관리자) */}
-      {isAdmin && (
-        <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-gray-800">취합 결과 <span className="text-gray-400 font-normal">(같은 품목·단위 자동 합산)</span></p>
-            <button onClick={addToPurchase} disabled={checked.size === 0 || adding} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-white bg-amber-500 rounded-lg disabled:opacity-40"><FiShoppingCart className="w-3 h-3" />선택 {checked.size}개 구매 목록에 추가</button>
-          </div>
-          {summary.length === 0 ? <p className="text-[11px] text-gray-400">아직 입력된 요청이 없습니다.</p> : (
-            <div className="rounded-lg border border-gray-100 divide-y divide-gray-100">
-              <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-gray-400 bg-gray-50">
-                <input type="checkbox" checked={checked.size === summary.length} onChange={e => setChecked(e.target.checked ? new Set(summary.map(s => s.key)) : new Set())} className="w-3 h-3" />
-                <span className="flex-1">품목</span><span className="w-16 text-right">합계</span>
-              </div>
-              {summary.map(s => (
-                <label key={s.key} className="flex items-start gap-2 px-2 py-1.5 cursor-pointer hover:bg-gray-50">
-                  <input type="checkbox" checked={checked.has(s.key)} onChange={e => setChecked(prev => { const n = new Set(prev); if (e.target.checked) n.add(s.key); else n.delete(s.key); return n; })} className="w-3 h-3 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-semibold text-gray-900">{s.name} {!s.itemId && <span className="text-[9px] text-gray-400 font-normal">(직접 입력)</span>}</p>
-                    <p className="text-[10px] text-gray-500">{s.requesters.map(r => `${r.userName} ${r.quantity}${s.unit}${r.memo ? `(${r.memo})` : ''}`).join(' · ')}</p>
-                  </div>
-                  <span className="w-16 text-right text-[12px] font-bold text-amber-700">총 {s.total}{s.unit}</span>
-                </label>
-              ))}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {prefill && <p className="text-[11px] text-gray-500 bg-amber-50 rounded-xl px-3 py-2">{supplyForLabel(prefill)} 요청과 같은 구매처·물품을 담았어요. 누구 것인지와 수량만 바꿔서 올리면 장보기 목록에 합쳐집니다.</p>}
+          <div>
+            <p className="text-xs font-bold text-gray-800 mb-1.5">① 누가 필요한가요?</p>
+            <div className="flex gap-1.5">
+              <button type="button" onClick={() => setForType('student')} className={seg(forType === 'student')}>👧 학생</button>
+              <button type="button" onClick={() => setForType('mentor')} className={seg(forType === 'mentor')}>🧑‍🏫 멘토(나)</button>
+              <button type="button" onClick={() => setForType('camp')} className={seg(forType === 'camp')}>🏕 캠프 공용</button>
             </div>
-          )}
-          <details className="group">
-            <summary className="cursor-pointer text-[10px] text-gray-400 hover:text-gray-600 list-none flex items-center gap-1"><span className="group-open:rotate-90 transition-transform inline-block">▶</span>선생님별 원본 ({entries.length}명)</summary>
-            <div className="mt-1.5 space-y-1.5">
-              {entries.map(e => (
-                <div key={e.id} className="text-[11px] bg-gray-50 rounded-lg px-2.5 py-1.5">
-                  <p className="font-semibold text-gray-800">{e.userName}</p>
-                  {e.items.length === 0 ? <p className="text-gray-400">(없음)</p> : e.items.map(l => <p key={l.id} className="text-gray-600">· {l.name} {l.quantity}{l.unit}{l.memo ? ` — ${l.memo}` : ''}</p>)}
+            {forType === 'camp' && <p className="mt-1.5 text-[10px] text-gray-500">상비약·소모품처럼 캠프 재고로 쓰는 물건. 재고 품목을 검색해 담고 넣을 그룹을 고르면, 구매 후 관리자가 입고할 때 재고에 반영됩니다.</p>}
+            {forType === 'student' && (student ? (
+              <div className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2">
+                <span className="flex-1 text-sm font-bold text-blue-900">{student.name} <span className="font-normal text-blue-500 text-xs">{student.cls}</span></span>
+                <button onClick={() => setStudent(null)} className="text-xs text-gray-500">변경</button>
+              </div>
+            ) : (
+              <div className="relative mt-2">
+                <input value={studentQuery} onChange={e => setStudentQuery(e.target.value)} placeholder="학생 이름 검색" className={inputCls} />
+                {studentQuery.trim() && (
+                  <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    {studentResults.map(s => (
+                      <button key={s.studentId} type="button" onClick={() => { setStudent({ id: s.studentId, name: s.name, cls: s.className }); setStudentQuery(''); }} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50">
+                        {s.name} <span className="text-[11px] text-gray-400">{s.className}{s.classMentor ? ` · 담임 ${s.classMentor}` : ''}</span>
+                      </button>
+                    ))}
+                    {studentResults.length === 0 && (
+                      <button type="button" onClick={() => { setStudent({ name: studentQuery.trim() }); setStudentQuery(''); }} className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">명단에 없으면 <b>"{studentQuery.trim()}"</b>로 입력</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-800 mb-1.5">② 어디서 사야 하나요?</p>
+            <div className="flex gap-1.5">
+              {SUPPLY_STORES.map(s => <button key={s} type="button" onClick={() => setStore(s)} className={seg(store === s)}>{STORE_ICON_WEB[s]} {s}</button>)}
+            </div>
+            {store === '기타' && <input value={storeEtc} onChange={e => setStoreEtc(e.target.value)} placeholder="구매처 (예: 편의점, 쿠팡)" className={`${inputCls} mt-2`} />}
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-gray-800">③ 무엇이 필요한가요? <span className="font-normal text-gray-400">{lines.length}개 담음</span></p>
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ(''); }} placeholder="물품 검색 (예: 밴드, 치약, 보드마카)" className={`${inputCls} pl-9`} />
+              {q.trim() && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white rounded-xl border border-emerald-200 shadow-lg divide-y divide-gray-100 overflow-hidden max-h-64 overflow-y-auto">
+                  {results.map(i => {
+                    const had = lines.find(l => l.itemId === i.id);
+                    const stock = views.find(v => v.id === i.id);
+                    return (
+                      <button key={i.id} type="button" onClick={() => addItem(i)} className="w-full text-left flex items-center gap-2 px-3 py-1.5 hover:bg-emerald-50">
+                        <span className="flex-1 min-w-0 text-[12px] truncate"><b>{i.name}</b> <span className="text-gray-400">{[i.kind, i.spec].filter(Boolean).join(' · ')}</span>{stock && stock.total > 0 ? <span className="text-emerald-600"> · 캠프 재고 {stock.total}</span> : null}</span>
+                        <span className="text-[11px] font-bold text-emerald-600">{had ? `${had.quantity} +1` : '+ 담기'}</span>
+                      </button>
+                    );
+                  })}
+                  <button type="button" onClick={() => { setLines(ls => [...ls, { id: newId(), name: q.trim(), quantity: 1, unit: '개' }]); setQ(''); }} className="w-full text-left px-3 py-1.5 text-[12px] text-gray-600 bg-gray-50 hover:bg-gray-100"><b>"{q.trim()}"</b> 직접 추가</button>
+                </div>
+              )}
+            </div>
+            {lines.length > 0 && (
+              <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
+                {lines.map(l => (
+                  <div key={l.id} className="px-3 py-2 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex-1 min-w-0 text-[13px] font-bold text-gray-900 truncate">{l.name}</span>
+                      <button type="button" onClick={() => upd(l.id, { quantity: Math.max(1, l.quantity - 1) })} className="w-6 h-6 rounded border border-gray-200 text-gray-500">−</button>
+                      <span className="w-7 text-center text-sm font-extrabold">{l.quantity}</span>
+                      <button type="button" onClick={() => upd(l.id, { quantity: l.quantity + 1 })} className="w-6 h-6 rounded border border-gray-200 text-gray-500">+</button>
+                      <button type="button" onClick={() => setLines(ls => ls.filter(x => x.id !== l.id))} className="text-gray-300 hover:text-red-500 px-1">🗑️</button>
+                    </div>
+                    <div className="flex gap-1 flex-wrap">
+                      {[...new Set([l.unit, ...UNITS])].map(u => (
+                        <button key={u} type="button" onClick={() => upd(l.id, { unit: u })} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${l.unit === u ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'}`}>{u}</button>
+                      ))}
+                      <input value={l.memo ?? ''} onChange={e => upd(l.id, { memo: e.target.value || undefined })} placeholder="메모 (색상·사이즈 등)" className="flex-1 min-w-[120px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none" />
+                    </div>
+                    {forType === 'camp' && (l.itemId ? (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-[10px] text-gray-500">입고 그룹</span>
+                        {groups.map(g => {
+                          const on = (l.groupId ?? defaultGroup?.id) === g.id;
+                          return <button key={g.id} type="button" onClick={() => upd(l.id, { groupId: g.id, groupName: g.name })} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500'}`}>{g.name}</button>;
+                        })}
+                      </div>
+                    ) : <p className="text-[10px] text-gray-400">재고 품목이 아니라 입고되지 않아요</p>)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-800 mb-1">메모 <span className="font-normal text-gray-400">(선택)</span></p>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="예: 오늘 저녁까지 필요해요, 학생 개인 비용" className={`${inputCls} resize-none`} />
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100">
+          <button onClick={submit} disabled={busy} className="w-full py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? '저장 중...' : existing ? '수정 저장' : '요청 올리기'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SupplyRequestDetailModal({ req: r, campCode, groups, views, isAdmin, userId, userName, onEdit, onMetoo, onClose }: {
+  req: SupplyRequest; campCode: string; groups: InventoryGroup[]; views: InventoryItemView[]; isAdmin: boolean; userId: string; userName: string;
+  onEdit: () => void; onMetoo: () => void; onClose: () => void;
+}) {
+  const mine = r.requesterId === userId;
+  const isOpen = isSupplyOpen(r.status);
+  const iAmBuyer = r.buyerId === userId;
+  const [mode, setMode] = useState<'none' | 'reject' | 'hold'>('none');
+  const isCamp = r.forType === 'camp';
+  // 캠프 공용 입고: 줄별 그룹·수량 (기본은 요청값)
+  const canIntake = isAdmin && isCamp && !r.stockApplied && r.status !== 'rejected';
+  const [intake, setIntake] = useState(false);
+  const [intakeLines, setIntakeLines] = useState(() => r.items.filter(l => l.itemId).map(l => ({
+    lineId: l.id, itemId: l.itemId!, itemName: l.name,
+    groupId: l.groupId ?? groups[0]?.id ?? '', quantity: String(l.quantity),
+  })));
+  const doIntake = () => run(async () => {
+    const lines = intakeLines.map(l => ({
+      itemId: l.itemId, itemName: l.itemName, groupId: l.groupId,
+      groupName: groups.find(g => g.id === l.groupId)?.name ?? '', quantity: Math.max(0, parseInt(l.quantity, 10) || 0),
+    }));
+    if (lines.some(l => !l.groupId)) { alert('입고할 그룹을 골라주세요.'); return; }
+    await receiveSupplyRequest(db, campCode, r.id, lines, userName);
+    setIntake(false);
+  });
+  const purchase = () => (isCamp && isAdmin ? setIntake(true) : act('purchased'));
+  const [reason, setReason] = useState('');
+  const [holdUntil, setHoldUntil] = useState(addDaysStr(7));
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try { await fn(); } catch (e) { console.error(e); alert('처리하지 못했습니다. 권한을 확인해주세요.'); } finally { setBusy(false); }
+  };
+  const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
+    run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); setMode('none'); setReason(''); });
+  const send = () => run(async () => { await addSupplyComment(db, r.id, { uid: userId, name: userName, text: comment, admin: isAdmin }); setComment(''); });
+  const status = supplyStatusLine(r);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${SUPPLY_STATUS_STYLE[r.status]}`}>{SUPPLY_REQUEST_STATUS_LABELS[r.status]}</span>
+              <h2 className="text-base font-bold text-gray-900">{STORE_ICON_WEB[r.store]} {supplyStoreLabel(r)}</h2>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-0.5">{r.requesterName} · {fmtDateTime(r.createdAt)}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <div className="rounded-xl bg-blue-50 px-3 py-2 text-sm"><span className="text-[11px] text-gray-500 mr-2">누구</span><b className="text-blue-900">{r.forType === 'student' ? '👧 ' : '🧑‍🏫 '}{supplyForLabel(r)}</b></div>
+          <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
+            {r.items.map(l => {
+              const stock = l.itemId ? views.find(v => v.id === l.itemId) : undefined;
+              return (
+                <div key={l.id} className="flex items-center gap-2 px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-bold text-gray-900 truncate">{l.name}{isCamp && l.groupName ? <span className="text-[11px] font-normal text-emerald-700"> → {l.groupName}</span> : null}</p>
+                    {(l.memo || (isAdmin && stock)) && <p className="text-[10px] text-gray-500">{[l.memo, isAdmin && stock ? `캠프 재고 ${stock.total}${stock.unit}` : ''].filter(Boolean).join(' · ')}</p>}
+                  </div>
+                  <span className="font-extrabold text-amber-700">{l.quantity}<span className="text-[10px] text-gray-400 ml-0.5">{l.unit}</span></span>
+                </div>
+              );
+            })}
+          </div>
+          {r.note && <p className="text-[12px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2">📝 {r.note}</p>}
+          {!isOpen || r.status === 'onhold' ? (
+            <p className={`text-[11px] rounded-xl px-3 py-2 ${r.status === 'onhold' ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-600'}`}>{status}{r.handledBy && r.status !== 'purchased' ? ` · ${r.handledBy}` : ''} · {fmtDateTime(r.handledAt)}</p>
+          ) : null}
+
+          {/* 사오기 */}
+          {isOpen && (r.buyerId ? (
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2">
+              <span className="flex-1 text-[12px] font-bold text-emerald-800">🙋 {iAmBuyer ? '제가' : `${r.buyerName} 쌤이`} 사오기로 했어요</span>
+              {iAmBuyer && <button onClick={() => run(() => setSupplyBuyer(db, [r.id], null))} className="text-[11px] text-gray-500 hover:underline">취소</button>}
+              {(iAmBuyer || isAdmin) && <button onClick={purchase} disabled={busy} className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">✓ 사왔어요</button>}
+            </div>
+          ) : (
+            <button onClick={() => run(() => setSupplyBuyer(db, [r.id], { uid: userId, name: userName }))} disabled={busy}
+              className="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl">🙋 제가 사올게요</button>
+          ))}
+          <div className="flex gap-2">
+            {isOpen && !mine && <button onClick={onMetoo} className="flex-1 py-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">🙋 나도 필요해요</button>}
+            {mine && isOpen && <button onClick={onEdit} className="flex-1 py-2 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl">수정</button>}
+            {mine && isOpen && <button onClick={() => { if (confirm('이 요청을 취소할까요?')) run(async () => { await deleteSupplyRequest(db, r.id); onClose(); }); }} className="flex-1 py-2 text-xs text-red-500 border border-red-200 rounded-xl">요청 취소</button>}
+          </div>
+
+          {/* 캠프 공용 → 재고 입고 */}
+          {canIntake && (intake ? (
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-2.5 space-y-1.5">
+              <p className="text-[11px] font-bold text-emerald-800">📥 재고 입고 — 실제로 산 수량(낱개)과 넣을 그룹을 확인하세요</p>
+              {intakeLines.map((l, idx) => (
+                <div key={l.lineId} className="flex items-center gap-1.5">
+                  <span className="flex-1 min-w-0 text-[12px] font-semibold text-gray-800 truncate">{l.itemName}</span>
+                  <select value={l.groupId} onChange={e => setIntakeLines(ls => ls.map((x, i) => i === idx ? { ...x, groupId: e.target.value } : x))} className="text-[11px] border border-emerald-200 rounded-lg px-1.5 py-1 bg-white w-24">
+                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                  <input type="number" min={0} value={l.quantity} onChange={e => setIntakeLines(ls => ls.map((x, i) => i === idx ? { ...x, quantity: e.target.value } : x))} className="w-16 text-[12px] border border-emerald-200 rounded-lg px-1.5 py-1 bg-white text-right" />
                 </div>
               ))}
+              {r.items.some(l => !l.itemId) && <p className="text-[10px] text-gray-500">재고 품목이 아닌 {r.items.filter(l => !l.itemId).map(l => l.name).join(', ')}은(는) 입고하지 않아요.</p>}
+              <div className="flex gap-1.5">
+                <button onClick={() => setIntake(false)} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">취소</button>
+                <button onClick={doIntake} disabled={busy} className="flex-[2] py-1.5 text-[11px] font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40">{r.status === 'purchased' ? '재고에 입고' : '구매 완료 + 재고 입고'}</button>
+              </div>
             </div>
-          </details>
+          ) : r.status === 'purchased' && (
+            <button onClick={() => setIntake(true)} className="w-full py-2 text-xs font-bold text-white bg-amber-500 rounded-xl">📥 재고에 입고하기</button>
+          ))}
+
+          {/* 관리자 처리 */}
+          {isAdmin && (mode !== 'none' || isOpen || !r.stockApplied) && (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-2.5 space-y-2">
+              <p className="text-[10px] font-bold text-indigo-700">관리자 처리</p>
+              {mode === 'none' ? (
+                isOpen ? (
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setMode('reject')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">반려</button>
+                    {r.status === 'onhold'
+                      ? <button onClick={() => act('requested')} disabled={busy} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">보류 해제</button>
+                      : <button onClick={() => setMode('hold')} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">⏸ 보류</button>}
+                    <button onClick={purchase} disabled={busy} className="flex-[1.4] py-1.5 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">✓ 구매 완료{isCamp ? ' + 입고' : ''}</button>
+                  </div>
+                ) : (
+                  <button onClick={() => act('requested')} disabled={busy} className="w-full py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">다시 진행 중으로</button>
+                )
+              ) : (
+                <div className="space-y-1.5">
+                  <input value={reason} onChange={e => setReason(e.target.value)} autoFocus
+                    placeholder={mode === 'reject' ? '반려 사유 (예: 캠프 재고로 대체, 살 필요 없음)' : '보류 사유 (예: 이번 장보기엔 못 사요)'} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none bg-white" />
+                  {mode === 'hold' && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="text-[10px] text-gray-500 mr-0.5">구매 예정</span>
+                      {([['내일', 1], ['3일 뒤', 3], ['1주 뒤', 7]] as const).map(([label, n]) => (
+                        <button key={label} type="button" onClick={() => setHoldUntil(addDaysStr(n))} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${holdUntil === addDaysStr(n) ? 'bg-amber-200 text-amber-900' : 'bg-white border border-gray-200 text-gray-600'}`}>{label}</button>
+                      ))}
+                      <input type="date" value={holdUntil} onChange={e => setHoldUntil(e.target.value)} className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5 bg-white" />
+                      <button type="button" onClick={() => setHoldUntil('')} className={`px-2 py-0.5 rounded text-[10px] ${!holdUntil ? 'bg-amber-200 text-amber-900' : 'text-gray-400'}`}>미정</button>
+                    </div>
+                  )}
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setMode('none')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">취소</button>
+                    <button onClick={() => act(mode === 'reject' ? 'rejected' : 'onhold', { note: reason, holdUntil })} disabled={busy}
+                      className={`flex-1 py-1.5 text-[11px] font-bold text-white rounded-lg ${mode === 'reject' ? 'bg-gray-500' : 'bg-amber-500'}`}>{mode === 'reject' ? '반려' : '보류'}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 메모·댓글 */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-bold text-gray-700">💬 메모·댓글 {r.comments?.length ? r.comments.length : ''}</p>
+            {(r.comments ?? []).map(c => (
+              <div key={c.id} className={`rounded-xl px-3 py-1.5 ${c.admin ? 'bg-indigo-50' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-1.5">
+                  <b className={`text-[11px] ${c.admin ? 'text-indigo-700' : 'text-gray-800'}`}>{c.name}</b>
+                  {c.admin && <span className="text-[9px] px-1 rounded bg-indigo-100 text-indigo-700 font-bold">관리자</span>}
+                  <span className="text-[10px] text-gray-400">{fmtDateTime(c.at)}</span>
+                  {isAdmin && <button onClick={() => run(() => deleteSupplyComment(db, r.id, c))} className="ml-auto text-[10px] text-gray-300 hover:text-red-500">삭제</button>}
+                </div>
+                <p className="text-[12px] text-gray-700 whitespace-pre-wrap">{c.text}</p>
+              </div>
+            ))}
+            <div className="flex gap-1.5">
+              <input value={comment} onChange={e => setComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && comment.trim()) send(); }}
+                placeholder={isAdmin ? '예: 이번엔 못 사고 다음 주에 살게요' : '예: 저희 반도 2개 필요해요, 제가 내일 다이소 가요'} className="flex-1 text-[12px] border border-gray-200 rounded-xl px-3 py-1.5 outline-none focus:border-emerald-400" />
+              <button onClick={send} disabled={busy || !comment.trim()} className="px-3 text-[12px] font-bold text-white bg-gray-800 rounded-xl disabled:opacity-30">등록</button>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
