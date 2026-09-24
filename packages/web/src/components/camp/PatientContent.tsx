@@ -56,6 +56,7 @@ import {
   newDoseId,
   getGroupStock,
   getTotalStock,
+  itemThumb,
   getItemUsage,
   itemLabel,
   getDoseWarnings,
@@ -2511,20 +2512,6 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
   const textCls = compact ? 'text-[11px]' : 'text-xs';
   const inputCls = `${textCls} border rounded-lg px-2 py-1 outline-none focus:border-emerald-400 bg-white`;
 
-  // 유형 · 종류별로 묶은 선택 목록 (같은 이름은 "이름 (종류·규격)"으로 구분)
-  const grouped = useMemo(() => {
-    const order: InventoryUsage[] = ['oral', 'topical', 'supply'];
-    const map = new Map<string, InventoryItemView[]>();
-    [...medicines]
-      .sort((a, b) => order.indexOf(getItemUsage(a)) - order.indexOf(getItemUsage(b)))
-      .forEach(it => {
-        const key = `${INVENTORY_USAGE_LABELS[getItemUsage(it)]}${it.kind ? ` · ${it.kind}` : ''}`;
-        if (!map.has(key)) map.set(key, []);
-        map.get(key)!.push(it);
-      });
-    return [...map.entries()];
-  }, [medicines]);
-
   const addRow = () => {
     if (!canAdd) return;
     // 기본값을 비워 둔다 — 확인 없이 저장해 엉뚱한 약이 차감되는 것을 막기 위해
@@ -2534,11 +2521,15 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
       groupId: g?.id ?? '', groupName: g?.name ?? '',
       givenAt: Timestamp.now(), givenBy, source: 'initial',
     }]);
+    // '추가'를 누르면 바로 약·물품 선택(검색) 화면을 연다
+    setPicking(doses.length);
   };
   const update = (idx: number, patch: Partial<MedicationDose>) =>
     onChange(doses.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
   const remove = (idx: number) => onChange(doses.filter((_, i) => i !== idx));
   const past = (history ?? []).filter(h => !doses.some(d => d.id === h.id));
+  // 약·물품 선택 화면 (검색) — 어떤 줄의 약을 고르는 중인지
+  const [picking, setPicking] = useState<number | null>(null);
 
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
@@ -2578,19 +2569,14 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
         return (
           <div key={d.id} className={`bg-white rounded-lg border p-2 space-y-1.5 ${incomplete ? 'border-amber-300' : 'border-emerald-100'}`}>
             <div className="flex gap-1.5 items-center">
-              <select value={d.itemId}
-                onChange={e => {
-                  const next = medicines.find(m => m.id === e.target.value);
-                  if (next) update(idx, { itemId: next.id, itemName: next.name, itemKind: next.kind, ingredient: next.ingredient, unit: next.unit || '개' });
-                }}
-                className={`${inputCls} flex-1 min-w-0 ${d.itemId ? 'border-emerald-200' : 'border-amber-300 text-gray-400'}`}>
-                <option value="">약·물품 선택</option>
-                {grouped.map(([label, list]) => (
-                  <optgroup key={label} label={label}>
-                    {list.map(m => <option key={m.id} value={m.id}>{itemLabel(m)}</option>)}
-                  </optgroup>
-                ))}
-              </select>
+              <button type="button" onClick={() => setPicking(idx)}
+                className={`${inputCls} flex-1 min-w-0 flex items-center gap-1.5 text-left ${d.itemId ? 'border-emerald-200' : 'border-amber-300'}`}>
+                {item && itemThumb(item)
+                  ? <img src={itemThumb(item)} alt="" className="w-5 h-5 rounded object-cover bg-gray-100 shrink-0" />
+                  : <span className="w-5 h-5 rounded bg-gray-100 shrink-0 flex items-center justify-center text-[10px] text-gray-400">💊</span>}
+                <span className={`truncate ${d.itemId ? 'text-gray-900 font-semibold' : 'text-gray-400'}`}>{item ? itemLabel(item) : '약·물품 선택'}</span>
+                <span className="ml-auto text-gray-300 shrink-0">🔍</span>
+              </button>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => update(idx, { quantity: Math.max(1, d.quantity - 1) })} className="w-6 h-6 rounded border border-gray-200 text-gray-500 hover:bg-gray-50">−</button>
                 <span className={`${textCls} w-9 text-center font-bold text-gray-800`}>{d.quantity}{d.unit ?? '개'}</span>
@@ -2627,6 +2613,114 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
           </div>
         );
       })}
+
+      {picking !== null && (
+        <MedicationItemPicker
+          medicines={medicines}
+          groups={groups}
+          groupId={doses[picking]?.groupId}
+          compact={compact}
+          onClose={() => setPicking(null)}
+          onPick={(m, qty) => {
+            update(picking, { itemId: m.id, itemName: m.name, itemKind: m.kind, ingredient: m.ingredient, unit: m.unit || '개', quantity: Math.max(1, qty) });
+            setPicking(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 약·물품 선택 — 이름 일부만 입력해도 찾을 수 있게 검색을 제공한다.
+ * 여기서는 새 물품을 만들지 않고, 이미 등록된 사용 중인 약·처치 물품만 고른다.
+ */
+function MedicationItemPicker({ medicines, groups, groupId, compact, onPick, onClose }: {
+  medicines: InventoryItemView[];
+  groups: InventoryGroup[];
+  /** 이 줄에서 쓰기로 한 그룹 (재고 표시용) */
+  groupId?: string;
+  compact?: boolean;
+  onPick: (m: InventoryItemView, quantity: number) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState<InventoryItemView | null>(null);
+  const [qty, setQty] = useState(1);
+
+  const results = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    const order: InventoryUsage[] = ['oral', 'topical', 'supply'];
+    return [...medicines]
+      .filter(m => !t || [m.name, m.kind, m.spec, m.subCategory, m.ingredient, m.description].some(f => f?.toLowerCase().includes(t)))
+      .sort((a, b) => order.indexOf(getItemUsage(a)) - order.indexOf(getItemUsage(b)) || a.name.localeCompare(b.name, 'ko'));
+  }, [medicines, q]);
+
+  const groupName = groups.find(g => g.id === groupId)?.name;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[70]" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+        <div className="px-4 pt-4 pb-3 border-b border-gray-100 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-900">약 · 물품 선택</h3>
+            <button type="button" onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600">✕</button>
+          </div>
+          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="물품명 검색 (예: 타이, 파스, 붕대)"
+            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400 bg-white" />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {results.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-10">검색 결과가 없습니다.</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {results.map(m => {
+                const gStock = groupId ? getGroupStock(m, groupId) : 0;
+                const picked = sel?.id === m.id;
+                return (
+                  <div key={m.id}>
+                    <button type="button" onClick={() => { setSel(picked ? null : m); setQty(1); }}
+                      className={`w-full flex items-center gap-2.5 px-4 h-[56px] text-left ${picked ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                      {itemThumb(m)
+                        ? <img src={itemThumb(m)} alt="" className="w-9 h-9 rounded-lg object-cover bg-gray-100 shrink-0" loading="lazy" />
+                        : <span className="w-9 h-9 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-400 text-sm">💊</span>}
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] font-semibold text-gray-900 truncate">{m.name}</span>
+                        <span className="block text-[10px] text-gray-400 truncate h-[13px]">{[m.kind, m.spec, INVENTORY_USAGE_LABELS[getItemUsage(m)]].filter(Boolean).join(' · ')}</span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className={`block text-[11px] font-bold ${groupId && gStock <= 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                          {groupId ? `${groupName} ${gStock}` : `전체 ${getTotalStock(m)}`}<span className="text-[9px] text-gray-400 ml-0.5">{m.unit}</span>
+                        </span>
+                        {groupId && <span className="block text-[9px] text-gray-400">전체 {getTotalStock(m)}{m.unit}</span>}
+                      </span>
+                    </button>
+
+                    {picked && (
+                      <div className="px-4 pb-3 pt-1 bg-emerald-50 space-y-2">
+                        {m.dosageNote && <p className="text-[10px] text-emerald-900">📋 {m.dosageNote}</p>}
+                        {m.description && <p className="text-[10px] text-gray-600">ℹ️ {m.description}</p>}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-gray-700">사용 수량</span>
+                          <button type="button" onClick={() => setQty(v => Math.max(1, v - 1))} className="w-7 h-7 rounded border border-gray-200 bg-white text-gray-600">−</button>
+                          <span className="w-12 text-center text-sm font-bold text-gray-900">{qty}{m.unit}</span>
+                          <button type="button" onClick={() => setQty(v => v + 1)} className="w-7 h-7 rounded border border-gray-200 bg-white text-gray-600">+</button>
+                          <button type="button" onClick={() => onPick(m, qty)}
+                            className="ml-auto px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">추가</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className={`px-4 py-2.5 border-t border-gray-100 ${compact ? 'text-[10px]' : 'text-[11px]'} text-gray-400`}>
+          재고 탭에 등록된 약·처치 물품만 고를 수 있습니다.
+        </div>
+      </div>
     </div>
   );
 }

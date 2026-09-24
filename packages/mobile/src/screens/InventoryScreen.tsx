@@ -60,7 +60,6 @@ import {
   deleteSupplyRequest,
   isSupplyOpen,
   supplyForLabel,
-  SUPPLY_REQUEST_STATUS_LABELS,
   receiveSupplyRequest,
   addCampRequestsFromNeeds,
   needsStockIntake,
@@ -86,10 +85,8 @@ import {
   getGroupStock,
   getMinStock,
   INVENTORY_CATEGORIES,
-  INVENTORY_MOVEMENT_LABELS,
   addInventoryItem,
   INVENTORY_UNITS,
-  INVENTORY_USAGES,
   INVENTORY_USAGE_LABELS,
   INVENTORY_SUBCATEGORIES,
   addInventoryGroup,
@@ -104,6 +101,15 @@ import {
   updateInventoryItem,
   DEFAULT_INVENTORY_ITEMS,
   STOCKTAKE_REASONS,
+  inventoryPerm,
+  transferStock,
+  subscribeCampMovements,
+  movementLabel,
+  MOVEMENT_FILTERS,
+  TRANSFER_REASONS,
+  supplyProgress,
+  INVENTORY_USAGE_ORDER,
+  suggestedUsages,
 } from '@smis-mentor/shared';
 import { getUsersByJobCodeId } from '../services/userService';
 import type {
@@ -131,10 +137,12 @@ import type {
   CampGroup,
   STSheetStudent,
   InventoryUsage,
+  InventoryPerm,
+  MovementFilterKey,
   InventoryPackage,
 } from '@smis-mentor/shared';
 
-type SubTab = 'stock' | 'request' | 'lost' | 'manage';
+type SubTab = 'stock' | 'request' | 'purchase' | 'movement' | 'lost' | 'manage';
 
 function todayStr(): string {
   const d = new Date();
@@ -242,6 +250,17 @@ export function InventoryScreen() {
   const [groupTouched, setGroupTouched] = useState(false);
   useEffect(() => { if (!groupTouched && myInvGroupId) setGroupFilter(myInvGroupId); }, [myInvGroupId, groupTouched]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // 기존 권한 체계 그대로 — admin / 그룹 역할 '부매니저'
+  const perm = useMemo(() => inventoryPerm(userData as { role?: string; jobExperiences?: Array<{ id: string; groupRole?: string }> } | null, activeJobCodeId),
+    [userData, activeJobCodeId]);
+  // 부매니저·관리자: 부족한 물품만 보기
+  const [shortOnly, setShortOnly] = useState(false);
+  const openRequestCount = useMemo(() => requests.filter(r => isSupplyOpen(r.status)).length, [requests]);
+  const shortIds = useMemo(() => new Set(
+    needs.filter(n => !groupFilter || n.groupId === groupFilter).map(n => n.itemId)
+  ), [needs, groupFilter]);
+  // 상세의 '필요한 물품 요청' → 요청 탭 작성 폼을 미리 채워 연다
+  const [requestPrefill, setRequestPrefill] = useState<{ req: SupplyRequest; nonce: number } | null>(null);
   // 관리자: 분류별 품목 추가 (추가하면 바로 상세를 열어 그룹 수량 입력)
   const [adding, setAdding] = useState<{ category?: InventoryCategory; subCategory?: string } | null>(null);
   const anyPlaced = useMemo(() => views.some(v => Object.keys(v.stocks).length > 0), [views]);
@@ -254,10 +273,11 @@ export function InventoryScreen() {
       // 검색어가 없으면 이 캠프에 둔 품목만, 검색하면 전체 품목에서 찾음
       if (!q && anyPlaced && Object.keys(v.stocks).length === 0) return false;
       if (!q && groupFilter && !(groupFilter in v.stocks)) return false;
+      if (shortOnly && perm.isStockManager && !shortIds.has(v.id)) return false;
       if (!q) return true;
       return [v.name, v.kind, v.subCategory, v.spec, v.description, v.ingredient].some(f => f?.toLowerCase().includes(q));
     });
-  }, [views, search, category, anyPlaced, groupFilter]);
+  }, [views, search, category, anyPlaced, groupFilter, shortOnly, shortIds, perm.isStockManager]);
 
   const sections = useMemo(() => {
     const map = new Map<string, InventoryItemView[]>();
@@ -285,10 +305,12 @@ export function InventoryScreen() {
   return (
     <View style={styles.container}>
       {/* 세부탭 */}
-      <View style={styles.tabRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll} contentContainerStyle={styles.tabRow}>
         {([
-          { id: 'stock' as SubTab, title: isForeign ? 'Stock' : '재고 현황', icon: 'cube-outline' as const },
+          { id: 'stock' as SubTab, title: isForeign ? 'Stock' : '재고 현황', icon: 'cube-outline' as const, badge: 0 },
           { id: 'request' as SubTab, title: isForeign ? 'Request' : '재고 요청', icon: 'clipboard-outline' as const, badge: requestBadge },
+          ...(perm.isStockManager ? [{ id: 'purchase' as SubTab, title: isForeign ? 'To buy' : '구매 목록', icon: 'cart-outline' as const, badge: 0 }] : []),
+          ...(perm.isStockManager ? [{ id: 'movement' as SubTab, title: isForeign ? 'History' : '입출고 기록', icon: 'list-outline' as const, badge: 0 }] : []),
           { id: 'lost' as SubTab, title: isForeign ? 'Lost' : '분실물', icon: 'search-outline' as const, badge: keptLostCount },
           ...(isAdmin ? [{ id: 'manage' as SubTab, title: '관리', icon: 'settings-outline' as const, badge: 0 }] : []),
         ]).map(tab => (
@@ -301,12 +323,29 @@ export function InventoryScreen() {
             {subTab === tab.id && <View style={styles.tabIndicator} />}
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {subTab === 'stock' ? (
         <View style={{ flex: 1 }}>
           {/* 고정 툴바: 검색 · 분류 · 범위/그룹 */}
           <View style={styles.toolbar}>
+            {perm.isStockManager && (
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity onPress={() => setShortOnly(v => !v)} activeOpacity={0.7}
+                  style={[styles.summaryCard, shortOnly ? { borderColor: '#f87171', backgroundColor: '#fef2f2' } : shortIds.size > 0 ? { borderColor: '#fecaca' } : null]}>
+                  <Text style={styles.summaryLabel}>재고 부족{shortOnly ? ' · 보는 중' : ''}</Text>
+                  <Text style={[styles.summaryValue, shortIds.size > 0 ? { color: '#dc2626' } : { color: '#9ca3af' }]}>
+                    {shortIds.size}<Text style={styles.summaryUnit}>개 품목</Text>
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setSubTab('request')} activeOpacity={0.7} style={styles.summaryCard}>
+                  <Text style={styles.summaryLabel}>미처리 요청</Text>
+                  <Text style={[styles.summaryValue, openRequestCount > 0 ? { color: '#047857' } : { color: '#9ca3af' }]}>
+                    {openRequestCount}<Text style={styles.summaryUnit}>건 ›</Text>
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <View style={styles.searchBox}>
               <Ionicons name="search" size={14} color="#9ca3af" />
               <TextInput value={search} onChangeText={setSearch} placeholder="품목 · 종류 · 성분 검색" placeholderTextColor="#9ca3af" style={styles.searchInput} returnKeyType="search" />
@@ -336,6 +375,11 @@ export function InventoryScreen() {
                   <Text style={[styles.miniChipText, groupFilter === g.id && { color: '#92400e' }]}>{g.id === myInvGroupId ? '★ ' : ''}{g.name}</Text>
                 </TouchableOpacity>
               ))}
+              {perm.isStockManager && (
+                <TouchableOpacity onPress={() => setShortOnly(v => !v)} style={[styles.miniChip, shortOnly && { backgroundColor: '#fee2e2', borderColor: '#fecaca' }]}>
+                  <Text style={[styles.miniChipText, shortOnly && { color: '#b91c1c', fontWeight: '700' }]}>부족만</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
             {sections.length > 1 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5, alignItems: 'center' }}>
@@ -399,7 +443,7 @@ export function InventoryScreen() {
               </View>
             )}
             renderItem={({ item: v, index, section }) => (
-              <StockRowMobile view={v} groups={groups} focusGroupId={groupFilter}
+              <StockRowMobile view={v} groups={groups} focusGroupId={groupFilter} showStatus={perm.isStockManager}
                 isShort={shortItems.has(v.id)} isLast={index === section.data.length - 1}
                 onPress={() => { setQuickUseGroupId(undefined); setSelectedId(v.id); }}
                 onQuickUse={groupFilter && groupFilter in v.stocks ? () => { setQuickUseGroupId(groupFilter); setSelectedId(v.id); } : undefined} />
@@ -408,7 +452,13 @@ export function InventoryScreen() {
         </View>
       ) : subTab === 'request' ? (
         <SupplyRequestTabMobile deepLink={deepLink} onDeepLinkDone={() => setDeepLink(null)} campCode={campCode} jobCodeId={activeJobCodeId ?? ''} requests={requests} settings={supplySettings} guides={supplyGuides} campGroups={campGroups}
+          prefill={requestPrefill} onPrefillDone={() => setRequestPrefill(null)}
           userGroup={userData?.jobExperiences?.find(e => e.id === activeJobCodeId)?.group} items={items} views={views} groups={groups} needs={needs} students={students} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
+      ) : subTab === 'purchase' && perm.isStockManager ? (
+        <PurchaseListTabMobile views={views} groups={groups} needs={needs} requests={requests} settings={supplySettings}
+          onSelect={id => { setQuickUseGroupId(undefined); setSelectedId(id); }} onGoRequests={() => setSubTab('request')} />
+      ) : subTab === 'movement' && perm.isStockManager ? (
+        <MovementTabMobile campCode={campCode} groups={groups} views={views} />
       ) : subTab === 'manage' && isAdmin ? (
         <ManageTabMobile campCode={campCode} jobCodeId={activeJobCodeId ?? ''} settings={supplySettings} guides={supplyGuides}
           items={items} views={views} groups={groups} packages={packages} campGroups={campGroups} userName={userName}
@@ -418,16 +468,24 @@ export function InventoryScreen() {
       )}
 
       <Modal visible={!!editingItem} animationType="fade" transparent onRequestClose={() => setEditingItem(null)}>
-        {editingItem && <ItemFormMobile item={editingItem === 'new' ? undefined : editingItem} userName={userName} onClose={() => setEditingItem(null)}
+        {editingItem && <ItemFormMobile item={editingItem === 'new' ? undefined : editingItem} groups={groups} perm={perm} userName={userName} onClose={() => setEditingItem(null)}
           onCreated={id => setTimeout(() => setSelectedId(id), 300)} />}
       </Modal>
       <Modal visible={!!adding} animationType="fade" transparent onRequestClose={() => setAdding(null)}>
-        {adding && <ItemFormMobile preset={adding} userName={userName} onClose={() => setAdding(null)} onCreated={id => setTimeout(() => setSelectedId(id), 300)} />}
+        {adding && <ItemFormMobile preset={adding} groups={groups} campCode={campCode} defaultGroupId={groupFilter || myInvGroupId} perm={perm} userName={userName}
+          onClose={() => setAdding(null)} onCreated={id => setTimeout(() => setSelectedId(id), 300)} />}
       </Modal>
       <Modal visible={!!selected} animationType="fade" transparent onRequestClose={() => setSelectedId(null)}>
         {selected && (
-          <ItemDetailMobile view={selected} groups={groups} campCode={campCode} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName}
-            initialUseGroupId={quickUseGroupId} onClose={() => { setSelectedId(null); setQuickUseGroupId(undefined); }}
+          <ItemDetailMobile view={selected} groups={groups} campCode={campCode} perm={perm} userId={userData?.userId ?? ''} userName={userName}
+            initialUseGroupId={quickUseGroupId} defaultGroupId={groupFilter || myInvGroupId}
+            onClose={() => { setSelectedId(null); setQuickUseGroupId(undefined); }}
+            onRequest={(v, gid) => {
+              const g = groups.find(x => x.id === (gid ?? myInvGroupId)) ?? groups[0];
+              setSelectedId(null);
+              setRequestPrefill({ nonce: Date.now(), req: { forType: 'camp', items: [{ id: 'pf', itemId: v.id, name: v.name, quantity: 1, unit: v.unit || '개', groupId: g?.id, groupName: g?.name }] } as unknown as SupplyRequest });
+              setSubTab('request');
+            }}
             onEditItem={() => { const it = items.find(x => x.id === selected.id); setSelectedId(null); if (it) setTimeout(() => setEditingItem(it), 300); }} />
         )}
       </Modal>
@@ -438,48 +496,45 @@ export function InventoryScreen() {
 // ==================== 재고 행 (컴팩트) ====================
 
 /** 한 줄 요약: 이름·종류 | 그룹별 수량(있는 그룹만) | 총량. 그룹을 고르면 그 그룹 수량을 크게 */
-const StockRowMobile = React.memo(function StockRowMobile({ view: v, groups, focusGroupId, isShort, isLast, onPress, onQuickUse }: {
-  view: InventoryItemView; groups: InventoryGroup[]; focusGroupId: string; isShort: boolean; isLast: boolean; onPress: () => void; onQuickUse?: () => void;
+const StockRowMobile = React.memo(function StockRowMobile({ view: v, groups, focusGroupId, showStatus, isShort, isLast, onPress, onQuickUse }: {
+  view: InventoryItemView; groups: InventoryGroup[]; focusGroupId: string; showStatus: boolean; isShort: boolean; isLast: boolean; onPress: () => void; onQuickUse?: () => void;
 }) {
-  const parts = groups
-    .map(g => {
-      const n = getGroupStock(v, g.id);
-      const min = getMinStock(v, g.id);
-      return { g, n, low: n < 0 || (min > 0 && n < min), placed: g.id in v.stocks };
-    })
-    .filter(x => x.placed || x.low);
-  const focus = focusGroupId ? parts.find(x => x.g.id === focusGroupId) ?? { g: groups.find(g => g.id === focusGroupId)!, n: getGroupStock(v, focusGroupId), low: false, placed: false } : null;
-  const negative = parts.some(x => x.n < 0);
-  const big = focus ? focus.n : v.total;
-  const bigLow = focus ? focus.low : isShort;
+  const qty = focusGroupId ? getGroupStock(v, focusGroupId) : v.total;
+  const min = focusGroupId ? getMinStock(v, focusGroupId) : 0;
+  const low = focusGroupId ? (qty < 0 || (min > 0 && qty < min)) : isShort;
+  // 일반 멘토에게는 부족 상태를 표시하지 않는다 (실사 필요한 음수만 빨갛게)
+  const lowShown = showStatus ? low : qty < 0;
+  const thumb = itemThumb(v);
+  const loc = focusGroupId ? v.locations?.[focusGroupId] : undefined;
+  const meta = [v.kind, v.spec, loc ? `📍 ${loc}` : '', focusGroupId ? '' : `${groups.filter(g => g.id in v.stocks).length}곳 합계`].filter(Boolean).join(' · ');
+  const ex = earliestExpiry(v, focusGroupId || undefined);
+  const exSt = expiryState(ex);
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={[styles.row, isLast && { borderBottomWidth: 0 }]}>
-      {itemThumb(v) ? <Image source={{ uri: itemThumb(v) }} style={{ width: 34, height: 34, borderRadius: 6, backgroundColor: '#f3f4f6' }} contentFit="cover" /> : null}
+    <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={[styles.row, styles.stockRow, isLast && { borderBottomWidth: 0 }]}>
+      {thumb
+        ? <Image source={{ uri: thumb }} style={styles.rowThumb} contentFit="cover" />
+        : <View style={[styles.rowThumb, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="cube-outline" size={16} color="#cbd5e1" /></View>}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.rowName} numberOfLines={1}>
-          {v.name}
-          {v.kind || v.spec ? <Text style={styles.rowMeta}>  {[v.kind, v.spec].filter(Boolean).join(' · ')}</Text> : null}
-        </Text>
-        <Text style={styles.rowGroups} numberOfLines={1}>
-          {focusGroupId && v.locations?.[focusGroupId] ? <Text style={{ color: '#6b7280' }}>📍{v.locations[focusGroupId]}  </Text> : null}
-          {parts.length === 0 ? <Text style={{ color: '#d1d5db' }}>재고 없음</Text> : parts.map((x, i) => (
-            <Text key={x.g.id} style={x.low ? styles.rowGroupLow : x.g.id === focusGroupId ? styles.rowGroupFocus : undefined}>
-              {i > 0 ? '  ' : ''}{x.g.name} {x.n}
-            </Text>
-          ))}
-        </Text>
+        <Text style={styles.rowName} numberOfLines={1}>{v.name}</Text>
+        <Text style={styles.rowGroups} numberOfLines={1}>{meta || ' '}</Text>
       </View>
-      {(() => { const ex = earliestExpiry(v, focusGroupId || undefined); const st = expiryState(ex); return st === 'expired' || st === 'soon'
-        ? <View style={[styles.badgeWarn, st === 'soon' && { backgroundColor: '#fef3c7' }]}><Text style={[styles.badgeWarnText, st === 'soon' && { color: '#92400e' }]}>{st === 'expired' ? '만료' : '임박'}</Text></View> : null; })()}
-      {negative && <View style={styles.badgeWarn}><Text style={styles.badgeWarnText}>실사</Text></View>}
-      {!negative && bigLow && <View style={styles.badgeLow}><Text style={styles.badgeLowText}>부족</Text></View>}
-      <View style={{ alignItems: 'flex-end', minWidth: 44 }}>
-        <Text style={[styles.rowTotal, bigLow && { color: '#dc2626' }]}>{big}<Text style={styles.rowUnit}>{v.unit}</Text></Text>
-        {focus ? <Text style={styles.rowTotalSub}>총 {v.total}</Text> : null}
+      {(exSt === 'expired' || exSt === 'soon') && (
+        <View style={[styles.badgeWarn, exSt === 'soon' && { backgroundColor: '#fef3c7' }]}>
+          <Text style={[styles.badgeWarnText, exSt === 'soon' && { color: '#92400e' }]}>{exSt === 'expired' ? '만료' : '임박'}</Text>
+        </View>
+      )}
+      <View style={{ alignItems: 'flex-end', width: 52 }}>
+        <Text style={[styles.rowTotal, lowShown && { color: '#dc2626' }]}>{qty}<Text style={styles.rowUnit}>{v.unit}</Text></Text>
       </View>
+      {showStatus && (
+        <View style={{ width: 34, alignItems: 'center' }}>
+          {low ? <View style={styles.badgeLow}><Text style={styles.badgeLowText}>부족</Text></View>
+            : <Text style={{ fontSize: 10, color: '#9ca3af' }}>정상</Text>}
+        </View>
+      )}
       {onQuickUse ? (
-        <TouchableOpacity onPress={onQuickUse} hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }} style={{ backgroundColor: '#2563eb', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}>
-          <Text style={{ fontSize: 11, fontWeight: '800', color: '#fff' }}>−</Text>
+        <TouchableOpacity onPress={onQuickUse} hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }} style={{ backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5 }}>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#1d4ed8' }}>−</Text>
         </TouchableOpacity>
       ) : null}
     </TouchableOpacity>
@@ -532,11 +587,14 @@ function notifySupply(body: Record<string, unknown>) {
   authenticatedFetch('/api/inventory/notify', { method: 'POST', body: JSON.stringify(body) }).catch(e => console.warn('알림 요청 실패:', e));
 }
 
-function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId, requests, settings, guides, campGroups, items, views, groups, needs, students, isAdmin, userId, userName, userGroup }: {
+function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId, requests, settings, guides, campGroups, items, views, groups, needs, students, isAdmin, userId, userName, userGroup, prefill, onPrefillDone }: {
   deepLink?: InventoryDeepLink | null; onDeepLinkDone?: () => void;
   campCode: string; jobCodeId: string; requests: SupplyRequest[]; settings: SupplySettings | null; guides: SupplyGuide[]; campGroups: CampGroup[];
   items: InventoryItem[]; views: InventoryItemView[]; groups: InventoryGroup[]; needs: PurchaseNeed[]; students: STSheetStudent[];
   isAdmin: boolean; userId: string; userName: string; userGroup?: string;
+  /** 재고 현황 상세의 '필요한 물품 요청' 으로 들어온 경우 — 작성 폼을 미리 채워 연다 */
+  prefill?: { req: SupplyRequest; nonce: number } | null;
+  onPrefillDone?: () => void;
 }) {
   const sectionsOf = <T,>(list: T[], reqOf: (t: T) => SupplyRequest) => groupSupplyByCampGroup(list, reqOf, campGroups, students);
   const [candidates, setCandidates] = useState<SupplyBuyerCandidate[]>([]);
@@ -546,6 +604,12 @@ function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId,
   }, [isAdmin, jobCodeId]);
   const [filter, setFilter] = useState<SupplyFilter>('open');
   const [editing, setEditing] = useState<SupplyEditing | null>(null);
+  useEffect(() => {
+    if (!prefill) return;
+    setEditing({ mode: 'new', prefill: prefill.req });
+    onPrefillDone?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.nonce]);
   const [openId, setOpenId] = useState<string | null>(null);
   // 푸시 알림으로 들어오면 해당 요청 열기 / 내 구매·정산 화면 보여 주기
   useEffect(() => {
@@ -570,6 +634,9 @@ function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId,
   const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyBuyerOf(r, settings)?.uid === userId && !supplyAllDone(r)), [open, settings, userId]);
   const myBuyLineCount = myBuys.reduce((a, r) => a + r.items.length - supplyDoneCount(r), 0);
   const shopping = useMemo(() => supplyShoppingList(myBuys), [myBuys]);
+  // 여러 요청에 걸쳐 같은 물품이 있으면 묶어서 (규격·단위가 다르면 따로 합산된다)
+  const duplicated = useMemo(() => supplyShoppingList(open).filter(l => l.who.length >= 2), [open]);
+  const [showDup, setShowDup] = useState(true);
   const settleAll = useMemo(() => supplySettleLines(requests), [requests]);
   const settlesLine = (s: SupplySettleLine) => (s.kind === 'parent' ? isAdmin : settlerIsMe(s.req) || isAdmin);
   const settleVisible = settleAll.filter(s => isAdmin || (s.kind !== 'parent' && settlerIsMe(s.req)) || s.done.byId === userId);
@@ -759,6 +826,30 @@ function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId,
           </View>
         ) : (
           <>
+            {filter === 'open' && duplicated.length > 0 && (
+              <View style={{ borderWidth: 1, borderColor: '#c7d2fe', backgroundColor: '#eef2ff', borderRadius: 10, overflow: 'hidden' }}>
+                <TouchableOpacity onPress={() => setShowDup(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8 }}>
+                  <Text style={{ flex: 1, fontSize: 12, fontWeight: '700', color: '#312e81' }}>
+                    🧺 여러 선생님이 요청한 물품 <Text style={{ fontWeight: '400', color: '#4f46e5' }}>{duplicated.length}종</Text>
+                  </Text>
+                  <Ionicons name={showDup ? 'chevron-up' : 'chevron-down'} size={14} color="#818cf8" />
+                </TouchableOpacity>
+                {showDup && (
+                  <View style={{ backgroundColor: '#fff' }}>
+                    {duplicated.map((l, i) => (
+                      <View key={l.key} style={{ paddingHorizontal: 10, paddingVertical: 6, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : StyleSheet.hairlineWidth, borderTopColor: '#e0e7ff' }}>
+                        <Text style={{ fontSize: 12 }}>
+                          <Text style={{ fontWeight: '700', color: '#111827' }}>{l.name}</Text>
+                          <Text style={{ fontWeight: '800', color: '#4338ca' }}>  {l.total}{l.unit}</Text>
+                          <Text style={{ color: '#9ca3af' }}>  · {l.who.length}건</Text>
+                        </Text>
+                        <Text numberOfLines={1} style={{ fontSize: 10, color: '#6b7280' }}>{l.who.join(' · ')}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
             {filter === 'open' && <Text style={{ fontSize: 10, color: '#9ca3af' }}>다른 선생님 요청도 함께 보여요. 같은 게 필요하면 요청을 열어 '나도 필요해요'.</Text>}
             {sectionsOf(list, r => r).map(sec => (
               <View key={sec.key} style={{ gap: 4 }}>
@@ -820,9 +911,20 @@ const SUPPLY_STATUS_COLOR: Record<SupplyRequestStatus, { bg: string; fg: string 
   rejected: { bg: '#f3f4f6', fg: '#6b7280' },
 };
 
+const PROGRESS_COLOR: Record<string, { bg: string; fg: string }> = {
+  waiting: { bg: '#f3f4f6', fg: '#4b5563' },
+  approved: { bg: '#dbeafe', fg: '#1d4ed8' },
+  buying: { bg: '#e0e7ff', fg: '#4338ca' },
+  bought: { bg: '#d1fae5', fg: '#047857' },
+  received: { bg: '#d1fae5', fg: '#047857' },
+  onhold: { bg: '#fef3c7', fg: '#92400e' },
+  rejected: { bg: '#f3f4f6', fg: '#6b7280' },
+};
+
 function SupplyRowMobile({ req: r, buyer, isLast, onPress }: { req: SupplyRequest; buyer: SupplyBuyer; isLast: boolean; onPress: () => void }) {
-  const c = SUPPLY_STATUS_COLOR[r.status];
-  const what = r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${l.unit}`).join(', ');
+  const pg = supplyProgress(r, !!buyer);
+  const c = PROGRESS_COLOR[pg.key] ?? SUPPLY_STATUS_COLOR[r.status];
+  const what = r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${l.unit}${l.groupName ? ` (${l.groupName})` : ''}`).join(', ');
   const status = supplyStatusLine(r, buyer);
   const last = r.comments?.[r.comments.length - 1];
   return (
@@ -835,7 +937,7 @@ function SupplyRowMobile({ req: r, buyer, isLast, onPress }: { req: SupplyReques
         {last ? <Text style={[styles.rowGroups, { fontSize: 10 }]} numberOfLines={1}>💬 {r.comments!.length} · <Text style={{ fontWeight: '700', color: last.admin ? '#4338ca' : '#374151' }}>{last.name}</Text> {last.text}</Text> : null}
       </View>
       <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
-        <Text style={{ fontSize: 9, fontWeight: '700', color: c.fg }}>{SUPPLY_REQUEST_STATUS_LABELS[r.status]}</Text>
+        <Text style={{ fontSize: 9, fontWeight: '700', color: c.fg }}>{pg.label}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -1260,7 +1362,9 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
         <View style={styles.modalHeader}>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}><Text style={{ fontSize: 9, fontWeight: '700', color: c.fg }}>{SUPPLY_REQUEST_STATUS_LABELS[r.status]}</Text></View>
+              {(() => { const pg = supplyProgress(r, !!buyer); const pc = PROGRESS_COLOR[pg.key] ?? c; return (
+                <View style={{ backgroundColor: pc.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}><Text style={{ fontSize: 9, fontWeight: '700', color: pc.fg }}>{pg.label}</Text></View>
+              ); })()}
               <Text style={styles.modalTitle}>{FOR_ICON[r.forType]} {supplyForLabel(r)}</Text>
             </View>
             <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{r.requesterName} · {fmtDateTime(r.createdAt)}{r.forType === 'student' && classMentor ? ` · 담임 ${classMentor}` : ''}</Text>
@@ -1850,8 +1954,17 @@ function SupplyGuideFormMobile({ guide, onClose }: { guide?: SupplyGuide; onClos
 
 // ==================== 품목 추가 (관리자 · 모바일) ====================
 
-function ItemFormMobile({ item, preset, userName, onClose, onCreated }: {
-  item?: InventoryItem; preset?: { category?: InventoryCategory; subCategory?: string }; userName: string; onClose: () => void; onCreated?: (id: string) => void;
+function ItemFormMobile({ item, preset, groups, campCode, defaultGroupId, perm, userName, onClose, onCreated }: {
+  item?: InventoryItem;
+  preset?: { category?: InventoryCategory; subCategory?: string };
+  groups?: InventoryGroup[];
+  /** 최초 재고를 바로 넣을 캠프 (재고 현황에서 추가할 때) */
+  campCode?: string;
+  defaultGroupId?: string;
+  perm: InventoryPerm;
+  userName: string;
+  onClose: () => void;
+  onCreated?: (id: string) => void;
 }) {
   const [category, setCategory] = useState<InventoryCategory>(item?.category ?? preset?.category ?? '의약품');
   const [subCategory, setSubCategory] = useState(item?.subCategory ?? preset?.subCategory ?? '');
@@ -1859,8 +1972,9 @@ function ItemFormMobile({ item, preset, userName, onClose, onCreated }: {
   const [name, setName] = useState(item?.name ?? '');
   const [spec, setSpec] = useState(item?.spec ?? '');
   const [unit, setUnit] = useState(item?.unit ?? '개');
-  const [usage, setUsage] = useState<InventoryUsage>(item ? getItemUsage(item) : (preset?.category ?? '의약품') === '의약품' ? 'oral' : 'operational');
+  const [usage, setUsage] = useState<InventoryUsage>(item ? getItemUsage(item) : suggestedUsages(preset?.category ?? '의약품')[0]);
   const [minStock, setMinStock] = useState(item?.minStockDefault != null ? String(item.minStockDefault) : '');
+  const [packSize, setPackSize] = useState(item?.packSize ? String(item.packSize) : '');
   const [ingredient, setIngredient] = useState(item?.ingredient ?? '');
   const [intervalHours, setIntervalHours] = useState(item?.intervalHours != null ? String(item.intervalHours) : '');
   const [maxPerDay, setMaxPerDay] = useState(item?.maxPerDay != null ? String(item.maxPerDay) : '');
@@ -1868,29 +1982,70 @@ function ItemFormMobile({ item, preset, userName, onClose, onCreated }: {
   const [description, setDescription] = useState(item?.description ?? '');
   const [isActive, setIsActive] = useState(item?.isActive !== false);
   const [busy, setBusy] = useState(false);
+  // 상세 설정은 기본으로 접어둔다
+  const [showDetail, setShowDetail] = useState(false);
   const subs = INVENTORY_SUBCATEGORIES[category] ?? [];
   const isMed = usage === 'oral' || usage === 'topical';
+  const primaryUsages = suggestedUsages(category);
+  const usageList = [...primaryUsages, ...INVENTORY_USAGE_ORDER.filter(u => !primaryUsages.includes(u))];
+
+  // 신규 등록 — 보관 교무실 · 최초 재고
+  const canSetStock = !item && !!campCode && !!groups?.length;
+  const [stockGroupId, setStockGroupId] = useState(defaultGroupId ?? groups?.[0]?.id ?? '');
+  const [initialQty, setInitialQty] = useState('');
+  // 신규 등록 — 이미지 (관리자만)
+  const [photo, setPhoto] = useState<PickedMedia | null>(null);
+  const pickPhoto = async () => {
+    const picked = await pickLostMedia();
+    const img = picked.find(p => p.type === 'image');
+    if (!img) { if (picked.length) Alert.alert('확인 필요', '이미지 파일만 등록할 수 있습니다.'); return; }
+    if ((img.fileSize ?? 0) > 10 * 1024 * 1024) { Alert.alert('확인 필요', '10MB 이하 이미지만 올릴 수 있습니다.'); return; }
+    setPhoto(img);
+  };
 
   const save = async () => {
-    if (!name.trim()) { Alert.alert('확인 필요', '품목 이름을 입력해주세요.'); return; }
+    if (!name.trim()) { Alert.alert('확인 필요', '물품명을 입력해주세요.'); return; }
     setBusy(true);
     try {
       const data = {
         category, subCategory: subCategory.trim() || undefined, kind: kind.trim() || undefined, name: name.trim(),
         spec: spec.trim() || undefined, unit: unit || '개', usage, isActive,
         description: description.trim() || undefined,
+        packSize: packSize ? Math.max(1, parseInt(packSize, 10) || 1) : undefined,
         minStockDefault: minStock === '' ? undefined : Math.max(0, parseInt(minStock, 10) || 0),
         ingredient: isMed ? ingredient.trim() || undefined : undefined,
         intervalHours: usage === 'oral' && intervalHours !== '' ? Math.max(0, parseFloat(intervalHours) || 0) : undefined,
         maxPerDay: usage === 'oral' && maxPerDay !== '' ? Math.max(0, parseInt(maxPerDay, 10) || 0) : undefined,
         dosageNote: isMed ? dosageNote.trim() || undefined : undefined,
       };
-      if (item) await updateInventoryItem(db, item.id, data);
-      else onCreated?.(await addInventoryItem(db, { ...data, createdBy: userName }));
+      if (item) {
+        await updateInventoryItem(db, item.id, data);
+      } else {
+        const id = await addInventoryItem(db, { ...data, createdBy: userName });
+        if (photo && perm.canEditItemMedia) {
+          try {
+            const uploaded = await uploadItemMediaMobile(id, [photo], userName);
+            if (uploaded.length) await addInventoryItemMedia(db, id, uploaded);
+          } catch (e) {
+            console.error('품목 이미지 업로드 오류:', e);
+            Alert.alert('알림', '품목은 등록했지만 이미지를 올리지 못했습니다. 품목 상세에서 다시 시도해주세요.');
+          }
+        }
+        const q = parseInt(initialQty, 10);
+        if (canSetStock && stockGroupId && !isNaN(q) && q > 0) {
+          const g = groups!.find(x => x.id === stockGroupId);
+          if (g) {
+            await setStockLevels(db, campCode!, [{ itemId: id, itemName: data.name, groupId: g.id, groupName: g.name, target: q }],
+              { reason: 'restock', refLabel: '품목 등록 (최초 재고)' }, userName);
+          }
+        }
+        onCreated?.(id);
+      }
       onClose();
-    } catch (e) { console.error('품목 추가 오류:', e); Alert.alert('오류', '품목을 추가하지 못했습니다.'); }
+    } catch (e) { console.error('품목 저장 오류:', e); Alert.alert('오류', '저장하지 못했습니다.'); }
     finally { setBusy(false); }
   };
+
   const Chips = <T extends string>({ values, value, onPick, label }: { values: readonly T[]; value: string; onPick: (v: T) => void; label?: (v: T) => string }) => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5 }}>
       {values.map(v => (
@@ -1909,52 +2064,120 @@ function ItemFormMobile({ item, preset, userName, onClose, onCreated }: {
           <TouchableOpacity onPress={onClose} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }} keyboardShouldPersistTaps="handled">
-          <View style={{ gap: 5 }}>
-            <Text style={styles.formLabel}>분류</Text>
-            <Chips values={INVENTORY_CATEGORIES} value={category} onPick={c => { setCategory(c); setSubCategory(''); if (!item) setUsage(c === '의약품' ? 'oral' : 'operational'); }} />
-          </View>
-          <View style={{ gap: 5 }}>
-            <Text style={styles.formLabel}>세부 분류 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택 · 직접 입력 가능)</Text></Text>
-            {subs.length > 0 && <Chips values={subs} value={subCategory} onPick={v => setSubCategory(subCategory === v ? '' : v)} />}
-            <TextInput value={subCategory} onChangeText={setSubCategory} placeholder="세부 분류" placeholderTextColor="#9ca3af" style={styles.input} />
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <View style={{ flex: 1 }}><Text style={styles.formLabel}>종류</Text><TextInput value={kind} onChangeText={setKind} placeholder={category === '의약품' ? '예: 소화제' : '(선택)'} placeholderTextColor="#9ca3af" style={styles.input} /></View>
-            <View style={{ flex: 1.3 }}><Text style={styles.formLabel}>이름 *</Text><TextInput value={name} onChangeText={setName} placeholder={category === '의약품' ? '예: 훼스탈플러스' : '예: 종이컵'} placeholderTextColor="#9ca3af" style={styles.input} autoFocus={!item} /></View>
-          </View>
-          <View><Text style={styles.formLabel}>규격 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text><TextInput value={spec} onChangeText={setSpec} placeholder="예: 알약 500mg, 액상" placeholderTextColor="#9ca3af" style={styles.input} /></View>
-          <View style={{ gap: 5 }}>
-            <Text style={styles.formLabel}>단위 (낱개 기준)</Text>
-            <Chips values={INVENTORY_UNITS} value={unit} onPick={setUnit} />
-          </View>
-          <View style={{ gap: 5 }}>
-            <Text style={styles.formLabel}>유형</Text>
-            <Chips values={INVENTORY_USAGES} value={usage} onPick={setUsage} label={u => INVENTORY_USAGE_LABELS[u]} />
-            <Text style={{ fontSize: 10, color: '#9ca3af' }}>먹는 약·바르는 약·처치 소모품은 환자 기록의 약 복용에서 고를 수 있어요.</Text>
-          </View>
-          {isMed && (
-            <View style={{ gap: 8, backgroundColor: '#fff1f2', borderRadius: 10, padding: 10 }}>
-              <View><Text style={styles.formLabel}>성분</Text><TextInput value={ingredient} onChangeText={setIngredient} placeholder="예: 아세트아미노펜" placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]} /></View>
-              {usage === 'oral' && (
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <View style={{ flex: 1 }}><Text style={styles.formLabel}>복용 간격(시간)</Text><TextInput value={intervalHours} onChangeText={setIntervalHours} keyboardType="decimal-pad" placeholder="예: 4" placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]} /></View>
-                  <View style={{ flex: 1 }}><Text style={styles.formLabel}>하루 최대</Text><TextInput value={maxPerDay} onChangeText={setMaxPerDay} keyboardType="number-pad" placeholder="예: 5" placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]} /></View>
+
+          {/* ── 기본 정보 ── */}
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {perm.canEditItemMedia && !item && (
+              <View style={{ width: 76 }}>
+                <TouchableOpacity onPress={pickPhoto} style={{ width: 76, height: 76, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: '#d1d5db', backgroundColor: '#f9fafb', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {photo
+                    ? <Image source={{ uri: photo.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                    : <><Ionicons name="camera-outline" size={18} color="#9ca3af" /><Text style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>이미지</Text></>}
+                </TouchableOpacity>
+                {photo ? <TouchableOpacity onPress={() => setPhoto(null)} style={{ paddingVertical: 3 }}><Text style={{ fontSize: 10, color: '#9ca3af', textAlign: 'center' }}>제거</Text></TouchableOpacity> : null}
+              </View>
+            )}
+            {perm.canEditItemMedia && item && (
+              <View style={{ width: 76 }}>
+                <View style={{ width: 76, height: 76, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {itemThumb(item)
+                    ? <Image source={{ uri: itemThumb(item) }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                    : <Ionicons name="cube-outline" size={20} color="#cbd5e1" />}
                 </View>
-              )}
-              <View><Text style={styles.formLabel}>복용 안내</Text><TextInput value={dosageNote} onChangeText={setDosageNote} placeholder="예: 초등 저학년 반 알" placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]} /></View>
+                <Text style={{ fontSize: 9, color: '#9ca3af', textAlign: 'center', marginTop: 3, lineHeight: 12 }}>상세에서{'\n'}사진 관리</Text>
+              </View>
+            )}
+            <View style={{ flex: 1, gap: 10 }}>
+              <View><Text style={styles.formLabel}>물품명 *</Text>
+                <TextInput value={name} onChangeText={setName} placeholder={category === '의약품' ? '예: 훼스탈플러스' : '예: 종이컵'} placeholderTextColor="#9ca3af" style={styles.input} autoFocus={!item} /></View>
+              <View style={{ gap: 5 }}>
+                <Text style={styles.formLabel}>분류 *</Text>
+                <Chips values={INVENTORY_CATEGORIES} value={category} onPick={c => { setCategory(c); setSubCategory(''); if (!item) setUsage(suggestedUsages(c)[0]); }} />
+              </View>
+            </View>
+          </View>
+
+          {canSetStock ? (
+            <View style={{ gap: 10 }}>
+              <View style={{ gap: 5 }}>
+                <Text style={styles.formLabel}>보관 교무실</Text>
+                <Chips values={groups!.map(g => g.id)} value={stockGroupId} onPick={setStockGroupId} label={id => groups!.find(g => g.id === id)?.name ?? ''} />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flex: 1 }}><Text style={styles.formLabel}>최초 재고 수량</Text>
+                  <TextInput value={initialQty} onChangeText={setInitialQty} keyboardType="number-pad" placeholder="0" placeholderTextColor="#9ca3af" style={styles.input} /></View>
+                <View style={{ flex: 1.4, gap: 5 }}>
+                  <Text style={styles.formLabel}>단위 (낱개)</Text>
+                  <Chips values={INVENTORY_UNITS} value={unit} onPick={setUnit} />
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={{ gap: 5 }}>
+              <Text style={styles.formLabel}>단위 (낱개 기준)</Text>
+              <Chips values={INVENTORY_UNITS} value={unit} onPick={setUnit} />
             </View>
           )}
-          <View><Text style={styles.formLabel}>설명 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text><TextInput value={description} onChangeText={setDescription} placeholder="예: 파란 상자, 어린이용" placeholderTextColor="#9ca3af" style={styles.input} /></View>
-          {item && (
-            <TouchableOpacity onPress={() => setIsActive(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name={isActive ? 'checkbox' : 'square-outline'} size={20} color={isActive ? '#059669' : '#9ca3af'} />
-              <Text style={{ fontSize: 13, color: '#374151' }}>사용 중 (끄면 목록·검색에서 숨김)</Text>
-            </TouchableOpacity>
-          )}
-          <View><Text style={styles.formLabel}>그룹별 최소 수량 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text><TextInput value={minStock} onChangeText={setMinStock} keyboardType="number-pad" placeholder="이보다 적으면 '부족'" placeholderTextColor="#9ca3af" style={styles.input} /></View>
-          <TouchableOpacity onPress={save} disabled={busy} style={[styles.btn, { flex: 0, backgroundColor: '#059669', paddingVertical: 12, opacity: busy ? 0.5 : 1 }]}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{busy ? '저장 중...' : item ? '저장' : '추가하고 수량 입력하기'}</Text>
+
+          {/* ── 상세 설정 (접힘) ── */}
+          <TouchableOpacity onPress={() => setShowDetail(v => !v)}
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9 }}>
+            <Text style={{ flex: 1, fontSize: 12, fontWeight: '700', color: '#4b5563' }}>
+              상세 설정 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>세부 분류 · 물품 유형 · 규격 · 최소 재고{isMed ? ' · 의약품' : ''}</Text>
+            </Text>
+            <Ionicons name={showDetail ? 'chevron-up' : 'chevron-down'} size={16} color="#9ca3af" />
           </TouchableOpacity>
+
+          {showDetail && (
+            <View style={{ gap: 12, borderWidth: 1, borderColor: '#f3f4f6', borderRadius: 10, padding: 10 }}>
+              <View style={{ gap: 5 }}>
+                <Text style={styles.formLabel}>세부 분류 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택 · 직접 입력 가능)</Text></Text>
+                {subs.length > 0 && <Chips values={subs} value={subCategory} onPick={v => setSubCategory(subCategory === v ? '' : v)} />}
+                <TextInput value={subCategory} onChangeText={setSubCategory} placeholder="세부 분류" placeholderTextColor="#9ca3af" style={styles.input} />
+              </View>
+              <View><Text style={styles.formLabel}>종류</Text>
+                <TextInput value={kind} onChangeText={setKind} placeholder={category === '의약품' ? '예: 소화제' : '(선택)'} placeholderTextColor="#9ca3af" style={styles.input} /></View>
+              <View style={{ gap: 5 }}>
+                <Text style={styles.formLabel}>물품 유형</Text>
+                <Chips values={usageList} value={usage} onPick={setUsage} label={u => INVENTORY_USAGE_LABELS[u]} />
+                <Text style={{ fontSize: 10, color: '#9ca3af' }}>먹는 약·바르는 약·처치 소모품은 환자 보고에서 고를 수 있고, 비품은 위치·수량만 관리합니다.</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flex: 1.4 }}><Text style={styles.formLabel}>규격 · 비고</Text>
+                  <TextInput value={spec} onChangeText={setSpec} placeholder="예: 알약 500mg" placeholderTextColor="#9ca3af" style={styles.input} /></View>
+                <View style={{ flex: 1 }}><Text style={styles.formLabel}>포장당 낱개</Text>
+                  <TextInput value={packSize} onChangeText={setPackSize} keyboardType="number-pad" placeholder="예: 4" placeholderTextColor="#9ca3af" style={styles.input} /></View>
+              </View>
+              {isMed && (
+                <View style={{ gap: 8, backgroundColor: '#fff1f2', borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#9f1239' }}>의약품 상세 정보</Text>
+                  <View><Text style={styles.formLabel}>주성분</Text><TextInput value={ingredient} onChangeText={setIngredient} placeholder="예: 아세트아미노펜" placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]} /></View>
+                  {usage === 'oral' && (
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <View style={{ flex: 1 }}><Text style={styles.formLabel}>최소 간격(시간)</Text><TextInput value={intervalHours} onChangeText={setIntervalHours} keyboardType="decimal-pad" placeholder="예: 4" placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]} /></View>
+                      <View style={{ flex: 1 }}><Text style={styles.formLabel}>1일 최대(회)</Text><TextInput value={maxPerDay} onChangeText={setMaxPerDay} keyboardType="number-pad" placeholder="예: 5" placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]} /></View>
+                    </View>
+                  )}
+                  <View><Text style={styles.formLabel}>복용 · 사용 안내</Text><TextInput value={dosageNote} onChangeText={setDosageNote} placeholder="예: 초등 저학년 반 알" placeholderTextColor="#9ca3af" style={[styles.input, { backgroundColor: '#fff' }]} /></View>
+                </View>
+              )}
+              <View><Text style={styles.formLabel}>{isMed ? '주의사항 · 기타 안내' : '설명 · 안내'} <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text>
+                <TextInput value={description} onChangeText={setDescription} placeholder="예: 파란 상자, 어린이용" placeholderTextColor="#9ca3af" style={styles.input} /></View>
+              <View><Text style={styles.formLabel}>최소 재고 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(교무실당 기본값)</Text></Text>
+                <TextInput value={minStock} onChangeText={setMinStock} keyboardType="number-pad" placeholder="이보다 적으면 '부족'" placeholderTextColor="#9ca3af" style={styles.input} /></View>
+              {item && (
+                <TouchableOpacity onPress={() => setIsActive(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name={isActive ? 'checkbox' : 'square-outline'} size={20} color={isActive ? '#059669' : '#9ca3af'} />
+                  <Text style={{ fontSize: 13, color: '#374151' }}>사용 중 (끄면 목록·검색에서 숨김)</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          <TouchableOpacity onPress={save} disabled={busy} style={[styles.btn, { flex: 0, backgroundColor: '#059669', paddingVertical: 12, opacity: busy ? 0.5 : 1 }]}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{busy ? '저장 중...' : item ? '저장' : '추가'}</Text>
+          </TouchableOpacity>
+          <View style={{ height: 8 }} />
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -1977,8 +2200,8 @@ async function uploadItemMediaMobile(itemId: string, picked: PickedMedia[], by: 
   return out;
 }
 
-/** 품목이 어떻게 생겼는지 — 스태프 누구나 추가·삭제 (삭제는 확인 창) */
-function ItemMediaSectionMobile({ item, userName }: { item: InventoryItem; isAdmin?: boolean; userName: string }) {
+/** 품목이 어떻게 생겼는지 — 보기는 누구나, 등록·삭제는 관리자만 (규칙에서도 관리자만 허용) */
+function ItemMediaSectionMobile({ item, canEdit, userName }: { item: InventoryItem; canEdit: boolean; userName: string }) {
   const [deleting, setDeleting] = useState<ItemMedia | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const media = item.media ?? [];
@@ -2003,15 +2226,21 @@ function ItemMediaSectionMobile({ item, userName }: { item: InventoryItem; isAdm
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>사진 · 영상 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{media.length || ''}</Text></Text>
-        <TouchableOpacity disabled={busy} onPress={async () => add(await captureLostPhoto())} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, opacity: busy ? 0.4 : 1 }}>
-          <Ionicons name="camera-outline" size={15} color="#1d4ed8" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>촬영</Text>
-        </TouchableOpacity>
-        <TouchableOpacity disabled={busy} onPress={async () => add(await pickLostMedia())} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, opacity: busy ? 0.4 : 1 }}>
-          <Ionicons name="images-outline" size={15} color="#1d4ed8" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>{busy ? '올리는 중...' : '앨범'}</Text>
-        </TouchableOpacity>
+        {canEdit && (
+          <>
+            <TouchableOpacity disabled={busy} onPress={async () => add(await captureLostPhoto())} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, opacity: busy ? 0.4 : 1 }}>
+              <Ionicons name="camera-outline" size={15} color="#1d4ed8" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>촬영</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={busy} onPress={async () => add(await pickLostMedia())} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, opacity: busy ? 0.4 : 1 }}>
+              <Ionicons name="images-outline" size={15} color="#1d4ed8" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>{busy ? '올리는 중...' : '앨범'}</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
       {media.length === 0 ? (
-        <Text style={{ fontSize: 11, color: '#9ca3af', backgroundColor: '#f9fafb', borderRadius: 8, padding: 10, textAlign: 'center' }}>아직 사진이 없어요. 포장·실물 사진을 올려두면 다른 선생님이 찾기 쉬워요.</Text>
+        <Text style={{ fontSize: 11, color: '#9ca3af', backgroundColor: '#f9fafb', borderRadius: 8, padding: 10, textAlign: 'center' }}>
+          {canEdit ? '아직 사진이 없어요. 포장·실물 사진을 올려두면 다른 선생님이 찾기 쉬워요.' : '등록된 사진이 없습니다. (사진 등록은 관리자만)'}
+        </Text>
       ) : (
         <View style={{ gap: 8 }}>
           {media.map(m => (
@@ -2021,7 +2250,9 @@ function ItemMediaSectionMobile({ item, userName }: { item: InventoryItem; isAdm
                 ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 }}><Ionicons name="play-circle" size={44} color="#fff" /><Text style={{ fontSize: 11, color: '#d1d5db' }}>눌러서 영상 재생</Text></View>
                 : <Image source={{ uri: m.url }} style={{ width: '100%', height: '100%' }} contentFit="contain" />}
               {m.by ? <Text style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 9, color: '#fff', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>{m.by}</Text> : null}
-              <TouchableOpacity onPress={() => setDeleting(m)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={[styles.thumbRemove, { width: 26, height: 26, borderRadius: 13, top: 6, right: 6 }]}><Text style={{ color: '#fff', fontSize: 12 }}>✕</Text></TouchableOpacity>
+              {canEdit && (
+                <TouchableOpacity onPress={() => setDeleting(m)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={[styles.thumbRemove, { width: 26, height: 26, borderRadius: 13, top: 6, right: 6 }]}><Text style={{ color: '#fff', fontSize: 12 }}>✕</Text></TouchableOpacity>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -2053,6 +2284,200 @@ function ItemMediaSectionMobile({ item, userName }: { item: InventoryItem; isAdm
           <TouchableOpacity onPress={() => setViewer(null)} style={{ position: 'absolute', top: 50, right: 20, padding: 8 }}><Ionicons name="close" size={28} color="#fff" /></TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+    </View>
+  );
+}
+
+
+// ==================== 🛒 구매 목록 (부매니저 · 관리자 · 모바일) ====================
+
+function PurchaseListTabMobile({ views, groups, needs, requests, settings, onSelect, onGoRequests }: {
+  views: InventoryItemView[]; groups: InventoryGroup[]; needs: PurchaseNeed[]; requests: SupplyRequest[]; settings: SupplySettings | null;
+  onSelect: (id: string) => void; onGoRequests: () => void;
+}) {
+  const [groupFilter, setGroupFilter] = useState<string>('');
+  const [search, setSearch] = useState('');
+
+  const auto = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return uncoveredPurchaseNeeds(needs, requests)
+      .filter(n => !groupFilter || n.groupId === groupFilter)
+      .filter(n => !q || n.itemName.toLowerCase().includes(q))
+      .sort((a, b) => b.shortage - a.shortage);
+  }, [needs, requests, groupFilter, search]);
+
+  const fromRequests = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const out: Array<{ req: SupplyRequest; line: SupplyRequestLine }> = [];
+    requests.forEach(r => {
+      if (!isSupplyOpen(r.status)) return;
+      r.items.forEach(line => {
+        if (r.done?.[line.id]) return;
+        if (groupFilter && line.groupId && line.groupId !== groupFilter) return;
+        if (q && !line.name.toLowerCase().includes(q)) return;
+        out.push({ req: r, line });
+      });
+    });
+    return out;
+  }, [requests, groupFilter, search]);
+
+  const viewOf = (itemId?: string) => (itemId ? views.find(v => v.id === itemId) : undefined);
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={14} color="#9ca3af" />
+        <TextInput value={search} onChangeText={setSearch} placeholder="물품명 검색" placeholderTextColor="#9ca3af" style={styles.searchInput} />
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5, alignItems: 'center' }}>
+        <TouchableOpacity onPress={() => setGroupFilter('')} style={[styles.miniChip, !groupFilter && styles.miniChipAmber]}>
+          <Text style={[styles.miniChipText, !groupFilter && { color: '#92400e' }]}>교무실 전체</Text>
+        </TouchableOpacity>
+        {groups.map(g => (
+          <TouchableOpacity key={g.id} onPress={() => setGroupFilter(groupFilter === g.id ? '' : g.id)} style={[styles.miniChip, groupFilter === g.id && styles.miniChipAmber]}>
+            <Text style={[styles.miniChipText, groupFilter === g.id && { color: '#92400e' }]}>{g.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <Text style={{ fontSize: 10, color: '#9ca3af' }}>실제 구매 수량은 구매 담당자가 정합니다. 물건이 도착해 입고까지 해야 재고에 반영됩니다.</Text>
+
+      <View>
+        <Text style={styles.sectionTitle}>재고 부족 (최소 재고 미달) <Text style={{ color: '#9ca3af', fontWeight: '400' }}>{auto.length}</Text></Text>
+        {auto.length === 0 ? (
+          <Text style={styles.emptyBody}>부족한 물품이 없습니다.</Text>
+        ) : (
+          <View style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, overflow: 'hidden', backgroundColor: '#fff' }}>
+            {auto.map((n, i) => {
+              const v = viewOf(n.itemId);
+              return (
+                <TouchableOpacity key={`${n.itemId}|${n.groupId}`} onPress={() => onSelect(n.itemId)} activeOpacity={0.6}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: '#e5e7eb' }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827' }} numberOfLines={1}>{n.itemName}{v?.spec ? <Text style={{ fontWeight: '400', color: '#9ca3af' }}>  {v.spec}</Text> : null}</Text>
+                    <Text style={{ fontSize: 10, color: '#6b7280' }}>{n.groupName} · 현재 {n.current} / 최소 {n.min}</Text>
+                  </View>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#dc2626' }}>−{n.shortage}<Text style={{ fontSize: 10, color: '#9ca3af' }}>{n.unit}</Text></Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      <View>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={[styles.sectionTitle, { flex: 1 }]}>요청 물품 (아직 구매 전) <Text style={{ color: '#9ca3af', fontWeight: '400' }}>{fromRequests.length}</Text></Text>
+          <TouchableOpacity onPress={onGoRequests}><Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>재고 요청 ›</Text></TouchableOpacity>
+        </View>
+        {fromRequests.length === 0 ? (
+          <Text style={styles.emptyBody}>진행 중인 요청 물품이 없습니다.</Text>
+        ) : (
+          <View style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, overflow: 'hidden', backgroundColor: '#fff' }}>
+            {fromRequests.map(({ req, line }, i) => {
+              const buyer = supplyBuyerOf(req, settings);
+              const pg = supplyProgress(req, !!buyer);
+              return (
+                <View key={`${req.id}|${line.id}`}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: '#e5e7eb' }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827' }} numberOfLines={1}>{line.name}</Text>
+                    <Text style={{ fontSize: 10, color: '#6b7280' }} numberOfLines={1}>
+                      {supplyForLabel(req)}{line.groupName ? ` · ${line.groupName}` : ''}{buyer ? ` · ${buyer.name}` : ''}{line.channel ? ` · ${line.channel}` : ''}{line.parentBill ? ' · 학부모 청구' : ''}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#1f2937' }}>{line.quantity}<Text style={{ fontSize: 10, color: '#9ca3af' }}>{line.unit}</Text></Text>
+                  <View style={{ backgroundColor: pg.key === 'buying' ? '#ecfdf5' : pg.key === 'approved' ? '#eff6ff' : pg.key === 'onhold' ? '#fffbeb' : '#f3f4f6', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: pg.key === 'buying' ? '#047857' : pg.key === 'approved' ? '#1d4ed8' : pg.key === 'onhold' ? '#b45309' : '#6b7280' }}>{pg.label}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+// ==================== 📋 입출고 기록 (부매니저 · 관리자 · 모바일) ====================
+
+function MovementTabMobile({ campCode, groups, views }: {
+  campCode: string; groups: InventoryGroup[]; views: InventoryItemView[];
+}) {
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  useEffect(() => subscribeCampMovements(db, campCode, setMovements), [campCode]);
+  const [groupFilter, setGroupFilter] = useState<string>('');
+  const [kind, setKind] = useState<MovementFilterKey>('all');
+  const [days, setDays] = useState<number>(7);
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const reasons = MOVEMENT_FILTERS.find(f => f.key === kind)?.reasons ?? [];
+    const since = days > 0 ? Date.now() - days * 86400000 : 0;
+    return movements.filter(m => {
+      if (groupFilter && m.groupId !== groupFilter) return false;
+      if (reasons.length > 0 && !reasons.includes(m.reason)) return false;
+      if (since && (m.at?.toMillis?.() ?? 0) < since) return false;
+      if (q && !(m.itemName ?? '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [movements, groupFilter, kind, days, search]);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.toolbar}>
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={14} color="#9ca3af" />
+          <TextInput value={search} onChangeText={setSearch} placeholder="물품명 검색" placeholderTextColor="#9ca3af" style={styles.searchInput} />
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5, alignItems: 'center' }}>
+          {MOVEMENT_FILTERS.map(f => (
+            <TouchableOpacity key={f.key} onPress={() => setKind(f.key)} style={[styles.chip, kind === f.key && styles.chipActive]}>
+              <Text style={[styles.chipText, kind === f.key && styles.chipTextActive]}>{f.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5, alignItems: 'center' }}>
+          {[{ v: 7, l: '최근 7일' }, { v: 30, l: '최근 30일' }, { v: 0, l: '전체 기간' }].map(d => (
+            <TouchableOpacity key={d.v} onPress={() => setDays(d.v)} style={[styles.miniChip, days === d.v && styles.miniChipAmber]}>
+              <Text style={[styles.miniChipText, days === d.v && { color: '#92400e' }]}>{d.l}</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity onPress={() => setGroupFilter('')} style={[styles.miniChip, !groupFilter && styles.miniChipAmber]}>
+            <Text style={[styles.miniChipText, !groupFilter && { color: '#92400e' }]}>모든 교무실</Text>
+          </TouchableOpacity>
+          {groups.map(g => (
+            <TouchableOpacity key={g.id} onPress={() => setGroupFilter(groupFilter === g.id ? '' : g.id)} style={[styles.miniChip, groupFilter === g.id && styles.miniChipAmber]}>
+              <Text style={[styles.miniChipText, groupFilter === g.id && { color: '#92400e' }]}>{g.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+        {filtered.length === 0 ? (
+          <View style={styles.centered}><Text style={styles.emptyBody}>기록이 없습니다.</Text></View>
+        ) : filtered.map((m, i) => {
+          const v = views.find(x => x.id === m.itemId);
+          return (
+            <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb', borderTopWidth: i === 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: '#e5e7eb' }}>
+              <Text style={{ fontSize: 10, color: '#9ca3af', width: 64 }}>{fmtDateTime(m.at)}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827' }} numberOfLines={1}>
+                  {m.itemName}{v?.spec ? <Text style={{ fontWeight: '400', color: '#9ca3af' }}>  {v.spec}</Text> : null}
+                </Text>
+                <Text style={{ fontSize: 10, color: '#6b7280' }} numberOfLines={1}>
+                  {m.groupName} · {movementLabel(m)}{m.memo ? ` · ${m.memo}` : ''} · {m.by}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 13, fontWeight: '800', width: 40, textAlign: 'right', color: m.delta > 0 ? '#047857' : '#dc2626' }}>{m.delta > 0 ? '+' : ''}{m.delta}</Text>
+            </View>
+          );
+        })}
+        {filtered.length > 0 && <Text style={{ fontSize: 10, color: '#9ca3af', textAlign: 'center', paddingVertical: 10 }}>최신 400건까지 보여줍니다.</Text>}
+      </ScrollView>
     </View>
   );
 }
@@ -2468,10 +2893,19 @@ function normExpiry(raw: string): string | null {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
-function ItemDetailMobile({ view, groups, campCode, isAdmin, userId, userName, initialUseGroupId, onClose, onEditItem }: {
-  view: InventoryItemView; groups: InventoryGroup[]; campCode: string; isAdmin: boolean; userId: string; userName: string; initialUseGroupId?: string; onClose: () => void; onEditItem?: () => void;
+function ItemDetailMobile({ view, groups, campCode, perm, userId, userName, initialUseGroupId, defaultGroupId, onRequest, onClose, onEditItem }: {
+  view: InventoryItemView; groups: InventoryGroup[]; campCode: string; perm: InventoryPerm; userId: string; userName: string;
+  initialUseGroupId?: string; defaultGroupId?: string;
+  onRequest: (view: InventoryItemView, groupId?: string) => void;
+  onClose: () => void; onEditItem?: () => void;
 }) {
+  const isAdmin = perm.canManageStock;
   const isMedicine = ['oral', 'topical'].includes(getItemUsage(view));
+  // 그룹 간 이동 — 일반 수량 조정과 헷갈리지 않도록 별도 화면
+  const [transferFrom, setTransferFrom] = useState<string | null>(null);
+  /** 바로 사용할 교무실 — 내 교무실 → 재고가 있는 첫 곳 */
+  const useGroupId = (defaultGroupId && defaultGroupId in view.stocks) ? defaultGroupId
+    : groups.find(g => getGroupStock(view, g.id) > 0)?.id;
   // 그룹별 유효기간(관리자) · 세부 위치(누구나)
   const [meta, setMeta] = useState<{ groupId: string; kind: 'location' | 'expiry'; value: string } | null>(null);
   const [restockExpiry, setRestockExpiry] = useState('');
@@ -2540,23 +2974,29 @@ function ItemDetailMobile({ view, groups, campCode, isAdmin, userId, userName, i
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ fontSize: 10, color: '#6b7280' }}>{view.category}{view.subCategory ? ` · ${view.subCategory}` : ''}{view.kind ? ` · ${view.kind}` : ''}</Text>
             <Text style={styles.modalTitle}>{view.name} {view.spec ? <Text style={{ fontSize: 11, fontWeight: '400', color: '#9ca3af' }}>{view.spec}</Text> : null}</Text>
-            {view.description ? <Text style={{ fontSize: 11, color: '#4b5563', marginTop: 2 }}>ℹ️ {view.description}</Text> : null}
           </View>
           <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
             <Text style={{ fontSize: 22, fontWeight: '800', color: '#047857', lineHeight: 26 }}>{view.total}<Text style={{ fontSize: 11, color: '#9ca3af' }}>{view.unit}</Text></Text>
-            <Text style={{ fontSize: 9, color: '#9ca3af' }}>전체 재고</Text>
+            <Text style={{ fontSize: 9, color: '#9ca3af' }}>현재 총재고</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={{ padding: 14, gap: 14 }} keyboardShouldPersistTaps="handled">
-          {/* 그룹별 수량 */}
+          {(view.description || view.dosageNote) ? (
+            <View style={{ borderRadius: 10, borderWidth: 1, borderColor: '#d1fae5', backgroundColor: '#ecfdf5', padding: 10, gap: 2 }}>
+              {view.dosageNote ? <Text style={{ fontSize: 11, color: '#065f46' }}>📋 {view.dosageNote}</Text> : null}
+              {view.description ? <Text style={{ fontSize: 11, color: '#374151' }}>ℹ️ {view.description}</Text> : null}
+            </View>
+          ) : null}
+
+          {/* 교무실별 수량 */}
           <View>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={[styles.sectionTitle, { flex: 1 }]}>그룹별 수량</Text>
-              {isAdmin && onEditItem && <TouchableOpacity onPress={onEditItem}><Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>품목 수정</Text></TouchableOpacity>}
+              <Text style={[styles.sectionTitle, { flex: 1 }]}>교무실별 수량</Text>
+              {perm.canEditItem && onEditItem && <TouchableOpacity onPress={onEditItem}><Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>품목 수정</Text></TouchableOpacity>}
             </View>
-            {groups.length === 0 ? <Text style={styles.emptyBody}>재고 그룹이 없습니다.</Text> : (
+            {groups.length === 0 ? <Text style={styles.emptyBody}>교무실(재고 그룹)이 없습니다.</Text> : (
               <View style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
                 {groups.map((g, i) => {
                   const n = getGroupStock(view, g.id);
@@ -2566,10 +3006,11 @@ function ItemDetailMobile({ view, groups, campCode, isAdmin, userId, userName, i
                     <View key={g.id} style={{ paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: i > 0 ? 1 : 0, borderTopColor: '#f3f4f6', gap: 4 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={{ flex: 1, fontSize: 12, fontWeight: '700', color: '#1f2937' }}>{g.name} <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{g.location ?? ''}</Text></Text>
-                        <Text style={{ fontSize: 13, fontWeight: '800', color: low ? '#dc2626' : '#1f2937' }}>{n}<Text style={{ fontSize: 10, color: '#9ca3af' }}>{view.unit}</Text></Text>
-                        <Text style={{ fontSize: 10, color: '#9ca3af' }}>최소 {min}</Text>
-                        {low ? <Text style={{ fontSize: 9, fontWeight: '700', color: '#dc2626', backgroundColor: '#fef2f2', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 }}>구매 필요 −{min - n}</Text>
-                          : <Text style={{ fontSize: 9, color: '#9ca3af' }}>충분</Text>}
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: low && perm.isStockManager ? '#dc2626' : '#1f2937' }}>{n}<Text style={{ fontSize: 10, color: '#9ca3af' }}>{view.unit}</Text></Text>
+                        {perm.isStockManager ? <Text style={{ fontSize: 10, color: '#9ca3af' }}>최소 {min}</Text> : null}
+                        {perm.isStockManager ? (low
+                          ? <Text style={{ fontSize: 9, fontWeight: '700', color: '#dc2626', backgroundColor: '#fef2f2', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 }}>부족 −{min - n}</Text>
+                          : <Text style={{ fontSize: 9, color: '#9ca3af' }}>정상</Text>) : null}
                       </View>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
                         <TouchableOpacity onPress={() => setMeta({ groupId: g.id, kind: 'location', value: view.locations[g.id] ?? '' })}>
@@ -2596,6 +3037,7 @@ function ItemDetailMobile({ view, groups, campCode, isAdmin, userId, userName, i
                             <>
                               <TouchableOpacity onPress={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>+입고</Text></TouchableOpacity>
                               <TouchableOpacity onPress={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }}><Text style={{ fontSize: 11, color: '#6b7280' }}>조정</Text></TouchableOpacity>
+                              <TouchableOpacity onPress={() => { setMode(null); setTransferFrom(g.id); }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#4f46e5' }}>이동</Text></TouchableOpacity>
                               <TouchableOpacity onPress={() => { setMode({ type: 'min', groupId: g.id }); setQty(view.minStocks?.[g.id] != null ? String(view.minStocks[g.id]) : ''); setMemo(''); }}><Text style={{ fontSize: 11, color: '#6b7280' }}>최소</Text></TouchableOpacity>
                             </>
                           )}
@@ -2625,7 +3067,7 @@ function ItemDetailMobile({ view, groups, campCode, isAdmin, userId, userName, i
           {mode && group && (
             <View style={{ borderRadius: 10, borderWidth: 1, padding: 10, gap: 8, borderColor: mode.type === 'use' ? '#bfdbfe' : mode.type === 'restock' ? '#a7f3d0' : '#fde68a', backgroundColor: mode.type === 'use' ? '#eff6ff' : mode.type === 'restock' ? '#ecfdf5' : '#fffbeb' }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#1f2937' }}>
-                {mode.type === 'use' ? '📤 사용' : mode.type === 'restock' ? '📥 재고 입고' : mode.type === 'adjust' ? '✏️ 수량 직접 조정' : '📏 최소 보유 수량'} · {group.name} <Text style={{ fontWeight: '400', color: '#6b7280' }}>현재 {current}{view.unit}</Text>
+                {mode.type === 'use' ? '📤 사용하기' : mode.type === 'restock' ? '📥 재고 입고' : mode.type === 'adjust' ? '✏️ 이 교무실 수량만 조정' : '📏 최소 보유 수량'} · {group.name} <Text style={{ fontWeight: '400', color: '#6b7280' }}>현재 {current}{view.unit}</Text>
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TextInput value={qty} onChangeText={setQty} keyboardType="number-pad" autoFocus
@@ -2682,7 +3124,7 @@ function ItemDetailMobile({ view, groups, campCode, isAdmin, userId, userName, i
                   <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f9fafb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                     <Text style={{ fontSize: 10, color: '#9ca3af', width: 66 }}>{fmtDateTime(m.at)}</Text>
                     <Text numberOfLines={1} style={{ flex: 1, fontSize: 11, color: '#374151' }}>
-                      <Text style={{ fontWeight: '700', color: '#1f2937' }}>{m.refLabel || INVENTORY_MOVEMENT_LABELS[m.reason]}</Text>
+                      <Text style={{ fontWeight: '700', color: '#1f2937' }}>{movementLabel(m)}</Text>
                       <Text style={{ color: '#9ca3af' }}> · {m.groupName}</Text>{m.memo ? <Text style={{ color: '#6b7280' }}> · {m.memo}</Text> : null}
                     </Text>
                     <Text style={{ fontSize: 10, color: '#9ca3af' }}>{m.by}</Text>
@@ -2698,9 +3140,166 @@ function ItemDetailMobile({ view, groups, campCode, isAdmin, userId, userName, i
             )}
           </View>
 
-          <ItemMediaSectionMobile item={view} isAdmin={isAdmin} userName={userName} />
+          <ItemMediaSectionMobile item={view} canEdit={perm.canEditItemMedia} userName={userName} />
           <View style={{ height: 20 }} />
         </ScrollView>
+
+        {/* 사용하기 · 필요한 물품 요청 — 누구나 */}
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
+          <TouchableOpacity disabled={!useGroupId}
+            onPress={() => { if (useGroupId) { setMode({ type: 'use', groupId: useGroupId }); setQty('1'); setMemo(''); } }}
+            style={[styles.btn, { backgroundColor: useGroupId ? '#2563eb' : '#e5e7eb' }]}>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: useGroupId ? '#fff' : '#9ca3af' }}>사용하기</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => onRequest(view, defaultGroupId)} style={[styles.btn, { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0' }]}>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: '#047857' }}>필요한 물품 요청</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <Modal visible={!!transferFrom} animationType="fade" transparent onRequestClose={() => setTransferFrom(null)}>
+        {transferFrom && (
+          <StockTransferMobile view={view} groups={groups} campCode={campCode} fromGroupId={transferFrom}
+            userId={userId} userName={userName} onClose={() => setTransferFrom(null)} />
+        )}
+      </Modal>
+    </KeyboardAvoidingView>
+  );
+}
+
+// ==================== 🔁 그룹(교무실) 간 재고 이동 (모바일) ====================
+
+function StockTransferMobile({ view, groups, campCode, fromGroupId, userId, userName, onClose }: {
+  view: InventoryItemView; groups: InventoryGroup[]; campCode: string; fromGroupId: string; userId: string; userName: string; onClose: () => void;
+}) {
+  const [from, setFrom] = useState(fromGroupId);
+  const others = groups.filter(g => g.id !== from);
+  const [to, setTo] = useState(others[0]?.id ?? '');
+  useEffect(() => { if (to === from) setTo(groups.find(g => g.id !== from)?.id ?? ''); }, [from, to, groups]);
+  const [qty, setQty] = useState('1');
+  const [memo, setMemo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<{ from: number; to: number } | null>(null);
+
+  const fromGroup = groups.find(g => g.id === from);
+  const toGroup = groups.find(g => g.id === to);
+  const fromCur = getGroupStock(view, from);
+  const toCur = getGroupStock(view, to);
+  const n = parseInt(qty, 10) || 0;
+  const invalid = !fromGroup || !toGroup || from === to || n <= 0 || n > fromCur;
+
+  const submit = async () => {
+    if (invalid || busy || !fromGroup || !toGroup) return;
+    setBusy(true);
+    try {
+      const res = await transferStock(db, campCode, {
+        itemId: view.id, itemName: view.name,
+        fromGroupId: fromGroup.id, fromGroupName: fromGroup.name,
+        toGroupId: toGroup.id, toGroupName: toGroup.name,
+        quantity: n, memo: memo.trim() || undefined,
+      }, { uid: userId, name: userName });
+      setDone(res);
+      notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: fromGroup.id });
+    } catch (e) {
+      Alert.alert('이동하지 못했습니다', e instanceof Error ? e.message : '다시 시도해주세요.');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.modalCard}>
+        <View style={styles.modalHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modalTitle}>🔁 다른 교무실로 이동</Text>
+            <Text style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>보내는 곳에서 빠지고 받는 곳에 그대로 더해집니다 (전체 재고는 그대로)</Text>
+          </View>
+          <TouchableOpacity onPress={onClose} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }} keyboardShouldPersistTaps="handled">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 10 }}>
+            {itemThumb(view)
+              ? <Image source={{ uri: itemThumb(view) }} style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: '#f3f4f6' }} contentFit="cover" />
+              : <View style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="cube-outline" size={18} color="#cbd5e1" /></View>}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#111827' }} numberOfLines={1}>{view.name}</Text>
+              <Text style={{ fontSize: 11, color: '#9ca3af' }} numberOfLines={1}>{[view.kind, view.spec].filter(Boolean).join(' · ') || view.category}</Text>
+            </View>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#047857' }}>{view.total}<Text style={{ fontSize: 10, color: '#9ca3af' }}>{view.unit}</Text></Text>
+          </View>
+
+          {done ? (
+            <View style={{ borderWidth: 1, borderColor: '#a7f3d0', backgroundColor: '#ecfdf5', borderRadius: 10, padding: 12, gap: 3 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#065f46' }}>이동했습니다.</Text>
+              <Text style={{ fontSize: 12, color: '#374151' }}>{fromGroup?.name} {done.from}{view.unit} · {toGroup?.name} {done.to}{view.unit}</Text>
+              <Text style={{ fontSize: 11, color: '#6b7280' }}>양쪽 입출고 기록에 남았습니다.</Text>
+            </View>
+          ) : (
+            <>
+              <View>
+                <Text style={styles.fieldLabel}>보내는 교무실</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+                  {groups.map(g => (
+                    <TouchableOpacity key={g.id} onPress={() => setFrom(g.id)} style={[styles.miniChip, from === g.id && styles.miniChipAmber]}>
+                      <Text style={[styles.miniChipText, from === g.id && { color: '#92400e', fontWeight: '700' }]}>{g.name} {getGroupStock(view, g.id)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View>
+                <Text style={styles.fieldLabel}>받는 교무실</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+                  {others.length === 0 ? <Text style={styles.emptyBody}>이동할 곳이 없습니다.</Text> : others.map(g => (
+                    <TouchableOpacity key={g.id} onPress={() => setTo(g.id)} style={[styles.miniChip, to === g.id && { backgroundColor: '#e0e7ff', borderColor: '#c7d2fe' }]}>
+                      <Text style={[styles.miniChipText, to === g.id && { color: '#4338ca', fontWeight: '700' }]}>{g.name} {getGroupStock(view, g.id)}{g.id in view.stocks ? '' : ' (새로)'}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <Text style={styles.fieldLabel}>이동할 수량</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TextInput value={qty} onChangeText={setQty} keyboardType="number-pad" style={[styles.input, { width: 110 }]} placeholder="0" placeholderTextColor="#9ca3af" />
+                  <Text style={{ fontSize: 11, color: '#6b7280' }}>{view.unit}</Text>
+                  {[1, 5, 10].filter(x => x <= fromCur).map(x => (
+                    <TouchableOpacity key={x} onPress={() => setQty(String(x))} style={styles.miniChip}><Text style={styles.miniChipText}>{x}</Text></TouchableOpacity>
+                  ))}
+                  {fromCur > 0 && <TouchableOpacity onPress={() => setQty(String(fromCur))} style={styles.miniChip}><Text style={styles.miniChipText}>전부</Text></TouchableOpacity>}
+                </View>
+                {n > fromCur ? <Text style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>보유 수량({fromCur}{view.unit})보다 많이 보낼 수 없습니다.</Text> : null}
+                {!invalid ? (
+                  <Text style={{ fontSize: 11, color: '#4b5563', marginTop: 6, backgroundColor: '#f9fafb', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6 }}>
+                    {fromGroup?.name} {fromCur} → <Text style={{ fontWeight: '800', color: '#dc2626' }}>{fromCur - n}</Text> · {toGroup?.name} {toCur} → <Text style={{ fontWeight: '800', color: '#047857' }}>{toCur + n}</Text>
+                    <Text style={{ color: '#9ca3af' }}>  전체 {view.total} (그대로)</Text>
+                  </Text>
+                ) : null}
+              </View>
+
+              <View>
+                <Text style={styles.fieldLabel}>이동 사유 (선택)</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+                  {TRANSFER_REASONS.map(r => (
+                    <TouchableOpacity key={r} onPress={() => setMemo(memo === r ? '' : r)} style={[styles.miniChip, memo === r && { backgroundColor: '#4f46e5', borderColor: '#4f46e5' }]}>
+                      <Text style={[styles.miniChipText, memo === r && { color: '#fff' }]}>{r}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TextInput value={memo} onChangeText={setMemo} placeholder="직접 입력해도 됩니다" placeholderTextColor="#9ca3af" style={styles.input} />
+              </View>
+            </>
+          )}
+          <View style={{ height: 12 }} />
+        </ScrollView>
+
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
+          <TouchableOpacity onPress={onClose} style={[styles.btn, { backgroundColor: '#f3f4f6' }]}><Text style={{ fontSize: 13, color: '#4b5563' }}>{done ? '닫기' : '취소'}</Text></TouchableOpacity>
+          {!done && (
+            <TouchableOpacity onPress={submit} disabled={invalid || busy} style={[styles.btn, { backgroundColor: '#4f46e5', opacity: invalid || busy ? 0.4 : 1 }]}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#fff' }}>{busy ? '이동 중...' : '이동하기'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -2711,8 +3310,13 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40, gap: 6 },
   emptyTitle: { fontSize: 14, fontWeight: '700', color: '#334155', textAlign: 'center' },
   emptyBody: { fontSize: 12, color: '#94a3b8', textAlign: 'center' },
-  tabRow: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', position: 'relative' },
+  tabScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  tabRow: { flexDirection: 'row', backgroundColor: '#fff' },
+  tabBtn: { minWidth: 92, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center', position: 'relative' },
+  summaryCard: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  summaryLabel: { fontSize: 10, color: '#6b7280' },
+  summaryValue: { fontSize: 18, fontWeight: '800', marginTop: 1 },
+  summaryUnit: { fontSize: 10, fontWeight: '700', color: '#9ca3af' },
   tabText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
   tabTextActive: { color: '#047857' },
   tabIndicator: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: '#059669' },
@@ -2743,6 +3347,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 },
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 12, color: '#111827', backgroundColor: '#fff' },
   btn: { flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: 'center' },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#4b5563', marginBottom: 5 },
   label: { fontSize: 11, fontWeight: '700', color: '#374151', marginBottom: 4 },
   toolbar: { backgroundColor: '#fff', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8, gap: 7, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   requestBanner: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#eff6ff', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6 },
@@ -2780,12 +3385,15 @@ const styles = StyleSheet.create({
   sectionHeaderText: { fontSize: 11, fontWeight: '700', color: '#475569' },
   sectionHeaderCount: { fontSize: 10, color: '#94a3b8' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
+  /** 재고 목록 전용 — 모든 행 높이를 통일해 빠르게 훑을 수 있게 */
+  stockRow: { height: 56, paddingVertical: 0 },
+  rowThumb: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#f3f4f6' },
   rowName: { fontSize: 13, fontWeight: '700', color: '#111827' },
   rowMeta: { fontSize: 11, fontWeight: '400', color: '#9ca3af' },
   rowGroups: { fontSize: 11, color: '#6b7280', marginTop: 1 },
   rowGroupLow: { color: '#dc2626', fontWeight: '700' },
   rowGroupFocus: { color: '#92400e', fontWeight: '700' },
-  rowTotal: { fontSize: 16, fontWeight: '800', color: '#047857' },
+  rowTotal: { fontSize: 15, fontWeight: '800', color: '#111827' },
   rowUnit: { fontSize: 10, fontWeight: '600', color: '#9ca3af' },
   rowTotalSub: { fontSize: 9, color: '#9ca3af' },
   badgeLow: { backgroundColor: '#fef2f2', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },

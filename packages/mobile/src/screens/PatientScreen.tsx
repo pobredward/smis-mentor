@@ -66,6 +66,8 @@ import {
   getGroupStock,
   getTotalStock,
   getItemUsage,
+  itemThumb,
+  INVENTORY_USAGE_LABELS,
   itemLabel,
   getDoseWarnings,
   doseLabel,
@@ -2430,9 +2432,8 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
     const q = query.trim().toLowerCase();
     const order: InventoryUsage[] = ['oral', 'topical', 'supply'];
     return medicines
-      .filter(m => !q || [m.name, m.kind, m.spec, m.ingredient].some(f => f?.toLowerCase().includes(q)))
-      .sort((a, b) => order.indexOf(getItemUsage(a)) - order.indexOf(getItemUsage(b)))
-      .slice(0, 12);
+      .filter(m => !q || [m.name, m.kind, m.spec, m.subCategory, m.ingredient, m.description].some(f => f?.toLowerCase().includes(q)))
+      .sort((a, b) => order.indexOf(getItemUsage(a)) - order.indexOf(getItemUsage(b)) || a.name.localeCompare(b.name, 'ko'));
   }, [medicines, query]);
   const sameKey = (x: MedicationDose) => (item?.ingredient ? x.ingredient === item.ingredient : x.itemId === d.itemId);
   const pending = item ? doses.slice(0, idx + 1).filter(x => x.itemId && sameKey(x)).length : 0;
@@ -2450,16 +2451,37 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
             {item && <TouchableOpacity onPress={() => setPicking(false)}><Text style={{ fontSize: 11, color: '#6b7280' }}>취소</Text></TouchableOpacity>}
             <TouchableOpacity onPress={onRemove} style={{ padding: 2 }}><Text style={{ fontSize: 12 }}>🗑️</Text></TouchableOpacity>
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
-            {candidates.map(m => (
-              <TouchableOpacity key={m.id}
-                onPress={() => { onUpdate({ itemId: m.id, itemName: m.name, itemKind: m.kind, ingredient: m.ingredient, unit: m.unit || '개' }); setPicking(false); setQuery(''); }}
-                style={{ paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: m.id === d.itemId ? '#059669' : '#e5e7eb', backgroundColor: m.id === d.itemId ? '#059669' : '#fff' }}>
-                <Text style={{ fontSize: 11, fontWeight: '600', color: m.id === d.itemId ? '#fff' : '#374151' }}>{itemLabel(m)}</Text>
-              </TouchableOpacity>
-            ))}
-            {candidates.length === 0 && <Text style={{ fontSize: 10, color: '#9ca3af' }}>검색 결과가 없습니다</Text>}
-          </View>
+          {candidates.length === 0 ? (
+            <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', paddingVertical: 12 }}>검색 결과가 없습니다.</Text>
+          ) : (
+            <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+              {candidates.map((m, i) => {
+                const gStock = d.groupId ? getGroupStock(m, d.groupId) : 0;
+                const on = m.id === d.itemId;
+                return (
+                  <TouchableOpacity key={m.id} activeOpacity={0.6}
+                    onPress={() => { onUpdate({ itemId: m.id, itemName: m.name, itemKind: m.kind, ingredient: m.ingredient, unit: m.unit || '개' }); setPicking(false); setQuery(''); }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 52, paddingHorizontal: 8,
+                      backgroundColor: on ? '#ecfdf5' : '#fff', borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: '#e5e7eb' }}>
+                    {itemThumb(m)
+                      ? <Image source={{ uri: itemThumb(m) }} style={{ width: 34, height: 34, borderRadius: 6, backgroundColor: '#f3f4f6' }} contentFit="cover" />
+                      : <View style={{ width: 34, height: 34, borderRadius: 6, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14 }}>💊</Text></View>}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: '#111827' }}>{m.name}</Text>
+                      <Text numberOfLines={1} style={{ fontSize: 10, color: '#9ca3af' }}>{[m.kind, m.spec, INVENTORY_USAGE_LABELS[getItemUsage(m)]].filter(Boolean).join(' · ')}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: d.groupId && gStock <= 0 ? '#dc2626' : '#374151' }}>
+                        {d.groupId ? `${d.groupName ?? ''} ${gStock}` : `전체 ${getTotalStock(m)}`}<Text style={{ fontSize: 9, color: '#9ca3af' }}>{m.unit}</Text>
+                      </Text>
+                      {d.groupId ? <Text style={{ fontSize: 9, color: '#9ca3af' }}>전체 {getTotalStock(m)}{m.unit}</Text> : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
       ) : (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

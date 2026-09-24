@@ -818,11 +818,8 @@ service cloud.firestore {
     // 품목 마스터 (회사 공통) · 그룹(캠프별) · 그룹 패키지(회사 공통): 관리자만 쓰기
     match /inventoryItems/{itemId} {
       allow read: if isCampStaff();
+      // 품목 이미지·영상(media) 포함 — 등록·변경·삭제 모두 관리자만
       allow create, update, delete: if isAdmin();
-      // 스태프 누구나 사진·영상 추가·삭제 (사진 목록만 바꿀 수 있음)
-      allow update: if isCampStaff() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['media', 'updatedAt']) &&
-        request.resource.data.media is list;
     }
 
     match /inventoryGroups/{groupId} {

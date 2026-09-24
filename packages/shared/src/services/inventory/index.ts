@@ -134,6 +134,28 @@ export const subscribeInventoryMovements = (
     (error) => { logger.error('재고 이력 구독 오류:', error); onError?.(error); }
   );
 
+/**
+ * 캠프 전체 입출고 기록 구독 (입출고 기록 탭).
+ * 필터·검색은 화면에서 하고 여기서는 최신순으로 limitTo 건만 가져온다.
+ */
+export const subscribeCampMovements = (
+  db: Firestore,
+  campCode: string,
+  onData: (movements: InventoryMovement[]) => void,
+  limitTo = 400,
+  onError?: (error: Error) => void
+): Unsubscribe =>
+  onSnapshot(
+    query(collection(db, MOVEMENTS), where('campCode', '==', campCode)),
+    (snap) => onData(
+      snap.docs
+        .map(d => ({ id: d.id, ...d.data() }) as InventoryMovement)
+        .sort((a, b) => (b.at?.toMillis?.() ?? 0) - (a.at?.toMillis?.() ?? 0))
+        .slice(0, limitTo)
+    ),
+    (error) => { logger.error('캠프 입출고 기록 구독 오류:', error); onError?.(error); }
+  );
+
 // ── 품목 CRUD (관리자, 회사 공통) ──────────────────────────────
 
 export const addInventoryItem = async (
@@ -437,6 +459,74 @@ export const recordStockUse = async (
       campCode, itemId: change.itemId, itemName: change.itemName, groupId: change.groupId, groupName: change.groupName,
       delta: -q, reason: 'use', refLabel: '사용', memo: change.memo?.trim() || undefined, at: now, by: by.name, byId: by.uid,
     }));
+  });
+};
+
+/**
+ * 그룹 간 재고 이동 — 보내는 그룹에서 빼고 받는 그룹에 그대로 더한다.
+ *
+ * 수량은 (캠프, 품목) 문서 하나의 stocks 맵 안에 그룹별로 들어 있으므로
+ * **한 문서 · 한 트랜잭션**으로 처리된다. 따라서 한쪽만 바뀌는 일이 없다.
+ * - 트랜잭션 안에서 현재 수량을 다시 읽어 검사하므로, 이동 버튼을 연달아 눌러도
+ *   보유 수량을 넘겨 빠지지 않는다 (부족하면 에러).
+ * - 받는 그룹에 이 품목 칸이 없으면 0에서 시작해 새로 만든다 (품목 자체는 회사 공통이라 중복 등록 없음).
+ * - 출고(−)·입고(+) 이력 2건을 같은 transferId 로 남긴다.
+ *
+ * @returns 이동 후 { from, to } 수량
+ */
+export const transferStock = async (
+  db: Firestore,
+  campCode: string,
+  move: {
+    itemId: string;
+    itemName: string;
+    fromGroupId: string;
+    fromGroupName: string;
+    toGroupId: string;
+    toGroupName: string;
+    quantity: number;
+    memo?: string;
+  },
+  by: { uid: string; name: string }
+): Promise<{ from: number; to: number }> => {
+  const q = Math.round(move.quantity);
+  if (!(q > 0)) throw new Error('이동 수량을 1 이상 입력해주세요.');
+  if (move.fromGroupId === move.toGroupId) throw new Error('같은 그룹으로는 이동할 수 없습니다.');
+
+  return runTransaction(db, async tx => {
+    const ref = doc(db, STOCKS, stockDocId(campCode, move.itemId));
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('이 캠프에 둔 재고가 없는 품목입니다.');
+    const stocks = (snap.data().stocks ?? {}) as Record<string, number>;
+    const fromCur = Number(stocks[move.fromGroupId]) || 0;
+    const toCur = Number(stocks[move.toGroupId]) || 0;
+    if (fromCur < q) throw new Error(`${move.fromGroupName} 보유 수량(${fromCur})보다 많이 보낼 수 없습니다.`);
+
+    const now = Timestamp.now();
+    const transferId = doc(collection(db, MOVEMENTS)).id;
+    tx.update(ref, {
+      [`stocks.${move.fromGroupId}`]: fromCur - q,
+      [`stocks.${move.toGroupId}`]: toCur + q,
+      updatedAt: now,
+    });
+    const base = {
+      campCode, itemId: move.itemId, itemName: move.itemName,
+      reason: 'transfer' as InventoryMovementReason, transferId,
+      memo: move.memo?.trim() || undefined, at: now, by: by.name, byId: by.uid,
+    };
+    // 보내는 그룹: 출고
+    tx.set(doc(collection(db, MOVEMENTS)), stripUndefined({
+      ...base, groupId: move.fromGroupId, groupName: move.fromGroupName,
+      counterGroupId: move.toGroupId, counterGroupName: move.toGroupName,
+      delta: -q, refLabel: `${move.toGroupName}(으)로 보냄`,
+    }));
+    // 받는 그룹: 입고
+    tx.set(doc(collection(db, MOVEMENTS)), stripUndefined({
+      ...base, groupId: move.toGroupId, groupName: move.toGroupName,
+      counterGroupId: move.fromGroupId, counterGroupName: move.fromGroupName,
+      delta: q, refLabel: `${move.fromGroupName}에서 받음`,
+    }));
+    return { from: fromCur - q, to: toCur + q };
   });
 };
 

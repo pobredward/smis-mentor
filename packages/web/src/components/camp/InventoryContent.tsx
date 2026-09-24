@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { FiBox, FiSearch, FiPlus, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCamera, FiImage, FiVideo } from 'react-icons/fi';
+import { FiBox, FiSearch, FiPlus, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCamera, FiImage, FiVideo, FiShoppingCart, FiList, FiChevronRight, FiRepeat } from 'react-icons/fi';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { db, storage } from '@/lib/firebase';
@@ -32,8 +32,16 @@ import {
   findGroupByClassCode,
   itemLabel,
   getItemUsage,
-  INVENTORY_USAGES,
   INVENTORY_USAGE_LABELS,
+  INVENTORY_USAGE_ORDER,
+  suggestedUsages,
+  inventoryPerm,
+  transferStock,
+  subscribeCampMovements,
+  movementLabel,
+  MOVEMENT_FILTERS,
+  TRANSFER_REASONS,
+  supplyProgress,
   subscribeSupplyRequests,
   addSupplyRequest,
   updateSupplyRequest,
@@ -77,7 +85,6 @@ import {
   deleteSupplyRequest,
   isSupplyOpen,
   supplyForLabel,
-  SUPPLY_REQUEST_STATUS_LABELS,
   receiveSupplyRequest,
   addCampRequestsFromNeeds,
   needsStockIntake,
@@ -99,7 +106,6 @@ import {
   INVENTORY_CATEGORIES,
   INVENTORY_SUBCATEGORIES,
   INVENTORY_UNITS,
-  INVENTORY_MOVEMENT_LABELS,
   DEFAULT_INVENTORY_ITEMS,
 } from '@smis-mentor/shared';
 import type {
@@ -125,10 +131,12 @@ import type {
   LostItemMedia,
   LostItemStatus,
   InventoryUsage,
+  InventoryPerm,
+  MovementFilterKey,
   CampGroup,
 } from '@smis-mentor/shared';
 
-type SubTab = 'stock' | 'request' | 'lost' | 'manage';
+type SubTab = 'stock' | 'request' | 'purchase' | 'movement' | 'lost' | 'manage';
 
 function todayStr(): string {
   const d = new Date();
@@ -241,6 +249,25 @@ export default function InventoryContent() {
     return groups.find(x => (x.campGroupName ?? x.name).toLowerCase() === g)?.id;
   }, [userData?.jobExperiences, activeJobCodeId, groups]);
   const selected = useMemo(() => views.find(v => v.id === selectedId) ?? null, [views, selectedId]);
+  // 기존 권한 체계 그대로 — admin / 그룹 역할 '부매니저'
+  const perm = useMemo(() => inventoryPerm(userData as { role?: string; jobExperiences?: Array<{ id: string; groupRole?: string }> } | null, activeJobCodeId),
+    [userData, activeJobCodeId]);
+  // 상세에서 '필요한 물품 요청' → 재고 요청 탭의 작성 폼을 미리 채워 연다
+  const [requestPrefill, setRequestPrefill] = useState<{ req: SupplyRequest; nonce: number } | null>(null);
+  const askSupply = (v: InventoryItemView, groupId?: string) => {
+    const g = groups.find(x => x.id === (groupId ?? myInvGroupId)) ?? groups[0];
+    setRequestPrefill({
+      nonce: Date.now(),
+      req: {
+        forType: 'camp',
+        items: [{ id: 'pf', itemId: v.id, name: v.name, quantity: 1, unit: v.unit || '개', groupId: g?.id, groupName: g?.name }],
+      } as unknown as SupplyRequest,
+    });
+    setSelectedId(null);
+    setSubTab('request');
+  };
+  // 부매니저·관리자 요약: 재고 부족 / 미처리 요청
+  const openRequestCount = useMemo(() => requests.filter(r => isSupplyOpen(r.status)).length, [requests]);
 
   if (!activeJobCodeId || !campCode) {
     return (
@@ -251,9 +278,13 @@ export default function InventoryContent() {
     );
   }
 
+  // 상단 메뉴 — 재고 현황 · 재고 요청 · 구매 목록 · 입출고 기록 · 분실물 · 관리
+  // (구매 목록·입출고 기록은 기존에 관리 정보를 보던 범위 = 부매니저·관리자)
   const tabs: { id: SubTab; title: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'stock', title: isForeign ? 'Stock' : '재고 현황', icon: <FiBox className="w-3.5 h-3.5" /> },
     { id: 'request', title: isForeign ? 'Request' : '재고 요청', icon: <FiClipboard className="w-3.5 h-3.5" />, badge: requestBadge },
+    ...(perm.isStockManager ? [{ id: 'purchase' as SubTab, title: isForeign ? 'To buy' : '구매 목록', icon: <FiShoppingCart className="w-3.5 h-3.5" /> }] : []),
+    ...(perm.isStockManager ? [{ id: 'movement' as SubTab, title: isForeign ? 'History' : '입출고 기록', icon: <FiList className="w-3.5 h-3.5" /> }] : []),
     { id: 'lost', title: isForeign ? 'Lost & Found' : '분실물', icon: <FiSearch className="w-3.5 h-3.5" />, badge: keptLostCount },
     ...(isAdmin ? [{ id: 'manage' as SubTab, title: '관리', icon: <FiSettings className="w-3.5 h-3.5" /> }] : []),
   ];
@@ -262,10 +293,10 @@ export default function InventoryContent() {
     <div className="flex flex-col h-full bg-gray-50">
       {/* 세부탭 바 */}
       <div className="bg-white border-b border-gray-200">
-        <div className="flex">
+        <div className="flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map(tab => (
             <button key={tab.id} onClick={() => setSubTab(tab.id)}
-              className={`flex-1 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative flex items-center justify-center gap-1.5 ${
+              className={`flex-1 min-w-[88px] px-2 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative flex items-center justify-center gap-1.5 ${
                 subTab === tab.id ? 'text-emerald-700' : 'text-gray-500 hover:text-gray-700'
               }`}>
               {tab.icon}{tab.title}
@@ -280,21 +311,28 @@ export default function InventoryContent() {
 
       <div className="flex-1 overflow-y-auto">
         {subTab === 'stock' && (
-          <>
-            <StockTab views={views} groups={groups} needs={needs} isAdmin={isAdmin} userName={userName} myGroupId={myInvGroupId}
-              onSelect={id => { setQuickUseGroupId(undefined); setSelectedId(id); }}
-              onQuickUse={(id, gid) => { setQuickUseGroupId(gid); setSelectedId(id); }} />
-          </>
+          <StockTab campCode={campCode} views={views} groups={groups} needs={needs} perm={perm} userName={userName} myGroupId={myInvGroupId}
+            openRequestCount={openRequestCount} onGoRequests={() => setSubTab('request')}
+            onSelect={id => { setQuickUseGroupId(undefined); setSelectedId(id); }}
+            onQuickUse={(id, gid) => { setQuickUseGroupId(gid); setSelectedId(id); }} />
         )}
         {subTab === 'request' && (
           <SupplyRequestTab campCode={campCode} jobCodeId={activeJobCodeId ?? ''} requests={requests} settings={supplySettings} guides={supplyGuides} campGroups={campGroups}
+            prefill={requestPrefill} onPrefillDone={() => setRequestPrefill(null)}
             userGroup={userData?.jobExperiences?.find(e => e.id === activeJobCodeId)?.group} items={items} views={views} groups={groups} needs={needs} students={students} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
+        )}
+        {subTab === 'purchase' && perm.isStockManager && (
+          <PurchaseListTab views={views} groups={groups} needs={needs} requests={requests} settings={supplySettings}
+            onSelect={id => { setQuickUseGroupId(undefined); setSelectedId(id); }} onGoRequests={() => setSubTab('request')} />
+        )}
+        {subTab === 'movement' && perm.isStockManager && (
+          <MovementTab campCode={campCode} groups={groups} views={views} />
         )}
         {subTab === 'lost' && (
           <LostTab campCode={campCode} jobCodeId={activeJobCodeId ?? ''} students={students} campGroups={campGroups} lostItems={lostItems} isAdmin={isAdmin} userId={userData?.userId ?? ''} userName={userName} />
         )}
         {subTab === 'manage' && isAdmin && (
-          <ManageTab campCode={campCode} items={items} views={views} groups={groups} packages={packages} campGroups={campGroups} userName={userName} onSelect={setSelectedId} />
+          <ManageTab campCode={campCode} items={items} views={views} groups={groups} packages={packages} campGroups={campGroups} perm={perm} userName={userName} onSelect={setSelectedId} />
         )}
       </div>
 
@@ -303,10 +341,12 @@ export default function InventoryContent() {
           view={selected}
           groups={groups}
           campCode={campCode}
-          isAdmin={isAdmin}
+          perm={perm}
           userId={userData?.userId ?? ''}
           userName={userName}
           initialUseGroupId={quickUseGroupId}
+          defaultGroupId={myInvGroupId}
+          onRequest={askSupply}
           onClose={() => { setSelectedId(null); setQuickUseGroupId(undefined); }}
         />
       )}
@@ -316,30 +356,38 @@ export default function InventoryContent() {
 
 // ==================== 📦 재고 현황 ====================
 
-function StockTab({ views, groups, needs, isAdmin, userName, myGroupId, onSelect, onQuickUse }: {
+function StockTab({ campCode, views, groups, needs, perm, userName, myGroupId, openRequestCount, onGoRequests, onSelect, onQuickUse }: {
+  campCode: string;
   views: InventoryItemView[];
   groups: InventoryGroup[];
   needs: PurchaseNeed[];
-  isAdmin: boolean;
+  perm: InventoryPerm;
   userName: string;
   myGroupId?: string;
+  openRequestCount: number;
+  onGoRequests: () => void;
   onSelect: (id: string) => void;
   onQuickUse: (id: string, groupId: string) => void;
 }) {
-  // 관리자: 분류별 품목 추가 (추가하면 바로 상세를 열어 그룹 수량 입력)
+  // 관리자: 품목 추가 (추가하면 바로 상세를 열어 그룹 수량 확인)
   const [adding, setAdding] = useState<{ category?: InventoryCategory; subCategory?: string } | null>(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<InventoryCategory | '전체'>('전체');
   const [groupFilter, setGroupFilter] = useState<string>('전체');
-  // 처음 한 번은 '내 그룹'으로 (직접 바꾸면 그대로 둠)
+  // 처음 한 번은 '내 교무실(그룹)'으로 (직접 바꾸면 그대로 둠)
   const [groupTouched, setGroupTouched] = useState(false);
   useEffect(() => { if (!groupTouched && myGroupId) setGroupFilter(myGroupId); }, [myGroupId, groupTouched]);
   const [showInactive, setShowInactive] = useState(false);
-  // 기본: 이 캠프 그룹에 둔 적 있는 품목만 (기본 세트 전체 140여 개가 다 보이지 않게)
+  // 부매니저·관리자 전용: 부족한 물품만 보기
+  const [shortOnly, setShortOnly] = useState(false);
+  // 기본: 이 캠프에 둔 적 있는 품목만 (회사 공통 품목 전체가 다 보이지 않게)
   const [placedOnly, setPlacedOnly] = useState(true);
   const anyPlaced = useMemo(() => views.some(v => Object.keys(v.stocks).length > 0), [views]);
 
-  const shortItems = useMemo(() => new Set(needs.map(n => n.itemId)), [needs]);
+  /** 선택한 교무실 기준 부족 품목 (전체면 어느 한 곳이라도 부족하면) */
+  const shortIds = useMemo(() => new Set(
+    needs.filter(n => groupFilter === '전체' || n.groupId === groupFilter).map(n => n.itemId)
+  ), [needs, groupFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -348,12 +396,13 @@ function StockTab({ views, groups, needs, isAdmin, userName, myGroupId, onSelect
       if (placedOnly && anyPlaced && Object.keys(v.stocks).length === 0) return false;
       if (category !== '전체' && v.category !== category) return false;
       if (groupFilter !== '전체' && !(groupFilter in v.stocks)) return false;
+      if (shortOnly && perm.isStockManager && !shortIds.has(v.id)) return false;
       if (!q) return true;
       return [v.name, v.kind, v.subCategory, v.spec, v.description].some(f => f?.toLowerCase().includes(q));
     });
-  }, [views, search, category, groupFilter, showInactive, placedOnly, anyPlaced]);
+  }, [views, search, category, groupFilter, showInactive, placedOnly, anyPlaced, shortOnly, shortIds, perm.isStockManager]);
 
-  // 세부 분류별로 묶어서 표시
+  // 분류(세부 분류)별로 묶어서 표시 — 행 안에서는 분류를 반복하지 않는다
   const sections = useMemo(() => {
     const map = new Map<string, { cat: InventoryCategory; sub?: string; list: InventoryItemView[] }>();
     filtered.forEach(v => {
@@ -364,55 +413,77 @@ function StockTab({ views, groups, needs, isAdmin, userName, myGroupId, onSelect
     return [...map.entries()];
   }, [filtered]);
 
+  const selCls = 'text-[12px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-emerald-400';
+
   return (
     <div className="px-4 py-3 space-y-3">
-      {/* 검색 + 필터 */}
-      <div className="space-y-2">
-        <div className="relative">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="품목명 · 종류 · 규격 검색"
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-emerald-400" />
+      {/* 부매니저·관리자 요약 — 재고 부족 / 미처리 요청 (일반 멘토에게는 표시하지 않음) */}
+      {perm.isStockManager && (
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setShortOnly(v => !v)}
+            className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
+              shortOnly ? 'border-red-400 bg-red-50' : shortIds.size > 0 ? 'border-red-200 bg-red-50/60 hover:border-red-300' : 'border-gray-200 bg-white'
+            }`}>
+            <p className="text-[11px] text-gray-500">재고 부족{shortOnly ? ' · 보는 중' : ''}</p>
+            <p className={`text-lg font-extrabold leading-tight ${shortIds.size > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+              {shortIds.size}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">개 품목</span>
+            </p>
+          </button>
+          <button onClick={onGoRequests} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left hover:border-emerald-300 transition-colors">
+            <p className="text-[11px] text-gray-500">미처리 요청</p>
+            <p className={`text-lg font-extrabold leading-tight ${openRequestCount > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
+              {openRequestCount}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">건</span>
+              <FiChevronRight className="inline w-3.5 h-3.5 text-gray-300 ml-0.5" />
+            </p>
+          </button>
         </div>
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-          {(['전체', ...INVENTORY_CATEGORIES] as const).map(c => (
-            <button key={c} onClick={() => setCategory(c)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border transition-colors ${
-                category === c ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300'
-              }`}>{c}</button>
-          ))}
-          {isAdmin && (
+      )}
+
+      {/* 교무실 · 분류 · 검색 */}
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <select value={groupFilter} onChange={e => { setGroupTouched(true); setGroupFilter(e.target.value); }} className={`${selCls} flex-1 min-w-0`}>
+            <option value="전체">교무실 전체 (합계)</option>
+            {groups.map(g => <option key={g.id} value={g.id}>{g.id === myGroupId ? '★ ' : ''}{g.name}</option>)}
+          </select>
+          <select value={category} onChange={e => setCategory(e.target.value as InventoryCategory | '전체')} className={`${selCls} w-28 shrink-0`}>
+            <option value="전체">분류 전체</option>
+            {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {perm.canEditItem && (
             <button onClick={() => setAdding({ category: category === '전체' ? undefined : category })}
-              className="ml-auto shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap text-white bg-gray-800">
-              <FiPlus className="w-3 h-3" />{category === '전체' ? '품목 추가' : `${category}에 추가`}
+              className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white bg-gray-800 hover:bg-gray-900">
+              <FiPlus className="w-3 h-3" />품목 추가
             </button>
           )}
         </div>
-        {groups.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5 items-center">
-            <span className="text-[10px] text-gray-400 shrink-0">그룹</span>
-            {[{ id: '전체', name: '전체' }, ...groups].map(g => (
-              <button key={g.id} onClick={() => { setGroupTouched(true); setGroupFilter(g.id); }}
-                className={`px-2 py-0.5 rounded-md text-[11px] whitespace-nowrap border transition-colors ${
-                  groupFilter === g.id ? 'bg-amber-100 text-amber-800 border-amber-300 font-semibold' : 'bg-white text-gray-500 border-gray-200'
-                }`}>{g.id === myGroupId ? '★ ' : ''}{g.name}</button>
-            ))}
-            {anyPlaced && (
-              <label className="ml-auto flex items-center gap-1 text-[10px] text-gray-400 shrink-0 cursor-pointer">
-                <input type="checkbox" checked={!placedOnly} onChange={e => setPlacedOnly(!e.target.checked)} className="w-3 h-3" />전체 품목 보기
-              </label>
-            )}
-            {isAdmin && (
-              <label className="flex items-center gap-1 text-[10px] text-gray-400 shrink-0 cursor-pointer">
-                <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="w-3 h-3" />사용 안 함 포함
-              </label>
-            )}
-          </div>
-        )}
+        <div className="relative">
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="물품명 검색"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-emerald-400" />
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          {perm.isStockManager && (
+            <label className="flex items-center gap-1 text-[11px] text-gray-500 cursor-pointer">
+              <input type="checkbox" checked={shortOnly} onChange={e => setShortOnly(e.target.checked)} className="w-3.5 h-3.5" />부족한 물품만 보기
+            </label>
+          )}
+          {anyPlaced && (
+            <label className="flex items-center gap-1 text-[11px] text-gray-400 cursor-pointer">
+              <input type="checkbox" checked={!placedOnly} onChange={e => setPlacedOnly(!e.target.checked)} className="w-3.5 h-3.5" />이 캠프에 없는 품목도 보기
+            </label>
+          )}
+          {perm.isAdmin && (
+            <label className="flex items-center gap-1 text-[11px] text-gray-400 cursor-pointer">
+              <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="w-3.5 h-3.5" />사용 안 함 포함
+            </label>
+          )}
+        </div>
       </div>
 
       {groups.length === 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800">
-          이 캠프에 재고 그룹이 아직 없습니다. {isAdmin ? '관리 탭에서 패키지를 적용하거나 그룹을 추가해주세요.' : '관리자가 그룹을 등록하면 수량이 표시됩니다.'}
+          이 캠프에 교무실(재고 그룹)이 아직 없습니다. {perm.isAdmin ? '관리 탭에서 패키지를 적용하거나 그룹을 추가해주세요.' : '관리자가 등록하면 수량이 표시됩니다.'}
         </div>
       )}
 
@@ -420,77 +491,89 @@ function StockTab({ views, groups, needs, isAdmin, userName, myGroupId, onSelect
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FiBox className="h-10 w-10 text-gray-300 mb-2" />
           <p className="text-sm text-gray-500">등록된 품목이 없습니다.</p>
-          {isAdmin && <p className="text-[11px] text-gray-400 mt-1">관리 탭 › 기본 품목 세트 불러오기로 시작할 수 있습니다.</p>}
+          {perm.isAdmin && <p className="text-[11px] text-gray-400 mt-1">관리 탭 › 기본 품목 세트 불러오기로 시작할 수 있습니다.</p>}
         </div>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-10">검색 결과가 없습니다.</p>
+        <p className="text-sm text-gray-400 text-center py-10">{shortOnly ? '부족한 물품이 없습니다.' : '검색 결과가 없습니다.'}</p>
       ) : (
         sections.map(([title, { cat, sub, list }]) => (
           <div key={title}>
-            <div className="flex items-center gap-2 mb-1.5 px-0.5">
+            <div className="flex items-center gap-2 mb-1 px-0.5">
               <p className="flex-1 text-[11px] font-bold text-gray-500">{title} <span className="text-gray-300 font-normal">{list.length}</span></p>
-              {isAdmin && <button onClick={() => setAdding({ category: cat, subCategory: sub })} className="text-[10px] font-semibold text-emerald-700 hover:underline">+ {sub ?? cat}에 추가</button>}
+              {perm.canEditItem && <button onClick={() => setAdding({ category: cat, subCategory: sub })} className="text-[10px] font-semibold text-emerald-700 hover:underline">+ 추가</button>}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
               {list.map(v => (
-                <div key={v.id} className="relative">
-                  <ItemCard view={v} groups={groups} isShort={shortItems.has(v.id)} onClick={() => onSelect(v.id)} />
-                  {groupFilter !== '전체' && groupFilter in v.stocks && (
-                    <button onClick={() => onQuickUse(v.id, groupFilter)} title="이 그룹에서 사용 기록"
-                      className="absolute right-2 bottom-2 px-2 py-0.5 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm">− 사용</button>
-                  )}
-                </div>
+                <ItemRow key={v.id} view={v} groupId={groupFilter === '전체' ? undefined : groupFilter}
+                  showStatus={perm.isStockManager} isShort={shortIds.has(v.id)}
+                  onClick={() => onSelect(v.id)}
+                  onQuickUse={groupFilter !== '전체' && groupFilter in v.stocks ? () => onQuickUse(v.id, groupFilter) : undefined} />
               ))}
             </div>
           </div>
         ))
       )}
-      {adding && <ItemFormModal preset={adding} userName={userName} onClose={() => setAdding(null)} onCreated={id => onSelect(id)} />}
+      {adding && <ItemFormModal preset={adding} groups={groups} campCode={campCode} defaultGroupId={groupFilter === '전체' ? myGroupId : groupFilter}
+        perm={perm} userName={userName} onClose={() => setAdding(null)} onCreated={id => onSelect(id)} />}
     </div>
   );
 }
 
-function ItemCard({ view, groups, isShort, onClick }: {
+/** 목록 한 줄 — 모든 행·썸네일 크기를 통일해 빠르게 훑을 수 있게 한다 */
+function ItemRow({ view, groupId, showStatus, isShort, onClick, onQuickUse }: {
   view: InventoryItemView;
-  groups: InventoryGroup[];
+  /** 선택한 교무실 (없으면 전체 합계) */
+  groupId?: string;
+  showStatus: boolean;
   isShort: boolean;
   onClick: () => void;
+  onQuickUse?: () => void;
 }) {
+  const qty = groupId ? getGroupStock(view, groupId) : view.total;
+  const min = groupId ? getMinStock(view, groupId) : 0;
+  const low = groupId ? (qty < 0 || (min > 0 && qty < min)) : isShort;
+  // 일반 멘토에게는 부족 상태를 표시하지 않는다 (수량이 음수인 실사 필요만 빨갛게)
+  const lowShown = showStatus ? low : qty < 0;
+  const thumb = itemThumb(view);
+  const ex = earliestExpiry(view, groupId);
+  const exSt = expiryState(ex);
+  const loc = groupId ? view.locations?.[groupId] : undefined;
+  const meta = [view.kind, view.spec, loc ? `📍 ${loc}` : ''].filter(Boolean).join(' · ');
+
   return (
-    <button onClick={onClick}
-      className={`text-left bg-white rounded-xl border shadow-sm px-3 py-2.5 hover:border-emerald-300 transition-colors ${
-        view.isActive === false ? 'opacity-60 border-dashed border-gray-300' : isShort ? 'border-red-200' : 'border-gray-200'
-      }`}>
-      <div className="flex items-start gap-2">
-        {itemThumb(view) && <img src={itemThumb(view)} alt="" className="w-11 h-11 rounded-lg object-cover bg-gray-100 shrink-0" loading="lazy" />}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-bold text-gray-900 truncate">{view.name}</span>
-            {view.kind && <span className="text-[10px] text-gray-500">{view.kind}</span>}
-            {view.spec && <span className="text-[10px] text-gray-400">{view.spec}</span>}
-            {view.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500">사용 안 함</span>}
-            {(() => { const ex = earliestExpiry(view); const st = expiryState(ex); return st === 'expired' || st === 'soon'
-              ? <span className={`text-[9px] px-1 rounded font-bold ${st === 'expired' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>⏳ {fmtExpiry(ex)} {st === 'expired' ? '지남' : '임박'}</span> : null; })()}
-          </div>
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {groups.map(g => {
-              const n = getGroupStock(view, g.id);
-              const min = getMinStock(view, g.id);
-              const low = n < 0 || (min > 0 && n < min);
-              return (
-                <span key={g.id} className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                  low ? 'bg-red-50 text-red-700 border-red-200 font-semibold' : n > 0 ? 'bg-gray-50 text-gray-700 border-gray-100' : 'bg-white text-gray-300 border-gray-100'
-                }`}>{g.name} {n}{n < 0 ? ' · 실사 필요' : ''}</span>
-              );
-            })}
-          </div>
-        </div>
-        <div className="text-right shrink-0">
-          <p className={`text-lg font-extrabold leading-none ${isShort ? 'text-red-600' : 'text-emerald-700'}`}>{view.total}<span className="text-[10px] font-semibold text-gray-400 ml-0.5">{view.unit}</span></p>
-          <p className="text-[9px] text-gray-400 mt-0.5">총 재고</p>
-        </div>
-      </div>
-    </button>
+    <div className="flex items-center h-[56px] hover:bg-gray-50 transition-colors">
+      <button onClick={onClick} className="flex-1 min-w-0 flex items-center gap-2.5 h-full pl-3 pr-2 text-left">
+        {thumb
+          ? <img src={thumb} alt="" className="w-9 h-9 rounded-lg object-cover bg-gray-100 shrink-0" loading="lazy" />
+          : <span className="w-9 h-9 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300"><FiBox className="w-4 h-4" /></span>}
+        <span className="flex-1 min-w-0">
+          <span className="flex items-center gap-1.5">
+            <span className={`text-[13px] font-semibold truncate ${view.isActive === false ? 'text-gray-400' : 'text-gray-900'}`}>{view.name}</span>
+            {view.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500 shrink-0">사용 안 함</span>}
+            {(exSt === 'expired' || exSt === 'soon') && (
+              <span className={`text-[9px] px-1 rounded font-bold shrink-0 ${exSt === 'expired' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
+                ⏳ {fmtExpiry(ex)} {exSt === 'expired' ? '지남' : '임박'}
+              </span>
+            )}
+          </span>
+          <span className="block text-[10px] text-gray-400 truncate h-[13px]">{meta}</span>
+        </span>
+      </button>
+      <button onClick={onClick} className="shrink-0 w-[72px] h-full text-right pr-2 flex flex-col justify-center">
+        <span className={`text-sm font-extrabold leading-none ${lowShown ? 'text-red-600' : 'text-gray-900'}`}>
+          {qty}<span className="text-[10px] font-semibold text-gray-400 ml-0.5">{view.unit}</span>
+        </span>
+      </button>
+      {showStatus && (
+        <button onClick={onClick} className="shrink-0 w-[46px] h-full flex items-center justify-center">
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${low ? 'bg-red-100 text-red-700' : 'text-gray-400'}`}>{low ? '부족' : '정상'}</span>
+        </button>
+      )}
+      {onQuickUse && (
+        <button onClick={onQuickUse} title="이 교무실에서 사용 기록"
+          className="shrink-0 mr-2 px-2 py-1 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md">− 사용</button>
+      )}
+    </div>
   );
 }
 
@@ -508,8 +591,11 @@ async function uploadItemMedia(itemId: string, files: File[], by: string): Promi
   return out;
 }
 
-/** 품목이 어떻게 생겼는지 — 스태프 누구나 추가·삭제 (삭제는 확인 창) */
-function ItemMediaSection({ item, userName }: { item: InventoryItem; isAdmin?: boolean; userName: string }) {
+/**
+ * 품목이 어떻게 생겼는지 — 보기는 스태프 누구나, 등록·삭제는 관리자만.
+ * (Firestore·Storage 규칙에서도 관리자만 쓰기·삭제가 되도록 막혀 있다)
+ */
+function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; canEdit: boolean; userName: string }) {
   const [deleting, setDeleting] = useState<ItemMedia | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const media = item.media ?? [];
@@ -533,13 +619,17 @@ function ItemMediaSection({ item, userName }: { item: InventoryItem; isAdmin?: b
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <p className="text-xs font-bold text-gray-700">사진 · 영상 <span className="font-normal text-gray-400">{media.length || ''}</span></p>
-        <label className={`flex items-center gap-1 text-[11px] font-semibold cursor-pointer ${busy ? 'text-gray-400' : 'text-blue-700 hover:underline'}`}>
-          <FiCamera className="w-3.5 h-3.5" />{busy ? '올리는 중...' : '추가'}
-          <input type="file" accept="image/*,video/*" multiple disabled={busy} className="hidden" onChange={e => { add(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
-        </label>
+        {canEdit && (
+          <label className={`flex items-center gap-1 text-[11px] font-semibold cursor-pointer ${busy ? 'text-gray-400' : 'text-blue-700 hover:underline'}`}>
+            <FiCamera className="w-3.5 h-3.5" />{busy ? '올리는 중...' : '추가'}
+            <input type="file" accept="image/*,video/*" multiple disabled={busy} className="hidden" onChange={e => { add(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
+          </label>
+        )}
       </div>
       {media.length === 0 ? (
-        <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">아직 사진이 없어요. 포장·실물 사진을 올려두면 다른 선생님이 찾기 쉬워요.</p>
+        <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">
+          {canEdit ? '아직 사진이 없어요. 포장·실물 사진을 올려두면 다른 선생님이 찾기 쉬워요.' : '등록된 사진이 없습니다. (사진 등록은 관리자만)'}
+        </p>
       ) : (
         <div className="space-y-2">
           {media.map(m => (
@@ -548,7 +638,9 @@ function ItemMediaSection({ item, userName }: { item: InventoryItem; isAdmin?: b
                 ? <video src={m.url} className="w-full max-h-[420px] bg-black" controls playsInline preload="metadata" />
                 : <img src={m.url} alt="" className="w-full max-h-[420px] object-contain bg-gray-50 cursor-zoom-in" loading="lazy" onClick={() => setViewing(m)} />}
               {m.by && <span className="absolute bottom-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded bg-black/50 text-white pointer-events-none">{m.by}</span>}
-              <button onClick={() => setDeleting(m)} title="삭제" className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-[11px] flex items-center justify-center hover:bg-red-600">✕</button>
+              {canEdit && (
+                <button onClick={() => setDeleting(m)} title="삭제" className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-[11px] flex items-center justify-center hover:bg-red-600">✕</button>
+              )}
             </div>
           ))}
         </div>
@@ -590,14 +682,16 @@ function ItemMediaSection({ item, userName }: { item: InventoryItem; isAdmin?: b
 
 // ==================== 품목 상세 (그룹별 수량 · 입고 · 조정 · 이력) ====================
 
-function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, initialUseGroupId, onClose }: {
+function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initialUseGroupId, defaultGroupId, onRequest, onClose }: {
   view: InventoryItemView;
   groups: InventoryGroup[];
   campCode: string;
-  isAdmin: boolean;
+  perm: InventoryPerm;
   userId: string;
   userName: string;
   initialUseGroupId?: string;
+  defaultGroupId?: string;
+  onRequest: (view: InventoryItemView, groupId?: string) => void;
   onClose: () => void;
 }) {
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
@@ -609,6 +703,8 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
   const [memo, setMemo] = useState('');
   const [busy, setBusy] = useState(false);
   const [editItem, setEditItem] = useState(false);
+  // 그룹 간 이동 — 일반 수량 조정과 헷갈리지 않도록 별도 화면
+  const [transferFrom, setTransferFrom] = useState<string | null>(null);
   const isMedicine = ['oral', 'topical'].includes(getItemUsage(view));
   // 그룹별 유효기간(관리자) · 세부 위치(누구나)
   const [meta, setMeta] = useState<{ groupId: string; kind: 'location' | 'expiry'; value: string } | null>(null);
@@ -626,6 +722,9 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
 
   const group = groups.find(g => g.id === mode?.groupId);
   const current = mode ? getGroupStock(view, mode.groupId) : 0;
+  /** 바로 사용할 교무실 — 내 교무실 → 재고가 있는 첫 곳 */
+  const useGroupId = (defaultGroupId && defaultGroupId in view.stocks) ? defaultGroupId
+    : groups.find(g => getGroupStock(view, g.id) > 0)?.id;
 
   const submit = async () => {
     if (!mode || !group || busy) return;
@@ -659,8 +758,9 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+    // 데스크톱은 오른쪽 사이드 패널, 모바일은 바텀시트
+    <div className="fixed inset-0 bg-black/60 flex items-end justify-center sm:items-stretch sm:justify-end z-50" onClick={onClose}>
+      <div className="bg-white w-full sm:w-[440px] sm:max-w-full rounded-t-2xl sm:rounded-none shadow-2xl flex flex-col max-h-[92vh] sm:max-h-none sm:h-full" onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
           <div className="min-w-0">
@@ -670,35 +770,42 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
               {view.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500">사용 안 함</span>}
             </div>
             <h2 className="text-base font-bold text-gray-900 mt-1">{view.name} {view.spec && <span className="text-xs font-normal text-gray-400">{view.spec}</span>}</h2>
-            {view.description && <p className="text-[11px] text-gray-600 mt-0.5">ℹ️ {view.description}</p>}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="text-right">
               <p className="text-2xl font-extrabold text-emerald-700 leading-none">{view.total}<span className="text-xs text-gray-400 ml-0.5">{view.unit}</span></p>
-              <p className="text-[9px] text-gray-400">전체 재고 (그룹 합)</p>
+              <p className="text-[9px] text-gray-400">현재 총재고</p>
             </div>
             <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* 그룹별 수량 */}
+          {/* 사용 방법 · 주의사항 */}
+          {(view.description || view.dosageNote) && (
+            <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 px-3 py-2 space-y-0.5">
+              {view.dosageNote && <p className="text-[11px] text-emerald-900">📋 {view.dosageNote}</p>}
+              {view.description && <p className="text-[11px] text-gray-700">ℹ️ {view.description}</p>}
+            </div>
+          )}
+
+          {/* 교무실별 수량 */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs font-bold text-gray-700">그룹별 수량</p>
-              {isAdmin && <button onClick={() => setEditItem(true)} className="text-[11px] text-emerald-700 hover:underline">품목 수정</button>}
+              <p className="text-xs font-bold text-gray-700">교무실별 수량</p>
+              {perm.canEditItem && <button onClick={() => setEditItem(true)} className="text-[11px] text-emerald-700 hover:underline">품목 수정</button>}
             </div>
             {groups.length === 0 ? (
-              <p className="text-[11px] text-gray-400">재고 그룹이 없습니다.</p>
+              <p className="text-[11px] text-gray-400">교무실(재고 그룹)이 없습니다.</p>
             ) : (
               <div className="rounded-xl border border-gray-200 overflow-hidden">
                 <table className="w-full text-[11px]">
                   <thead className="bg-gray-50 text-gray-500">
                     <tr>
-                      <th className="text-left px-3 py-1.5 font-semibold">그룹</th>
+                      <th className="text-left px-3 py-1.5 font-semibold">교무실</th>
                       <th className="text-right px-2 py-1.5 font-semibold">현재</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">최소</th>
-                      <th className="text-left px-2 py-1.5 font-semibold">상태</th>
+                      {perm.isStockManager && <th className="text-right px-2 py-1.5 font-semibold">최소</th>}
+                      {perm.isStockManager && <th className="text-left px-2 py-1.5 font-semibold">상태</th>}
                       <th className="px-2 py-1.5" />
                     </tr>
                   </thead>
@@ -718,26 +825,29 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
                                 className={`text-[10px] ${view.locations[g.id] ? 'text-gray-700' : 'text-gray-300 hover:text-gray-500'}`}>📍 {view.locations[g.id] || '위치 적기'}</button>
                               {(() => {
                                 const ex = view.expiries[g.id]; const st = expiryState(ex);
-                                if (!ex) return isAdmin ? <button onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: '' })} className="text-[10px] text-gray-300 hover:text-gray-500">⏳ 유효기간</button> : null;
-                                return <button disabled={!isAdmin} onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: ex })}
+                                if (!ex) return perm.canManageStock ? <button onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: '' })} className="text-[10px] text-gray-300 hover:text-gray-500">⏳ 유효기간</button> : null;
+                                return <button disabled={!perm.canManageStock} onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: ex })}
                                   className={`text-[10px] px-1 rounded ${st === 'expired' ? 'bg-red-100 text-red-700 font-bold' : st === 'soon' ? 'bg-amber-100 text-amber-800 font-bold' : 'text-gray-500'}`}>⏳ {fmtExpiry(ex)}{st === 'expired' ? ' 지남' : st === 'soon' ? ' 임박' : ''}</button>;
                               })()}
                             </div>
                           </td>
-                          <td className={`text-right px-2 py-1.5 font-bold ${low ? 'text-red-600' : 'text-gray-800'}`}>{n}</td>
-                          <td className="text-right px-2 py-1.5 text-gray-500">{min}{isOverride && <span className="text-[9px] text-amber-600 ml-0.5">*</span>}</td>
-                          <td className="px-2 py-1.5">
-                            {low ? <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">구매 필요 (−{min - n})</span>
-                              : <span className="text-[10px] text-gray-400">충분</span>}
-                          </td>
+                          <td className={`text-right px-2 py-1.5 font-bold ${low && perm.isStockManager ? 'text-red-600' : 'text-gray-800'}`}>{n}</td>
+                          {perm.isStockManager && <td className="text-right px-2 py-1.5 text-gray-500">{min}{isOverride && <span className="text-[9px] text-amber-600 ml-0.5">*</span>}</td>}
+                          {perm.isStockManager && (
+                            <td className="px-2 py-1.5">
+                              {low ? <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">부족 (−{min - n})</span>
+                                : <span className="text-[10px] text-gray-400">정상</span>}
+                            </td>
+                          )}
                           <td className="px-2 py-1.5 text-right whitespace-nowrap">
                             {g.id in view.stocks && (
                               <button onClick={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} className="text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded px-1.5 py-0.5 mr-2">− 사용</button>
                             )}
-                            {isAdmin && (
+                            {perm.canManageStock && (
                               <>
                                 <button onClick={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }} className="text-[10px] font-semibold text-emerald-700 hover:underline mr-2">+입고</button>
                                 <button onClick={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }} className="text-[10px] text-gray-500 hover:underline mr-2">조정</button>
+                                <button onClick={() => { setMode(null); setTransferFrom(g.id); }} title="다른 그룹으로 이동" className="text-[10px] font-semibold text-indigo-600 hover:underline mr-2">이동</button>
                                 <button onClick={() => { setMode({ type: 'min', groupId: g.id }); setQty(isOverride ? String(view.minStocks[g.id]) : ''); setMemo(''); }} className="text-[10px] text-gray-500 hover:underline">최소</button>
                               </>
                             )}
@@ -749,7 +859,7 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
                 </table>
               </div>
             )}
-            {isAdmin && <p className="text-[10px] text-gray-400 mt-1">최소 수량 기본값 {view.minStockDefault ?? 0}{view.unit} (품목 수정에서 변경) · * 표시는 그룹별 예외</p>}
+            {perm.canManageStock && <p className="text-[10px] text-gray-400 mt-1">최소 수량 기본값 {view.minStockDefault ?? 0}{view.unit} (품목 수정에서 변경) · * 표시는 교무실별 예외 · <b>조정</b>은 이 교무실 수량만 바꾸고, <b>이동</b>은 다른 교무실로 옮깁니다</p>}
           </div>
 
           {/* 세부 위치 · 유효기간 */}
@@ -773,11 +883,11 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
             </div>
           )}
 
-          {/* 입고 / 조정 / 최소 폼 */}
+          {/* 사용 / 입고 / 조정 / 최소 폼 */}
           {mode && group && (
             <div className={`rounded-xl border p-3 space-y-2 ${mode.type === 'use' ? 'border-blue-200 bg-blue-50' : mode.type === 'restock' ? 'border-emerald-200 bg-emerald-50' : mode.type === 'adjust' ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
               <p className="text-xs font-bold text-gray-800">
-                {mode.type === 'use' ? '📤 사용' : mode.type === 'restock' ? '📥 재고 입고' : mode.type === 'adjust' ? '✏️ 수량 직접 조정' : '📏 최소 보유 수량'} · {group.name}
+                {mode.type === 'use' ? '📤 사용하기' : mode.type === 'restock' ? '📥 재고 입고' : mode.type === 'adjust' ? '✏️ 이 교무실 수량만 조정' : '📏 최소 보유 수량'} · {group.name}
                 <span className="font-normal text-gray-500 ml-1">현재 {current}{view.unit}</span>
               </p>
               <div className="flex gap-2 items-center">
@@ -839,7 +949,7 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
                   <div key={m.id} className="flex items-center gap-2 text-[11px] bg-gray-50 rounded-lg px-2.5 py-1.5">
                     <span className="text-gray-400 w-20 shrink-0">{fmtDateTime(m.at)}</span>
                     <span className="flex-1 min-w-0 truncate text-gray-700">
-                      {m.refLabel ? <b className="text-gray-800">{m.refLabel}</b> : INVENTORY_MOVEMENT_LABELS[m.reason]}
+                      <b className="text-gray-800">{movementLabel(m)}</b>
                       <span className="text-gray-400"> · {m.groupName}</span>
                       {m.memo && <span className="text-gray-500"> · {m.memo}</span>}
                     </span>
@@ -856,13 +966,181 @@ function ItemDetailModal({ view, groups, campCode, isAdmin, userId, userName, in
             )}
           </div>
 
-          <ItemMediaSection item={view} isAdmin={isAdmin} userName={userName} />
+          <ItemMediaSection item={view} canEdit={perm.canEditItemMedia} userName={userName} />
+        </div>
+
+        {/* 사용하기 · 필요한 물품 요청 — 누구나 */}
+        <div className="px-5 py-3 border-t border-gray-100 flex gap-2">
+          <button
+            onClick={() => { if (useGroupId) { setMode({ type: 'use', groupId: useGroupId }); setQty('1'); setMemo(''); } }}
+            disabled={!useGroupId}
+            className="flex-1 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:bg-gray-200 disabled:text-gray-400">
+            사용하기
+          </button>
+          <button onClick={() => onRequest(view, defaultGroupId)}
+            className="flex-1 py-2.5 text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl">
+            필요한 물품 요청
+          </button>
         </div>
       </div>
 
-      {editItem && (
-        <ItemFormModal item={view} userName={userName} onClose={() => setEditItem(false)} />
+      {transferFrom && (
+        <StockTransferModal view={view} groups={groups} campCode={campCode} fromGroupId={transferFrom}
+          userId={userId} userName={userName} onClose={() => setTransferFrom(null)} />
       )}
+
+      {editItem && (
+        <ItemFormModal item={view} groups={groups} perm={perm} userName={userName} onClose={() => setEditItem(false)} />
+      )}
+    </div>
+  );
+}
+
+// ==================== 🔁 그룹(교무실) 간 재고 이동 ====================
+// 보내는 그룹 −, 받는 그룹 + 가 하나의 트랜잭션으로 처리되어 전체 재고 합계는 변하지 않는다.
+
+function StockTransferModal({ view, groups, campCode, fromGroupId, userId, userName, onClose }: {
+  view: InventoryItemView;
+  groups: InventoryGroup[];
+  campCode: string;
+  fromGroupId: string;
+  userId: string;
+  userName: string;
+  onClose: () => void;
+}) {
+  const [from, setFrom] = useState(fromGroupId);
+  const others = groups.filter(g => g.id !== from);
+  const [to, setTo] = useState(others[0]?.id ?? '');
+  useEffect(() => { if (to === from) setTo(groups.find(g => g.id !== from)?.id ?? ''); }, [from, to, groups]);
+  const [qty, setQty] = useState('1');
+  const [memo, setMemo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<{ from: number; to: number } | null>(null);
+
+  const fromGroup = groups.find(g => g.id === from);
+  const toGroup = groups.find(g => g.id === to);
+  const fromCur = getGroupStock(view, from);
+  const toCur = getGroupStock(view, to);
+  const n = parseInt(qty, 10) || 0;
+  const invalid = !fromGroup || !toGroup || from === to || n <= 0 || n > fromCur;
+
+  const submit = async () => {
+    if (invalid || busy || !fromGroup || !toGroup) return;
+    setBusy(true);
+    try {
+      const res = await transferStock(db, campCode, {
+        itemId: view.id, itemName: view.name,
+        fromGroupId: fromGroup.id, fromGroupName: fromGroup.name,
+        toGroupId: toGroup.id, toGroupName: toGroup.name,
+        quantity: n, memo: memo.trim() || undefined,
+      }, { uid: userId, name: userName });
+      setDone(res);
+      notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: fromGroup.id });
+    } catch (e) {
+      console.error('그룹 간 이동 오류:', e);
+      alert(e instanceof Error ? e.message : '이동하지 못했습니다.');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[70] p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-1.5"><FiRepeat className="w-4 h-4 text-indigo-600" />다른 교무실로 이동</h2>
+            <p className="text-[11px] text-gray-500 mt-0.5">보내는 곳에서 빠지고 받는 곳에 그대로 더해집니다 (전체 재고는 그대로)</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {/* 물품 */}
+          <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 px-3 py-2">
+            {itemThumb(view)
+              ? <img src={itemThumb(view)} alt="" className="w-11 h-11 rounded-lg object-cover bg-gray-100 shrink-0" />
+              : <span className="w-11 h-11 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300"><FiBox /></span>}
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-gray-900 truncate">{view.name}</p>
+              <p className="text-[11px] text-gray-400 truncate">{[view.kind, view.spec].filter(Boolean).join(' · ') || `${view.category}`}</p>
+            </div>
+            <span className="ml-auto text-right shrink-0">
+              <span className="block text-base font-extrabold text-emerald-700 leading-none">{view.total}{view.unit}</span>
+              <span className="block text-[9px] text-gray-400">전체</span>
+            </span>
+          </div>
+
+          {done ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 space-y-1">
+              <p className="text-sm font-bold text-emerald-800">이동했습니다.</p>
+              <p className="text-[12px] text-gray-700">{fromGroup?.name} <b>{done.from}{view.unit}</b> · {toGroup?.name} <b>{done.to}{view.unit}</b></p>
+              <p className="text-[11px] text-gray-500">양쪽 입출고 기록에 남았습니다.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+                <div>
+                  <p className="text-[11px] font-bold text-gray-600 mb-1">보내는 교무실</p>
+                  <select value={from} onChange={e => setFrom(e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white outline-none">
+                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                  <p className="text-[11px] text-gray-500 mt-1">보유 <b className="text-gray-800">{fromCur}{view.unit}</b></p>
+                </div>
+                <div className="pb-7 text-gray-300 text-lg">→</div>
+                <div>
+                  <p className="text-[11px] font-bold text-gray-600 mb-1">받는 교무실</p>
+                  <select value={to} onChange={e => setTo(e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white outline-none">
+                    {others.length === 0 && <option value="">이동할 곳이 없습니다</option>}
+                    {others.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                  <p className="text-[11px] text-gray-500 mt-1">보유 <b className="text-gray-800">{toCur}{view.unit}</b>{!(to in view.stocks) && to ? ' (새로 생김)' : ''}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold text-gray-600 mb-1">이동할 수량</p>
+                <div className="flex items-center gap-2">
+                  <input type="number" min={1} max={fromCur} value={qty} onChange={e => setQty(e.target.value)} autoFocus
+                    className="w-28 text-sm border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
+                  <span className="text-xs text-gray-500">{view.unit}</span>
+                  <div className="flex gap-1 ml-auto">
+                    {[1, 5, 10].filter(x => x <= fromCur).map(x => (
+                      <button key={x} type="button" onClick={() => setQty(String(x))} className="px-2 py-1 text-[11px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">{x}</button>
+                    ))}
+                    {fromCur > 0 && <button type="button" onClick={() => setQty(String(fromCur))} className="px-2 py-1 text-[11px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">전부</button>}
+                  </div>
+                </div>
+                {n > fromCur && <p className="text-[11px] text-red-600 mt-1">보유 수량({fromCur}{view.unit})보다 많이 보낼 수 없습니다.</p>}
+                {!invalid && (
+                  <p className="text-[11px] text-gray-600 mt-1.5 bg-gray-50 rounded-lg px-2 py-1.5">
+                    {fromGroup?.name} {fromCur} → <b className="text-red-600">{fromCur - n}</b> · {toGroup?.name} {toCur} → <b className="text-emerald-700">{toCur + n}</b>
+                    <span className="text-gray-400"> · 전체 {view.total} (그대로)</span>
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold text-gray-600 mb-1">이동 사유 <span className="font-normal text-gray-400">(선택)</span></p>
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {TRANSFER_REASONS.map(r => (
+                    <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${memo === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>{r}</button>
+                  ))}
+                </div>
+                <input value={memo} onChange={e => setMemo(e.target.value)} placeholder="직접 입력해도 됩니다"
+                  className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white" />
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl">{done ? '닫기' : '취소'}</button>
+          {!done && (
+            <button onClick={submit} disabled={invalid || busy}
+              className="flex-1 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-40">{busy ? '이동 중...' : '이동하기'}</button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -873,6 +1151,16 @@ const SUPPLY_STATUS_STYLE: Record<SupplyRequestStatus, string> = {
   requested: 'bg-blue-100 text-blue-700',
   onhold: 'bg-amber-100 text-amber-800',
   purchased: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-gray-100 text-gray-500',
+};
+/** 진행 상태 배지 (대기 → 승인 → 구매 중 → 입고 완료) */
+const PROGRESS_STYLE: Record<string, string> = {
+  waiting: 'bg-gray-100 text-gray-600',
+  approved: 'bg-blue-100 text-blue-700',
+  buying: 'bg-indigo-100 text-indigo-700',
+  bought: 'bg-emerald-100 text-emerald-700',
+  received: 'bg-emerald-100 text-emerald-700',
+  onhold: 'bg-amber-100 text-amber-800',
   rejected: 'bg-gray-100 text-gray-500',
 };
 const FOR_ICON: Record<SupplyForType, string> = { student: '👧', mentor: '🧑‍🏫', camp: '🏕' };
@@ -917,10 +1205,13 @@ function savePayTo(v: string) { try { localStorage.setItem(PAYTO_KEY, v); } catc
 type SupplyEditing = { mode: 'new'; prefill?: SupplyRequest } | { mode: 'edit'; req: SupplyRequest };
 type SupplyAssigning = { mode: 'default' } | { mode: 'reqs'; reqs: SupplyRequest[] };
 
-function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, campGroups, items, views, groups, needs, students, isAdmin, userId, userName, userGroup }: {
+function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, campGroups, items, views, groups, needs, students, isAdmin, userId, userName, userGroup, prefill, onPrefillDone }: {
   campCode: string; jobCodeId: string; requests: SupplyRequest[]; settings: SupplySettings | null; guides: SupplyGuide[]; campGroups: CampGroup[];
   items: InventoryItem[]; views: InventoryItemView[]; groups: InventoryGroup[]; needs: PurchaseNeed[]; students: STSheetStudent[];
   isAdmin: boolean; userId: string; userName: string; userGroup?: string;
+  /** 재고 현황 상세의 '필요한 물품 요청' 으로 들어온 경우 — 작성 폼을 미리 채워 연다 */
+  prefill?: { req: SupplyRequest; nonce: number } | null;
+  onPrefillDone?: () => void;
 }) {
   const sectionsOf = <T,>(list: T[], reqOf: (t: T) => SupplyRequest) => groupSupplyByCampGroup(list, reqOf, campGroups, students);
   const [candidates, setCandidates] = useState<SupplyBuyerCandidate[]>([]);
@@ -931,6 +1222,12 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
   const [filter, setFilter] = useState<'open' | 'buy' | 'settle' | 'mine' | 'done'>('open');
   const [editing, setEditing] = useState<SupplyEditing | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!prefill) return;
+    setEditing({ mode: 'new', prefill: prefill.req });
+    onPrefillDone?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.nonce]);
   const [assigning, setAssigning] = useState<SupplyAssigning | null>(null);
   const [completing, setCompleting] = useState<{ reqId: string; lineIds: string[] } | null>(null);
   const opened = requests.find(r => r.id === openId) ?? null;
@@ -949,6 +1246,9 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
   const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyBuyerOf(r, settings)?.uid === userId && !supplyAllDone(r)), [open, settings, userId]);
   const myBuyLineCount = myBuys.reduce((a, r) => a + r.items.length - supplyDoneCount(r), 0);
   const shopping = useMemo(() => supplyShoppingList(myBuys), [myBuys]);
+  // 여러 요청에 걸쳐 같은 물품이 있으면 묶어서 (규격·단위가 다르면 따로 합산된다)
+  const duplicated = useMemo(() => supplyShoppingList(open).filter(l => l.who.length >= 2), [open]);
+  const [showDup, setShowDup] = useState(true);
   // 정산
   const settleAll = useMemo(() => supplySettleLines(requests), [requests]);
   /** 이 줄을 내가 정산하는가 — 학부모 청구는 관리자 */
@@ -1113,6 +1413,28 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
         </div>
       ) : (
         <>
+          {filter === 'open' && duplicated.length > 0 && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 overflow-hidden">
+              <button onClick={() => setShowDup(v => !v)} className="w-full flex items-center gap-2 px-3 py-2 text-left">
+                <span className="flex-1 text-[12px] font-bold text-indigo-900">🧺 여러 선생님이 요청한 물품 <span className="font-normal text-indigo-700/70">{duplicated.length}종</span></span>
+                <span className="text-indigo-400 text-[11px]">{showDup ? '▲' : '▼'}</span>
+              </button>
+              {showDup && (
+                <div className="bg-white/70 divide-y divide-indigo-100">
+                  {duplicated.map(l => (
+                    <div key={l.key} className="px-3 py-1.5">
+                      <p className="text-[12px]">
+                        <b className="text-gray-900">{l.name}</b>
+                        <span className="font-extrabold text-indigo-700 ml-1.5">{l.total}{l.unit}</span>
+                        <span className="text-gray-400 ml-1">· {l.who.length}건</span>
+                      </p>
+                      <p className="text-[10px] text-gray-500 truncate">{l.who.join(' · ')}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {filter === 'open' && <p className="text-[10px] text-gray-400">다른 선생님 요청도 함께 보입니다. 같은 게 필요하면 요청을 열어 <b>나도 필요해요</b>를 눌러주세요.</p>}
           {sectionsOf(list, r => r).map(sec => (
           <div key={sec.key} className="space-y-1">
@@ -1126,11 +1448,13 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
                   <span className="text-lg leading-none mt-0.5">{FOR_ICON[r.forType]}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-bold text-gray-900 truncate">{supplyForLabel(r)} <span className="text-[11px] font-normal text-gray-400">{r.requesterName} · {fmtDateTime(r.createdAt)}</span></p>
-                    <p className="text-[12px] text-gray-700 truncate">{r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${l.unit}`).join(', ')}</p>
+                    <p className="text-[12px] text-gray-700 truncate">{r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${l.unit}${l.groupName ? ` (${l.groupName})` : ''}`).join(', ')}</p>
                     <p className={`text-[10px] truncate ${r.status === 'onhold' ? 'text-amber-700' : r.status === 'requested' ? 'text-emerald-700' : 'text-gray-500'}`}>{status}</p>
                     {last && <p className="text-[10px] text-gray-500 truncate">💬 {r.comments!.length} · <b className={last.admin ? 'text-indigo-700' : ''}>{last.name}</b> {last.text}</p>}
                   </div>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${SUPPLY_STATUS_STYLE[r.status]}`}>{SUPPLY_REQUEST_STATUS_LABELS[r.status]}</span>
+                  {(() => { const pg = supplyProgress(r, !!buyerOf(r)); return (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${PROGRESS_STYLE[pg.key] ?? SUPPLY_STATUS_STYLE[r.status]}`}>{pg.label}</span>
+                  ); })()}
                 </button>
               );
             })}
@@ -1530,7 +1854,9 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
           <div>
             <div className="flex items-center gap-1.5">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${SUPPLY_STATUS_STYLE[r.status]}`}>{SUPPLY_REQUEST_STATUS_LABELS[r.status]}</span>
+              {(() => { const pg = supplyProgress(r, !!buyer); return (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${PROGRESS_STYLE[pg.key] ?? SUPPLY_STATUS_STYLE[r.status]}`}>{pg.label}</span>
+              ); })()}
               <h2 className="text-base font-bold text-gray-900">{FOR_ICON[r.forType]} {supplyForLabel(r)}</h2>
             </div>
             <p className="text-[11px] text-gray-400 mt-0.5">{r.requesterName} · {fmtDateTime(r.createdAt)}{r.forType === 'student' && classMentor ? ` · 담임 ${classMentor}` : ''}</p>
@@ -1676,6 +2002,234 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+// ==================== 🛒 구매 목록 (부매니저 · 관리자) ====================
+// 자동 부족 알림(최소 재고 미달)과 진행 중인 물품 요청을 한 곳에 모아 본다.
+// 이미 요청으로 올라간 부족분은 uncoveredPurchaseNeeds 가 걸러 주므로 중복되지 않는다.
+
+function PurchaseListTab({ views, groups, needs, requests, settings, onSelect, onGoRequests }: {
+  views: InventoryItemView[];
+  groups: InventoryGroup[];
+  needs: PurchaseNeed[];
+  requests: SupplyRequest[];
+  settings: SupplySettings | null;
+  onSelect: (id: string) => void;
+  onGoRequests: () => void;
+}) {
+  const [groupFilter, setGroupFilter] = useState<string>('전체');
+  const [search, setSearch] = useState('');
+
+  /** ① 자동: 최소 재고 미달인데 아직 요청에 안 들어간 것 */
+  const auto = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return uncoveredPurchaseNeeds(needs, requests)
+      .filter(n => groupFilter === '전체' || n.groupId === groupFilter)
+      .filter(n => !q || n.itemName.toLowerCase().includes(q))
+      .sort((a, b) => b.shortage - a.shortage);
+  }, [needs, requests, groupFilter, search]);
+
+  /** ② 요청: 아직 구매가 끝나지 않은 품목 줄 */
+  const fromRequests = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const out: Array<{ req: SupplyRequest; line: SupplyRequestLine }> = [];
+    requests.forEach(r => {
+      if (!isSupplyOpen(r.status)) return;
+      r.items.forEach(line => {
+        if (r.done?.[line.id]) return;
+        if (groupFilter !== '전체' && line.groupId && line.groupId !== groupFilter) return;
+        if (q && !line.name.toLowerCase().includes(q)) return;
+        out.push({ req: r, line });
+      });
+    });
+    return out;
+  }, [requests, groupFilter, search]);
+
+  const viewOf = (itemId?: string) => (itemId ? views.find(v => v.id === itemId) : undefined);
+  const selCls = 'text-[12px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-emerald-400';
+
+  return (
+    <div className="px-4 py-3 space-y-3">
+      <div className="flex gap-2">
+        <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className={`${selCls} flex-1 min-w-0`}>
+          <option value="전체">교무실 전체</option>
+          {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+        <div className="relative flex-1">
+          <FiSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="물품명" className="w-full pl-8 pr-2 py-1.5 text-[12px] border border-gray-200 rounded-lg bg-white outline-none" />
+        </div>
+      </div>
+
+      <p className="text-[10px] text-gray-400">
+        실제 구매 수량은 구매 담당자가 정합니다. 구매를 눌러도 재고는 늘지 않고, 물건이 도착해 <b>입고</b>까지 해야 재고에 반영됩니다.
+      </p>
+
+      {/* ① 자동 부족 */}
+      <div>
+        <p className="text-[11px] font-bold text-gray-500 mb-1 px-0.5">재고 부족 (최소 재고 미달) <span className="text-gray-300 font-normal">{auto.length}</span></p>
+        {auto.length === 0 ? (
+          <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">부족한 물품이 없습니다.</p>
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <table className="w-full text-[11px]">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="text-left px-3 py-1.5 font-semibold">물품명 · 규격</th>
+                  <th className="text-left px-2 py-1.5 font-semibold">교무실</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">현재</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">최소</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">부족</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auto.map(n => {
+                  const v = viewOf(n.itemId);
+                  return (
+                    <tr key={`${n.itemId}|${n.groupId}`} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => onSelect(n.itemId)}>
+                      <td className="px-3 py-1.5">
+                        <b className="text-gray-900">{n.itemName}</b>
+                        {v?.spec && <span className="text-gray-400 ml-1">{v.spec}</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-gray-600">{n.groupName}</td>
+                      <td className="px-2 py-1.5 text-right font-bold text-red-600">{n.current}</td>
+                      <td className="px-2 py-1.5 text-right text-gray-500">{n.min}</td>
+                      <td className="px-2 py-1.5 text-right font-bold text-gray-800">{n.shortage}{n.unit}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ② 요청에서 올라온 것 */}
+      <div>
+        <div className="flex items-center gap-2 mb-1 px-0.5">
+          <p className="flex-1 text-[11px] font-bold text-gray-500">요청 물품 (아직 구매 전) <span className="text-gray-300 font-normal">{fromRequests.length}</span></p>
+          <button onClick={onGoRequests} className="text-[10px] font-semibold text-emerald-700 hover:underline">재고 요청 탭 →</button>
+        </div>
+        {fromRequests.length === 0 ? (
+          <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">진행 중인 요청 물품이 없습니다.</p>
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+            {fromRequests.map(({ req, line }) => {
+              const buyer = supplyBuyerOf(req, settings);
+              const pg = supplyProgress(req, !!buyer);
+              const v = viewOf(line.itemId);
+              return (
+                <div key={`${req.id}|${line.id}`} className="flex items-center gap-2 px-3 py-2 text-[11px]">
+                  <span className="flex-1 min-w-0">
+                    <b className="text-gray-900">{line.name}</b>
+                    {v?.spec && <span className="text-gray-400 ml-1">{v.spec}</span>}
+                    <span className="text-gray-400 ml-1">· {supplyForLabel(req)}{line.groupName ? ` · ${line.groupName}` : ''}</span>
+                    {line.channel && <span className="ml-1 text-[9px] px-1 rounded bg-sky-50 text-sky-700 border border-sky-100">{line.channel}</span>}
+                    {line.parentBill && <span className="ml-1 text-[9px] px-1 rounded bg-violet-50 text-violet-700 border border-violet-100">학부모 청구</span>}
+                  </span>
+                  <span className="shrink-0 font-bold text-gray-800">{line.quantity}{line.unit}</span>
+                  <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                    pg.key === 'buying' ? 'bg-emerald-50 text-emerald-700' : pg.key === 'approved' ? 'bg-blue-50 text-blue-700' : pg.key === 'onhold' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+                  }`}>{pg.label}</span>
+                  {buyer && <span className="shrink-0 text-gray-400 w-12 truncate text-right">{buyer.name}</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==================== 📋 입출고 기록 (부매니저 · 관리자) ====================
+
+function MovementTab({ campCode, groups, views }: {
+  campCode: string;
+  groups: InventoryGroup[];
+  views: InventoryItemView[];
+}) {
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  useEffect(() => subscribeCampMovements(db, campCode, setMovements), [campCode]);
+  const [groupFilter, setGroupFilter] = useState<string>('전체');
+  const [kind, setKind] = useState<MovementFilterKey>('all');
+  const [days, setDays] = useState<number>(7);
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const reasons = MOVEMENT_FILTERS.find(f => f.key === kind)?.reasons ?? [];
+    const since = days > 0 ? Date.now() - days * 86400000 : 0;
+    return movements.filter(m => {
+      if (groupFilter !== '전체' && m.groupId !== groupFilter) return false;
+      if (reasons.length > 0 && !reasons.includes(m.reason)) return false;
+      if (since && (m.at?.toMillis?.() ?? 0) < since) return false;
+      if (q && !(m.itemName ?? '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [movements, groupFilter, kind, days, search]);
+
+  const selCls = 'text-[12px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-emerald-400';
+
+  return (
+    <div className="px-4 py-3 space-y-3">
+      <div className="flex gap-2">
+        <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className={`${selCls} flex-1 min-w-0`}>
+          <option value="전체">교무실 전체</option>
+          {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+        <select value={days} onChange={e => setDays(Number(e.target.value))} className={`${selCls} w-24 shrink-0`}>
+          <option value={7}>최근 7일</option>
+          <option value={30}>최근 30일</option>
+          <option value={0}>전체 기간</option>
+        </select>
+      </div>
+      <div className="relative">
+        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="물품명 검색"
+          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-emerald-400" />
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+        {MOVEMENT_FILTERS.map(f => (
+          <button key={f.key} onClick={() => setKind(f.key)}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border ${
+              kind === f.key ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+            }`}>{f.label}</button>
+        ))}
+      </div>
+
+      <p className="text-[10px] text-gray-400">최신 400건까지 보여줍니다. 그룹 간 이동은 보낸 기록·받은 기록이 각각 남습니다.</p>
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-10">기록이 없습니다.</p>
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+          {filtered.map(m => {
+            const v = views.find(x => x.id === m.itemId);
+            return (
+              <div key={m.id} className="flex items-center gap-2 px-3 py-2 text-[11px]">
+                <span className="text-gray-400 w-[76px] shrink-0">{fmtDateTime(m.at)}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate">
+                    <b className="text-gray-900">{m.itemName}</b>
+                    {v?.spec && <span className="text-gray-400 ml-1">{v.spec}</span>}
+                  </span>
+                  <span className="block text-[10px] text-gray-500 truncate">
+                    {m.groupName}
+                    <span className="text-gray-400"> · {movementLabel(m)}</span>
+                    {m.memo && <span className="text-gray-400"> · {m.memo}</span>}
+                  </span>
+                </span>
+                <span className="text-gray-400 shrink-0 w-12 truncate text-right">{m.by}</span>
+                <span className={`font-bold shrink-0 w-11 text-right ${m.delta > 0 ? 'text-emerald-700' : 'text-red-600'}`}>{m.delta > 0 ? '+' : ''}{m.delta}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2225,8 +2779,9 @@ function BulkStockEditor({ campCode, views, groups, userName }: {
 
 // ==================== ⚙️ 관리 (관리자) ====================
 
-function ManageTab({ campCode, items, views, groups, packages, campGroups, userName, onSelect }: {
+function ManageTab({ campCode, items, views, groups, packages, campGroups, perm, userName, onSelect }: {
   campCode: string;
+  perm: InventoryPerm;
   items: InventoryItem[];
   views: InventoryItemView[];
   groups: InventoryGroup[];
@@ -2250,7 +2805,7 @@ function ManageTab({ campCode, items, views, groups, packages, campGroups, userN
           ? <BulkStockEditor campCode={campCode} views={views} groups={groups} userName={userName} />
           : section === 'guides'
             ? <SupplyGuideManager />
-            : <ItemManager items={items} views={views} userName={userName} onSelect={onSelect} />}
+            : <ItemManager items={items} views={views} groups={groups} perm={perm} userName={userName} onSelect={onSelect} />}
     </div>
   );
 }
@@ -2356,8 +2911,8 @@ function GroupRow({ group, campGroups, onDelete }: { group: InventoryGroup; camp
   );
 }
 
-function ItemManager({ items, views, userName, onSelect }: {
-  items: InventoryItem[]; views: InventoryItemView[]; userName: string; onSelect: (id: string) => void;
+function ItemManager({ items, views, groups, perm, userName, onSelect }: {
+  items: InventoryItem[]; views: InventoryItemView[]; groups: InventoryGroup[]; perm: InventoryPerm; userName: string; onSelect: (id: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
@@ -2407,7 +2962,7 @@ function ItemManager({ items, views, userName, onSelect }: {
         ))}
       </div>
       {(showForm || editing) && (
-        <ItemFormModal item={editing ?? undefined} userName={userName} onClose={() => { setShowForm(false); setEditing(null); }} />
+        <ItemFormModal item={editing ?? undefined} groups={groups} perm={perm} userName={userName} onClose={() => { setShowForm(false); setEditing(null); }} />
       )}
     </div>
   );
@@ -2415,8 +2970,17 @@ function ItemManager({ items, views, userName, onSelect }: {
 
 // ==================== 품목 추가/수정 폼 ====================
 
-function ItemFormModal({ item, preset, userName, onClose, onCreated }: {
-  item?: InventoryItem; preset?: { category?: InventoryCategory; subCategory?: string }; userName: string; onClose: () => void; onCreated?: (id: string) => void;
+function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, userName, onClose, onCreated }: {
+  item?: InventoryItem;
+  preset?: { category?: InventoryCategory; subCategory?: string };
+  groups?: InventoryGroup[];
+  /** 최초 재고를 바로 넣을 캠프 (재고 현황에서 추가할 때) */
+  campCode?: string;
+  defaultGroupId?: string;
+  perm: InventoryPerm;
+  userName: string;
+  onClose: () => void;
+  onCreated?: (id: string) => void;
 }) {
   const [category, setCategory] = useState<InventoryCategory>(item?.category ?? preset?.category ?? '의약품');
   const [subCategory, setSubCategory] = useState(item?.subCategory ?? preset?.subCategory ?? '');
@@ -2434,6 +2998,26 @@ function ItemFormModal({ item, preset, userName, onClose, onCreated }: {
   const [maxPerDay, setMaxPerDay] = useState(item?.maxPerDay != null ? String(item.maxPerDay) : '');
   const [dosageNote, setDosageNote] = useState(item?.dosageNote ?? '');
   const [busy, setBusy] = useState(false);
+  // 상세 설정은 기본으로 접어둔다
+  const [showDetail, setShowDetail] = useState(false);
+  // 신규 등록 — 보관 교무실 · 최초 재고
+  const canSetStock = !item && !!campCode && !!groups?.length;
+  const [stockGroupId, setStockGroupId] = useState(defaultGroupId ?? groups?.[0]?.id ?? '');
+  const [initialQty, setInitialQty] = useState('');
+  // 신규 등록 — 이미지 (관리자만). 품목이 만들어진 뒤 업로드한다
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState('');
+  useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl); }, [photoUrl]);
+  const pickPhoto = (f?: File | null) => {
+    setPhotoError('');
+    if (!f) { setPhoto(null); if (photoUrl) URL.revokeObjectURL(photoUrl); setPhotoUrl(null); return; }
+    if (!f.type.startsWith('image/')) { setPhotoError('이미지 파일만 올릴 수 있습니다.'); return; }
+    if (f.size > 10 * 1024 * 1024) { setPhotoError('10MB 이하 이미지만 올릴 수 있습니다.'); return; }
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    setPhoto(f);
+    setPhotoUrl(URL.createObjectURL(f));
+  };
 
   const save = async () => {
     if (!name.trim() || busy) return;
@@ -2456,9 +3040,29 @@ function ItemFormModal({ item, preset, userName, onClose, onCreated }: {
         maxPerDay: maxPerDay === '' ? undefined : Math.max(0, parseInt(maxPerDay, 10) || 0),
         dosageNote: dosageNote.trim() || undefined,
       };
-      if (item) await updateInventoryItem(db, item.id, data);
-      else {
+      if (item) {
+        await updateInventoryItem(db, item.id, data);
+      } else {
         const id = await addInventoryItem(db, { ...data, createdBy: userName });
+        // 이미지는 품목이 만들어진 뒤 업로드 — 실패해도 품목 등록 자체는 살린다
+        if (photo && perm.canEditItemMedia) {
+          try {
+            const uploaded = await uploadItemMedia(id, [photo], userName);
+            if (uploaded.length) await addInventoryItemMedia(db, id, uploaded);
+          } catch (e) {
+            console.error('품목 이미지 업로드 오류:', e);
+            alert('품목은 등록했지만 이미지를 올리지 못했습니다. 품목 상세에서 다시 시도해주세요.');
+          }
+        }
+        // 최초 재고
+        const q = parseInt(initialQty, 10);
+        if (canSetStock && stockGroupId && !isNaN(q) && q > 0) {
+          const g = groups!.find(x => x.id === stockGroupId);
+          if (g) {
+            await setStockLevels(db, campCode!, [{ itemId: id, itemName: data.name, groupId: g.id, groupName: g.name, target: q }],
+              { reason: 'restock', refLabel: '품목 등록 (최초 재고)' }, userName);
+          }
+        }
         onCreated?.(id);
       }
       onClose();
@@ -2470,6 +3074,9 @@ function ItemFormModal({ item, preset, userName, onClose, onCreated }: {
 
   const inputCls = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400';
   const subs = INVENTORY_SUBCATEGORIES[category] ?? [];
+  const primaryUsages = suggestedUsages(category);
+  const otherUsages = INVENTORY_USAGE_ORDER.filter(u => !primaryUsages.includes(u));
+  const isMed = usage === 'oral' || usage === 'topical';
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[60]" onClick={onClose}>
@@ -2479,90 +3086,162 @@ function ItemFormModal({ item, preset, userName, onClose, onCreated }: {
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">분류 *</p>
-            <div className="flex gap-1.5 flex-wrap">
-              {INVENTORY_CATEGORIES.map(c => (
-                <button key={c} type="button" onClick={() => { setCategory(c); setSubCategory(''); if (!item) setUsage(c === '의약품' ? 'oral' : 'operational'); }}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${category === c ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200'}`}>{c}</button>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">세부 분류</p>
-              <input list="inv-subcats" value={subCategory} onChange={e => setSubCategory(e.target.value)} placeholder={subs.length ? subs.join(' / ') : '(선택)'} className={inputCls} />
-              <datalist id="inv-subcats">{subs.map(s => <option key={s} value={s} />)}</datalist>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">종류</p>
-              <input value={kind} onChange={e => setKind(e.target.value)} placeholder="예: 소화제, 진통제(아세트)" className={inputCls} />
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">품목명 *</p>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 타이레놀" className={inputCls} autoFocus={!item} />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-1">
-              <p className="text-xs font-bold text-gray-700 mb-1">규격/비고</p>
-              <input value={spec} onChange={e => setSpec(e.target.value)} placeholder="알약 500mg" className={inputCls} />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">단위 (낱개)</p>
-              <input list="inv-units" value={unit} onChange={e => setUnit(e.target.value)} className={inputCls} />
-              <datalist id="inv-units">{INVENTORY_UNITS.map(u => <option key={u} value={u} />)}</datalist>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">포장당 낱개</p>
-              <input type="number" min={1} value={packSize} onChange={e => setPackSize(e.target.value)} placeholder="예: 4" className={inputCls} />
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">유형 *</p>
-            <div className="flex gap-1.5 flex-wrap">
-              {INVENTORY_USAGES.map(u => (
-                <button key={u} type="button" onClick={() => setUsage(u)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${usage === u ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
-              ))}
-            </div>
-            <p className="text-[10px] text-gray-400 mt-1">먹는 약·바르는 약·처치 소모품은 환자 탭에서 사용 기록할 수 있고, 비품은 위치·수량만 관리합니다.</p>
-          </div>
-          {usage === 'oral' && (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2">
-              <p className="text-xs font-bold text-emerald-800">복용 안내 · 경고 <span className="font-normal text-emerald-700/70">(포장 설명서 기준으로 관리자가 입력)</span></p>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-3 sm:col-span-1">
-                  <p className="text-[11px] text-gray-600 mb-0.5">주성분</p>
-                  <input value={ingredient} onChange={e => setIngredient(e.target.value)} placeholder="아세트아미노펜" className={inputCls} />
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-600 mb-0.5">최소 간격(시간)</p>
-                  <input type="number" min={0} step={0.5} value={intervalHours} onChange={e => setIntervalHours(e.target.value)} placeholder="예: 4" className={inputCls} />
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-600 mb-0.5">1일 최대(회)</p>
-                  <input type="number" min={0} value={maxPerDay} onChange={e => setMaxPerDay(e.target.value)} placeholder="예: 4" className={inputCls} />
-                </div>
+
+          {/* ── 기본 정보 ── */}
+          <div className="flex gap-3">
+            {/* 물품 이미지 — 관리자만, 선택 항목 */}
+            {perm.canEditItemMedia && !item && (
+              <div className="shrink-0">
+                <label className="block w-[72px] h-[72px] rounded-xl border border-dashed border-gray-300 bg-gray-50 overflow-hidden cursor-pointer relative hover:border-emerald-400">
+                  {photoUrl
+                    ? <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                    : <span className="w-full h-full flex flex-col items-center justify-center text-gray-400"><FiCamera className="w-4 h-4" /><span className="text-[9px] mt-0.5">이미지</span></span>}
+                  <input type="file" accept="image/*" className="hidden" onChange={e => { pickPhoto(e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+                {photo && (
+                  <button type="button" onClick={() => pickPhoto(null)} className="w-full mt-1 text-[10px] text-gray-400 hover:text-red-500">제거</button>
+                )}
               </div>
-              <textarea value={dosageNote} onChange={e => setDosageNote(e.target.value)} rows={2} placeholder="예: 만 7~12세 1정, 만 12세 이상 1~2정 (포장 설명서 확인)" className={`${inputCls} resize-none`} />
-              <p className="text-[10px] text-gray-500">같은 주성분끼리 간격·횟수를 계산합니다 (예: 타이레놀과 판콜에이는 둘 다 아세트아미노펜).</p>
+            )}
+            {perm.canEditItemMedia && item && (
+              <div className="shrink-0">
+                <div className="w-[72px] h-[72px] rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+                  {itemThumb(item) ? <img src={itemThumb(item)} alt="" className="w-full h-full object-cover" /> : <FiBox className="w-5 h-5 text-gray-300" />}
+                </div>
+                <p className="w-full mt-1 text-[9px] text-gray-400 text-center leading-tight">상세에서<br />사진 관리</p>
+              </div>
+            )}
+            <div className="flex-1 min-w-0 space-y-3">
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-1">물품명 *</p>
+                <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 타이레놀" className={inputCls} autoFocus={!item} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-1">분류 *</p>
+                <select value={category} onChange={e => { const c = e.target.value as InventoryCategory; setCategory(c); setSubCategory(''); if (!item) setUsage(suggestedUsages(c)[0]); }} className={inputCls}>
+                  {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+          {photoError && <p className="text-[11px] text-red-600">{photoError}</p>}
+
+          {canSetStock && (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-1">
+                <p className="text-xs font-bold text-gray-700 mb-1">보관 교무실</p>
+                <select value={stockGroupId} onChange={e => setStockGroupId(e.target.value)} className={inputCls}>
+                  {groups!.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-1">최초 재고</p>
+                <input type="number" min={0} value={initialQty} onChange={e => setInitialQty(e.target.value)} placeholder="0" className={inputCls} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-1">단위 (낱개)</p>
+                <input list="inv-units" value={unit} onChange={e => setUnit(e.target.value)} className={inputCls} />
+                <datalist id="inv-units">{INVENTORY_UNITS.map(u => <option key={u} value={u} />)}</datalist>
+              </div>
             </div>
           )}
-          <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">설명 · 안내 <span className="font-normal text-gray-400">(약 선택 시 그대로 표시)</span></p>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="예: 해열·진통제로 사용하는 약품. 식후 복용" className={`${inputCls} resize-none`} />
-          </div>
-          <div className="grid grid-cols-2 gap-2 items-end">
+          {!canSetStock && (
             <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">최소 보유 수량 (그룹당 기본값)</p>
-              <input type="number" min={0} value={minStockDefault} onChange={e => setMinStockDefault(e.target.value)} placeholder="0 = 구매 필요 판단 안 함" className={inputCls} />
+              <p className="text-xs font-bold text-gray-700 mb-1">단위 (낱개)</p>
+              <input list="inv-units2" value={unit} onChange={e => setUnit(e.target.value)} className={inputCls} />
+              <datalist id="inv-units2">{INVENTORY_UNITS.map(u => <option key={u} value={u} />)}</datalist>
             </div>
-            <label className="flex items-center gap-2 text-xs text-gray-700 pb-2 cursor-pointer">
-              <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="w-4 h-4" />
-              사용 중 <span className="text-[10px] text-gray-400">(해제 시 새 보고에서 숨김, 기록은 유지)</span>
-            </label>
-          </div>
+          )}
+
+          {/* ── 상세 설정 (접힘) ── */}
+          <button type="button" onClick={() => setShowDetail(v => !v)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-bold text-gray-600 hover:border-gray-300">
+            <span>상세 설정 <span className="font-normal text-gray-400">세부 분류 · 물품 유형 · 규격 · 최소 재고{isMed ? ' · 의약품 정보' : ''}</span></span>
+            <span className="text-gray-400">{showDetail ? '▲' : '▼'}</span>
+          </button>
+
+          {showDetail && (
+            <div className="space-y-3 rounded-xl border border-gray-100 p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs font-bold text-gray-700 mb-1">세부 분류</p>
+                  <input list="inv-subcats" value={subCategory} onChange={e => setSubCategory(e.target.value)} placeholder={subs.length ? subs.join(' / ') : '(선택)'} className={inputCls} />
+                  <datalist id="inv-subcats">{subs.map(s => <option key={s} value={s} />)}</datalist>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-700 mb-1">종류</p>
+                  <input value={kind} onChange={e => setKind(e.target.value)} placeholder="예: 소화제, 진통제(아세트)" className={inputCls} />
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-1">물품 유형 *</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {primaryUsages.map(u => (
+                    <button key={u} type="button" onClick={() => setUsage(u)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${usage === u ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
+                  ))}
+                  {otherUsages.map(u => (
+                    <button key={u} type="button" onClick={() => setUsage(u)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] border ${usage === u ? 'bg-gray-800 text-white border-gray-800 font-semibold' : 'bg-white text-gray-400 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">먹는 약·바르는 약·처치 소모품은 환자 보고에서 사용 기록할 수 있고, 비품은 위치·수량만 관리합니다.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs font-bold text-gray-700 mb-1">규격 · 비고</p>
+                  <input value={spec} onChange={e => setSpec(e.target.value)} placeholder="알약 500mg" className={inputCls} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-700 mb-1">포장당 낱개 수량</p>
+                  <input type="number" min={1} value={packSize} onChange={e => setPackSize(e.target.value)} placeholder="예: 4" className={inputCls} />
+                </div>
+              </div>
+
+              {isMed && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2">
+                  <p className="text-xs font-bold text-emerald-800">의약품 상세 정보 <span className="font-normal text-emerald-700/70">(포장 설명서 기준으로 관리자가 입력)</span></p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-3 sm:col-span-1">
+                      <p className="text-[11px] text-gray-600 mb-0.5">주성분</p>
+                      <input value={ingredient} onChange={e => setIngredient(e.target.value)} placeholder="아세트아미노펜" className={inputCls} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-0.5">최소 간격(시간)</p>
+                      <input type="number" min={0} step={0.5} value={intervalHours} onChange={e => setIntervalHours(e.target.value)} placeholder="예: 4" className={inputCls} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-gray-600 mb-0.5">1일 최대(회)</p>
+                      <input type="number" min={0} value={maxPerDay} onChange={e => setMaxPerDay(e.target.value)} placeholder="예: 4" className={inputCls} />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-600 mb-0.5">복용 · 사용 안내</p>
+                    <textarea value={dosageNote} onChange={e => setDosageNote(e.target.value)} rows={2} placeholder="예: 만 7~12세 1정, 만 12세 이상 1~2정 (포장 설명서 확인)" className={`${inputCls} resize-none`} />
+                  </div>
+                  <p className="text-[10px] text-gray-500">같은 주성분끼리 간격·횟수를 계산합니다 (예: 타이레놀과 판콜에이는 둘 다 아세트아미노펜).</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-1">{isMed ? '주의사항 · 기타 안내' : '설명 · 안내'} <span className="font-normal text-gray-400">(선택 시 그대로 표시)</span></p>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="예: 해열·진통제로 사용하는 약품. 식후 복용" className={`${inputCls} resize-none`} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 items-end">
+                <div>
+                  <p className="text-xs font-bold text-gray-700 mb-1">최소 재고 (교무실당 기본값)</p>
+                  <input type="number" min={0} value={minStockDefault} onChange={e => setMinStockDefault(e.target.value)} placeholder="0 = 부족 판단 안 함" className={inputCls} />
+                </div>
+                <label className="flex items-center gap-2 text-xs text-gray-700 pb-2 cursor-pointer">
+                  <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="w-4 h-4" />
+                  사용 중 <span className="text-[10px] text-gray-400">(해제 시 새 보고에서 숨김, 기록은 유지)</span>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl">취소</button>

@@ -41,8 +41,17 @@ export const INVENTORY_USAGE_LABELS: Record<InventoryUsage, string> = {
   topical: '바르는·붙이는 약',
   supply: '처치 소모품',
   equipment: '비품',
-  operational: '운영 소모품',
+  operational: '일반 소모품',
 };
+/** 품목 추가 화면에서 보여줄 순서 (먹는 약 → 바르는 약 → 처치 소모품 → 일반 소모품 → 비품) */
+export const INVENTORY_USAGE_ORDER: readonly InventoryUsage[] = ['oral', 'topical', 'supply', 'operational', 'equipment'];
+/** 분류별로 먼저 보여줄 유형 (나머지는 '기타 유형'으로 접어둠) */
+export function suggestedUsages(category: InventoryCategory): readonly InventoryUsage[] {
+  if (category === '의약품') return ['oral', 'topical', 'supply'];
+  if (category === '전자제품' || category === '교구') return ['equipment', 'operational'];
+  if (category === '위생도구') return ['supply', 'operational', 'equipment'];
+  return ['operational', 'equipment'];
+}
 /** 환자 처치에 쓰이는 유형 (환자 탭 사용 기록 대상) */
 export const TREATMENT_USAGES: readonly InventoryUsage[] = ['oral', 'topical', 'supply'];
 
@@ -160,6 +169,7 @@ export const INVENTORY_MOVEMENT_REASONS = [
   'restock',     // 입고
   'adjust',      // 수기 조정
   'use',         // 사용 (스태프 누구나)
+  'transfer',    // 그룹 간 이동 (보내는 그룹 −, 받는 그룹 + 두 건이 같은 transferId로 묶임)
 ] as const;
 export type InventoryMovementReason = (typeof INVENTORY_MOVEMENT_REASONS)[number];
 
@@ -177,7 +187,32 @@ export const INVENTORY_MOVEMENT_LABELS: Record<InventoryMovementReason, string> 
   restock: '입고',
   adjust: '수기 조정',
   use: '사용',
+  transfer: '그룹 간 이동',
 };
+
+/** 그룹 간 이동 사유 — 버튼으로 빠르게 (선택) */
+export const TRANSFER_REASONS = ['재고 나눠주기', '부족한 그룹 지원', '보관 장소 정리', '행사·수업 준비', '반납'] as const;
+
+/** 입출고 기록 화면의 묶음 필터 */
+export const MOVEMENT_FILTERS = [
+  { key: 'all', label: '전체', reasons: [] as InventoryMovementReason[] },
+  { key: 'in', label: '입고', reasons: ['restock'] as InventoryMovementReason[] },
+  { key: 'use', label: '사용', reasons: ['use'] as InventoryMovementReason[] },
+  { key: 'dose', label: '환자 투약', reasons: ['dose', 'dose_adjust', 'dose_revert'] as InventoryMovementReason[] },
+  { key: 'transfer', label: '그룹 간 이동', reasons: ['transfer'] as InventoryMovementReason[] },
+  { key: 'adjust', label: '수기 조정', reasons: ['adjust'] as InventoryMovementReason[] },
+] as const;
+export type MovementFilterKey = (typeof MOVEMENT_FILTERS)[number]['key'];
+
+/** 한 줄 설명 — 그룹 간 이동은 보낸/받은 방향과 상대 그룹까지 */
+export function movementLabel(m: Pick<InventoryMovement, 'reason' | 'delta' | 'refLabel' | 'counterGroupName'>): string {
+  if (m.reason === 'transfer') {
+    return m.delta < 0
+      ? `${m.counterGroupName ?? '다른 그룹'}(으)로 보냄`
+      : `${m.counterGroupName ?? '다른 그룹'}에서 받음`;
+  }
+  return m.refLabel || INVENTORY_MOVEMENT_LABELS[m.reason];
+}
 
 /** 입출고 이력 1건 (delta > 0 입고/복구, delta < 0 출고/차감) */
 export interface InventoryMovement {
@@ -194,9 +229,15 @@ export interface InventoryMovement {
   refDoseId?: string;
   /** 표시용 스냅샷 (예: "김윤아 최초보고", "실사 차이") */
   refLabel?: string;
+  /** 그룹 간 이동: 출고·입고 두 건을 묶는 ID */
+  transferId?: string;
+  /** 그룹 간 이동: 상대 그룹 (보낸 기록이면 받는 그룹, 받은 기록이면 보낸 그룹) */
+  counterGroupId?: string;
+  counterGroupName?: string;
   memo?: string;
   at: Timestamp;
   by: string;
+  byId?: string;
 }
 
 /** 품목 + 현재 캠프 수량을 합친 화면용 뷰 */
@@ -358,6 +399,45 @@ export function sortInventoryItems<T extends InventoryItem>(items: T[]): T[] {
     (a.kind ?? '').localeCompare(b.kind ?? '', 'ko') ||
     a.name.localeCompare(b.name, 'ko')
   );
+}
+
+// ==================== 재고 화면 권한 ====================
+// 기존 권한 체계를 그대로 쓴다. 바꾸지 않는다.
+//  - role === 'admin'                     → 기존 관리자 권한 (품목·그룹·수량·이미지·관리 탭)
+//  - jobExperiences[활성 캠프].groupRole  → 그룹 안 역할. '부매니저'(원어민 'Sub Manager')는
+//                                           재고 운영 정보를 **볼** 수 있다 (부족 현황·미처리 요청·취합).
+//    ※ 쓰기 권한(입고·조정·최소 재고·그룹 간 이동)은 예전처럼 관리자만. 보안 규칙도 그대로 관리자만 허용.
+//    ※ '매니저'(Manager)에게도 같은 화면을 주려면 아래 배열에 '매니저', 'Manager'만 추가하면 된다.
+export const STOCK_MANAGER_GROUP_ROLES: readonly string[] = ['부매니저', 'Sub Manager'];
+
+export interface InventoryPerm {
+  /** 시스템 role === 'admin' */
+  isAdmin: boolean;
+  /** 이 캠프에서 부매니저인가 (관리자 포함) — 재고 운영 정보를 본다 */
+  isStockManager: boolean;
+  /** 재고 입고·조정·최소 재고·그룹 간 이동 (기존과 동일: 관리자만) */
+  canManageStock: boolean;
+  /** 품목 이미지 등록·변경·삭제 (관리자만) */
+  canEditItemMedia: boolean;
+  /** 품목 추가·수정 (기존과 동일: 관리자만) */
+  canEditItem: boolean;
+}
+
+/** 현재 로그인 유저 + 활성 캠프 jobCode 로 재고 화면 권한 계산 */
+export function inventoryPerm(
+  user: { role?: string; jobExperiences?: Array<{ id: string; groupRole?: string }> } | null | undefined,
+  activeJobCodeId?: string
+): InventoryPerm {
+  const isAdmin = user?.role === 'admin';
+  const groupRole = user?.jobExperiences?.find(e => e.id === activeJobCodeId)?.groupRole;
+  const isSub = !!groupRole && STOCK_MANAGER_GROUP_ROLES.includes(groupRole);
+  return {
+    isAdmin,
+    isStockManager: isAdmin || isSub,
+    canManageStock: isAdmin,
+    canEditItemMedia: isAdmin,
+    canEditItem: isAdmin,
+  };
 }
 
 // ==================== 구매 요청 (멘토가 올림) ====================
@@ -660,6 +740,37 @@ export function supplyShoppingList(requests: SupplyRequest[]): SupplyShoppingLin
     line.who.push(r.forType === 'camp' ? `공용${l.groupName ? `(${l.groupName})` : ''} ${l.quantity}` : `${supplyForLabel(r)} ${l.quantity}`);
   }));
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+}
+
+/**
+ * 요청 진행 상태 표시 — 기존 status 필드(requested/onhold/purchased/rejected)와
+ * 구매 담당 지정·품목별 완료·입고 반영 여부를 합쳐 "대기 → 승인 → 구매 중 → 입고 완료" 로 보여준다.
+ * (기존 데이터를 바꾸지 않기 위해 status 값 자체는 그대로 둔다)
+ */
+export type SupplyProgressKey = 'waiting' | 'approved' | 'buying' | 'bought' | 'received' | 'onhold' | 'rejected';
+export const SUPPLY_PROGRESS: Record<SupplyProgressKey, { label: string; step: number }> = {
+  waiting:  { label: '대기', step: 1 },
+  approved: { label: '승인', step: 2 },
+  buying:   { label: '구매 중', step: 3 },
+  bought:   { label: '구매 완료', step: 3 },
+  received: { label: '입고 완료', step: 4 },
+  onhold:   { label: '보류', step: 0 },
+  rejected: { label: '반려', step: 0 },
+};
+export function supplyProgress(
+  r: Pick<SupplyRequest, 'status' | 'forType' | 'items' | 'done' | 'buyerId' | 'stockApplied'>,
+  hasBuyer?: boolean
+): { key: SupplyProgressKey; label: string; step: number } {
+  let key: SupplyProgressKey;
+  if (r.status === 'rejected') key = 'rejected';
+  else if (r.status === 'onhold') key = 'onhold';
+  else if (r.status === 'purchased') {
+    // 캠프 공용은 실제 입고까지 해야 완료
+    key = r.forType === 'camp' ? (r.stockApplied ? 'received' : 'bought') : 'received';
+  } else if (supplyDoneCount(r) > 0) key = 'buying';
+  else if (hasBuyer ?? !!r.buyerId) key = 'approved';
+  else key = 'waiting';
+  return { key, ...SUPPLY_PROGRESS[key] };
 }
 
 export const PURCHASE_STATUSES = ['needed', 'ordered', 'received'] as const;

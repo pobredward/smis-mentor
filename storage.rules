@@ -212,15 +212,16 @@ service firebase.storage {
     // 역할: 인증 사용자(읽기/업로드/삭제), 이미지 또는 영상 50MB 이하
     // ──────────────────────────────────────────────────────────────
     // 재고 품목 사진·영상 (회사 공통) — 스태프 누구나 업로드·삭제
+    // 품목 사진·영상: 스태프는 보기만, 등록·변경·삭제는 관리자만
     match /inventoryItems/{itemId}/{allPaths=**} {
       allow read: if isCampStaff();
       allow write: if (
-        isCampStaff() &&
+        isAdmin() &&
         request.resource != null &&
         (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('video/.*')) &&
         isUnder50MB()
       );
-      allow delete: if isCampStaff();
+      allow delete: if isAdmin();
     }
 
     match /lostItems/{campCode}/{lostItemId}/{allPaths=**} {
