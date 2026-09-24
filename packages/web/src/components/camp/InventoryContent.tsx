@@ -618,16 +618,16 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-xs font-bold text-gray-700">사진 · 영상 <span className="font-normal text-gray-400">{media.length || ''}</span></p>
+        <p className="text-sm font-bold text-gray-700">사진 · 영상 <span className="font-normal text-gray-400">{media.length || ''}</span></p>
         {canEdit && (
-          <label className={`flex items-center gap-1 text-[11px] font-semibold cursor-pointer ${busy ? 'text-gray-400' : 'text-blue-700 hover:underline'}`}>
+          <label className={`flex items-center gap-1 text-[13px] font-semibold cursor-pointer ${busy ? 'text-gray-400' : 'text-blue-700 hover:underline'}`}>
             <FiCamera className="w-3.5 h-3.5" />{busy ? '올리는 중...' : '추가'}
             <input type="file" accept="image/*,video/*" multiple disabled={busy} className="hidden" onChange={e => { add(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
           </label>
         )}
       </div>
       {media.length === 0 ? (
-        <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">
+        <p className="text-[13px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">
           {canEdit ? '아직 사진이 없어요. 포장·실물 사진을 올려두면 다른 선생님이 찾기 쉬워요.' : '등록된 사진이 없습니다. (사진 등록은 관리자만)'}
         </p>
       ) : (
@@ -637,9 +637,9 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
               {m.type === 'video'
                 ? <video src={m.url} className="w-full max-h-[420px] bg-black" controls playsInline preload="metadata" />
                 : <img src={m.url} alt="" className="w-full max-h-[420px] object-contain bg-gray-50 cursor-zoom-in" loading="lazy" onClick={() => setViewing(m)} />}
-              {m.by && <span className="absolute bottom-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded bg-black/50 text-white pointer-events-none">{m.by}</span>}
+              {m.by && <span className="absolute bottom-1.5 left-1.5 text-[11px] px-1.5 py-0.5 rounded bg-black/50 text-white pointer-events-none">{m.by}</span>}
               {canEdit && (
-                <button onClick={() => setDeleting(m)} title="삭제" className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-[11px] flex items-center justify-center hover:bg-red-600">✕</button>
+                <button onClick={() => setDeleting(m)} title="삭제" className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-[13px] flex items-center justify-center hover:bg-red-600">✕</button>
               )}
             </div>
           ))}
@@ -654,14 +654,14 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
                 : <img src={deleting.url} alt="" className="w-full max-h-56 object-contain" />}
             </div>
             <div className="px-5 py-4 space-y-2">
-              <h3 className="text-base font-bold text-gray-900">이 {deleting.type === 'video' ? '영상' : '사진'}을 삭제할까요?</h3>
-              <p className="text-[12px] text-gray-600 leading-relaxed">
+              <h3 className="text-lg font-bold text-gray-900">이 {deleting.type === 'video' ? '영상' : '사진'}을 삭제할까요?</h3>
+              <p className="text-[14px] text-gray-600 leading-relaxed">
                 <b>{item.name}</b>의 {deleting.type === 'video' ? '영상' : '사진'}이 <b className="text-red-600">모든 캠프에서 사라지고 되돌릴 수 없어요.</b>
                 {deleting.by ? <> ({deleting.by} 선생님이 올림)</> : null}
               </p>
               <div className="flex gap-2 pt-1">
-                <button onClick={() => setDeleting(null)} disabled={deleteBusy} className="flex-1 py-2 text-sm text-gray-700 bg-gray-100 rounded-xl">취소</button>
-                <button onClick={() => remove(deleting)} disabled={deleteBusy} className="flex-1 py-2 text-sm font-bold text-white bg-red-600 rounded-xl disabled:opacity-50">{deleteBusy ? '삭제 중...' : '삭제'}</button>
+                <button onClick={() => setDeleting(null)} disabled={deleteBusy} className="flex-1 py-2 text-base text-gray-700 bg-gray-100 rounded-xl">취소</button>
+                <button onClick={() => remove(deleting)} disabled={deleteBusy} className="flex-1 py-2 text-base font-bold text-white bg-red-600 rounded-xl disabled:opacity-50">{deleteBusy ? '삭제 중...' : '삭제'}</button>
               </div>
             </div>
           </div>
@@ -673,7 +673,7 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
             ? <video src={viewing.url} className="max-w-full max-h-full" controls autoPlay playsInline onClick={e => e.stopPropagation()} />
             : <img src={viewing.url} alt="" className="max-w-full max-h-full object-contain" />}
           <button onClick={() => setViewing(null)} className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center"><FiX /></button>
-          {viewing.by && <p className="absolute bottom-4 inset-x-0 text-center text-[11px] text-white/70">{viewing.by} 올림</p>}
+          {viewing.by && <p className="absolute bottom-4 inset-x-0 text-center text-[13px] text-white/70">{viewing.by} 올림</p>}
         </div>
       )}
     </div>
@@ -760,21 +760,21 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
   return (
     // 데스크톱은 오른쪽 사이드 패널, 모바일은 바텀시트
     <div className="fixed inset-0 bg-black/60 flex items-end justify-center sm:items-stretch sm:justify-end z-50" onClick={onClose}>
-      <div className="bg-white w-full sm:w-[440px] sm:max-w-full rounded-t-2xl sm:rounded-none shadow-2xl flex flex-col max-h-[92vh] sm:max-h-none sm:h-full" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full sm:w-[560px] lg:w-[680px] sm:max-w-full rounded-t-2xl sm:rounded-none shadow-2xl flex flex-col max-h-[92vh] sm:max-h-none sm:h-full" onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${CATEGORY_STYLE[view.category] ?? CATEGORY_STYLE.기타}`}>{view.category}{view.subCategory ? ` · ${view.subCategory}` : ''}</span>
-              {view.kind && <span className="text-[10px] text-gray-500">{view.kind}</span>}
-              {view.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500">사용 안 함</span>}
+              <span className={`text-[12px] px-1.5 py-0.5 rounded border ${CATEGORY_STYLE[view.category] ?? CATEGORY_STYLE.기타}`}>{view.category}{view.subCategory ? ` · ${view.subCategory}` : ''}</span>
+              {view.kind && <span className="text-[12px] text-gray-500">{view.kind}</span>}
+              {view.isActive === false && <span className="text-[11px] px-1 rounded bg-gray-100 text-gray-500">사용 안 함</span>}
             </div>
-            <h2 className="text-base font-bold text-gray-900 mt-1">{view.name} {view.spec && <span className="text-xs font-normal text-gray-400">{view.spec}</span>}</h2>
+            <h2 className="text-lg font-bold text-gray-900 mt-1">{view.name} {view.spec && <span className="text-sm font-normal text-gray-400">{view.spec}</span>}</h2>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="text-right">
-              <p className="text-2xl font-extrabold text-emerald-700 leading-none">{view.total}<span className="text-xs text-gray-400 ml-0.5">{view.unit}</span></p>
-              <p className="text-[9px] text-gray-400">현재 총재고</p>
+              <p className="text-3xl font-extrabold text-emerald-700 leading-none">{view.total}<span className="text-sm text-gray-400 ml-0.5">{view.unit}</span></p>
+              <p className="text-[11px] text-gray-400">현재 총재고</p>
             </div>
             <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
           </div>
@@ -784,29 +784,29 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
           {/* 사용 방법 · 주의사항 */}
           {(view.description || view.dosageNote) && (
             <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 px-3 py-2 space-y-0.5">
-              {view.dosageNote && <p className="text-[11px] text-emerald-900">📋 {view.dosageNote}</p>}
-              {view.description && <p className="text-[11px] text-gray-700">ℹ️ {view.description}</p>}
+              {view.dosageNote && <p className="text-[13px] text-emerald-900">📋 {view.dosageNote}</p>}
+              {view.description && <p className="text-[13px] text-gray-700">ℹ️ {view.description}</p>}
             </div>
           )}
 
           {/* 교무실별 수량 */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs font-bold text-gray-700">교무실별 수량</p>
-              {perm.canEditItem && <button onClick={() => setEditItem(true)} className="text-[11px] text-emerald-700 hover:underline">품목 수정</button>}
+              <p className="text-sm font-bold text-gray-700">교무실별 수량</p>
+              {perm.canEditItem && <button onClick={() => setEditItem(true)} className="text-[13px] text-emerald-700 hover:underline">품목 수정</button>}
             </div>
             {groups.length === 0 ? (
-              <p className="text-[11px] text-gray-400">교무실(재고 그룹)이 없습니다.</p>
+              <p className="text-[13px] text-gray-400">교무실(재고 그룹)이 없습니다.</p>
             ) : (
               <div className="rounded-xl border border-gray-200 overflow-hidden">
-                <table className="w-full text-[11px]">
+                <table className="w-full text-[13px]">
                   <thead className="bg-gray-50 text-gray-500">
                     <tr>
-                      <th className="text-left px-3 py-1.5 font-semibold">교무실</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">현재</th>
-                      {perm.isStockManager && <th className="text-right px-2 py-1.5 font-semibold">최소</th>}
-                      {perm.isStockManager && <th className="text-left px-2 py-1.5 font-semibold">상태</th>}
-                      <th className="px-2 py-1.5" />
+                      <th className="text-left px-3 py-2 font-semibold">교무실</th>
+                      <th className="text-right px-2 py-2 font-semibold">현재</th>
+                      {perm.isStockManager && <th className="text-right px-2 py-2 font-semibold">최소</th>}
+                      {perm.isStockManager && <th className="text-left px-2 py-2 font-semibold">상태</th>}
+                      <th className="px-2 py-2" />
                     </tr>
                   </thead>
                   <tbody>
@@ -817,38 +817,38 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
                       const isOverride = view.minStocks?.[g.id] != null;
                       return (
                         <tr key={g.id} className="border-t border-gray-100">
-                          <td className="px-3 py-1.5">
+                          <td className="px-3 py-2">
                             <span className="font-semibold text-gray-800">{g.name}</span>
                             {g.location && <span className="text-gray-400 ml-1">{g.location}</span>}
                             <div className="flex flex-wrap items-center gap-1 mt-0.5">
                               <button onClick={() => setMeta({ groupId: g.id, kind: 'location', value: view.locations[g.id] ?? '' })}
-                                className={`text-[10px] ${view.locations[g.id] ? 'text-gray-700' : 'text-gray-300 hover:text-gray-500'}`}>📍 {view.locations[g.id] || '위치 적기'}</button>
+                                className={`text-[12px] ${view.locations[g.id] ? 'text-gray-700' : 'text-gray-300 hover:text-gray-500'}`}>📍 {view.locations[g.id] || '위치 적기'}</button>
                               {(() => {
                                 const ex = view.expiries[g.id]; const st = expiryState(ex);
-                                if (!ex) return perm.canManageStock ? <button onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: '' })} className="text-[10px] text-gray-300 hover:text-gray-500">⏳ 유효기간</button> : null;
+                                if (!ex) return perm.canManageStock ? <button onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: '' })} className="text-[12px] text-gray-300 hover:text-gray-500">⏳ 유효기간</button> : null;
                                 return <button disabled={!perm.canManageStock} onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: ex })}
-                                  className={`text-[10px] px-1 rounded ${st === 'expired' ? 'bg-red-100 text-red-700 font-bold' : st === 'soon' ? 'bg-amber-100 text-amber-800 font-bold' : 'text-gray-500'}`}>⏳ {fmtExpiry(ex)}{st === 'expired' ? ' 지남' : st === 'soon' ? ' 임박' : ''}</button>;
+                                  className={`text-[12px] px-1 rounded ${st === 'expired' ? 'bg-red-100 text-red-700 font-bold' : st === 'soon' ? 'bg-amber-100 text-amber-800 font-bold' : 'text-gray-500'}`}>⏳ {fmtExpiry(ex)}{st === 'expired' ? ' 지남' : st === 'soon' ? ' 임박' : ''}</button>;
                               })()}
                             </div>
                           </td>
-                          <td className={`text-right px-2 py-1.5 font-bold ${low && perm.isStockManager ? 'text-red-600' : 'text-gray-800'}`}>{n}</td>
-                          {perm.isStockManager && <td className="text-right px-2 py-1.5 text-gray-500">{min}{isOverride && <span className="text-[9px] text-amber-600 ml-0.5">*</span>}</td>}
+                          <td className={`text-right px-2 py-2 font-bold ${low && perm.isStockManager ? 'text-red-600' : 'text-gray-800'}`}>{n}</td>
+                          {perm.isStockManager && <td className="text-right px-2 py-2 text-gray-500">{min}{isOverride && <span className="text-[11px] text-amber-600 ml-0.5">*</span>}</td>}
                           {perm.isStockManager && (
-                            <td className="px-2 py-1.5">
-                              {low ? <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">부족 (−{min - n})</span>
-                                : <span className="text-[10px] text-gray-400">정상</span>}
+                            <td className="px-2 py-2">
+                              {low ? <span className="text-[12px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">부족 (−{min - n})</span>
+                                : <span className="text-[12px] text-gray-400">정상</span>}
                             </td>
                           )}
-                          <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                          <td className="px-2 py-2 text-right whitespace-nowrap">
                             {g.id in view.stocks && (
-                              <button onClick={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} className="text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded px-1.5 py-0.5 mr-2">− 사용</button>
+                              <button onClick={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} className="text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md px-2 py-1 mr-2">− 사용</button>
                             )}
                             {perm.canManageStock && (
                               <>
-                                <button onClick={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }} className="text-[10px] font-semibold text-emerald-700 hover:underline mr-2">+입고</button>
-                                <button onClick={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }} className="text-[10px] text-gray-500 hover:underline mr-2">조정</button>
-                                <button onClick={() => { setMode(null); setTransferFrom(g.id); }} title="다른 그룹으로 이동" className="text-[10px] font-semibold text-indigo-600 hover:underline mr-2">이동</button>
-                                <button onClick={() => { setMode({ type: 'min', groupId: g.id }); setQty(isOverride ? String(view.minStocks[g.id]) : ''); setMemo(''); }} className="text-[10px] text-gray-500 hover:underline">최소</button>
+                                <button onClick={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }} className="text-[12px] font-semibold text-emerald-700 hover:underline mr-2">+입고</button>
+                                <button onClick={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline mr-2">조정</button>
+                                <button onClick={() => { setMode(null); setTransferFrom(g.id); }} title="다른 그룹으로 이동" className="text-[12px] font-semibold text-indigo-600 hover:underline mr-2">이동</button>
+                                <button onClick={() => { setMode({ type: 'min', groupId: g.id }); setQty(isOverride ? String(view.minStocks[g.id]) : ''); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline">최소</button>
                               </>
                             )}
                           </td>
@@ -859,26 +859,26 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
                 </table>
               </div>
             )}
-            {perm.canManageStock && <p className="text-[10px] text-gray-400 mt-1">최소 수량 기본값 {view.minStockDefault ?? 0}{view.unit} (품목 수정에서 변경) · * 표시는 교무실별 예외 · <b>조정</b>은 이 교무실 수량만 바꾸고, <b>이동</b>은 다른 교무실로 옮깁니다</p>}
+            {perm.canManageStock && <p className="text-[12px] text-gray-400 mt-1">최소 수량 기본값 {view.minStockDefault ?? 0}{view.unit} (품목 수정에서 변경) · * 표시는 교무실별 예외 · <b>조정</b>은 이 교무실 수량만 바꾸고, <b>이동</b>은 다른 교무실로 옮깁니다</p>}
           </div>
 
           {/* 세부 위치 · 유효기간 */}
           {meta && (
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
-              <p className="text-xs font-bold text-gray-800">{meta.kind === 'location' ? '📍 세부 위치' : '⏳ 유효기간'} · {groups.find(g => g.id === meta.groupId)?.name}</p>
+              <p className="text-sm font-bold text-gray-800">{meta.kind === 'location' ? '📍 세부 위치' : '⏳ 유효기간'} · {groups.find(g => g.id === meta.groupId)?.name}</p>
               {meta.kind === 'location' ? (
                 <input value={meta.value} onChange={e => setMeta({ ...meta, value: e.target.value })} autoFocus placeholder="예: 약통 2번 칸, 교무실 캐비닛 위"
-                  className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white" />
+                  className="w-full text-base border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
               ) : (
                 <div className="flex items-center gap-2">
-                  <input type="date" value={meta.value} onChange={e => setMeta({ ...meta, value: e.target.value })} className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white" />
-                  <span className="text-[10px] text-gray-400">여러 개면 가장 빠른 날짜</span>
+                  <input type="date" value={meta.value} onChange={e => setMeta({ ...meta, value: e.target.value })} className="text-base border border-gray-200 rounded-lg px-2.5 py-2 bg-white" />
+                  <span className="text-[12px] text-gray-400">여러 개면 가장 빠른 날짜</span>
                 </div>
               )}
               <div className="flex gap-2">
-                {meta.value && <button onClick={() => setMeta({ ...meta, value: '' })} className="px-3 py-1.5 text-xs text-red-500 bg-white border border-red-200 rounded-lg">지우기</button>}
-                <button onClick={() => setMeta(null)} className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
-                <button onClick={saveMeta} disabled={busy} className="flex-1 py-1.5 text-xs font-bold text-white bg-gray-800 rounded-lg disabled:opacity-50">저장</button>
+                {meta.value && <button onClick={() => setMeta({ ...meta, value: '' })} className="px-3 py-2 text-sm text-red-500 bg-white border border-red-200 rounded-lg">지우기</button>}
+                <button onClick={() => setMeta(null)} className="flex-1 py-2 text-sm text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
+                <button onClick={saveMeta} disabled={busy} className="flex-1 py-2 text-sm font-bold text-white bg-gray-800 rounded-lg disabled:opacity-50">저장</button>
               </div>
             </div>
           )}
@@ -886,34 +886,34 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
           {/* 사용 / 입고 / 조정 / 최소 폼 */}
           {mode && group && (
             <div className={`rounded-xl border p-3 space-y-2 ${mode.type === 'use' ? 'border-blue-200 bg-blue-50' : mode.type === 'restock' ? 'border-emerald-200 bg-emerald-50' : mode.type === 'adjust' ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
-              <p className="text-xs font-bold text-gray-800">
+              <p className="text-sm font-bold text-gray-800">
                 {mode.type === 'use' ? '📤 사용하기' : mode.type === 'restock' ? '📥 재고 입고' : mode.type === 'adjust' ? '✏️ 이 교무실 수량만 조정' : '📏 최소 보유 수량'} · {group.name}
                 <span className="font-normal text-gray-500 ml-1">현재 {current}{view.unit}</span>
               </p>
               <div className="flex gap-2 items-center">
                 <input type="number" min={0} value={qty} onChange={e => setQty(e.target.value)} autoFocus
                   placeholder={mode.type === 'restock' ? '입고 수량' : mode.type === 'adjust' ? '조정 후 수량' : `비우면 기본값(${view.minStockDefault ?? 0})`}
-                  className="w-32 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white" />
-                <span className="text-xs text-gray-500">{view.unit}</span>
-                {mode.type === 'restock' && qty && <span className="text-[11px] text-emerald-700">→ {current + (parseInt(qty, 10) || 0)}{view.unit}</span>}
-                {mode.type === 'use' && qty && <span className="text-[11px] text-blue-700">→ {current - (parseInt(qty, 10) || 0)}{view.unit} 남음</span>}
+                  className="w-32 text-base border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
+                <span className="text-sm text-gray-500">{view.unit}</span>
+                {mode.type === 'restock' && qty && <span className="text-[13px] text-emerald-700">→ {current + (parseInt(qty, 10) || 0)}{view.unit}</span>}
+                {mode.type === 'use' && qty && <span className="text-[13px] text-blue-700">→ {current - (parseInt(qty, 10) || 0)}{view.unit} 남음</span>}
                 {mode.type === 'restock' && (
-                  <label className="ml-auto flex items-center gap-1 text-[10px] text-gray-500">유효기간
-                    <input type="date" value={restockExpiry} onChange={e => setRestockExpiry(e.target.value)} className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5 bg-white" />
+                  <label className="ml-auto flex items-center gap-1 text-[12px] text-gray-500">유효기간
+                    <input type="date" value={restockExpiry} onChange={e => setRestockExpiry(e.target.value)} className="text-[13px] border border-gray-200 rounded px-1.5 py-0.5 bg-white" />
                   </label>
                 )}
-                {mode.type === 'adjust' && qty && <span className="text-[11px] text-amber-700">차이 {(parseInt(qty, 10) || 0) - current > 0 ? '+' : ''}{(parseInt(qty, 10) || 0) - current}</span>}
+                {mode.type === 'adjust' && qty && <span className="text-[13px] text-amber-700">차이 {(parseInt(qty, 10) || 0) - current > 0 ? '+' : ''}{(parseInt(qty, 10) || 0) - current}</span>}
               </div>
               {mode.type !== 'min' && (
                 <>
                 {mode.type === 'use' && isMedicine && (
-                  <p className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">💊 학생에게 먹이거나 발라 준 약은 <b>환자 탭</b>에서 복용 기록을 남기면 자동으로 빠져요. 여기서도 빼면 두 번 빠집니다.</p>
+                  <p className="text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">💊 학생에게 먹이거나 발라 준 약은 <b>환자 탭</b>에서 복용 기록을 남기면 자동으로 빠져요. 여기서도 빼면 두 번 빠집니다.</p>
                 )}
                 {mode.type === 'use' && (
                   <div className="flex flex-wrap gap-1">
                     {USE_REASONS.map(r => (
                       <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${memo === r ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{r}</button>
+                        className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{r}</button>
                     ))}
                   </div>
                 )}
@@ -921,32 +921,32 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
                   <div className="flex flex-wrap gap-1">
                     {ADJUST_REASONS.map(r => (
                       <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${memo === r ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}>{r}</button>
+                        className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}>{r}</button>
                     ))}
                   </div>
                 )}
                 <input value={memo} onChange={e => setMemo(e.target.value)}
                   placeholder={mode.type === 'use' ? '어디에 썼나요? (선택, 예: 3반 미술 수업)' : mode.type === 'restock' ? '메모 (선택, 예: 이마트 구매)' : '위에서 고르거나 직접 입력 (필수)'}
-                  className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white" />
+                  className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
                 </>
               )}
               <div className="flex gap-2">
-                <button onClick={() => setMode(null)} className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
+                <button onClick={() => setMode(null)} className="flex-1 py-2 text-sm text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
                 <button onClick={submit} disabled={busy}
-                  className="flex-1 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">{busy ? '처리 중...' : '저장'}</button>
+                  className="flex-1 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">{busy ? '처리 중...' : '저장'}</button>
               </div>
             </div>
           )}
 
           {/* 변동 내역 */}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1.5">변동 내역 <span className="text-gray-400 font-normal">({movements.length}건)</span></p>
+            <p className="text-sm font-bold text-gray-700 mb-1.5">변동 내역 <span className="text-gray-400 font-normal">({movements.length}건)</span></p>
             {movements.length === 0 ? (
-              <p className="text-[11px] text-gray-400">이 캠프에서 아직 변동이 없습니다.</p>
+              <p className="text-[13px] text-gray-400">이 캠프에서 아직 변동이 없습니다.</p>
             ) : (
               <div className="space-y-1">
                 {(showAllMoves ? movements : movements.slice(0, 4)).map(m => (
-                  <div key={m.id} className="flex items-center gap-2 text-[11px] bg-gray-50 rounded-lg px-2.5 py-1.5">
+                  <div key={m.id} className="flex items-center gap-2 text-[13px] bg-gray-50 rounded-lg px-2.5 py-2">
                     <span className="text-gray-400 w-20 shrink-0">{fmtDateTime(m.at)}</span>
                     <span className="flex-1 min-w-0 truncate text-gray-700">
                       <b className="text-gray-800">{movementLabel(m)}</b>
@@ -958,7 +958,7 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
                   </div>
                 ))}
                 {movements.length > 4 && (
-                  <button onClick={() => setShowAllMoves(v => !v)} className="w-full py-1 text-[11px] font-semibold text-gray-500 hover:text-gray-800">
+                  <button onClick={() => setShowAllMoves(v => !v)} className="w-full py-1 text-[13px] font-semibold text-gray-500 hover:text-gray-800">
                     {showAllMoves ? '접기 ▲' : `이전 내역 ${movements.length - 4}건 더 보기 ▼`}
                   </button>
                 )}
@@ -974,11 +974,11 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
           <button
             onClick={() => { if (useGroupId) { setMode({ type: 'use', groupId: useGroupId }); setQty('1'); setMemo(''); } }}
             disabled={!useGroupId}
-            className="flex-1 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:bg-gray-200 disabled:text-gray-400">
+            className="flex-1 py-3 text-base font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:bg-gray-200 disabled:text-gray-400">
             사용하기
           </button>
           <button onClick={() => onRequest(view, defaultGroupId)}
-            className="flex-1 py-2.5 text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl">
+            className="flex-1 py-3 text-base font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl">
             필요한 물품 요청
           </button>
         </div>
@@ -1044,11 +1044,11 @@ function StockTransferModal({ view, groups, campCode, fromGroupId, userId, userN
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[70] p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
-            <h2 className="text-base font-bold text-gray-900 flex items-center gap-1.5"><FiRepeat className="w-4 h-4 text-indigo-600" />다른 교무실로 이동</h2>
-            <p className="text-[11px] text-gray-500 mt-0.5">보내는 곳에서 빠지고 받는 곳에 그대로 더해집니다 (전체 재고는 그대로)</p>
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-1.5"><FiRepeat className="w-4 h-4 text-indigo-600" />다른 교무실로 이동</h2>
+            <p className="text-[13px] text-gray-500 mt-0.5">보내는 곳에서 빠지고 받는 곳에 그대로 더해집니다 (전체 재고는 그대로)</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
@@ -1060,58 +1060,58 @@ function StockTransferModal({ view, groups, campCode, fromGroupId, userId, userN
               ? <img src={itemThumb(view)} alt="" className="w-11 h-11 rounded-lg object-cover bg-gray-100 shrink-0" />
               : <span className="w-11 h-11 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300"><FiBox /></span>}
             <div className="min-w-0">
-              <p className="text-sm font-bold text-gray-900 truncate">{view.name}</p>
-              <p className="text-[11px] text-gray-400 truncate">{[view.kind, view.spec].filter(Boolean).join(' · ') || `${view.category}`}</p>
+              <p className="text-base font-bold text-gray-900 truncate">{view.name}</p>
+              <p className="text-[13px] text-gray-400 truncate">{[view.kind, view.spec].filter(Boolean).join(' · ') || `${view.category}`}</p>
             </div>
             <span className="ml-auto text-right shrink-0">
-              <span className="block text-base font-extrabold text-emerald-700 leading-none">{view.total}{view.unit}</span>
-              <span className="block text-[9px] text-gray-400">전체</span>
+              <span className="block text-lg font-extrabold text-emerald-700 leading-none">{view.total}{view.unit}</span>
+              <span className="block text-[11px] text-gray-400">전체</span>
             </span>
           </div>
 
           {done ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 space-y-1">
-              <p className="text-sm font-bold text-emerald-800">이동했습니다.</p>
-              <p className="text-[12px] text-gray-700">{fromGroup?.name} <b>{done.from}{view.unit}</b> · {toGroup?.name} <b>{done.to}{view.unit}</b></p>
-              <p className="text-[11px] text-gray-500">양쪽 입출고 기록에 남았습니다.</p>
+              <p className="text-base font-bold text-emerald-800">이동했습니다.</p>
+              <p className="text-[14px] text-gray-700">{fromGroup?.name} <b>{done.from}{view.unit}</b> · {toGroup?.name} <b>{done.to}{view.unit}</b></p>
+              <p className="text-[13px] text-gray-500">양쪽 입출고 기록에 남았습니다.</p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
                 <div>
-                  <p className="text-[11px] font-bold text-gray-600 mb-1">보내는 교무실</p>
-                  <select value={from} onChange={e => setFrom(e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white outline-none">
+                  <p className="text-[13px] font-bold text-gray-600 mb-1">보내는 교무실</p>
+                  <select value={from} onChange={e => setFrom(e.target.value)} className="w-full text-base border border-gray-200 rounded-lg px-2 py-2 bg-white outline-none">
                     {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                   </select>
-                  <p className="text-[11px] text-gray-500 mt-1">보유 <b className="text-gray-800">{fromCur}{view.unit}</b></p>
+                  <p className="text-[13px] text-gray-500 mt-1">보유 <b className="text-gray-800">{fromCur}{view.unit}</b></p>
                 </div>
-                <div className="pb-7 text-gray-300 text-lg">→</div>
+                <div className="pb-7 text-gray-300 text-xl">→</div>
                 <div>
-                  <p className="text-[11px] font-bold text-gray-600 mb-1">받는 교무실</p>
-                  <select value={to} onChange={e => setTo(e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-2 bg-white outline-none">
+                  <p className="text-[13px] font-bold text-gray-600 mb-1">받는 교무실</p>
+                  <select value={to} onChange={e => setTo(e.target.value)} className="w-full text-base border border-gray-200 rounded-lg px-2 py-2 bg-white outline-none">
                     {others.length === 0 && <option value="">이동할 곳이 없습니다</option>}
                     {others.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                   </select>
-                  <p className="text-[11px] text-gray-500 mt-1">보유 <b className="text-gray-800">{toCur}{view.unit}</b>{!(to in view.stocks) && to ? ' (새로 생김)' : ''}</p>
+                  <p className="text-[13px] text-gray-500 mt-1">보유 <b className="text-gray-800">{toCur}{view.unit}</b>{!(to in view.stocks) && to ? ' (새로 생김)' : ''}</p>
                 </div>
               </div>
 
               <div>
-                <p className="text-[11px] font-bold text-gray-600 mb-1">이동할 수량</p>
+                <p className="text-[13px] font-bold text-gray-600 mb-1">이동할 수량</p>
                 <div className="flex items-center gap-2">
                   <input type="number" min={1} max={fromCur} value={qty} onChange={e => setQty(e.target.value)} autoFocus
-                    className="w-28 text-sm border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
-                  <span className="text-xs text-gray-500">{view.unit}</span>
+                    className="w-28 text-base border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
+                  <span className="text-sm text-gray-500">{view.unit}</span>
                   <div className="flex gap-1 ml-auto">
                     {[1, 5, 10].filter(x => x <= fromCur).map(x => (
-                      <button key={x} type="button" onClick={() => setQty(String(x))} className="px-2 py-1 text-[11px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">{x}</button>
+                      <button key={x} type="button" onClick={() => setQty(String(x))} className="px-2 py-1 text-[13px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">{x}</button>
                     ))}
-                    {fromCur > 0 && <button type="button" onClick={() => setQty(String(fromCur))} className="px-2 py-1 text-[11px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">전부</button>}
+                    {fromCur > 0 && <button type="button" onClick={() => setQty(String(fromCur))} className="px-2 py-1 text-[13px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">전부</button>}
                   </div>
                 </div>
-                {n > fromCur && <p className="text-[11px] text-red-600 mt-1">보유 수량({fromCur}{view.unit})보다 많이 보낼 수 없습니다.</p>}
+                {n > fromCur && <p className="text-[13px] text-red-600 mt-1">보유 수량({fromCur}{view.unit})보다 많이 보낼 수 없습니다.</p>}
                 {!invalid && (
-                  <p className="text-[11px] text-gray-600 mt-1.5 bg-gray-50 rounded-lg px-2 py-1.5">
+                  <p className="text-[13px] text-gray-600 mt-1.5 bg-gray-50 rounded-lg px-2 py-2">
                     {fromGroup?.name} {fromCur} → <b className="text-red-600">{fromCur - n}</b> · {toGroup?.name} {toCur} → <b className="text-emerald-700">{toCur + n}</b>
                     <span className="text-gray-400"> · 전체 {view.total} (그대로)</span>
                   </p>
@@ -1119,25 +1119,25 @@ function StockTransferModal({ view, groups, campCode, fromGroupId, userId, userN
               </div>
 
               <div>
-                <p className="text-[11px] font-bold text-gray-600 mb-1">이동 사유 <span className="font-normal text-gray-400">(선택)</span></p>
+                <p className="text-[13px] font-bold text-gray-600 mb-1">이동 사유 <span className="font-normal text-gray-400">(선택)</span></p>
                 <div className="flex flex-wrap gap-1 mb-1.5">
                   {TRANSFER_REASONS.map(r => (
                     <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${memo === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>{r}</button>
+                      className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>{r}</button>
                   ))}
                 </div>
                 <input value={memo} onChange={e => setMemo(e.target.value)} placeholder="직접 입력해도 됩니다"
-                  className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white" />
+                  className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
               </div>
             </>
           )}
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl">{done ? '닫기' : '취소'}</button>
+          <button onClick={onClose} className="flex-1 py-2.5 text-base text-gray-600 bg-gray-100 rounded-xl">{done ? '닫기' : '취소'}</button>
           {!done && (
             <button onClick={submit} disabled={invalid || busy}
-              className="flex-1 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-40">{busy ? '이동 중...' : '이동하기'}</button>
+              className="flex-1 py-2.5 text-base font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-40">{busy ? '이동 중...' : '이동하기'}</button>
           )}
         </div>
       </div>
@@ -2553,7 +2553,7 @@ function LostItemDetailModal({ item, isAdmin, userId, userName, onClose }: {
   const inputCls = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-400';
   return (
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[60]" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
           <div className="min-w-0">
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${LOST_STATUS_STYLE[item.status]}`}>{LOST_ITEM_STATUS_LABELS[item.status]}</span>
@@ -3072,7 +3072,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
     } finally { setBusy(false); }
   };
 
-  const inputCls = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400';
+  const inputCls = 'w-full text-base border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400';
   const subs = INVENTORY_SUBCATEGORIES[category] ?? [];
   const primaryUsages = suggestedUsages(category);
   const otherUsages = INVENTORY_USAGE_ORDER.filter(u => !primaryUsages.includes(u));
@@ -3080,9 +3080,9 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[60]" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">{item ? '품목 수정' : '품목 추가'}</h2>
+          <h2 className="text-lg font-bold text-gray-900">{item ? '품목 수정' : '품목 추가'}</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
@@ -3095,11 +3095,11 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
                 <label className="block w-[72px] h-[72px] rounded-xl border border-dashed border-gray-300 bg-gray-50 overflow-hidden cursor-pointer relative hover:border-emerald-400">
                   {photoUrl
                     ? <img src={photoUrl} alt="" className="w-full h-full object-cover" />
-                    : <span className="w-full h-full flex flex-col items-center justify-center text-gray-400"><FiCamera className="w-4 h-4" /><span className="text-[9px] mt-0.5">이미지</span></span>}
+                    : <span className="w-full h-full flex flex-col items-center justify-center text-gray-400"><FiCamera className="w-4 h-4" /><span className="text-[11px] mt-0.5">이미지</span></span>}
                   <input type="file" accept="image/*" className="hidden" onChange={e => { pickPhoto(e.target.files?.[0]); e.target.value = ''; }} />
                 </label>
                 {photo && (
-                  <button type="button" onClick={() => pickPhoto(null)} className="w-full mt-1 text-[10px] text-gray-400 hover:text-red-500">제거</button>
+                  <button type="button" onClick={() => pickPhoto(null)} className="w-full mt-1 text-[12px] text-gray-400 hover:text-red-500">제거</button>
                 )}
               </div>
             )}
@@ -3108,38 +3108,38 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
                 <div className="w-[72px] h-[72px] rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
                   {itemThumb(item) ? <img src={itemThumb(item)} alt="" className="w-full h-full object-cover" /> : <FiBox className="w-5 h-5 text-gray-300" />}
                 </div>
-                <p className="w-full mt-1 text-[9px] text-gray-400 text-center leading-tight">상세에서<br />사진 관리</p>
+                <p className="w-full mt-1 text-[11px] text-gray-400 text-center leading-tight">상세에서<br />사진 관리</p>
               </div>
             )}
             <div className="flex-1 min-w-0 space-y-3">
               <div>
-                <p className="text-xs font-bold text-gray-700 mb-1">물품명 *</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">물품명 *</p>
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 타이레놀" className={inputCls} autoFocus={!item} />
               </div>
               <div>
-                <p className="text-xs font-bold text-gray-700 mb-1">분류 *</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">분류 *</p>
                 <select value={category} onChange={e => { const c = e.target.value as InventoryCategory; setCategory(c); setSubCategory(''); if (!item) setUsage(suggestedUsages(c)[0]); }} className={inputCls}>
                   {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
           </div>
-          {photoError && <p className="text-[11px] text-red-600">{photoError}</p>}
+          {photoError && <p className="text-[13px] text-red-600">{photoError}</p>}
 
           {canSetStock && (
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-1">
-                <p className="text-xs font-bold text-gray-700 mb-1">보관 교무실</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">보관 교무실</p>
                 <select value={stockGroupId} onChange={e => setStockGroupId(e.target.value)} className={inputCls}>
                   {groups!.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
               <div>
-                <p className="text-xs font-bold text-gray-700 mb-1">최초 재고</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">최초 재고</p>
                 <input type="number" min={0} value={initialQty} onChange={e => setInitialQty(e.target.value)} placeholder="0" className={inputCls} />
               </div>
               <div>
-                <p className="text-xs font-bold text-gray-700 mb-1">단위 (낱개)</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">단위 (낱개)</p>
                 <input list="inv-units" value={unit} onChange={e => setUnit(e.target.value)} className={inputCls} />
                 <datalist id="inv-units">{INVENTORY_UNITS.map(u => <option key={u} value={u} />)}</datalist>
               </div>
@@ -3147,7 +3147,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
           )}
           {!canSetStock && (
             <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">단위 (낱개)</p>
+              <p className="text-sm font-bold text-gray-700 mb-1">단위 (낱개)</p>
               <input list="inv-units2" value={unit} onChange={e => setUnit(e.target.value)} className={inputCls} />
               <datalist id="inv-units2">{INVENTORY_UNITS.map(u => <option key={u} value={u} />)}</datalist>
             </div>
@@ -3155,7 +3155,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
 
           {/* ── 상세 설정 (접힘) ── */}
           <button type="button" onClick={() => setShowDetail(v => !v)}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-bold text-gray-600 hover:border-gray-300">
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-sm font-bold text-gray-600 hover:border-gray-300">
             <span>상세 설정 <span className="font-normal text-gray-400">세부 분류 · 물품 유형 · 규격 · 최소 재고{isMed ? ' · 의약품 정보' : ''}</span></span>
             <span className="text-gray-400">{showDetail ? '▲' : '▼'}</span>
           </button>
@@ -3164,88 +3164,88 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
             <div className="space-y-3 rounded-xl border border-gray-100 p-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="text-xs font-bold text-gray-700 mb-1">세부 분류</p>
+                  <p className="text-sm font-bold text-gray-700 mb-1">세부 분류</p>
                   <input list="inv-subcats" value={subCategory} onChange={e => setSubCategory(e.target.value)} placeholder={subs.length ? subs.join(' / ') : '(선택)'} className={inputCls} />
                   <datalist id="inv-subcats">{subs.map(s => <option key={s} value={s} />)}</datalist>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-gray-700 mb-1">종류</p>
+                  <p className="text-sm font-bold text-gray-700 mb-1">종류</p>
                   <input value={kind} onChange={e => setKind(e.target.value)} placeholder="예: 소화제, 진통제(아세트)" className={inputCls} />
                 </div>
               </div>
 
               <div>
-                <p className="text-xs font-bold text-gray-700 mb-1">물품 유형 *</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">물품 유형 *</p>
                 <div className="flex gap-1.5 flex-wrap">
                   {primaryUsages.map(u => (
                     <button key={u} type="button" onClick={() => setUsage(u)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${usage === u ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
+                      className={`px-2.5 py-1 rounded-full text-[13px] font-semibold border ${usage === u ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
                   ))}
                   {otherUsages.map(u => (
                     <button key={u} type="button" onClick={() => setUsage(u)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] border ${usage === u ? 'bg-gray-800 text-white border-gray-800 font-semibold' : 'bg-white text-gray-400 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
+                      className={`px-2.5 py-1 rounded-full text-[13px] border ${usage === u ? 'bg-gray-800 text-white border-gray-800 font-semibold' : 'bg-white text-gray-400 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
                   ))}
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">먹는 약·바르는 약·처치 소모품은 환자 보고에서 사용 기록할 수 있고, 비품은 위치·수량만 관리합니다.</p>
+                <p className="text-[12px] text-gray-400 mt-1">먹는 약·바르는 약·처치 소모품은 환자 보고에서 사용 기록할 수 있고, 비품은 위치·수량만 관리합니다.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="text-xs font-bold text-gray-700 mb-1">규격 · 비고</p>
+                  <p className="text-sm font-bold text-gray-700 mb-1">규격 · 비고</p>
                   <input value={spec} onChange={e => setSpec(e.target.value)} placeholder="알약 500mg" className={inputCls} />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-gray-700 mb-1">포장당 낱개 수량</p>
+                  <p className="text-sm font-bold text-gray-700 mb-1">포장당 낱개 수량</p>
                   <input type="number" min={1} value={packSize} onChange={e => setPackSize(e.target.value)} placeholder="예: 4" className={inputCls} />
                 </div>
               </div>
 
               {isMed && (
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2">
-                  <p className="text-xs font-bold text-emerald-800">의약품 상세 정보 <span className="font-normal text-emerald-700/70">(포장 설명서 기준으로 관리자가 입력)</span></p>
+                  <p className="text-sm font-bold text-emerald-800">의약품 상세 정보 <span className="font-normal text-emerald-700/70">(포장 설명서 기준으로 관리자가 입력)</span></p>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="col-span-3 sm:col-span-1">
-                      <p className="text-[11px] text-gray-600 mb-0.5">주성분</p>
+                      <p className="text-[13px] text-gray-600 mb-0.5">주성분</p>
                       <input value={ingredient} onChange={e => setIngredient(e.target.value)} placeholder="아세트아미노펜" className={inputCls} />
                     </div>
                     <div>
-                      <p className="text-[11px] text-gray-600 mb-0.5">최소 간격(시간)</p>
+                      <p className="text-[13px] text-gray-600 mb-0.5">최소 간격(시간)</p>
                       <input type="number" min={0} step={0.5} value={intervalHours} onChange={e => setIntervalHours(e.target.value)} placeholder="예: 4" className={inputCls} />
                     </div>
                     <div>
-                      <p className="text-[11px] text-gray-600 mb-0.5">1일 최대(회)</p>
+                      <p className="text-[13px] text-gray-600 mb-0.5">1일 최대(회)</p>
                       <input type="number" min={0} value={maxPerDay} onChange={e => setMaxPerDay(e.target.value)} placeholder="예: 4" className={inputCls} />
                     </div>
                   </div>
                   <div>
-                    <p className="text-[11px] text-gray-600 mb-0.5">복용 · 사용 안내</p>
+                    <p className="text-[13px] text-gray-600 mb-0.5">복용 · 사용 안내</p>
                     <textarea value={dosageNote} onChange={e => setDosageNote(e.target.value)} rows={2} placeholder="예: 만 7~12세 1정, 만 12세 이상 1~2정 (포장 설명서 확인)" className={`${inputCls} resize-none`} />
                   </div>
-                  <p className="text-[10px] text-gray-500">같은 주성분끼리 간격·횟수를 계산합니다 (예: 타이레놀과 판콜에이는 둘 다 아세트아미노펜).</p>
+                  <p className="text-[12px] text-gray-500">같은 주성분끼리 간격·횟수를 계산합니다 (예: 타이레놀과 판콜에이는 둘 다 아세트아미노펜).</p>
                 </div>
               )}
 
               <div>
-                <p className="text-xs font-bold text-gray-700 mb-1">{isMed ? '주의사항 · 기타 안내' : '설명 · 안내'} <span className="font-normal text-gray-400">(선택 시 그대로 표시)</span></p>
+                <p className="text-sm font-bold text-gray-700 mb-1">{isMed ? '주의사항 · 기타 안내' : '설명 · 안내'} <span className="font-normal text-gray-400">(선택 시 그대로 표시)</span></p>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="예: 해열·진통제로 사용하는 약품. 식후 복용" className={`${inputCls} resize-none`} />
               </div>
 
               <div className="grid grid-cols-2 gap-2 items-end">
                 <div>
-                  <p className="text-xs font-bold text-gray-700 mb-1">최소 재고 (교무실당 기본값)</p>
+                  <p className="text-sm font-bold text-gray-700 mb-1">최소 재고 (교무실당 기본값)</p>
                   <input type="number" min={0} value={minStockDefault} onChange={e => setMinStockDefault(e.target.value)} placeholder="0 = 부족 판단 안 함" className={inputCls} />
                 </div>
-                <label className="flex items-center gap-2 text-xs text-gray-700 pb-2 cursor-pointer">
+                <label className="flex items-center gap-2 text-sm text-gray-700 pb-2 cursor-pointer">
                   <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="w-4 h-4" />
-                  사용 중 <span className="text-[10px] text-gray-400">(해제 시 새 보고에서 숨김, 기록은 유지)</span>
+                  사용 중 <span className="text-[12px] text-gray-400">(해제 시 새 보고에서 숨김, 기록은 유지)</span>
                 </label>
               </div>
             </div>
           )}
         </div>
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl">취소</button>
-          <button onClick={save} disabled={!name.trim() || busy} className="flex-1 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? '저장 중...' : '저장'}</button>
+          <button onClick={onClose} className="flex-1 py-2.5 text-base text-gray-600 bg-gray-100 rounded-xl">취소</button>
+          <button onClick={save} disabled={!name.trim() || busy} className="flex-1 py-2.5 text-base font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? '저장 중...' : '저장'}</button>
         </div>
       </div>
     </div>
