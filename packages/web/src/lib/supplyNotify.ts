@@ -11,16 +11,37 @@
  * - settled          정산 완료 → 사 온 사람
  * - status           반려·보류 → 요청자
  * - comment          댓글 → 요청자 + 구매 담당 (작성자 제외)
- * - stock_low        사용 기록 후 최소 수량 미만 → 관리자
+ * - stock_low        사용 기록 후 최소 수량 미만 → 관리자 · 매니저 · 부매니저
  *
- * 받는 사람의 알림 설정(notificationSettings.generalNotifications === false)은 존중한다.
+ * 받는 사람의 알림 설정(전체 on/off + 종류별 on/off)을 존중한다 — notificationAllowed() 한 곳에서 판단한다.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getAdminFirestore } from './firebase-admin';
+import {
+  notificationAllowed, pushReachOf, STOCK_MANAGER_GROUP_ROLES,
+  type NotificationKey, type NotificationSettings, type PushReachState,
+} from '@smis-mentor/shared';
+
+/** 못 받은 이유 — 푸시 상태 + '이 종류를 껐음' */
+export type MissedState = PushReachState | 'typeOff';
+export interface MissedTarget { name: string; state: MissedState; key: NotificationKey }
+/**
+ * notifySupply 한 번 호출 동안 모이는 '못 받은 사람'.
+ * 같은 프로세스에서 요청이 동시에 처리돼도 섞이지 않도록 호출 단위로 보관한다.
+ */
+const missedStore = new AsyncLocalStorage<MissedTarget[]>();
+const missed = { push: (m: MissedTarget) => { missedStore.getStore()?.push(m); } };
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 type Doc = FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot;
-interface UserLite { id: string; name: string; role?: string; tokens: string[]; muted: boolean; exp?: { group?: string; groupRole?: string; classCode?: string } }
+interface UserLite {
+  id: string; name: string; role?: string; tokens: string[];
+  settings?: NotificationSettings;
+  /** 푸시 수신 가능 여부 판단용 원본 (pushTokens · notificationPermission 포함) */
+  raw: Record<string, unknown>;
+  exp?: { group?: string; groupRole?: string; classCode?: string };
+}
 
 export type SupplyNotifyEvent =
   | { type: 'request_created'; requestId: string }
@@ -55,15 +76,32 @@ async function campUsers(campCode: string): Promise<UserLite[]> {
       name: String(u.name ?? '').trim(),
       role: u.role,
       tokens: Object.keys(u.pushTokens ?? {}).filter(t => /^(Exponent|Expo)PushToken\[.+\]$/.test(t)),
-      muted: u.notificationSettings?.generalNotifications === false,
+      settings: u.notificationSettings as NotificationSettings | undefined,
+      raw: u as Record<string, unknown>,
       exp: (u.jobExperiences ?? []).find((e: { id?: string }) => e.id === jobCodeId),
     };
   });
 }
 
-async function send(targets: UserLite[], title: string, body: string, data: Record<string, unknown>, exceptUid?: string): Promise<number> {
+/**
+ * 알림 전송. 보낸 사람 수를 돌려주고, **못 받은 사람은 missed 에 모아 둔다**
+ * (보낸 사람이 "○○ 선생님은 알림을 못 받아요"를 바로 알고 켜 달라고 말할 수 있게).
+ * @param key 알림 종류 — 받는 사람이 이 종류를 껐으면 보내지 않는다
+ */
+async function send(key: NotificationKey, targets: UserLite[], title: string, body: string, data: Record<string, unknown>, exceptUid?: string): Promise<number> {
   const seen = new Set<string>();
-  const list = targets.filter(u => u && !u.muted && u.id !== exceptUid && !seen.has(u.id) && seen.add(u.id));
+  const intended = targets.filter(u => u && u.id !== exceptUid && !seen.has(u.id) && seen.add(u.id));
+  const list: UserLite[] = [];
+  intended.forEach(u => {
+    const reach = pushReachOf(u.raw);
+    // 종류별로 껐는지까지 함께 본다
+    const state: MissedState | null =
+      reach.state !== 'ok' ? reach.state
+      : !notificationAllowed(u.settings, key) ? 'typeOff'
+      : null;
+    if (state) missed.push({ name: u.name, state, key });
+    else list.push(u);
+  });
   const messages = list.flatMap(u => u.tokens.map(to => ({ to, sound: 'default', title, body, priority: 'high', channelId: 'default', data: { ...data, screen: 'Camp', tab: 'inventory' } })));
   for (let i = 0; i < messages.length; i += 100) {
     try {
@@ -85,8 +123,24 @@ function itemsLabel(r: FirebaseFirestore.DocumentData, lineIds?: string[]): stri
   return pick.length > 2 ? `${head} 외 ${pick.length - 2}개` : head;
 }
 
+export interface NotifyResult {
+  /** 실제로 푸시를 받은 사람 수 */
+  sent: number;
+  /** 보내려 했지만 못 받은 사람 — 알림을 꺼 두었거나 등록된 기기가 없는 경우 */
+  missed: MissedTarget[];
+}
+
+/** 알림을 보내고, 받은 사람 수와 **못 받은 사람 목록**을 돌려준다 */
+export async function notifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise<NotifyResult> {
+  const list: MissedTarget[] = [];
+  const sent = await missedStore.run(list, () => runNotifySupply(ev, actorUid));
+  // 같은 사람이 여러 번 걸리면 한 번만
+  const seen = new Set<string>();
+  return { sent, missed: list.filter(m => !seen.has(m.name) && seen.add(m.name)) };
+}
+
 /** @returns 알림 받은 사람 수 */
-export async function notifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise<number> {
+async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise<number> {
   const db = getAdminFirestore();
 
   if (ev.type === 'default_buyer') {
@@ -94,7 +148,7 @@ export async function notifySupply(ev: SupplyNotifyEvent, actorUid: string): Pro
     const uid = s.data()?.defaultBuyerId;
     if (!uid) return 0;
     const users = await campUsers(ev.campCode);
-    return send(users.filter(u => u.id === uid), '🛒 기본 구매 담당이 되었어요', '담당이 따로 없는 구매 요청을 사 와서 품목별로 완료해주세요.', { type: 'supply' }, actorUid);
+    return send('supplyBuyer', users.filter(u => u.id === uid), '🛒 기본 구매 담당이 되었어요', '담당이 따로 없는 구매 요청을 사 와서 품목별로 완료해주세요.', { type: 'supply' }, actorUid);
   }
 
   if (ev.type === 'stock_low') {
@@ -108,7 +162,8 @@ export async function notifySupply(ev: SupplyNotifyEvent, actorUid: string): Pro
     if (!(min > 0 && n < min)) return 0;
     const users = await campUsers(ev.campCode);
     const name = it.data()?.name ?? '품목';
-    return send(users.filter(u => u.role === 'admin'), `📉 ${name} 부족`, `${gr.data()?.name ?? ''} 그룹 ${n}${it.data()?.unit ?? ''} 남음 (최소 ${min}) — 재고 요청 탭에서 요청으로 올릴 수 있어요.`, { type: 'stock', itemId: ev.itemId }, actorUid);
+    const stockManagers = users.filter(u => u.role === 'admin' || (!!u.exp?.groupRole && STOCK_MANAGER_GROUP_ROLES.includes(u.exp.groupRole)));
+    return send('stockLow', stockManagers, `📉 ${name} 부족`, `${gr.data()?.name ?? ''} 그룹 ${n}${it.data()?.unit ?? ''} 남음 (최소 ${min}) — 재고 요청 탭에서 요청으로 올릴 수 있어요.`, { type: 'stock', itemId: ev.itemId }, actorUid);
   }
 
   if (ev.type === 'buyer_assigned') {
@@ -120,7 +175,7 @@ export async function notifySupply(ev: SupplyNotifyEvent, actorUid: string): Pro
     const byBuyer = new Map<string, typeof reqs>();
     reqs.forEach(r => { if (r.buyerId) { if (!byBuyer.has(r.buyerId)) byBuyer.set(r.buyerId, []); byBuyer.get(r.buyerId)!.push(r); } });
     for (const [uid, list] of byBuyer) {
-      total += await send(users.filter(u => u.id === uid), '🛒 사 올 물건이 생겼어요',
+      total += await send('supplyBuyer', users.filter(u => u.id === uid), '🛒 사 올 물건이 생겼어요',
         list.length === 1 ? `${forLabel(list[0])} · ${itemsLabel(list[0])}` : `요청 ${list.length}건 — 재고 요청 › 내 구매에서 확인하세요.`,
         { type: 'supply', requestId: list.length === 1 ? list[0].id : undefined, view: 'buy' }, actorUid);
     }
@@ -141,25 +196,25 @@ export async function notifySupply(ev: SupplyNotifyEvent, actorUid: string): Pro
   switch (ev.type) {
     case 'request_created': {
       const targets = buyerUid ? byId(buyerUid) : admins;
-      return send(targets, `🛒 새 구매 요청 · ${forLabel(r)}`, `${itemsLabel(r)} — ${r.requesterName ?? ''}`, { ...data, view: 'buy' }, actorUid);
+      return send('supplyRequest', targets, `🛒 새 구매 요청 · ${forLabel(r)}`, `${itemsLabel(r)} — ${r.requesterName ?? ''}`, { ...data, view: 'buy' }, actorUid);
     }
     case 'status': {
       if (r.status !== 'rejected' && r.status !== 'onhold') return 0;
       const title = r.status === 'rejected' ? '구매 요청이 반려됐어요' : '⏸ 구매 요청이 보류됐어요';
       const note = r.statusNote ? ` · ${r.statusNote}` : '';
-      return send(byId(r.requesterId), title, `${forLabel(r)} · ${itemsLabel(r)}${note}`, data, actorUid);
+      return send('supplyProgress', byId(r.requesterId), title, `${forLabel(r)} · ${itemsLabel(r)}${note}`, data, actorUid);
     }
     case 'comment': {
       const last = (r.comments ?? []).slice(-1)[0];
       if (!last) return 0;
-      return send([...byId(r.requesterId), ...byId(buyerUid)], `💬 ${last.name}: ${forLabel(r)} 요청`, String(last.text).slice(0, 120), data, actorUid);
+      return send('supplyComment', [...byId(r.requesterId), ...byId(buyerUid)], `💬 ${last.name}: ${forLabel(r)} 요청`, String(last.text).slice(0, 120), data, actorUid);
     }
     case 'settled': {
       const done = (r.done ?? {}) as Record<string, { byId?: string; amount?: number }>;
       const byBuyer = new Map<string, number>();
       ev.lineIds.forEach(id => { const d = done[id]; if (d?.byId && r.settlements?.[id]) byBuyer.set(d.byId, (byBuyer.get(d.byId) ?? 0) + (d.amount ?? 0)); });
       let total = 0;
-      for (const [uid, amount] of byBuyer) total += await send(byId(uid), '💰 정산 완료', `${forLabel(r)} · ${won(amount)} 정산됐어요 (${r.forType === 'student' ? '용돈봉투' : '송금'})`, data, actorUid);
+      for (const [uid, amount] of byBuyer) total += await send('supplySettle', byId(uid), '💰 정산 완료', `${forLabel(r)} · ${won(amount)} 정산됐어요 (${r.forType === 'student' ? '용돈봉투' : '송금'})`, data, actorUid);
       return total;
     }
     case 'lines_done': {
@@ -169,22 +224,22 @@ export async function notifySupply(ev: SupplyNotifyEvent, actorUid: string): Pro
       const buyerName = done[ev.lineIds[0]]?.by ?? '';
       let total = 0;
       // 요청자에게 — 구매 완료 소식
-      total += await send(byId(r.requesterId), '✅ 구매 완료', `${forLabel(r)} · ${itemsLabel(r, ev.lineIds)} — ${buyerName} 쌤이 사 왔어요`, data, actorUid);
+      total += await send('supplyProgress', byId(r.requesterId), '✅ 구매 완료', `${forLabel(r)} · ${itemsLabel(r, ev.lineIds)} — ${buyerName} 쌤이 사 왔어요`, data, actorUid);
       if (!(amount > 0)) return total;
       // 정산할 사람
       const parentLines = lines.filter(l => l.parentBill);
       if (parentLines.length || r.forType === 'camp') {
-        total += await send(admins, r.forType === 'camp' ? '📥 캠프 공용 물품 구매 완료' : '🧾 학부모 청구할 물품',
+        total += await send('supplyIntake', admins, r.forType === 'camp' ? '📥 캠프 공용 물품 구매 완료' : '🧾 학부모 청구할 물품',
           `${forLabel(r)} · ${itemsLabel(r, ev.lineIds)} · ${won(amount)}${r.forType === 'camp' ? ' — 재고 입고해주세요' : ''}`, data, actorUid);
       }
       if (r.forType === 'student' && lines.some(l => !l.parentBill)) {
         // 담임: 요청 당시 담임 이름 → 없으면 반코드로 배정된 담임
         const mentorName = String(r.classMentor ?? '').trim();
         const mentors = users.filter(u => (mentorName && u.name === mentorName) || (!mentorName && r.studentClassCode && u.exp?.classCode === r.studentClassCode && (!u.exp?.groupRole || u.exp.groupRole === '담임')));
-        total += await send(mentors, '📒 용돈봉투 정산 요청', `${forLabel(r)} · ${won(amount)} — 봉투에서 빼서 ${buyerName} 쌤께 전달해주세요`, { ...data, view: 'settle' }, actorUid);
+        total += await send('supplySettle', mentors, '📒 용돈봉투 정산 요청', `${forLabel(r)} · ${won(amount)} — 봉투에서 빼서 ${buyerName} 쌤께 전달해주세요`, { ...data, view: 'settle' }, actorUid);
       } else if (r.forType === 'mentor' && lines.some(l => !l.parentBill) && r.requesterId !== actorUid) {
         const payTo = Object.values(done).find(d => (d as { payTo?: string }).payTo) as { payTo?: string } | undefined;
-        total += await send(byId(r.requesterId), '💸 송금 요청', `${buyerName} 쌤께 ${won(amount)}${payTo?.payTo ? ` · ${payTo.payTo}` : ''}`, { ...data, view: 'settle' }, actorUid);
+        total += await send('supplySettle', byId(r.requesterId), '💸 송금 요청', `${buyerName} 쌤께 ${won(amount)}${payTo?.payTo ? ` · ${payTo.payTo}` : ''}`, { ...data, view: 'settle' }, actorUid);
       }
       return total;
     }

@@ -14,6 +14,7 @@
  *    - 이름표(ownerName)가 있으면 담임·방 담당·해당 그룹 매니저/부매니저에게만, 없으면 캠프 스태프 전원 (등록자 제외)
  */
 import { getAdminFirestore, adminFieldValue } from './firebase-admin';
+import { notificationAllowed, pushReachOf, lostNotifyRecipients, type NotifyUserLike } from '@smis-mentor/shared';
 import * as admin from 'firebase-admin';
 
 interface DoseLike {
@@ -133,13 +134,16 @@ interface LostItemDoc {
   ownerClassMentor?: string;
   ownerUnitMentor?: string;
   ownerGroup?: string;
+  /** 'owner'(기본) 담당 선생님에게만 · 'all' 캠프 전체 */
+  notifyScope?: 'owner' | 'all';
+  /** 'owner' 일 때 대상 — 없으면 셋 다 */
+  notifyTargets?: Array<'classMentor' | 'unitMentor' | 'groupManager'>;
 }
 
-const GROUP_MANAGER_ROLES = ['매니저', '부매니저', 'Manager', 'Sub Manager'];
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 /** @returns 알림 받은 사람 수 */
-export async function notifyLostItem(lostItemId: string): Promise<number> {
+export async function notifyLostItem(lostItemId: string): Promise<{ sent: number; missed: Array<{ name: string; state: string }> }> {
   const db = getAdminFirestore();
   const ref = db.doc(`lostItems/${lostItemId}`);
   // 문서당 한 번만 발송 (notifiedAt을 트랜잭션으로 선점)
@@ -151,29 +155,40 @@ export async function notifyLostItem(lostItemId: string): Promise<number> {
     tx.update(ref, { notifiedAt: admin.firestore.Timestamp.now() });
     return d;
   });
-  if (!item) return 0;
+  if (!item) return { sent: 0, missed: [] };
 
   const usersSnap = await db.collection('users').where('jobCodeIds', 'array-contains', item.jobCodeId).get();
-  let targets = usersSnap.docs;
-  if (item.ownerName) {
-    const mentorNames = new Set([item.ownerClassMentor, item.ownerUnitMentor].map(s => s?.trim()).filter(Boolean) as string[]);
-    targets = targets.filter(d => {
-      const u = d.data();
-      if (mentorNames.has(String(u.name ?? '').trim())) return true;
-      if (!item.ownerGroup) return false;
-      return (u.jobExperiences ?? []).some((e: { id?: string; group?: string; groupRole?: string }) =>
-        e.id === item.jobCodeId && String(e.group ?? '').toLowerCase() === item.ownerGroup && GROUP_MANAGER_ROLES.includes(String(e.groupRole)));
-    });
-  }
-  targets = targets.filter(d => d.id !== item.reportedById);
+  // 대상 계산은 shared 의 lostNotifyRecipients 한 곳에서 — 등록 화면 미리보기와 같은 기준
+  type CampUser = NotifyUserLike & { id: string; pushTokens?: Record<string, { platform?: string }> };
+  const all = usersSnap.docs.map(d => ({ ...(d.data() as object), id: d.id })) as CampUser[];
+  let targets = lostNotifyRecipients(all, {
+    jobCodeId: item.jobCodeId,
+    scope: item.ownerName && item.notifyScope !== 'all' ? 'owner' : 'all',
+    targets: item.notifyTargets?.length ? item.notifyTargets : ['classMentor', 'unitMentor', 'groupManager'],
+    ownerClassMentor: item.ownerClassMentor,
+    ownerUnitMentor: item.ownerUnitMentor,
+    ownerGroup: item.ownerGroup,
+    excludeId: item.reportedById,
+  });
+
+  // 보내려 했지만 못 받는 사람을 따로 모은다 — 등록한 사람이 "알림 켜 달라"고 말할 수 있게
+  const missed: Array<{ name: string; state: string }> = [];
+  targets = targets.filter(u => {
+    const reach = pushReachOf(u);
+    const state = reach.state !== 'ok' ? reach.state
+      : !notificationAllowed(u.notificationSettings, 'lostItem') ? 'typeOff'
+      : null;
+    if (state) { missed.push({ name: String(u.name ?? '').trim() || '이름 없음', state }); return false; }
+    return true;
+  });
 
   const title = item.ownerName ? `🔍 ${item.ownerName} 학생 분실물` : '🔍 분실물 등록';
   const place = item.foundPlace ? ` · ${item.foundPlace}` : '';
   const body = item.ownerName ? `${item.name}${place} — 학생에게 전달해주세요` : `${item.name}${place} — 주인을 찾고 있어요`;
 
   const messages: Record<string, unknown>[] = [];
-  targets.forEach(d => {
-    Object.keys(d.data().pushTokens ?? {})
+  targets.forEach(u => {
+    Object.keys(u.pushTokens ?? {})
       .filter(t => /^(Exponent|Expo)PushToken\[.+\]$/.test(t))
       .forEach(to => messages.push({
         to, sound: 'default', title, body, priority: 'high', channelId: 'default',
@@ -191,5 +206,5 @@ export async function notifyLostItem(lostItemId: string): Promise<number> {
       console.error('분실물 푸시 전송 오류:', e);
     }
   }
-  return targets.length;
+  return { sent: targets.length, missed };
 }

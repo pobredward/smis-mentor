@@ -823,6 +823,18 @@ export interface LostItemMedia {
   size?: number;
 }
 
+/** 이름표가 있는 분실물의 알림 대상 */
+export const LOST_NOTIFY_TARGETS = ['classMentor', 'unitMentor', 'groupManager'] as const;
+export type LostNotifyTarget = (typeof LOST_NOTIFY_TARGETS)[number];
+export const LOST_NOTIFY_TARGET_LABELS: Record<LostNotifyTarget, { ko: string; en: string }> = {
+  classMentor:  { ko: '반담당', en: 'Class teacher' },
+  unitMentor:   { ko: '방담당', en: 'Room teacher' },
+  groupManager: { ko: '부매니저', en: 'Sub manager' },
+};
+/** 저장된 값이 없으면 셋 다 */
+export const lostNotifyTargets = (l: Pick<LostItem, 'notifyTargets'>): LostNotifyTarget[] =>
+  l.notifyTargets?.length ? l.notifyTargets : [...LOST_NOTIFY_TARGETS];
+
 /** 분실물 1건 — 캠프별, 모든 스태프가 등록·조회·상태 변경 */
 export interface LostItem {
   id: string;
@@ -843,6 +855,18 @@ export interface LostItem {
   jobCodeId?: string;
   /** false면 등록 시 푸시 알림을 보내지 않음 (중요하지 않은 물품) */
   notify?: boolean;
+  /**
+   * 알림 범위 — 이름표로 주인을 아는 경우에만 의미가 있다.
+   *  'owner' (기본) 아래 notifyTargets 에 고른 담당 선생님에게만
+   *  'all'          캠프 선생님 전체
+   * 없으면 'owner'로 본다 (기존 문서 호환).
+   */
+  notifyScope?: 'owner' | 'all';
+  /**
+   * 'owner' 일 때 누구에게 보낼지 — 등록할 때 따로따로 고른다.
+   * 없으면 셋 다 보낸 것으로 본다 (기존 문서 호환).
+   */
+  notifyTargets?: LostNotifyTarget[];
   /** 이름표 등으로 주인을 아는 경우 — 담임·방 담당·그룹 매니저에게 알림 */
   ownerStudentId?: string;
   ownerName?: string;

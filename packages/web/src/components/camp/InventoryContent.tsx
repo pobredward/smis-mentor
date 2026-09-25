@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { FiBox, FiSearch, FiPlus, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCamera, FiImage, FiVideo, FiShoppingCart, FiList, FiChevronRight, FiRepeat } from 'react-icons/fi';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import toast from 'react-hot-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { db, storage } from '@/lib/firebase';
 import { authenticatedPost } from '@/lib/apiClient';
@@ -34,6 +35,12 @@ import {
   getItemUsage,
   INVENTORY_USAGE_LABELS,
   INVENTORY_USAGE_ORDER,
+  missedSummary,
+  LOST_NOTIFY_TARGETS,
+  LOST_NOTIFY_TARGET_LABELS,
+  lostNotifyPreview,
+  lostGroupManagers,
+  MISSED_STATE_LABELS,
   suggestedUsages,
   inventoryPerm,
   transferStock,
@@ -132,6 +139,8 @@ import type {
   LostItemStatus,
   InventoryUsage,
   InventoryPerm,
+  LostNotifyTarget,
+  NotifyUserLike,
   MovementFilterKey,
   CampGroup,
 } from '@smis-mentor/shared';
@@ -155,8 +164,19 @@ const CATEGORY_STYLE: Record<InventoryCategory, string> = {
 };
 
 /** 푸시 알림 요청 — 실패해도 화면 동작은 그대로 (받는 사람은 서버가 정한다) */
+/**
+ * 알림 요청 — 보낸 뒤 **못 받은 사람이 있으면 보낸 사람에게 알려 준다**
+ * (그 자리에서 "알림 켜 주세요"라고 말할 수 있게).
+ */
 function notifySupply(body: Record<string, unknown>) {
-  authenticatedPost('/api/inventory/notify', body).catch(e => console.warn('알림 요청 실패:', e));
+  authenticatedPost<{ sent?: number; missed?: Array<{ name: string; state: string }> }>('/api/inventory/notify', body)
+    .then(data => {
+      // 재고 부족(stock_low)은 사용 기록에 따라 자동으로 나가는 알림이라 알려 주지 않는다
+      if (body.type === 'stock_low') return;
+      const msg = missedSummary(data?.missed);
+      if (msg) toast(`🔕 ${msg}`, { duration: 7000 });
+    })
+    .catch(e => console.warn('알림 요청 실패:', e));
 }
 
 function fmtDateTime(ts: InventoryMovement['at'] | undefined): string {
@@ -2376,6 +2396,52 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
   const [owner, setOwner] = useState<STSheetStudent | null>(null);
   const [ownerQuery, setOwnerQuery] = useState('');
   const [notify, setNotify] = useState(true);
+  /** 학생 반 → 캠프 그룹 (알림 대상 안내·저장에 함께 사용) */
+  const ownerGroupLabel = useMemo(
+    () => (owner?.classNumber ? findGroupByClassCode(campGroups, studentClassCode(owner.classNumber))?.name : undefined),
+    [owner, campGroups]);
+  // 이름표로 주인을 아는 분실물: 누구에게 보낼지 (기본은 담당 셋 다)
+  const [targets, setTargets] = useState<LostNotifyTarget[]>([...LOST_NOTIFY_TARGETS]);
+  const [toAll, setToAll] = useState(false);
+  const toggleTarget = (t: LostNotifyTarget) =>
+    setTargets(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
+  // 보내기 전에 "누가 받을 수 있나" 확인 — 캠프 인원은 필요할 때 한 번만 불러온다
+  const [campUsers, setCampUsers] = useState<NotifyUserLike[] | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [showCheck, setShowCheck] = useState(false);
+  const loadCampUsers = async () => {
+    if (campUsers || !jobCodeId) return;
+    setChecking(true);
+    try { setCampUsers((await getUsersByJobCodeId(jobCodeId)) as unknown as NotifyUserLike[]); }
+    catch (e) { console.warn('캠프 인원 조회 실패:', e); setCampUsers([]); }
+    finally { setChecking(false); }
+  };
+  // 담당 선생님을 고른 경우엔 인원이 적으니 자동으로 확인해 둔다
+  useEffect(() => { if (owner && !toAll) loadCampUsers(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [owner, toAll]);
+  const preview = useMemo(() => {
+    if (!campUsers) return null;
+    return lostNotifyPreview(campUsers, {
+      jobCodeId,
+      scope: owner && !toAll ? 'owner' : 'all',
+      targets,
+      ownerClassMentor: owner?.classMentor,
+      ownerUnitMentor: owner?.unitMentor,
+      ownerGroup: ownerGroupLabel?.toLowerCase(),
+      excludeId: userId,
+    });
+  }, [campUsers, owner, toAll, targets, ownerGroupLabel, jobCodeId, userId]);
+  /** 이 그룹의 부매니저 이름들 — 반담당·방담당처럼 사람을 특정해 보여 준다 */
+  const groupManagerNames = useMemo(
+    () => (campUsers ? lostGroupManagers(campUsers, jobCodeId, ownerGroupLabel?.toLowerCase()).map(u => String(u.name ?? '').trim()).filter(Boolean) : []),
+    [campUsers, jobCodeId, ownerGroupLabel]);
+  /** 이 사람이 알림을 받을 수 있나 (이름으로 찾음) */
+  const reachOfName = (name?: string) => {
+    if (!name || !preview) return null;
+    const t = name.trim();
+    if (preview.ok.includes(t)) return 'ok' as const;
+    const m = preview.missed.find(x => x.name === t);
+    return m ? m.state : null;
+  };
   const ownerResults = useMemo(() => {
     const q = ownerQuery.trim();
     return q ? students.filter(s => s.name.includes(q)).slice(0, 6) : [];
@@ -2395,20 +2461,30 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
     setBusy(true);
     try {
       setProgress('등록 중...');
-      const ownerGroup = owner?.classNumber ? findGroupByClassCode(campGroups, studentClassCode(owner.classNumber))?.name.toLowerCase() : undefined;
+      const ownerGroup = ownerGroupLabel?.toLowerCase();
       const id = await addLostItem(db, {
         campCode, name: name.trim(), description: description.trim() || undefined, foundPlace: foundPlace.trim() || undefined,
         foundDate, keptAt: keptAt.trim() || undefined, reportedBy: userName, reportedById: userId,
         jobCodeId: jobCodeId || undefined, notify,
         ownerStudentId: owner?.studentId, ownerName: owner?.name, ownerClassCode: owner?.className,
         ownerClassMentor: owner?.classMentor, ownerUnitMentor: owner?.unitMentor, ownerGroup,
+        notifyScope: owner ? (toAll ? 'all' : 'owner') : undefined,
+        notifyTargets: owner && !toAll ? targets : undefined,
       });
       if (files.length) {
         setProgress(`사진·영상 ${files.length}개 업로드 중...`);
         const media = await uploadLostMedia(campCode, id, files);
         await addLostItemMedia(db, id, media);
       }
-      if (notify) authenticatedPost('/api/inventory/notify-lost', { lostItemId: id }).catch(e => console.warn('분실물 알림 요청 실패:', e));
+      if (notify) {
+        authenticatedPost<{ sent?: number; missed?: Array<{ name: string; state: string }> }>('/api/inventory/notify-lost', { lostItemId: id })
+          .then(data => {
+            const msg = missedSummary(data?.missed);
+            if (msg) toast(`🔕 ${msg}`, { duration: 8000 });
+            else if (data?.sent) toast.success(`${data.sent}명에게 알림을 보냈어요`);
+          })
+          .catch(e => console.warn('분실물 알림 요청 실패:', e));
+      }
       onCreated(id);
     } catch (e) {
       console.error('분실물 등록 오류:', e);
@@ -2472,15 +2548,95 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
               </div>
             )}
           </div>
-          <label className="flex items-start gap-2 rounded-xl border border-gray-200 px-3 py-2 cursor-pointer">
-            <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} className="w-4 h-4 mt-0.5" />
-            <span className="text-[12px] text-gray-700">
-              푸시 알림 보내기
-              <span className="block text-[10px] text-gray-400">
-                {owner ? '담임 · 방 담당 · 그룹 매니저에게 보냅니다' : '캠프 선생님 전체에게 보냅니다 — 중요하지 않은 물품이면 끄세요'}
+          <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
+            <label className="flex items-start gap-2 px-3 py-2 cursor-pointer">
+              <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} className="w-4 h-4 mt-0.5" />
+              <span className="text-[12px] text-gray-700">
+                푸시 알림 보내기
+                <span className="block text-[10px] text-gray-400">
+                  {!notify ? '아무에게도 보내지 않습니다'
+                    : owner && !toAll
+                      ? (targets.length
+                          ? `${owner.name} 학생 ${targets.map(t => LOST_NOTIFY_TARGET_LABELS[t].ko).join(' · ')}에게만 보냅니다`
+                          : '받는 사람을 골라주세요')
+                      : '캠프 선생님 전체에게 보냅니다 — 중요하지 않은 물품이면 끄세요'}
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+            {notify && owner && (
+              <div className="px-3 py-2 bg-gray-50/60 space-y-1.5">
+                <p className="text-[11px] font-bold text-gray-600">
+                  받는 사람 <span className="font-normal text-gray-400">이름표가 있어 주인을 아는 물품이에요</span>
+                </p>
+                <div className={`space-y-1 ${toAll ? 'opacity-40' : ''}`}>
+                  {LOST_NOTIFY_TARGETS.map(t => {
+                    const who = t === 'classMentor' ? owner.classMentor
+                      : t === 'unitMentor' ? owner.unitMentor
+                      : groupManagerNames.join(', ');
+                    // 부매니저는 명단을 불러와야 이름을 알 수 있다
+                    const loading = t === 'groupManager' && !campUsers;
+                    return (
+                      <label key={t} className={`flex items-center gap-2 ${toAll || (!who && !loading) ? 'cursor-default' : 'cursor-pointer'}`}>
+                        <input type="checkbox" checked={!toAll && targets.includes(t)} disabled={toAll || (!who && !loading)}
+                          onChange={() => toggleTarget(t)} className="w-4 h-4" />
+                        <span className="text-[12px] text-gray-700 flex-1 min-w-0">
+                          {LOST_NOTIFY_TARGET_LABELS[t].ko}
+                          <span className="text-[11px] text-gray-400 ml-1">
+                            {loading ? '확인 중...' : who || (t === 'groupManager' ? `${ownerGroupLabel ?? ''} 부매니저 없음`.trim() : '지정된 사람 없음')}
+                          </span>
+                        </span>
+                        {(() => {
+                          if (toAll || !who) return null;
+                          // 부매니저가 여러 명이면 한 명이라도 못 받으면 알려 준다
+                          const names = t === 'groupManager' ? groupManagerNames : [who];
+                          const bad = names.map(n => reachOfName(n)).find(st => st && st !== 'ok');
+                          if (bad) return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 shrink-0 font-bold">🔕 {MISSED_STATE_LABELS[bad]?.ko ?? '못 받음'}</span>;
+                          if (names.every(n => reachOfName(n) === 'ok')) return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">받을 수 있음</span>;
+                          return null;
+                        })()}
+                      </label>
+                    );
+                  })}
+                </div>
+                <label className="flex items-center gap-2 pt-1 border-t border-gray-200 cursor-pointer">
+                  <input type="checkbox" checked={toAll} onChange={e => setToAll(e.target.checked)} className="w-4 h-4" />
+                  <span className="text-[12px] text-gray-700 flex-1">캠프 선생님 전체</span>
+                  {toAll && (
+                    <button type="button" onClick={e => { e.preventDefault(); setShowCheck(v => !v); loadCampUsers(); }}
+                      className="text-[11px] font-semibold text-blue-700 hover:underline shrink-0">
+                      {checking ? '확인 중...' : showCheck ? '접기' : '받을 수 있는지 확인'}
+                    </button>
+                  )}
+                </label>
+                {/* 전체 발송 — 누르면 누가 못 받는지 */}
+                {toAll && showCheck && preview && (
+                  <div className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 space-y-1">
+                    <p className="text-[11px] text-gray-700">
+                      <b>{preview.total}명</b> 중 <b className="text-emerald-700">{preview.ok.length}명</b>이 받을 수 있어요
+                      {preview.missed.length > 0 && <> · <b className="text-red-600">{preview.missed.length}명</b>은 못 받아요</>}
+                    </p>
+                    {preview.missed.length > 0 && (
+                      <p className="text-[11px] text-gray-500 leading-relaxed">
+                        {preview.missed.map(m => `${m.name}(${MISSED_STATE_LABELS[m.state]?.ko ?? '못 받음'})`).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {/* 담당 선생님 — 고른 사람 중 못 받는 사람 요약 */}
+                {!toAll && preview && preview.missed.length > 0 && (
+                  <p className="text-[11px] text-red-600">
+                    🔕 {preview.missed.map(m => `${m.name}(${MISSED_STATE_LABELS[m.state]?.ko ?? '못 받음'})`).join(', ')} — 알림을 켜 달라고 알려주세요
+                  </p>
+                )}
+                {!toAll && preview && preview.total === 0 && targets.length > 0 && (
+                  <p className="text-[11px] text-amber-700">고른 담당 선생님이 이 캠프 명단에 없어요. 캠프 전체로 보내는 게 좋겠습니다.</p>
+                )}
+                {!toAll && targets.length === 0 && (
+                  <p className="text-[11px] text-amber-700">한 명 이상 고르거나, 캠프 전체를 선택하거나, 푸시 알림을 꺼주세요.</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="px-5 py-4 border-t border-gray-100 space-y-1.5">
           {progress && <p className="text-[11px] text-blue-600 text-center">{progress}</p>}

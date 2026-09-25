@@ -49,8 +49,10 @@ interface UserData {
     };
   };
   notificationSettings?: {
-    taskReminders?: boolean;
+    /** 전체 on/off — 끄면 어떤 알림도 보내지 않는다 */
     generalNotifications?: boolean;
+    taskReminders?: boolean;
+    [key: string]: boolean | undefined;
   };
   jobExperiences?: Array<{
     id: string;
@@ -186,7 +188,9 @@ export const checkOverdueTasks = functionsV2.https.onRequest(
           const isCompleted = task.completions?.some(c => c.userId === userData.userId);
           if (isCompleted) continue;
 
+          // 알림 설정 — 전체를 껐거나 업무 알림을 껐으면 제외
           const settings = userData.notificationSettings;
+          if (settings?.generalNotifications === false) continue;
           if (settings?.taskReminders === false) continue;
 
           incompleteUsers.push(userData.userId);
@@ -450,8 +454,9 @@ export const sendTaskReminderToUsers = functionsV2.https.onCall(
         const isCompleted = task.completions?.some(c => c.userId === userData.userId);
         if (isCompleted) continue;
 
-        // 알림 설정 확인
+        // 알림 설정 확인 — 전체를 껐거나 업무 알림을 껐으면 제외
         const settings = userData.notificationSettings;
+        if (settings?.generalNotifications === false) continue;
         if (settings?.taskReminders === false) continue;
 
         incompleteUsers.push(userData.userId);

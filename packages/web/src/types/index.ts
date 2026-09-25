@@ -1,5 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
-import type { JobExperienceGroupRole } from '@smis-mentor/shared';
+import type { JobExperienceGroupRole, NotificationSettings } from '@smis-mentor/shared';
 
 export interface PartTimeJob {
   period: string;
@@ -37,6 +37,14 @@ export interface User {
   }>;
   jobCodeIds?: string[];
   activeJobExperienceId?: string;
+  /** 기기별 Expo 푸시 토큰 — 앱에서 알림을 허용하고 로그인하면 등록된다 */
+  pushTokens?: Record<string, { platform?: string; addedAt?: Timestamp; lastUsed?: Timestamp }>;
+  /** 알림 설정 (전체 on/off + 종류별) */
+  notificationSettings?: NotificationSettings;
+  /** 앱이 기록한 휴대폰 알림 권한 상태 */
+  notificationPermission?: { status: 'granted' | 'denied' | 'undetermined'; platform?: string; updatedAt?: Timestamp };
+  /** 모바일 앱을 마지막으로 연 시각 */
+  lastMobileAt?: Timestamp;
   partTimeJobs?: PartTimeJob[];
   createdAt: Timestamp;
   updatedAt: Timestamp;

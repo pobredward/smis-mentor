@@ -2,9 +2,9 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { doc, setDoc, getDoc, deleteField } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteField, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { logger } from '@smis-mentor/shared';
+import { logger, type NotificationSettings as SharedNotificationSettings } from '@smis-mentor/shared';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -15,10 +15,8 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export interface NotificationSettings {
-  taskReminders: boolean;
-  generalNotifications: boolean;
-}
+/** 알림 설정 — 전체 on/off + 종류별 on/off (종류 목록은 shared 의 NOTIFICATION_TYPES) */
+export type NotificationSettings = SharedNotificationSettings;
 
 // Expo Go 환경인지 확인
 function isExpoGo(): boolean {
@@ -117,6 +115,29 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
   return token;
 }
 
+/**
+ * 휴대폰 알림 권한 상태 + 앱을 연 시각을 users 문서에 기록한다.
+ *
+ * 관리자 화면(사용자 조회)에서 '알림을 거부한 사람'과 '앱을 안 깐 사람'을 구분하는 데 쓴다.
+ * 토큰이 없는 이유는 여러 가지(권한 거부 / 앱 삭제로 토큰 만료 / 앱 미사용)인데,
+ * 이 두 값이 있으면 "앱은 쓰는데 토큰이 없다 = 권한 문제"를 알 수 있다.
+ * 앱을 열 때마다 갱신되므로 설정 앱에서 껐다 켜도 다음 실행에 반영된다.
+ */
+export async function saveNotificationPermission(userId: string): Promise<void> {
+  if (isExpoGo() || !Device.isDevice) return;
+  try {
+    const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
+    const status: 'granted' | 'denied' | 'undetermined' = granted ? 'granted' : canAskAgain ? 'undetermined' : 'denied';
+    await setDoc(doc(db, 'users', userId), {
+      notificationPermission: { status, platform: Platform.OS, updatedAt: Timestamp.now() },
+      lastMobileAt: Timestamp.now(),
+    }, { merge: true });
+  } catch (error) {
+    // 기록 실패는 앱 동작에 영향이 없다
+    logger.warn('알림 권한 상태 기록 실패:', error);
+  }
+}
+
 export async function savePushToken(userId: string, token: string): Promise<void> {
   try {
     const userRef = doc(db, 'users', userId);
@@ -164,24 +185,12 @@ export async function getNotificationSettings(userId: string): Promise<Notificat
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
     
-    if (!userDoc.exists()) {
-      return {
-        taskReminders: true,
-        generalNotifications: true,
-      };
-    }
-    
-    const data = userDoc.data();
-    return {
-      taskReminders: data.notificationSettings?.taskReminders ?? true,
-      generalNotifications: data.notificationSettings?.generalNotifications ?? true,
-    };
+    // 저장된 값만 그대로 돌려준다 — 값이 없는 종류는 '켜짐'으로 본다 (notificationAllowed 기준)
+    if (!userDoc.exists()) return {};
+    return (userDoc.data().notificationSettings ?? {}) as NotificationSettings;
   } catch (error) {
     logger.error('알림 설정 조회 실패:', error);
-    return {
-      taskReminders: true,
-      generalNotifications: true,
-    };
+    return {};
   }
 }
 

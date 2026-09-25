@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 import type { JobExperienceGroupRole } from './camp';
 import type { AuthProvider } from './auth';
+import type { NotificationSettings } from './notification';
 
 export interface PartTimeJob {
   period: string;
@@ -127,6 +128,19 @@ export interface User {
   // jobExperiences[*].id의 파생 배열 — Firestore array-contains 쿼리용
   // addUserJobCode / removeUserJobCode 호출 시 항상 함께 업데이트됨
   jobCodeIds?: string[];
+
+  /** 기기별 Expo 푸시 토큰 — 앱에서 알림을 허용하고 로그인하면 등록된다 */
+  pushTokens?: Record<string, { platform?: string; addedAt?: Timestamp; lastUsed?: Timestamp }>;
+  /** 알림 설정 (전체 on/off + 종류별) — shared/types/notification.ts */
+  notificationSettings?: NotificationSettings;
+  /** 앱이 기록한 휴대폰 알림 권한 상태 (앱을 열 때마다 갱신) */
+  notificationPermission?: {
+    status: 'granted' | 'denied' | 'undetermined';
+    platform?: string;
+    updatedAt?: Timestamp;
+  };
+  /** 모바일 앱을 마지막으로 연 시각 — '앱을 쓰는데 토큰이 없다'를 구분하는 데 쓴다 */
+  lastMobileAt?: Timestamp;
 }
 
 export type JobGroup = 'junior' | 'middle' | 'senior' | 'spring' | 'summer' | 'autumn' | 'winter' | 'common' | 'manager' | 'short1' | 'short2' | 'short3' | 'short4';

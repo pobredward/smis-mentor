@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
       ev = { type: b.type as 'request_created' | 'status' | 'comment', requestId: String(b.requestId) };
   }
   try {
-    const sent = await notifySupply(ev, auth.firebaseUid);
-    return NextResponse.json({ sent });
+    const { sent, missed } = await notifySupply(ev, auth.firebaseUid);
+    return NextResponse.json({ sent, missed });
   } catch (e) {
     console.error('재고 알림 오류:', e);
     return NextResponse.json({ error: '알림 전송 중 오류가 발생했습니다.' }, { status: 500 });

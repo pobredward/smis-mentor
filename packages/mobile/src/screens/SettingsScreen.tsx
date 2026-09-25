@@ -20,6 +20,26 @@ import {
   updateNotificationSettings,
   NotificationSettings,
 } from '../services/notificationService';
+import {
+  visibleNotificationTypes,
+  notificationMasterOn,
+  NOTIFICATION_GROUP_LABELS,
+  type NotificationKey,
+  type NotificationType,
+} from '@smis-mentor/shared';
+
+/** 종류별 아이콘 */
+const NOTIFICATION_ICONS: Record<NotificationKey, keyof typeof Ionicons.glyphMap> = {
+  taskReminders: 'checkmark-circle-outline',
+  lostItem: 'search-outline',
+  supplyRequest: 'clipboard-outline',
+  supplyBuyer: 'cart-outline',
+  supplyProgress: 'checkmark-done-outline',
+  supplyComment: 'chatbubble-ellipses-outline',
+  supplySettle: 'cash-outline',
+  supplyIntake: 'archive-outline',
+  stockLow: 'trending-down-outline',
+};
 import { RootStackParamList } from '../navigation/types';
 import { useNotificationPermission } from '../hooks/useNotificationPermission';
 
@@ -30,12 +50,22 @@ export function SettingsScreen() {
   const { userData } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [settings, setSettings] = useState<NotificationSettings>({
-    taskReminders: true,
-    generalNotifications: true,
-  });
+  const [settings, setSettings] = useState<NotificationSettings>({});
 
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  const masterOn = notificationMasterOn(settings);
+  /**
+   * 이 사람에게 보여 줄 알림 종류 — 묶음별로 정리.
+   * userData 는 users 문서 onSnapshot 으로 실시간 갱신되므로,
+   * 관리자가 권한이나 캠프 역할(부매니저 등)을 바꾸면 이 목록도 즉시 바뀐다.
+   */
+  const visibleTypes = React.useMemo(() => {
+    const list = visibleNotificationTypes(userData as { role?: string; jobExperiences?: Array<{ id?: string; group?: string; groupRole?: string }> } | null);
+    const order: NotificationType['group'][] = ['task', 'supply', 'stock', 'lost'];
+    return order
+      .map(groupKey => ({ groupKey, types: list.filter(t => t.group === groupKey) }))
+      .filter(g => g.types.length > 0);
+  }, [userData]);
 
   const {
     permissionStatus,
@@ -65,10 +95,11 @@ export function SettingsScreen() {
     }
   };
 
-  const handleToggleSetting = async (key: keyof NotificationSettings) => {
+  const handleToggleSetting = async (key: NotificationKey | 'generalNotifications') => {
     if (!userData?.userId || saving) return;
 
-    const newValue = !settings[key];
+    // 값이 없으면 '켜짐'이 기본 — 그 반대로 뒤집는다
+    const newValue = settings[key] === false;
     const newSettings = { ...settings, [key]: newValue };
     
     setSettings(newSettings);
@@ -193,63 +224,71 @@ export function SettingsScreen() {
         </View>
         <Text style={styles.sectionDescription}>
           {isForeign
-            ? 'Select the notifications you want to receive. Turning off a notification will stop push notifications of that type.'
-            : '받고 싶은 알림을 선택하세요. 알림을 끄면 해당 유형의 푸시 알림을 받지 않습니다.'}
+            ? 'Turn everything off at once, or choose the kinds you want. Types shown here depend on your role in the camp.'
+            : '전체를 한 번에 끄거나, 종류별로 고를 수 있어요. 보이는 종류는 캠프에서의 역할에 따라 달라집니다.'}
         </Text>
 
+        {/* 전체 on/off */}
         <View style={styles.settingsList}>
-          {/* 업무 알림 / Task Notifications */}
-          <View style={styles.settingItem}>
+          <View style={[styles.settingItem, { backgroundColor: '#f8fafc' }]}>
             <View style={styles.settingInfo}>
               <View style={styles.settingIconContainer}>
-                <Ionicons name="checkmark-circle-outline" size={24} color="#3b82f6" />
+                <Ionicons name={masterOn ? 'notifications' : 'notifications-off'} size={24} color={masterOn ? '#10b981' : '#9ca3af'} />
               </View>
               <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>
-                  {isForeign ? 'Task Notifications' : '업무 알림'}
-                </Text>
+                <Text style={styles.settingLabel}>{isForeign ? 'All notifications' : '전체 알림'}</Text>
                 <Text style={styles.settingDescription}>
-                  {isForeign
-                    ? 'Receive reminders when a task deadline has passed.'
-                    : '업무 마감 시간이 지났을 때 독촉 알림을 받습니다.'}
+                  {masterOn
+                    ? (isForeign ? 'On — each kind can be set below.' : '켜짐 — 아래에서 종류별로 조절할 수 있어요.')
+                    : (isForeign ? 'Off — no push notifications at all.' : '꺼짐 — 어떤 푸시 알림도 오지 않아요.')}
                 </Text>
               </View>
             </View>
             <Switch
-              value={settings.taskReminders}
-              onValueChange={() => handleToggleSetting('taskReminders')}
-              disabled={saving}
-              trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-              thumbColor={settings.taskReminders ? '#3b82f6' : '#f3f4f6'}
-            />
-          </View>
-
-          {/* 일반 알림 / General Notifications */}
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="megaphone-outline" size={24} color="#10b981" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>
-                  {isForeign ? 'General Notifications' : '일반 알림'}
-                </Text>
-                <Text style={styles.settingDescription}>
-                  {isForeign
-                    ? 'Receive general notifications such as announcements and updates.'
-                    : '공지사항, 업데이트 등 일반적인 알림을 받습니다.'}
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={settings.generalNotifications}
+              value={masterOn}
               onValueChange={() => handleToggleSetting('generalNotifications')}
               disabled={saving}
               trackColor={{ false: '#d1d5db', true: '#6ee7b7' }}
-              thumbColor={settings.generalNotifications ? '#10b981' : '#f3f4f6'}
+              thumbColor={masterOn ? '#10b981' : '#f3f4f6'}
             />
           </View>
         </View>
+
+        {/* 종류별 */}
+        {visibleTypes.length > 0 && (
+          <View style={[styles.settingsList, { marginTop: 12, opacity: masterOn ? 1 : 0.45 }]}>
+            {visibleTypes.map(({ groupKey, types }) => (
+              <View key={groupKey} style={{ gap: 14 }}>
+                <Text style={styles.groupHeader}>
+                  {isForeign ? NOTIFICATION_GROUP_LABELS[groupKey].en : NOTIFICATION_GROUP_LABELS[groupKey].ko}
+                </Text>
+                {types.map(t => {
+                  const on = settings[t.key] !== false;
+                  return (
+                    <View key={t.key} style={styles.settingItem}>
+                      <View style={styles.settingInfo}>
+                        <View style={styles.settingIconContainer}>
+                          <Ionicons name={NOTIFICATION_ICONS[t.key]} size={22} color={masterOn && on ? '#3b82f6' : '#9ca3af'} />
+                        </View>
+                        <View style={styles.settingTextContainer}>
+                          <Text style={styles.settingLabel}>{isForeign ? t.labelEn : t.label}</Text>
+                          <Text style={styles.settingDescription}>{isForeign ? t.descEn : t.desc}</Text>
+                        </View>
+                      </View>
+                      <Switch
+                        value={masterOn && on}
+                        onValueChange={() => handleToggleSetting(t.key)}
+                        disabled={saving || !masterOn}
+                        trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
+                        thumbColor={masterOn && on ? '#3b82f6' : '#f3f4f6'}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       <View style={styles.infoSection}>
@@ -381,6 +420,13 @@ const styles = StyleSheet.create({
   },
   settingsList: {
     gap: 16,
+  },
+  groupHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6b7280',
+    marginBottom: 10,
+    marginTop: 2,
   },
   settingItem: {
     flexDirection: 'row',

@@ -13,8 +13,17 @@ import { maskRRNLast } from '@/utils/userUtils';
 import { getLessonMaterials, getSections, LessonMaterialData, SectionData, getLessonMaterialTemplates, LessonMaterialTemplate } from '@/lib/lessonMaterialService';
 import { getGenerationCodes, filterMaterialsByGeneration, filterSectionsWithLinks, getGroupLabel } from '@smis-mentor/shared';
 import { authenticatedGet } from '@/lib/apiClient';
+import { pushReachOf, pushReachReasons, PUSH_REACH_LABELS, NOTIFICATION_TYPES, type PushReachState } from '@smis-mentor/shared';
 
 type UserWithGroupInfo = User & { groupName?: string };
+
+/** 알림 상태 배지 색 */
+const PUSH_TONE: Record<'ok' | 'warn' | 'bad', string> = {
+  ok: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  warn: 'bg-amber-100 text-amber-800 border-amber-200',
+  bad: 'bg-red-100 text-red-700 border-red-200',
+};
+const fmtDay = (ms?: number) => (ms ? new Date(ms).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }) : '-');
 
 export default function UserCheck() {
   const router = useRouter();
@@ -29,6 +38,8 @@ export default function UserCheck() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showAllGenerations, setShowAllGenerations] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('mentor');
+  // 알림 수신 현황 — 못 받는 사람만 보기
+  const [pushOnlyProblem, setPushOnlyProblem] = useState(false);
   const [decryptedRRN, setDecryptedRRN] = useState<{ rrnFront: string; rrnLast: string } | null>(null);
   const [isDecryptingRRN, setIsDecryptingRRN] = useState(false);
   
@@ -613,6 +624,7 @@ export default function UserCheck() {
               <div className="space-y-8">
                 {groupOrder.map(group => {
                   let usersInGroup = groupedUsers[group] || [];
+                  if (pushOnlyProblem) usersInGroup = usersInGroup.filter(u => pushReachOf(u).state !== 'ok');
                   
                   // 정렬 로직
                   usersInGroup = [...usersInGroup].sort((a, b) => {
@@ -760,6 +772,56 @@ export default function UserCheck() {
                   </button>
                 </div>
 
+                {/* 알림 수신 상태 */}
+                {(() => {
+                  const r = pushReachOf(selectedUser);
+                  const tone = PUSH_REACH_LABELS[r.state].tone;
+                  return (
+                    <div className="pt-3 mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-base font-semibold">알림 수신</h3>
+                        <span className={`px-2 py-0.5 text-xs rounded-full border font-bold ${PUSH_TONE[tone]}`}>
+                          {PUSH_REACH_LABELS[r.state].label}
+                        </span>
+                      </div>
+                      <div className="text-sm space-y-1">
+                        <p>
+                          <span className="text-gray-500">등록 기기: </span>
+                          <span className="text-gray-900">
+                            {r.devices > 0 ? `${r.devices}대${r.platforms.length ? ` (${r.platforms.join(', ')})` : ''} · 최근 확인 ${fmtDay(r.lastUsedMs)}` : '없음'}
+                          </span>
+                        </p>
+                        {r.state === 'noToken' && (
+                          <div className="text-[12px] text-gray-500 space-y-0.5">
+                            <p>
+                              {r.lastMobileMs
+                                ? `앱은 ${fmtDay(r.lastMobileMs)}에 썼는데 등록된 푸시 토큰이 없습니다 — 알림 권한을 거부했을 가능성이 큽니다.`
+                                : '등록된 푸시 토큰이 없습니다. 이유는 다음 중 하나입니다.'}
+                            </p>
+                            <ul className="list-disc pl-4">
+                              {pushReachReasons(r).map((reason, i) => <li key={i}>{reason}</li>)}
+                            </ul>
+                            <p className="text-gray-400">
+                              마지막 로그인(웹·앱 공통) {selectedUser.lastLoginAt ? fmtDay(selectedUser.lastLoginAt.toMillis()) : '기록 없음'}
+                            </p>
+                          </div>
+                        )}
+                        {r.state === 'denied' && (
+                          <p className="text-[12px] text-gray-500">휴대폰 설정에서 알림을 거부했습니다. 본인이 설정에서 켜야 받을 수 있습니다.</p>
+                        )}
+                        {r.state === 'muted' && (
+                          <p className="text-[12px] text-gray-500">앱의 마이페이지 › 알림 설정에서 <b>전체 알림</b>을 꺼 두었습니다.</p>
+                        )}
+                        {r.state !== 'muted' && r.offKeys.length > 0 && (
+                          <p className="text-[12px] text-gray-500">
+                            꺼 둔 알림: {r.offKeys.map(k => NOTIFICATION_TYPES.find(t => t.key === k)?.label ?? k).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* 기본 정보 */}
                 <div className="pt-3 mb-4">
                   <h3 className="text-base font-semibold mb-2">기본 정보</h3>
@@ -891,6 +953,74 @@ export default function UserCheck() {
             </div>
           </div>
         )}
+        {/* 알림 수신 현황 */}
+        {users.length > 0 && (() => {
+          const rows = users.map(u => ({ u, r: pushReachOf(u) }));
+          const count = (s: PushReachState) => rows.filter(x => x.r.state === s).length;
+          const problem = rows.filter(x => x.r.state !== 'ok');
+          return (
+            <div className="bg-white p-4 rounded-lg shadow mb-6">
+              <div className="flex items-center flex-wrap gap-2 mb-3">
+                <h2 className="text-base font-bold text-gray-900">알림 수신 현황</h2>
+                <span className="text-xs text-gray-400">{selectedGeneration} {selectedCode} · {users.length}명</span>
+                {problem.length > 0 && (
+                  <button
+                    onClick={() => setPushOnlyProblem(v => !v)}
+                    className={`ml-auto px-3 py-1 text-xs rounded-full border font-semibold ${
+                      pushOnlyProblem ? 'bg-red-600 border-red-600 text-white' : 'bg-white border-red-200 text-red-700 hover:bg-red-50'
+                    }`}>
+                    {pushOnlyProblem ? '전체 보기' : `못 받는 사람만 보기 (${problem.length})`}
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['ok', 'noToken', 'denied', 'muted'] as PushReachState[]).map(s => (
+                  <div key={s} className={`rounded-lg border px-3 py-2 ${count(s) > 0 ? PUSH_TONE[PUSH_REACH_LABELS[s].tone] : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                    <p className="text-[11px] font-semibold">{PUSH_REACH_LABELS[s].label}</p>
+                    <p className="text-lg font-extrabold leading-tight">{count(s)}<span className="text-[11px] font-semibold ml-0.5">명</span></p>
+                  </div>
+                ))}
+              </div>
+              {problem.length > 0 && (
+                <div className="mt-3 rounded-lg border border-gray-200 divide-y divide-gray-100">
+                  {problem.map(({ u, r }) => {
+                    const jc = jobCodes.find(c => c.generation === selectedGeneration && c.code === selectedCode);
+                    const exp = u.jobExperiences?.find(e => e.id === jc?.id);
+                    return (
+                      <div key={u.userId} className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-gray-50"
+                        onClick={() => handleSelectUser(u)}>
+                        <span className="font-bold text-gray-900 w-28 truncate">{u.name}</span>
+                        <span className="text-gray-500 w-32 truncate">{exp?.group ?? '-'} {exp?.groupRole ?? ''}</span>
+                        <span className={`px-1.5 py-0.5 rounded-full border font-bold ${PUSH_TONE[PUSH_REACH_LABELS[r.state].tone]}`}>
+                          {PUSH_REACH_LABELS[r.state].label}
+                        </span>
+                        <span className="ml-auto text-gray-400">
+                          {r.devices > 0
+                            ? `기기 ${r.devices} · 최근 ${fmtDay(r.lastUsedMs)}`
+                            : r.lastMobileMs
+                              ? `앱 사용 ${fmtDay(r.lastMobileMs)} · 토큰 없음`
+                              : `마지막 로그인 ${u.lastLoginAt ? fmtDay(u.lastLoginAt.toMillis()) : '기록 없음'}`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="mt-2 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                <p className="font-semibold text-gray-700 mb-1">‘알림 못 받음’은 등록된 푸시 토큰이 없다는 뜻입니다. 이유는 셋 중 하나입니다.</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>앱으로 로그인한 적이 없음 (웹만 사용)</li>
+                  <li>앱에서 <b>알림 권한을 거부</b> — 이 경우 토큰이 아예 발급되지 않습니다</li>
+                  <li>앱을 지웠거나 기기를 바꿔 <b>토큰이 만료</b> — 업무 알림 발송 때 서버가 자동으로 정리합니다</li>
+                </ul>
+                <p className="mt-1 text-gray-400">
+                  앱은 로그아웃해도 토큰을 지우지 않습니다. 새 앱 버전이 배포되면 <b>앱 사용 시각</b>과 <b>권한 상태</b>가 함께 기록돼 이유를 구분할 수 있습니다.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
     </Layout>
   );

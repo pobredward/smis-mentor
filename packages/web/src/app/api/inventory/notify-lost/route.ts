@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
   const lostItemId = String(body.lostItemId ?? '');
   if (!lostItemId || lostItemId.includes('/')) return NextResponse.json({ error: 'lostItemId가 필요합니다.' }, { status: 400 });
   try {
-    const sent = await notifyLostItem(lostItemId);
-    return NextResponse.json({ sent });
+    const { sent, missed } = await notifyLostItem(lostItemId);
+    return NextResponse.json({ sent, missed });
   } catch (e) {
     console.error('분실물 알림 오류:', e);
     return NextResponse.json({ error: '알림 전송 중 오류가 발생했습니다.' }, { status: 500 });

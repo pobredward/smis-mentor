@@ -16,6 +16,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { formatPhoneNumber } from '@smis-mentor/shared';
 import { useCampDataPrefetch } from '@/hooks/useCampDataPrefetch';
+import NotificationSettingsCard from '@/components/profile/NotificationSettingsCard';
 
 export default function ProfilePage() {
   const { userData, waitForAuthReady, refreshUserData, updateActiveJobCode } = useAuth();
@@ -1462,6 +1463,9 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
+
+        {/* 알림 설정 섹션 */}
+        <NotificationSettingsCard />
 
         {/* 회원 탈퇴 섹션 */}
         <div className="mt-8 mb-12 text-center">

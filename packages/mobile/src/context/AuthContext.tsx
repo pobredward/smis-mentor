@@ -12,7 +12,7 @@ import React, {
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { auth, db } from '../config/firebase';
 import { getUserByEmail, getUserById } from '../services/authService';
 import { removeCache, CACHE_STORE } from '../services/cacheUtils';
@@ -22,6 +22,7 @@ import { ensureActiveJobExperience } from '@smis-mentor/shared';
 import {
   registerForPushNotificationsAsync,
   savePushToken,
+  saveNotificationPermission,
   addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
 } from '../services/notificationService';
@@ -241,8 +242,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         })
         .catch(error => {
           logger.error('푸시 토큰 갱신 실패:', error);
-        });
+        })
+        // 허용이든 거부든 현재 권한 상태를 남긴다 (관리자 화면에서 구분용)
+        .finally(() => { saveNotificationPermission(userData.userId); });
     }
+  }, [userData?.userId]);
+
+  // 앱이 포그라운드로 돌아올 때 권한 상태 재기록 (설정 앱에서 바꾸고 돌아온 경우)
+  useEffect(() => {
+    if (!userData?.userId) return;
+    const uid = userData.userId;
+    const sub = AppState.addEventListener('change', s => { if (s === 'active') saveNotificationPermission(uid); });
+    return () => sub.remove();
   }, [userData?.userId]);
 
   // 알림 리스너 설정

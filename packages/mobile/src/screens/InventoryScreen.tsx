@@ -108,6 +108,12 @@ import {
   MOVEMENT_FILTERS,
   TRANSFER_REASONS,
   supplyProgress,
+  missedSummary,
+  LOST_NOTIFY_TARGETS,
+  LOST_NOTIFY_TARGET_LABELS,
+  lostNotifyPreview,
+  lostGroupManagers,
+  MISSED_STATE_LABELS,
   INVENTORY_USAGE_ORDER,
   suggestedUsages,
 } from '@smis-mentor/shared';
@@ -138,6 +144,8 @@ import type {
   STSheetStudent,
   InventoryUsage,
   InventoryPerm,
+  LostNotifyTarget,
+  NotifyUserLike,
   MovementFilterKey,
   InventoryPackage,
 } from '@smis-mentor/shared';
@@ -583,8 +591,20 @@ function SectionHeaderMobile({ label, count }: { label: string; count: number })
 }
 const failAlert = () => Alert.alert('오류', '처리하지 못했습니다. 권한을 확인해주세요.');
 /** 푸시 알림 요청 — 실패해도 화면 동작은 그대로 (받는 사람은 서버가 정한다) */
+/**
+ * 알림 요청 — 보낸 뒤 **못 받은 사람이 있으면 보낸 사람에게 알려 준다**
+ * (그 자리에서 "알림 켜 주세요"라고 말할 수 있게).
+ */
 function notifySupply(body: Record<string, unknown>) {
-  authenticatedFetch('/api/inventory/notify', { method: 'POST', body: JSON.stringify(body) }).catch(e => console.warn('알림 요청 실패:', e));
+  authenticatedFetch('/api/inventory/notify', { method: 'POST', body: JSON.stringify(body) })
+    .then(async res => {
+      // 재고 부족(stock_low)은 사용 기록에 따라 자동으로 나가는 알림이라 알려 주지 않는다
+      if (body.type === 'stock_low') return;
+      const data = (await res.json().catch(() => null)) as { missed?: Array<{ name: string; state: string }> } | null;
+      const msg = missedSummary(data?.missed);
+      if (msg) Alert.alert('알림을 못 받은 사람이 있어요', msg);
+    })
+    .catch(e => console.warn('알림 요청 실패:', e));
 }
 
 function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId, requests, settings, guides, campGroups, items, views, groups, needs, students, isAdmin, userId, userName, userGroup, prefill, onPrefillDone }: {
@@ -2639,6 +2659,51 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
   const [owner, setOwner] = useState<STSheetStudent | null>(null);
   const [ownerQuery, setOwnerQuery] = useState('');
   const [notify, setNotify] = useState(true);
+  /** 학생 반 → 캠프 그룹 (알림 대상 안내·저장에 함께 사용) */
+  const ownerGroupLabel = useMemo(
+    () => (owner?.classNumber ? findGroupByClassCode(campGroups, studentClassCode(owner.classNumber))?.name : undefined),
+    [owner, campGroups]);
+  // 이름표로 주인을 아는 분실물: 누구에게 보낼지 (기본은 담당 셋 다)
+  const [targets, setTargets] = useState<LostNotifyTarget[]>([...LOST_NOTIFY_TARGETS]);
+  const [toAll, setToAll] = useState(false);
+  const toggleTarget = (t: LostNotifyTarget) =>
+    setTargets(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
+  // 보내기 전에 "누가 받을 수 있나" 확인 — 캠프 인원은 필요할 때 한 번만 불러온다
+  const [campUsers, setCampUsers] = useState<NotifyUserLike[] | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [showCheck, setShowCheck] = useState(false);
+  const loadCampUsers = async () => {
+    if (campUsers || !jobCodeId) return;
+    setChecking(true);
+    try { setCampUsers((await getUsersByJobCodeId(jobCodeId)) as unknown as NotifyUserLike[]); }
+    catch (e) { console.warn('캠프 인원 조회 실패:', e); setCampUsers([]); }
+    finally { setChecking(false); }
+  };
+  // 담당 선생님을 고른 경우엔 인원이 적으니 자동으로 확인해 둔다
+  useEffect(() => { if (owner && !toAll) loadCampUsers(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [owner, toAll]);
+  const preview = useMemo(() => {
+    if (!campUsers) return null;
+    return lostNotifyPreview(campUsers, {
+      jobCodeId,
+      scope: owner && !toAll ? 'owner' : 'all',
+      targets,
+      ownerClassMentor: owner?.classMentor,
+      ownerUnitMentor: owner?.unitMentor,
+      ownerGroup: ownerGroupLabel?.toLowerCase(),
+      excludeId: userId,
+    });
+  }, [campUsers, owner, toAll, targets, ownerGroupLabel, jobCodeId, userId]);
+  /** 이 그룹의 부매니저 이름들 — 반담당·방담당처럼 사람을 특정해 보여 준다 */
+  const groupManagerNames = useMemo(
+    () => (campUsers ? lostGroupManagers(campUsers, jobCodeId, ownerGroupLabel?.toLowerCase()).map(u => String(u.name ?? '').trim()).filter(Boolean) : []),
+    [campUsers, jobCodeId, ownerGroupLabel]);
+  const reachOfName = (name?: string) => {
+    if (!name || !preview) return null;
+    const t = name.trim();
+    if (preview.ok.includes(t)) return 'ok' as const;
+    const m = preview.missed.find(x => x.name === t);
+    return m ? m.state : null;
+  };
   const ownerResults = useMemo(() => {
     const q = ownerQuery.trim();
     return q ? students.filter(s => s.name.includes(q)).slice(0, 6) : [];
@@ -2658,20 +2723,30 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
     setBusy(true);
     try {
       setProgress('등록 중...');
-      const ownerGroup = owner?.classNumber ? findGroupByClassCode(campGroups, studentClassCode(owner.classNumber))?.name.toLowerCase() : undefined;
+      const ownerGroup = ownerGroupLabel?.toLowerCase();
       const id = await addLostItem(db, {
         campCode, name: name.trim(), description: description.trim() || undefined, foundPlace: foundPlace.trim() || undefined,
         foundDate, keptAt: keptAt.trim() || undefined, reportedBy: userName, reportedById: userId,
         jobCodeId: jobCodeId || undefined, notify,
         ownerStudentId: owner?.studentId, ownerName: owner?.name, ownerClassCode: owner?.className,
         ownerClassMentor: owner?.classMentor, ownerUnitMentor: owner?.unitMentor, ownerGroup,
+        notifyScope: owner ? (toAll ? 'all' : 'owner') : undefined,
+        notifyTargets: owner && !toAll ? targets : undefined,
       });
       if (picked.length) {
         setProgress(`사진·영상 ${picked.length}개 업로드 중...`);
         const media = await uploadLostMediaMobile(campCode, id, picked);
         await addLostItemMedia(db, id, media);
       }
-      if (notify) authenticatedFetch('/api/inventory/notify-lost', { method: 'POST', body: JSON.stringify({ lostItemId: id }) }).catch(e => console.warn('분실물 알림 요청 실패:', e));
+      if (notify) {
+        authenticatedFetch('/api/inventory/notify-lost', { method: 'POST', body: JSON.stringify({ lostItemId: id }) })
+          .then(async res => {
+            const data = (await res.json().catch(() => null)) as { sent?: number; missed?: Array<{ name: string; state: string }> } | null;
+            const msg = missedSummary(data?.missed);
+            if (msg) Alert.alert('알림을 못 받은 사람이 있어요', msg);
+          })
+          .catch(e => console.warn('분실물 알림 요청 실패:', e));
+      }
       onCreated(id);
     } catch (e) { console.error('분실물 등록 오류:', e); Alert.alert('오류', '등록 중 오류가 발생했습니다.'); }
     finally { setBusy(false); setProgress(''); }
@@ -2712,13 +2787,94 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
               </View>
             )}
           </View>
-          <TouchableOpacity onPress={() => setNotify(v => !v)} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 10 }}>
-            <Ionicons name={notify ? 'checkbox' : 'square-outline'} size={18} color={notify ? '#2563eb' : '#9ca3af'} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 12, color: '#374151' }}>푸시 알림 보내기</Text>
-              <Text style={{ fontSize: 10, color: '#9ca3af' }}>{owner ? '담임 · 방 담당 · 그룹 매니저에게 보냅니다' : '캠프 선생님 전체에게 보냅니다 — 중요하지 않은 물품이면 끄세요'}</Text>
-            </View>
-          </TouchableOpacity>
+          <View style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+            <TouchableOpacity onPress={() => setNotify(v => !v)} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 10 }}>
+              <Ionicons name={notify ? 'checkbox' : 'square-outline'} size={18} color={notify ? '#2563eb' : '#9ca3af'} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, color: '#374151' }}>푸시 알림 보내기</Text>
+                <Text style={{ fontSize: 10, color: '#9ca3af' }}>
+                  {!notify ? '아무에게도 보내지 않습니다'
+                    : owner && !toAll
+                      ? (targets.length
+                          ? `${owner.name} 학생 ${targets.map(t => LOST_NOTIFY_TARGET_LABELS[t].ko).join(' · ')}에게만 보냅니다`
+                          : '받는 사람을 골라주세요')
+                      : '캠프 선생님 전체에게 보냅니다 — 중요하지 않은 물품이면 끄세요'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            {notify && owner ? (
+              <View style={{ padding: 10, gap: 6, backgroundColor: '#f9fafb', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb' }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#4b5563' }}>
+                  받는 사람 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>이름표가 있어 주인을 아는 물품이에요</Text>
+                </Text>
+                <View style={{ gap: 6, opacity: toAll ? 0.4 : 1 }}>
+                  {LOST_NOTIFY_TARGETS.map(t => {
+                    const who = t === 'classMentor' ? owner.classMentor
+                      : t === 'unitMentor' ? owner.unitMentor
+                      : groupManagerNames.join(', ');
+                    // 부매니저는 명단을 불러와야 이름을 알 수 있다
+                    const loading = t === 'groupManager' && !campUsers;
+                    const on = !toAll && targets.includes(t);
+                    return (
+                      <TouchableOpacity key={t} disabled={toAll || (!who && !loading)} onPress={() => toggleTarget(t)}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name={on ? 'checkbox' : 'square-outline'} size={18} color={on ? '#2563eb' : '#9ca3af'} />
+                        <Text style={{ flex: 1, fontSize: 12, color: '#374151' }}>
+                          {LOST_NOTIFY_TARGET_LABELS[t].ko}
+                          <Text style={{ fontSize: 11, color: '#9ca3af' }}>  {loading ? '확인 중...' : who || (t === 'groupManager' ? `${ownerGroupLabel ?? ''} 부매니저 없음`.trim() : '지정된 사람 없음')}</Text>
+                        </Text>
+                        {(() => {
+                          if (toAll || !who) return null;
+                          const names = t === 'groupManager' ? groupManagerNames : [who];
+                          const bad = names.map(n => reachOfName(n)).find(st => st && st !== 'ok');
+                          if (bad) return <Text style={{ fontSize: 10, fontWeight: '700', color: '#dc2626' }}>🔕 {MISSED_STATE_LABELS[bad]?.ko ?? '못 받음'}</Text>;
+                          if (names.every(n => reachOfName(n) === 'ok')) return <Text style={{ fontSize: 10, color: '#047857' }}>받을 수 있음</Text>;
+                          return null;
+                        })()}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb' }}>
+                  <TouchableOpacity onPress={() => setToAll(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <Ionicons name={toAll ? 'checkbox' : 'square-outline'} size={18} color={toAll ? '#2563eb' : '#9ca3af'} />
+                    <Text style={{ fontSize: 12, color: '#374151' }}>캠프 선생님 전체</Text>
+                  </TouchableOpacity>
+                  {toAll ? (
+                    <TouchableOpacity onPress={() => { setShowCheck(v => !v); loadCampUsers(); }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>
+                        {checking ? '확인 중...' : showCheck ? '접기' : '받을 수 있는지 확인'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {toAll && showCheck && preview ? (
+                  <View style={{ borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 3 }}>
+                    <Text style={{ fontSize: 11, color: '#374151' }}>
+                      <Text style={{ fontWeight: '700' }}>{preview.total}명</Text> 중 <Text style={{ fontWeight: '700', color: '#047857' }}>{preview.ok.length}명</Text>이 받을 수 있어요
+                      {preview.missed.length > 0 ? <Text> · <Text style={{ fontWeight: '700', color: '#dc2626' }}>{preview.missed.length}명</Text>은 못 받아요</Text> : null}
+                    </Text>
+                    {preview.missed.length > 0 ? (
+                      <Text style={{ fontSize: 11, color: '#6b7280', lineHeight: 16 }}>
+                        {preview.missed.map(m => `${m.name}(${MISSED_STATE_LABELS[m.state]?.ko ?? '못 받음'})`).join(', ')}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+                {!toAll && preview && preview.missed.length > 0 ? (
+                  <Text style={{ fontSize: 11, color: '#dc2626' }}>
+                    🔕 {preview.missed.map(m => `${m.name}(${MISSED_STATE_LABELS[m.state]?.ko ?? '못 받음'})`).join(', ')} — 알림을 켜 달라고 알려주세요
+                  </Text>
+                ) : null}
+                {!toAll && preview && preview.total === 0 && targets.length > 0 ? (
+                  <Text style={{ fontSize: 11, color: '#b45309' }}>고른 담당 선생님이 이 캠프 명단에 없어요. 캠프 전체로 보내는 게 좋겠습니다.</Text>
+                ) : null}
+                {!toAll && targets.length === 0 ? (
+                  <Text style={{ fontSize: 11, color: '#b45309' }}>한 명 이상 고르거나, 캠프 전체를 선택하거나, 푸시 알림을 꺼주세요.</Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
           {progress ? <Text style={{ fontSize: 11, color: '#2563eb', textAlign: 'center' }}>{progress}</Text> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity onPress={onClose} disabled={busy} style={[styles.btn, { backgroundColor: '#f3f4f6' }]}><Text style={{ fontSize: 12, color: '#6b7280' }}>취소</Text></TouchableOpacity>
