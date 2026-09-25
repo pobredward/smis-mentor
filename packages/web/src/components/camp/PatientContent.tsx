@@ -396,6 +396,11 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** 이 날 복용하는 약인가 — '캠프 끝까지'(endDateAuto)는 저장된 종료일과 무관하게 계속 복용 */
+function schedActiveOn(s: { startDate: string; endDate: string; endDateAuto?: boolean }, date: string): boolean {
+  return date >= s.startDate && (!!s.endDateAuto || date <= s.endDate);
+}
+
 function isInDateRange(start: string, end: string, date: string): boolean {
   return date >= start && date <= end;
 }
@@ -541,7 +546,12 @@ export default function PatientContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
-  const [today] = useState(todayStr());
+  // 날짜가 바뀌면(자정 넘김) 오늘도 바뀐다 — 켜 둔 채 밤을 넘겨도 복용 체크가 전날로 기록되지 않게
+  const [today, setToday] = useState(todayStr());
+  useEffect(() => {
+    const t = setInterval(() => setToday(prev => (prev === todayStr() ? prev : todayStr())), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const [campEndDate, setCampEndDate] = useState<string>('');  // "2026-08-14"
   const [campGroups, setCampGroups] = useState<CampGroup[]>([]); // 그룹-반 매핑
   // 주 탭: 환자 현황 / 약복용명단
@@ -771,7 +781,7 @@ export default function PatientContent() {
     return filterByMyUnit(records.filter(r => {
       if (r.progressStatus === '완치') return false;
       const schedules = Array.isArray(r.medicationSchedules) ? r.medicationSchedules : [];
-      return schedules.some(s => isInDateRange(s.startDate, s.endDate, today));
+      return schedules.some(s => schedActiveOn(s, today));
     }));
   }, [records, today, filterByMyUnit]);
 
@@ -1758,7 +1768,7 @@ function PatientCard({
     tempSchedules.forEach(s => {
       const total = calcTotalDoses(s);
       s.times.forEach(t => {
-        if (isInDateRange(s.startDate, s.endDate, today)) {
+        if (schedActiveOn(s, today)) {
           todayTotal++;
           if (s.checkedTimes.includes(makeMedTimeKey(t, today))) todayDone++;
         }
@@ -2828,8 +2838,8 @@ function ManagerActionPanel({
   const doneActions = actions.filter(a => a.isDone);
   const isAssignee = record.assigneeId === currentUserId; // 담당자(유저)
   const isAdmin = currentUserRole === 'admin';
-  // 관리자는 언제든(본인이 최초보고 담당자여도) 지시 가능, 그 외에는 담당자가 아닐 때만
-  const canIssue = isAdmin || !isAssignee;
+  // 매니저 지시 · 후속조치는 환자 상태 최종결정이라 직원(관리자)만 한다 — 담당자 여부와 무관하게 언제든
+  const canIssue = isAdmin;
 
   const now = () => {
     const d = new Date();
@@ -2919,7 +2929,8 @@ function ManagerActionPanel({
       {/* 진행 중인 액션 */}
       {pendingActions.map(action => {
         const cfg = ACTION_CONFIG[action.actionType];
-        const isIssuer = action.issuedById === currentUserId;
+        // 지시한 관리자가 자리에 없어도 다른 관리자가 마무리할 수 있게 — 관리자면 누구나
+        const isIssuer = isAdmin;
         const isMyTurn = isAssignee && !action.response && cfg.needsResponse;
         const waitingResponse = isIssuer && !action.response && cfg.needsResponse;
         const responseReceived = !!action.response;
@@ -4250,7 +4261,7 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
     const timeIdx = ORDER.indexOf(time);
     records.forEach(r => {
       (r.medicationSchedules ?? []).forEach(sched => {
-        if (!isInDateRange(sched.startDate, sched.endDate, today)) return;
+        if (!schedActiveOn(sched, today)) return;
         if (!sched.times.includes(time)) return;
         if ((sched.skipDates ?? []).includes(today)) return;
         // firstTime 비활성
@@ -4270,7 +4281,7 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
   const recordsWithTimes = (filterTimes: MedicationTime[]) =>
     records.filter(r =>
       (r.medicationSchedules ?? []).some(sched =>
-        isInDateRange(sched.startDate, sched.endDate, today) &&
+        schedActiveOn(sched, today) &&
         sched.times.some(t => filterTimes.includes(t))
       )
     );
@@ -4530,7 +4541,7 @@ function MedicationPatientCard({
   const todaySchedules = (record.medicationSchedules ?? [])
     .map((s, idx) => ({ ...s, idx }))
     .filter(s => {
-      if (!isInDateRange(s.startDate, s.endDate, today)) return false;
+      if (!schedActiveOn(s, today)) return false;
       if (!filterTimes) return true;
       return s.times.some(t => filterTimes.includes(t));
     });
@@ -5194,7 +5205,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
     const totalDoses = calcTotalDoses(sched);
     const totalDone = sched.checkedTimes.length;
     const pct = totalDoses > 0 ? Math.min(100, Math.round((totalDone / totalDoses) * 100)) : 0;
-    const isActiveOnDate = isInDateRange(sched.startDate, sched.endDate, viewDate);
+    const isActiveOnDate = schedActiveOn(sched, viewDate);
 
     const hasRoomTime = sched.times.some(t => roomTimeSet.has(t));
     const hasClassTime = sched.times.some(t => !roomTimeSet.has(t));
@@ -6264,10 +6275,10 @@ function QuickReportModal({
                       } else if (opt.id === 'slight') {
                         setFeverLevel('slight');
                         // 이미 미열 범위면 유지, 아니면 기본값
-                        if (!form.temperature || classifyFever(temp) !== '미열') setField('temperature', FEVER_THRESHOLDS.slight.toFixed(1));
+                        if (form.temperature && classifyFever(temp) !== '미열') setField('temperature', ''); // 재지 않았으면 비워 둔다 (열감만 기록)
                       } else {
                         setFeverLevel('high');
-                        if (!form.temperature || classifyFever(temp) !== '고열') setField('temperature', FEVER_THRESHOLDS.high.toFixed(1));
+                        if (form.temperature && classifyFever(temp) !== '고열') setField('temperature', '');
                       }
                     }}
                     className={`flex flex-col items-center gap-0.5 py-2.5 rounded-xl border text-xs font-bold transition-all ${
@@ -6301,7 +6312,7 @@ function QuickReportModal({
                       if (level === '고열') setFeverLevel('high');
                       else if (level === '미열') setFeverLevel('slight');
                     }}
-                    placeholder="체온 직접 입력 (예: 37.8)"
+                    placeholder="잰 체온 (예: 37.8) — 안 쟀으면 비워두세요"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 pr-8"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">°C</span>

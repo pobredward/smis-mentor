@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useState, useEffect, useRef } from 'react';
 import { logger, toDriveImageUrl } from '@smis-mentor/shared';
 import {
@@ -67,7 +68,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   // disclosure 이후 실행할 동작 ('save' | 'delete')
   const pendingContactsActionRef = React.useRef<'save' | 'delete' | null>(null);
 
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
   const isAdmin = userData?.role === 'admin';
 
   // 활성 기수의 code 가져오기

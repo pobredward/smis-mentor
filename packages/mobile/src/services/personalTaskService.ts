@@ -14,7 +14,7 @@ import {
   serverTimestamp,
   writeBatch,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import type { PersonalTask } from '../../../shared/src/types/camp';
 
 const PERSONAL_TASKS_COLLECTION = 'personalTasks';
@@ -240,8 +240,12 @@ export const getPersonalTasksInMonth = async (
 // 같은 groupId를 가진 개인 업무 목록 조회
 export const getPersonalTasksByGroupId = async (groupId: string): Promise<PersonalTask[]> => {
   try {
+    // 본인 것만 조회 — 보안 규칙이 list 에 ownerId 조건을 요구한다 (남의 개인 업무를 읽지 못하게)
+    const uid = auth.currentUser?.uid;
+    if (!uid) return [];
     const q = query(
       collection(db, PERSONAL_TASKS_COLLECTION),
+      where('ownerId', '==', uid),
       where('groupId', '==', groupId)
     );
     const snapshot = await getDocs(q);

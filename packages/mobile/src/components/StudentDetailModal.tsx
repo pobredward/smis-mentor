@@ -1,4 +1,5 @@
 'use client';
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { logger, toDriveImageUrl, getFieldConfig, getFieldValue, getFixedFieldValue, getDefaultFieldConfig, type STSheetFieldConfig, type FieldItemConfig } from '@smis-mentor/shared';
 import {
@@ -160,7 +161,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 }) => {
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
   const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);
   const groupRole = activeJobExp?.groupRole;
 

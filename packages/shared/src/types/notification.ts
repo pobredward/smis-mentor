@@ -19,6 +19,7 @@ export const NOTIFICATION_KEYS = [
   'supplySettle',
   'supplyIntake',
   'stockLow',
+  'stockTransfer',
 ] as const;
 export type NotificationKey = (typeof NOTIFICATION_KEYS)[number];
 
@@ -121,6 +122,13 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
     label: '재고 부족', labelEn: 'Low stock',
     desc: '최소 재고보다 적어졌을 때',
     descEn: 'When stock falls below the minimum',
+    visible: isNotifyStockManager,
+  },
+  {
+    key: 'stockTransfer', group: 'stock',
+    label: '재고 이동', labelEn: 'Stock moved',
+    desc: '다른 그룹 부매니저가 우리 그룹 재고를 가져갔을 때',
+    descEn: 'When another group takes stock from your group',
     visible: isNotifyStockManager,
   },
 ];

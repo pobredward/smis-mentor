@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -71,7 +72,7 @@ export default function ScheduleContent() {
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const isAdmin = userData?.role === 'admin';
 
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   const [editing, setEditing] = useState(false);
   const [category, setCategory] = useState<string | null>(null);

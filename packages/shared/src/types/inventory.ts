@@ -1,3 +1,4 @@
+import { sameCampGroup } from '../utils/campAccess';
 import { Timestamp } from 'firebase/firestore';
 
 // ==================== 캠프 재고 (의약품·문구류·전자제품·위생도구·기타) ====================
@@ -415,8 +416,10 @@ export interface InventoryPerm {
   isAdmin: boolean;
   /** 이 캠프에서 부매니저인가 (관리자 포함) — 재고 운영 정보를 본다 */
   isStockManager: boolean;
-  /** 재고 입고·조정·최소 재고·그룹 간 이동 (기존과 동일: 관리자만) */
+  /** 모든 그룹 재고 입고·조정·최소 재고·그룹 간 이동 (관리자) */
   canManageStock: boolean;
+  /** 이 캠프의 부매니저 (관리자 아님) — 자기 그룹 재고 입고 · 조정 · 이동 가능 */
+  isSubManager: boolean;
   /** 품목 이미지 등록·변경·삭제 (관리자만) */
   canEditItemMedia: boolean;
   /** 품목 추가·수정 (기존과 동일: 관리자만) */
@@ -435,10 +438,35 @@ export function inventoryPerm(
     isAdmin,
     isStockManager: isAdmin || isSub,
     canManageStock: isAdmin,
+    isSubManager: !isAdmin && isSub,
     canEditItemMedia: isAdmin,
     canEditItem: isAdmin,
   };
 }
+
+/** 재고 그룹(교무실)이 이 캠프 그룹과 연결된 그룹인가 — 연결이 없으면 그룹 이름으로 비교 */
+export function isStockGroupOf(g: Pick<InventoryGroup, 'campGroupName' | 'name'>, campGroup?: string): boolean {
+  return sameCampGroup(g.campGroupName || g.name, campGroup);
+}
+
+/**
+ * 재고를 입고 · 조정할 수 있는 그룹 id
+ * - 관리자: 전체
+ * - 부매니저: 자기 캠프 그룹과 연결된 재고 그룹만
+ */
+export function managedStockGroupIds(
+  perm: Pick<InventoryPerm, 'canManageStock' | 'isSubManager'>,
+  groups: Array<Pick<InventoryGroup, 'id' | 'campGroupName' | 'name'>>,
+  myCampGroupName?: string
+): Set<string> {
+  if (perm.canManageStock) return new Set(groups.map(g => g.id));
+  if (!perm.isSubManager || !myCampGroupName) return new Set();
+  return new Set(groups.filter(g => isStockGroupOf(g, myCampGroupName)).map(g => g.id));
+}
+
+/** 그룹 간 이동 가능 여부 — 보내거나 받는 쪽 중 하나가 내가 관리하는 그룹 (양방향) */
+export const canTransferBetween = (managed: Set<string>, fromId: string, toId: string): boolean =>
+  fromId !== toId && (managed.has(fromId) || managed.has(toId));
 
 // ==================== 구매 요청 (멘토가 올림) ====================
 // 멘토가 "누가(학생/멘토/캠프 공용) · 무엇이" 필요한지 올리면
@@ -813,6 +841,75 @@ export const LOST_ITEM_STATUS_LABELS: Record<LostItemStatus, string> = {
   discarded: '폐기',
 };
 
+/**
+ * 분실물 종류
+ *  'found' 주웠어요 — 물건을 보관 중 (기본값, 기존 문서 전부)
+ *  'lost'  잃어버렸어요 — 찾고 있는 물건
+ * 상태(status) 값은 공유하고 라벨만 다르게 쓴다 (기존 데이터·보안 규칙 그대로).
+ */
+export const LOST_ITEM_KINDS = ['found', 'lost'] as const;
+export type LostItemKind = (typeof LOST_ITEM_KINDS)[number];
+export const lostItemKind = (l: Pick<LostItem, 'kind'>): LostItemKind => l.kind ?? 'found';
+export const LOST_KIND_LABELS: Record<LostItemKind, { tab: string; action: string; en: string }> = {
+  found: { tab: '주운 물건', action: '주웠어요', en: 'Found' },
+  lost:  { tab: '찾는 물건', action: '잃어버렸어요', en: 'Lost' },
+};
+/** 같은 status 라도 종류에 따라 다르게 읽힌다 */
+export const LOST_STATUS_LABELS_BY_KIND: Record<LostItemKind, Record<LostItemStatus, string>> = {
+  found: { found: '보관 중', claimed: '주인 찾음', discarded: '폐기' },
+  lost:  { found: '찾는 중', claimed: '찾음',      discarded: '못 찾음' },
+};
+export const lostStatusLabel = (l: Pick<LostItem, 'kind' | 'status'>): string =>
+  LOST_STATUS_LABELS_BY_KIND[lostItemKind(l)][l.status];
+/** 아직 진행 중인 건 (보관 중 · 찾는 중) */
+export const isLostOpen = (l: Pick<LostItem, 'status'>): boolean => l.status === 'found';
+
+/**
+ * 주운 물건 ↔ 찾는 물건 짝 찾기.
+ * 이름·설명을 두 글자씩 끊어 겹치는 정도로 본다 (짧은 한국어 물건명에 잘 맞는다).
+ */
+function bigrams(s: string): Set<string> {
+  const t = s.toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+  const out = new Set<string>();
+  for (let i = 0; i < t.length - 1; i++) out.add(t.slice(i, i + 2));
+  if (t.length === 1) out.add(t);
+  return out;
+}
+function similarity(a: string, b: string): number {
+  const A = bigrams(a), B = bigrams(b);
+  if (!A.size || !B.size) return 0;
+  let hit = 0;
+  A.forEach(g => { if (B.has(g)) hit++; });
+  return hit / Math.min(A.size, B.size);
+}
+
+export interface LostMatch<T> { item: T; score: number }
+/**
+ * 이 건과 짝이 될 만한 반대쪽 건들 (점수 높은 순).
+ * @param me 지금 보고 있는(또는 올리려는) 건
+ * @param all 같은 캠프의 분실물 전체
+ */
+export function suggestLostMatches<T extends Pick<LostItem, 'id' | 'kind' | 'status' | 'name' | 'description' | 'ownerStudentId' | 'ownerName'>>(
+  me: Pick<LostItem, 'kind' | 'name' | 'description' | 'ownerStudentId'>,
+  all: T[],
+  limit = 3
+): Array<LostMatch<T>> {
+  const wantKind: LostItemKind = lostItemKind(me) === 'found' ? 'lost' : 'found';
+  const text = `${me.name ?? ''} ${me.description ?? ''}`.trim();
+  if (!text) return [];
+  return all
+    .filter(l => lostItemKind(l) === wantKind && isLostOpen(l))
+    .map(l => {
+      let score = similarity(text, `${l.name ?? ''} ${l.description ?? ''}`);
+      // 주인이 같으면 확실한 짝
+      if (me.ownerStudentId && l.ownerStudentId && me.ownerStudentId === l.ownerStudentId) score = Math.max(score, 0.9);
+      return { item: l, score };
+    })
+    .filter(m => m.score >= 0.34)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 /** 첨부 사진/영상 (Firebase Storage) */
 export interface LostItemMedia {
   url: string;
@@ -875,6 +972,12 @@ export interface LostItem {
   ownerUnitMentor?: string;
   /** 캠프 그룹 키 (users.jobExperiences[].group 과 같은 값, 예: spring) */
   ownerGroup?: string;
+  /** 종류 — 없으면 'found'(주웠어요) */
+  kind?: LostItemKind;
+  /** 짝이 맞춰진 반대쪽 건 (주운 물건 ↔ 찾는 물건) */
+  matchedId?: string;
+  matchedAt?: Timestamp;
+  matchedBy?: string;
   /** 주인 찾음 처리: 학생(또는 사람) 이름 · 처리자 · 시각 */
   claimedBy?: string;
   claimedHandler?: string;

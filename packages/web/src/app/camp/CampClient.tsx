@@ -14,6 +14,7 @@ import RosterContent from '@/components/camp/RosterContent';
 import PatientContent from '@/components/camp/PatientContent';
 import InventoryContent from '@/components/camp/InventoryContent';
 import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
+import { hasCampAccess, isCampStaffRole, resolveActiveJobCodeId } from '@smis-mentor/shared';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient' | 'inventory';
 
@@ -45,10 +46,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
 
   // 활성 캠프 타입 로드 (F 캠프, E/J 캠프 여부 판별용)
   useEffect(() => {
-    const activeJobCodeId =
-      adminActiveCampId ||
-      userData?.activeJobExperienceId ||
-      userData?.jobExperiences?.[0]?.id;
+    const activeJobCodeId = resolveActiveJobCodeId(userData);
     if (!activeJobCodeId) return;
     jobCodesService.getJobCodesByIds([activeJobCodeId]).then(codes => {
       if (codes.length > 0 && codes[0].code) {
@@ -61,11 +59,9 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
 
   // 관리자가 캠프를 아직 배정하지 않은 경우
   // admin은 임시 활성화(adminTempActiveCamp) 또는 activeJobExperienceId가 있으면 진입 허용
-  const hasNoCampAssigned = userData && (
-    isAdmin
-      ? !adminActiveCampId
-      : (!userData.jobExperiences || userData.jobExperiences.length === 0)
-  );
+  // 스태프(admin · mentor · foreign)이고 활성 캠프가 있어야 한다. 가입 승인 전 임시 계정은 막는다
+  const hasNoCampAssigned = !!userData && !hasCampAccess(userData);
+  const isPendingAccount = !!userData && !isCampStaffRole(userData.role);
   
   // 원어민 유저는 '수업' 탭 제외
   const allTabs: { id: TabName; title: string; path: string }[] = [
@@ -137,12 +133,16 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-6">
           <div className="text-5xl">⏳</div>
           <h2 className="text-xl font-semibold text-gray-800">
-            Waiting for camp access
+            {isForeign ? 'Waiting for camp access' : isPendingAccount ? '가입 승인 대기 중' : '배정된 캠프가 없어요'}
           </h2>
           <p className="text-gray-500 text-sm max-w-xs leading-relaxed">
-            You have not been assigned to a camp yet.
-            <br />
-            Please wait until an administrator grants you access.
+            {isForeign
+              ? 'You have not been assigned to a camp yet. Please wait until an administrator grants you access.'
+              : isPendingAccount
+                ? '가입이 승인되면 캠프 탭을 사용할 수 있어요.'
+                : isAdmin
+                  ? '마이페이지에서 캠프를 활성화하면 캠프 탭을 볼 수 있어요.'
+                  : '관리자가 캠프에 배정하면 바로 열립니다.'}
           </p>
         </div>
       </Layout>
@@ -154,7 +154,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
       <div className="-mx-4 sm:-mx-6 lg:-mx-8 -my-6">
         {/* 커스텀 탭 바 */}
         <div className="bg-white border-b border-gray-200 sticky top-16 z-30">
-          <div className="max-w-2xl mx-auto flex">
+          <div className="max-w-2xl mx-auto flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {tabs.map((tab) => (
               <button
                 key={tab.id}

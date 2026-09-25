@@ -389,9 +389,9 @@ service cloud.firestore {
     // isActiveUser() 대신 isAuthenticated()를 사용한다.
     // ──────────────────────────────────────────────────────────────
     match /personalTasks/{taskId} {
-      // list 쿼리 허용 (where ownerId == uid 조건 강제는 클라이언트에서 보장)
-      // getDoc 단건 조회는 resource.data.ownerId 비교로 본인만 허용
-      allow list: if isAuthenticated();
+      // list 쿼리도 본인 것만 — 쿼리에 where('ownerId', '==', uid) 가 있어야 통과한다
+      // (2026-09 앱 업데이트 이후 배포: 구버전 앱의 groupId 단독 쿼리는 이 규칙에서 거부됨)
+      allow list: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
       allow get: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
       allow create: if (
         isAuthenticated() &&
@@ -427,34 +427,26 @@ service cloud.firestore {
     match /campPages/{pageId} {
       allow read: if (
         isAdmin() ||
-        // 캠프 스태프는 targetRole 기반 읽기
+        // 캠프 스태프는 targetRole 기반 읽기 (필터는 화면에서)
         isCampStaff()
       );
+      // 생성 · 수정 · 삭제는 관리자만 — 화면도 관리자에게만 편집 버튼이 있다
       allow create: if (
-        isAdmin() ||
-        (
-          isCampStaff() &&
-          request.resource.data.keys().hasAll(['jobCodeId', 'category', 'title', 'targetRole', 'content', 'order', 'createdAt', 'updatedAt']) &&
-          request.resource.data.title is string &&
-          request.resource.data.title.size() <= 200 &&
-          request.resource.data.content is string &&
-          request.resource.data.content.size() <= 500000
-        )
+        isAdmin() &&
+        request.resource.data.keys().hasAll(['jobCodeId', 'category', 'title', 'targetRole', 'content', 'order', 'createdAt', 'updatedAt']) &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() <= 200 &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() <= 500000
       );
       allow update: if (
-        isAdmin() ||
-        (
-          isCampStaff() &&
-          request.resource.data.title is string &&
-          request.resource.data.title.size() <= 200 &&
-          request.resource.data.content is string &&
-          request.resource.data.content.size() <= 500000 &&
-          // jobCodeId, targetRole 변경 불가 (본인 캠프/역할의 페이지만 수정)
-          fieldUnchanged('jobCodeId') &&
-          fieldUnchanged('targetRole')
-        )
+        isAdmin() &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() <= 200 &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() <= 500000
       );
-      allow delete: if isAdmin() || isCampStaff();
+      allow delete: if isAdmin();
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -463,8 +455,8 @@ service cloud.firestore {
     // ──────────────────────────────────────────────────────────────
     match /generationResources/{jobCodeId} {
       allow read: if isCampStaff();
-      // 캠프 스태프도 링크 추가/수정/삭제 가능 (링크 관리 기능)
-      allow create, update: if isCampStaff();
+      // 링크 추가 · 수정 · 삭제는 관리자만 (화면도 관리자 전용)
+      allow create, update: if isAdmin();
       // 삭제는 admin만 (전체 리소스 문서 삭제 보호)
       allow delete: if isAdmin();
     }
@@ -495,13 +487,12 @@ service cloud.firestore {
       // 부모 lessonMaterial의 소유자이거나 admin만 CRUD 가능
       match /sections/{sectionId} {
         allow read: if isCampStaff();
-        allow create, update: if (
+        allow create, update, delete: if (
           isAdmin() ||
-          isCampStaff()
-        );
-        allow delete: if (
-          isAdmin() ||
-          isCampStaff()
+          (
+            isCampStaff() &&
+            get(/databases/$(database)/documents/lessonMaterials/$(materialId)).data.userId == request.auth.uid
+          )
         );
       }
     }
@@ -799,7 +790,9 @@ service cloud.firestore {
           isCampStaff() &&
           fieldUnchanged('campCode') &&
           fieldUnchanged('studentId') &&
-          fieldUnchanged('createdAt')
+          fieldUnchanged('createdAt') &&
+          // 작성자를 바꾼 뒤 삭제하는 우회를 막는다
+          fieldUnchanged('recordedById')
         )
       );
 
@@ -905,7 +898,13 @@ service cloud.firestore {
           supplyChanged().hasOnly(['settlements', 'updatedAt'])
         )
       ));
-      allow delete: if isAdmin() || (isCampStaff() && resource.data.requesterId == request.auth.uid && resource.data.status in ['requested', 'onhold']);
+      allow delete: if isAdmin() || (
+        isCampStaff() &&
+        resource.data.requesterId == request.auth.uid &&
+        resource.data.status in ['requested', 'onhold'] &&
+        // 구매 완료된 줄이 있으면 정산 근거가 사라지므로 삭제 불가
+        resource.data.get('done', {}).size() == 0
+      );
     }
 
     // 관리자 지정 품목 가이드 (쿠팡·학부모 청구 등, 회사 공통) — 조회 스태프, 변경 관리자
@@ -937,7 +936,19 @@ service cloud.firestore {
         isCampStaff() &&
         fieldUnchanged('campCode') &&
         fieldUnchanged('reportedById') &&
-        fieldUnchanged('createdAt')
+        fieldUnchanged('reportedBy') &&
+        fieldUnchanged('createdAt') &&
+        fieldUnchanged('kind') &&
+        // 알림 1회 발송 기록은 서버만 쓴다 (지우고 다시 보내기 방지)
+        fieldUnchanged('notifiedAt') &&
+        fieldUnchanged('matchNotifiedAt') &&
+        // 첨부는 누구나 더할 수 있지만, 빼는 건 등록자 · 관리자만
+        (
+          !('media' in request.resource.data.diff(resource.data).affectedKeys()) ||
+          request.resource.data.media.size() >= resource.data.media.size() ||
+          resource.data.reportedById == request.auth.uid ||
+          isAdmin()
+        )
       );
       allow delete: if isAdmin() || (isCampStaff() && resource.data.reportedById == request.auth.uid);
     }
@@ -953,12 +964,14 @@ service cloud.firestore {
       // 스태프: 본인 이름의 '사용' 기록 (감소만)
       allow create: if (
         isCampStaff() &&
+        request.resource.data.keys().hasAll(['campCode', 'itemId', 'groupId', 'delta', 'reason', 'at', 'by', 'byId']) &&
         request.resource.data.reason == 'use' &&
         request.resource.data.byId == request.auth.uid &&
         request.resource.data.delta is number &&
         request.resource.data.delta < 0
       );
-      allow update, delete: if isAdmin();
+      // 입출고 기록은 감사용 — 누구도 고치거나 지우지 않는다 (서버 Admin SDK 는 규칙 밖)
+      allow update, delete: if false;
     }
 
     // ──────────────────────────────────────────────────────────────

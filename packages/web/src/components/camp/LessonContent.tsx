@@ -1,4 +1,5 @@
 'use client';
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { logger } from '@smis-mentor/shared';
 
 import { useEffect, useState } from 'react';
@@ -151,6 +152,8 @@ function SectionForm({
 
 export default function LessonContent() {
   const { userData, loading: authLoading } = useAuth();
+  // 교육 · 다른 캠프 탭과 같은 기준 (관리자 임시 캠프 → 활성 캠프 → 첫 배정 캠프)
+  const lessonJobCodeId = resolveActiveJobCodeId(userData);
   const queryClient = useQueryClient();
   const [sections, setSections] = useState<Record<string, SectionDataWithLinks[]>>({});
   const [loading, setLoading] = useState(true);
@@ -190,14 +193,14 @@ export default function LessonContent() {
 
   // 활성화된 캠프의 jobCode 정보 가져오기
   const fetchActiveJobCode = async () => {
-    if (!userData?.activeJobExperienceId) {
+    if (!lessonJobCodeId) {
       setUserJobCodes([]);
       return [];
     }
     
     try {
       // activeJobExperienceId를 배열로 전달
-      const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
+      const jobCodesInfo = await getUserJobCodesInfo([lessonJobCodeId]);
       setUserJobCodes(jobCodesInfo);
       return jobCodesInfo;
     } catch (error) {
@@ -221,7 +224,7 @@ export default function LessonContent() {
     if (!userData) return;
     
     // 활성화된 캠프가 없으면 빈 상태로 표시
-    if (!userData.activeJobExperienceId) {
+    if (!lessonJobCodeId) {
       setLoading(false);
       setMaterials([]);
       setSections({});
@@ -747,7 +750,7 @@ export default function LessonContent() {
     );
   }
 
-  if (!userData.activeJobExperienceId) {
+  if (!lessonJobCodeId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
         <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4">

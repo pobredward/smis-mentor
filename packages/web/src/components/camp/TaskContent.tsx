@@ -11,8 +11,6 @@ import {
   getTaskDatesInMonth,
   getTasksInMonth,
   toggleTaskCompletion,
-  deleteTask,
-  createTask,
   formatTime,
   formatDuration,
 } from '@/lib/taskService';
@@ -27,8 +25,21 @@ import {
 } from '@/lib/personalTaskService';
 import { getTaskCategories } from '@/lib/taskCategoryService';
 import type { Task, JobExperienceGroupRole, User, PersonalTask, TaskCategory } from '@smis-mentor/shared';
-import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames, isKoreanHoliday } from '@smis-mentor/shared';
-import { JobCodeWithGroup } from '@/types';
+import {
+  getTaskTargetUsers,
+  getTaskCompletionStatus,
+  getUserNames,
+  isKoreanHoliday,
+  resolveActiveJobCodeId,
+  taskViewerOf,
+  isTaskVisibleTo,
+  isTaskAssignedTo,
+  canEditTask,
+  canRemindTask,
+  myCampGroup,
+  type TaskViewer,
+} from '@smis-mentor/shared';
+import { deleteTaskViaApi } from '@/lib/taskApi';
 import TaskFormModal from './TaskFormModal';
 import TaskDetailModal from './TaskDetailModal';
 import PersonalTaskFormModal from './PersonalTaskFormModal';
@@ -88,6 +99,15 @@ export default function TaskContent() {
   const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const DAYS_OF_WEEK = isForeign ? DAYS_OF_WEEK_EN : DAYS_OF_WEEK_KO;
+  // 활성 캠프 (관리자 임시 캠프 포함) + 이 캠프에서 내가 볼 업무 기준
+  const activeJobCodeId = resolveActiveJobCodeId(userData);
+  const viewer: TaskViewer = useMemo(() => taskViewerOf(userData, activeJobCodeId), [userData, activeJobCodeId]);
+  const isSubManager = !isAdmin && viewer.isSubManager;
+  /** 완료 현황을 보는 사람 (관리자 · 부매니저) */
+  const showStatus = isAdmin || isSubManager;
+  /** 캠프 구성원 → 부매니저는 자기 그룹 사람만 */
+  const scopeUsers = (users: User[]) =>
+    isAdmin ? users : users.filter(u => myCampGroup(u, activeJobCodeId) === viewer.group);
 
   // 개인 업무 상태
   const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
@@ -149,14 +169,14 @@ export default function TaskContent() {
     jobCode: JobCodeInfo | null;
     groupRole: JobExperienceGroupRole | null;
   }> => {
-    if (!userData?.activeJobExperienceId) {
+    if (!activeJobCodeId) {
       return { jobCode: null, groupRole: null };
     }
 
     try {
-      const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
-      const activeExp = userData.jobExperiences?.find(
-        exp => exp.id === userData.activeJobExperienceId
+      const jobCodesInfo = await getUserJobCodesInfo([activeJobCodeId]);
+      const activeExp = userData?.jobExperiences?.find(
+        exp => exp.id === activeJobCodeId
       );
       const resolvedGroupRole = (activeExp?.groupRole as JobExperienceGroupRole) ?? null;
       if (resolvedGroupRole) {
@@ -178,7 +198,7 @@ export default function TaskContent() {
 
   // 업무 목록 가져오기
   const fetchTasks = async () => {
-    if (!userData?.activeJobExperienceId) {
+    if (!activeJobCodeId) {
       setLoading(false);
       return;
     }
@@ -197,15 +217,15 @@ export default function TaskContent() {
       setCurrentCampCode(activeJobCode.code);
       setCurrentCampCodeId(activeJobCode.id);
       
-      // 캠프 사용자 목록 가져오기 (관리자만)
-      if (isAdmin) {
+      // 캠프 사용자 목록 (완료 현황용) — 관리자는 전체, 부매니저는 자기 그룹
+      if (showStatus) {
         const users = await getUsersByJobCodeId(activeJobCode.id);
-        setCampUsers(users);
+        setCampUsers(scopeUsers(users));
       }
 
       // 월별 업무 Map + 개인 업무 날짜 + 카테고리 동시 로드 (각각 필요한 범위만 읽음)
       const [, , fetchedCategories] = await Promise.all([
-        fetchMonthTasks(resolvedGroupRole, isAdmin, activeJobCode.code),
+        fetchMonthTasks(viewer, activeJobCode.code),
         loadPersonalTaskDates(currentDate.getFullYear(), currentDate.getMonth(), activeJobCode.code),
         getTaskCategories(activeJobCode.code),
       ]);
@@ -224,8 +244,7 @@ export default function TaskContent() {
   // 월별 업무 날짜 가져오기
   // groupRole, adminFlag를 직접 받아서 state 비동기 업데이트로 인한 race condition 방지
   const fetchTaskDatesInMonth = async (
-    groupRole: JobExperienceGroupRole | null = currentGroupRole,
-    adminFlag: boolean = isAdmin,
+    viewerArg: TaskViewer = viewer,
   ) => {
     if (!currentCampCode) return;
 
@@ -234,8 +253,7 @@ export default function TaskContent() {
         currentCampCode,
         currentDate.getFullYear(),
         currentDate.getMonth(),
-        groupRole,
-        adminFlag,
+        viewerArg,
       );
       setTaskDates(dates);
     } catch (error) {
@@ -245,8 +263,7 @@ export default function TaskContent() {
 
   // 월별 전체 업무 Map 가져오기 (풀 캘린더 뷰 및 컴팩트 뷰 뱃지용)
   const fetchMonthTasks = async (
-    groupRole: JobExperienceGroupRole | null = currentGroupRole,
-    adminFlag: boolean = isAdmin,
+    viewerArg: TaskViewer = viewer,
     campCode?: string,
   ) => {
     const code = campCode || currentCampCode;
@@ -257,8 +274,7 @@ export default function TaskContent() {
         code,
         currentDate.getFullYear(),
         currentDate.getMonth(),
-        groupRole,
-        adminFlag,
+        viewerArg,
       );
       setMonthTasks(taskMap);
       setTaskDates(new Set(taskMap.keys()));
@@ -278,12 +294,8 @@ export default function TaskContent() {
         userData ? getPersonalTasksByDate(userData.userId, code, date) : Promise.resolve([]),
       ]);
 
-      // 역할 필터링
-      const filtered = dateTasks.filter(task => {
-        if (isAdmin) return true;
-        if (!currentGroupRole) return false;
-        return task.targetRoles.includes(currentGroupRole);
-      });
+      // 관리자가 아니면 내 그룹 대상 업무만 (부매니저는 그룹 업무 전체)
+      const filtered = dateTasks.filter(task => isTaskVisibleTo(task, viewer));
 
       setSelectedDateTasks(filtered);
       setPersonalTasks(personalDateTasks);
@@ -324,10 +336,10 @@ export default function TaskContent() {
     
     setIsRefreshing(true);
     try {
-      // 캠프 사용자 목록 다시 가져오기 (관리자만)
-      if (isAdmin && userData?.activeJobExperienceId) {
-        const users = await getUsersByJobCodeId(userData.activeJobExperienceId);
-        setCampUsers(users);
+      // 캠프 사용자 목록 다시 가져오기 (관리자 · 부매니저)
+      if (showStatus && activeJobCodeId) {
+        const users = await getUsersByJobCodeId(activeJobCodeId);
+        setCampUsers(scopeUsers(users));
       }
       
       await refreshCurrentData();
@@ -449,11 +461,7 @@ export default function TaskContent() {
         panelDate ? getTasksByDate(currentCampCode, panelDate) : Promise.resolve(null),
       ]);
       if (refreshed) {
-        const filtered = refreshed.filter(t => {
-          if (isAdmin) return true;
-          if (!currentGroupRole) return false;
-          return t.targetRoles.includes(currentGroupRole);
-        });
+        const filtered = refreshed.filter(t => isTaskVisibleTo(t, viewer));
         setPanelTasks(filtered);
       }
     } catch (error) {
@@ -495,11 +503,17 @@ export default function TaskContent() {
   // 개인 업무 삭제 (groupId 있으면 그룹 전체/단일 선택)
   const handlePersonalDelete = async (task: PersonalTask) => {
     if (task.groupId) {
-      const choice = confirm(
+      // 확인 → 그룹 전체 / 취소 → "이 날짜만?" 한 번 더 묻고, 거기서도 취소하면 아무것도 지우지 않는다
+      const all = confirm(
         isForeign
-          ? 'This is a grouped task spanning multiple dates.\n\n[OK] Delete entire group\n[Cancel] Delete only this date'
-          : '이 업무는 여러 날짜에 묶인 그룹 업무입니다.\n\n[확인] 그룹 전체 삭제\n[취소] 이 날짜만 삭제'
+          ? 'This task spans multiple dates.\n\n[OK] Delete ALL dates\n[Cancel] Other options'
+          : '여러 날짜에 묶인 업무입니다.\n\n[확인] 모든 날짜 삭제\n[취소] 다른 선택'
       );
+      const onlyThis = !all && confirm(
+        isForeign ? 'Delete only this date?' : '이 날짜만 삭제할까요?\n(취소하면 아무것도 삭제하지 않습니다)'
+      );
+      if (!all && !onlyThis) return;
+      const choice = all;
       try {
         if (choice) {
           await deletePersonalTaskGroup(task.groupId);
@@ -528,18 +542,28 @@ export default function TaskContent() {
   };
 
   // 업무 삭제
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm(isForeign ? 'Are you sure you want to delete this task?' : '정말 이 업무를 삭제하시겠습니까?')) return;
+  const handleDeleteTask = async (task: Task) => {
+    let scope: 'one' | 'group' = 'one';
+    if (task.groupId) {
+      const all = confirm(isForeign
+        ? 'This task spans multiple dates.\n\n[OK] Delete ALL dates\n[Cancel] Other options'
+        : '여러 날짜에 묶인 업무입니다.\n\n[확인] 모든 날짜 삭제\n[취소] 다른 선택');
+      const onlyThis = !all && confirm(isForeign ? 'Delete only this date?' : '이 날짜만 삭제할까요?\n(취소하면 아무것도 삭제하지 않습니다)');
+      if (!all && !onlyThis) return;
+      scope = all ? 'group' : 'one';
+    } else if (!confirm(isForeign ? 'Are you sure you want to delete this task?' : '정말 이 업무를 삭제하시겠습니까?')) {
+      return;
+    }
 
     try {
-      await deleteTask(taskId);
+      await deleteTaskViaApi(task.id, scope);
       setShowTaskDetail(false); // 모달 닫기
       setSelectedTask(null);
       await refreshCurrentData();
       toast.success(isForeign ? 'Task deleted.' : '업무가 삭제되었습니다.');
     } catch (error) {
       logger.error('업무 삭제 오류:', error);
-      toast.error(isForeign ? 'Failed to delete task.' : '업무 삭제 중 오류가 발생했습니다.');
+      toast.error(error instanceof Error && error.message && !isForeign ? error.message : (isForeign ? 'Failed to delete task.' : '업무 삭제 중 오류가 발생했습니다.'));
     }
   };
 
@@ -621,11 +645,13 @@ export default function TaskContent() {
       const isHolidayDate = isKoreanHoliday(date);
 
       const currentUserId = userData?.userId ?? '';
-      const pendingCount = dayTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
-      const allCompleted = hasTask && pendingCount === 0;
+      // 내가 체크할 업무 기준 (관리자 · 부매니저가 보기만 하는 업무는 따로 센다)
+      const myTasks = dayTasks.filter(t => isTaskAssignedTo(t, viewer));
+      const watchCount = dayTasks.length - myTasks.length;
+      const pendingCount = myTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
       const personalPendingCount = personalTaskDates.get(dateStr) ?? 0;
       const totalPendingCount = pendingCount + personalPendingCount;
-      const allDone = allCompleted && personalPendingCount === 0;
+      const allDone = myTasks.length > 0 && totalPendingCount === 0;
 
       days.push(
         <button
@@ -639,9 +665,11 @@ export default function TaskContent() {
               ? 'bg-emerald-500 text-white'
               : totalPendingCount > 0
               ? 'bg-gray-200 text-gray-700'
+              : watchCount > 0
+              ? 'bg-blue-50 text-blue-500 border border-blue-100'
               : 'bg-gray-100 text-transparent'
           }`}>
-            {allDone ? '✓' : totalPendingCount > 0 ? totalPendingCount : '·'}
+            {allDone ? '✓' : totalPendingCount > 0 ? totalPendingCount : watchCount > 0 ? watchCount : '·'}
           </div>
           {/* 날짜 숫자 — 선택 시 파란 원형, 오늘은 회색 원형 배경 */}
           <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-medium leading-none ${
@@ -1032,7 +1060,8 @@ export default function TaskContent() {
                             <TaskCard
                               key={`panel-shared-${task.id}`}
                               task={task}
-                              isAdmin={isAdmin}
+                              showStatus={showStatus}
+                              canCheck={isTaskAssignedTo(task, viewer)}
                               currentUserId={userData.userId}
                               campUsers={campUsers}
                               campCode={currentCampCodeId}
@@ -1112,8 +1141,8 @@ export default function TaskContent() {
         )}
       </div>
 
-      {/* Admin 업무 추가 + 카테고리 관리 버튼 */}
-      {isAdmin && (
+      {/* 업무 추가 (관리자 · 부매니저) + 카테고리 관리 (관리자) */}
+      {(isAdmin || isSubManager) && (
         <div className="px-4 mb-3 flex gap-2">
           <button
             onClick={() => {
@@ -1127,6 +1156,7 @@ export default function TaskContent() {
             </svg>
             {isForeign ? 'Add Task' : '업무 추가'}
           </button>
+          {isAdmin && (
           <button
             onClick={() => setShowCategoryManager(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 bg-gray-50 border border-dashed border-gray-200 rounded-lg hover:bg-gray-100 hover:border-gray-300 transition-all font-medium whitespace-nowrap"
@@ -1136,6 +1166,7 @@ export default function TaskContent() {
             </svg>
             {isForeign ? 'Categories' : '카테고리'}
           </button>
+          )}
         </div>
       )}
 
@@ -1201,7 +1232,8 @@ export default function TaskContent() {
                       <TaskCard
                         key={`shared-${item.task.id}`}
                         task={item.task}
-                        isAdmin={isAdmin}
+                        showStatus={showStatus}
+                        canCheck={isTaskAssignedTo(item.task, viewer)}
                         currentUserId={userData.userId}
                         campUsers={campUsers}
                         campCode={currentCampCodeId}
@@ -1294,6 +1326,7 @@ export default function TaskContent() {
           isCopyMode={isCopyMode}
           selectedDate={selectedDate}
           categories={categories}
+          lockedGroup={isSubManager ? viewer.group : undefined}
           onClose={() => {
             setShowTaskForm(false);
             setEditingTask(null);
@@ -1363,6 +1396,10 @@ export default function TaskContent() {
         <TaskDetailModal
           task={selectedTask}
           isAdmin={isAdmin}
+          showStatus={showStatus && canRemindTask(selectedTask, viewer)}
+          canEdit={canEditTask(selectedTask, viewer, userData?.userId)}
+          canRemind={canRemindTask(selectedTask, viewer)}
+          scopeLabel={isSubManager ? viewer.group : undefined}
           campUsers={campUsers}
           campCode={currentCampCodeId}
           onClose={() => {
@@ -1375,9 +1412,7 @@ export default function TaskContent() {
             setShowTaskForm(true);
           }}
           onDelete={() => {
-            handleDeleteTask(selectedTask.id);
-            setShowTaskDetail(false);
-            setSelectedTask(null);
+            handleDeleteTask(selectedTask);
           }}
           onCopy={() => {
             handleCopyTask(selectedTask);
@@ -1394,7 +1429,8 @@ export default function TaskContent() {
 // 간단한 업무 카드 컴포넌트
 function TaskCard({
   task,
-  isAdmin,
+  showStatus,
+  canCheck,
   currentUserId,
   campUsers,
   campCode,
@@ -1403,7 +1439,10 @@ function TaskCard({
   onClick,
 }: {
   task: Task;
-  isAdmin: boolean;
+  /** 완료 현황 표시 (관리자 · 부매니저 — 부매니저는 campUsers 가 자기 그룹만) */
+  showStatus: boolean;
+  /** 내가 체크하는 업무인가 */
+  canCheck: boolean;
   currentUserId: string;
   campUsers: User[];
   campCode: string;
@@ -1413,37 +1452,16 @@ function TaskCard({
 }) {
   const { userData: cardUser } = useAuth();
   const isForeign = cardUser?.role === 'foreign' || cardUser?.role === 'foreign_temp';
-  const isCompleted = task.completions.some((c: { userId: string }) => c.userId === currentUserId);
+  const isCompleted = canCheck && task.completions.some((c: { userId: string }) => c.userId === currentUserId);
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
 
-  // 관리자용: 실제 완료 현황 계산
-  const targetUsers = isAdmin ? getTaskTargetUsers(task, campUsers, campCode) : [];
-  
-  // 디버깅 로그
-  if (isAdmin && campUsers.length > 0) {
-    logger.info('=== TaskCard 디버깅 ===');
-    logger.info('업무:', task.title);
-    logger.info('campCode:', campCode);
-    logger.info('task.targetRoles:', task.targetRoles);
-    logger.info('task.targetGroups:', task.targetGroups);
-    logger.info('전체 campUsers 수:', campUsers.length);
-    logger.info('필터링된 targetUsers 수:', targetUsers.length);
-    if (targetUsers.length > 0) {
-      logger.info('대상 사용자:', targetUsers.map(u => ({ 
-        name: u.name, 
-        jobExps: u.jobExperiences?.map(exp => ({ id: exp.id, role: exp.groupRole, group: exp.group }))
-      })));
-    } else {
-      logger.warn('대상 사용자가 0명입니다. 첫 번째 사용자 jobExperiences 확인:');
-      logger.warn(campUsers[0].jobExperiences);
-    }
-  }
-  
-  const { completedUsers, incompleteUsers } = isAdmin 
+  // 관리자 · 부매니저: 실제 완료 현황
+  const targetUsers = showStatus ? getTaskTargetUsers(task, campUsers, campCode) : [];
+  const { completedUsers, incompleteUsers } = showStatus
     ? getTaskCompletionStatus(task, targetUsers)
     : { completedUsers: [], incompleteUsers: [] };
-  
+
   const completedNames = getUserNames(completedUsers);
   const incompleteNames = getUserNames(incompleteUsers);
 
@@ -1471,7 +1489,7 @@ function TaskCard({
 
       <div className={`flex ${isCompleted ? 'opacity-60' : ''}`}>
         {/* 업무 정보 */}
-        <div className={`${isAdmin ? 'w-2/5 border-r' : 'flex-1'} py-2.5 pl-3 pr-2 min-w-0`}>
+        <div className={`${showStatus ? 'w-2/5 border-r' : 'flex-1'} py-2.5 pl-3 pr-2 min-w-0`}>
           <h4 className={`text-sm font-medium mb-1 ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
             {task.title}
           </h4>
@@ -1494,8 +1512,8 @@ function TaskCard({
           </div>
         </div>
 
-        {/* 관리자: 완료 현황 */}
-        {isAdmin && (
+        {/* 관리자 · 부매니저: 완료 현황 */}
+        {showStatus && (
           <div className="flex-1 p-2.5 bg-gray-50 space-y-1">
             {completedNames.length > 0 && (
               <div className="flex items-start gap-1.5">
@@ -1512,7 +1530,8 @@ function TaskCard({
           </div>
         )}
 
-        {/* 체크박스 — 오른쪽 */}
+        {/* 체크박스 — 오른쪽 (내가 체크하는 업무만) */}
+        {canCheck && (
         <div className="flex items-center px-3 py-2.5 flex-shrink-0">
           <button
             type="button"
@@ -1531,6 +1550,7 @@ function TaskCard({
             )}
           </button>
         </div>
+        )}
       </div>
     </div>
   );

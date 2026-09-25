@@ -1,5 +1,17 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { logger } from '@smis-mentor/shared';
+import {
+  logger,
+  resolveActiveJobCodeId,
+  taskViewerOf,
+  isTaskVisibleTo,
+  isTaskAssignedTo,
+  canEditTask,
+  canRemindTask,
+  myCampGroup,
+  toDateKey,
+  type TaskViewer,
+} from '@smis-mentor/shared';
+import { saveTaskViaApi } from '../services/taskApi';
 import {
   View,
   Text,
@@ -85,6 +97,13 @@ export function TasksScreen() {
   const { userData, loading: authLoading } = useAuth();
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const daysOfWeek = isForeign ? DAYS_OF_WEEK_EN : DAYS_OF_WEEK_KO;
+  // 활성 캠프 (관리자 임시 캠프 포함) + 이 캠프에서 내가 볼 업무 기준
+  const activeJobCodeId = resolveActiveJobCodeId(userData);
+  const viewer: TaskViewer = useMemo(() => taskViewerOf(userData, activeJobCodeId), [userData, activeJobCodeId]);
+  const isAdmin = userData?.role === 'admin';
+  const isSubManager = !isAdmin && viewer.isSubManager;
+  /** 완료 현황을 보는 사람 (관리자 · 부매니저) */
+  const showStatus = isAdmin || isSubManager;
   // campTasks 전체 캐시는 사용하지 않음 — 날짜/월 범위 쿼리로 필요한 데이터만 읽음
   const [loading, setLoading] = useState(true);
   const [currentGroupRole, setCurrentGroupRole] = useState<JobExperienceGroupRole | null>(null);
@@ -148,15 +167,11 @@ export function TasksScreen() {
       if (monthTasksRef.current.size > 0) {
         const resolvedAdmin = adminFlag !== undefined ? adminFlag : isAdmin;
         const resolvedRole = groupRoleOverride !== undefined ? groupRoleOverride : currentGroupRole;
-        setSelectedDateTasks(dayTasks.filter(task => {
-          if (resolvedAdmin) return true;
-          if (!resolvedRole) return false;
-          return task.targetRoles.includes(resolvedRole);
-        }));
+        setSelectedDateTasks(dayTasks.filter(task => isTaskVisibleTo(task, viewer)));
         setPersonalTasks(dayPersonalTasks);
       }
     });
-  }, [isAdmin, currentGroupRole]);
+  }, [viewer]);
 
   // 4개 달력 state를 한 번의 렌더로 일괄 업데이트 — unstable_batchedUpdates 보장
   // 선택된 날짜의 업무 목록도 함께 갱신 (월 이동 후 비동기 로드 완료 시에도 즉시 반영)
@@ -175,11 +190,7 @@ export function TasksScreen() {
       setPersonalMonthTasks(data.personalTasks);
       // 선택된 날짜가 이번 달 데이터에 포함되면 업무 목록 갱신
       if (str) {
-        setSelectedDateTasks(dayTasks.filter(task => {
-          if (isAdmin) return true;
-          if (!currentGroupRole) return false;
-          return task.targetRoles.includes(currentGroupRole);
-        }));
+        setSelectedDateTasks(dayTasks.filter(task => isTaskVisibleTo(task, viewer)));
         setPersonalTasks(dayPersonalTasks);
       }
     });
@@ -293,9 +304,8 @@ export function TasksScreen() {
       }
     });
 
-  const isAdmin = userData?.role === 'admin';
-  const isManager = currentGroupRole === '매니저' || currentGroupRole === 'Manager';
-  const canAddTask = isAdmin || isManager;
+  // 업무 추가: 관리자 + 부매니저(자기 그룹). 매니저는 모두 관리자 계정이다
+  const canAddTask = isAdmin || isSubManager;
 
   // 개인 업무 상태
   const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
@@ -454,9 +464,9 @@ export function TasksScreen() {
     }
 
     try {
-      const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
-      const activeExp = userData.jobExperiences?.find(
-        exp => exp.id === userData.activeJobExperienceId
+      const jobCodesInfo = await getUserJobCodesInfo([activeJobCodeId!]);
+      const activeExp = userData?.jobExperiences?.find(
+        exp => exp.id === activeJobCodeId
       );
       const resolvedGroupRole = (activeExp?.groupRole as JobExperienceGroupRole) ?? null;
       if (resolvedGroupRole) {
@@ -471,7 +481,7 @@ export function TasksScreen() {
 
   // 업무 목록 가져오기
   const fetchTasks = async () => {
-    if (!userData?.activeJobExperienceId) {
+    if (!activeJobCodeId) {
       setLoading(false);
       return;
     }
@@ -501,11 +511,14 @@ export function TasksScreen() {
         loadMonthData(year, month, commonOpts),
         Promise.resolve(),
         getTaskCategories(activeJobCode.code),
-        isAdmin ? getUsersByJobCodeId(activeJobCode.id) : Promise.resolve([] as User[]),
+        showStatus ? getUsersByJobCodeId(activeJobCode.id) : Promise.resolve([] as User[]),
       ]);
 
       setCategories(fetchedCategories);
-      if (isAdmin && campUserResult.length > 0) setCampUsers(campUserResult);
+      // 완료 현황용 캠프 구성원 — 관리자는 전체, 부매니저는 자기 그룹
+      if (showStatus && campUserResult.length > 0) {
+        setCampUsers(isAdmin ? campUserResult : campUserResult.filter(u => myCampGroup(u, activeJobCodeId) === viewer.group));
+      }
       if (data) applyMonthData(data);
 
       await loadTasksForDate(selectedDate, activeJobCode.code);
@@ -527,10 +540,7 @@ export function TasksScreen() {
 
   // 월별 업무 날짜 가져오기
   // groupRole, adminFlag를 직접 받아서 state 비동기 업데이트로 인한 race condition 방지
-  const fetchTaskDatesInMonth = async (
-    groupRole: JobExperienceGroupRole | null = currentGroupRole,
-    adminFlag: boolean = isAdmin,
-  ) => {
+  const fetchTaskDatesInMonth = async () => {
     if (!currentCampCode) return;
 
     try {
@@ -538,8 +548,7 @@ export function TasksScreen() {
         currentCampCode,
         currentDate.getFullYear(),
         currentDate.getMonth(),
-        groupRole,
-        adminFlag,
+        viewer,
       );
       setTaskDates(dates);
     } catch (error) {
@@ -549,8 +558,6 @@ export function TasksScreen() {
 
   // 월별 전체 업무 Map 가져오기 (풀 캘린더 뷰 및 컴팩트 뷰 뱃지용)
   const fetchMonthTasks = async (
-    groupRole: JobExperienceGroupRole | null = currentGroupRole,
-    adminFlag: boolean = isAdmin,
     campCode?: string,
   ) => {
     const code = campCode || currentCampCode;
@@ -561,8 +568,7 @@ export function TasksScreen() {
         code,
         currentDate.getFullYear(),
         currentDate.getMonth(),
-        groupRole,
-        adminFlag,
+        viewer,
       );
       monthTasksRef.current = taskMap;
       setMonthTasks(taskMap);
@@ -586,11 +592,7 @@ export function TasksScreen() {
       ]);
 
       // 역할 필터링
-      const filtered = dateTasks.filter(task => {
-        if (isAdmin) return true;
-        if (!currentGroupRole) return false;
-        return task.targetRoles.includes(currentGroupRole);
-      });
+      const filtered = dateTasks.filter(task => isTaskVisibleTo(task, viewer));
 
       setSelectedDateTasks(filtered);
       setPersonalTasks(personalDateTasks);
@@ -639,7 +641,7 @@ export function TasksScreen() {
 
     try {
       const [taskMap, personalDates, personalTaskMap] = await Promise.all([
-        getTasksInMonth(code, year, month, role, admin),
+        getTasksInMonth(code, year, month, viewer),
         getPersonalTaskDatesInMonth(userData.userId, code, year, month),
         getPersonalTasksInMonth(userData.userId, code, year, month),
       ]);
@@ -665,16 +667,10 @@ export function TasksScreen() {
       // 전체 월 캐시 초기화 → 강제 재조회
       monthCacheRef.current.clear();
 
-      // 캠프 사용자 목록 다시 가져오기 (관리자만)
-      if (isAdmin && userData?.activeJobExperienceId) {
-        const jobCodesInfo = await getUserJobCodesInfo([userData.activeJobExperienceId]);
-        const activeJobCode = jobCodesInfo[0];
-        
-        if (activeJobCode) {
-          const users = await getUsersByJobCodeId(activeJobCode.id);
-          logger.info('모바일 - 새로고침으로 조회된 캠프 사용자 수:', users.length);
-          setCampUsers(users);
-        }
+      // 캠프 사용자 목록 다시 가져오기 (관리자 · 부매니저)
+      if (showStatus && activeJobCodeId) {
+        const users = await getUsersByJobCodeId(activeJobCodeId);
+        setCampUsers(isAdmin ? users : users.filter(u => myCampGroup(u, activeJobCodeId) === viewer.group));
       }
       
       const year = currentDate.getFullYear();
@@ -765,7 +761,7 @@ export function TasksScreen() {
           getTasksByDate(currentCampCode, cachedDate),
           userData ? getPersonalTasksByDate(userData.userId, currentCampCode, cachedDate) : Promise.resolve([]),
         ]).then(([refreshed, refreshedPersonal]) => {
-          sheetTasksRef.current = refreshed;
+          sheetTasksRef.current = refreshed.filter(t => isTaskVisibleTo(t, viewer));
           sheetPersonalTasksRef.current = refreshedPersonal;
           setSheetRenderKey(k => k + 1);
         }).catch(() => {
@@ -794,16 +790,12 @@ export function TasksScreen() {
     } else {
       // 캐시에서 즉시 반영 — Firestore 쿼리 없이 UI 즉각 업데이트
       unstable_batchedUpdates(() => {
-        setSelectedDateTasks(dayTasks.filter(task => {
-          if (isAdmin) return true;
-          if (!currentGroupRole) return false;
-          return task.targetRoles.includes(currentGroupRole);
-        }));
+        setSelectedDateTasks(dayTasks.filter(task => isTaskVisibleTo(task, viewer)));
         setPersonalTasks(dayPersonalTasks);
       });
       applySelectedDate(date);
     }
-  }, [calendarView, openSheet, applySelectedDate, isAdmin, currentGroupRole]);
+  }, [calendarView, openSheet, applySelectedDate, viewer]);
 
   // 업무 완료 토글
   const handleToggleComplete = async (taskId: string) => {
@@ -1340,6 +1332,7 @@ export function TasksScreen() {
               selectedDateStr={selectedDateStr}
               personalTaskDates={personalTaskDates}
               currentUserId={userData?.userId ?? ''}
+              viewer={viewer}
               onDateClick={handleDateClick}
             />
           ) : (
@@ -1408,14 +1401,15 @@ export function TasksScreen() {
                         <TaskCard
                           key={`shared-${item.task.id}`}
                           task={item.task}
-                          isAdmin={isAdmin}
+                          isAdmin={showStatus}
+                          canCheck={isTaskAssignedTo(item.task, viewer)}
                           currentUserId={userData.userId}
                           campUsers={campUsers}
                           campCodeId={currentCampCodeId}
                           category={sharedCat}
                           onToggle={handleToggleComplete}
                           onPress={() => {
-                            const taskDate = selectedDate.toISOString().split('T')[0];
+                            const taskDate = toDateKey(selectedDate);
                             (navigation as any).navigate('TaskDetail', { taskId: item.task.id, taskDate });
                           }}
                         />
@@ -1431,7 +1425,7 @@ export function TasksScreen() {
                         key={`personal-${p.id}`}
                         activeOpacity={0.7}
                         onPress={() => {
-                          const taskDate = selectedDate.toISOString().split('T')[0];
+                          const taskDate = toDateKey(selectedDate);
                           (navigation as any).navigate('PersonalTaskDetail', { taskId: p.id, taskDate });
                         }}
                         accessibilityLabel={isForeign ? `Personal task: ${p.title}` : `개인 업무: ${p.title}`}
@@ -1529,6 +1523,7 @@ export function TasksScreen() {
         <TaskAddModal
           visible={showAddModal}
           campCode={currentCampCode}
+          lockedGroup={isSubManager ? viewer.group : undefined}
           initialDate={selectedDate}
           editingTask={editingTask}
           categories={categories}
@@ -2025,7 +2020,8 @@ export function TasksScreen() {
                 <SheetTaskList
                   sheetTasks={sheetTasks}
                   sheetPersonalTasks={sheetPersonalTasks}
-                  isAdmin={isAdmin}
+                  isAdmin={showStatus}
+                  viewer={viewer}
                   userData={userData}
                   campUsers={campUsers}
                   currentCampCodeId={currentCampCodeId}
@@ -2056,6 +2052,7 @@ function SheetTaskList({
   sheetTasks,
   sheetPersonalTasks,
   isAdmin,
+  viewer,
   userData,
   campUsers,
   currentCampCodeId,
@@ -2070,6 +2067,7 @@ function SheetTaskList({
   sheetTasks: Task[];
   sheetPersonalTasks: PersonalTask[];
   isAdmin: boolean;
+  viewer: TaskViewer;
   userData: { userId: string; name: string; role?: string } | null;
   campUsers: User[];
   currentCampCodeId: string;
@@ -2108,8 +2106,8 @@ function SheetTaskList({
   }
 
   const baseDateStr = sheetDate
-    ? sheetDate.toISOString().split('T')[0]
-    : selectedDate.toISOString().split('T')[0];
+    ? toDateKey(sheetDate)
+    : toDateKey(selectedDate);
 
   return (
     <>
@@ -2122,6 +2120,7 @@ function SheetTaskList({
               <TaskCard
                 task={task}
                 isAdmin={isAdmin}
+                canCheck={isTaskAssignedTo(task, viewer)}
                 currentUserId={userData?.userId ?? ''}
                 campUsers={campUsers}
                 campCodeId={currentCampCodeId}
@@ -2194,6 +2193,7 @@ function SheetTaskList({
 function TaskCard({
   task,
   isAdmin,
+  canCheck = true,
   currentUserId,
   campUsers,
   campCodeId,
@@ -2202,7 +2202,10 @@ function TaskCard({
   onPress,
 }: {
   task: Task;
+  /** 완료 현황 표시 (관리자 · 부매니저 — 부매니저는 campUsers 가 자기 그룹만) */
   isAdmin: boolean;
+  /** 내가 체크하는 업무인가 (아니면 체크박스를 숨긴다) */
+  canCheck?: boolean;
   currentUserId: string;
   campUsers: User[];
   campCodeId: string;
@@ -2210,11 +2213,11 @@ function TaskCard({
   onToggle: (taskId: string) => void;
   onPress: () => void;
 }) {
-  const isCompleted = task.completions.some(c => c.userId === currentUserId);
+  const isCompleted = canCheck && task.completions.some(c => c.userId === currentUserId);
   const timeStr = formatTime(task.time);
   const durationStr = formatDuration(task.estimatedDuration);
 
-  // 관리자용 완료 현황
+  // 관리자 · 부매니저용 완료 현황
   let adminCompletionStatus = null;
   if (isAdmin && campCodeId) {
     const targetUsers = getTaskTargetUsers(task, campUsers, campCodeId);
@@ -2296,7 +2299,8 @@ function TaskCard({
           </View>
         )}
 
-        {/* 오른쪽: 체크박스 */}
+        {/* 오른쪽: 체크박스 (내가 체크하는 업무만) */}
+        {canCheck && (
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
@@ -2313,6 +2317,7 @@ function TaskCard({
             color={isCompleted ? '#3b82f6' : '#d1d5db'}
           />
         </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -2623,6 +2628,7 @@ function TaskAddModal({
   initialDate,
   editingTask,
   categories = [],
+  lockedGroup,
   onClose,
   onSuccess,
 }: {
@@ -2631,6 +2637,8 @@ function TaskAddModal({
   initialDate?: Date;
   editingTask?: Task | null;
   categories?: TaskCategory[];
+  /** 부매니저가 만들 때: 대상 그룹을 이 그룹으로 고정 (한글 표기) */
+  lockedGroup?: string;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -2696,7 +2704,7 @@ function TaskAddModal({
         
         // 대상 역할 및 그룹 설정
         setTargetRoles(editingTask.targetRoles);
-        setTargetGroups(editingTask.targetGroups || []);
+        setTargetGroups(lockedGroup ? [lockedGroup as JobExperienceGroup] : (editingTask.targetGroups || []));
         
         // 제목, 설명, 소요시간 설정
         setTitle(editingTask.title);
@@ -2737,7 +2745,7 @@ function TaskAddModal({
         setTime('');
         setTargetRoleType('mentor');
         setTargetRoles([]);
-        setTargetGroups([]);
+        setTargetGroups(lockedGroup ? [lockedGroup as JobExperienceGroup] : []);
         setTitle('');
         setDescription('');
         setEstimatedDuration('');
@@ -2747,7 +2755,7 @@ function TaskAddModal({
         setSelectedCategoryId('');
       }
     }
-  }, [visible, editingTask, initialDate]);
+  }, [visible, editingTask, initialDate, lockedGroup]);
 
   // roleOptions는 targetRoleType에 따라 동적으로 변경
   const getMentorRoles = (): JobExperienceGroupRole[] => Array.from(MENTOR_GROUP_ROLES);
@@ -2775,9 +2783,10 @@ function TaskAddModal({
 
   // 날짜 선택/해제 핸들러
   const toggleDateSelection = (dateToToggle: Date) => {
-    const dateStr = dateToToggle.toISOString().split('T')[0];
+    // 로컬 날짜로 비교 (toISOString 은 UTC 라 한국 오전에 하루 전 날짜가 나온다)
+    const dateStr = toDateKey(dateToToggle);
     const existingIndex = selectedDates.findIndex(
-      d => d.toISOString().split('T')[0] === dateStr
+      d => toDateKey(d) === dateStr
     );
 
     if (existingIndex >= 0) {
@@ -2804,9 +2813,9 @@ function TaskAddModal({
   const handleDragMove = (date: Date) => {
     if (!isDragging || !dragStartDate) return;
     
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toDateKey(date);
     const isAlreadySelected = selectedDates.some(
-      d => d.toISOString().split('T')[0] === dateStr
+      d => toDateKey(d) === dateStr
     );
     
     if (!isAlreadySelected) {
@@ -2845,9 +2854,9 @@ function TaskAddModal({
 
     for (let day = 1; day <= daysInMonth; day++) {
       const currentDate = new Date(year, month, day);
-      const dateStr = currentDate.toISOString().split('T')[0];
+      const dateStr = toDateKey(currentDate);
       const isSelected = selectedDates.some(
-        d => d.toISOString().split('T')[0] === dateStr
+        d => toDateKey(d) === dateStr
       );
       const isToday = 
         today.getDate() === day && 
@@ -2973,7 +2982,7 @@ function TaskAddModal({
       return;
     }
 
-    if (targetGroups.length === 0) {
+    if (!lockedGroup && targetGroups.length === 0) {
       Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please select at least one target group.' : '대상 그룹을 하나 이상 선택해주세요.');
       return;
     }
@@ -2994,86 +3003,31 @@ function TaskAddModal({
 
     setIsSubmitting(true);
     try {
-      const commonUpdates = {
-        title: title.trim(),
-        description: description.trim(),
-        time: time || undefined,
-        estimatedDuration:
-          estimatedDuration && !isNaN(Number(estimatedDuration))
-            ? { value: Number(estimatedDuration), unit: 'minutes' as const }
-            : undefined,
-        targetRoles,
-        targetGroups,
-        categoryId: selectedCategoryId || undefined,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      };
+      // 생성 · 수정 · 여러 날짜 묶음 처리는 서버가 한다 (남는 날짜의 완료 기록 · 첨부 보존, 같은 날짜 중복 제거)
+      const dates = [...new Set(selectedDates.map(toDateKey))];
+      const minutes = estimatedDuration ? Number(estimatedDuration) : NaN;
+      await saveTaskViaApi({
+        campCode,
+        taskId: isEdit && editingTask ? editingTask.id : undefined,
+        dates,
+        fields: {
+          title: title.trim(),
+          description: description.trim(),
+          targetRoles,
+          targetGroups: lockedGroup ? [lockedGroup] : targetGroups,
+          time: time || null,
+          estimatedDurationMinutes: minutes > 0 ? minutes : null,
+          categoryId: selectedCategoryId || null,
+          attachments,
+        },
+      });
+      Alert.alert(
+        isForeign ? 'Success' : '성공',
+        isEdit
+          ? (isForeign ? 'Task has been updated.' : '업무가 수정되었습니다.')
+          : (isForeign ? `${dates.length} task(s) have been added.` : `${dates.length}개의 업무가 추가되었습니다.`),
+      );
 
-      if (isEdit && editingTask) {
-        if (editingTask.groupId) {
-          // 그룹 수정: 날짜 변경 여부 확인
-          const groupTasks = await getTasksByGroupId(editingTask.groupId);
-          const originalDateStrs = new Set(
-            groupTasks.map(t => {
-              const d = t.date.toDate();
-              return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-            })
-          );
-          const newDateStrs = new Set(
-            selectedDates.map(d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`)
-          );
-          const datesChanged =
-            originalDateStrs.size !== newDateStrs.size ||
-            [...newDateStrs].some(s => !originalDateStrs.has(s));
-
-          if (datesChanged) {
-            await updateTaskGroup(campCode, editingTask.groupId, commonUpdates, selectedDates);
-          } else {
-            await updateTaskGroup(campCode, editingTask.groupId, commonUpdates);
-          }
-          Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Group task has been updated.' : '그룹 업무가 수정되었습니다.');
-        } else {
-          // 그룹 없는 단일 Task 수정
-          const localDate = new Date(
-            selectedDates[0].getFullYear(),
-            selectedDates[0].getMonth(),
-            selectedDates[0].getDate(),
-            0, 0, 0, 0
-          );
-          const taskData: Partial<Task> = {
-            ...commonUpdates,
-            date: Timestamp.fromDate(localDate),
-          };
-          await updateTask(editingTask.id, taskData);
-          Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Task has been updated.' : '업무가 수정되었습니다.');
-        }
-      } else {
-        // 추가 모드: 날짜 2개 이상이면 공유 groupId 부여
-        const newGroupId = selectedDates.length >= 2
-          ? `group_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-          : undefined;
-
-        for (const date of selectedDates) {
-          const localDate = new Date(
-            date.getFullYear(),
-            date.getMonth(),
-            date.getDate(),
-            0, 0, 0, 0
-          );
-
-          const taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions'> = {
-            campCode,
-            createdBy: '',
-            ...commonUpdates,
-            date: Timestamp.fromDate(localDate),
-            ...(newGroupId ? { groupId: newGroupId } : {}),
-          };
-
-          await createTask(campCode, taskData, newGroupId);
-        }
-
-        Alert.alert(isForeign ? 'Success' : '성공', isForeign ? `${selectedDates.length} task(s) have been added.` : `${selectedDates.length}개의 업무가 추가되었습니다.`);
-      }
-      
       // 폼 초기화
       setTargetRoleType('mentor');
       setSelectedDates([new Date()]);
@@ -3081,7 +3035,7 @@ function TaskAddModal({
       setTime('');
       setHasTime(false);
       setTargetRoles([]);
-      setTargetGroups([]);
+      setTargetGroups(lockedGroup ? [lockedGroup as JobExperienceGroup] : []);
       setTitle('');
       setDescription('');
       setEstimatedDuration('');
@@ -3091,7 +3045,8 @@ function TaskAddModal({
       onSuccess();
     } catch (error) {
       logger.error('업무 처리 오류:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? `Failed to ${isEdit ? 'update' : 'add'} task.` : `업무 ${isEdit ? '수정' : '추가'} 중 오류가 발생했습니다.`);
+      const msg = error instanceof Error && error.message && !isForeign ? error.message : '';
+      Alert.alert(isForeign ? 'Error' : '오류', msg || (isForeign ? `Failed to ${isEdit ? 'update' : 'add'} task.` : `업무 ${isEdit ? '수정' : '추가'} 중 오류가 발생했습니다.`));
     } finally {
       setIsSubmitting(false);
     }
@@ -3388,6 +3343,12 @@ function TaskAddModal({
               <Text style={styles.formLabel}>
                 🎯 {isForeign ? 'Target group' : '대상 그룹'} <Text style={styles.required}>*</Text>
               </Text>
+              {lockedGroup ? (
+                <Text style={{ fontSize: 12, color: '#4b5563', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 }}>
+                  <Text style={{ fontWeight: '700', color: '#15803d' }}>{isForeign ? (GROUP_LABEL_EN[lockedGroup] ?? lockedGroup) : lockedGroup}</Text>
+                  {isForeign ? ' — sub managers create tasks for their own group only' : ' — 부매니저는 자기 그룹 업무만 만들 수 있어요'}
+                </Text>
+              ) : (
               <View style={styles.roleButtons}>
                 {groupOptions.map((group) => (
                   <TouchableOpacity
@@ -3415,6 +3376,7 @@ function TaskAddModal({
                   </TouchableOpacity>
                 ))}
               </View>
+              )}
             </View>
 
             {/* 4. 업무 제목 */}
@@ -3578,6 +3540,8 @@ interface CompactCalendarGridProps {
   selectedDateStr: string;
   personalTaskDates: Map<string, number>;
   currentUserId: string;
+  /** 내가 체크할 업무 판단 기준 */
+  viewer: TaskViewer;
   onDateClick: (date: Date) => void;
 }
 
@@ -3587,6 +3551,7 @@ const CompactCalendarGrid = React.memo(function CompactCalendarGrid({
   selectedDateStr,
   personalTaskDates,
   currentUserId,
+  viewer,
   onDateClick,
 }: CompactCalendarGridProps) {
   const year = currentDate.getFullYear();
@@ -3619,15 +3584,18 @@ const CompactCalendarGrid = React.memo(function CompactCalendarGrid({
     const isSaturday = dayOfWeek === 6;
     const isHolidayDate = holidaySet.has(dateStr);
 
-    const pendingCount = dayTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
-    const allCompleted = hasTask && pendingCount === 0;
+    // 내가 체크할 업무 기준 (관리자 · 부매니저가 보기만 하는 업무는 따로 센다)
+    const myTasks = dayTasks.filter(t => isTaskAssignedTo(t, viewer));
+    const watchCount = hasTask ? dayTasks.length - myTasks.length : 0;
+    const pendingCount = myTasks.filter(t => !t.completions.some(c => c.userId === currentUserId)).length;
     const personalPendingCount = personalTaskDates.get(dateStr) ?? 0;
     const totalPendingCount = pendingCount + personalPendingCount;
-    const allDone = allCompleted && personalPendingCount === 0;
+    const allDone = myTasks.length > 0 && totalPendingCount === 0;
 
     const boxStyle = (() => {
       if (allDone) return styles.compactBoxCompleted;
       if (totalPendingCount > 0) return styles.compactBoxPending;
+      if (watchCount > 0) return styles.compactBoxWatch;
       return styles.compactBoxEmpty;
     })();
 
@@ -3655,6 +3623,8 @@ const CompactCalendarGrid = React.memo(function CompactCalendarGrid({
             <Ionicons name="checkmark" size={14} color="#ffffff" />
           ) : totalPendingCount > 0 ? (
             <Text style={styles.compactBoxNumber}>{totalPendingCount}</Text>
+          ) : watchCount > 0 ? (
+            <Text style={[styles.compactBoxNumber, { color: '#3b82f6' }]}>{watchCount}</Text>
           ) : null}
         </View>
         <View style={[
@@ -3757,6 +3727,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
+  },
+  compactBoxWatch: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
   },
   compactBoxEmpty: {
     backgroundColor: '#e5e7eb',

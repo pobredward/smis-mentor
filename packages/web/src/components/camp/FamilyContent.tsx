@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { stSheetService, jobCodesService, CampCode, FamilyUnit } from '@/lib/stSheetService';
@@ -138,7 +139,8 @@ function FamilyCard({ family, isAdmin }: FamilyCardProps) {
                     ? parent.nativeEnglish : undefined
                 } />
                 <Row label="이메일"    value={parent.email} />
-                {isAdmin && <Row label="주민번호" value={maskSSN(parent.ssn)} />}
+                {/* 주민번호: 관리자는 전체, 그 외(멘토 · 원어민)는 뒷자리 첫 1자리까지 */}
+                <Row label="주민번호" value={maskSSN(parent.ssn)} />
                 <Row label="여권이름"  value={parent.passportName} />
                 <Row label="여권번호"  value={parent.passportNumber} />
                 <Row label="여권만료"  value={parent.passportExpiry !== '0000.00.00' ? parent.passportExpiry : undefined} />
@@ -170,7 +172,7 @@ function FamilyCard({ family, isAdmin }: FamilyCardProps) {
                 <Row label="학생ID"   value={student.id} />
                 <Row label="부모연락처" value={student.parentPhone} />
                 <Row label="등록처"   value={student.registrationSource} />
-                {isAdmin && <Row label="주민번호"  value={maskSSN(student.ssn)} />}
+                <Row label="주민번호"  value={maskSSN(student.ssn)} />
                 <Row label="여권이름"  value={student.passportName} />
                 <Row label="여권번호"  value={student.passportNumber} />
                 <Row label="여권만료"  value={student.passportExpiry !== '0000.00.00' ? student.passportExpiry : undefined} />
@@ -196,7 +198,7 @@ export default function FamilyContent() {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   // 캠프 코드 로드
   useEffect(() => {

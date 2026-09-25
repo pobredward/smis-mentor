@@ -2,15 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import type { Task, User } from '@smis-mentor/shared';
-import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName } from '@smis-mentor/shared';
+import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName, missedSummary } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
-import { functions } from '@/lib/firebase';
-import { httpsCallable } from 'firebase/functions';
+import { remindTaskViaApi } from '@/lib/taskApi';
 import toast from 'react-hot-toast';
 
 interface TaskDetailModalProps {
   task: Task;
   isAdmin: boolean;
+  /** 완료 현황을 보여줄지 (관리자 · 부매니저). 부매니저는 campUsers 가 자기 그룹 사람만 들어온다 */
+  showStatus?: boolean;
+  /** 수정 · 삭제 가능 (관리자, 또는 본인이 만든 업무의 부매니저) */
+  canEdit?: boolean;
+  /** 미완료자 독촉 가능 */
+  canRemind?: boolean;
+  /** 부매니저에게 보이는 그룹 이름 (완료 현황 제목에 표시) */
+  scopeLabel?: string;
   campUsers: User[];
   campCode: string;
   onClose: () => void;
@@ -23,6 +30,10 @@ interface TaskDetailModalProps {
 export default function TaskDetailModal({
   task,
   isAdmin,
+  showStatus = isAdmin,
+  canEdit = isAdmin,
+  canRemind = isAdmin,
+  scopeLabel,
   campUsers,
   campCode,
   onClose,
@@ -57,8 +68,8 @@ export default function TaskDetailModal({
   const otherAttachments = task.attachments?.filter((a: { type: string }) => a.type !== 'link' && a.type !== 'image') || [];
 
   // 실제 완료 현황 계산
-  const targetUsers = isAdmin ? getTaskTargetUsers(task, campUsers, campCode) : [];
-  const { completedUsers, incompleteUsers, totalCount, completionRate } = isAdmin 
+  const targetUsers = showStatus ? getTaskTargetUsers(task, campUsers, campCode) : [];
+  const { completedUsers, incompleteUsers, totalCount, completionRate } = showStatus
     ? getTaskCompletionStatus(task, targetUsers)
     : { completedUsers: [], incompleteUsers: [], totalCount: 0, completionRate: 0 };
   
@@ -69,14 +80,15 @@ export default function TaskDetailModal({
   const handleSendReminder = async () => {
     setIsSendingReminder(true);
     try {
-      const sendTaskReminder = httpsCallable(functions, 'sendTaskReminderToUsers');
-      const result = await sendTaskReminder({ taskId: task.id });
-      const data = result.data as { success: boolean; message: string; sentCount: number };
-      
-      toast.success(data.message);
-    } catch (error: any) {
+      // 관리자는 전체, 부매니저는 자기 그룹 미완료자에게만 (서버가 판단)
+      const data = await remindTaskViaApi(task.id);
+      const missed = missedSummary(data.missed);
+      if (data.sent > 0) toast.success(`${data.sent}명에게 알림을 보냈습니다.`);
+      else if (!missed) toast('알림을 보낼 미완료자가 없습니다.');
+      if (missed) toast(`🔕 ${missed}`, { duration: 8000 });
+    } catch (error: unknown) {
       console.error('푸시 알림 전송 실패:', error);
-      toast.error(error.message || '알림 전송에 실패했습니다.');
+      toast.error(error instanceof Error && error.message ? error.message : '알림 전송에 실패했습니다.');
     } finally {
       setIsSendingReminder(false);
     }
@@ -278,10 +290,10 @@ export default function TaskDetailModal({
             )}
 
             {/* 완료 현황 (Admin) - 한 번에 보기 */}
-            {isAdmin && totalCount > 0 && (
+            {showStatus && totalCount > 0 && (
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h5 className="text-sm font-semibold text-gray-900">완료 현황</h5>
+                  <h5 className="text-sm font-semibold text-gray-900">완료 현황{scopeLabel ? <span className="ml-1 text-xs font-medium text-gray-500">· {scopeLabel}</span> : null}</h5>
                   <div className="flex items-center gap-2">
                     <span className="text-lg font-bold text-blue-600">
                       {sortedCompletedUsers.length}/{totalCount}명
@@ -359,7 +371,7 @@ export default function TaskDetailModal({
                 )}
 
                 {/* 미완료자에게 알림 보내기 */}
-                {sortedIncompleteUsers.length > 0 && (
+                {canRemind && sortedIncompleteUsers.length > 0 && (
                   <div className="space-y-2">
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <div className="flex items-start gap-2 text-xs text-blue-800">
@@ -410,7 +422,7 @@ export default function TaskDetailModal({
 
           {/* 푸터 - 더 작게 */}
           <div className="flex gap-2 p-4 border-t border-gray-200">
-            {isAdmin ? (
+            {canEdit ? (
               <>
                 <button
                   onClick={onCopy}

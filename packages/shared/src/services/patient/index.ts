@@ -710,8 +710,9 @@ export const updateMedicationSchedule = async (
   index: number,
   updated: Omit<MedicationSchedule, 'checkedTimes'>
 ): Promise<void> => {
+  // 폼에 없는 값(처방전 사진 · 복용 확인자 · 휴약일 등)은 그대로 두고, 폼이 바꾼 값만 덮어쓴다
   const newSchedules = allSchedules.map((s, i) =>
-    i === index ? { ...updated, checkedTimes: s.checkedTimes } : s
+    i === index ? { ...s, ...updated, checkedTimes: s.checkedTimes } : s
   );
   await updateDoc(doc(db, 'patientRecords', recordId), {
     medicationSchedules: newSchedules,

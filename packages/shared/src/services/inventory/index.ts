@@ -1174,6 +1174,40 @@ export const removeLostItemMedia = async (db: Firestore, lostItemId: string, cur
   });
 };
 
+/**
+ * 주운 물건 ↔ 찾는 물건 짝 연결.
+ * 두 건을 한 트랜잭션으로 '찾음'(claimed) 처리하고 서로를 가리키게 한다.
+ */
+export const linkLostItems = async (
+  db: Firestore,
+  aId: string,
+  bId: string,
+  by: { name: string; claimedName?: string }
+): Promise<void> => {
+  if (aId === bId) throw new Error('같은 건끼리는 연결할 수 없습니다.');
+  await runTransaction(db, async tx => {
+    const aRef = doc(db, LOST_ITEMS, aId);
+    const bRef = doc(db, LOST_ITEMS, bId);
+    const [aSnap, bSnap] = await Promise.all([tx.get(aRef), tx.get(bRef)]);
+    if (!aSnap.exists() || !bSnap.exists()) throw new Error('연결할 분실물을 찾지 못했습니다.');
+    const now = Timestamp.now();
+    const common = {
+      status: 'claimed' as LostItemStatus,
+      claimedHandler: by.name,
+      claimedAt: now,
+      matchedAt: now,
+      matchedBy: by.name,
+      updatedAt: now,
+    };
+    const owner = by.claimedName
+      ?? (aSnap.data().ownerName as string | undefined)
+      ?? (bSnap.data().ownerName as string | undefined);
+    tx.update(aRef, stripUndefined({ ...common, matchedId: bId, claimedBy: owner }));
+    tx.update(bRef, stripUndefined({ ...common, matchedId: aId, claimedBy: owner }));
+  });
+  logger.info('분실물 짝 연결:', aId, bId);
+};
+
 export const deleteLostItem = async (db: Firestore, lostItemId: string): Promise<void> => {
   await deleteDoc(doc(db, LOST_ITEMS, lostItemId));
   logger.info('분실물 삭제:', lostItemId);

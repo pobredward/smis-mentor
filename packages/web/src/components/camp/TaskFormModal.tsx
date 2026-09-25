@@ -3,9 +3,9 @@ import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Timestamp } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { createTask, updateTask, deleteTask, uploadTaskImage, uploadTaskFile, getTasksByGroupId, updateTaskGroup } from '@/lib/taskService';
+import { uploadTaskImage, uploadTaskFile, getTasksByGroupId } from '@/lib/taskService';
+import { saveTaskViaApi } from '@/lib/taskApi';
 import type { 
   Task, 
   TaskAttachment, 
@@ -17,7 +17,8 @@ import {
   JOB_EXPERIENCE_GROUP_ROLES,
   MENTOR_GROUP_ROLES,
   FOREIGN_GROUP_ROLES,
-  JOB_EXPERIENCE_GROUPS 
+  JOB_EXPERIENCE_GROUPS,
+  toDateKey,
 } from '@smis-mentor/shared';
 
 type TargetRoleType = 'mentor' | 'foreign';
@@ -27,11 +28,13 @@ const getForeignRoles = (): JobExperienceGroupRole[] => Array.from(FOREIGN_GROUP
 
 interface TaskFormProps {
   campCode: string;
-  createdBy: string;
+  createdBy?: string;
   task?: Task | null;
   isCopyMode?: boolean;
   selectedDate: Date;
   categories?: TaskCategory[];
+  /** 부매니저가 만들 때: 대상 그룹을 이 그룹으로 고정 (한글 표기) */
+  lockedGroup?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -53,7 +56,7 @@ const GROUP_LABEL_EN: Record<string, string> = {
   '단기4': 'Short 4',
 };
 
-export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = false, selectedDate, categories = [], onClose, onSuccess }: TaskFormProps) {
+export default function TaskFormModal({ campCode, task, isCopyMode = false, selectedDate, categories = [], lockedGroup, onClose, onSuccess }: TaskFormProps) {
   const { userData: formUser } = useAuth();
   const isForeign = formUser?.role === 'foreign' || formUser?.role === 'foreign_temp';
   const isEdit = !!task && !isCopyMode;
@@ -67,7 +70,9 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
   }, [onClose]);
 
   // 타겟 role 타입 (멘토용/원어민용) - default는 mentor
-  const [targetRoleType, setTargetRoleType] = useState<TargetRoleType>('mentor');
+  // 수정 · 복사할 때는 기존 대상 역할로 멘토용/원어민용을 정한다
+  const [targetRoleType, setTargetRoleType] = useState<TargetRoleType>(() =>
+    task?.targetRoles?.length && task.targetRoles.every(r => (FOREIGN_GROUP_ROLES as readonly string[]).includes(r)) ? 'foreign' : 'mentor');
   
   // roleOptions는 targetRoleType에 따라 동적으로 변경
   const roleOptions = targetRoleType === 'mentor' ? getMentorRoles() : getForeignRoles();
@@ -88,7 +93,8 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
   const [selectedRoles, setSelectedRoles] = useState<JobExperienceGroupRole[]>(task?.targetRoles || []);
 
   // 대상 그룹 (새로 추가)
-  const [selectedGroups, setSelectedGroups] = useState<JobExperienceGroup[]>(task?.targetGroups || []);
+  const [selectedGroups, setSelectedGroups] = useState<JobExperienceGroup[]>(
+    lockedGroup ? [lockedGroup as JobExperienceGroup] : (task?.targetGroups || []));
 
   // 업무 제목 & 설명
   const [title, setTitle] = useState(task?.title || '');
@@ -360,110 +366,36 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
     setSubmitting(true);
 
     try {
-      const commonUpdates = {
-        title: title.trim(),
-        description: description.trim(),
-        targetRoles: selectedRoles,
-        targetGroups: selectedGroups,
-        // 시간이 없는 경우 수정 모드에서 기존 값을 삭제하기 위해 null 전달
-        time: time || (isEdit ? null : undefined),
-        // 소요시간이 없는 경우 수정 모드에서 기존 값을 삭제하기 위해 null 전달
-        estimatedDuration: durationMinutes && parseFloat(durationMinutes) > 0
-          ? { value: parseFloat(durationMinutes), unit: 'minutes' as const }
-          : (isEdit ? null : undefined),
-        // 카테고리 (없으면 null로 필드 제거)
-        categoryId: selectedCategoryId || (isEdit ? null : undefined),
-        attachments: attachments.length > 0 ? attachments : undefined,
-        createdBy,
-      };
-
-      if (isEdit && task) {
-        if (task.groupId) {
-          // 그룹 수정: 날짜가 바뀌었는지 확인
-          const groupTasks = await getTasksByGroupId(task.groupId);
-          const originalDateStrs = new Set(
-            groupTasks.map(t => {
-              const d = t.date.toDate();
-              return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-            })
-          );
-          const newDateStrs = new Set(
-            selectedDates.map(d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`)
-          );
-          const datesChanged =
-            originalDateStrs.size !== newDateStrs.size ||
-            [...newDateStrs].some(s => !originalDateStrs.has(s));
-
-          if (datesChanged) {
-            // 날짜 변경: 기존 삭제 후 새 날짜로 재생성
-            await updateTaskGroup(campCode, task.groupId, commonUpdates, selectedDates);
-          } else {
-            // 날짜 동일: 내용만 일괄 업데이트
-            await updateTaskGroup(campCode, task.groupId, commonUpdates);
-          }
-          toast.success(isForeign ? 'Group task updated.' : '그룹 업무가 수정되었습니다.');
-        } else {
-          // 그룹 없는 단일 Task 수정
-          if (selectedDates.length >= 2) {
-            // 단일 → 그룹 업그레이드: 기존 문서 삭제 후 새 groupId로 다중 생성
-            await deleteTask(task.id);
-            const newGroupId = crypto.randomUUID();
-            for (const date of selectedDates) {
-              const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-              await createTask(campCode, {
-                campCode,
-                ...commonUpdates,
-                date: Timestamp.fromDate(localDate),
-                groupId: newGroupId,
-              }, newGroupId);
-            }
-            toast.success(`${selectedDates.length}개의 그룹 업무가 생성되었습니다.`);
-          } else {
-            // 날짜 1개: 기존 방식 유지
-            const localDate = new Date(
-              selectedDates[0].getFullYear(),
-              selectedDates[0].getMonth(),
-              selectedDates[0].getDate(),
-              0, 0, 0, 0
-            );
-            await updateTask(task.id, {
-              ...commonUpdates,
-              campCode,
-              date: Timestamp.fromDate(localDate),
-            });
-            toast.success(isForeign ? 'Task updated.' : '업무가 수정되었습니다.');
-          }
-        }
+      // 생성 · 수정 · 여러 날짜 묶음 처리는 서버가 한다 (남는 날짜의 완료 기록 · 첨부 보존)
+      const dates = [...new Set(selectedDates.map(toDateKey))];
+      const minutes = durationMinutes ? parseFloat(durationMinutes) : NaN;
+      await saveTaskViaApi({
+        campCode,
+        taskId: isEdit && task ? task.id : undefined,
+        dates,
+        fields: {
+          title: title.trim(),
+          description: description.trim(),
+          targetRoles: selectedRoles,
+          targetGroups: lockedGroup ? [lockedGroup] : selectedGroups,
+          time: time || null,
+          estimatedDurationMinutes: minutes > 0 ? minutes : null,
+          categoryId: selectedCategoryId || null,
+          attachments,
+        },
+      });
+      if (isEdit) {
+        toast.success(isForeign ? 'Task updated.' : '업무가 수정되었습니다.');
       } else {
-        // 생성 모드: 날짜 2개 이상이면 공유 groupId 부여
-        const newGroupId = selectedDates.length >= 2
-          ? crypto.randomUUID()
-          : undefined;
-
-        for (const date of selectedDates) {
-          const localDate = new Date(
-            date.getFullYear(),
-            date.getMonth(),
-            date.getDate(),
-            0, 0, 0, 0
-          );
-          const taskData = {
-            campCode,
-            ...commonUpdates,
-            date: Timestamp.fromDate(localDate),
-            ...(newGroupId ? { groupId: newGroupId } : {}),
-          };
-          await createTask(campCode, taskData, newGroupId);
-        }
-
-        toast.success(isForeign ? `${selectedDates.length} task(s) created.` : `${selectedDates.length}개의 업무가 생성되었습니다.`);
+        toast.success(isForeign ? `${dates.length} task(s) created.` : `${dates.length}개의 업무가 생성되었습니다.`);
       }
 
       onSuccess();
       onClose();
     } catch (error) {
       logger.error('업무 저장 오류:', error);
-      toast.error(isForeign ? 'Failed to save task.' : '업무 저장 중 오류가 발생했습니다.');
+      const msg = error instanceof Error && error.message && !isForeign ? error.message : '';
+      toast.error(msg || (isForeign ? 'Failed to save task.' : '업무 저장 중 오류가 발생했습니다.'));
     } finally {
       setSubmitting(false);
     }
@@ -772,6 +704,12 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
             <label className="block text-xs font-medium text-gray-700 mb-1">
               🎯 {isForeign ? 'Target Group' : '대상 그룹'} <span className="text-red-500">*</span>
             </label>
+            {lockedGroup ? (
+              <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                <b className="text-green-700">{isForeign ? (GROUP_LABEL_EN[lockedGroup] ?? lockedGroup) : lockedGroup}</b>
+                {isForeign ? ' — sub managers create tasks for their own group only' : ' — 부매니저는 자기 그룹 업무만 만들 수 있어요'}
+              </p>
+            ) : (
             <div className="flex flex-wrap gap-1.5">
               {['공통', ...groupOptions.filter(g => g !== '공통')].map(group => (
                 <button
@@ -794,6 +732,7 @@ export default function TaskFormModal({ campCode, createdBy, task, isCopyMode = 
                 </button>
               ))}
             </div>
+            )}
           </div>
 
           {/* 4. 업무 제목 */}

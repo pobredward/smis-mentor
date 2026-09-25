@@ -39,6 +39,7 @@ const NOTIFICATION_ICONS: Record<NotificationKey, keyof typeof Ionicons.glyphMap
   supplySettle: 'cash-outline',
   supplyIntake: 'archive-outline',
   stockLow: 'trending-down-outline',
+  stockTransfer: 'swap-horizontal-outline',
 };
 import { RootStackParamList } from '../navigation/types';
 import { useNotificationPermission } from '../hooks/useNotificationPermission';

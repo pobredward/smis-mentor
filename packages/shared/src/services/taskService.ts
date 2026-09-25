@@ -1,5 +1,94 @@
 import type { Task, User, JobExperienceGroupRole, JobExperienceGroup } from '../types';
 import { LEGACY_GROUP_MAP } from '../types/camp';
+import { campExperienceOf, isSubManagerIn, normalizeCampGroup, type CampUserLike } from '../utils/campAccess';
+
+// ==================== 업무 노출 · 배정 기준 ====================
+// 관리자가 아니면 "내 그룹" 대상 업무만 본다.
+// - 멘토 · 원어민: 내 그룹 + 내 역할 대상 업무 (체크 대상과 같다)
+// - 부매니저: 내 그룹 대상 업무를 역할과 무관하게 모두 본다 (완료 현황 확인용). 체크는 내 역할 대상만.
+
+export interface TaskViewer {
+  isAdmin: boolean;
+  /** 활성 캠프에서 내 역할 (담임/수업/Speaking…) */
+  groupRole?: string;
+  /** 활성 캠프에서 내 그룹 (한글 표기: 서머 · 주니어 …) */
+  group?: string;
+  /** 활성 캠프에서 부매니저인가 */
+  isSubManager: boolean;
+}
+
+export function taskViewerOf(user: CampUserLike | null | undefined, jobCodeId?: string): TaskViewer {
+  const exp = campExperienceOf(user, jobCodeId);
+  return {
+    isAdmin: user?.role === 'admin',
+    groupRole: exp?.groupRole,
+    group: normalizeCampGroup(exp?.group),
+    isSubManager: isSubManagerIn(user, jobCodeId),
+  };
+}
+
+/** 업무가 이 그룹을 대상으로 하는가 ('공통'이면 모든 그룹, 대상 그룹이 없는 옛 업무도 모든 그룹) */
+export function taskTargetsGroup(task: Pick<Task, 'targetGroups'>, group?: string): boolean {
+  const groups = task.targetGroups ?? [];
+  if (groups.length === 0 || groups.includes('공통')) return true;
+  const g = normalizeCampGroup(group);
+  return !!g && groups.some(t => normalizeCampGroup(t) === g);
+}
+
+/** 이 사람이 체크해야 하는 업무인가 (내 역할 + 내 그룹) */
+export function isTaskAssignedTo(task: Pick<Task, 'targetRoles' | 'targetGroups'>, viewer: TaskViewer): boolean {
+  return !!viewer.groupRole
+    && (task.targetRoles ?? []).includes(viewer.groupRole as JobExperienceGroupRole)
+    && taskTargetsGroup(task, viewer.group);
+}
+
+/** 이 사람 화면에 보일 업무인가 */
+export function isTaskVisibleTo(task: Pick<Task, 'targetRoles' | 'targetGroups'>, viewer: TaskViewer): boolean {
+  if (viewer.isAdmin) return true;
+  if (viewer.isSubManager) return taskTargetsGroup(task, viewer.group);
+  return isTaskAssignedTo(task, viewer);
+}
+
+/** 업무 저장 API(/api/tasks/save) 요청 본문 — web · mobile 공용 */
+export interface TaskSavePayload {
+  /** 캠프 코드 (예: J28) */
+  campCode: string;
+  /** 있으면 수정 */
+  taskId?: string;
+  /** 'YYYY-MM-DD' 목록 (2개 이상이면 묶음 업무) */
+  dates: string[];
+  fields: {
+    title: string;
+    description: string;
+    targetRoles: string[];
+    /** 부매니저는 서버가 내 그룹으로 고정한다 */
+    targetGroups: string[];
+    /** 비우면 삭제 */
+    time?: string | null;
+    estimatedDurationMinutes?: number | null;
+    categoryId?: string | null;
+    attachments?: Array<{ type: string; url: string; label: string; thumbnail?: string }>;
+  };
+}
+
+/** 업무 독촉 API(/api/tasks/remind) 응답 */
+export interface TaskRemindResult {
+  sent: number;
+  incomplete: number;
+  missed: Array<{ name: string; state: string }>;
+}
+
+/** 이 업무를 수정 · 삭제할 수 있는가 — 관리자, 또는 본인이 만든 업무의 부매니저 */
+export function canEditTask(task: Pick<Task, 'createdBy'>, viewer: TaskViewer, uid?: string): boolean {
+  if (viewer.isAdmin) return true;
+  return viewer.isSubManager && !!uid && task.createdBy === uid;
+}
+
+/** 이 업무의 미완료자에게 독촉할 수 있는가 — 관리자, 또는 자기 그룹 대상 업무의 부매니저 */
+export function canRemindTask(task: Pick<Task, 'targetGroups'>, viewer: TaskViewer): boolean {
+  if (viewer.isAdmin) return true;
+  return viewer.isSubManager && taskTargetsGroup(task, viewer.group);
+}
 
 /**
  * 업무의 대상 사용자 필터링
@@ -20,23 +109,13 @@ export const getTaskTargetUsers = (
     const campExperience = user.jobExperiences.find(exp => exp.id === campCode);
     if (!campExperience) return false;
 
-    // 역할 매칭: 업무의 대상 역할에 사용자의 역할이 포함되어야 함
-    const matchesRole = task.targetRoles.includes(campExperience.groupRole);
-    if (!matchesRole) return false;
-
-    // 그룹 매칭
-    // 사용자의 그룹명을 한글로 변환 (영어 레거시 그룹명 지원)
-    const userGroupKorean = LEGACY_GROUP_MAP[campExperience.group] || campExperience.group;
-    
-    // 1. 업무 대상 그룹에 "공통"이 포함되어 있으면 모든 그룹의 사용자 포함
-    if (task.targetGroups.includes('공통')) {
-      return true;
-    }
-    
-    // 2. 그렇지 않으면 사용자의 그룹이 업무 대상 그룹에 포함되어야 함
-    const matchesGroup = task.targetGroups.includes(userGroupKorean as JobExperienceGroup);
-    
-    return matchesGroup;
+    // 역할 + 그룹 매칭 — 화면 노출(isTaskAssignedTo)과 같은 기준
+    return isTaskAssignedTo(task, {
+      isAdmin: false,
+      groupRole: campExperience.groupRole,
+      group: LEGACY_GROUP_MAP[campExperience.group] || campExperience.group,
+      isSubManager: false,
+    });
   });
 };
 

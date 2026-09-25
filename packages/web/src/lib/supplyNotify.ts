@@ -18,7 +18,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getAdminFirestore } from './firebase-admin';
 import {
-  notificationAllowed, pushReachOf, STOCK_MANAGER_GROUP_ROLES,
+  notificationAllowed, pushReachOf, STOCK_MANAGER_GROUP_ROLES, isStockGroupOf,
   type NotificationKey, type NotificationSettings, type PushReachState,
 } from '@smis-mentor/shared';
 
@@ -47,6 +47,8 @@ export type SupplyNotifyEvent =
   | { type: 'request_created'; requestId: string }
   | { type: 'buyer_assigned'; requestIds: string[] }
   | { type: 'default_buyer'; campCode: string }
+  /** 부매니저가 다른 그룹 재고를 자기 그룹으로 가져왔을 때 → 가져간 그룹의 부매니저에게 (서버 내부에서만 보냄) */
+  | { type: 'stock_taken'; campCode: string; itemId: string; fromGroupId: string; toGroupId: string; quantity: number; byName: string }
   | { type: 'lines_done'; requestId: string; lineIds: string[] }
   | { type: 'settled'; requestId: string; lineIds: string[] }
   | { type: 'status'; requestId: string }
@@ -164,6 +166,24 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
     const name = it.data()?.name ?? '품목';
     const stockManagers = users.filter(u => u.role === 'admin' || (!!u.exp?.groupRole && STOCK_MANAGER_GROUP_ROLES.includes(u.exp.groupRole)));
     return send('stockLow', stockManagers, `📉 ${name} 부족`, `${gr.data()?.name ?? ''} 그룹 ${n}${it.data()?.unit ?? ''} 남음 (최소 ${min}) — 재고 요청 탭에서 요청으로 올릴 수 있어요.`, { type: 'stock', itemId: ev.itemId }, actorUid);
+  }
+
+  if (ev.type === 'stock_taken') {
+    const [it, from, to] = await Promise.all([
+      db.doc(`inventoryItems/${ev.itemId}`).get(),
+      db.doc(`inventoryGroups/${ev.fromGroupId}`).get(),
+      db.doc(`inventoryGroups/${ev.toGroupId}`).get(),
+    ]);
+    const fromGroup = from.data();
+    if (!fromGroup) return 0;
+    const users = await campUsers(ev.campCode);
+    // 가져간 그룹과 연결된 캠프 그룹의 부매니저
+    const managers = users.filter(u => !!u.exp?.groupRole && STOCK_MANAGER_GROUP_ROLES.includes(u.exp.groupRole)
+      && isStockGroupOf({ campGroupName: fromGroup.campGroupName, name: fromGroup.name }, u.exp.group));
+    const name = it.data()?.name ?? '품목';
+    return send('stockTransfer', managers, `🔁 ${name} ${ev.quantity}${it.data()?.unit ?? ''} 이동`,
+      `${ev.byName} 선생님이 ${fromGroup.name}에서 ${to.data()?.name ?? '다른 그룹'}(으)로 가져갔어요.`,
+      { type: 'stock', itemId: ev.itemId }, actorUid);
   }
 
   if (ev.type === 'buyer_assigned') {

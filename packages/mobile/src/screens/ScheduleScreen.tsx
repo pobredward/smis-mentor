@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,7 +53,7 @@ function useNowMinutes(startMs?: number | null, endMs?: number | null) {
 export function ScheduleScreen() {
   const { userData } = useAuth();
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   const [category, setCategory] = useState<string | null>(null);
   const [groupName, setGroupName] = useState<string | null>(null);

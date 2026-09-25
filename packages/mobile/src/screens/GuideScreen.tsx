@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useState, useEffect } from 'react';
 import { logger } from '@smis-mentor/shared';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, TextInput, Platform } from 'react-native';
@@ -45,7 +46,7 @@ export function GuideScreen() {
 
   const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   // 사용자 role에 따라 인솔표 링크 필터링
   const filteredGuides = guides.filter(link => {

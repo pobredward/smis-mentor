@@ -43,6 +43,8 @@ import {
   MISSED_STATE_LABELS,
   suggestedUsages,
   inventoryPerm,
+  managedStockGroupIds,
+  canTransferBetween,
   transferStock,
   subscribeCampMovements,
   movementLabel,
@@ -106,6 +108,14 @@ import {
   lostItemMediaPath,
   LOST_ITEM_STATUSES,
   LOST_ITEM_STATUS_LABELS,
+  LOST_ITEM_KINDS,
+  LOST_KIND_LABELS,
+  LOST_STATUS_LABELS_BY_KIND,
+  lostItemKind,
+  lostStatusLabel,
+  isLostOpen,
+  suggestLostMatches,
+  linkLostItems,
   buildInventoryViews,
   computePurchaseNeeds,
   getGroupStock,
@@ -137,6 +147,7 @@ import type {
   LostItem,
   LostItemMedia,
   LostItemStatus,
+  LostItemKind,
   InventoryUsage,
   InventoryPerm,
   LostNotifyTarget,
@@ -272,6 +283,10 @@ export default function InventoryContent() {
   // 기존 권한 체계 그대로 — admin / 그룹 역할 '부매니저'
   const perm = useMemo(() => inventoryPerm(userData as { role?: string; jobExperiences?: Array<{ id: string; groupRole?: string }> } | null, activeJobCodeId),
     [userData, activeJobCodeId]);
+  /** 입고 · 조정 · 이동할 수 있는 그룹 — 관리자 전체, 부매니저는 자기 그룹 */
+  const managedGroupIds = useMemo(
+    () => managedStockGroupIds(perm, groups, userData?.jobExperiences?.find(e => e.id === activeJobCodeId)?.group),
+    [perm, groups, userData?.jobExperiences, activeJobCodeId]);
   // 상세에서 '필요한 물품 요청' → 재고 요청 탭의 작성 폼을 미리 채워 연다
   const [requestPrefill, setRequestPrefill] = useState<{ req: SupplyRequest; nonce: number } | null>(null);
   const askSupply = (v: InventoryItemView, groupId?: string) => {
@@ -362,6 +377,7 @@ export default function InventoryContent() {
           groups={groups}
           campCode={campCode}
           perm={perm}
+          managedGroupIds={managedGroupIds}
           userId={userData?.userId ?? ''}
           userName={userName}
           initialUseGroupId={quickUseGroupId}
@@ -702,11 +718,13 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
 
 // ==================== 품목 상세 (그룹별 수량 · 입고 · 조정 · 이력) ====================
 
-function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initialUseGroupId, defaultGroupId, onRequest, onClose }: {
+function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId, userName, initialUseGroupId, defaultGroupId, onRequest, onClose }: {
   view: InventoryItemView;
   groups: InventoryGroup[];
   campCode: string;
   perm: InventoryPerm;
+  /** 입고 · 조정 · 이동할 수 있는 그룹 (부매니저는 자기 그룹) */
+  managedGroupIds: Set<string>;
   userId: string;
   userName: string;
   initialUseGroupId?: string;
@@ -759,19 +777,33 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
         notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: group.id });
       } else if (mode.type === 'restock') {
         if (n <= 0) return;
-        await restock(db, campCode, { ...base, quantity: n, memo: memo.trim() || undefined }, userName);
-        if (restockExpiry) await setStockMeta(db, campCode, view.id, group.id, { expiry: restockExpiry });
+        if (perm.canManageStock) {
+          await restock(db, campCode, { ...base, quantity: n, memo: memo.trim() || undefined }, userName);
+          if (restockExpiry) await setStockMeta(db, campCode, view.id, group.id, { expiry: restockExpiry });
+        } else {
+          // 부매니저: 서버가 "내 그룹"인지 확인하고 기록한다
+          await authenticatedPost('/api/inventory/stock-op', {
+            op: 'restock', campCode, itemId: view.id, groupId: group.id, quantity: n,
+            expiry: restockExpiry || undefined, memo: memo.trim() || undefined,
+          });
+        }
         setRestockExpiry('');
       } else if (mode.type === 'adjust') {
         if (!memo.trim()) { alert('조정 사유를 입력해주세요.'); return; }
-        await adjustStockTo(db, campCode, { ...base, current, target: n, reason: memo.trim() }, userName);
+        if (perm.canManageStock) {
+          await adjustStockTo(db, campCode, { ...base, current, target: n, reason: memo.trim() }, userName);
+        } else {
+          await authenticatedPost('/api/inventory/stock-op', {
+            op: 'adjust', campCode, itemId: view.id, groupId: group.id, target: n, reason: memo.trim(),
+          });
+        }
       } else {
         await setGroupMinStock(db, campCode, view.id, group.id, qty === '' ? null : n);
       }
       setMode(null); setQty(''); setMemo('');
     } catch (e) {
       console.error('재고 처리 오류:', e);
-      alert('처리 중 오류가 발생했습니다.');
+      alert(e instanceof Error && e.message ? e.message : '처리 중 오류가 발생했습니다.');
     } finally {
       setBusy(false);
     }
@@ -863,12 +895,14 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
                             {g.id in view.stocks && (
                               <button onClick={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} className="text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md px-2 py-1 mr-2">− 사용</button>
                             )}
-                            {perm.canManageStock && (
+                            {managedGroupIds.has(g.id) && (
                               <>
                                 <button onClick={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }} className="text-[12px] font-semibold text-emerald-700 hover:underline mr-2">+입고</button>
                                 <button onClick={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline mr-2">조정</button>
-                                <button onClick={() => { setMode(null); setTransferFrom(g.id); }} title="다른 그룹으로 이동" className="text-[12px] font-semibold text-indigo-600 hover:underline mr-2">이동</button>
-                                <button onClick={() => { setMode({ type: 'min', groupId: g.id }); setQty(isOverride ? String(view.minStocks[g.id]) : ''); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline">최소</button>
+                                <button onClick={() => { setMode(null); setTransferFrom(g.id); }} title="다른 그룹과 주고받기" className="text-[12px] font-semibold text-indigo-600 hover:underline mr-2">이동</button>
+                                {perm.canManageStock && (
+                                  <button onClick={() => { setMode({ type: 'min', groupId: g.id }); setQty(isOverride ? String(view.minStocks[g.id]) : ''); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline">최소</button>
+                                )}
                               </>
                             )}
                           </td>
@@ -879,6 +913,7 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
                 </table>
               </div>
             )}
+            {perm.isSubManager && managedGroupIds.size > 0 && <p className="text-[12px] text-gray-400 mt-1">내 그룹 재고는 <b>입고 · 조정 · 이동</b>할 수 있어요. 이동은 다른 그룹에서 가져오는 것도 됩니다 (그 그룹 부매니저에게 알림).</p>}
             {perm.canManageStock && <p className="text-[12px] text-gray-400 mt-1">최소 수량 기본값 {view.minStockDefault ?? 0}{view.unit} (품목 수정에서 변경) · * 표시는 교무실별 예외 · <b>조정</b>은 이 교무실 수량만 바꾸고, <b>이동</b>은 다른 교무실로 옮깁니다</p>}
           </div>
 
@@ -1006,6 +1041,7 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
 
       {transferFrom && (
         <StockTransferModal view={view} groups={groups} campCode={campCode} fromGroupId={transferFrom}
+          managedGroupIds={perm.canManageStock ? null : managedGroupIds}
           userId={userId} userName={userName} onClose={() => setTransferFrom(null)} />
       )}
 
@@ -1019,19 +1055,25 @@ function ItemDetailModal({ view, groups, campCode, perm, userId, userName, initi
 // ==================== 🔁 그룹(교무실) 간 재고 이동 ====================
 // 보내는 그룹 −, 받는 그룹 + 가 하나의 트랜잭션으로 처리되어 전체 재고 합계는 변하지 않는다.
 
-function StockTransferModal({ view, groups, campCode, fromGroupId, userId, userName, onClose }: {
+function StockTransferModal({ view, groups, campCode, fromGroupId, managedGroupIds, userId, userName, onClose }: {
   view: InventoryItemView;
   groups: InventoryGroup[];
   campCode: string;
   fromGroupId: string;
+  /** 부매니저: 내 그룹 — 보내거나 받는 쪽 중 하나가 여기 있어야 한다. 관리자는 null(제한 없음) */
+  managedGroupIds?: Set<string> | null;
   userId: string;
   userName: string;
   onClose: () => void;
 }) {
   const [from, setFrom] = useState(fromGroupId);
-  const others = groups.filter(g => g.id !== from);
+  // 부매니저: 보내는 곳이 내 그룹이 아니면 받는 곳은 내 그룹만 (다른 그룹 재고를 가져오기)
+  const others = groups.filter(g => g.id !== from
+    && (!managedGroupIds || canTransferBetween(managedGroupIds, from, g.id)));
   const [to, setTo] = useState(others[0]?.id ?? '');
-  useEffect(() => { if (to === from) setTo(groups.find(g => g.id !== from)?.id ?? ''); }, [from, to, groups]);
+  useEffect(() => {
+    if (!others.some(g => g.id === to)) setTo(others[0]?.id ?? '');
+  }, [from, to, others]);
   const [qty, setQty] = useState('1');
   const [memo, setMemo] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1048,14 +1090,23 @@ function StockTransferModal({ view, groups, campCode, fromGroupId, userId, userN
     if (invalid || busy || !fromGroup || !toGroup) return;
     setBusy(true);
     try {
-      const res = await transferStock(db, campCode, {
-        itemId: view.id, itemName: view.name,
-        fromGroupId: fromGroup.id, fromGroupName: fromGroup.name,
-        toGroupId: toGroup.id, toGroupName: toGroup.name,
-        quantity: n, memo: memo.trim() || undefined,
-      }, { uid: userId, name: userName });
-      setDone(res);
-      notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: fromGroup.id });
+      if (!managedGroupIds) {
+        const res = await transferStock(db, campCode, {
+          itemId: view.id, itemName: view.name,
+          fromGroupId: fromGroup.id, fromGroupName: fromGroup.name,
+          toGroupId: toGroup.id, toGroupName: toGroup.name,
+          quantity: n, memo: memo.trim() || undefined,
+        }, { uid: userId, name: userName });
+        setDone(res);
+        notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: fromGroup.id });
+      } else {
+        // 부매니저: 서버가 권한 확인 · 기록 · 알림(가져온 그룹 부매니저, 재고 부족)까지 처리
+        const res = await authenticatedPost<{ from: number; to: number }>('/api/inventory/stock-op', {
+          op: 'transfer', campCode, itemId: view.id, fromGroupId: fromGroup.id, toGroupId: toGroup.id,
+          quantity: n, memo: memo.trim() || undefined,
+        });
+        setDone(res);
+      }
     } catch (e) {
       console.error('그룹 간 이동 오류:', e);
       alert(e instanceof Error ? e.message : '이동하지 못했습니다.');
@@ -2279,33 +2330,54 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
   campCode: string; jobCodeId: string; students: STSheetStudent[]; campGroups: CampGroup[];
   lostItems: LostItem[]; isAdmin: boolean; userId: string; userName: string;
 }) {
+  // 주운 물건 / 찾는 물건
+  const [kind, setKind] = useState<LostItemKind>('found');
   const [filter, setFilter] = useState<LostItemStatus | '전체'>('found');
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const opened = lostItems.find(l => l.id === openId) ?? null;
 
+  const ofKind = useMemo(() => lostItems.filter(l => lostItemKind(l) === kind), [lostItems, kind]);
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return lostItems.filter(l =>
+    return ofKind.filter(l =>
       (filter === '전체' || l.status === filter) &&
       (!q || [l.name, l.description, l.foundPlace, l.keptAt, l.claimedBy, l.reportedBy].some(f => f?.toLowerCase().includes(q)))
     );
-  }, [lostItems, filter, search]);
+  }, [ofKind, filter, search]);
   const counts = useMemo(() => ({
-    found: lostItems.filter(l => l.status === 'found').length,
-    claimed: lostItems.filter(l => l.status === 'claimed').length,
-    discarded: lostItems.filter(l => l.status === 'discarded').length,
+    found: ofKind.filter(l => l.status === 'found').length,
+    claimed: ofKind.filter(l => l.status === 'claimed').length,
+    discarded: ofKind.filter(l => l.status === 'discarded').length,
+  }), [ofKind]);
+  const openCounts = useMemo(() => ({
+    found: lostItems.filter(l => lostItemKind(l) === 'found' && isLostOpen(l)).length,
+    lost: lostItems.filter(l => lostItemKind(l) === 'lost' && isLostOpen(l)).length,
   }), [lostItems]);
+  const L = LOST_STATUS_LABELS_BY_KIND[kind];
 
   return (
     <div className="px-4 py-3 space-y-3">
+      {/* 주운 물건 / 찾는 물건 */}
+      <div className="flex rounded-xl border border-gray-200 bg-white overflow-hidden">
+        {LOST_ITEM_KINDS.map(k => (
+          <button key={k} onClick={() => { setKind(k); setFilter('found'); }}
+            className={`flex-1 py-2 text-[13px] font-bold transition-colors ${kind === k ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+            {LOST_KIND_LABELS[k].tab}
+            <span className={`ml-1.5 text-[11px] font-semibold ${kind === k ? 'text-white/80' : 'text-gray-400'}`}>{k === 'found' ? openCounts.found : openCounts.lost}</span>
+          </button>
+        ))}
+      </div>
       <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-bold text-gray-800">분실물 <span className="text-blue-600">{counts.found}</span><span className="text-[10px] text-gray-400 font-normal ml-1">보관 중</span></p>
-          <p className="text-[10px] text-gray-400">누구나 등록·확인할 수 있습니다. 주인을 찾으면 "주인 찾음"으로 바꿔주세요.</p>
-        </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shrink-0"><FiPlus className="w-3 h-3" />분실물 등록</button>
+        <p className="text-[10px] text-gray-400 flex-1">
+          {kind === 'found'
+            ? '주운 물건을 등록해 주인을 찾습니다. 주인을 찾으면 "주인 찾음"으로 바꿔주세요.'
+            : '잃어버린 물건을 등록하면 캠프 선생님 전체에게 알림이 갑니다. 주운 물건과 짝이 맞으면 연결해주세요.'}
+        </p>
+        <button onClick={() => setShowForm(true)} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shrink-0">
+          <FiPlus className="w-3 h-3" />{LOST_KIND_LABELS[kind].action}
+        </button>
       </div>
       <div className="relative">
         <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -2313,7 +2385,7 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
           className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-blue-400" />
       </div>
       <div className="flex gap-1.5 overflow-x-auto">
-        {([['found', `보관 중 ${counts.found}`], ['claimed', `주인 찾음 ${counts.claimed}`], ['discarded', `폐기 ${counts.discarded}`], ['전체', '전체']] as const).map(([id, label]) => (
+        {([['found', `${L.found} ${counts.found}`], ['claimed', `${L.claimed} ${counts.claimed}`], ['discarded', `${L.discarded} ${counts.discarded}`], ['전체', '전체']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setFilter(id)}
             className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border ${filter === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200'}`}>{label}</button>
         ))}
@@ -2322,7 +2394,7 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
       {list.length === 0 ? (
         <div className="flex flex-col items-center py-14 text-center">
           <FiSearch className="h-9 w-9 text-gray-300 mb-2" />
-          <p className="text-sm text-gray-500">{lostItems.length === 0 ? '등록된 분실물이 없습니다.' : '해당하는 분실물이 없습니다.'}</p>
+          <p className="text-sm text-gray-500">{ofKind.length === 0 ? (kind === 'found' ? '등록된 주운 물건이 없습니다.' : '찾는 물건 신고가 없습니다.') : '해당하는 건이 없습니다.'}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2338,12 +2410,12 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
                 </div>
                 <div className="flex-1 min-w-0 px-3 py-2">
                   <div className="flex items-center gap-1.5">
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${LOST_STATUS_STYLE[l.status]}`}>{LOST_ITEM_STATUS_LABELS[l.status]}</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${LOST_STATUS_STYLE[l.status]}`}>{lostStatusLabel(l)}</span>
                     <span className="text-sm font-bold text-gray-900 truncate">{l.name}</span>
                     {l.ownerName && <span className="text-[10px] text-rose-600 shrink-0">🏷️ {l.ownerName}</span>}
                     {l.media.length > 1 && <span className="text-[9px] text-gray-400 shrink-0">+{l.media.length - 1}</span>}
                   </div>
-                  <p className="text-[11px] text-gray-600 mt-0.5 truncate">📍 {l.foundPlace || '장소 미상'} · {l.foundDate}</p>
+                  <p className="text-[11px] text-gray-600 mt-0.5 truncate">📍 {l.foundPlace || '장소 미상'} · {l.foundDate}{l.matchedId ? ' · 🔗 연결됨' : ''}</p>
                   <p className="text-[10px] text-gray-400 truncate">{l.keptAt ? `보관: ${l.keptAt} · ` : ''}등록 {l.reportedBy}{l.status === 'claimed' && l.claimedBy ? ` · → ${l.claimedBy}` : ''}</p>
                 </div>
               </button>
@@ -2352,8 +2424,8 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
         </div>
       )}
 
-      {showForm && <LostItemFormModal campCode={campCode} jobCodeId={jobCodeId} students={students} campGroups={campGroups} userId={userId} userName={userName} onClose={() => setShowForm(false)} onCreated={id => { setShowForm(false); setOpenId(id); }} />}
-      {opened && <LostItemDetailModal item={opened} isAdmin={isAdmin} userId={userId} userName={userName} onClose={() => setOpenId(null)} />}
+      {showForm && <LostItemFormModal kind={kind} allItems={lostItems} campCode={campCode} jobCodeId={jobCodeId} students={students} campGroups={campGroups} userId={userId} userName={userName} onClose={() => setShowForm(false)} onCreated={id => { setShowForm(false); setOpenId(id); }} />}
+      {opened && <LostItemDetailModal item={opened} allItems={lostItems} isAdmin={isAdmin} userId={userId} userName={userName} onClose={() => setOpenId(null)} onOpen={setOpenId} />}
     </div>
   );
 }
@@ -2388,10 +2460,12 @@ function MediaPicker({ files, onChange, disabled }: { files: File[]; onChange: (
   );
 }
 
-function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, userName, onClose, onCreated }: {
+function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, campGroups, userId, userName, onClose, onCreated }: {
+  kind: LostItemKind; allItems: LostItem[];
   campCode: string; jobCodeId: string; students: STSheetStudent[]; campGroups: CampGroup[];
   userId: string; userName: string; onClose: () => void; onCreated: (id: string) => void;
 }) {
+  const isLost = kind === 'lost';
   // 이름표(주인)가 있으면 담임·방 담당·그룹 매니저에게, 없으면 캠프 전체에 알림 — 끌 수 있음
   const [owner, setOwner] = useState<STSheetStudent | null>(null);
   const [ownerQuery, setOwnerQuery] = useState('');
@@ -2402,7 +2476,7 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
     [owner, campGroups]);
   // 이름표로 주인을 아는 분실물: 누구에게 보낼지 (기본은 담당 셋 다)
   const [targets, setTargets] = useState<LostNotifyTarget[]>([...LOST_NOTIFY_TARGETS]);
-  const [toAll, setToAll] = useState(false);
+  const [toAll, setToAll] = useState(isLost); // 잃어버린 물건은 누가 주웠을지 모르니 캠프 전체가 기본
   const toggleTarget = (t: LostNotifyTarget) =>
     setTargets(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
   // 보내기 전에 "누가 받을 수 있나" 확인 — 캠프 인원은 필요할 때 한 번만 불러온다
@@ -2452,6 +2526,11 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
   const [foundDate, setFoundDate] = useState(todayStr());
   const [keptAt, setKeptAt] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  /** 반대쪽(주운 물건 ↔ 찾는 물건)에서 짝이 될 만한 건 */
+  const matches = useMemo(
+    () => (name.trim() ? suggestLostMatches({ kind, name, description, ownerStudentId: owner?.studentId }, allItems) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [name, description, owner?.studentId, allItems, kind]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const tooBig = files.some(f => f.size > 50 * 1024 * 1024);
@@ -2465,7 +2544,7 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
       const id = await addLostItem(db, {
         campCode, name: name.trim(), description: description.trim() || undefined, foundPlace: foundPlace.trim() || undefined,
         foundDate, keptAt: keptAt.trim() || undefined, reportedBy: userName, reportedById: userId,
-        jobCodeId: jobCodeId || undefined, notify,
+        jobCodeId: jobCodeId || undefined, notify, kind,
         ownerStudentId: owner?.studentId, ownerName: owner?.name, ownerClassCode: owner?.className,
         ownerClassMentor: owner?.classMentor, ownerUnitMentor: owner?.unitMentor, ownerGroup,
         notifyScope: owner ? (toAll ? 'all' : 'owner') : undefined,
@@ -2497,7 +2576,7 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[60]" onClick={busy ? undefined : onClose}>
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">🔍 분실물 등록</h2>
+          <h2 className="text-base font-bold text-gray-900">{isLost ? '🙋 잃어버렸어요' : '🔍 주운 물건 등록'}</h2>
           <button onClick={onClose} disabled={busy} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
@@ -2506,26 +2585,48 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
             <p className="text-xs font-bold text-gray-700 mb-1">물품명 *</p>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 파란색 물통, 안경, 후드집업" className={inputCls} autoFocus />
           </div>
+
+          {/* 반대쪽에서 짝이 될 만한 건 제안 */}
+          {matches.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 space-y-1.5">
+              <p className="text-[12px] font-bold text-amber-900">
+                💡 {isLost ? '혹시 이 물건인가요? (누군가 주워서 등록했어요)' : '이 물건을 찾는 사람이 있어요'}
+              </p>
+              {matches.map(({ item: m }) => (
+                <button type="button" key={m.id} onClick={() => onCreated(m.id)} className="w-full text-left text-[11px] text-gray-700 bg-white rounded-lg border border-amber-100 px-2.5 py-1.5 hover:border-amber-300">
+                  <b className="text-gray-900">{m.name}</b>
+                  {m.ownerName && <span className="text-rose-600 ml-1">🏷️ {m.ownerName}</span>}
+                  <span className="text-gray-400 ml-1">· {m.foundPlace || '장소 미상'} · {m.foundDate} · {m.reportedBy}</span>
+                  {m.description && <span className="block text-gray-500 truncate">{m.description}</span>}
+                </button>
+              ))}
+              <p className="text-[10px] text-amber-700">
+                눌러서 열어 보고, 같은 물건이면 거기서 <b>연결</b>하세요. 아니면 그대로 등록해도 됩니다.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">발견 장소</p>
+              <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? '마지막으로 본 곳' : '발견 장소'}</p>
               <input value={foundPlace} onChange={e => setFoundPlace(e.target.value)} placeholder="예: 강당, 3층 복도" className={inputCls} />
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">발견일</p>
+              <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? '잃어버린 날' : '발견일'}</p>
               <input type="date" value={foundDate} max={todayStr()} onChange={e => setFoundDate(e.target.value)} className={inputCls} />
             </div>
           </div>
-          <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">보관 장소</p>
-            <input value={keptAt} onChange={e => setKeptAt(e.target.value)} placeholder="예: 2층 교무실 분실물 박스" className={inputCls} />
-          </div>
+          {!isLost && (
+            <div>
+              <p className="text-xs font-bold text-gray-700 mb-1">보관 장소</p>
+              <input value={keptAt} onChange={e => setKeptAt(e.target.value)} placeholder="예: 2층 교무실 분실물 박스" className={inputCls} />
+            </div>
+          )}
           <div>
             <p className="text-xs font-bold text-gray-700 mb-1">설명 <span className="font-normal text-gray-400">(특징, 이름표 여부 등)</span></p>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="예: 뚜껑에 스티커 붙어 있음, 이름 없음" className={`${inputCls} resize-none`} />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">🏷️ 이름표 (주인을 아는 경우)</p>
+            <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? '🙋 잃어버린 학생 ' : '🏷️ 이름표 (주인을 아는 경우)'}<span className="font-normal text-gray-400">{isLost ? '(선택 — 선생님 물건이면 비워두세요)' : ''}</span></p>
             {owner ? (
               <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
                 <span className="text-sm font-semibold text-rose-800">{owner.name}</span>
@@ -2650,10 +2751,13 @@ function LostItemFormModal({ campCode, jobCodeId, students, campGroups, userId, 
   );
 }
 
-function LostItemDetailModal({ item, isAdmin, userId, userName, onClose }: {
-  item: LostItem; isAdmin: boolean; userId: string; userName: string; onClose: () => void;
+function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClose, onOpen }: {
+  item: LostItem; allItems: LostItem[]; isAdmin: boolean; userId: string; userName: string; onClose: () => void; onOpen: (id: string) => void;
 }) {
   const canDelete = isAdmin || item.reportedById === userId;
+  const kind = lostItemKind(item);
+  const isLost = kind === 'lost';
+  const L = LOST_STATUS_LABELS_BY_KIND[kind];
   const [claimName, setClaimName] = useState(item.claimedBy ?? item.ownerName ?? '');
   const [claiming, setClaiming] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -2665,6 +2769,31 @@ function LostItemDetailModal({ item, isAdmin, userId, userName, onClose }: {
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [viewer, setViewer] = useState<LostItemMedia | null>(null);
+
+  const matched = useMemo(() => (item.matchedId ? allItems.find(l => l.id === item.matchedId) ?? null : null), [item.matchedId, allItems]);
+  const matches = useMemo(
+    () => (item.matchedId || item.status !== 'found' ? [] : suggestLostMatches(item, allItems)),
+    [item, allItems]
+  );
+  const link = async (otherId: string, otherName: string) => {
+    if (busy) return;
+    if (!confirm(`\u300c${item.name}\u300d\uc640 \u300c${otherName}\u300d\uc744 \uac19\uc740 \ubb3c\uac74\uc73c\ub85c \uc5f0\uacb0\ud569\ub2c8\ub2e4.\n\uc5f0\uacb0\ud558\uba74 \uc591\ucabd \ubaa8\ub450 \ucc3e\uc740 \uac83\uc73c\ub85c \uc815\ub9ac\ub429\ub2c8\ub2e4. \uc9c4\ud589\ud560\uae4c\uc694?`)) return;
+    setBusy(true);
+    try {
+      await linkLostItems(db, item.id, otherId, { name: userName, claimedName: claimName.trim() || undefined });
+      // 신고한 선생님(과 학생 담당)에게 "찾았어요" — 연결한 본인은 제외
+      authenticatedPost<{ sent?: number; missed?: Array<{ name: string; state: string }> }>('/api/inventory/notify-lost', { lostItemId: item.id, event: 'matched' })
+        .then(data => {
+          const msg = missedSummary(data?.missed);
+          if (msg) toast(`🔕 ${msg}`, { duration: 8000 });
+          else if (data?.sent) toast.success(`${data.sent}명에게 찾았다고 알렸어요`);
+        })
+        .catch(e => console.warn('분실물 연결 알림 요청 실패:', e));
+    } catch (e) {
+      console.error('분실물 연결 오류:', e);
+      alert('연결 중 오류가 발생했습니다.');
+    } finally { setBusy(false); }
+  };
 
   const saveEdit = async () => {
     if (!name.trim() || busy) return;
@@ -2712,9 +2841,12 @@ function LostItemDetailModal({ item, isAdmin, userId, userName, onClose }: {
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
           <div className="min-w-0">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${LOST_STATUS_STYLE[item.status]}`}>{LOST_ITEM_STATUS_LABELS[item.status]}</span>
+            <div className="flex items-center gap-1">
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isLost ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>{LOST_KIND_LABELS[kind].tab}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${LOST_STATUS_STYLE[item.status]}`}>{lostStatusLabel(item)}</span>
+            </div>
             <h2 className="text-base font-bold text-gray-900 mt-1">{item.name}</h2>
-            <p className="text-[10px] text-gray-400">등록 {item.reportedBy} · {fmtDateTime(item.createdAt)}{item.status !== 'found' && item.claimedHandler ? ` · ${LOST_ITEM_STATUS_LABELS[item.status]} 처리 ${item.claimedHandler} ${fmtDateTime(item.claimedAt)}` : ''}</p>
+            <p className="text-[10px] text-gray-400">등록 {item.reportedBy} · {fmtDateTime(item.createdAt)}{item.status !== 'found' && item.claimedHandler ? ` · ${lostStatusLabel(item)} 처리 ${item.claimedHandler} ${fmtDateTime(item.claimedAt)}` : ''}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
@@ -2758,14 +2890,43 @@ function LostItemDetailModal({ item, isAdmin, userId, userName, onClose }: {
             </div>
           ) : (
             <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-[12px] text-gray-700 space-y-1">
-              <p>📍 발견 장소: <b>{item.foundPlace || '—'}</b> · 발견일 <b>{item.foundDate}</b></p>
-              <p>📦 보관 장소: <b>{item.keptAt || '—'}</b></p>
+              <p>📍 {isLost ? '마지막으로 본 곳' : '발견 장소'}: <b>{item.foundPlace || '—'}</b> · {isLost ? '잃어버린 날' : '발견일'} <b>{item.foundDate}</b></p>
+              {!isLost && <p>📦 보관 장소: <b>{item.keptAt || '—'}</b></p>}
               {item.description && <p className="text-gray-600">📝 {item.description}</p>}
-              {item.ownerName && <p className="text-rose-700">🏷️ 이름표: <b>{item.ownerName}</b>{item.ownerClassCode ? ` (${item.ownerClassCode})` : ''}</p>}
-              {item.status === 'claimed' && <p className="text-emerald-700">✅ {item.claimedBy || '주인'}에게 돌려줌</p>}
+              {item.ownerName && <p className="text-rose-700">{isLost ? '🙋 잃어버린 학생' : '🏷️ 이름표'}: <b>{item.ownerName}</b>{item.ownerClassCode ? ` (${item.ownerClassCode})` : ''}</p>}
+              {item.status === 'claimed' && <p className="text-emerald-700">✅ {isLost ? `${item.claimedBy || '주인'} 학생이 찾았어요` : `${item.claimedBy || '주인'}에게 돌려줌`}</p>}
               <button onClick={() => setEditing(true)} className="text-[11px] text-blue-600 hover:underline">정보 수정</button>
             </div>
           )}
+
+          {/* 짝 연결 */}
+          {matched ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-[11px] font-bold text-emerald-800">🔗 연결된 {LOST_KIND_LABELS[lostItemKind(matched)].tab}</p>
+              <button type="button" onClick={() => onOpen(matched.id)} className="mt-1 w-full text-left">
+                <p className="text-[12px] font-bold text-gray-900 hover:underline">{matched.name}</p>
+                <p className="text-[10px] text-gray-500">등록 {matched.reportedBy} · {matched.foundPlace || '장소 미기재'}</p>
+              </button>
+              {item.matchedBy && <p className="text-[10px] text-emerald-700 mt-1">{item.matchedBy} 연결 · {fmtDateTime(item.matchedAt)}</p>}
+            </div>
+          ) : matches.length > 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-amber-800">
+                💡 {isLost ? '이 물건일 수도 있어요 (주운 물건)' : '이 물건을 찾는 사람이 있어요 (찾는 물건)'}
+              </p>
+              {matches.map(m => (
+                <div key={m.item.id} className="flex items-center gap-2 bg-white rounded-lg border border-amber-100 px-2.5 py-2">
+                  <button type="button" onClick={() => onOpen(m.item.id)} className="flex-1 min-w-0 text-left">
+                    <p className="text-[12px] font-bold text-gray-900 truncate hover:underline">{m.item.name}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{m.item.reportedBy} · {m.item.foundPlace || '장소 미기재'}{m.item.ownerName ? ` · ${m.item.ownerName}` : ''}</p>
+                  </button>
+                  <button type="button" onClick={() => link(m.item.id, m.item.name)} disabled={busy}
+                    className="shrink-0 px-2.5 py-1.5 text-[11px] font-bold text-white bg-amber-600 rounded-lg disabled:opacity-40">연결하기</button>
+                </div>
+              ))}
+              <p className="text-[10px] text-amber-700">연결하면 양쪽 모두 “{L.claimed}”으로 정리됩니다.</p>
+            </div>
+          ) : null}
 
           {/* 상태 */}
           <div className="space-y-2">
@@ -2774,14 +2935,14 @@ function LostItemDetailModal({ item, isAdmin, userId, userName, onClose }: {
               {LOST_ITEM_STATUSES.map(s => (
                 <button key={s} onClick={() => setStatus(s)} disabled={busy}
                   className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${item.status === s ? `${LOST_STATUS_STYLE[s]} border-transparent` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
-                  {LOST_ITEM_STATUS_LABELS[s]}
+                  {L[s]}
                 </button>
               ))}
             </div>
             {(claiming || item.status === 'claimed') && (
               <div className="flex gap-2 items-center">
-                <input value={claimName} onChange={e => setClaimName(e.target.value)} placeholder="돌려준 학생(사람) 이름" className={`${inputCls} flex-1`} autoFocus={claiming} />
-                <button onClick={() => setStatus('claimed')} disabled={busy || !claimName.trim()} className="px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{item.status === 'claimed' ? '이름 저장' : '주인 찾음 처리'}</button>
+                <input value={claimName} onChange={e => setClaimName(e.target.value)} placeholder={isLost ? '찾은 학생(사람) 이름' : '돌려준 학생(사람) 이름'} className={`${inputCls} flex-1`} autoFocus={claiming} />
+                <button onClick={() => setStatus('claimed')} disabled={busy || !claimName.trim()} className="px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{item.status === 'claimed' ? '이름 저장' : `${L.claimed} 처리`}</button>
               </div>
             )}
           </div>

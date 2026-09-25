@@ -1,10 +1,11 @@
 'use client';
-import { logger } from '@smis-mentor/shared';
+import { logger, resolveActiveJobCodeId, taskViewerOf, canEditTask } from '@smis-mentor/shared';
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getTaskById, toggleTaskCompletion, deleteTask } from '@/lib/taskService';
+import { getTaskById, toggleTaskCompletion } from '@/lib/taskService';
+import { deleteTaskViaApi } from '@/lib/taskApi';
 import type { Task, JobExperienceGroupRole } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
 import toast from 'react-hot-toast';
@@ -33,7 +34,9 @@ export default function TaskDetailPage() {
   const [currentGroupRole, setCurrentGroupRole] = useState<JobExperienceGroupRole | null>(null);
   const [showAppBanner, setShowAppBanner] = useState(false);
 
-  const isAdmin = userData?.role === 'admin';
+  // 삭제: 관리자, 또는 본인이 만든 업무의 부매니저
+  const viewer = taskViewerOf(userData, resolveActiveJobCodeId(userData));
+  const isAdmin = !!task && canEditTask(task, viewer, userData?.userId);
 
   useEffect(() => {
     // 모바일 브라우저에서만 앱 배너 표시 (앱에서 열리지 않은 경우)
@@ -95,14 +98,14 @@ export default function TaskDetailPage() {
   const handleDelete = async () => {
     if (!task) return;
     
-    if (confirm('정말 이 업무를 삭제하시겠습니까?')) {
+    if (confirm(task.groupId ? '이 날짜의 업무를 삭제하시겠습니까?\n(다른 날짜는 그대로 남습니다)' : '정말 이 업무를 삭제하시겠습니까?')) {
       try {
-        await deleteTask(task.id);
+        await deleteTaskViaApi(task.id, 'one');
         toast.success('업무가 삭제되었습니다.');
         handleBack();
       } catch (error) {
         logger.error('업무 삭제 오류:', error);
-        toast.error('업무 삭제 중 오류가 발생했습니다.');
+        toast.error(error instanceof Error && error.message ? error.message : '업무 삭제 중 오류가 발생했습니다.');
       }
     }
   };

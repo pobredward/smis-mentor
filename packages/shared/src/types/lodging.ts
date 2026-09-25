@@ -218,7 +218,7 @@ export const LODGING_PLACE_COLORS: Record<LodgingPlaceKind, { bg: string; ink: s
   etc: { bg: '#E4E4E1', ink: '#4B4F54' },
 };
 
-/** 전체·등각·3D 에 크게 보여 줄 만한 장소 (계단·화장실은 뺀다) */
+/** 전체·3D 에 크게 보여 줄 만한 장소 (계단·화장실은 뺀다) */
 export const LODGING_MAJOR_KINDS: LodgingPlaceKind[] = ['hall', 'dining', 'shop', 'fun'];
 
 // ── 명단 합치기 ──────────────────────────────────────────────────────────

@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { logger } from '@smis-mentor/shared';
+import {
+  logger,
+  resolveActiveJobCodeId,
+  taskViewerOf,
+  isTaskAssignedTo,
+  canEditTask as canEditTaskFor,
+  canRemindTask,
+  myCampGroup,
+  missedSummary,
+} from '@smis-mentor/shared';
+import { deleteTaskViaApi, remindTaskViaApi } from '../services/taskApi';
 import {
   View,
   Text,
@@ -26,12 +36,9 @@ import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName } from '@s
 import {
   getTaskById,
   toggleTaskCompletion,
-  deleteTask,
   formatTime,
   formatDuration,
 } from '../services/taskService';
-import { functions } from '../config/firebase';
-import { httpsCallable } from 'firebase/functions';
 import { RootStackParamList } from '../navigation/types';
 
 type TaskDetailRouteProp = RouteProp<RootStackParamList, 'TaskDetail'>;
@@ -51,8 +58,13 @@ export default function TaskDetailScreen() {
   const [currentCampCodeId, setCurrentCampCodeId] = useState<string>('');
 
   const isAdmin = userData?.role === 'admin';
-  const isManager = currentGroupRole === '매니저' || currentGroupRole === 'Manager';
-  const canEditTask = isAdmin || isManager;
+  // 활성 캠프 기준 권한 — 관리자 전체, 부매니저는 자기 그룹 (본인이 만든 업무만 수정 · 삭제)
+  const activeJobCodeId = resolveActiveJobCodeId(userData);
+  const viewer = taskViewerOf(userData, activeJobCodeId);
+  const isSubManager = !isAdmin && viewer.isSubManager;
+  const canEditTask = !!task && canEditTaskFor(task, viewer, userData?.userId);
+  const canRemind = !!task && canRemindTask(task, viewer);
+  const canCheck = !!task && isTaskAssignedTo(task, viewer);
 
   useEffect(() => {
     loadTask();
@@ -63,22 +75,19 @@ export default function TaskDetailScreen() {
   }, [userData]);
 
   const loadCampData = async () => {
-    if (!userData?.activeJobExperienceId) return;
+    if (!userData || !activeJobCodeId) return;
 
-    const activeExp = userData.jobExperiences?.find(
-      exp => exp.id === userData.activeJobExperienceId
-    );
-
+    const activeExp = userData.jobExperiences?.find(exp => exp.id === activeJobCodeId);
     if (activeExp?.groupRole) {
       setCurrentGroupRole(activeExp.groupRole as JobExperienceGroupRole);
     }
 
-    // 캠프 사용자 목록 가져오기 (관리자만)
-    if (isAdmin) {
+    // 캠프 사용자 목록 (완료 현황용) — 관리자는 전체, 부매니저는 자기 그룹
+    if (isAdmin || isSubManager) {
       try {
-        setCurrentCampCodeId(userData.activeJobExperienceId);
-        const users = await getUsersByJobCodeId(userData.activeJobExperienceId);
-        setCampUsers(users);
+        setCurrentCampCodeId(activeJobCodeId);
+        const users = await getUsersByJobCodeId(activeJobCodeId);
+        setCampUsers(isAdmin ? users : users.filter(u => myCampGroup(u, activeJobCodeId) === viewer.group));
       } catch (error) {
         logger.error('캠프 데이터 로드 오류:', error);
       }
@@ -97,14 +106,14 @@ export default function TaskDetailScreen() {
           text: '전송',
           onPress: async () => {
             try {
-              const sendTaskReminder = httpsCallable(functions, 'sendTaskReminderToUsers');
-              const result = await sendTaskReminder({ taskId: task.id });
-              const data = result.data as { success: boolean; message: string; sentCount: number };
-              
-              Alert.alert('성공', data.message);
-            } catch (error: any) {
+              // 관리자는 전체, 부매니저는 자기 그룹 미완료자에게만 (서버가 판단)
+              const data = await remindTaskViaApi(task.id);
+              const missed = missedSummary(data.missed);
+              const head = data.sent > 0 ? `${data.sent}명에게 알림을 보냈습니다.` : '알림을 받을 수 있는 미완료자가 없습니다.';
+              Alert.alert(missed ? '알림을 못 받은 사람이 있어요' : '전송 완료', missed ? `${head}\n\n${missed}` : head);
+            } catch (error: unknown) {
               logger.error('푸시 알림 전송 실패:', error);
-              Alert.alert('오류', error.message || '알림 전송에 실패했습니다.');
+              Alert.alert('오류', error instanceof Error && error.message ? error.message : '알림 전송에 실패했습니다.');
             }
           },
         },
@@ -147,26 +156,30 @@ export default function TaskDetailScreen() {
   const handleDelete = () => {
     if (!task) return;
 
+    const run = async (scope: 'one' | 'group') => {
+      try {
+        await deleteTaskViaApi(task.id, scope);
+        Alert.alert('성공', '업무가 삭제되었습니다.');
+        handleBack();
+      } catch (error) {
+        logger.error('업무 삭제 오류:', error);
+        Alert.alert('오류', error instanceof Error && error.message ? error.message : '업무 삭제 중 오류가 발생했습니다.');
+      }
+    };
+
     Alert.alert(
       '업무 삭제',
-      '정말 이 업무를 삭제하시겠습니까?',
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteTask(task.id);
-              Alert.alert('성공', '업무가 삭제되었습니다.');
-              handleBack();
-            } catch (error) {
-              logger.error('업무 삭제 오류:', error);
-              Alert.alert('오류', '업무 삭제 중 오류가 발생했습니다.');
-            }
-          },
-        },
-      ]
+      task.groupId ? '여러 날짜에 묶인 업무입니다. 어떻게 삭제할까요?' : '정말 이 업무를 삭제하시겠습니까?',
+      task.groupId
+        ? [
+            { text: '취소', style: 'cancel' },
+            { text: '이 날짜만', onPress: () => run('one') },
+            { text: '모든 날짜', style: 'destructive', onPress: () => run('group') },
+          ]
+        : [
+            { text: '취소', style: 'cancel' },
+            { text: '삭제', style: 'destructive', onPress: () => run('one') },
+          ],
     );
   };
 
@@ -287,7 +300,8 @@ export default function TaskDetailScreen() {
             <Ionicons name="share-outline" size={22} color="#1f2937" />
           </TouchableOpacity>
 
-          {/* 완료 버튼 */}
+          {/* 완료 버튼 (내가 체크하는 업무만) */}
+          {canCheck && (
           <TouchableOpacity
             onPress={handleToggleComplete}
             style={[
@@ -302,6 +316,7 @@ export default function TaskDetailScreen() {
               {isCompleted ? '✓ 완료됨' : '완료 표시'}
             </Text>
           </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -431,10 +446,10 @@ export default function TaskDetailScreen() {
             </View>
           )}
 
-          {/* 완료 현황 (관리자) */}
-          {isAdmin && currentCampCodeId && (
+          {/* 완료 현황 (관리자 · 부매니저) */}
+          {(isAdmin || (isSubManager && canRemind)) && currentCampCodeId && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>완료 현황</Text>
+              <Text style={styles.sectionLabel}>완료 현황{isSubManager && viewer.group ? ` · ${viewer.group}` : ''}</Text>
               
               {(() => {
                 const targetUsers = getTaskTargetUsers(task, campUsers, currentCampCodeId);
@@ -479,6 +494,7 @@ export default function TaskDetailScreen() {
                           <Text style={styles.incompleteSectionTitle}>
                             ✗ 미완료 ({sortedIncompleteUsers.length}명)
                           </Text>
+                          {canRemind && (
                           <TouchableOpacity 
                             style={styles.sendReminderButton}
                             onPress={handleSendReminder}
@@ -488,6 +504,7 @@ export default function TaskDetailScreen() {
                               알림 보내기
                             </Text>
                           </TouchableOpacity>
+                          )}
                         </View>
                         <View style={styles.badgeContainer}>
                           {sortedIncompleteUsers.map((user) => {
@@ -513,7 +530,7 @@ export default function TaskDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* 하단 액션 버튼 (관리자 또는 매니저) */}
+      {/* 하단 액션 버튼 (관리자, 또는 본인이 만든 업무의 부매니저) */}
       {canEditTask && (
         <View style={styles.actionButtons}>
           <Pressable
@@ -546,7 +563,7 @@ export default function TaskDetailScreen() {
           >
             <Text style={styles.editActionButtonText}>수정</Text>
           </Pressable>
-          {isAdmin && (
+          {canEditTask && (
             <Pressable
               onPress={(e) => {
                 e.preventDefault();

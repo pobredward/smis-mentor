@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { createContext, useContext, useState, useRef, ReactNode, useEffect } from 'react';
 import { logger } from '@smis-mentor/shared';
 import { View, StyleSheet, Platform } from 'react-native';
@@ -33,7 +34,7 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
   const [zoomLevels, setZoomLevelsState] = useState<Record<string, number>>({});
   const webViewRefs = useRef<Record<string, WebView | null>>({});
 
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   // AsyncStorage에서 줌 레벨 복원
   useEffect(() => {

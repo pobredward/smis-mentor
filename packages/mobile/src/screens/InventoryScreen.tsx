@@ -74,6 +74,14 @@ import {
   lostItemMediaPath,
   LOST_ITEM_STATUSES,
   LOST_ITEM_STATUS_LABELS,
+  LOST_ITEM_KINDS,
+  LOST_KIND_LABELS,
+  LOST_STATUS_LABELS_BY_KIND,
+  lostItemKind,
+  lostStatusLabel,
+  isLostOpen,
+  suggestLostMatches,
+  linkLostItems,
   restock,
   adjustStockTo,
   getCampGroups,
@@ -102,6 +110,8 @@ import {
   DEFAULT_INVENTORY_ITEMS,
   STOCKTAKE_REASONS,
   inventoryPerm,
+  managedStockGroupIds,
+  canTransferBetween,
   transferStock,
   subscribeCampMovements,
   movementLabel,
@@ -140,6 +150,7 @@ import type {
   LostItem,
   LostItemMedia,
   LostItemStatus,
+  LostItemKind,
   CampGroup,
   STSheetStudent,
   InventoryUsage,
@@ -259,6 +270,11 @@ export function InventoryScreen() {
   useEffect(() => { if (!groupTouched && myInvGroupId) setGroupFilter(myInvGroupId); }, [myInvGroupId, groupTouched]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   // 기존 권한 체계 그대로 — admin / 그룹 역할 '부매니저'
+  /** 입고 · 조정 · 이동할 수 있는 그룹 — 관리자 전체, 부매니저는 자기 그룹 */
+  const managedGroupIds = useMemo(
+    () => managedStockGroupIds(inventoryPerm(userData as { role?: string; jobExperiences?: Array<{ id: string; groupRole?: string }> } | null, activeJobCodeId),
+      groups, userData?.jobExperiences?.find(e => e.id === activeJobCodeId)?.group),
+    [userData, activeJobCodeId, groups]);
   const perm = useMemo(() => inventoryPerm(userData as { role?: string; jobExperiences?: Array<{ id: string; groupRole?: string }> } | null, activeJobCodeId),
     [userData, activeJobCodeId]);
   // 부매니저·관리자: 부족한 물품만 보기
@@ -485,7 +501,7 @@ export function InventoryScreen() {
       </Modal>
       <Modal visible={!!selected} animationType="fade" transparent onRequestClose={() => setSelectedId(null)}>
         {selected && (
-          <ItemDetailMobile view={selected} groups={groups} campCode={campCode} perm={perm} userId={userData?.userId ?? ''} userName={userName}
+          <ItemDetailMobile view={selected} groups={groups} campCode={campCode} perm={perm} managedGroupIds={managedGroupIds} userId={userData?.userId ?? ''} userName={userName}
             initialUseGroupId={quickUseGroupId} defaultGroupId={groupFilter || myInvGroupId}
             onClose={() => { setSelectedId(null); setQuickUseGroupId(undefined); }}
             onRequest={(v, gid) => {
@@ -595,6 +611,14 @@ const failAlert = () => Alert.alert('오류', '처리하지 못했습니다. 권
  * 알림 요청 — 보낸 뒤 **못 받은 사람이 있으면 보낸 사람에게 알려 준다**
  * (그 자리에서 "알림 켜 주세요"라고 말할 수 있게).
  */
+/** 부매니저 재고 운영 — 서버가 "내 그룹"인지 확인하고 기록한다 (실패 시 서버 메시지로 throw) */
+async function stockOp<T = { from?: number; to?: number; value?: number }>(body: Record<string, unknown>): Promise<T> {
+  const res = await authenticatedFetch('/api/inventory/stock-op', { method: 'POST', body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { error?: string }).error || '처리하지 못했습니다.');
+  return data as T;
+}
+
 function notifySupply(body: Record<string, unknown>) {
   authenticatedFetch('/api/inventory/notify', { method: 'POST', body: JSON.stringify(body) })
     .then(async res => {
@@ -2580,28 +2604,53 @@ function LostListMobile({ campCode, jobCodeId, students, campGroups, lostItems, 
   campCode: string; jobCodeId: string; students: STSheetStudent[]; campGroups: CampGroup[];
   lostItems: LostItem[]; isAdmin: boolean; userId: string; userName: string;
 }) {
+  // 주운 물건(found) / 찾는 물건(lost) 두 목록을 한 탭에서 전환
+  const [kind, setKind] = useState<LostItemKind>('found');
   const [filter, setFilter] = useState<LostItemStatus | '전체'>('found');
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const opened = lostItems.find(l => l.id === openId) ?? null;
+  const ofKind = useMemo(() => lostItems.filter(l => lostItemKind(l) === kind), [lostItems, kind]);
   const list = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return lostItems.filter(l => (filter === '전체' || l.status === filter) &&
-      (!q || [l.name, l.description, l.foundPlace, l.keptAt, l.claimedBy, l.reportedBy].some(f => f?.toLowerCase().includes(q))));
-  }, [lostItems, filter, search]);
-  const count = (s: LostItemStatus) => lostItems.filter(l => l.status === s).length;
+    return ofKind.filter(l => (filter === '전체' || l.status === filter) &&
+      (!q || [l.name, l.description, l.foundPlace, l.keptAt, l.claimedBy, l.reportedBy, l.ownerName].some(f => f?.toLowerCase().includes(q))));
+  }, [ofKind, filter, search]);
+  const count = (s: LostItemStatus) => ofKind.filter(l => l.status === s).length;
+  const openCounts = {
+    found: lostItems.filter(l => lostItemKind(l) === 'found' && isLostOpen(l)).length,
+    lost: lostItems.filter(l => lostItemKind(l) === 'lost' && isLostOpen(l)).length,
+  };
+  const L = LOST_STATUS_LABELS_BY_KIND[kind];
+  const isLost = kind === 'lost';
 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ padding: 14, gap: 8 }} keyboardShouldPersistTaps="handled">
+        <View style={{ flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 10, padding: 3 }}>
+          {LOST_ITEM_KINDS.map(k => {
+            const on = kind === k;
+            return (
+              <TouchableOpacity key={k} onPress={() => { setKind(k); setFilter('found'); }}
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderRadius: 8, backgroundColor: on ? '#fff' : 'transparent' }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: on ? '#111827' : '#6b7280' }}>{k === 'found' ? '📦' : '🙋'} {LOST_KIND_LABELS[k].tab}</Text>
+                {openCounts[k] > 0 ? (
+                  <View style={{ backgroundColor: on ? (k === 'lost' ? '#fef3c7' : '#dbeafe') : '#e5e7eb', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: on ? (k === 'lost' ? '#b45309' : '#1d4ed8') : '#6b7280' }}>{openCounts[k]}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1f2937' }}>분실물 <Text style={{ color: '#2563eb' }}>{count('found')}</Text> <Text style={{ fontSize: 10, color: '#9ca3af', fontWeight: '400' }}>보관 중</Text></Text>
-            <Text style={{ fontSize: 10, color: '#9ca3af' }}>누구나 등록·확인 · 주인을 찾으면 상태를 바꿔주세요</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1f2937' }}>{LOST_KIND_LABELS[kind].tab} <Text style={{ color: isLost ? '#d97706' : '#2563eb' }}>{count('found')}</Text> <Text style={{ fontSize: 10, color: '#9ca3af', fontWeight: '400' }}>{L.found}</Text></Text>
+            <Text style={{ fontSize: 10, color: '#9ca3af' }}>{isLost ? '학생이 잃어버린 물건을 신고해 두면, 주운 물건과 짝을 맞춰 드려요' : '누구나 등록·확인 · 주인을 찾으면 상태를 바꿔주세요'}</Text>
           </View>
-          <TouchableOpacity onPress={() => setShowForm(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 }}>
-            <Ionicons name="add" size={14} color="#fff" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>등록</Text>
+          <TouchableOpacity onPress={() => setShowForm(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: isLost ? '#d97706' : '#2563eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 }}>
+            <Ionicons name="add" size={14} color="#fff" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{LOST_KIND_LABELS[kind].action}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.searchBox}>
@@ -2609,14 +2658,14 @@ function LostListMobile({ campCode, jobCodeId, students, campGroups, lostItems, 
           <TextInput value={search} onChangeText={setSearch} placeholder="물품명 · 장소 · 학생 이름 검색" placeholderTextColor="#9ca3af" style={styles.searchInput} />
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-          {([['found', `보관 중 ${count('found')}`], ['claimed', `주인 찾음 ${count('claimed')}`], ['discarded', `폐기 ${count('discarded')}`], ['전체', '전체']] as const).map(([id, label]) => (
+          {([['found', `${L.found} ${count('found')}`], ['claimed', `${L.claimed} ${count('claimed')}`], ['discarded', `${L.discarded} ${count('discarded')}`], ['전체', '전체']] as const).map(([id, label]) => (
             <TouchableOpacity key={id} onPress={() => setFilter(id)} style={[styles.chip, filter === id && { backgroundColor: '#2563eb', borderColor: '#2563eb' }]}>
               <Text style={[styles.chipText, filter === id && styles.chipTextActive]}>{label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
         {list.length === 0 ? (
-          <View style={styles.centered}><Ionicons name="search-outline" size={36} color="#cbd5e1" /><Text style={styles.emptyTitle}>{lostItems.length === 0 ? '등록된 분실물이 없습니다.' : '해당하는 분실물이 없습니다.'}</Text></View>
+          <View style={styles.centered}><Ionicons name="search-outline" size={36} color="#cbd5e1" /><Text style={styles.emptyTitle}>{ofKind.length === 0 ? (isLost ? '신고된 찾는 물건이 없습니다.' : '등록된 주운 물건이 없습니다.') : '해당하는 분실물이 없습니다.'}</Text></View>
         ) : list.map(l => {
           const thumb = l.media.find(m => m.type === 'image');
           const c = LOST_STATUS_COLOR[l.status];
@@ -2628,12 +2677,13 @@ function LostListMobile({ campCode, jobCodeId, students, campGroups, lostItems, 
               </View>
               <View style={{ flex: 1, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                  <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}><Text style={{ fontSize: 9, fontWeight: '700', color: c.text }}>{LOST_ITEM_STATUS_LABELS[l.status]}</Text></View>
-                  <Text style={[styles.itemName, { flex: 1 }]} numberOfLines={1}>{l.name}{l.ownerName ? <Text style={{ fontSize: 10, color: '#e11d48', fontWeight: '600' }}>  🏷️ {l.ownerName}</Text> : null}</Text>
+                  <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}><Text style={{ fontSize: 9, fontWeight: '700', color: c.text }}>{lostStatusLabel(l)}</Text></View>
+                  <Text style={[styles.itemName, { flex: 1 }]} numberOfLines={1}>{l.name}{l.ownerName ? <Text style={{ fontSize: 10, color: '#e11d48', fontWeight: '600' }}>  {isLost ? '🙋' : '🏷️'} {l.ownerName}</Text> : null}</Text>
+                  {l.matchedId ? <Text style={{ fontSize: 9, color: '#047857', fontWeight: '700' }}>🔗 연결됨</Text> : null}
                   {l.media.length > 1 && <Text style={{ fontSize: 9, color: '#9ca3af' }}>+{l.media.length - 1}</Text>}
                 </View>
                 <Text style={{ fontSize: 11, color: '#4b5563', marginTop: 3 }} numberOfLines={1}>📍 {l.foundPlace || '장소 미상'} · {l.foundDate}</Text>
-                <Text style={{ fontSize: 10, color: '#9ca3af' }} numberOfLines={1}>{l.keptAt ? `보관: ${l.keptAt} · ` : ''}등록 {l.reportedBy}{l.status === 'claimed' && l.claimedBy ? ` · → ${l.claimedBy}` : ''}</Text>
+                <Text style={{ fontSize: 10, color: '#9ca3af' }} numberOfLines={1}>{!isLost && l.keptAt ? `보관: ${l.keptAt} · ` : ''}등록 {l.reportedBy}{l.status === 'claimed' && l.claimedBy ? ` · → ${l.claimedBy}` : ''}</Text>
               </View>
             </TouchableOpacity>
           );
@@ -2642,19 +2692,22 @@ function LostListMobile({ campCode, jobCodeId, students, campGroups, lostItems, 
       </ScrollView>
 
       <Modal visible={showForm} animationType="fade" transparent onRequestClose={() => setShowForm(false)}>
-        <LostItemFormMobile campCode={campCode} jobCodeId={jobCodeId} students={students} campGroups={campGroups} userId={userId} userName={userName} onClose={() => setShowForm(false)} onCreated={id => { setShowForm(false); setOpenId(id); }} />
+        <LostItemFormMobile kind={kind} allItems={lostItems} campCode={campCode} jobCodeId={jobCodeId} students={students} campGroups={campGroups} userId={userId} userName={userName} onClose={() => setShowForm(false)} onCreated={id => { setShowForm(false); setOpenId(id); }} />
       </Modal>
       <Modal visible={!!opened} animationType="fade" transparent onRequestClose={() => setOpenId(null)}>
-        {opened && <LostItemDetailMobile item={opened} isAdmin={isAdmin} userId={userId} userName={userName} onClose={() => setOpenId(null)} />}
+        {opened && <LostItemDetailMobile item={opened} allItems={lostItems} isAdmin={isAdmin} userId={userId} userName={userName} onClose={() => setOpenId(null)} onOpen={setOpenId} />}
       </Modal>
     </View>
   );
 }
 
-function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId, userName, onClose, onCreated }: {
+function LostItemFormMobile({ kind, allItems, campCode, jobCodeId, students, campGroups, userId, userName, onClose, onCreated }: {
+  kind: LostItemKind; allItems: LostItem[];
   campCode: string; jobCodeId: string; students: STSheetStudent[]; campGroups: CampGroup[];
   userId: string; userName: string; onClose: () => void; onCreated: (id: string) => void;
 }) {
+  /** 잃어버렸어요 신고 — 주운 물건과 문구·기본값이 다르다 */
+  const isLost = kind === 'lost';
   // 이름표(주인)가 있으면 담임·방 담당·그룹 매니저에게, 없으면 캠프 전체에 알림 — 끌 수 있음
   const [owner, setOwner] = useState<STSheetStudent | null>(null);
   const [ownerQuery, setOwnerQuery] = useState('');
@@ -2665,7 +2718,7 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
     [owner, campGroups]);
   // 이름표로 주인을 아는 분실물: 누구에게 보낼지 (기본은 담당 셋 다)
   const [targets, setTargets] = useState<LostNotifyTarget[]>([...LOST_NOTIFY_TARGETS]);
-  const [toAll, setToAll] = useState(false);
+  const [toAll, setToAll] = useState(isLost);
   const toggleTarget = (t: LostNotifyTarget) =>
     setTargets(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
   // 보내기 전에 "누가 받을 수 있나" 확인 — 캠프 인원은 필요할 때 한 번만 불러온다
@@ -2717,6 +2770,10 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const tooBig = picked.some(p => (p.fileSize ?? 0) > 50 * 1024 * 1024);
+  /** 반대쪽 목록에서 짝이 될 만한 건 — 이미 등록돼 있으면 새로 올리지 않아도 된다 */
+  const matches = useMemo(
+    () => (name.trim() ? suggestLostMatches({ kind, name, description, ownerStudentId: owner?.studentId }, allItems) : []),
+    [kind, name, description, owner, allItems]);
 
   const submit = async () => {
     if (!name.trim() || busy || tooBig) return;
@@ -2725,8 +2782,8 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
       setProgress('등록 중...');
       const ownerGroup = ownerGroupLabel?.toLowerCase();
       const id = await addLostItem(db, {
-        campCode, name: name.trim(), description: description.trim() || undefined, foundPlace: foundPlace.trim() || undefined,
-        foundDate, keptAt: keptAt.trim() || undefined, reportedBy: userName, reportedById: userId,
+        campCode, kind, name: name.trim(), description: description.trim() || undefined, foundPlace: foundPlace.trim() || undefined,
+        foundDate, keptAt: isLost ? undefined : keptAt.trim() || undefined, reportedBy: userName, reportedById: userId,
         jobCodeId: jobCodeId || undefined, notify,
         ownerStudentId: owner?.studentId, ownerName: owner?.name, ownerClassCode: owner?.className,
         ownerClassMentor: owner?.classMentor, ownerUnitMentor: owner?.unitMentor, ownerGroup,
@@ -2756,20 +2813,34 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
     <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.modalCard}>
         <View style={styles.modalHeader}>
-          <Text style={[styles.modalTitle, { flex: 1 }]}>🔍 분실물 등록</Text>
+          <Text style={[styles.modalTitle, { flex: 1 }]}>{isLost ? '🙋 잃어버렸어요' : '📦 주웠어요'}</Text>
           <TouchableOpacity onPress={onClose} disabled={busy} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }} keyboardShouldPersistTaps="handled">
           <MediaPickerMobile picked={picked} onChange={setPicked} disabled={busy} />
           <View><Text style={styles.label}>물품명 *</Text><TextInput value={name} onChangeText={setName} placeholder="예: 파란색 물통, 안경, 후드집업" placeholderTextColor="#9ca3af" style={styles.input} /></View>
+          {matches.length > 0 ? (
+            <View style={{ borderWidth: 1, borderColor: '#fde68a', backgroundColor: '#fffbeb', borderRadius: 10, padding: 10, gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>
+                💡 {isLost ? '비슷한 물건이 이미 보관 중이에요' : '이 물건을 찾는 학생이 있어요'}
+              </Text>
+              {matches.map(m => (
+                <TouchableOpacity key={m.item.id} onPress={() => onCreated(m.item.id)} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 7 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827' }} numberOfLines={1}>{m.item.name}</Text>
+                  <Text style={{ fontSize: 10, color: '#6b7280' }} numberOfLines={1}>{m.item.reportedBy} · {m.item.foundPlace || '장소 미기재'}{m.item.ownerName ? ` · ${m.item.ownerName}` : ''}</Text>
+                </TouchableOpacity>
+              ))}
+              <Text style={{ fontSize: 10, color: '#b45309' }}>눌러서 열어 보고, 같은 물건이면 거기서 연결하세요. 아니면 그대로 등록해도 됩니다.</Text>
+            </View>
+          ) : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <View style={{ flex: 1 }}><Text style={styles.label}>발견 장소</Text><TextInput value={foundPlace} onChangeText={setFoundPlace} placeholder="예: 강당, 3층 복도" placeholderTextColor="#9ca3af" style={styles.input} /></View>
-            <View style={{ width: 120 }}><Text style={styles.label}>발견일</Text><TextInput value={foundDate} onChangeText={setFoundDate} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" style={styles.input} /></View>
+            <View style={{ flex: 1 }}><Text style={styles.label}>{isLost ? '마지막으로 본 곳' : '발견 장소'}</Text><TextInput value={foundPlace} onChangeText={setFoundPlace} placeholder={isLost ? '예: 식당, 버스' : '예: 강당, 3층 복도'} placeholderTextColor="#9ca3af" style={styles.input} /></View>
+            <View style={{ width: 120 }}><Text style={styles.label}>{isLost ? '잃어버린 날' : '발견일'}</Text><TextInput value={foundDate} onChangeText={setFoundDate} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" style={styles.input} /></View>
           </View>
-          <View><Text style={styles.label}>보관 장소</Text><TextInput value={keptAt} onChangeText={setKeptAt} placeholder="예: 2층 교무실 분실물 박스" placeholderTextColor="#9ca3af" style={styles.input} /></View>
-          <View><Text style={styles.label}>설명 (특징, 이름표 여부 등)</Text><TextInput value={description} onChangeText={setDescription} multiline placeholder="예: 뚜껑에 스티커 붙어 있음, 이름 없음" placeholderTextColor="#9ca3af" style={[styles.input, { minHeight: 56 }]} /></View>
+          {!isLost ? <View><Text style={styles.label}>보관 장소</Text><TextInput value={keptAt} onChangeText={setKeptAt} placeholder="예: 2층 교무실 분실물 박스" placeholderTextColor="#9ca3af" style={styles.input} /></View> : null}
+          <View><Text style={styles.label}>{isLost ? '설명 (색, 특징 등)' : '설명 (특징, 이름표 여부 등)'}</Text><TextInput value={description} onChangeText={setDescription} multiline placeholder={isLost ? '예: 검정 후드, 왼쪽 팔에 흰 줄' : '예: 뚜껑에 스티커 붙어 있음, 이름 없음'} placeholderTextColor="#9ca3af" style={[styles.input, { minHeight: 56 }]} /></View>
           <View>
-            <Text style={styles.label}>🏷️ 이름표 (주인을 아는 경우)</Text>
+            <Text style={styles.label}>{isLost ? '🙋 잃어버린 학생 (선택)' : '🏷️ 이름표 (주인을 아는 경우)'}</Text>
             {owner ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#fecdd3', backgroundColor: '#fff1f2', borderRadius: 8, padding: 8 }}>
                 <Text style={{ fontSize: 13, fontWeight: '700', color: '#9f1239' }}>{owner.name}</Text>
@@ -2798,14 +2869,14 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
                       ? (targets.length
                           ? `${owner.name} 학생 ${targets.map(t => LOST_NOTIFY_TARGET_LABELS[t].ko).join(' · ')}에게만 보냅니다`
                           : '받는 사람을 골라주세요')
-                      : '캠프 선생님 전체에게 보냅니다 — 중요하지 않은 물품이면 끄세요'}
+                      : isLost ? '캠프 선생님 전체에게 보냅니다 — 주운 분이 알려줄 수 있어요' : '캠프 선생님 전체에게 보냅니다 — 중요하지 않은 물품이면 끄세요'}
                 </Text>
               </View>
             </TouchableOpacity>
             {notify && owner ? (
               <View style={{ padding: 10, gap: 6, backgroundColor: '#f9fafb', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb' }}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: '#4b5563' }}>
-                  받는 사람 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>이름표가 있어 주인을 아는 물품이에요</Text>
+                  받는 사람 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{isLost ? '학생을 지정한 신고예요' : '이름표가 있어 주인을 아는 물품이에요'}</Text>
                 </Text>
                 <View style={{ gap: 6, opacity: toAll ? 0.4 : 1 }}>
                   {LOST_NOTIFY_TARGETS.map(t => {
@@ -2878,7 +2949,7 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
           {progress ? <Text style={{ fontSize: 11, color: '#2563eb', textAlign: 'center' }}>{progress}</Text> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity onPress={onClose} disabled={busy} style={[styles.btn, { backgroundColor: '#f3f4f6' }]}><Text style={{ fontSize: 12, color: '#6b7280' }}>취소</Text></TouchableOpacity>
-            <TouchableOpacity onPress={submit} disabled={!name.trim() || busy || tooBig} style={[styles.btn, { backgroundColor: '#2563eb', opacity: !name.trim() || busy || tooBig ? 0.4 : 1 }]}><Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{busy ? '등록 중...' : '등록'}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={submit} disabled={!name.trim() || busy || tooBig} style={[styles.btn, { backgroundColor: isLost ? '#d97706' : '#2563eb', opacity: !name.trim() || busy || tooBig ? 0.4 : 1 }]}><Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{busy ? '등록 중...' : isLost ? '신고 등록' : '등록'}</Text></TouchableOpacity>
           </View>
           <View style={{ height: 30 }} />
         </ScrollView>
@@ -2887,10 +2958,13 @@ function LostItemFormMobile({ campCode, jobCodeId, students, campGroups, userId,
   );
 }
 
-function LostItemDetailMobile({ item, isAdmin, userId, userName, onClose }: {
-  item: LostItem; isAdmin: boolean; userId: string; userName: string; onClose: () => void;
+function LostItemDetailMobile({ item, allItems, isAdmin, userId, userName, onClose, onOpen }: {
+  item: LostItem; allItems: LostItem[]; isAdmin: boolean; userId: string; userName: string; onClose: () => void; onOpen: (id: string) => void;
 }) {
   const canDelete = isAdmin || item.reportedById === userId;
+  const kind = lostItemKind(item);
+  const isLost = kind === 'lost';
+  const L = LOST_STATUS_LABELS_BY_KIND[kind];
   const [claimName, setClaimName] = useState(item.claimedBy ?? item.ownerName ?? '');
   const [claiming, setClaiming] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -2905,6 +2979,34 @@ function LostItemDetailMobile({ item, isAdmin, userId, userName, onClose }: {
   const c = LOST_STATUS_COLOR[item.status];
   const screenW = Dimensions.get('window').width;
   const tile = Math.floor((screenW - 28 - 12) / 3);
+
+  /** 이미 연결된 짝 / 연결 후보 (열려 있는 건에만 제안) */
+  const matched = useMemo(() => (item.matchedId ? allItems.find(l => l.id === item.matchedId) ?? null : null), [item.matchedId, allItems]);
+  const matches = useMemo(
+    () => (item.matchedId || item.status !== 'found' ? [] : suggestLostMatches(item, allItems)),
+    [item, allItems]);
+  const link = (otherId: string, otherName: string) => {
+    if (busy) return;
+    Alert.alert('같은 물건으로 연결', `「${item.name}」와 「${otherName}」을 같은 물건으로 연결합니다.\n연결하면 양쪽 모두 찾은 것으로 정리됩니다.`, [
+      { text: '취소', style: 'cancel' },
+      { text: '연결', onPress: async () => {
+        setBusy(true);
+        try {
+          await linkLostItems(db, item.id, otherId, { name: userName, claimedName: claimName.trim() || undefined });
+          // 신고한 선생님(과 학생 담당)에게 "찾았어요" — 연결한 본인은 제외
+          authenticatedFetch('/api/inventory/notify-lost', { method: 'POST', body: JSON.stringify({ lostItemId: item.id, event: 'matched' }) })
+            .then(async res => {
+              const data = (await res.json().catch(() => null)) as { sent?: number; missed?: Array<{ name: string; state: string }> } | null;
+              const msg = missedSummary(data?.missed);
+              if (msg) Alert.alert('알림을 못 받은 사람이 있어요', msg);
+            })
+            .catch(e => console.warn('분실물 연결 알림 요청 실패:', e));
+        }
+        catch (e) { console.error('분실물 연결 오류:', e); Alert.alert('오류', '연결 중 오류가 발생했습니다.'); }
+        finally { setBusy(false); }
+      } },
+    ]);
+  };
 
   const saveEdit = async () => {
     if (!name.trim() || busy) return;
@@ -2950,8 +3052,9 @@ function LostItemDetailMobile({ item, isAdmin, userId, userName, onClose }: {
         <View style={styles.modalHeader}>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}><Text style={{ fontSize: 9, fontWeight: '700', color: c.text }}>{LOST_ITEM_STATUS_LABELS[item.status]}</Text></View>
-              <Text style={styles.modalTitle} numberOfLines={1}>{item.name}</Text>
+              <View style={{ backgroundColor: isLost ? '#fef3c7' : '#e0f2fe', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}><Text style={{ fontSize: 9, fontWeight: '700', color: isLost ? '#b45309' : '#0369a1' }}>{LOST_KIND_LABELS[kind].tab}</Text></View>
+              <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}><Text style={{ fontSize: 9, fontWeight: '700', color: c.text }}>{lostStatusLabel(item)}</Text></View>
+              <Text style={[styles.modalTitle, { flex: 1 }]} numberOfLines={1}>{item.name}</Text>
             </View>
             <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>등록 {item.reportedBy} · {fmtDateTime(item.createdAt)}{item.status !== 'found' && item.claimedHandler ? ` · 처리 ${item.claimedHandler}` : ''}</Text>
           </View>
@@ -2981,10 +3084,10 @@ function LostItemDetailMobile({ item, isAdmin, userId, userName, onClose }: {
             <View style={{ gap: 8 }}>
               <TextInput value={name} onChangeText={setName} placeholder="물품명" placeholderTextColor="#9ca3af" style={styles.input} />
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TextInput value={foundPlace} onChangeText={setFoundPlace} placeholder="발견 장소" placeholderTextColor="#9ca3af" style={[styles.input, { flex: 1 }]} />
+                <TextInput value={foundPlace} onChangeText={setFoundPlace} placeholder={isLost ? '마지막으로 본 곳' : '발견 장소'} placeholderTextColor="#9ca3af" style={[styles.input, { flex: 1 }]} />
                 <TextInput value={foundDate} onChangeText={setFoundDate} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" style={[styles.input, { width: 120 }]} />
               </View>
-              <TextInput value={keptAt} onChangeText={setKeptAt} placeholder="보관 장소" placeholderTextColor="#9ca3af" style={styles.input} />
+              {!isLost ? <TextInput value={keptAt} onChangeText={setKeptAt} placeholder="보관 장소" placeholderTextColor="#9ca3af" style={styles.input} /> : null}
               <TextInput value={description} onChangeText={setDescription} multiline placeholder="설명" placeholderTextColor="#9ca3af" style={[styles.input, { minHeight: 56 }]} />
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <TouchableOpacity onPress={() => setEditing(false)} style={[styles.btn, { backgroundColor: '#f3f4f6' }]}><Text style={{ fontSize: 12, color: '#6b7280' }}>취소</Text></TouchableOpacity>
@@ -2993,14 +3096,43 @@ function LostItemDetailMobile({ item, isAdmin, userId, userName, onClose }: {
             </View>
           ) : (
             <View style={{ backgroundColor: '#f9fafb', borderRadius: 10, borderWidth: 1, borderColor: '#f3f4f6', padding: 10, gap: 4 }}>
-              <Text style={{ fontSize: 12, color: '#374151' }}>📍 발견 장소: <Text style={{ fontWeight: '700' }}>{item.foundPlace || '—'}</Text> · 발견일 <Text style={{ fontWeight: '700' }}>{item.foundDate}</Text></Text>
-              <Text style={{ fontSize: 12, color: '#374151' }}>📦 보관 장소: <Text style={{ fontWeight: '700' }}>{item.keptAt || '—'}</Text></Text>
+              <Text style={{ fontSize: 12, color: '#374151' }}>📍 {isLost ? '마지막으로 본 곳' : '발견 장소'}: <Text style={{ fontWeight: '700' }}>{item.foundPlace || '—'}</Text> · {isLost ? '잃어버린 날' : '발견일'} <Text style={{ fontWeight: '700' }}>{item.foundDate}</Text></Text>
+              {!isLost ? <Text style={{ fontSize: 12, color: '#374151' }}>📦 보관 장소: <Text style={{ fontWeight: '700' }}>{item.keptAt || '—'}</Text></Text> : null}
               {item.description ? <Text style={{ fontSize: 12, color: '#4b5563' }}>📝 {item.description}</Text> : null}
-              {item.ownerName ? <Text style={{ fontSize: 12, color: '#be123c' }}>🏷️ 이름표: <Text style={{ fontWeight: '700' }}>{item.ownerName}</Text>{item.ownerClassCode ? ` (${item.ownerClassCode})` : ''}</Text> : null}
-              {item.status === 'claimed' ? <Text style={{ fontSize: 12, color: '#047857' }}>✅ {item.claimedBy || '주인'}에게 돌려줌</Text> : null}
+              {item.ownerName ? <Text style={{ fontSize: 12, color: '#be123c' }}>{isLost ? '🙋 잃어버린 학생' : '🏷️ 이름표'}: <Text style={{ fontWeight: '700' }}>{item.ownerName}</Text>{item.ownerClassCode ? ` (${item.ownerClassCode})` : ''}</Text> : null}
+              {item.status === 'claimed' ? <Text style={{ fontSize: 12, color: '#047857' }}>✅ {isLost ? `${item.claimedBy || '주인'} 학생이 찾았어요` : `${item.claimedBy || '주인'}에게 돌려줌`}</Text> : null}
               <TouchableOpacity onPress={() => setEditing(true)}><Text style={{ fontSize: 11, color: '#2563eb' }}>정보 수정</Text></TouchableOpacity>
             </View>
           )}
+
+          {matched ? (
+            <View style={{ borderWidth: 1, borderColor: '#a7f3d0', backgroundColor: '#ecfdf5', borderRadius: 10, padding: 10, gap: 4 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>🔗 연결된 {LOST_KIND_LABELS[lostItemKind(matched)].tab}</Text>
+              <TouchableOpacity onPress={() => onOpen(matched.id)}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827' }} numberOfLines={1}>{matched.name}</Text>
+                <Text style={{ fontSize: 10, color: '#6b7280' }} numberOfLines={1}>등록 {matched.reportedBy} · {matched.foundPlace || '장소 미기재'}</Text>
+              </TouchableOpacity>
+              {item.matchedBy ? <Text style={{ fontSize: 10, color: '#047857' }}>{item.matchedBy} 연결 · {fmtDateTime(item.matchedAt)}</Text> : null}
+            </View>
+          ) : matches.length > 0 ? (
+            <View style={{ borderWidth: 1, borderColor: '#fde68a', backgroundColor: '#fffbeb', borderRadius: 10, padding: 10, gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>
+                💡 {isLost ? '이 물건일 수도 있어요 (주운 물건)' : '이 물건을 찾는 사람이 있어요 (찾는 물건)'}
+              </Text>
+              {matches.map(m => (
+                <View key={m.item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 7 }}>
+                  <TouchableOpacity onPress={() => onOpen(m.item.id)} style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827' }} numberOfLines={1}>{m.item.name}</Text>
+                    <Text style={{ fontSize: 10, color: '#6b7280' }} numberOfLines={1}>{m.item.reportedBy} · {m.item.foundPlace || '장소 미기재'}{m.item.ownerName ? ` · ${m.item.ownerName}` : ''}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => link(m.item.id, m.item.name)} disabled={busy} style={{ backgroundColor: '#d97706', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, opacity: busy ? 0.4 : 1 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>연결하기</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <Text style={{ fontSize: 10, color: '#b45309' }}>연결하면 양쪽 모두 “{L.claimed}”으로 정리됩니다.</Text>
+            </View>
+          ) : null}
 
           <View style={{ gap: 8 }}>
             <Text style={styles.label}>상태 변경</Text>
@@ -3009,16 +3141,16 @@ function LostItemDetailMobile({ item, isAdmin, userId, userName, onClose }: {
                 const on = item.status === s; const sc = LOST_STATUS_COLOR[s];
                 return (
                   <TouchableOpacity key={s} onPress={() => setStatus(s)} disabled={busy} style={[styles.btn, { backgroundColor: on ? sc.bg : '#fff', borderWidth: 1, borderColor: on ? sc.bg : '#e5e7eb' }]}>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: on ? sc.text : '#6b7280' }}>{LOST_ITEM_STATUS_LABELS[s]}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: on ? sc.text : '#6b7280' }}>{L[s]}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
             {(claiming || item.status === 'claimed') && (
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <TextInput value={claimName} onChangeText={setClaimName} placeholder="돌려준 학생(사람) 이름" placeholderTextColor="#9ca3af" autoFocus={claiming} style={[styles.input, { flex: 1 }]} />
+                <TextInput value={claimName} onChangeText={setClaimName} placeholder={isLost ? '찾은 학생(사람) 이름' : '돌려준 학생(사람) 이름'} placeholderTextColor="#9ca3af" autoFocus={claiming} style={[styles.input, { flex: 1 }]} />
                 <TouchableOpacity onPress={() => setStatus('claimed')} disabled={busy || !claimName.trim()} style={{ backgroundColor: '#059669', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, opacity: busy || !claimName.trim() ? 0.4 : 1 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{item.status === 'claimed' ? '이름 저장' : '주인 찾음 처리'}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{item.status === 'claimed' ? '이름 저장' : `${L.claimed} 처리`}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -3049,8 +3181,10 @@ function normExpiry(raw: string): string | null {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
-function ItemDetailMobile({ view, groups, campCode, perm, userId, userName, initialUseGroupId, defaultGroupId, onRequest, onClose, onEditItem }: {
+function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userId, userName, initialUseGroupId, defaultGroupId, onRequest, onClose, onEditItem }: {
   view: InventoryItemView; groups: InventoryGroup[]; campCode: string; perm: InventoryPerm; userId: string; userName: string;
+  /** 입고 · 조정 · 이동할 수 있는 그룹 (부매니저는 자기 그룹) */
+  managedGroupIds: Set<string>;
   initialUseGroupId?: string; defaultGroupId?: string;
   onRequest: (view: InventoryItemView, groupId?: string) => void;
   onClose: () => void; onEditItem?: () => void;
@@ -3107,19 +3241,28 @@ function ItemDetailMobile({ view, groups, campCode, perm, userId, userName, init
         if (!(n > 0)) return;
         const ex = restockExpiry ? normExpiry(restockExpiry) : '';
         if (ex === null) { Alert.alert('확인 필요', '유효기간을 2026-12-31 또는 2026-12 형식으로 적어주세요.'); return; }
-        await restock(db, campCode, { ...base, quantity: n, memo: memo.trim() || undefined }, userName);
-        if (ex) await setStockMeta(db, campCode, view.id, group.id, { expiry: ex });
+        if (isAdmin) {
+          await restock(db, campCode, { ...base, quantity: n, memo: memo.trim() || undefined }, userName);
+          if (ex) await setStockMeta(db, campCode, view.id, group.id, { expiry: ex });
+        } else {
+          // 부매니저: 서버가 "내 그룹"인지 확인하고 기록한다
+          await stockOp({ op: 'restock', campCode, itemId: view.id, groupId: group.id, quantity: n, expiry: ex || undefined, memo: memo.trim() || undefined });
+        }
         setRestockExpiry('');
       } else if (mode.type === 'adjust') {
         if (!memo.trim()) { Alert.alert('입력 필요', '조정 사유를 입력해주세요.'); return; }
-        await adjustStockTo(db, campCode, { ...base, current, target: n, reason: memo.trim() }, userName);
+        if (isAdmin) {
+          await adjustStockTo(db, campCode, { ...base, current, target: n, reason: memo.trim() }, userName);
+        } else {
+          await stockOp({ op: 'adjust', campCode, itemId: view.id, groupId: group.id, target: n, reason: memo.trim() });
+        }
       } else {
         await setGroupMinStock(db, campCode, view.id, group.id, qty === '' ? null : Math.max(0, n || 0));
       }
       setMode(null); setQty(''); setMemo('');
     } catch (e) {
       console.error('재고 처리 오류:', e);
-      Alert.alert('오류', '처리 중 오류가 발생했습니다.');
+      Alert.alert('오류', e instanceof Error && e.message ? e.message : '처리 중 오류가 발생했습니다.');
     } finally { setBusy(false); }
   };
 
@@ -3182,19 +3325,21 @@ function ItemDetailMobile({ view, groups, campCode, perm, userId, userName, init
                           );
                         })()}
                       </View>
-                      {(isAdmin || g.id in view.stocks) && (
+                      {(managedGroupIds.has(g.id) || g.id in view.stocks) && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                           {g.id in view.stocks && (
                             <TouchableOpacity onPress={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} style={{ backgroundColor: '#2563eb', borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 }}>
                               <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>− 사용</Text>
                             </TouchableOpacity>
                           )}
-                          {isAdmin && (
+                          {managedGroupIds.has(g.id) && (
                             <>
-                              <TouchableOpacity onPress={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>+입고</Text></TouchableOpacity>
-                              <TouchableOpacity onPress={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }}><Text style={{ fontSize: 11, color: '#6b7280' }}>조정</Text></TouchableOpacity>
-                              <TouchableOpacity onPress={() => { setMode(null); setTransferFrom(g.id); }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#4f46e5' }}>이동</Text></TouchableOpacity>
-                              <TouchableOpacity onPress={() => { setMode({ type: 'min', groupId: g.id }); setQty(view.minStocks?.[g.id] != null ? String(view.minStocks[g.id]) : ''); setMemo(''); }}><Text style={{ fontSize: 11, color: '#6b7280' }}>최소</Text></TouchableOpacity>
+                              <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }} onPress={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>+입고</Text></TouchableOpacity>
+                              <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }} onPress={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }}><Text style={{ fontSize: 11, color: '#6b7280' }}>조정</Text></TouchableOpacity>
+                              <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }} onPress={() => { setMode(null); setTransferFrom(g.id); }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#4f46e5' }}>이동</Text></TouchableOpacity>
+                              {isAdmin && (
+                                <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }} onPress={() => { setMode({ type: 'min', groupId: g.id }); setQty(view.minStocks?.[g.id] != null ? String(view.minStocks[g.id]) : ''); setMemo(''); }}><Text style={{ fontSize: 11, color: '#6b7280' }}>최소</Text></TouchableOpacity>
+                              )}
                             </>
                           )}
                         </View>
@@ -3316,6 +3461,7 @@ function ItemDetailMobile({ view, groups, campCode, perm, userId, userName, init
       <Modal visible={!!transferFrom} animationType="fade" transparent onRequestClose={() => setTransferFrom(null)}>
         {transferFrom && (
           <StockTransferMobile view={view} groups={groups} campCode={campCode} fromGroupId={transferFrom}
+            managedGroupIds={isAdmin ? null : managedGroupIds}
             userId={userId} userName={userName} onClose={() => setTransferFrom(null)} />
         )}
       </Modal>
@@ -3325,13 +3471,19 @@ function ItemDetailMobile({ view, groups, campCode, perm, userId, userName, init
 
 // ==================== 🔁 그룹(교무실) 간 재고 이동 (모바일) ====================
 
-function StockTransferMobile({ view, groups, campCode, fromGroupId, userId, userName, onClose }: {
+function StockTransferMobile({ view, groups, campCode, fromGroupId, managedGroupIds, userId, userName, onClose }: {
   view: InventoryItemView; groups: InventoryGroup[]; campCode: string; fromGroupId: string; userId: string; userName: string; onClose: () => void;
+  /** 부매니저: 내 그룹 — 보내거나 받는 쪽 중 하나가 여기 있어야 한다. 관리자는 null(제한 없음) */
+  managedGroupIds?: Set<string> | null;
 }) {
   const [from, setFrom] = useState(fromGroupId);
-  const others = groups.filter(g => g.id !== from);
+  // 부매니저: 보내는 곳이 내 그룹이 아니면 받는 곳은 내 그룹만 (다른 그룹 재고를 가져오기)
+  const others = groups.filter(g => g.id !== from
+    && (!managedGroupIds || canTransferBetween(managedGroupIds, from, g.id)));
   const [to, setTo] = useState(others[0]?.id ?? '');
-  useEffect(() => { if (to === from) setTo(groups.find(g => g.id !== from)?.id ?? ''); }, [from, to, groups]);
+  useEffect(() => {
+    if (!others.some(g => g.id === to)) setTo(others[0]?.id ?? '');
+  }, [from, to, others]);
   const [qty, setQty] = useState('1');
   const [memo, setMemo] = useState('');
   const [busy, setBusy] = useState(false);
@@ -3348,14 +3500,23 @@ function StockTransferMobile({ view, groups, campCode, fromGroupId, userId, user
     if (invalid || busy || !fromGroup || !toGroup) return;
     setBusy(true);
     try {
-      const res = await transferStock(db, campCode, {
-        itemId: view.id, itemName: view.name,
-        fromGroupId: fromGroup.id, fromGroupName: fromGroup.name,
-        toGroupId: toGroup.id, toGroupName: toGroup.name,
-        quantity: n, memo: memo.trim() || undefined,
-      }, { uid: userId, name: userName });
-      setDone(res);
-      notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: fromGroup.id });
+      if (!managedGroupIds) {
+        const res = await transferStock(db, campCode, {
+          itemId: view.id, itemName: view.name,
+          fromGroupId: fromGroup.id, fromGroupName: fromGroup.name,
+          toGroupId: toGroup.id, toGroupName: toGroup.name,
+          quantity: n, memo: memo.trim() || undefined,
+        }, { uid: userId, name: userName });
+        setDone(res);
+        notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: fromGroup.id });
+      } else {
+        // 부매니저: 서버가 권한 확인 · 기록 · 알림(가져온 그룹 부매니저, 재고 부족)까지 처리
+        const res = await stockOp<{ from: number; to: number }>({
+          op: 'transfer', campCode, itemId: view.id, fromGroupId: fromGroup.id, toGroupId: toGroup.id,
+          quantity: n, memo: memo.trim() || undefined,
+        });
+        setDone(res);
+      }
     } catch (e) {
       Alert.alert('이동하지 못했습니다', e instanceof Error ? e.message : '다시 시도해주세요.');
     } finally { setBusy(false); }

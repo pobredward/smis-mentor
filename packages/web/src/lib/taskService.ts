@@ -1,4 +1,4 @@
-import { logger } from '@smis-mentor/shared';
+import { logger, isTaskVisibleTo, type TaskViewer } from '@smis-mentor/shared';
 import {
   collection,
   doc,
@@ -500,8 +500,7 @@ export const getTasksInMonth = async (
   campCode: string,
   year: number,
   month: number,
-  groupRole: JobExperienceGroupRole | null,
-  isAdmin: boolean
+  viewer: TaskViewer
 ): Promise<Map<string, Task[]>> => {
   try {
     const monthStart = new Date(year, month, 1, 0, 0, 0, 0);
@@ -522,9 +521,8 @@ export const getTasksInMonth = async (
       const task = { id: d.id, ...d.data() } as Task;
       const taskDate = new Date(task.date.toDate());
 
-      if (!isAdmin) {
-        if (!groupRole || !task.targetRoles.includes(groupRole)) return;
-      }
+      // 관리자가 아니면 내 그룹 대상 업무만 (부매니저는 그룹 업무 전체)
+      if (!isTaskVisibleTo(task, viewer)) return;
 
       const y = taskDate.getFullYear();
       const m = String(taskDate.getMonth() + 1).padStart(2, '0');
@@ -549,11 +547,10 @@ export const getTaskDatesInMonth = async (
   campCode: string,
   year: number,
   month: number,
-  groupRole: JobExperienceGroupRole | null,
-  isAdmin: boolean
+  viewer: TaskViewer
 ): Promise<Set<string>> => {
   try {
-    const taskMap = await getTasksInMonth(campCode, year, month, groupRole, isAdmin);
+    const taskMap = await getTasksInMonth(campCode, year, month, viewer);
     return new Set(taskMap.keys());
   } catch (error) {
     logger.error('월별 업무 날짜 가져오기 오류:', error);

@@ -26,7 +26,7 @@ interface Props {
 }
 
 /**
- * 등각·3D — shared 가 만든 HTML 을 WebView 로 띄운다 (web 의 iframe 과 같은 문서).
+ * 3D — shared 가 만든 HTML 을 WebView 로 띄운다 (web 의 iframe 과 같은 문서).
  * 3D 는 three.js 를 CDN 에서 받으므로 인터넷이 필요하다.
  */
 export const LodgingViewer = forwardRef<LodgingViewerHandle, Props>(function LodgingViewer(

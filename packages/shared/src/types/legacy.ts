@@ -124,6 +124,8 @@ export interface User {
 
   // 활성화된 캠프 코드 (최근 추가)
   activeJobExperienceId?: string;
+  /** 관리자가 캠프를 임시로 활성화했을 때의 jobCode id */
+  adminTempActiveCamp?: string;
 
   // jobExperiences[*].id의 파생 배열 — Firestore array-contains 쿼리용
   // addUserJobCode / removeUserJobCode 호출 시 항상 함께 업데이트됨

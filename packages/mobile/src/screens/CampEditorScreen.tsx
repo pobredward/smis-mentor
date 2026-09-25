@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useState, useLayoutEffect, useEffect } from 'react';
 import {
   View,
@@ -26,7 +27,7 @@ export function CampEditorScreen({ route, navigation }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   useEffect(() => {
     const keyboardWillShowListener = Keyboard.addListener(

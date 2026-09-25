@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { logger } from '@smis-mentor/shared';
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -67,7 +68,7 @@ export default function CampLinkList({
   const [editLinkTargetRole, setEditLinkTargetRole] = useState<ResourceLinkRole>('common');
 
   const isAdmin = userData?.role === 'admin';
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   // 프리페칭 캐시를 활용하는 useQuery 기반 데이터 로딩
   const queryKey = activeJobCodeId ? getLinkQueryKey(linkType, activeJobCodeId) : ['generationResources', null];

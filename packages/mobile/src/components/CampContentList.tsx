@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useState, useEffect, useCallback } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
@@ -78,7 +79,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
   const [searchQuery, setSearchQuery] = useState('');
 
   const isAdmin = userData?.role === 'admin';
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   // 1단계: 역할 기반 필터 (기존 로직 유지)
   const roleFilteredItems = items.filter(item => {

@@ -28,7 +28,7 @@ interface Props {
 }
 
 /**
- * 등각·3D — shared 가 만든 한 장짜리 HTML 을 iframe 으로 띄운다.
+ * 3D — shared 가 만든 한 장짜리 HTML 을 iframe 으로 띄운다.
  * 모바일 WebView 와 같은 문서라 두 플랫폼이 똑같이 보인다.
  */
 const LodgingViewer = forwardRef<LodgingViewerHandle, Props>(function LodgingViewer(

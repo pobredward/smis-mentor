@@ -284,6 +284,28 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** 이 날 복용하는 약인가 — '캠프 끝까지'(endDateAuto)는 저장된 종료일과 무관하게 계속 복용 */
+function schedActiveOn(s: { startDate: string; endDate: string; endDateAuto?: boolean }, date: string): boolean {
+  return date >= s.startDate && (!!s.endDateAuto || date <= s.endDate);
+}
+
+/**
+ * 시작 날 firstTime 이전 · 마지막 날 lastTime 이후 시간은 복용하지 않는다 (웹과 같은 규칙).
+ * 예: 중식후부터 시작한 약은 첫날 기상후 · 조식후를 체크할 수 없다.
+ */
+function isMedTimeOff(
+  s: { startDate: string; endDate: string; endDateAuto?: boolean; firstTime?: MedicationTime; lastTime?: MedicationTime },
+  time: MedicationTime,
+  date: string,
+): boolean {
+  const i = MEDICATION_TIMES.indexOf(time);
+  const first = s.firstTime ? MEDICATION_TIMES.indexOf(s.firstTime) : -1;
+  const last = s.lastTime ? MEDICATION_TIMES.indexOf(s.lastTime) : -1;
+  if (date === s.startDate && first >= 0 && i < first) return true;
+  if (!s.endDateAuto && date === s.endDate && last >= 0 && i > last) return true;
+  return false;
+}
+
 function isInDateRange(start: string, end: string, date: string): boolean {
   return date >= start && date <= end;
 }
@@ -395,7 +417,12 @@ export function PatientScreen() {
   const [showQuickReport, setShowQuickReport] = useState(false);
   const [campGroups, setCampGroups] = useState<CampGroup[]>([]);
   const [campUsers, setCampUsers] = useState<User[]>([]);
-  const [today] = useState(todayStr());
+  // 날짜가 바뀌면(자정 넘김) 오늘도 바뀐다 — 켜 둔 채 밤을 넘겨도 복용 체크가 전날로 기록되지 않게
+  const [today, setToday] = useState(todayStr());
+  useEffect(() => {
+    const t = setInterval(() => setToday(prev => (prev === todayStr() ? prev : todayStr())), 30_000);
+    return () => clearInterval(t);
+  }, []);
   // 주 탭: 환자 현황 / 약복용명단
   const [mainTab, setMainTab] = useState<'환자 현황' | '약복용명단'>('환자 현황');
 
@@ -555,7 +582,7 @@ export function PatientScreen() {
   const medicationRecords = useMemo(() => {
     return filterByMyUnit(records.filter(r => {
       if (r.progressStatus === '완치') return false;
-      return (r.medicationSchedules ?? []).some(s => isInDateRange(s.startDate, s.endDate, today));
+      return (r.medicationSchedules ?? []).some(s => schedActiveOn(s, today));
     }));
   }, [records, today, filterByMyUnit]);
 
@@ -1236,9 +1263,10 @@ function MedicationListView({
     let total = 0, done = 0;
     records.forEach(r => {
       (r.medicationSchedules ?? []).forEach(sched => {
-        if (!isInDateRange(sched.startDate, sched.endDate, today)) return;
+        if (!schedActiveOn(sched, today)) return;
         if (!sched.times.includes(time)) return;
         if ((sched.skipDates ?? []).includes(today)) return; // 휴약일 제외
+        if (isMedTimeOff(sched, time, today)) return; // 첫날 시작 전 · 마지막 날 이후
         total++;
         if (sched.checkedTimes.includes(makeMedTimeKey(time, today))) done++;
       });
@@ -1249,7 +1277,7 @@ function MedicationListView({
   const recordsWithTimes = (filterTimes: MedicationTime[]) =>
     records.filter(r =>
       (r.medicationSchedules ?? []).some(sched =>
-        isInDateRange(sched.startDate, sched.endDate, today) &&
+        schedActiveOn(sched, today) &&
         sched.times.some(t => filterTimes.includes(t))
       )
     );
@@ -1482,18 +1510,18 @@ function MedPatientCard({
   const todayScheds = (record.medicationSchedules ?? [])
     .map((s, idx) => ({ ...s, idx }))
     .filter(s =>
-      isInDateRange(s.startDate, s.endDate, today) &&
+      schedActiveOn(s, today) &&
       s.times.some(t => filterTimes.includes(t))
     );
 
   // 휴약일인 스케줄은 진행률 집계에서 제외
   const todayTotal = todayScheds.reduce((sum, s) => {
     if ((s.skipDates ?? []).includes(today)) return sum;
-    return sum + s.times.filter(t => filterTimes.includes(t)).length;
+    return sum + s.times.filter(t => filterTimes.includes(t) && !isMedTimeOff(s, t, today)).length;
   }, 0);
   const todayDone = todayScheds.reduce((sum, s) => {
     if ((s.skipDates ?? []).includes(today)) return sum;
-    return sum + s.times.filter(t => filterTimes.includes(t) && s.checkedTimes.includes(makeMedTimeKey(t, today))).length;
+    return sum + s.times.filter(t => filterTimes.includes(t) && !isMedTimeOff(s, t, today) && s.checkedTimes.includes(makeMedTimeKey(t, today))).length;
   }, 0);
   const allDone = todayTotal > 0 && todayDone === todayTotal;
 
@@ -1571,10 +1599,12 @@ function MedPatientCard({
                   const key = makeMedTimeKey(time, today);
                   const checked = sched.checkedTimes.includes(key);
                   const checkerName = sched.checkedBy?.[key];
+                  const off = !checked && isMedTimeOff(sched, time, today);
                   return (
                     <View key={time} style={{ alignItems: 'flex-start' }}>
                       <TouchableOpacity
-                        style={[styles.medTimeBtn, checked && styles.medTimeBtnDone]}
+                        disabled={off}
+                        style={[styles.medTimeBtn, checked && styles.medTimeBtnDone, off && { opacity: 0.35 }]}
                         onPress={() => {
                           if (checked) onCheck(sched.idx, time, true);
                           else onRequestConfirm?.(sched.idx, time, sched.name);
@@ -1807,7 +1837,7 @@ function PatientCard({
     let todayTotal = 0, todayDone = 0;
     tempSchedules.forEach(s => {
       s.times.forEach(t => {
-        if (isInDateRange(s.startDate, s.endDate, today)) {
+        if (schedActiveOn(s, today)) {
           todayTotal++;
           if (s.checkedTimes.includes(makeMedTimeKey(t, today))) todayDone++;
         }
@@ -2981,6 +3011,8 @@ function HospitalScheduleFormMobile({
     return null;
   }, [allRecords]);
 
+  // 처음 열 때 한 번만 같은 차량의 출발 시간 · 운전자를 채운다 (웹과 같음).
+  // 다른 사람이 저장할 때마다 다시 채우면 입력 중인 값이 덮어써진다.
   useEffect(() => {
     if (isEdit) return;
     const info = findSlotInfo(transportSlot);
@@ -2988,7 +3020,8 @@ function HospitalScheduleFormMobile({
       if (info.departureTime) setDepartureTime(info.departureTime);
       if (info.driver) setDriver(info.driver);
     }
-  }, [isEdit, findSlotInfo, transportSlot]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSlotChange = (slot: TransportSlot) => {
     setTransportSlot(slot);
@@ -3007,7 +3040,8 @@ function HospitalScheduleFormMobile({
 
   // 외부(TabFormModalMobile)에서 저장 버튼 클릭 시 호출될 submit 함수 등록
   const handleSubmitInternal = () => {
-    onSubmit({ transportSlot, departureTime, driver: isCar ? driver : undefined, escort, hospitalName, parentReporter, parentReportMethod, hospitalStatus: '내원예정' });
+    // 상태는 넘기지 않는다 — 새로 추가할 때만 '내원예정'으로 시작하고, 수정 때는 기존 상태(내원완료 등)를 유지
+    onSubmit({ transportSlot, departureTime, driver: isCar ? driver : undefined, escort, hospitalName, parentReporter, parentReportMethod });
   };
   useEffect(() => {
     if (submitRef) submitRef.current = handleSubmitInternal;
@@ -3222,7 +3256,7 @@ function MedicationTabMobile({
     const total = calcTotalDoses(sched);
     const done = (sched.checkedTimes ?? []).length;
     const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-    const isActive = isInDateRange(sched.startDate, sched.endDate, today);
+    const isActive = schedActiveOn(sched, today);
     return (
       <View style={{ backgroundColor: '#fff7ed', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#fed7aa', marginBottom: 8 }}>
         {/* 헤더 행 */}
@@ -3256,8 +3290,9 @@ function MedicationTabMobile({
             {MEDICATION_TIMES.filter(t => sched.times.includes(t)).map(time => {
               const key = makeMedTimeKey(time, today);
               const checked = (sched.checkedTimes ?? []).includes(key);
+              const off = !checked && isMedTimeOff(sched, time, today);
               return (
-                <TouchableOpacity key={time} style={[styles.medTimeBtn, checked && styles.medTimeBtnDone]}
+                <TouchableOpacity key={time} disabled={off} style={[styles.medTimeBtn, checked && styles.medTimeBtnDone, off && { opacity: 0.35 }]}
                   onPress={() => onCheck(idx, time, checked)}>
                   {checked && <Text style={{ color: '#fff', fontSize: 10 }}>✓ </Text>}
                   <Text style={[styles.medTimeBtnText, checked && { color: '#fff' }]}>{time}</Text>
@@ -4384,10 +4419,10 @@ function QuickReportModalMobile({
                     if (opt.id === 'normal') { setFeverLevel('normal'); setField('temperature', ''); }
                     else if (opt.id === 'slight') {
                       setFeverLevel('slight');
-                      if (!form.temperature || classifyFever(form.temperature) !== '미열') setField('temperature', FEVER_THRESHOLDS.slight.toFixed(1));
+                      if (form.temperature && classifyFever(form.temperature) !== '미열') setField('temperature', ''); // 재지 않았으면 비워 둔다 (열감만 기록)
                     } else {
                       setFeverLevel('high');
-                      if (!form.temperature || classifyFever(form.temperature) !== '고열') setField('temperature', FEVER_THRESHOLDS.high.toFixed(1));
+                      if (form.temperature && classifyFever(form.temperature) !== '고열') setField('temperature', '');
                     }
                   }}
                   style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', borderWidth: 1.5, borderColor: selected ? opt.activeColor : '#e5e7eb', backgroundColor: selected ? opt.activeColor : '#fff' }}
@@ -4411,7 +4446,7 @@ function QuickReportModalMobile({
                     if (level === '고열') setFeverLevel('high');
                     else if (level === '미열') setFeverLevel('slight');
                   }}
-                  placeholder="체온 직접 입력 (예: 37.8)"
+                  placeholder="잰 체온 (예: 37.8) — 안 쟀으면 비워두세요"
                   placeholderTextColor="#9ca3af"
                   keyboardType="decimal-pad"
                   style={[styles.formInput, { paddingRight: 36 }]}

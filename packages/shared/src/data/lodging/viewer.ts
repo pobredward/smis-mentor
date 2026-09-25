@@ -7,7 +7,7 @@ import {
   lodgingRoomTone,
 } from '../../types/lodging';
 
-/** 등각 조망은 없앴다 — 3D 한 가지 */
+/** 뷰어 모드 — 3D 한 가지 */
 export type LodgingViewerMode = '3d';
 
 export interface LodgingViewerPayload {

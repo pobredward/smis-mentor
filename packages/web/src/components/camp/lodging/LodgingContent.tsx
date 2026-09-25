@@ -41,12 +41,13 @@ import LodgingViewer from './LodgingViewer';
 import LodgingDetail, { type LodgingTarget } from './LodgingDetail';
 
 type ViewKey = 'all' | 'b1' | 'f1' | 'f2' | 'f3' | 'f4' | '3d';
+const VIEW_KEYS: readonly string[] = ['all', 'b1', 'f1', 'f2', 'f3', 'f4', '3d'];
 const VIEW_KEY = (jobCodeId: string) => `SMIS_LODGING_VIEW_${jobCodeId}`;
 const ROWS_KEY = 'SMIS_LODGING_FILTER_ROWS';
 
 /**
  * 숙소 탭 — 건물은 고정, 방 명단은 ST 시트 방호수, 용도·선생님은 캠프 설정.
- * 전체 / B1 / 1~4층 / 등각 조망 / 3D.
+ * 전체 / B1 / 1~4층 / 3D.
  */
 export default function LodgingContent() {
   const { userData } = useAuth();
@@ -140,7 +141,7 @@ export default function LodgingContent() {
     if (!activeJobCodeId || typeof window === 'undefined') return;
     try {
       const v = window.localStorage.getItem(VIEW_KEY(activeJobCodeId));
-      if (v) setViewState((v === 'iso' ? '3d' : v) as ViewKey);   // 등각 조망은 없앴다
+      if (v && VIEW_KEYS.includes(v)) setViewState(v as ViewKey);   // 예전에 저장된 없는 보기는 무시
     } catch {
       /* noop */
     }

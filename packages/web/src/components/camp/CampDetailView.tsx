@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { logger } from '@smis-mentor/shared';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -56,7 +57,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
   const [isCopying, setIsCopying] = useState(false);
 
   const isAdmin = userData?.role === 'admin';
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   useEffect(() => {
     const loadItem = async () => {

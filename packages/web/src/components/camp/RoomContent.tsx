@@ -1,4 +1,5 @@
 'use client';
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { logger, toDriveImageUrl, getFieldValue, getFixedFieldValue, getDefaultFieldConfig, type STSheetFieldConfig } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -38,7 +39,7 @@ export default function RoomContent() {
   } | null>(null);
   const [fieldSaving, setFieldSaving] = useState(false);
 
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
   const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);

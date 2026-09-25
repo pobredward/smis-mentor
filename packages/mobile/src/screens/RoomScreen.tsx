@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StudentList, StudentDetailModal } from '../components';
@@ -17,7 +18,7 @@ export function RoomScreen() {
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
   // activeJobCodeId 변경을 직접 구독 → FamilyList 렌더 중에도 campCode 갱신
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
   useEffect(() => {
     if (!activeJobCodeId) { setCampCode(null); return; }
     jobCodesService.getJobCodesByIds([activeJobCodeId]).then((codes) => {

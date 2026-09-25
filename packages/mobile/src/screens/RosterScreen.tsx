@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ClassScreen } from './ClassScreen';
@@ -21,7 +22,7 @@ export function RosterScreen() {
   const [isEJCamp, setIsEJCamp] = useState(false);
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
   useEffect(() => {
     if (!activeJobCodeId) { setIsEJCamp(false); return; }
     jobCodesService.getJobCodesByIds([activeJobCodeId]).then((codes) => {

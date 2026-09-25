@@ -27,7 +27,7 @@ import {
   clearHiddenOverdueTasks,
 } from '../services/cacheUtils';
 import { getApplicationsByUserId } from '../services/recruitmentService';
-import { getCampHomeMessage, updateCampHomeMessage } from '@smis-mentor/shared';
+import { getCampHomeMessage, updateCampHomeMessage, taskViewerOf, isTaskAssignedTo } from '@smis-mentor/shared';
 import { getJobBoardById } from '../services/jobBoardService';
 import { db } from '../config/firebase';
 import type { Task, PersonalTask } from '../../../shared/src/types/camp';
@@ -107,18 +107,10 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           now.setHours(0, 0, 0, 0);
           const today = now.getTime();
 
-          // 사용자 역할 가져오기
-          const userExp = userData.jobExperiences?.find(
-            exp => exp.id === userData.activeJobExperienceId
-          );
-          const userRole = userExp?.groupRole;
-
-          // 역할에 맞는 업무만 필터링
-          const userTasks = allTasks.filter(task => {
-            if (userData.role === 'admin') return true;
-            if (!userRole) return false;
-            return task.targetRoles.includes(userRole as any);
-          });
+          // 홈에는 "내가 체크할 업무"만 — 내 역할 + 내 그룹 (관리자는 전체)
+          const viewer = taskViewerOf(userData, userData.activeJobExperienceId);
+          const userTasks = allTasks.filter(task =>
+            userData.role === 'admin' ? true : isTaskAssignedTo(task, viewer));
 
           const sortByTime = (a: Task, b: Task) => {
             if (a.time && b.time) return a.time.localeCompare(b.time);

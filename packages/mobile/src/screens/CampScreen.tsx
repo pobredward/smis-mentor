@@ -10,6 +10,7 @@ import { LocationSharingScreen } from './LocationSharingScreen';
 import { PatientScreen } from './PatientScreen';
 import { InventoryScreen } from './InventoryScreen';
 import { useAuth } from '../context/AuthContext';
+import { hasCampAccess, isCampStaffRole } from '@smis-mentor/shared';
 import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab, registerNavigateToCampTab, unregisterNavigateToCampTab } from '../context/CampTabContext';
 
 // 위치 탭은 잠시 숨겨 둔다 — 다시 열려면 true (화면 코드는 그대로 있다)
@@ -29,9 +30,10 @@ export function CampScreen() {
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
-  // 관리자가 캠프를 아직 배정하지 않은 경우
-  const hasNoCampAssigned =
-    userData && (!userData.jobExperiences || userData.jobExperiences.length === 0);
+  // 캠프 탭 진입 조건 — 스태프(admin · mentor · foreign)이고 활성 캠프가 있을 것
+  // (관리자는 임시 활성 캠프만 있어도 된다. 가입 승인 전 임시 계정은 막는다)
+  const hasNoCampAssigned = !!userData && !hasCampAccess(userData);
+  const isPendingAccount = !!userData && !isCampStaffRole(userData.role);
 
   const allTabs: { id: TabName; title: string }[] = isForeign
     ? [
@@ -57,15 +59,25 @@ export function CampScreen() {
       ];
 
   const tabs = allTabs;
+  // 저장된 탭이 이 사람에게 없는 탭이면(예: 원어민의 '수업') 기본 탭으로
+  useEffect(() => {
+    if (userData && !tabs.some(t => t.id === activeTab)) setActiveTab('schedule');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userData?.role, activeTab]);
 
   if (hasNoCampAssigned) {
     return (
       <View style={styles.noCampContainer}>
         <Text style={styles.noCampIcon}>⏳</Text>
-        <Text style={styles.noCampTitle}>Waiting for camp access</Text>
+        <Text style={styles.noCampTitle}>{isForeign ? 'Waiting for camp access' : isPendingAccount ? '가입 승인 대기 중' : '배정된 캠프가 없어요'}</Text>
         <Text style={styles.noCampDescription}>
-          You have not been assigned to a camp yet.{'\n'}
-          Please wait until an administrator grants you access.
+          {isForeign
+            ? 'You have not been assigned to a camp yet.\nPlease wait until an administrator grants you access.'
+            : isPendingAccount
+              ? '가입이 승인되면 캠프 탭을 사용할 수 있어요.'
+              : userData?.role === 'admin'
+                ? '마이페이지에서 캠프를 활성화하면 캠프 탭을 볼 수 있어요.'
+                : '관리자가 캠프에 배정하면 바로 열립니다.'}
         </Text>
       </View>
     );
@@ -105,7 +117,7 @@ export function CampScreen() {
           <EducationScreen />
         </View>
         <View style={[styles.tabContent, activeTab !== 'lesson' && styles.hiddenTab]} pointerEvents={activeTab !== 'lesson' ? 'none' : 'auto'}>
-          <LessonScreen />
+          {!isForeign && <LessonScreen />}
         </View>
         <View style={[styles.tabContent, activeTab !== 'tasks' && styles.hiddenTab]} pointerEvents={activeTab !== 'tasks' ? 'none' : 'auto'}>
           <TasksScreen />

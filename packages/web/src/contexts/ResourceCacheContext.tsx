@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { generationResourcesService, ResourceLink } from '@/lib/generationResourcesService';
@@ -55,7 +56,7 @@ export function ResourceCacheProvider({ children }: { children: ReactNode }) {
   const [userJobCodes, setUserJobCodes] = useState<JobCodeWithGroup[]>([]);
   const [lessonLoading, setLessonLoading] = useState(true);
 
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   useEffect(() => {
     // Auth가 준비될 때까지 대기

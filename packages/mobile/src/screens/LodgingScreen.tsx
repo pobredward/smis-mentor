@@ -1,3 +1,4 @@
+import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -49,6 +50,7 @@ import { PanZoomCanvas, type PanZoomHandle } from '../components/lodging/PanZoom
 import { StudentDetailModal } from '../components/StudentDetailModal';
 
 type ViewKey = 'all' | 'b1' | 'f1' | 'f2' | 'f3' | 'f4' | '3d';
+const VIEW_KEYS: readonly string[] = ['all', 'b1', 'f1', 'f2', 'f3', 'f4', '3d'];
 const VIEW_KEY = (jobCodeId: string) => `SMIS_LODGING_VIEW_${jobCodeId}`;
 const ROWS_KEY = 'SMIS_LODGING_FILTER_ROWS';
 const FILTER_KEYS: LodgingFilterKey[] = ['group', 'airport'];
@@ -59,14 +61,14 @@ type XY = { x: number; y: number };
 
 /**
  * 숙소 탭 — 건물은 고정, 방 명단은 ST 시트 방호수, 용도·선생님은 캠프 설정.
- * 전체 / B1 / 1~4층 / 등각 조망 / 3D.
+ * 전체 / B1 / 1~4층 / 3D.
  */
 export function LodgingScreen() {
   const { userData } = useAuth();
   const queryClient = useQueryClient();
   const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
-  const activeJobCodeId = userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
+  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: lodgingQueryKey(activeJobCodeId ?? ''),
@@ -119,7 +121,7 @@ export function LodgingScreen() {
   useEffect(() => {
     if (!activeJobCodeId) return;
     AsyncStorage.getItem(VIEW_KEY(activeJobCodeId))
-      .then((v) => v && setViewState((v === 'iso' ? '3d' : v) as ViewKey))   // 등각 조망은 없앴다
+      .then((v) => { if (v && VIEW_KEYS.includes(v)) setViewState(v as ViewKey); })   // 예전에 저장된 없는 보기는 무시
       .catch(() => {});
   }, [activeJobCodeId]);
   const setView = useCallback(
