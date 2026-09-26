@@ -1,4 +1,5 @@
-import { logger } from '@smis-mentor/shared';
+import { logger, isPermissionDenied, lookupUserViaApi } from '@smis-mentor/shared';
+import { getApiBaseUrl } from './authService';
 import {
   doc,
   updateDoc,
@@ -97,7 +98,17 @@ export async function checkEmailExists(
   try {
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('email', '==', email));
-    const querySnapshot = await getDocs(q);
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (queryError) {
+      // 일반 사용자는 규칙상 타인 이메일 조회 불가 → 서버 조회로 폴백
+      if (isPermissionDenied(queryError)) {
+        const found = await lookupUserViaApi(getApiBaseUrl(), { by: 'email', email });
+        return !!found && (!excludeUserId || found.userId !== excludeUserId);
+      }
+      throw queryError;
+    }
     
     if (querySnapshot.empty) {
       return false;
@@ -126,7 +137,16 @@ export async function checkPhoneExists(
   try {
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('phoneNumber', '==', phoneNumber));
-    const querySnapshot = await getDocs(q);
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (queryError) {
+      if (isPermissionDenied(queryError)) {
+        const found = await lookupUserViaApi(getApiBaseUrl(), { by: 'phone', phone: phoneNumber });
+        return !!found && (!excludeUserId || found.userId !== excludeUserId);
+      }
+      throw queryError;
+    }
     
     if (querySnapshot.empty) {
       return false;

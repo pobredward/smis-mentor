@@ -38,15 +38,15 @@ export async function GET(request: NextRequest) {
         .get()
         .then(snapshot => snapshot.data().count),
       
-      // 지원서 (refUserId)
-      db.collection('applications')
+      // 지원서 (refUserId) — 실제 컬렉션명은 applicationHistories
+      db.collection('applicationHistories')
         .where('refUserId', '==', userId)
         .count()
         .get()
         .then(snapshot => snapshot.data().count),
       
-      // 캠프 업무 (createdBy)
-      db.collection('tasks')
+      // 캠프 업무 (createdBy) — 실제 컬렉션명은 campTasks
+      db.collection('campTasks')
         .where('createdBy', '==', userId)
         .count()
         .get()

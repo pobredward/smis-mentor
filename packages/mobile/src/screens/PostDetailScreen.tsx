@@ -26,6 +26,11 @@ import {
   createComment,
   updateComment,
   deleteComment,
+  reportContent,
+  blockUser,
+  maskBlockedComments,
+  REPORT_REASON_LABELS,
+  type ReportReason,
 } from '../services/communityService';
 import { useAuth } from '../context/AuthContext';
 import { RootStackScreenProps } from '../navigation/types';
@@ -48,7 +53,9 @@ type ListItem =
 
 export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'PostDetail'>) {
   const { postId } = route.params;
-  const { userData } = useAuth();
+  const { userData, refreshUserData } = useAuth();
+  const blockedUsersRaw = userData?.blockedUsers;
+  const blockedUsers = useMemo(() => blockedUsersRaw ?? [], [blockedUsersRaw]);
 
   // 게시글
   const [post, setPost] = useState<CommunityPost | null>(null);
@@ -58,6 +65,13 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
   const [likeLoading, setLikeLoading] = useState(false);
   const [showPostMenu, setShowPostMenu] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // 신고 대상 (게시글 또는 댓글) — 사유 선택 모달
+  const [reportTarget, setReportTarget] = useState<
+    | { targetType: 'post'; postId: string; targetAuthorId: string; contentSnapshot: string }
+    | { targetType: 'comment'; postId: string; commentId: string; targetAuthorId: string; contentSnapshot: string }
+    | null
+  >(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   // 댓글
   const [comments, setComments] = useState<CommentWithReplies[]>([]);
@@ -98,7 +112,7 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
 
   const loadComments = useCallback(async () => {
     try {
-      const all = await getComments(postId);
+      const all = maskBlockedComments(await getComments(postId), blockedUsers);
       const topLevel = all.filter((c) => c.parentId === null);
       setComments(topLevel.map((c) => ({
         ...c,
@@ -110,7 +124,7 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
     } finally {
       setCommentsLoading(false);
     }
-  }, [postId]);
+  }, [postId, blockedUsers]);
 
   useEffect(() => { loadPost(); }, [loadPost]);
   useEffect(() => { loadComments(); }, [loadComments]);
@@ -155,6 +169,57 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
       }},
     ]);
   }, [postId, navigation]);
+
+  // ─── 신고 · 차단 ────────────────────────────────────────────────────────────
+
+  const openReportForPost = useCallback(() => {
+    if (!post) return;
+    setShowPostMenu(false);
+    setReportTarget({ targetType: 'post', postId, targetAuthorId: post.authorId, contentSnapshot: post.content });
+  }, [post, postId]);
+
+  const openReportForComment = useCallback((comment: CommunityComment) => {
+    setReportTarget({ targetType: 'comment', postId, commentId: comment.id, targetAuthorId: comment.authorId, contentSnapshot: comment.content });
+  }, [postId]);
+
+  const submitReport = useCallback(async (reason: ReportReason) => {
+    if (!reportTarget || !currentUserId || reportSubmitting) return;
+    setReportSubmitting(true);
+    try {
+      await reportContent({
+        ...reportTarget,
+        commentId: reportTarget.targetType === 'comment' ? reportTarget.commentId : undefined,
+        reporterId: currentUserId,
+        reason,
+      });
+      setReportTarget(null);
+      Alert.alert('신고 접수', '신고가 접수되었습니다. 관리자가 확인 후 조치합니다.');
+    } catch (e: any) {
+      setReportTarget(null);
+      const denied = /permission|insufficient/i.test(String(e?.message || e?.code || ''));
+      Alert.alert(denied ? '이미 신고한 내용입니다' : '오류', denied ? '같은 내용은 한 번만 신고할 수 있습니다.' : '신고 접수에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setReportSubmitting(false);
+    }
+  }, [reportTarget, currentUserId, reportSubmitting]);
+
+  const handleBlockAuthor = useCallback((targetUserId: string, label: string) => {
+    if (!currentUserId || targetUserId === currentUserId) return;
+    setShowPostMenu(false);
+    Alert.alert('사용자 차단', `${label}의 글과 댓글이 더 이상 표시되지 않습니다. 차단하시겠습니까?\n(마이페이지 > 차단 목록에서 해제할 수 있습니다)`, [
+      { text: '취소', style: 'cancel' },
+      { text: '차단', style: 'destructive', onPress: async () => {
+        try {
+          await blockUser(currentUserId, targetUserId);
+          await refreshUserData();
+          Alert.alert('차단 완료', '해당 사용자의 글과 댓글을 숨겼습니다.');
+          navigation.goBack();
+        } catch {
+          Alert.alert('오류', '차단에 실패했습니다.');
+        }
+      }},
+    ]);
+  }, [currentUserId, refreshUserData, navigation]);
 
   // ─── 댓글 액션 ────────────────────────────────────────────────────────────
 
@@ -362,14 +427,19 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
                     <Text style={styles.metaAction}>답글</Text>
                   </TouchableOpacity>
                   {isOwn && (
-                    <>
-                      <TouchableOpacity onPress={() => handleCommentEdit(comment, null)}>
-                        <Text style={styles.metaAction}>수정</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleCommentDelete(comment)}>
-                        <Text style={[styles.metaAction, styles.metaDelete]}>삭제</Text>
-                      </TouchableOpacity>
-                    </>
+                    <TouchableOpacity onPress={() => handleCommentEdit(comment, null)}>
+                      <Text style={styles.metaAction}>수정</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(isOwn || isAdmin) && (
+                    <TouchableOpacity onPress={() => handleCommentDelete(comment)}>
+                      <Text style={[styles.metaAction, styles.metaDelete]}>삭제</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!isOwn && (
+                    <TouchableOpacity onPress={() => openReportForComment(comment)} accessibilityLabel="댓글 신고">
+                      <Text style={styles.metaAction}>신고</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
               </>
@@ -416,14 +486,19 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
                     <View style={styles.commentMeta}>
                       <Text style={styles.commentDate}>{formatRelativeTime(reply.createdAt?.toDate?.() ?? new Date())}</Text>
                       {ro && (
-                        <>
-                          <TouchableOpacity onPress={() => handleCommentEdit(reply, comment.id)}>
-                            <Text style={styles.metaAction}>수정</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => handleCommentDelete(reply)}>
-                            <Text style={[styles.metaAction, styles.metaDelete]}>삭제</Text>
-                          </TouchableOpacity>
-                        </>
+                        <TouchableOpacity onPress={() => handleCommentEdit(reply, comment.id)}>
+                          <Text style={styles.metaAction}>수정</Text>
+                        </TouchableOpacity>
+                      )}
+                      {(ro || isAdmin) && (
+                        <TouchableOpacity onPress={() => handleCommentDelete(reply)}>
+                          <Text style={[styles.metaAction, styles.metaDelete]}>삭제</Text>
+                        </TouchableOpacity>
+                      )}
+                      {!ro && (
+                        <TouchableOpacity onPress={() => openReportForComment(reply)} accessibilityLabel="답글 신고">
+                          <Text style={styles.metaAction}>신고</Text>
+                        </TouchableOpacity>
                       )}
                     </View>
                   </>
@@ -434,7 +509,7 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
         })}
       </View>
     );
-  }, [currentUserId, handleReply, handleCommentEdit, handleCommentDelete, toggleReplies]);
+  }, [currentUserId, isAdmin, handleReply, handleCommentEdit, handleCommentDelete, toggleReplies, openReportForComment]);
 
   // ─── 로딩 / 에러 ────────────────────────────────────────────────────────────
 
@@ -458,13 +533,9 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
             <Ionicons name="chevron-back" size={24} color="#1e293b" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>게시글</Text>
-          {canManage ? (
-            <TouchableOpacity onPress={() => setShowPostMenu(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="게시글 메뉴" accessibilityRole="button">
-              <Ionicons name="ellipsis-horizontal" size={22} color="#64748b" />
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 24 }} />
-          )}
+          <TouchableOpacity onPress={() => setShowPostMenu(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="게시글 메뉴" accessibilityRole="button">
+            <Ionicons name="ellipsis-horizontal" size={22} color="#64748b" />
+          </TouchableOpacity>
         </View>
 
         {/* 통합 스크롤: 게시글 본문(header) + 댓글(data) */}
@@ -555,9 +626,51 @@ export function PostDetailScreen({ navigation, route }: RootStackScreenProps<'Po
                 <View style={styles.menuDivider} />
               </>
             )}
-            <TouchableOpacity style={styles.menuItem} onPress={handlePostDelete}>
-              <Ionicons name="trash-outline" size={18} color="#ef4444" />
-              <Text style={[styles.menuItemText, { color: '#ef4444' }]}>삭제</Text>
+            {!isAuthor && (
+              <>
+                <TouchableOpacity style={styles.menuItem} onPress={openReportForPost}>
+                  <Ionicons name="flag-outline" size={18} color="#1e293b" />
+                  <Text style={styles.menuItemText}>신고</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+                <TouchableOpacity style={styles.menuItem} onPress={() => post && handleBlockAuthor(post.authorId, postIsAnonymous ? '이 작성자' : post.authorName)}>
+                  <Ionicons name="ban-outline" size={18} color="#1e293b" />
+                  <Text style={styles.menuItemText}>작성자 차단</Text>
+                </TouchableOpacity>
+                {canManage && <View style={styles.menuDivider} />}
+              </>
+            )}
+            {canManage && (
+              <TouchableOpacity style={styles.menuItem} onPress={handlePostDelete}>
+                <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                <Text style={[styles.menuItemText, { color: '#ef4444' }]}>{isAuthor ? '삭제' : '삭제 (관리자)'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 신고 사유 선택 */}
+      <Modal visible={!!reportTarget} transparent animationType="fade" onRequestClose={() => setReportTarget(null)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setReportTarget(null)}>
+          <View style={styles.menuSheet}>
+            <View style={styles.menuItem}>
+              <Ionicons name="flag-outline" size={18} color="#1e293b" />
+              <Text style={[styles.menuItemText, { fontWeight: '700' }]}>
+                {reportTarget?.targetType === 'comment' ? '댓글 신고 사유' : '게시글 신고 사유'}
+              </Text>
+            </View>
+            <View style={styles.menuDivider} />
+            {(Object.keys(REPORT_REASON_LABELS) as ReportReason[]).map((reason) => (
+              <React.Fragment key={reason}>
+                <TouchableOpacity style={styles.menuItem} onPress={() => submitReport(reason)} disabled={reportSubmitting}>
+                  <Text style={styles.menuItemText}>{REPORT_REASON_LABELS[reason]}</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+              </React.Fragment>
+            ))}
+            <TouchableOpacity style={styles.menuItem} onPress={() => setReportTarget(null)}>
+              <Text style={[styles.menuItemText, { color: '#64748b' }]}>취소</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>

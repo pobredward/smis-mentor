@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { logger } from '@smis-mentor/shared';
+import { logger, fillRecruitmentTemplate } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -204,10 +204,13 @@ export function ApplicantDetailScreen({
       }
       
       // 면접 base 정보 설정
-      if (app.interviewBaseLink) {
-        setInterviewLink(app.interviewBaseLink);
-      } else {
-        setInterviewLink('https://us06web.zoom.us/j/3016520037?pwd=dd11bOqRxjjdq5ptzbnyHXmZjPTEXe.1');
+      // 지원서에 저장된 값만 사용 (코드에 링크·비밀번호를 두지 않음 — 비어 있으면 면접 링크 관리 값 사용)
+      setInterviewLink(app.interviewBaseLink || '');
+      if (!app.interviewBaseLink) {
+        import('../services/interviewLinksService')
+          .then(({ getInterviewLinks }) => getInterviewLinks())
+          .then((links) => { if (links.zoomUrl) setInterviewLink((cur) => cur || links.zoomUrl); })
+          .catch(() => undefined);
       }
       
       if (app.interviewBaseDuration) {
@@ -216,11 +219,7 @@ export function ApplicantDetailScreen({
         setInterviewDuration('60');
       }
       
-      if (app.interviewBaseNotes) {
-        setInterviewNotes(app.interviewBaseNotes);
-      } else {
-        setInterviewNotes('회의 ID: 301 652 0037\n비밀번호: 1234\n면접 시작 5분 전 접속 바랍니다.');
-      }
+      setInterviewNotes(app.interviewBaseNotes || '');
 
       // 지원 장소 로드
       await loadUserAppliedCamps(app.refUserId);
@@ -416,13 +415,14 @@ export function ApplicantDetailScreen({
       
       // 면접 정보 기본값 설정 (자동으로 박스를 열지는 않음)
       if (!interviewLink) {
-        setInterviewLink(application?.interviewBaseLink || 'https://us06web.zoom.us/j/3016520037?pwd=dd11bOqRxjjdq5ptzbnyHXmZjPTEXe.1');
+        // 지원서 → 채용 공고 순 (코드에 링크·비밀번호를 두지 않음)
+        setInterviewLink(application?.interviewBaseLink || '');
       }
       if (!interviewDuration) {
         setInterviewDuration(application?.interviewBaseDuration ? String(application.interviewBaseDuration) : '60');
       }
       if (!interviewNotes) {
-        setInterviewNotes(application?.interviewBaseNotes || '회의 ID: 301 652 0037\n비밀번호: 1234\n면접 전 미리 Zoom에 접속하여 테스트해주시기 바랍니다.');
+        setInterviewNotes(application?.interviewBaseNotes || '');
       }
       
       // DB 업데이트는 백그라운드로
@@ -667,11 +667,15 @@ export function ApplicantDetailScreen({
       setIsSendingSMS(true);
       
       // 변수 치환
-      const variables: Record<string, string> = {
-        이름: application.user.name || '',
-      };
-      
-      const messageContent = replaceTemplateVariables(content, variables);
+      // 모든 채용 변수 치환 (화면에 입력 중인 면접 일시·링크 우선)
+      const scheduled = interviewDate && interviewTime ? new Date(`${interviewDate}T${interviewTime}:00`) : null;
+      const messageContent = fillRecruitmentTemplate(content, {
+        name: application.user.name || '',
+        interviewDate: scheduled ?? (application as any).interviewDate?.toDate?.() ?? null,
+        interviewLink: interviewLink || application.interviewBaseLink || '',
+        interviewDurationMin: interviewDuration || application.interviewBaseDuration || '',
+        interviewNotes: interviewNotes || application.interviewBaseNotes || '',
+      });
       
       // SMS 전송
       const result = await sendCustomSMS(

@@ -42,6 +42,13 @@ export interface User {
   isOnLeave?: boolean;
   jobExperiences?: JobExperience[];
   activeJobExperienceId?: string;
+  /** 커뮤니티에서 내가 차단한 사용자 uid 목록 */
+  blockedUsers?: string[];
+  rrnGenderDigit?: string;
+  englishNickname?: string;
+  /** 가입 시 동의한 약관·개인정보처리방침 버전 (CONSENT_VERSION) 과 시각 */
+  consentVersion?: string;
+  consentedAt?: any;
   selfIntroduction?: string;
   jobMotivation?: string;
   partTimeJobs?: PartTimeJob[];

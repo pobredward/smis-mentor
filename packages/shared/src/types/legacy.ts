@@ -53,6 +53,10 @@ export interface User {
   feedback: string;
   gender?: 'M' | 'F';
   rrnFront?: string;
+  /** 주민번호 뒷자리 첫 숫자 (가입 시 수집 — 성별·세기 판단용). 뒷자리 전체는 rrnLastEncrypted */
+  rrnGenderDigit?: string;
+  /** 명찰용 영어 닉네임 (캠프 참가 정보) */
+  englishNickname?: string;
   rrnLast?: string;
   university?: string;
   grade?: number;
@@ -126,6 +130,11 @@ export interface User {
   activeJobExperienceId?: string;
   /** 관리자가 캠프를 임시로 활성화했을 때의 jobCode id */
   adminTempActiveCamp?: string;
+  /** 커뮤니티에서 내가 차단한 사용자 uid 목록 (해당 사용자의 글·댓글 숨김) */
+  blockedUsers?: string[];
+  /** 가입 시 동의한 약관·개인정보처리방침 버전 (CONSENT_VERSION) 과 시각 */
+  consentVersion?: string;
+  consentedAt?: any;
 
   // jobExperiences[*].id의 파생 배열 — Firestore array-contains 쿼리용
   // addUserJobCode / removeUserJobCode 호출 시 항상 함께 업데이트됨

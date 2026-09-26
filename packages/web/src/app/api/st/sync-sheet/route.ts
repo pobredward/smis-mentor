@@ -12,6 +12,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import {
   logger,
   CAMP_SHEET_CONFIG,
+  maskSsnForStaff,
   buildNormalizedHeaderIndexMap,
   mapHeadersToStudent,
   isInactiveStudent,
@@ -123,6 +124,17 @@ export async function POST(request: NextRequest) {
       const families: FamilyUnit[] = parseFamilySheet(rows, campCode);
       const totalStudents = families.reduce((s, f) => s + f.students.length, 0);
 
+      // 주민번호 원본은 관리자 전용 컬렉션(stSheetSensitive)에만 두고, 스태프가 읽는 캐시에는 가린 값만 저장
+      const familySensitive: Record<string, { ssn: string }> = {};
+      for (const f of families) {
+        for (const person of [...(f.parents ?? []), ...(f.students ?? [])] as Array<{ id: string; ssn?: string }>) {
+          if (person.ssn) {
+            familySensitive[`${f.familyId}__${person.id}`] = { ssn: person.ssn };
+            person.ssn = maskSsnForStaff(person.ssn);
+          }
+        }
+      }
+
       const cacheData = {
         campCode,
         families: JSON.parse(JSON.stringify(families)),
@@ -137,6 +149,9 @@ export async function POST(request: NextRequest) {
       // 캐시 저장 + 오버라이드 초기화 + availableHeaders 저장 병렬 실행
       await Promise.all([
         db.collection('familySTSheetCache').doc(campCode).set(cacheData),
+        db.collection('stSheetSensitive').doc(campCode).set({
+          campCode, kind: 'family', entries: familySensitive, updatedAt: new Date().toISOString(),
+        }),
         clearOverrides(),
         saveAvailableHeaders(),
       ]);
@@ -191,6 +206,15 @@ export async function POST(request: NextRequest) {
       const skipped = students.length - active.length;
       if (skipped > 0) logger.info(`[${campCode}] 빈 슬롯/이월자/취소자 ${skipped}명 제외`);
 
+      // 주민번호 원본 분리: 스태프 캐시에는 "YYMMDD-G******" 만 (나이·학년 계산은 앞자리+성별 자리로 충분)
+      const studentSensitive: Record<string, { ssn: string }> = {};
+      for (const st of active) {
+        if (st.ssn) {
+          studentSensitive[st.studentId || `row${(st as any).rowNumber ?? ''}`] = { ssn: st.ssn };
+          st.ssn = maskSsnForStaff(st.ssn);
+        }
+      }
+
       // undefined 필드 제거 (Firestore는 undefined 허용 안 함)
       const sanitized = active.map((s) =>
         Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined)),
@@ -206,6 +230,9 @@ export async function POST(request: NextRequest) {
           syncedByName: authCtx.user.name ?? 'Admin',
           version: Date.now(),
           totalStudents: active.length,
+        }),
+        db.collection('stSheetSensitive').doc(campCode).set({
+          campCode, kind: 'student', entries: studentSensitive, updatedAt: new Date().toISOString(),
         }),
         clearOverrides(),
         saveAvailableHeaders(),

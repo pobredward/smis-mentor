@@ -1,5 +1,5 @@
 'use client';
-import { logger } from '@smis-mentor/shared';
+import { logger, fillRecruitmentTemplate } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -40,6 +40,7 @@ import {
 } from '@smis-mentor/shared';
 import { formatPhoneNumber, formatPhoneNumberForMentor } from '@smis-mentor/shared';
 import { authenticatedPost } from '@/lib/apiClient';
+import { getDocsByIds, queryWhereIn } from '@/lib/batchRead';
 
 type JobBoardWithId = JobBoard & { id: string };
 
@@ -208,20 +209,23 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       const q = query(applicationsRef, where('refJobBoardId', '==', jobBoardId));
       const applicationsSnapshot = await getDocs(q);
       
-      const applicationsData = await Promise.all(
-        applicationsSnapshot.docs.map(async (docSnapshot) => {
-          const data = docSnapshot.data() as ApplicationHistory;
-          const userRef = doc(db, 'users', data.refUserId);
-          const userDoc = await getDoc(userRef);
-          const userData = userDoc.exists() ? userDoc.data() as DocumentData : undefined;
-          
-          return {
-            ...data,
-            id: docSnapshot.id,
-            user: userData ? { ...userData, id: userDoc.id } as User : undefined
-          } as ApplicationWithUser;
-        })
-      );
+      // 지원자 정보는 30명씩 묶어서 한 번에 (예전: 지원자마다 1번씩 읽음)
+      const userIds = applicationsSnapshot.docs.map((d) => (d.data() as ApplicationHistory).refUserId);
+      const [userMap, boardsSnap, codesSnap, otherApps] = await Promise.all([
+        getDocsByIds('users', userIds),
+        getDocs(collection(db, 'jobBoards')),
+        getDocs(collection(db, 'jobCodes')),
+        queryWhereIn('applicationHistories', 'refUserId', userIds),
+      ]);
+      const applicationsData = applicationsSnapshot.docs.map((docSnapshot) => {
+        const data = docSnapshot.data() as ApplicationHistory;
+        const userData = userMap.get(data.refUserId);
+        return {
+          ...data,
+          id: docSnapshot.id,
+          user: userData ? { ...userData, id: data.refUserId } as User : undefined
+        } as ApplicationWithUser;
+      });
       
       // 지원일 기준 내림차순 정렬 (최신순)
       applicationsData.sort((a, b) => {
@@ -233,21 +237,34 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       setApplications(applicationsData);
       setFilteredApplications(applicationsData);
       
-      // 모든 지원자의 지원 장소 정보를 로드
-      await Promise.all(
-        applicationsData.map(async (app) => {
-          await loadUserAppliedCampsForList(app.refUserId);
-        })
-      );
+      // 지원자들이 지원한 캠프 목록 — 공고·지원 이력을 한 번에 읽어 계산 (예전: 지원자마다 이력 조회 + 공고마다 1번)
+      const boardCode = new Map(boardsSnap.docs.map((d) => [d.id, d.data().jobCode as string | undefined]));
+      const camps: Record<string, string[]> = {};
+      for (const h of otherApps) {
+        const { refUserId, refJobBoardId } = h.data() as ApplicationHistory;
+        const code = boardCode.get(refJobBoardId);
+        if (!code) continue;
+        camps[refUserId] = [...new Set([...(camps[refUserId] ?? []), code])];
+      }
+      setAppliedCampsMap((prev) => ({ ...prev, ...Object.fromEntries(userIds.map((id) => [id, camps[id] ?? []])) }));
 
-      // 각 사용자의 직무 경험 정보 로드
-      await Promise.all(
-        applicationsData.map(async (app) => {
-          if (app.user?.jobExperiences) {
-            await loadUserJobCodes(app.user.userId, app.user.jobExperiences);
-          }
-        })
-      );
+      // 각 사용자의 직무 경험 — 업무 코드는 전체를 한 번만 읽어 매핑 (ID 가 아닌 옛 형식만 기존 방식으로)
+      const codeById = new Map(codesSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
+      const jobCodeMap: Record<string, JobCodeWithGroup[]> = {};
+      const legacy: ApplicationWithUser[] = [];
+      for (const app of applicationsData) {
+        const exps = app.user?.jobExperiences as Array<{ id: string; group: JobGroup } | string> | undefined;
+        if (!app.user || !exps?.length) { if (app.user) jobCodeMap[app.user.userId] = []; continue; }
+        const ids = exps.map((e) => (typeof e === 'object' ? e.id : e));
+        if (ids.every((id) => codeById.has(id))) {
+          jobCodeMap[app.user.userId] = exps.map((e) => {
+            const id = typeof e === 'object' ? e.id : e;
+            return { ...codeById.get(id), group: typeof e === 'object' ? e.group : 'junior' } as JobCodeWithGroup;
+          });
+        } else legacy.push(app);
+      }
+      setUserJobCodesMap((prev) => ({ ...prev, ...jobCodeMap }));
+      await Promise.all(legacy.map((app) => loadUserJobCodes(app.user!.userId, app.user!.jobExperiences)));
     } catch (error) {
       logger.error('데이터 로드 오류:', error);
       toast.error('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -434,10 +451,16 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       setInterviewTime('');
     }
 
-    // 채용 공고의 base 정보 가져오기 (기본값 사용)
-    setInterviewBaseLink('https://us06web.zoom.us/j/3016520037?pwd=dd11bOqRxjjdq5ptzbnyHXmZjPTEXe.1');
-    setInterviewBaseDuration('60');
-    setInterviewBaseNotes('회의 ID: 301 652 0037\n비밀번호: 1234\n면접 시작 5분 전에 접속 바랍니다.');
+    // 면접 기본값: 지원서 → 채용 공고 → 면접 설정(interviewSettings/links) 순. 코드에 링크·비밀번호를 두지 않는다.
+    setInterviewBaseLink(app.interviewBaseLink || jobBoard?.interviewBaseLink || '');
+    setInterviewBaseDuration(String(app.interviewBaseDuration || jobBoard?.interviewBaseDuration || 60));
+    setInterviewBaseNotes(app.interviewBaseNotes || jobBoard?.interviewBaseNotes || '');
+    if (!app.interviewBaseLink && !jobBoard?.interviewBaseLink) {
+      import('@/lib/interviewLinksService')
+        .then(({ getInterviewLinks }) => getInterviewLinks())
+        .then((links) => { if (links.zoomUrl) setInterviewBaseLink((cur) => cur || links.zoomUrl); })
+        .catch(() => undefined);
+    }
     
     // selectedGroupRole을 사용자 role에 맞게 초기화
     const userRole = app.user?.role;
@@ -641,32 +664,30 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           break;
       }
 
-      // Firestore 업데이트 - 비동기 작업이지만 로컬 상태 업데이트를 먼저 하기 위해 await을 사용하지 않음
-      updateDoc(applicationRef, firestoreUpdateData)
-        .catch((error) => {
-          logger.error('Firestore 업데이트 오류:', error);
-          // Firestore 업데이트 오류 시 사용자에게 알림
-          toast.error('상태 업데이트 중 오류가 발생했습니다. 다시 시도해주세요.');
-          // 로컬 상태를 원래대로 복원하는 로직이 필요하다면 여기에 추가
-        });
-
-      // 즉시 로컬 상태 업데이트 (Firestore 응답을 기다리지 않음)
+      // 낙관적 업데이트: 화면을 먼저 바꾸고, 저장 실패 시 원래 상태로 되돌린다
+      // (이전에는 저장 결과를 기다리지 않고 성공 토스트를 띄워, 실패해도 성공처럼 보였음)
+      const previousApplication = selectedApplication;
       const updatedApplication: ApplicationWithUser = {
         ...selectedApplication,
         ...updateData
       };
-
-      // applications 배열 업데이트
-      setApplications(prevApplications => 
-        prevApplications.map(app => 
-          app.id === applicationId ? updatedApplication : app
-        )
+      setApplications(prevApplications =>
+        prevApplications.map(app => (app.id === applicationId ? updatedApplication : app))
       );
-
-      // 선택된 지원자 상태 업데이트
       setSelectedApplication(updatedApplication);
 
-      // 토스트 메시지 표시
+      try {
+        await updateDoc(applicationRef, firestoreUpdateData);
+      } catch (writeError) {
+        logger.error('Firestore 업데이트 오류:', writeError);
+        setApplications(prevApplications =>
+          prevApplications.map(app => (app.id === applicationId ? previousApplication : app))
+        );
+        setSelectedApplication(previousApplication);
+        toast.error('상태 저장에 실패해 원래대로 되돌렸습니다. 다시 시도해주세요.');
+        return;
+      }
+
       toast.success('상태가 업데이트되었습니다.');
     } catch (error) {
       logger.error('상태 업데이트 오류:', error);
@@ -1019,6 +1040,16 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     setSmsContent(content);
   }, [selectedTemplateId, selectedApplication, smsTemplates, jobBoard]);
   
+  // 채용 문자 변수 치환 — 지원자별 면접 정보 우선, 없으면 화면에 입력된 기본값
+  const fillForSelected = (text: string) => fillRecruitmentTemplate(text, {
+    name: selectedApplication?.user?.name || '',
+    jobBoardTitle: jobBoard?.title || '',
+    interviewDate: selectedApplication?.interviewDate?.toDate?.() ?? null,
+    interviewLink: selectedApplication?.interviewBaseLink || interviewBaseLink || '',
+    interviewDurationMin: selectedApplication?.interviewBaseDuration || interviewBaseDuration || '',
+    interviewNotes: selectedApplication?.interviewBaseNotes || interviewBaseNotes || '',
+  });
+
   // SMS 전송 핸들러
   const handleSendSMS = async () => {
     if (!selectedApplication?.user?.phoneNumber || !smsContent) {
@@ -1031,7 +1062,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       
       const result = await authenticatedPost<any>('/api/send-sms', {
         phoneNumber: selectedApplication.user.phoneNumber,
-        content: smsContent,
+        content: fillForSelected(smsContent),
         userName: selectedApplication.user.name,
         fromNumber
       });
@@ -1180,7 +1211,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       try {
         const result = await authenticatedPost<any>('/api/send-sms', {
           phoneNumber: selectedApplication.user.phoneNumber,
-          content: message,
+          content: fillForSelected(message),
           userName: selectedApplication.user.name,
           fromNumber
         });

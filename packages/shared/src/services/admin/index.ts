@@ -142,6 +142,9 @@ export const createTempUser = async (
       addressDetail: '',
       profileImage: '',
       status: 'temp',
+      // 가입 전 임시 계정 — 약관 동의는 본인이 가입을 완료할 때 서버가 기록
+      agreedTerms: false,
+      agreedPersonal: false,
       isEmailVerified: false,
       createdAt: now,
       updatedAt: now,

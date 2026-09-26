@@ -9,6 +9,12 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
 import { ApplicationHistory, JobBoard } from '@/types';
+import { recruitStatusBadge, type StatusTone } from '@smis-mentor/shared';
+
+const TONE_CLASS: Record<StatusTone, string> = {
+  wait: 'bg-yellow-100 text-yellow-800', info: 'bg-purple-100 text-purple-800', ok: 'bg-green-100 text-green-800',
+  bad: 'bg-red-100 text-red-800', muted: 'bg-gray-100 text-gray-800',
+};
 
 type ApplicationWithJobDetails = ApplicationHistory & {
   jobBoard?: (JobBoard & { id: string }) | undefined;
@@ -68,73 +74,11 @@ export default function ApplicationSection() {
   
   // 지원 상태 뱃지 함수
   const getStatusBadge = (status: string | undefined, type: 'application' | 'interview' | 'final') => {
-    let color = '';
-    let label = '';
-    
-    if (type === 'application') {
-      switch (status) {
-        case 'pending':
-          color = 'bg-yellow-100 text-yellow-800';
-          label = '검토중';
-          break;
-        case 'accepted':
-          color = 'bg-green-100 text-green-800';
-          label = '서류합격';
-          break;
-        case 'rejected':
-          color = 'bg-red-100 text-red-800';
-          label = '서류불합격';
-          break;
-        default:
-          color = 'bg-gray-100 text-gray-800';
-          label = '미정';
-      }
-    } else if (type === 'interview') {
-      switch (status) {
-        case 'pending':
-          color = 'bg-yellow-100 text-yellow-800';
-          label = '면접예정';
-          break;
-        case 'complete':
-          color = 'bg-purple-100 text-purple-800';
-          label = '면접완료';
-          break;
-        case 'passed':
-          color = 'bg-green-100 text-green-800';
-          label = '면접합격';
-          break;
-        case 'failed':
-          color = 'bg-red-100 text-red-800';
-          label = '면접불합격';
-          break;
-        case 'absent':
-          color = 'bg-red-100 text-red-800';
-          label = '불참';
-          break;
-        default:
-          color = 'bg-gray-100 text-gray-800';
-          label = '미정';
-      }
-    } else if (type === 'final') {
-      switch (status) {
-        case 'finalAccepted':
-          color = 'bg-green-100 text-green-800';
-          label = '합격';
-          break;
-        case 'finalRejected':
-          color = 'bg-red-100 text-red-800';
-          label = '최종불합격';
-          break;
-        case 'absent':
-          color = 'bg-gray-100 text-gray-800';
-          label = '불참';
-          break;
-        default:
-          color = 'bg-gray-100 text-gray-800';
-          label = '미정';
-      }
-    }
-    
+    // 라벨은 shared 한 곳에서 (웹·앱 공통)
+    const b = recruitStatusBadge(type, status);
+    const color = TONE_CLASS[b.tone];
+    const label = b.label;
+
     return (
       <span className={`px-2 py-1 text-xs rounded-full ${color}`}>
         {label}

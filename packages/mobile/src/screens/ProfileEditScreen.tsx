@@ -15,7 +15,7 @@ import {
   Modal,
   Switch,
 } from 'react-native';
-import { saveSensitiveInfo } from '../services/apiClient';
+import { saveSensitiveInfo, mobileAuthenticatedPost } from '../services/apiClient';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -390,12 +390,17 @@ export function ProfileEditScreen() {
         finalPhoneNumber = data.phoneNumber;
       }
       
-      // 이메일 중복 확인
+      // 이메일 변경: Firebase Auth 와 동기화가 필요하므로 서버(/api/user/change-email)가 중복 확인 + Auth/Firestore 동시 변경
       if (data.email !== userData.email) {
-        const existsEmail = await checkEmailExists(data.email, userData.userId);
-        if (existsEmail) {
+        let emailError: string | null = null;
+        try {
+          await mobileAuthenticatedPost('/api/user/change-email', { email: data.email });
+        } catch (e: any) {
+          emailError = String(e?.message || 'change-email failed');
+        }
+        if (emailError) {
           setEmailExists(true);
-          Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'This email is already in use.' : '이미 사용 중인 이메일입니다.');
+          Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'This email is already in use or could not be changed.' : (/이미 사용/.test(emailError) ? '이미 사용 중인 이메일입니다.' : '이메일을 변경할 수 없습니다. 잠시 후 다시 시도해주세요.'));
           setIsLoading(false);
           return;
         }
@@ -457,7 +462,6 @@ export function ProfileEditScreen() {
       // 공통 필드
       if (data.dateOfBirth) updateData.dateOfBirth = data.dateOfBirth;
       updateData.phoneNumber = finalPhoneNumber;
-      updateData.email = data.email;
       updateData.address = data.address || '';
       updateData.addressDetail = data.addressDetail || '';
       updateData.gender = data.gender;

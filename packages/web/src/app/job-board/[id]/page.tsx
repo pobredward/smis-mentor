@@ -417,6 +417,12 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       return;
     }
 
+    // 마감된 공고는 지원 불가 (규칙에서도 막는다)
+    if (jobBoard.status !== 'active') {
+      toast.error('모집이 마감된 공고입니다.');
+      return;
+    }
+
     // 프로필 이미지 확인
     if (!userData.profileImage) {
       setProfileErrorType('image');
@@ -472,7 +478,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       router.push('/profile/job-apply');
     } catch (error) {
       logger.error('지원 오류:', error);
-      toast.error('지원 중 오류가 발생했습니다.');
+      toast.error((error as Error)?.message === '이미 지원하신 공고입니다.' ? '이미 지원하신 공고입니다.' : '지원 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -972,7 +978,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
                           </Button>
                           <Button
                             variant="primary"
-                            onClick={() => router.push('/profile/edit')}
+                            onClick={() => router.push('/profile')}
                           >
                             내 정보 수정하기
                           </Button>

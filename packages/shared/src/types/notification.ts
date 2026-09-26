@@ -155,8 +155,23 @@ export function notificationAllowed(settings: NotificationSettings | undefined |
   return settings[key] !== false;
 }
 
-/** 전체를 켜고 끌 때 쓰는 값 — 종류별 값은 건드리지 않는다 */
+/** 전체 알림이 켜져 있는가 */
 export const notificationMasterOn = (s?: NotificationSettings | null): boolean => s?.generalNotifications !== false;
+
+/**
+ * 전체 알림 스위치를 눌렀을 때 저장할 값.
+ * - 켤 때: 전체 + 화면에 보이는 종류를 모두 켠다 (예전에 꺼 둔 업무 알림 등이 꺼진 채 남지 않게)
+ * - 끌 때: 전체만 끈다 (종류별 값은 그대로 두었다가, 다시 켜면 모두 켜짐)
+ */
+export function notificationMasterTogglePatch(
+  s: NotificationSettings | null | undefined,
+  visibleKeys: NotificationKey[],
+): NotificationSettings {
+  if (notificationMasterOn(s)) return { generalNotifications: false };
+  const patch: NotificationSettings = { generalNotifications: true };
+  for (const k of visibleKeys) patch[k] = true;
+  return patch;
+}
 
 // ==================== 알림 수신 가능 여부 (관리자 조회용) ====================
 

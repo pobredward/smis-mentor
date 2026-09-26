@@ -95,3 +95,34 @@ export const FINAL_STATUS_LABELS: Record<string, string> = {
   finalRejected: '불합격',
   finalAbsent: '최종불참',
 };
+
+// ── 지원자에게 보여 주는 상태 배지 (웹·앱 공용 — 화면마다 따로 쓰던 라벨을 하나로) ──
+
+export type RecruitStage = 'application' | 'interview' | 'final';
+export type StatusTone = 'wait' | 'info' | 'ok' | 'bad' | 'muted';
+
+const BADGES: Record<RecruitStage, Record<string, { label: string; tone: StatusTone }>> = {
+  application: {
+    pending: { label: '검토중', tone: 'wait' },
+    accepted: { label: '서류합격', tone: 'ok' },
+    rejected: { label: '서류불합격', tone: 'bad' },
+  },
+  interview: {
+    pending: { label: '면접예정', tone: 'wait' },
+    complete: { label: '면접완료', tone: 'info' },
+    passed: { label: '면접합격', tone: 'ok' },
+    failed: { label: '면접불합격', tone: 'bad' },
+    absent: { label: '면접불참', tone: 'muted' },
+  },
+  final: {
+    finalAccepted: { label: '최종합격', tone: 'ok' },
+    finalRejected: { label: '최종불합격', tone: 'bad' },
+    finalAbsent: { label: '최종불참', tone: 'muted' },
+    absent: { label: '최종불참', tone: 'muted' }, // 옛 데이터 호환
+  },
+};
+
+/** 단계·상태 → 배지 라벨과 색 계열 (모르는 값은 '미정') */
+export function recruitStatusBadge(stage: RecruitStage, status: string | null | undefined): { label: string; tone: StatusTone } {
+  return (status && BADGES[stage][status]) || { label: '미정', tone: 'muted' };
+}

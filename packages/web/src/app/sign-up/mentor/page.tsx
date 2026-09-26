@@ -256,7 +256,7 @@ export default function MentorSignUpStep1() {
     const loadingToast = toast.loading('계정을 복구하는 중입니다...');
     
     try {
-      await reactivateUser(deletedUserId);
+      await reactivateUser(deletedUserId, { phoneNumber: formData?.phoneNumber ?? '', name: formData?.name ?? '' });
       toast.dismiss(loadingToast);
       toast.success(
         `계정이 복구되었습니다! 비밀번호 재설정 이메일을 확인해주세요.\n로그인 페이지로 이동합니다.`,

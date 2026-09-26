@@ -12,10 +12,12 @@ import {
   RefreshControl,
   Platform,
   Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabScreenProps } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
+import { BasicInfoSection, CampProfileSection, RrnSection, AddressSection, EducationSection, ExperienceSection, IntroSection, ReferralSection } from '../components/profile/ProfileSections';
 import { signOut, getUserByPhone, signIn } from '../services/authService';
 import { jobCodesService, JobCode } from '../services';
 import { SignInScreen } from './SignInScreen';
@@ -34,7 +36,7 @@ import { useCampDataPrefetch } from '../hooks/useCampDataPrefetch';
 import { useRecruitmentDataPrefetch } from '../hooks/useRecruitmentDataPrefetch';
 import { useCampTab } from '../context/CampTabContext';
 // import { getUserInfoFromRRN } from '../utils/userUtils';
-import { logger, deactivateUserMobile } from '@smis-mentor/shared';
+import { logger, deactivateUserMobile, CONSENT_VERSION } from '@smis-mentor/shared';
 import { calculateAgeFromDateOfBirth } from '@smis-mentor/shared';
 import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import * as DocumentPicker from 'expo-document-picker';
@@ -97,6 +99,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [prefetchStage, setPrefetchStage] = useState<'cache' | 'update' | 'data' | 'recruitment' | 'webview' | 'complete'>('cache');
   const [prefetchCancelled, setPrefetchCancelled] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  // 재인증 비밀번호 입력 모달 (RN 의 기본 prompt 는 iOS 전용이라 Android 에서 탈퇴가 불가능했음)
+  const [reauthVisible, setReauthVisible] = useState(false);
+  const [reauthPassword, setReauthPassword] = useState('');
+  const reauthResolverRef = React.useRef<((ok: boolean) => void) | null>(null);
   const [isDeactivating, setIsDeactivating] = useState(false);
 
   // 문서 업로드/삭제 상태
@@ -477,70 +483,40 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       const userCredential = await signUp(completeSignUpData.email!, completeSignUpData.password!);
       const firebaseUser = userCredential.user;
       
-      // 사용자 정보에서 생년월일 추출 (주민번호 기반)
-      // TODO: 나중에 주민번호에서 생년월일 추출하는 함수 구현
-      const birthDate = null;
-      
-      // Firestore에 사용자 문서 생성
-      const { doc, setDoc, Timestamp } = await import('firebase/firestore');
-      const { db } = await import('../config/firebase');
-      
-      const userData = {
-        name: completeSignUpData.name!,
-        email: completeSignUpData.email!,
-        phoneNumber: completeSignUpData.phone!,
-        role: 'mentor_temp' as const,
-        status: 'temp' as const,
-        university: completeSignUpData.university!,
-        grade: completeSignUpData.grade!,
-        isOnLeave: completeSignUpData.isOnLeave,
-        major1: completeSignUpData.major1!,
-        major2: completeSignUpData.major2 || '',
-        address: data.address,
-        addressDetail: data.addressDetail,
-        gender: data.gender,
-        birthDate,
-        referralPath: data.referralPath,
-        referrerName: data.referrerName || '',
-        otherReferralDetail: data.otherReferralDetail || '',
-        agreedTerms: true,
-        agreedPersonal: data.agreedPersonal,
-        geocode: data.geocode,
-        photoURL: '',
-        userId: firebaseUser.uid,
-        id: firebaseUser.uid,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
-      
-      await setDoc(doc(db, 'users', firebaseUser.uid), userData);
-
-      // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리
+      // users 문서 생성·탈퇴 계정 정리는 서버가 (신규 멘토는 mentor_temp → 관리자 검토 후 승격). 실패 시 서버가 Auth 계정 삭제
+      const { completeSignupViaApi } = await import('../services/authService');
       try {
-        const { getUserByEmailIncludeInactive } = await import('../services/authService');
-        const inactiveUser = await getUserByEmailIncludeInactive(completeSignUpData.email!);
-        if (inactiveUser && inactiveUser.userId !== firebaseUser.uid) {
-          const { updateDoc, doc: docRef } = await import('firebase/firestore');
-          await updateDoc(docRef(db, 'users', inactiveUser.userId), {
-            email: `rejoined_${Date.now()}_${completeSignUpData.email}`,
-          });
-          logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
-        }
-      } catch (cleanupError) {
-        logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
+        await completeSignupViaApi({
+          kind: 'mentor',
+          rollbackAuthOnFailure: true,
+          provider: { providerId: 'password' },
+          profile: {
+            name: completeSignUpData.name!,
+            phoneNumber: completeSignUpData.phone!,
+            university: completeSignUpData.university!,
+            grade: completeSignUpData.grade!,
+            isOnLeave: completeSignUpData.isOnLeave,
+            major1: completeSignUpData.major1!,
+            major2: completeSignUpData.major2 || '',
+            address: data.address,
+            addressDetail: data.addressDetail,
+            gender: data.gender,
+            rrnFront: data.rrnFront,
+            rrnGenderDigit: (data.rrnLast ?? '').slice(0, 1),
+            referralPath: data.referralPath,
+            referrerName: data.referrerName || '',
+            otherReferralDetail: data.otherReferralDetail || '',
+            agreedPersonal: data.agreedPersonal,
+            ...(data.geocode && { geocode: { lat: data.geocode.lat, lng: data.geocode.lng } }),
+          },
+        });
+      } catch (e) {
+        const { auth: fbAuth } = await import('../config/firebase');
+        await fbAuth.signOut().catch(() => undefined);
+        throw e;
       }
 
-      // 주민등록번호 암호화 저장 (서버 API Route를 통해 처리)
-      const { saveSensitiveInfo } = await import('../services/apiClient');
-      await saveSensitiveInfo({
-        userId: firebaseUser.uid,
-        rrnFront: data.rrnFront,
-        rrnLast: data.rrnLast,
-      });
-      
-      // 이메일 인증 메일 발송
-      const { sendEmailVerification } = await import('firebase/auth');
-      await sendEmailVerification(firebaseUser);
+      // 이메일 인증 메일은 서버(complete-signup)가 보낸다
       
       setIsLoading(false);
       
@@ -560,9 +536,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     } catch (error) {
       setIsLoading(false);
       logger.error('멘토 회원가입 실패:', error);
+      const msg = String((error as Error)?.message || '');
       Alert.alert(
         '회원가입 실패',
-        '회원가입 중 오류가 발생했습니다.\n다시 시도해주세요.\n\n지속적인 문제 시 관리자에게 문의하세요.\n관리자: 010-7656-7933 (신선웅)'
+        (/[가-힣]/.test(msg) ? `${msg}\n\n` : '회원가입 중 오류가 발생했습니다.\n다시 시도해주세요.\n\n') +
+        '지속적인 문제 시 관리자에게 문의하세요.\n관리자: 010-7656-7933 (신선웅)'
       );
     }
   };
@@ -638,83 +616,39 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       const userCredential = await signUp(data.email, data.password);
       const userId = userCredential.user.uid;
 
-      const userData = {
-        userId,
-        name: fullName,
-        email: data.email,
-        phone: fullPhone,
-        phoneNumber: fullPhone,
-        password: '',
-        address: tempUser?.address || '',
-        addressDetail: tempUser?.addressDetail || '',
-        role: 'foreign',
-        jobExperiences: tempUser?.jobExperiences || [],
-        jobCodeIds: (tempUser?.jobExperiences || []).map((exp: { id: string }) => exp.id),
-        partTimeJobs: tempUser?.partTimeJobs || [],
-        createdAt: tempUser?.createdAt || Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        agreedTerms: true,
-        agreedPersonal: true,
-        profileImage: '',
-        status: 'active' as const,
-        isEmailVerified: false,
-        isPhoneVerified: false,
-        isProfileCompleted: false,
-        isTermsAgreed: true,
-        isPersonalAgreed: true,
-        isAddressVerified: false,
-        isProfileImageUploaded: false,
-        jobMotivation: 'Foreign Teacher Application',
-        feedback: (tempUser as any)?.feedback || '',
-        ...(signUpData.dateOfBirth && {
-          dateOfBirth: signUpData.dateOfBirth,
-          age: calculateAgeFromDateOfBirth(signUpData.dateOfBirth),
-        }),
-        foreignTeacher: {
-          firstName: signUpData.firstName,
-          lastName: signUpData.lastName,
-          middleName: signUpData.middleName || '',
-          countryCode: signUpData.countryCode,
-          cvUrl: '',
-          passportPhotoUrl: '',
-          foreignIdCardUrl: '',
-          applicationDate: Timestamp.now(),
-        },
-      };
-
-      // 새 Auth UID로 Firestore 문서 생성
-      await setDoc(doc(db, 'users', userId), userData);
-
-      // temp 계정이 있었으면 기존 문서 삭제 (새 문서 생성 후에 삭제)
-      if (tempUser && tempUser.userId !== userId) {
-        try {
-          const { deleteDoc, doc: docRef } = await import('firebase/firestore');
-          await deleteDoc(docRef(db, 'users', tempUser.userId));
-          logger.info('🗑️ 기존 temp 문서 삭제 완료:', tempUser.userId);
-        } catch (deleteError) {
-          logger.warn('⚠️ 기존 temp 문서 삭제 실패 (가입은 완료됨):', deleteError);
-        }
-      }
-
-      // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리
+      // users 문서 생성·foreign_temp 계정 이관·탈퇴 계정 정리는 서버가 한 번에. 실패 시 서버가 Auth 계정 삭제
+      const { completeSignupViaApi } = await import('../services/authService');
+      let result;
       try {
-        const { getUserByEmailIncludeInactive } = await import('../services/authService');
-        const inactiveUser = await getUserByEmailIncludeInactive(data.email);
-        if (inactiveUser && inactiveUser.userId !== userId) {
-          const { updateDoc, doc: docRef } = await import('firebase/firestore');
-          await updateDoc(docRef(db, 'users', inactiveUser.userId), {
-            email: `rejoined_${Date.now()}_${data.email}`,
-          });
-          logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
-        }
-      } catch (cleanupError) {
-        logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
+        result = await completeSignupViaApi({
+          kind: 'foreign',
+          tempUserId: tempUser?.userId,
+          rollbackAuthOnFailure: true,
+          provider: { providerId: 'password' },
+          profile: {
+            name: fullName,
+            phoneNumber: fullPhone,
+            ...(signUpData.dateOfBirth && { dateOfBirth: signUpData.dateOfBirth, age: calculateAgeFromDateOfBirth(signUpData.dateOfBirth) }),
+            foreignTeacher: {
+              firstName: signUpData.firstName,
+              lastName: signUpData.lastName,
+              middleName: signUpData.middleName || '',
+              countryCode: signUpData.countryCode,
+            },
+            agreedPersonal: true,
+          },
+        });
+      } catch (e) {
+        const { auth: fbAuth } = await import('../config/firebase');
+        await fbAuth.signOut().catch(() => undefined);
+        throw e;
       }
+      logger.info('✅ 원어민 가입 완료:', { userId, claimedTemp: result.claimedTemp });
 
-      const alertTitle = tempUser ? 'Account Activated' : 'Sign Up Complete';
-      const alertMessage = tempUser
-        ? `Welcome, ${fullName}!\n\nYour account has been activated.\nPlease upload your documents (Profile Photo, CV, Passport Photo) in Profile Edit.`
-        : `Welcome, ${fullName}!\n\nYour account has been successfully created.\nPlease upload your documents (Profile Photo, CV, Passport Photo) in Profile Edit.`;
+      const alertTitle = result.claimedTemp ? 'Account Activated' : 'Sign Up Complete';
+      const alertMessage = result.claimedTemp
+        ? `Welcome, ${fullName}!\n\nYour account has been activated.\nPlease upload your documents (Profile Photo, CV, Passport Photo) on My Page.`
+        : `Welcome, ${fullName}!\n\nYour account has been successfully created.\nPlease upload your documents (Profile Photo, CV, Passport Photo) on My Page.`;
 
       Alert.alert(
         alertTitle,
@@ -821,35 +755,29 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     }
   };
 
-  // 재인증 프롬프트 표시
+  // 재인증 프롬프트 표시 — iOS/Android 공용 모달
   const showReauthPrompt = (): Promise<boolean> => {
     return new Promise((resolve) => {
-      Alert.prompt(
-        '재인증 필요',
-        '보안을 위해 현재 비밀번호를 입력해주세요.',
-        [
-          {
-            text: '취소',
-            style: 'cancel',
-            onPress: () => resolve(false)
-          },
-          {
-            text: '확인',
-            onPress: async (password?: string) => {
-              if (!password) {
-                Alert.alert('오류', '비밀번호를 입력해주세요.');
-                resolve(false);
-                return;
-              }
-              
-              const success = await reauthenticateUser(password);
-              resolve(success);
-            }
-          }
-        ],
-        'secure-text'
-      );
+      reauthResolverRef.current = resolve;
+      setReauthPassword('');
+      setReauthVisible(true);
     });
+  };
+
+  const finishReauth = async (confirmed: boolean) => {
+    const resolve = reauthResolverRef.current;
+    reauthResolverRef.current = null;
+    setReauthVisible(false);
+    if (!confirmed) { resolve?.(false); return; }
+    const password = reauthPassword;
+    setReauthPassword('');
+    if (!password) {
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter your password.' : '비밀번호를 입력해주세요.');
+      resolve?.(false);
+      return;
+    }
+    const success = await reauthenticateUser(password);
+    resolve?.(success);
   };
 
   const handleDeactivateAccount = async () => {
@@ -857,6 +785,15 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     
     setIsDeactivating(true);
     try {
+      // 이 기기의 푸시 토큰 제거 (탈퇴 후에도 알림이 오는 문제 방지)
+      try {
+        const { registerPushTokenIfPermitted, removePushToken } = await import('../services/notificationService');
+        const token = await registerPushTokenIfPermitted();
+        if (token) await removePushToken(userData.userId, token);
+      } catch (tokenError) {
+        logger.warn('⚠️ 탈퇴 전 푸시 토큰 제거 실패 (계속 진행):', tokenError);
+      }
+
       await deactivateUserMobile(userData.userId, db, auth);
       
       setShowDeactivateModal(false);
@@ -928,6 +865,20 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       let socialData;
       let credential;
 
+      // 팝업/네이티브 로그인으로 세션이 바뀐 뒤 원래 계정으로 복원할 때 서버에 제출할 증명 (원래 세션의 ID token)
+      const originalIdToken = auth.currentUser ? await auth.currentUser.getIdToken(true) : null;
+      const restoreOriginalSession = async () => {
+        if (!originalIdToken) throw new Error('원래 세션 정보가 없습니다. 다시 로그인해주세요.');
+        const tempUid = auth.currentUser?.uid;
+        const tempIdToken = tempUid && tempUid !== userData.userId ? await auth.currentUser!.getIdToken().catch(() => null) : null;
+        const { signInWithCustomToken } = await import('../services/authService');
+        await signInWithCustomToken(
+          userData.userId,
+          { kind: 'firebase', idToken: originalIdToken },
+          tempUid && tempIdToken ? { deleteAuthUid: { uid: tempUid, idToken: tempIdToken } } : undefined
+        );
+      };
+
       if (providerId === 'google.com') {
         const { signInWithGoogleDirect } = await import('../services/googleAuthService');
 
@@ -946,9 +897,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         if (currentUserAfterPopup?.uid !== userData.userId) {
           console.log('⚠️ 구글 팝업으로 세션 변경됨 → 원래 계정으로 복원');
 
-          // Custom Token으로 복원
-          const { signInWithCustomToken } = await import('../services/authService');
-          await signInWithCustomToken(userData.userId, userData.email);
+          // 원래 세션 증명으로 Custom Token 복원 (임시 계정은 서버에서 정리)
+          await restoreOriginalSession();
         }
 
         // Firebase Auth 연동 시도
@@ -985,9 +935,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         if (currentUserAfterApple?.uid !== userData.userId) {
           console.log('⚠️ Apple 팝업으로 세션 변경됨 → 원래 계정으로 복원');
           
-          // Custom Token으로 원래 계정 복원
-          const { signInWithCustomToken } = await import('../services/authService');
-          await signInWithCustomToken(userData.userId, userData.email);
+          // 원래 세션 증명으로 Custom Token 복원 (임시 계정은 서버에서 정리)
+          await restoreOriginalSession();
           console.log('✅ 원래 계정으로 복원 완료');
         }
         
@@ -1415,6 +1364,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     return (
       <ScrollView 
         style={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1546,6 +1498,44 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           </View>
         </Modal>
 
+
+        {/* 재인증(비밀번호) 모달 — Android 포함 */}
+        <Modal
+          visible={reauthVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => finishReauth(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.deactivateModalContent}>
+              <Text style={styles.reauthTitle}>{isForeign ? 'Re-authentication Required' : '재인증 필요'}</Text>
+              <Text style={styles.reauthBody}>
+                {isForeign ? 'For security, please enter your current password.' : '보안을 위해 현재 비밀번호를 입력해주세요.'}
+              </Text>
+              <TextInput
+                style={styles.reauthInput}
+                value={reauthPassword}
+                onChangeText={setReauthPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder={isForeign ? 'Password' : '비밀번호'}
+                placeholderTextColor="#9ca3af"
+                returnKeyType="done"
+                onSubmitEditing={() => finishReauth(true)}
+              />
+              <View style={styles.deactivateModalButtons}>
+                <TouchableOpacity style={styles.deactivateModalCancelButton} onPress={() => finishReauth(false)} accessibilityRole="button">
+                  <Text style={styles.deactivateModalCancelText}>{isForeign ? 'Cancel' : '취소'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.deactivateModalConfirmButton} onPress={() => finishReauth(true)} accessibilityRole="button">
+                  <Text style={styles.deactivateModalConfirmText}>{isForeign ? 'Confirm' : '확인'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {/* 회원 탈퇴 확인 모달 */}
         <Modal
           visible={showDeactivateModal}
@@ -1629,49 +1619,22 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         <View style={styles.content}>
           {/* 헤더 */}
           <View style={styles.header}>
-            <Text style={styles.title}>{isForeign ? 'My Profile' : '내 프로필'}</Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('ProfileEdit')}
-              style={styles.editButton}
-            >
-              <Text style={styles.editButtonText}>{isForeign ? 'Edit' : '수정'}</Text>
-            </TouchableOpacity>
+            <Text style={styles.title}>{isForeign ? 'My Page' : '마이페이지'}</Text>
           </View>
 
-          {/* 프로필 카드 */}
-          <View style={styles.profileCard}>
-            <View style={styles.profileHeader}>
-              {userData.profileImage ? (
-                <Image
-                  source={{ uri: userData.profileImage }}
-                  style={styles.avatarImage}
-                />
-              ) : (
-                <View style={styles.avatarContainer}>
-                  <Text style={styles.avatarText}>
-                    {userData.name.charAt(0)}
-                  </Text>
+          {/* 기본 정보 (사진·이름·연락처) — 제자리 수정 */}
+          <BasicInfoSection
+            statusBadges={
+              <View style={styles.profileStatus}>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(userData.status, userData.role) }]}>
+                  <Text style={styles.statusBadgeText}>{getStatusLabel(userData.status, userData.role)}</Text>
                 </View>
-              )}
-              <View style={styles.profileInfo}>
-                <Text style={styles.profileName}>{userData.name}</Text>
-                <View style={styles.profileStatus}>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(userData.status, userData.role) }]}>
-                    <Text style={styles.statusBadgeText}>{getStatusLabel(userData.status, userData.role)}</Text>
-                  </View>
-                  <View style={[styles.roleBadge, { backgroundColor: getRoleColor(userData.role) }]}>
-                    <Text style={styles.roleBadgeText}>{getRoleLabel(userData.role)}</Text>
-                  </View>
+                <View style={[styles.roleBadge, { backgroundColor: getRoleColor(userData.role) }]}>
+                  <Text style={styles.roleBadgeText}>{getRoleLabel(userData.role)}</Text>
                 </View>
-                <Text style={styles.profileEmail}>{userData.email}</Text>
-                {(userData.phone || userData.phoneNumber) && (
-                  <Text style={styles.profilePhone}>
-                    {formatPhoneNumber(userData.phoneNumber || userData.phone || '')}
-                  </Text>
-                )}
               </View>
-            </View>
-          </View>
+            }
+          />
 
           {/* SMIS 캠프 참여 이력 - 기수 선택 */}
           <View style={styles.sectionCard}>
@@ -1868,70 +1831,23 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             )}
           </View>
 
-          {/* 원어민 교사 정보 (Teacher Information + Personal Information 통합) */}
-          {isForeign && userData.foreignTeacher && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Teacher Information</Text>
-              </View>
-              <View style={styles.infoGrid}>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>First Name</Text>
-                  <Text style={styles.infoValue}>{userData.foreignTeacher.firstName}</Text>
-                </View>
-                {userData.foreignTeacher.middleName && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Middle Name</Text>
-                    <Text style={styles.infoValue}>{userData.foreignTeacher.middleName}</Text>
-                  </View>
-                )}
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Last Name</Text>
-                  <Text style={styles.infoValue}>{userData.foreignTeacher.lastName}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Country</Text>
-                  <Text style={styles.infoValue}>{userData.foreignTeacher.countryCode}</Text>
-                </View>
-                {userData.age && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Age</Text>
-                    <Text style={styles.infoValue}>{userData.age} years old</Text>
-                  </View>
-                )}
-                {userData.gender && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Gender</Text>
-                    <Text style={styles.infoValue}>{userData.gender === 'M' ? 'Male' : 'Female'}</Text>
-                  </View>
-                )}
-                {userData.phoneNumber && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Phone Number</Text>
-                    <Text style={styles.infoValue}>{formatPhoneNumber(userData.phoneNumber)}</Text>
-                  </View>
-                )}
-                {userData.address && (
-                  <View style={[styles.infoItem, { flex: 1, width: '100%' }]}>
-                    <Text style={styles.infoLabel}>Address</Text>
-                    <Text style={styles.infoValue}>
-                      {userData.address}{userData.addressDetail ? ` ${userData.addressDetail}` : ''}
-                    </Text>
-                  </View>
-                )}
-                {userData.foreignTeacher.applicationDate && (
-                  <View style={[styles.infoItem, { flex: 1, width: '100%' }]}>
-                    <Text style={styles.infoLabel}>Application Date</Text>
-                    <Text style={styles.infoValue}>
-                      {userData.foreignTeacher.applicationDate.toDate
-                        ? userData.foreignTeacher.applicationDate.toDate().toLocaleDateString('en-US')
-                        : new Date((userData.foreignTeacher.applicationDate as any).seconds * 1000).toLocaleDateString('en-US')}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
+          {/* 캠프 참가 정보 (캠프 코드가 있는 멘토·원어민) */}
+          <CampProfileSection />
+
+          {/* 멘토 — 섹션별 제자리 수정 */}
+          {!isForeign && (
+            <>
+              <RrnSection />
+              <AddressSection />
+              <EducationSection />
+              <ExperienceSection />
+              <IntroSection />
+              <ReferralSection />
+            </>
           )}
+
+          {/* 원어민 주소 */}
+          {isForeign && <AddressSection />}
 
           {/* 원어민 제출 서류 (별도 섹션) */}
           {isForeign && userData.foreignTeacher && (
@@ -2131,125 +2047,6 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
             </TouchableOpacity>
           </View>
-
-          {/* 개인 정보 - 멘토만 표시 (원어민은 Teacher Information에 통합) */}
-          {!isForeign && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>개인 정보</Text>
-              </View>
-              <View style={styles.infoGrid}>
-                {userData.age && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>나이</Text>
-                    <Text style={styles.infoValue}>{userData.age}세</Text>
-                  </View>
-                )}
-                {userData.gender && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>성별</Text>
-                    <Text style={styles.infoValue}>{userData.gender === 'M' ? '남성' : '여성'}</Text>
-                  </View>
-                )}
-                {userData.phoneNumber && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>연락처</Text>
-                    <Text style={styles.infoValue}>{formatPhoneNumber(userData.phoneNumber)}</Text>
-                  </View>
-                )}
-                {userData.address && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>주소</Text>
-                    <Text style={styles.infoValue}>
-                      {userData.address}
-                      {userData.addressDetail ? ` ${userData.addressDetail}` : ''}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* 학교 정보 - 원어민은 숨기기 */}
-          {!isForeign && (userData.school || userData.university) && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>학교 정보</Text>
-              </View>
-              <View style={styles.infoGrid}>
-                {(userData.university || userData.school) && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>학교</Text>
-                    <Text style={styles.infoValue}>{userData.university || userData.school}</Text>
-                  </View>
-                )}
-                {userData.grade && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>학년</Text>
-                    <Text style={styles.infoValue}>
-                      {userData.grade === 6 ? '졸업생' : `${userData.grade}학년`}
-                      {userData.isOnLeave ? ' (휴학 중)' : ''}
-                    </Text>
-                  </View>
-                )}
-                {(userData.major1 || userData.major) && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>전공</Text>
-                    <Text style={styles.infoValue}>
-                      {userData.major1 || userData.major}
-                      {userData.major2 ? ` / ${userData.major2}` : ''}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* 알바 & 멘토링 경력 - 원어민은 숨기기 */}
-          {!isForeign && userData.partTimeJobs && userData.partTimeJobs.length > 0 && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>알바 & 멘토링 경력</Text>
-              </View>
-              <View style={styles.experienceContainer}>
-                {userData.partTimeJobs.map((job, index) => (
-                  <View key={index} style={styles.experienceItem}>
-                    <View style={styles.experienceHeader}>
-                      <Text style={styles.experienceCompany}>{job.companyName}</Text>
-                      <Text style={styles.experiencePeriod}>{job.period}</Text>
-                    </View>
-                    <Text style={styles.experiencePosition}>{job.position}</Text>
-                    {job.description && (
-                      <Text style={styles.experienceDescription}>{job.description}</Text>
-                    )}
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* 자기소개 & 지원동기 - 원어민은 숨기기 */}
-          {!isForeign && (userData.selfIntroduction || userData.jobMotivation) && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>자기소개 & 지원동기</Text>
-              </View>
-              <View style={styles.infoGrid}>
-                {userData.selfIntroduction && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>자기소개</Text>
-                    <Text style={styles.infoValueMultiline}>{userData.selfIntroduction}</Text>
-                  </View>
-                )}
-                {userData.jobMotivation && (
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>지원동기</Text>
-                    <Text style={styles.infoValueMultiline}>{userData.jobMotivation}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
 
           {/* 개인정보처리방침 / 서비스 이용약관 */}
           <View style={styles.legalButtonsRow}>
@@ -3212,6 +3009,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#78350f',
     lineHeight: 20,
+  },
+  reauthTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  reauthBody: {
+    fontSize: 14,
+    color: '#4b5563',
+    marginBottom: 14,
+    lineHeight: 20,
+  },
+  reauthInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
+    marginBottom: 16,
+    backgroundColor: '#ffffff',
   },
   deactivateModalButtons: {
     flexDirection: 'row',

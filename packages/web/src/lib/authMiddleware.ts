@@ -12,7 +12,10 @@ export interface AuthContext {
  * API 라우트에서 인증된 사용자 정보를 가져오는 헬퍼
  * Authorization 헤더에서 Firebase ID Token을 검증하고 사용자 정보를 반환
  */
-export async function getAuthenticatedUser(request: NextRequest): Promise<AuthContext | null> {
+export async function getAuthenticatedUser(
+  request: NextRequest,
+  opts: { allowUnverifiedEmail?: boolean } = {},
+): Promise<AuthContext | null> {
   try {
     const authHeader = request.headers.get('Authorization');
     
@@ -40,6 +43,13 @@ export async function getAuthenticatedUser(request: NextRequest): Promise<AuthCo
     }
     
     const user = { ...userDoc.data(), userId: firebaseUid } as User;
+
+    // 이메일 인증 전(비밀번호 가입 직후) 계정은 API 를 쓸 수 없다.
+    // 기존 가입자는 모두 isEmailVerified=true 로 표시해 두었고, 소셜 가입은 가입 시 true.
+    if (!opts.allowUnverifiedEmail && decodedToken.email_verified !== true && (user as any).isEmailVerified !== true) {
+      logger.warn('이메일 미인증 계정의 API 호출 차단:', firebaseUid.substring(0, 8));
+      return null;
+    }
     logger.info('✅ 사용자 정보 조회 성공:', {
       userId: user.userId,
       name: user.name,

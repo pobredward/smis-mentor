@@ -78,6 +78,24 @@ export default function AdminDashboard() {
           icon: <IoSettings className="w-5 h-5" />,
         },
         {
+          title: '캠프 참가 정보 현황',
+          href: '/admin/camp-profiles',
+          iconClass: 'text-blue-600',
+          icon: <IoPeople className="w-5 h-5" />,
+        },
+        {
+          title: '감사 로그',
+          href: '/admin/audit-logs',
+          iconClass: 'text-gray-700',
+          icon: <IoDocumentText className="w-5 h-5" />,
+        },
+        {
+          title: '커뮤니티 신고 처리',
+          href: '/admin/reports',
+          iconClass: 'text-red-600',
+          icon: <IoSearch className="w-5 h-5" />,
+        },
+        {
           title: '사용자 지도',
           href: '/admin/user-map-test',
           iconClass: 'text-teal-600',

@@ -6,6 +6,11 @@
 
 set -e  # 에러 발생 시 스크립트 중단
 
+# ⚠️ 비밀값은 저장소에 커밋하지 않는다. 실행 전 셸에서 export 한 값을 사용한다:
+#   export NAVER_CLIENT_SECRET=...   (네이버 개발자센터에서 재발급한 값)
+#   export SENTRY_AUTH_TOKEN=...     (Sentry > Settings > Auth Tokens 에서 재발급한 값)
+# 2026-09 이전 커밋에 들어있던 두 값은 노출된 것으로 간주하고 회전(재발급)해야 한다.
+
 ENVIRONMENT=${1:-"all"}
 
 echo "🔧 EAS 환경 변수 설정 시작..."
@@ -30,7 +35,7 @@ add_env_vars() {
   
   # 🔑 네이버 로그인
   eas env:create --name EXPO_PUBLIC_NAVER_CLIENT_ID --value "XgK86FxXznee_HFfBeH3" --environment $ENV --visibility plaintext --force --non-interactive || true
-  eas env:create --name NAVER_CLIENT_SECRET --value "GcoXVzqEZs" --environment $ENV --visibility secret --force --non-interactive || true
+  eas env:create --name NAVER_CLIENT_SECRET --value "${NAVER_CLIENT_SECRET:?NAVER_CLIENT_SECRET 환경변수를 먼저 export 하세요}" --environment $ENV --visibility secret --force --non-interactive || true
   eas env:create --name EXPO_PUBLIC_NAVER_CALLBACK_URL --value "https://auth.expo.io/@pobredward02/smis-mentor" --environment $ENV --visibility plaintext --force --non-interactive || true
   
   # 🐛 Sentry (클라이언트)
@@ -39,7 +44,7 @@ add_env_vars() {
   # 🔨 Sentry (빌드 타임 - 비밀 정보)
   eas env:create --name SENTRY_ORG --value "pobredward" --environment $ENV --visibility secret --force --non-interactive || true
   eas env:create --name SENTRY_PROJECT --value "smis-mentor-mobile" --environment $ENV --visibility secret --force --non-interactive || true
-  eas env:create --name SENTRY_AUTH_TOKEN --value "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" --environment $ENV --visibility secret --force --non-interactive || true
+  eas env:create --name SENTRY_AUTH_TOKEN --value "${SENTRY_AUTH_TOKEN:?SENTRY_AUTH_TOKEN 환경변수를 먼저 export 하세요}" --environment $ENV --visibility secret --force --non-interactive || true
   
   echo "✅ $ENV 환경 변수 생성 완료"
   echo ""

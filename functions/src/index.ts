@@ -1,18 +1,9 @@
 import * as functions from 'firebase-functions/v1';
 import * as functionsV2 from 'firebase-functions/v2';
+import * as firestoreV2 from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
-import { google } from 'googleapis';
-import {
-  CAMP_SHEET_CONFIG,
-  buildNormalizedHeaderIndexMap,
-  mapHeadersToStudent,
-  isInactiveStudent,
-  STSheetStudent,
-  parseFamilySheet,
-  FamilyUnit,
-  FamilySTSheetCache,
-} from './studentTypes';
+import { OAuth2Client } from 'google-auth-library';
 
 admin.initializeApp();
 
@@ -83,6 +74,134 @@ interface TaskWithNotification extends Task {
   notificationSentDates?: string[]; // YYYY-MM-DD 형식, 당일 알림 발송 여부 추적
 }
 
+// ──────────────────────────────────────────────────────────────
+// onRequest 함수 호출자 검증
+//  - Cloud Scheduler: OIDC ID 토큰(Google 서명) → 서명·만료 검증 후 서비스 계정 이메일 허용 목록 확인
+//  - 관리자 수동 호출: Firebase ID 토큰 → users/{uid}.role == 'admin'
+//  (이전에는 'Bearer ' 접두사만 확인해 누구나 호출 가능했음)
+// ──────────────────────────────────────────────────────────────
+const oidcClient = new OAuth2Client();
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || 'smis-mentor';
+const SCHEDULER_INVOKER_EMAILS = (process.env.SCHEDULER_INVOKER_EMAILS || `${PROJECT_ID}@appspot.gserviceaccount.com`)
+  .split(',').map((e) => e.trim()).filter(Boolean);
+
+function isAllowedInvokerEmail(email: string | undefined): boolean {
+  if (!email) return false;
+  if (SCHEDULER_INVOKER_EMAILS.includes(email)) return true;
+  // 프로젝트 소속 서비스 계정 (Cloud Scheduler 작업에 지정된 SA)
+  return email.endsWith(`@${PROJECT_ID}.iam.gserviceaccount.com`);
+}
+
+async function verifyInvoker(
+  req: { headers: Record<string, unknown> },
+  opts: { allowScheduler?: boolean; allowAdmin?: boolean } = { allowScheduler: true, allowAdmin: true }
+): Promise<{ ok: true; by: 'scheduler' | 'admin'; email?: string; uid?: string } | { ok: false; reason: string }> {
+  const raw = req.headers.authorization;
+  const authHeader = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : '';
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return { ok: false, reason: 'no-bearer' };
+  const token = authHeader.slice(7).trim();
+  if (!token) return { ok: false, reason: 'empty' };
+
+  // 1) Cloud Scheduler OIDC 토큰
+  if (opts.allowScheduler !== false) {
+    try {
+      const ticket = await oidcClient.verifyIdToken({ idToken: token });
+      const payload = ticket.getPayload();
+      if (payload?.email && payload.email_verified && isAllowedInvokerEmail(payload.email)) {
+        return { ok: true, by: 'scheduler', email: payload.email };
+      }
+      if (payload?.email) console.warn('⛔ 허용되지 않은 OIDC 호출자:', payload.email, 'aud=', payload.aud);
+    } catch {
+      /* Google OIDC 토큰이 아님 → Firebase ID 토큰으로 재시도 */
+    }
+  }
+
+  // 2) 관리자 Firebase ID 토큰
+  if (opts.allowAdmin !== false) {
+    try {
+      const decoded = await admin.auth().verifyIdToken(token);
+      const snap = await admin.firestore().collection('users').doc(decoded.uid).get();
+      if (snap.exists && snap.data()?.role === 'admin' && snap.data()?.status === 'active') {
+        return { ok: true, by: 'admin', uid: decoded.uid };
+      }
+      return { ok: false, reason: 'not-admin' };
+    } catch {
+      /* 유효한 Firebase 토큰 아님 */
+    }
+  }
+  return { ok: false, reason: 'invalid-token' };
+}
+
+/** 만료된 Expo 푸시 토큰 삭제 — 토큰에 '[' ']' 가 있어 문자열 경로 대신 FieldPath 사용 */
+async function removeExpiredPushToken(userId: string, token: string): Promise<void> {
+  try {
+    await db.collection('users').doc(userId).update(
+      new admin.firestore.FieldPath('pushTokens', token),
+      admin.firestore.FieldValue.delete()
+    );
+    console.log(`🗑️ 만료 토큰 삭제 (userId: ${userId}): ${token.substring(0, 40)}...`);
+  } catch (deleteError) {
+    console.error('만료 토큰 삭제 실패:', deleteError);
+  }
+}
+
+/**
+ * 이전 실행에서 큐에 넣어 둔 푸시 영수증 확인 → DeviceNotRegistered 토큰 정리
+ * (Expo 영수증은 발송 후 수 분 뒤에 확정되므로 다음 스케줄 실행에서 처리)
+ */
+async function processPushReceiptQueue(): Promise<void> {
+  const cutoff = new Date(Date.now() - 60 * 1000);
+  const snap = await db.collection('pushReceiptQueue')
+    .where('createdAt', '<', cutoff)
+    .orderBy('createdAt')
+    .limit(600)
+    .get();
+  if (snap.empty) return;
+
+  const byId = new Map<string, { token: string; userId: string }>();
+  snap.docs.forEach((d) => byId.set(d.id, d.data() as { token: string; userId: string }));
+  const ids = Array.from(byId.keys());
+
+  let removed = 0;
+  for (const chunk of expo.chunkPushNotificationReceiptIds(ids)) {
+    try {
+      const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
+      for (const [receiptId, receipt] of Object.entries(receipts)) {
+        if (receipt.status === 'error') {
+          console.warn(`푸시 영수증 오류 (${receiptId}):`, receipt.message, receipt.details?.error);
+          if (receipt.details?.error === 'DeviceNotRegistered') {
+            const info = byId.get(receiptId);
+            if (info) { await removeExpiredPushToken(info.userId, info.token); removed += 1; }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('푸시 영수증 조회 실패:', error);
+    }
+  }
+
+  // 처리한(또는 Expo 가 더는 보관하지 않는) 큐 문서 삭제
+  const batch = db.batch();
+  snap.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
+  console.log(`🧾 푸시 영수증 ${ids.length}건 확인, 만료 토큰 ${removed}건 삭제`);
+}
+
+/**
+ * 오래된 위치 기록 삭제 — 마지막 갱신 후 14일 지난 userLocations 문서
+ * (캠프가 끝난 뒤 위치 기록이 무기한 남지 않도록. 개인정보처리방침의 보존기간과 일치시켜야 함)
+ */
+const LOCATION_RETENTION_DAYS = 14;
+async function cleanupStaleLocations(): Promise<void> {
+  const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - LOCATION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const snap = await db.collection('userLocations').where('updatedAt', '<', cutoff).limit(300).get();
+  if (snap.empty) return;
+  const batch = db.batch();
+  snap.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
+  console.log(`📍 오래된 위치 기록 ${snap.size}건 삭제 (${LOCATION_RETENTION_DAYS}일 경과)`);
+}
+
 // Cloud Scheduler에서 HTTP POST로 30분마다 호출
 // gcloud functions deploy --build-service-account 옵션으로 배포 (Compute Engine SA 없이 Cloud Build SA 활용)
 export const checkOverdueTasks = functionsV2.https.onRequest(
@@ -91,16 +210,19 @@ export const checkOverdueTasks = functionsV2.https.onRequest(
     serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
   },
   async (req, res) => {
-    // Cloud Scheduler의 OIDC 토큰 또는 내부 시크릿으로 호출 검증
-    const authHeader = req.headers.authorization ?? '';
-    const isScheduler = authHeader.startsWith('Bearer ');
-    if (!isScheduler) {
+    // Cloud Scheduler OIDC 토큰(서명 검증 + SA 허용 목록) 또는 관리자 Firebase ID 토큰만 허용
+    const invoker = await verifyInvoker(req as any);
+    if (!invoker.ok) {
+      console.warn('⛔ checkOverdueTasks 비인가 호출:', invoker.reason);
       res.status(403).json({ error: '허가되지 않은 접근입니다.' });
       return;
     }
 
     try {
       console.log('🔔 업무 알림 체크 시작...');
+      // 이전 실행의 푸시 영수증 확인 (만료 토큰 정리)
+      await processPushReceiptQueue().catch((e) => console.error('영수증 큐 처리 실패:', e));
+      await cleanupStaleLocations().catch((e) => console.error('위치 기록 정리 실패:', e));
       const now = new Date();
 
       // 30분 이전 시각 (이 창 안에 time이 있는 업무만 알림 발송)
@@ -271,11 +393,13 @@ async function sendTaskReminderNotifications(task: Task, userIds: string[]): Pro
 
     const chunks = expo.chunkPushNotifications(messages);
     const tickets: ExpoPushTicket[] = [];
+    const sentMessages: ExpoPushMessage[] = []; // tickets 와 1:1 정렬 유지 (실패한 청크는 제외)
 
     for (const chunk of chunks) {
       try {
         const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
         tickets.push(...ticketChunk);
+        sentMessages.push(...chunk);
       } catch (error) {
         console.error('푸시 알림 전송 실패:', error);
       }
@@ -283,57 +407,31 @@ async function sendTaskReminderNotifications(task: Task, userIds: string[]): Pro
 
     console.log(`✅ 업무 "${task.title}"에 대한 알림 전송 완료: ${tickets.length}개`);
 
-    // 티켓 ID → 토큰 매핑 (DeviceNotRegistered 시 어떤 토큰인지 역추적)
-    const ticketTokenMap = new Map<string, string>();
+    // 1) 티켓 단계 오류(DeviceNotRegistered)는 즉시 토큰 삭제
+    // 2) 정상 티켓은 영수증 큐에 넣고 다음 스케줄 실행 때 확인
+    //    (응답 후 setTimeout 은 Cloud Functions 에서 실행이 보장되지 않아 폐기)
+    const queueBatch = db.batch();
+    let queued = 0;
     for (let i = 0; i < tickets.length; i++) {
       const ticket = tickets[i];
-      if (ticket.status === 'ok' && 'id' in ticket) {
-        const token = messages[i]?.to as string;
-        if (token) ticketTokenMap.set(ticket.id, token);
+      const token = sentMessages[i]?.to as string | undefined;
+      const userId = token ? tokenUserMap.get(token) : undefined;
+      if (ticket.status === 'error') {
+        console.error('푸시 티켓 오류:', ticket.message, ticket.details?.error);
+        if (ticket.details?.error === 'DeviceNotRegistered' && token && userId) {
+          await removeExpiredPushToken(userId, token);
+        }
+      } else if ('id' in ticket && token && userId) {
+        queueBatch.set(db.collection('pushReceiptQueue').doc(ticket.id), {
+          token,
+          userId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        queued += 1;
       }
     }
-
-    const receiptsIds = tickets
-      .filter(ticket => ticket.status === 'ok')
-      .map(ticket => 'id' in ticket ? ticket.id : null)
-      .filter((id): id is string => id !== null);
-
-    if (receiptsIds.length > 0) {
-      setTimeout(async () => {
-        try {
-          const receiptChunks = expo.chunkPushNotificationReceiptIds(receiptsIds);
-          for (const chunk of receiptChunks) {
-            const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
-            
-            for (const [receiptId, receipt] of Object.entries(receipts)) {
-              if (receipt.status === 'error') {
-                console.error(`푸시 알림 수신 실패 (${receiptId}):`, receipt.message);
-                
-                if (receipt.details?.error === 'DeviceNotRegistered') {
-                  const expiredToken = ticketTokenMap.get(receiptId);
-                  const userId = expiredToken ? tokenUserMap.get(expiredToken) : undefined;
-
-                  if (expiredToken && userId) {
-                    try {
-                      // Firestore에서 만료된 토큰 자동 삭제
-                      await db.collection('users').doc(userId).update({
-                        [`pushTokens.${expiredToken}`]: admin.firestore.FieldValue.delete(),
-                      });
-                      console.log(`🗑️ 만료 토큰 자동 삭제 완료 (userId: ${userId}): ${expiredToken.substring(0, 40)}...`);
-                    } catch (deleteError) {
-                      console.error('만료 토큰 삭제 실패:', deleteError);
-                    }
-                  } else {
-                    console.log(`⚠️ 만료 토큰 매핑 없음 (receiptId: ${receiptId})`);
-                  }
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error('푸시 알림 수신 확인 실패:', error);
-        }
-      }, 10000);
+    if (queued > 0) {
+      await queueBatch.commit();
     }
   } catch (error) {
     console.error('푸시 알림 전송 중 오류:', error);
@@ -347,12 +445,19 @@ export const sendTestNotification = functions
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', '인증이 필요합니다.');
     }
+    // 본인에게만 테스트 발송 가능 (관리자는 임의 대상 허용)
+    if (data.userId !== context.auth.uid) {
+      const callerDoc = await db.collection('users').doc(context.auth.uid).get();
+      if (callerDoc.data()?.role !== 'admin') {
+        throw new functions.https.HttpsError('permission-denied', '본인에게만 테스트 알림을 보낼 수 있습니다.');
+      }
+    }
 
     try {
       const userDoc = await db.collection('users').doc(data.userId).get();
       const userData = userDoc.data() as UserData;
 
-      if (!userData.pushTokens) {
+      if (!userData?.pushTokens) {
         throw new functions.https.HttpsError('not-found', '푸시 토큰이 없습니다.');
       }
 
@@ -492,352 +597,6 @@ export const sendTaskReminderToUsers = functionsV2.https.onCall(
   }
 );
 
-// Custom Token 생성 함수 (소셜 로그인용)
-// Compute Engine 기본 서비스 계정이 없는 환경을 위해 v2 onRequest 사용
-// cors 옵션으로 CORS 자동 처리, serviceAccount 명시로 배포 가능하게 함
-export const createCustomToken = functionsV2.https.onRequest(
-  {
-    region: 'asia-northeast3',
-    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
-    cors: ['https://smis-mentor.com', 'https://www.smis-mentor.com', 'http://localhost:3000'],
-  },
-  async (req, res) => {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: { status: 'METHOD_NOT_ALLOWED', message: 'POST 요청만 허용됩니다.' } });
-      return;
-    }
-
-    try {
-      // httpsCallable 요청 형식: { "data": { userId, email, existingUid } }
-      const data = (req.body?.data ?? req.body) as { userId: string; email: string; existingUid?: string };
-
-      console.log('🔑 Custom Token 생성 요청:', {
-        userId: data.userId,
-        email: data.email,
-        existingUid: data.existingUid ? `${data.existingUid.substring(0, 8)}...` : undefined,
-      });
-
-      if (!data.userId || !data.email) {
-        res.status(400).json({ error: { status: 'INVALID_ARGUMENT', message: 'userId와 email이 필요합니다.' } });
-        return;
-      }
-
-      const userDoc = await db.collection('users').doc(data.userId).get();
-
-      if (!userDoc.exists) {
-        res.status(404).json({ error: { status: 'NOT_FOUND', message: '사용자를 찾을 수 없습니다.' } });
-        return;
-      }
-
-      const userData = userDoc.data() as UserData;
-
-      if (userData.email !== data.email) {
-        res.status(403).json({ error: { status: 'PERMISSION_DENIED', message: '이메일이 일치하지 않습니다.' } });
-        return;
-      }
-
-      const targetUid = data.existingUid || data.userId;
-      console.log(`🎯 사용할 UID: ${targetUid} (${data.existingUid ? '기존 UID 재사용' : '신규 생성'})`);
-
-      let firebaseUser;
-      try {
-        firebaseUser = await admin.auth().getUser(targetUid);
-        console.log('✅ 기존 Firebase Auth 사용자 발견:', firebaseUser.uid);
-      } catch (authError: any) {
-        if (authError.code === 'auth/user-not-found') {
-          console.log('🆕 Firebase Auth 사용자 생성:', { uid: targetUid, email: data.email });
-          firebaseUser = await admin.auth().createUser({
-            uid: targetUid,
-            email: data.email,
-            displayName: userData.name,
-            emailVerified: true,
-          });
-        } else {
-          console.error('❌ Firebase Auth 사용자 조회 실패:', authError);
-          throw authError;
-        }
-      }
-
-      const customToken = await admin.auth().createCustomToken(firebaseUser.uid, {
-        email: data.email,
-        provider: 'custom',
-      });
-
-      console.log('✅ Custom Token 생성 완료:', {
-        uid: firebaseUser.uid,
-        uidMatch: firebaseUser.uid === targetUid,
-      });
-
-      // httpsCallable 응답 형식: { "result": { ... } }
-      res.json({ result: { customToken, uid: firebaseUser.uid } });
-    } catch (error) {
-      console.error('❌ Custom Token 생성 실패:', error);
-      res.status(500).json({ error: { status: 'INTERNAL', message: 'Custom Token 생성에 실패했습니다.' } });
-    }
-  }
-);
-
-// 관리자 권한으로 사용자 삭제 (Firebase Auth + Firestore) - v2
-export const adminDeleteUser = functionsV2.https.onCall(
-  {
-    region: 'asia-northeast3',
-  },
-  async (request) => {
-    try {
-      const { userId } = request.data;
-
-      // 1. 인증 체크
-      if (!request.auth) {
-        throw new functionsV2.https.HttpsError('unauthenticated', '인증이 필요합니다.');
-      }
-
-      // 2. 관리자 권한 체크
-      const adminDoc = await db.collection('users').doc(request.auth.uid).get();
-      const adminData = adminDoc.data();
-      
-      if (!adminData || adminData.role !== 'admin') {
-        throw new functionsV2.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
-      }
-
-      if (!userId) {
-        throw new functionsV2.https.HttpsError('invalid-argument', 'userId가 필요합니다.');
-      }
-
-      console.log(`🗑️ 사용자 삭제 시작: ${userId}`);
-
-      // 3. Firestore에서 사용자 정보 조회
-      const userDoc = await db.collection('users').doc(userId).get();
-      
-      if (!userDoc.exists) {
-        throw new functionsV2.https.HttpsError('not-found', '사용자를 찾을 수 없습니다.');
-      }
-
-      const userData = userDoc.data();
-      console.log(`📋 사용자 정보: ${userData?.name} (${userData?.email})`);
-
-      // 4. Firebase Auth에서 사용자 삭제 시도
-      let authDeleted = false;
-      try {
-        await admin.auth().deleteUser(userId);
-        console.log('✅ Firebase Auth 사용자 삭제 완료');
-        authDeleted = true;
-      } catch (authError: any) {
-        if (authError.code === 'auth/user-not-found') {
-          console.log('⚠️ Firebase Auth에 사용자가 없음 (이미 삭제됨 또는 존재하지 않음)');
-        } else {
-          console.error('❌ Firebase Auth 삭제 실패:', authError);
-        }
-      }
-
-      // 5. Firestore에서 사용자 문서 삭제
-      await db.collection('users').doc(userId).delete();
-      console.log('✅ Firestore 사용자 문서 삭제 완료');
-
-      // 6. Storage 파일 정리
-      const storage = admin.storage();
-      const bucket = storage.bucket();
-      const pathsToDelete = [`profileImages/${userId}`, `foreignTeachers/${userId}`];
-      let storageDeleted = 0;
-      for (const prefix of pathsToDelete) {
-        try {
-          const [files] = await bucket.getFiles({ prefix });
-          if (files.length > 0) {
-            await Promise.all(files.map(file => file.delete()));
-            storageDeleted += files.length;
-          }
-        } catch (storageError) {
-          console.error(`❌ Storage 파일 삭제 실패 (${prefix}):`, storageError);
-        }
-      }
-      if (storageDeleted > 0) console.log(`✅ Storage 파일 ${storageDeleted}개 삭제 완료`);
-
-      return {
-        success: true,
-        authDeleted,
-        message: authDeleted 
-          ? '사용자가 Firebase Auth 및 Firestore에서 삭제되었습니다.'
-          : '사용자가 Firestore에서 삭제되었습니다. (Firebase Auth에는 존재하지 않았습니다.)',
-      };
-    } catch (error) {
-      console.error('❌ 사용자 삭제 실패:', error);
-      
-      if (error instanceof functionsV2.https.HttpsError) {
-        throw error;
-      }
-      
-      throw new functionsV2.https.HttpsError('internal', '사용자 삭제에 실패했습니다.');
-    }
-  }
-);
-
-// Firebase Auth와 Firestore 일관성 검증 함수 (Admin SDK 사용)
-export const verifyAuthFirestoreConsistency = functions
-  .region('asia-northeast3')
-  .https.onCall(async (data, context) => {
-    try {
-      console.log('🔍 Firebase Auth ↔ Firestore 일관성 검증 시작...');
-
-      // 1. 모든 Firestore 사용자 조회
-      const usersSnapshot = await db.collection('users').get();
-      const firestoreUsers = new Map<string, any>();
-      
-      usersSnapshot.forEach((doc) => {
-        const userData = doc.data();
-        firestoreUsers.set(doc.id, {
-          documentId: doc.id,
-          userId: userData.userId,
-          id: userData.id,
-          email: userData.email,
-          name: userData.name,
-          status: userData.status,
-          role: userData.role,
-          authProviders: userData.authProviders || [],
-        });
-      });
-
-      console.log(`📊 Firestore 사용자 수: ${firestoreUsers.size}`);
-
-      // 2. 모든 Firebase Auth 사용자 조회 (페이징)
-      const authUsers = new Map<string, any>();
-      let nextPageToken: string | undefined;
-
-      do {
-        const listUsersResult = await admin.auth().listUsers(1000, nextPageToken);
-        
-        listUsersResult.users.forEach((userRecord) => {
-          authUsers.set(userRecord.uid, {
-            uid: userRecord.uid,
-            email: userRecord.email,
-            displayName: userRecord.displayName,
-            emailVerified: userRecord.emailVerified,
-            disabled: userRecord.disabled,
-            providerData: userRecord.providerData,
-          });
-        });
-
-        nextPageToken = listUsersResult.pageToken;
-      } while (nextPageToken);
-
-      console.log(`📊 Firebase Auth 사용자 수: ${authUsers.size}`);
-
-      // 3. 불일치 분석
-      const inconsistencies: any[] = [];
-      const orphanedFirestoreUsers: any[] = [];
-      const orphanedAuthUsers: any[] = [];
-
-      // Firestore 사용자 기준으로 검증
-      for (const [docId, firestoreUser] of firestoreUsers) {
-        // Firestore 내부 일관성 체크
-        const internalConsistent = 
-          docId === firestoreUser.userId && 
-          docId === firestoreUser.id;
-
-        // Firebase Auth UID와 비교
-        const authUserByDocId = authUsers.get(docId);
-        const authUserByUserId = authUsers.get(firestoreUser.userId);
-        const authUserByEmail = firestoreUser.email 
-          ? Array.from(authUsers.values()).find(u => u.email === firestoreUser.email)
-          : null;
-
-        const issue: any = {
-          firestoreDocId: docId,
-          firestoreUserId: firestoreUser.userId,
-          firestoreId: firestoreUser.id,
-          email: firestoreUser.email,
-          name: firestoreUser.name,
-          status: firestoreUser.status,
-          role: firestoreUser.role,
-          internalConsistent,
-          issues: [],
-        };
-
-        // 불일치 타입 분류
-        if (!internalConsistent) {
-          if (docId !== firestoreUser.userId) {
-            issue.issues.push('documentId ≠ userId');
-          }
-          if (docId !== firestoreUser.id) {
-            issue.issues.push('documentId ≠ id');
-          }
-        }
-
-        // Firebase Auth 검증
-        if (!authUserByDocId && !authUserByUserId && !authUserByEmail) {
-          issue.issues.push('Firebase Auth에 존재하지 않음');
-          orphanedFirestoreUsers.push(issue);
-        } else {
-          let authUid = null;
-
-          if (authUserByDocId) {
-            authUid = authUserByDocId.uid;
-          } else if (authUserByUserId) {
-            authUid = authUserByUserId.uid;
-            issue.issues.push(`Auth UID는 userId(${firestoreUser.userId})와 일치하나 documentId와 불일치`);
-          } else if (authUserByEmail) {
-            authUid = authUserByEmail.uid;
-            issue.issues.push(`Auth UID(${authUserByEmail.uid})가 documentId, userId 모두와 불일치 (이메일로만 찾음)`);
-          }
-
-          issue.authUid = authUid;
-
-          if (authUid !== docId) {
-            issue.issues.push(`Firebase Auth UID(${authUid}) ≠ Firestore documentId(${docId})`);
-          }
-        }
-
-        if (issue.issues.length > 0) {
-          inconsistencies.push(issue);
-        }
-      }
-
-      // Firebase Auth에만 있는 사용자 (Firestore에 없음)
-      for (const [authUid, authUser] of authUsers) {
-        const hasFirestoreDoc = firestoreUsers.has(authUid);
-        const hasUserIdMatch = Array.from(firestoreUsers.values()).some(
-          u => u.userId === authUid
-        );
-        const hasEmailMatch = authUser.email 
-          ? Array.from(firestoreUsers.values()).some(u => u.email === authUser.email)
-          : false;
-
-        if (!hasFirestoreDoc && !hasUserIdMatch && !hasEmailMatch) {
-          orphanedAuthUsers.push({
-            authUid,
-            email: authUser.email,
-            displayName: authUser.displayName,
-            issue: 'Firestore에 존재하지 않음',
-          });
-        }
-      }
-
-      // 결과 정리
-      const result = {
-        summary: {
-          totalFirestoreUsers: firestoreUsers.size,
-          totalAuthUsers: authUsers.size,
-          inconsistentUsers: inconsistencies.length,
-          orphanedFirestoreUsers: orphanedFirestoreUsers.length,
-          orphanedAuthUsers: orphanedAuthUsers.length,
-        },
-        inconsistencies: inconsistencies.sort((a, b) => {
-          // active 먼저, 그 다음 이슈 개수 많은 순
-          if (a.status === 'active' && b.status !== 'active') return -1;
-          if (a.status !== 'active' && b.status === 'active') return 1;
-          return b.issues.length - a.issues.length;
-        }),
-        orphanedFirestoreUsers,
-        orphanedAuthUsers,
-      };
-
-      console.log('✅ 검증 완료:', result.summary);
-
-      return result;
-    } catch (error) {
-      console.error('❌ 검증 실패:', error);
-      throw new functions.https.HttpsError('internal', '검증에 실패했습니다.');
-    }
-  });
-
 /**
  * 소셜 제공자 연동 해제 시 Firebase Auth에서도 계정 삭제
  * Multiple Email Policy에서 별도 계정으로 생성된 소셜 계정 정리
@@ -945,9 +704,10 @@ export const cleanupUserStorageOnDelete = functionsV2.https.onRequest(
     serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
   },
   async (req, res) => {
-    // Cloud Scheduler 또는 내부 호출로만 사용 가능
-    const authHeader = req.headers.authorization ?? '';
-    if (!authHeader.startsWith('Bearer ')) {
+    // 관리자 Firebase ID 토큰(또는 스케줄러 OIDC)만 허용 — 임의 사용자의 Storage 삭제 방지
+    const invoker = await verifyInvoker(req as any);
+    if (!invoker.ok) {
+      console.warn('⛔ cleanupUserStorageOnDelete 비인가 호출:', invoker.reason);
       res.status(403).json({ error: '허가되지 않은 접근입니다.' });
       return;
     }
@@ -992,198 +752,6 @@ export const cleanupUserStorageOnDelete = functionsV2.https.onRequest(
   }
 );
 
-// ─── ST 시트 동기화 ──────────────────────────────────────────────────────────
-
-// 서비스 계정 키 파일을 직접 로드 (.gitignore에서 제외 해제하여 배포 번들에 포함)
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const SHEETS_SERVICE_ACCOUNT = require('../managesheet-export-d5f1ccefc291.json');
-
-async function getSheetsClient() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: SHEETS_SERVICE_ACCOUNT,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  });
-  return google.sheets({ version: 'v4', auth });
-}
-
-/**
- * GID → 시트 이름 변환
- * spreadsheets.get으로 시트 목록을 가져와 sheetId가 일치하는 시트 이름을 반환.
- */
-async function resolveSheetName(
-  sheets: ReturnType<typeof google.sheets>,
-  spreadsheetId: string,
-  gid: string
-): Promise<string> {
-  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
-  const sheetList = meta.data.sheets ?? [];
-  const matched = sheetList.find(
-    (s) => String(s.properties?.sheetId) === gid
-  );
-  return matched?.properties?.title ?? 'ST';
-}
-
-function parseLines(rawValues: string[][]): STSheetStudent[] {
-  // rawValues[0] = 헤더 행
-  return [];
-}
-
-async function fetchAndParseCamp(campCode: string): Promise<STSheetStudent[]> {
-  const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
-  if (!config) throw new Error(`캠프 코드 ${campCode}에 대한 설정이 없습니다.`);
-
-  const sheets = await getSheetsClient();
-  const sheetName = await resolveSheetName(sheets, config.spreadsheetId, config.gid);
-
-  console.log(`📊 [${campCode}] 시트 읽기: "${sheetName}" (gid=${config.gid})`);
-
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: config.spreadsheetId,
-    range: sheetName,
-    valueRenderOption: 'FORMATTED_VALUE',
-  });
-
-  const rows: string[][] = (response.data.values ?? []).map((row) =>
-    (row as string[]).map((cell) => String(cell ?? ''))
-  );
-
-  if (rows.length < 2) {
-    console.warn(`[${campCode}] 데이터 행이 없습니다.`);
-    return [];
-  }
-
-  const headerIndexMap = buildNormalizedHeaderIndexMap(rows[0]);
-  const students = rows
-    .slice(1)
-    .filter((row) => row[0]?.trim())
-    .map((row, idx) =>
-      mapHeadersToStudent(row, headerIndexMap, idx + 2, campCode, config.type)
-    );
-
-  const active = students.filter((s) => !isInactiveStudent(s));
-  const skipped = students.length - active.length;
-  if (skipped > 0) console.log(`[${campCode}] 이월자/취소자 ${skipped}명 제외`);
-  console.log(`[${campCode}] 활성 학생 ${active.length}명`);
-
-  return active;
-}
-
-/**
- * F 캠프 시트를 FamilyUnit[] 로 파싱하여 반환.
- * stSheetCache 대신 familySTSheetCache 컬렉션에 저장.
- */
-async function fetchAndParseFamilyCamp(campCode: string): Promise<FamilyUnit[]> {
-  const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
-  if (!config) throw new Error(`캠프 코드 ${campCode}에 대한 설정이 없습니다.`);
-  if (config.type !== 'F') throw new Error(`${campCode}는 F 타입 캠프가 아닙니다.`);
-
-  const sheets = await getSheetsClient();
-  const sheetName = await resolveSheetName(sheets, config.spreadsheetId, config.gid);
-
-  console.log(`📊 [${campCode}] F캠프 가족 시트 읽기: "${sheetName}" (gid=${config.gid})`);
-
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: config.spreadsheetId,
-    range: sheetName,
-    valueRenderOption: 'FORMATTED_VALUE',
-  });
-
-  const rows: string[][] = (response.data.values ?? []).map((row) =>
-    (row as string[]).map((cell) => String(cell ?? ''))
-  );
-
-  const families = parseFamilySheet(rows, campCode);
-  console.log(`[${campCode}] 가족 ${families.length}팀, 학생 ${families.reduce((s, f) => s + f.students.length, 0)}명`);
-  return families;
-}
-
-/**
- * ST 시트 동기화 Callable Function
- * 클라이언트(웹/모바일)에서 campCode를 전달하면
- * 서버에서 Google Sheets API(서비스 계정)로 읽어 Firestore에 저장.
- */
-export const syncSTSheet = functionsV2.https.onCall(
-  {
-    region: 'asia-northeast3',
-    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
-    timeoutSeconds: 120,
-    memory: '512MiB',
-  },
-  async (request: functionsV2.https.CallableRequest<{ campCode: string }>) => {
-    if (!request.auth) {
-      throw new functionsV2.https.HttpsError('unauthenticated', '로그인이 필요합니다.');
-    }
-
-    // 관리자 권한 확인
-    const callerDoc = await db.collection('users').doc(request.auth.uid).get();
-    const callerData = callerDoc.data();
-    if (!callerData || callerData.role !== 'admin') {
-      throw new functionsV2.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
-    }
-
-    const { campCode } = request.data;
-    if (!campCode) {
-      throw new functionsV2.https.HttpsError('invalid-argument', 'campCode가 필요합니다.');
-    }
-
-    try {
-      const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
-      const isFamily = config?.type === 'F';
-
-      if (isFamily) {
-        // F 캠프: 가족 단위 파싱 → familySTSheetCache 컬렉션
-        console.log(`🔄 F캠프 가족 시트 동기화 시작: ${campCode}`);
-        const families = await fetchAndParseFamilyCamp(campCode);
-        const totalStudents = families.reduce((s, f) => s + f.students.length, 0);
-
-        const cacheData: Omit<FamilySTSheetCache, 'id'> = {
-          campCode,
-          families,
-          lastSyncedAt: new Date(),
-          syncedBy: request.auth.uid,
-          syncedByName: callerData.name ?? 'Admin',
-          version: Date.now(),
-          totalFamilies: families.length,
-          totalStudents,
-        };
-
-        await db.collection('familySTSheetCache').doc(campCode).set(
-          JSON.parse(JSON.stringify(cacheData))
-        );
-
-        console.log(`✅ F캠프 동기화 완료: ${campCode} (${families.length}가족, 학생 ${totalStudents}명)`);
-        return { success: true, count: totalStudents, familyCount: families.length, lastSync: new Date().toISOString() };
-      } else {
-        // 일반 캠프: 학생 단위 파싱 → stSheetCache 컬렉션
-        console.log(`🔄 ST 시트 동기화 시작: ${campCode}`);
-        const students = await fetchAndParseCamp(campCode);
-
-        // undefined 필드 제거 (Firestore는 undefined 값을 허용하지 않음)
-        const sanitizedStudents = students.map(s =>
-          Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined))
-        );
-
-        await db.collection('stSheetCache').doc(campCode).set({
-          campCode,
-          data: sanitizedStudents,
-          lastSyncedAt: new Date().toISOString(),
-          syncedBy: request.auth.uid,
-          syncedByName: callerData.name ?? 'Admin',
-          version: Date.now(),
-          totalStudents: students.length,
-        });
-
-        console.log(`✅ 동기화 완료: ${campCode} (${students.length}명)`);
-        return { success: true, count: students.length, lastSync: new Date().toISOString() };
-      }
-    } catch (error) {
-      console.error(`❌ 동기화 실패 [${campCode}]:`, error);
-      const message = error instanceof Error ? error.message : '알 수 없는 오류';
-      throw new functionsV2.https.HttpsError('internal', `동기화 실패: ${message}`);
-    }
-  }
-);
-
 /**
  * 매일 자동으로 고아 소셜 계정 정리
  * Firestore authProviders에 없는 Firebase Auth 계정 삭제
@@ -1196,8 +764,9 @@ export const cleanupOrphanedSocialAccounts = functionsV2.https.onRequest(
     serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
   },
   async (req, res) => {
-    const authHeader = req.headers.authorization ?? '';
-    if (!authHeader.startsWith('Bearer ')) {
+    const invoker = await verifyInvoker(req as any);
+    if (!invoker.ok) {
+      console.warn('⛔ cleanupOrphanedSocialAccounts 비인가 호출:', invoker.reason);
       res.status(403).json({ error: '허가되지 않은 접근입니다.' });
       return;
     }
@@ -1288,3 +857,43 @@ export const cleanupOrphanedSocialAccounts = functionsV2.https.onRequest(
   });
 
 
+
+// ──────────────────────────────────────────────────────────────
+// 감사 로그: users 문서의 역할·상태·캠프 배정·이메일 변경 기록
+// 관리자 화면이 클라이언트에서 직접 updateDoc 하므로 서버 트리거로 모든 경로를 커버한다.
+// (민감값은 남기지 않음 — 변경된 필드명과 이전/이후 값만)
+// ──────────────────────────────────────────────────────────────
+export const auditUserChanges = firestoreV2.onDocumentUpdatedWithAuthContext(
+  { document: 'users/{userId}', region: 'asia-northeast3' },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    const changes: Array<{ action: string; field: string; from: unknown; to: unknown }> = [];
+    if (!same(before.role, after.role)) changes.push({ action: 'USER_ROLE_CHANGE', field: 'role', from: before.role ?? null, to: after.role ?? null });
+    if (!same(before.status, after.status)) changes.push({ action: 'USER_STATUS_CHANGE', field: 'status', from: before.status ?? null, to: after.status ?? null });
+    if (!same(before.jobCodeIds, after.jobCodeIds)) changes.push({ action: 'USER_CAMP_CHANGE', field: 'jobCodeIds', from: before.jobCodeIds ?? [], to: after.jobCodeIds ?? [] });
+    if (!same(before.email, after.email)) changes.push({ action: 'EMAIL_CHANGE', field: 'email', from: before.email ?? null, to: after.email ?? null });
+    if (changes.length === 0) return;
+
+    const actor = event.authType === 'system' || event.authType === 'service_account' ? 'server' : (event.authId ?? 'unknown');
+    const batch = db.batch();
+    for (const c of changes) {
+      batch.set(db.collection('auditLogs').doc(), {
+        action: c.action,
+        category: 'ACCOUNT',
+        source: 'trigger',
+        performedBy: actor,
+        authType: event.authType ?? null,
+        targetUserId: event.params.userId,
+        targetLabel: typeof after.name === 'string' ? after.name : null,
+        metadata: { field: c.field, from: c.from, to: c.to },
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+);

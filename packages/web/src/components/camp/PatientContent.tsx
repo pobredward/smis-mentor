@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
+import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
+import EscortSsn from '@/components/camp/patient/EscortSsn';
+import { isActiveEscortVisit } from '@smis-mentor/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -1250,6 +1253,18 @@ export default function PatientContent() {
         )}
       </div>
 
+      {/* 내가 인솔할 학생 (내원 인솔자로 지정된 경우) */}
+      {mainTab === '환자 현황' && (
+        <MyEscortPanel
+          records={records}
+          myName={userData?.name}
+          onOpen={(id) => {
+            setExpandedId(id);
+            setTimeout(() => document.getElementById(`patient-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+          }}
+        />
+      )}
+
       {/* 검색 (환자 현황 탭만) */}
       {mainTab === '환자 현황' && (
         <div className="bg-white border-b border-gray-100 px-4 py-2">
@@ -1793,7 +1808,7 @@ function PatientCard({
   const elapsedLabel = elapsed === 0 ? '오늘' : elapsed === 1 ? '어제' : `${elapsed}일째`;
 
   return (
-    <div className={
+    <div id={`patient-${record.id}`} className={
       grouped
         ? `relative overflow-hidden rounded-lg shadow-sm border-l-4 ${isMyRecord ? `bg-blue-50/70 border-y border-r border-gray-100 ${groupBorderColor}` : `bg-white border-y border-r border-gray-100 ${groupBorderColor}`}`
         : `relative bg-white rounded-xl border shadow-sm overflow-hidden ${isMyRecord ? 'border-blue-200' : 'border-gray-200'}`
@@ -4052,6 +4067,9 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
   onUpdateVisits: (visits: HospitalVisitEntry[]) => void;
 }) {
   const visits = record.hospitalVisits ?? [];
+  const { userData: viewer } = useAuth();
+  const viewerName = viewer?.name;
+  const viewerIsAdmin = viewer?.role === 'admin';
   const [showForm, setShowForm] = useState(false);
   const [editingIdx, setEditingIdx] = useState<number>(-1);
   const hospitalSubmitRef = useRef<(() => void) | null>(null);
@@ -4133,6 +4151,10 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
             {visit.departureTime && <span className="text-gray-500">출발: <b className="text-gray-700">{visit.departureTime}</b></span>}
             {visit.driver && <span className="text-gray-500">운전: <b className="text-gray-700">{visit.driver}</b></span>}
             {visit.escort && <span className="text-gray-500">인솔: <b className="text-gray-700">{visit.escort}</b></span>}
+            {/* 병원 접수용 주민번호 — 인솔자 본인은 자동 표시, 관리자는 보기 버튼 */}
+            {(isActiveEscortVisit(visit, viewerName) || viewerIsAdmin) && visit.hospitalStatus !== '필요없음' && (
+              <span className="text-gray-500 col-span-2">주민번호: <EscortSsn recordId={record.id} auto={isActiveEscortVisit(visit, viewerName)} /></span>
+            )}
             {visit.hospitalName && <span className="text-gray-500 col-span-2">병원: <b className="text-gray-700">{visit.hospitalName}</b></span>}
             {visit.parentReporter && <span className="text-gray-500">학부모 보고자: <b className="text-gray-700">{visit.parentReporter}</b></span>}
             {visit.parentReportMethod && <span className="text-gray-500">보고 방식: <b className="text-gray-700">{visit.parentReportMethod}</b></span>}

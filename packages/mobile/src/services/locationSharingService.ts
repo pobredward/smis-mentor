@@ -482,3 +482,39 @@ export const subscribeToLocationSharing = (
     }
   );
 };
+
+/**
+ * 모든 위치 공유 강제 중지 — 설정 화면용
+ * 위치 탭이 숨겨졌거나(권한·역할 변경, 캠프 전환) 앱이 공유 상태를 잃어버린 경우에도
+ * 이 기기의 포그라운드 감시·백그라운드 태스크를 멈추고, 본인의 모든 userLocations 문서를 isSharing=false 로 바꾼다.
+ */
+export const forceStopAllLocationSharing = async (db: Firestore, userId: string): Promise<number> => {
+  if (activeLocationSubscription) {
+    activeLocationSubscription.remove();
+    activeLocationSubscription = null;
+  }
+  await stopBackgroundLocationUpdates();
+  let updated = 0;
+  try {
+    const { getDocs } = await import('firebase/firestore');
+    const snap = await getDocs(query(collection(db, 'userLocations'), where('userId', '==', userId)));
+    await Promise.all(snap.docs.map(async (d) => {
+      if (d.data().isSharing) {
+        await updateDoc(d.ref, { isSharing: false, updatedAt: serverTimestamp() });
+        updated += 1;
+      }
+    }));
+  } catch (e) {
+    logger.warn('[Location] 위치 문서 일괄 중지 실패:', e);
+  }
+  return updated;
+};
+
+/** 이 기기에서 백그라운드 위치 태스크가 돌고 있는지 */
+export const isBackgroundLocationRunning = async (): Promise<boolean> => {
+  try {
+    return await Location.hasStartedLocationUpdatesAsync(BG_LOCATION_TASK);
+  } catch {
+    return false;
+  }
+};

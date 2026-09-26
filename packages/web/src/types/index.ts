@@ -41,6 +41,11 @@ export interface User {
   pushTokens?: Record<string, { platform?: string; addedAt?: Timestamp; lastUsed?: Timestamp }>;
   /** 알림 설정 (전체 on/off + 종류별) */
   notificationSettings?: NotificationSettings;
+  /** 커뮤니티에서 내가 차단한 사용자 uid 목록 */
+  blockedUsers?: string[];
+  /** 가입 시 동의한 약관·개인정보처리방침 버전 (CONSENT_VERSION) 과 시각 */
+  consentVersion?: string;
+  consentedAt?: any;
   /** 앱이 기록한 휴대폰 알림 권한 상태 */
   notificationPermission?: { status: 'granted' | 'denied' | 'undetermined'; platform?: string; updatedAt?: Timestamp };
   /** 모바일 앱을 마지막으로 연 시각 */
@@ -69,6 +74,10 @@ export interface User {
   feedback: string;
   gender?: 'M' | 'F';
   rrnFront?: string;
+  /** 주민번호 뒷자리 첫 숫자 (가입 시 수집 — 성별·세기 판단용). 뒷자리 전체는 rrnLastEncrypted */
+  rrnGenderDigit?: string;
+  /** 명찰용 영어 닉네임 (캠프 참가 정보) */
+  englishNickname?: string;
   rrnLast?: string;
   rrnLastEncrypted?: string;
   university?: string;

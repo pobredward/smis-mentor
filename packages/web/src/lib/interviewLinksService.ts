@@ -8,9 +8,10 @@ export interface InterviewLinks {
   updatedAt?: Date;
 }
 
+// 링크는 관리자 화면(면접 링크 관리)에서 입력 — 코드에 Zoom 링크·비밀번호를 두지 않는다
 const DEFAULT_LINKS: InterviewLinks = {
-  zoomUrl: 'https://us06web.zoom.us/j/85134823001?pwd=dUP232JtaSI6UrGIGxlf99urSQpgKq.1',
-  canvaUrl: 'https://www.canva.com/design/DAFvhaPK91Q/VhiME0MRIe-gqhlQlWyb9A/view?utm_content=DAFvhaPK91Q&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=haf1323a182',
+  zoomUrl: '',
+  canvaUrl: '',
 };
 
 /**
@@ -29,8 +30,7 @@ export const getInterviewLinks = async (): Promise<InterviewLinks> => {
         updatedAt: data.updatedAt?.toDate(),
       };
     } else {
-      // 문서가 없으면 기본값으로 초기화
-      await setInterviewLinks(DEFAULT_LINKS);
+      // 문서가 없으면 빈 값 (관리자가 면접 링크 관리에서 입력)
       return DEFAULT_LINKS;
     }
   } catch (error) {

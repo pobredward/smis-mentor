@@ -70,3 +70,20 @@ export function sameCampGroup(a?: string, b?: string): boolean {
   const y = normalizeCampGroup(b?.trim().toLowerCase());
   return !!x && !!y && x === y;
 }
+
+
+/**
+ * 학생·가족 주민번호를 스태프용으로 가림: "YYMMDD-G******" (성별 자리까지만)
+ * 결정(2026-09): 스태프(멘토·원어민)는 주민번호 뒷자리 첫 숫자까지만 본다. 원본은 관리자 전용 저장소에만.
+ */
+export function maskSsnForStaff(ssn?: string | null): string {
+  if (!ssn) return '';
+  const digits = String(ssn).replace(/[^0-9]/g, '');
+  if (digits.length < 7) return String(ssn).includes('-') ? String(ssn).split('-')[0] + '-*******' : '******';
+  return `${digits.slice(0, 6)}-${digits[6]}${'*'.repeat(Math.max(digits.length - 7, 6))}`;
+}
+
+/** 이미 가려진 값인지 */
+export function isMaskedSsn(ssn?: string | null): boolean {
+  return !!ssn && /\*/.test(ssn);
+}

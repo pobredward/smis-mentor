@@ -48,6 +48,7 @@ export default function ForeignSignUpStep1() {
   const [showDeletedAccountModal, setShowDeletedAccountModal] = useState(false);
   const [deletedUserId, setDeletedUserId] = useState<string>('');
   const [deletedUserName, setDeletedUserName] = useState<string>('');
+  const [deletedPhone, setDeletedPhone] = useState<string>('');
   
   const {
     register,
@@ -69,7 +70,7 @@ export default function ForeignSignUpStep1() {
     const loadingToast = toast.loading('Restoring your account...');
     
     try {
-      await reactivateUser(deletedUserId);
+      await reactivateUser(deletedUserId, { phoneNumber: deletedPhone, name: deletedUserName });
       toast.dismiss(loadingToast);
       toast.success(
         `Your account has been restored! Please check your email for password reset instructions.\nRedirecting to login page...`,
@@ -165,6 +166,7 @@ export default function ForeignSignUpStep1() {
           
           setDeletedUserId(userByPhoneWithDeleted.id || userByPhoneWithDeleted.userId || '');
           setDeletedUserName(inputFullName);
+          setDeletedPhone(fullPhone);
           setShowDeletedAccountModal(true);
           setIsLoading(false);
           return;

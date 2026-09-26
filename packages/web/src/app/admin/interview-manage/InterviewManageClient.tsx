@@ -1,5 +1,5 @@
 'use client';
-import { logger } from '@smis-mentor/shared';
+import { logger, fillRecruitmentTemplate } from '@smis-mentor/shared';
 
 import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, setDoc, DocumentData } from 'firebase/firestore';
@@ -180,20 +180,27 @@ export function InterviewManageClient() {
         where('interviewDate', '>=', fiveMonthsAgoTimestamp)
       );
       
-      // 면접일이 없는 경우를 위한 추가 쿼리
-      const qNoDate = query(
+      // 면접일이 없는 서류 합격자: where('interviewDate','==',null) 은 필드가 아예 없는 문서를 못 잡으므로
+      // 서류 합격자 전체를 받아 클라이언트에서 "면접일 없음 + 최근 5개월 내 갱신" 으로 거른다
+      const qAccepted = query(
         applicationsRef,
-        where('applicationStatus', '==', 'accepted'),
-        where('interviewDate', '==', null)
+        where('applicationStatus', '==', 'accepted')
       );
       
-      const [applicationsSnapshot, noDateSnapshot] = await Promise.all([
+      const [applicationsSnapshot, acceptedSnapshot] = await Promise.all([
         getDocs(q),
-        getDocs(qNoDate)
+        getDocs(qAccepted)
       ]);
+      const cutoffMs = fiveMonthsAgo.getTime();
+      const noDateDocs = acceptedSnapshot.docs.filter((d) => {
+        const data = d.data();
+        if (data.interviewDate) return false;
+        const touched = (data.updatedAt ?? data.createdAt ?? data.applicationDate)?.toMillis?.() ?? 0;
+        return touched >= cutoffMs;
+      });
       
       // 두 결과를 합침
-      const allDocs = [...applicationsSnapshot.docs, ...noDateSnapshot.docs];
+      const allDocs = [...applicationsSnapshot.docs, ...noDateDocs];
       
       // 사용자 ID를 모아서 한 번에 조회
       const userIds = [...new Set(allDocs.map(doc => doc.data().refUserId))];
@@ -389,11 +396,12 @@ export function InterviewManageClient() {
         setSelectedApplication(prev => {
           if (!prev) return prev;
           
+          // 지원자별로 저장된 면접 정보가 있으면 우선 (공고 기본값으로 덮어쓰지 않음)
           return {
             ...prev,
-            interviewBaseLink: jobBoardData.interviewBaseLink || '',
-            interviewBaseDuration: jobBoardData.interviewBaseDuration || 30,
-            interviewBaseNotes: jobBoardData.interviewBaseNotes || ''
+            interviewBaseLink: prev.interviewBaseLink || jobBoardData.interviewBaseLink || '',
+            interviewBaseDuration: prev.interviewBaseDuration || jobBoardData.interviewBaseDuration || 30,
+            interviewBaseNotes: prev.interviewBaseNotes || jobBoardData.interviewBaseNotes || ''
           };
         });
       }
@@ -1337,7 +1345,15 @@ export function InterviewManageClient() {
     try {
       setIsLoadingMessage(true);
       
-      const processedMessage = message.replace(/\{이름\}/g, selectedApplication.user?.name || '');
+      // 모든 채용 변수 치환 ({이름}·{면접일자}·{면접시간}·{면접링크}·{면접소요시간}·{면접참고사항}·{채용공고명})
+      const processedMessage = fillRecruitmentTemplate(message, {
+        name: selectedApplication.user?.name || '',
+        jobBoardTitle: (selectedApplication as any).jobBoardTitle || '',
+        interviewDate: (selectedApplication as any).interviewDate?.toDate?.() ?? null,
+        interviewLink: (selectedApplication as any).interviewBaseLink || '',
+        interviewDurationMin: (selectedApplication as any).interviewBaseDuration || '',
+        interviewNotes: (selectedApplication as any).interviewBaseNotes || '',
+      });
       
       const result = await authenticatedPost<any>('/api/send-sms', {
         phoneNumber: selectedApplication.user?.phoneNumber,

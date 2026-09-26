@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { signIn, resetPassword, getUserByEmail, getUserByPhone, getUserByForeignName, updateUser, getUserById, signInWithCustomTokenFromFunction, getUserBySocialProvider } from '@/lib/firebaseService';
+import { signIn, resetPassword, getUserByEmail, getUserByPhone, getUserByForeignName, updateUser, getUserById, signInWithCustomTokenFromFunction, getUserBySocialProvider, buildSocialProof, getFirebaseProof } from '@/lib/firebaseService';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -33,12 +33,32 @@ import { handleNaverAuthError } from '@/lib/naverAuthService';
 import { handleAppleAuthError } from '@/lib/appleAuthService';
 import { auth } from '@/lib/firebase';
 
+/** 원어민 가입 페이지는 URL 파라미터로 이동하므로, 네이버/카카오 access token 은 URL 대신 세션 스토리지에 보관 */
+function stashSocialAccessToken(socialData: SocialUserData) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (socialData.accessToken) {
+      sessionStorage.setItem('social_access_token', JSON.stringify({ providerId: socialData.providerId, accessToken: socialData.accessToken }));
+    } else {
+      sessionStorage.removeItem('social_access_token');
+    }
+  } catch { /* ignore */ }
+}
+
 const loginSchema = z.object({
   email: z.string().email('유효한 이메일 주소를 입력해주세요.'),
   password: z.string().min(6, '비밀번호는 최소 6자 이상이어야 합니다.'),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
+
+/** 로그인 후 이동 경로 — 같은 사이트의 상대 경로만 허용 (//evil.com, https://…, javascript: 차단) */
+function safeRedirect(raw: string | null): string | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/\\') || /[\u0000-\u001f]/.test(v)) return null;
+  return v;
+}
 
 export function SignInClient() {
   const router = useRouter();
@@ -72,10 +92,11 @@ export function SignInClient() {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     try {
-      await signIn(data.email, data.password);
+      const credential = await signIn(data.email, data.password);
       
-      // 사용자 정보 조회
-      const userRecord = await getUserByEmail(data.email);
+      // 사용자 정보 조회 (본인 문서 직접 읽기)
+      const signedInUid = (credential as any)?.user?.uid ?? auth.currentUser?.uid;
+      const userRecord = signedInUid ? await getUserById(signedInUid) : await getUserByEmail(data.email);
       
       // 탈퇴/삭제된 계정 차단
       if (userRecord?.status === 'inactive') {
@@ -109,7 +130,7 @@ export function SignInClient() {
         
         // URL에서 redirect 매개변수 확인
         const params = new URLSearchParams(window.location.search);
-        const redirectTo = params.get('redirect');
+        const redirectTo = safeRedirect(params.get('redirect'));
         
         // 지연 후 리디렉션
         setTimeout(() => {
@@ -202,31 +223,24 @@ export function SignInClient() {
           if (currentUser?.uid !== targetUserId) {
             logger.info('⚠️ Firebase Auth 세션이 다름 → 원래 계정으로 재로그인');
             
-            const hasPasswordProvider = result.user?.authProviders?.some(
-              (p: any) => p.providerId === 'password'
-            );
-            const firebaseAuthPassword = (result.user as any)._firebaseAuthPassword;
-            
-            if (hasPasswordProvider && firebaseAuthPassword) {
-              logger.info('🔑 비밀번호로 재로그인');
-              await signIn(result.user.email, firebaseAuthPassword);
-            } else {
-              logger.info('🔑 Custom Token으로 재로그인');
-              toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
-              try {
-                await signInWithCustomTokenFromFunction(
-                  result.user.userId,
-                  result.user.email,
-                  targetUserId
-                );
-                toast.dismiss('custom-token-loading');
-              } catch (customTokenError) {
-                toast.dismiss('custom-token-loading');
-                logger.error('❌ Custom Token 로그인 실패:', customTokenError);
-                toast.error('로그인에 실패했습니다. 관리자에게 문의하세요.', { duration: 6000 });
-                setIsLoading(false);
-                return;
-              }
+            // 팝업 세션(구글/애플)의 ID token 이 신원 증명 → 서버가 authProviders/이메일로 소유자 검증 후 발급
+            // 팝업으로 생긴 임시 Auth 계정은 서버에서 함께 정리 (users 문서가 없는 경우에만)
+            logger.info('🔑 Custom Token으로 재로그인');
+            toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
+            try {
+              const proof = await getFirebaseProof();
+              await signInWithCustomTokenFromFunction(result.user.userId, proof, {
+                ...(currentUser && proof.kind === 'firebase' && {
+                  deleteAuthUid: { uid: currentUser.uid, idToken: proof.idToken },
+                }),
+              });
+              toast.dismiss('custom-token-loading');
+            } catch (customTokenError) {
+              toast.dismiss('custom-token-loading');
+              logger.error('❌ Custom Token 로그인 실패:', customTokenError);
+              toast.error('로그인에 실패했습니다. 관리자에게 문의하세요.', { duration: 6000 });
+              setIsLoading(false);
+              return;
             }
             
             logger.info('✅ Firebase Auth 세션 복원 완료');
@@ -244,48 +258,24 @@ export function SignInClient() {
           }
           
           try {
-            // 🔑 Firestore에서 Firebase Auth 로그인 비밀번호 가져오기
-            const firebaseAuthPassword = (result.user as any)._firebaseAuthPassword;
-            
-            if (!firebaseAuthPassword) {
-              logger.info('ℹ️ _firebaseAuthPassword 없음 → Custom Token 방식 사용');
-              
-              // ⏳ Custom Token 생성 중 안내
-              toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
-              
-              // Fallback: Custom Token 방식 (기존 사용자 또는 비밀번호 있는 사용자)
-              try {
-                const existingFirebaseUid = result.user.userId;
-                logger.info('🔑 Custom Token 생성 시작:', {
-                  userId: existingFirebaseUid,
-                  email: result.user.email,
-                });
-                
-                await signInWithCustomTokenFromFunction(
-                  result.user.userId,
-                  result.user.email,
-                  existingFirebaseUid
-                );
-                
-                logger.info('✅ Custom Token 로그인 완료');
-                toast.dismiss('custom-token-loading'); // ✅ 로딩 토스트 제거
-              } catch (customTokenError) {
-                logger.error('❌ Custom Token 로그인 실패:', customTokenError);
-                toast.dismiss('custom-token-loading'); // ❌ 로딩 토스트 제거
-                toast.error(
-                  '로그인에 실패했습니다.\n' +
-                  'Custom Token 생성 오류가 발생했습니다.\n' +
-                  '관리자에게 문의하세요.',
-                  { duration: 6000 }
-                );
-                setIsLoading(false);
-                return;
-              }
-            } else {
-              // Firebase Auth 비밀번호로 로그인 (소셜 전용 계정)
-              logger.info('🔑 _firebaseAuthPassword로 로그인 시도');
-              await signIn(result.user.email, firebaseAuthPassword);
-              logger.info('✅ _firebaseAuthPassword 로그인 완료');
+            // 네이버/카카오 access token 을 서버가 제공자 API로 재검증한 뒤 Custom Token 발급
+            toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
+            try {
+              const proof = await buildSocialProof(data);
+              await signInWithCustomTokenFromFunction(result.user.userId, proof);
+              logger.info('✅ Custom Token 로그인 완료');
+              toast.dismiss('custom-token-loading');
+            } catch (customTokenError) {
+              logger.error('❌ Custom Token 로그인 실패:', customTokenError);
+              toast.dismiss('custom-token-loading');
+              toast.error(
+                '로그인에 실패했습니다.\n' +
+                ((customTokenError as Error)?.message || 'Custom Token 생성 오류가 발생했습니다.') + '\n' +
+                '문제가 계속되면 관리자에게 문의하세요.',
+                { duration: 6000 }
+              );
+              setIsLoading(false);
+              return;
             }
           } catch (error) {
             logger.error('❌ Firebase Auth 로그인 실패:', error);
@@ -298,7 +288,7 @@ export function SignInClient() {
         toast.success('로그인에 성공했습니다!');
         setTimeout(() => {
           const params = new URLSearchParams(window.location.search);
-          const redirectTo = params.get('redirect');
+          const redirectTo = safeRedirect(params.get('redirect'));
           router.push(redirectTo || '/');
         }, 1000);
       } else if (result.action === 'LINK_ACTIVE') {
@@ -516,44 +506,29 @@ export function SignInClient() {
                 const currentUser = auth.currentUser;
                 const targetUserId = existingUser.userId;
 
-                // 구글/애플은 팝업 세션이 있을 수 있으므로 UID 비교 후 필요 시 복원
-                if (socialData.providerId === 'google.com' || socialData.providerId === 'apple.com') {
-                  if (currentUser?.uid !== targetUserId) {
-                    const firebaseAuthPassword = (existingUser as any)._firebaseAuthPassword;
-                    if (firebaseAuthPassword) {
-                      await signIn(existingUser.email, firebaseAuthPassword);
-                    } else {
-                      toast.loading('로그인 인증 중...', { id: 'foreign-relogin-loading' });
-                      try {
-                        await signInWithCustomTokenFromFunction(targetUserId, existingUser.email, targetUserId);
-                        toast.dismiss('foreign-relogin-loading');
-                      } catch (err) {
-                        toast.dismiss('foreign-relogin-loading');
-                        throw err;
-                      }
-                    }
-                  }
-                } else {
-                  // 네이버/카카오: Firebase Auth 계정이 없으므로 비밀번호 또는 Custom Token으로 로그인
-                  const firebaseAuthPassword = (existingUser as any)._firebaseAuthPassword;
-                  if (firebaseAuthPassword) {
-                    await signIn(existingUser.email, firebaseAuthPassword);
-                  } else {
-                    toast.loading('로그인 인증 중...', { id: 'foreign-relogin-loading' });
-                    try {
-                      await signInWithCustomTokenFromFunction(targetUserId, existingUser.email, targetUserId);
-                      toast.dismiss('foreign-relogin-loading');
-                    } catch (err) {
-                      toast.dismiss('foreign-relogin-loading');
-                      throw err;
-                    }
+                // 구글/애플은 팝업 세션 UID 가 다르면 복원, 네이버/카카오는 항상 Custom Token
+                const needsCustomToken =
+                  socialData.providerId === 'naver' || socialData.providerId === 'kakao' || currentUser?.uid !== targetUserId;
+                if (needsCustomToken) {
+                  toast.loading('로그인 인증 중...', { id: 'foreign-relogin-loading' });
+                  try {
+                    const proof = await buildSocialProof(socialData);
+                    await signInWithCustomTokenFromFunction(targetUserId, proof, {
+                      ...(currentUser && currentUser.uid !== targetUserId && proof.kind === 'firebase' && {
+                        deleteAuthUid: { uid: currentUser.uid, idToken: proof.idToken },
+                      }),
+                    });
+                    toast.dismiss('foreign-relogin-loading');
+                  } catch (err) {
+                    toast.dismiss('foreign-relogin-loading');
+                    throw err;
                   }
                 }
 
                 toast.success('Welcome back! Logging you in...');
                 setTimeout(() => {
                   const params = new URLSearchParams(window.location.search);
-                  const redirectTo = params.get('redirect');
+                  const redirectTo = safeRedirect(params.get('redirect'));
                   router.push(redirectTo || '/');
                 }, 1000);
               } catch (loginError) {
@@ -570,6 +545,7 @@ export function SignInClient() {
             logger.info('✅ foreign_temp 계정 발견 - 활성화 진행');
             toast.success('Temporary account found. Please complete your registration.');
             const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
+            stashSocialAccessToken(socialData);
             router.push(
               `/sign-up/foreign/account?` +
               `firstName=${encodeURIComponent(data.firstName)}&` +
@@ -611,6 +587,7 @@ export function SignInClient() {
           toast.success(`Welcome ${data.firstName}! Please complete your registration.`);
           setShowForeignPhoneModal(false);
           const provider = socialData.providerId.replace('.com', ''); // 'google' or 'naver'
+          stashSocialAccessToken(socialData);
           router.push(
             `/sign-up/foreign/account?` +
             `firstName=${encodeURIComponent(data.firstName)}&` +
@@ -709,6 +686,7 @@ export function SignInClient() {
         
         if (role === 'foreign_temp') {
           // 소셜 로그인이므로 foreign/account로 이동 (이름/전화 params는 없지만 tempUserId로 Firestore 조회)
+          stashSocialAccessToken(socialData);
           router.push(`/sign-up/foreign/account?socialSignUp=true&tempUserId=${result.user.userId}&socialProvider=${provider}&socialEmail=${encodeURIComponent(socialData.email || '')}&socialProviderUid=${encodeURIComponent(socialData.providerUid || '')}&socialDisplayName=${encodeURIComponent(socialData.name || '')}&socialPhotoURL=${encodeURIComponent(socialData.photoURL || '')}`);
         } else {
           // 소셜 로그인이므로 education 페이지로 직접 이동 (account 건너뛰기)
@@ -728,6 +706,7 @@ export function SignInClient() {
           socialProviderUid: socialData.providerUid,
           socialDisplayName: socialData.name,
           socialPhotoURL: socialData.photoURL,
+          socialAccessToken: socialData.accessToken, // 네이버/카카오 가입 시 서버 검증용
         });
           router.push('/sign-up/education');
         }
@@ -751,6 +730,7 @@ export function SignInClient() {
             socialProviderUid: socialData.providerUid, // 네이버 고유 ID
             socialDisplayName: socialData.name,
             socialPhotoURL: socialData.photoURL,
+            socialAccessToken: socialData.accessToken, // 네이버/카카오 가입 시 서버 검증용
           });
         
         toast.success('신규 가입을 진행합니다.');

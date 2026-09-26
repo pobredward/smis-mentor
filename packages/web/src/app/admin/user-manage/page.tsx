@@ -414,6 +414,13 @@ export default function UserManage() {
         if (selectedUser.jobMotivation === undefined) cleanedData.jobMotivation = '';
       }
       
+      // 이메일은 Auth 와 함께 바뀌어야 하므로 서버로 (문서만 바꾸면 그 사용자가 로그인할 수 없게 된다)
+      const newEmail = typeof cleanedData.email === 'string' ? cleanedData.email.trim() : '';
+      delete cleanedData.email;
+      if (newEmail && newEmail.toLowerCase() !== (selectedUser.email || '').toLowerCase()) {
+        await authenticatedPost('/api/user/change-email', { email: newEmail, targetUserId: selectedUser.userId });
+      }
+
       await updateUser(selectedUser.userId, cleanedData);
 
       // rrnFront 또는 rrnLast가 변경된 경우 암호화 API를 통해 저장

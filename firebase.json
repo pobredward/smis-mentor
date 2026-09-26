@@ -7,7 +7,7 @@
     {
       "source": "functions",
       "codebase": "default",
-      "runtime": "nodejs20",
+      "runtime": "nodejs22",
       "serviceAccount": "smis-mentor@appspot.gserviceaccount.com",
       "predeploy": [
         "npm run build --workspace=functions"

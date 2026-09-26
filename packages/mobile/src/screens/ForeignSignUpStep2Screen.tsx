@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getUserByEmail } from '../services/authService';
+import { ConsentCheckbox } from '../components/ConsentCheckbox';
 
 interface ForeignSignUpStep2ScreenProps {
   firstName: string;
@@ -44,6 +45,7 @@ export function ForeignSignUpStep2Screen({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [emailExists, setEmailExists] = useState(false);
+  const [agreedConsent, setAgreedConsent] = useState(false);
 
   const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
 
@@ -94,6 +96,11 @@ export function ForeignSignUpStep2Screen({
 
     if (password !== confirmPassword) {
       Alert.alert('Input Error', 'Passwords do not match.');
+      return;
+    }
+
+    if (!agreedConsent) {
+      Alert.alert('Consent Required', 'Please agree to the Terms of Service and Privacy Policy.');
       return;
     }
 
@@ -217,6 +224,8 @@ export function ForeignSignUpStep2Screen({
                 <Text style={styles.infoItem}>• Alien Registration Card (if applicable)</Text>
               </View>
             </View>
+
+            <ConsentCheckbox checked={agreedConsent} onChange={setAgreedConsent} english disabled={isLoading} />
 
             <View style={styles.buttonGroup}>
               <TouchableOpacity

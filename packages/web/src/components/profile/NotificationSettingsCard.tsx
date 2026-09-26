@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   visibleNotificationTypes,
   notificationMasterOn,
+  notificationMasterTogglePatch,
   NOTIFICATION_GROUP_LABELS,
   type NotificationKey,
   type NotificationSettings,
@@ -47,11 +48,14 @@ export default function NotificationSettingsCard() {
 
   const toggle = async (key: NotificationKey | 'generalNotifications') => {
     if (!uid || saving) return;
-    const next = settings[key] === false; // 없으면 켜짐 → 끈다
+    // 전체 스위치: 켤 때는 보이는 종류도 모두 켠다
+    const patch: NotificationSettings = key === 'generalNotifications'
+      ? notificationMasterTogglePatch(settings, groups.flatMap(g => g.types.map(t => t.key)))
+      : { [key]: settings[key] === false }; // 없으면 켜짐 → 끈다
     setSaving(key);
     setError('');
     try {
-      await setDoc(doc(db, 'users', uid), { notificationSettings: { [key]: next } }, { merge: true });
+      await setDoc(doc(db, 'users', uid), { notificationSettings: patch }, { merge: true });
     } catch (e) {
       console.error('알림 설정 저장 오류:', e);
       setError(isForeign ? 'Failed to save. Please try again.' : '저장하지 못했습니다. 다시 시도해주세요.');

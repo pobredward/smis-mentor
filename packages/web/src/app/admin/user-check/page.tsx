@@ -3,6 +3,7 @@ import { logger } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import CampRosterTable from '@/components/admin/CampRosterTable';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getAllJobCodes, getUsersByJobCodeId } from '@/lib/firebaseService';
@@ -1020,6 +1021,13 @@ export default function UserCheck() {
             </div>
           );
         })()}
+
+        {/* 캠프 인원 전체 정보 표 (급여·송금·여권 등) */}
+        <CampRosterTable
+          jobCodeId={jobCodes.find(c => c.generation === selectedGeneration && c.code === selectedCode)?.id}
+          campCode={selectedCode}
+          role={selectedRole}
+        />
 
       </div>
     </Layout>

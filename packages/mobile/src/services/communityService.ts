@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   getDocs,
@@ -224,8 +225,14 @@ export async function createPost(
     imageUrls.push(url);
   }
 
-  await addDoc(collection(db, 'posts'), {
-    ...input,
+  // 익명 글은 실명·프로필을 문서에 남기지 않는다 (작성자 식별은 authorId 로만, 규칙상 스태프 전체가 읽을 수 있으므로)
+  const anonymized = input.isAnonymous
+    ? { ...input, authorName: '익명', authorProfileImage: null, authorJobCodeLabel: null }
+    : input;
+
+  // 이미지 경로에 쓴 임시 ID 를 실제 문서 ID 로 사용 (기존 addDoc 은 다른 ID 를 만들어 반환값이 어긋났음)
+  await setDoc(tempRef, {
+    ...anonymized,
     imageUrls,
     likeCount: 0,
     likedBy: [],
@@ -325,8 +332,11 @@ export async function createComment(
   input: CreateCommentInput
 ): Promise<string> {
   const commentsRef = collection(db, 'posts', postId, 'comments');
+  const anonymized = input.isAnonymous
+    ? { ...input, authorName: '익명', authorProfileImage: null }
+    : input;
   const docRef = await addDoc(commentsRef, {
-    ...input,
+    ...anonymized,
     deletedAt: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -371,4 +381,77 @@ export async function deleteComment(
   await updateDoc(doc(db, 'posts', postId), {
     commentCount: increment(-1),
   });
+}
+
+// ─── 신고 · 차단 (앱스토어 UGC 정책: 신고·차단 수단 필수) ─────────────────────
+
+export type ReportTargetType = 'post' | 'comment';
+export type ReportReason = 'spam' | 'abuse' | 'sexual' | 'privacy' | 'other';
+
+export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  spam: '스팸·광고',
+  abuse: '욕설·비방·혐오',
+  sexual: '성적·부적절한 내용',
+  privacy: '개인정보 노출',
+  other: '기타',
+};
+
+/**
+ * 게시글/댓글 신고 — reports 컬렉션에 기록 (관리자만 열람)
+ * 같은 사용자가 같은 대상을 여러 번 신고해도 문서 1개만 남도록 결정적 ID 사용
+ */
+export async function reportContent(params: {
+  targetType: ReportTargetType;
+  postId: string;
+  commentId?: string;
+  targetAuthorId: string;
+  reporterId: string;
+  reason: ReportReason;
+  detail?: string;
+  contentSnapshot?: string;
+}): Promise<void> {
+  const targetId = params.targetType === 'comment' ? `${params.postId}_${params.commentId}` : params.postId;
+  const reportId = `${params.targetType}_${targetId}_${params.reporterId}`;
+  await setDoc(doc(db, 'reports', reportId), {
+    targetType: params.targetType,
+    postId: params.postId,
+    commentId: params.commentId ?? null,
+    targetAuthorId: params.targetAuthorId,
+    reporterId: params.reporterId,
+    reason: params.reason,
+    detail: (params.detail ?? '').slice(0, 500),
+    contentSnapshot: (params.contentSnapshot ?? '').slice(0, 300),
+    status: 'open',
+    createdAt: serverTimestamp(),
+  });
+}
+
+/** 사용자 차단 — 본인 users 문서의 blockedUsers 에 추가 (차단한 사용자의 글·댓글은 내 화면에서 숨김) */
+export async function blockUser(myUserId: string, targetUserId: string): Promise<void> {
+  if (!targetUserId || targetUserId === myUserId) return;
+  await updateDoc(doc(db, 'users', myUserId), {
+    blockedUsers: arrayUnion(targetUserId),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function unblockUser(myUserId: string, targetUserId: string): Promise<void> {
+  await updateDoc(doc(db, 'users', myUserId), {
+    blockedUsers: arrayRemove(targetUserId),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** 차단 사용자 글 숨김 */
+export function filterBlockedPosts(posts: CommunityPost[], blockedUsers: string[] | undefined): CommunityPost[] {
+  if (!blockedUsers || blockedUsers.length === 0) return posts;
+  const set = new Set(blockedUsers);
+  return posts.filter((p) => !set.has(p.authorId));
+}
+
+/** 차단 사용자 댓글은 '삭제된 댓글' 처럼 내용만 가린다 (대댓글 구조 유지) */
+export function maskBlockedComments(comments: CommunityComment[], blockedUsers: string[] | undefined): CommunityComment[] {
+  if (!blockedUsers || blockedUsers.length === 0) return comments;
+  const set = new Set(blockedUsers);
+  return comments.map((c) => (set.has(c.authorId) ? { ...c, content: '', deletedAt: c.deletedAt ?? (c.createdAt as any) } : c));
 }

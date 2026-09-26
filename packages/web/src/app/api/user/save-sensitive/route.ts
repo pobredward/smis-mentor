@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
 
     await db.collection('users').doc(userId).update({
       rrnFront,
+      rrnGenderDigit: rrnLast.charAt(0),
       rrnLastEncrypted,
       // 평문 rrnLast 필드 제거 (마이그레이션 시 기존 값 삭제)
       rrnLast: null,

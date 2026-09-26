@@ -560,8 +560,9 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
   results.forEach(({ student, campCode, isFamily, familyUnit }) => {
     // ssn은 하이픈 제거 후 정규화 (980619-1234567 == 9806191234567)
     const normalizedSsn = student.ssn ? student.ssn.replace(/-/g, '') : null;
+    // 캐시의 주민번호는 뒷자리가 가려져 있으므로("YYMMDD-G******") 생년월일·성별이 같은 다른 학생과 섞이지 않게 이름을 함께 쓴다
     const key = normalizedSsn
-      ? `ssn:${normalizedSsn}`
+      ? (normalizedSsn.includes('*') ? `ssn:${normalizedSsn}:name:${student.name}` : `ssn:${normalizedSsn}`)
       : `name:${student.name}:phone:${(student.parentPhone || '').replace(/-/g, '')}`;
 
     if (!map.has(key)) {

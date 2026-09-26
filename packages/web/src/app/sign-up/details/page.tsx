@@ -8,10 +8,9 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import DaumPostcode, { Address } from 'react-daum-postcode';
 import toast from 'react-hot-toast';
-import { getUserByPhone, getUserByEmailIncludeInactive, updateUser, createUser, signUp } from '@/lib/firebaseService';
+import { getUserByPhone, signUp, signUpWithSocialToken, completeSignupViaApi } from '@/lib/firebaseService';
 import { getUserInfoFromRRN } from '@/utils/userUtils';
 import { signupStorage, SignUpData } from '@/utils/signupStorage';
-import { authenticatedPost } from '@/lib/apiClient';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
@@ -25,7 +24,8 @@ const detailsSchema = z.object({
   address: z.string().min(1, '주소를 입력해주세요.'),
   addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
   rrnFront: z.string().length(6, '주민번호 앞자리 6자리를 입력해주세요.'),
-  rrnLast: z.string().length(7, '주민번호 뒷자리 7자리를 입력해주세요.'),
+  // 가입 시에는 생년월일 + 뒷자리 첫 숫자(성별·세기)만 받는다. 뒷자리 전체는 캠프 배정 후 '캠프 참가 정보'에서 입력
+  rrnLast: z.string().regex(/^[1-8]$/, '주민번호 뒷자리 첫 번째 숫자를 입력해주세요.'),
   gender: z.enum(['M', 'F'], {
     errorMap: () => ({ message: '성별을 선택해주세요.' }),
   }),
@@ -84,7 +84,7 @@ export default function SignUpDetails() {
 
   // 주민번호가 변경될 때마다 성별 자동 설정
   useEffect(() => {
-    if (rrnFront?.length === 6 && rrnLast?.length === 7) {
+    if (rrnFront?.length === 6 && rrnLast?.length === 1) {
       const { gender } = getUserInfoFromRRN(rrnFront, rrnLast);
       if (gender) {
         setValue('gender', gender);
@@ -106,7 +106,7 @@ export default function SignUpDetails() {
 
     setIsLoading(true);
     try {
-      const { name, phoneNumber, email, password, university, grade, isOnLeave, major1, major2, socialSignUp, tempUserId, socialProvider, firebaseAuthUid, socialProviderUid, socialDisplayName, socialPhotoURL } = signupData;
+      const { name, phoneNumber, email, password, university, grade, isOnLeave, major1, major2, socialSignUp, tempUserId, socialProvider, firebaseAuthUid, socialProviderUid, socialDisplayName, socialPhotoURL, socialAccessToken } = signupData;
 
       logger.info('🔍 회원가입 데이터 확인:', {
         socialSignUp,
@@ -169,6 +169,20 @@ export default function SignUpDetails() {
       const gradeNum = typeof grade === 'number' ? grade : parseInt(grade as string, 10);
       // isOnLeave 처리: null, true, false 모두 지원
       const isOnLeaveVal = isOnLeave === null ? null : Boolean(isOnLeave);
+
+      // 서버(/api/auth/complete-signup)로 보낼 프로필 — role·캠프 배정 등 권한 필드는 서버가 정한다
+      const buildProfile = async () => {
+        const geo = await updateGeocodeIfAddressChanged(undefined, data.address);
+        return {
+          name, phoneNumber,
+          address: data.address, addressDetail: data.addressDetail,
+          gender: data.gender, age, agreedPersonal: data.agreedPersonal,
+          referralPath: referralPathValue, referrerName: data.referrerName ?? '',
+          university, grade: gradeNum, isOnLeave: isOnLeaveVal, major1, major2: major2 || '',
+          rrnFront: data.rrnFront, rrnGenderDigit: data.rrnLast,
+          ...(geo.geocode && { geocode: { lat: geo.geocode.lat, lng: geo.geocode.lng } }),
+        };
+      };
       
       if (existingUser && existingUser.status === 'temp') {
         const now = Timestamp.now();
@@ -208,32 +222,30 @@ export default function SignUpDetails() {
             newUserId = currentUser.uid;
             logger.info('✅ 구글/애플 temp 활성화 - Auth UID 재사용:', newUserId);
           } else {
-            // 네이버/카카오: Firebase Auth 계정이 없으므로 임시 비밀번호로 신규 생성
-            // (합성 firebaseAuthUid는 Custom Token으로 사용 불가)
-            logger.info('🆕 네이버/카카오 temp 활성화 - Firebase Auth 신규 생성');
-            const tempPw = `${email}_${Date.now()}_${Math.random().toString(36)}`;
+            // 네이버/카카오: 서버가 access token 을 검증한 뒤 Auth 사용자를 만들고 Custom Token 발급
+            // (임시 비밀번호를 Firestore 에 평문 저장하던 방식은 폐기)
+            logger.info('🆕 네이버/카카오 temp 활성화 - 서버 검증 후 Firebase 세션 확보');
+            if (!socialAccessToken || (provider !== 'naver' && provider !== 'kakao')) {
+              toast.error('소셜 인증 정보가 만료되었습니다. 다시 로그인해주세요.');
+              signupStorage.clear();
+              router.push('/sign-in');
+              setIsLoading(false);
+              return;
+            }
             try {
-              const naverCred = await signUp(email, tempPw);
-              newUserId = naverCred.user.uid;
-              currentUser = naverCred.user;
-              logger.info('✅ 네이버/카카오 temp 활성화 - Auth 계정 생성:', newUserId);
-              // Firestore에 저장할 임시 비밀번호 (재로그인용)
-              userCredential = {
-                user: naverCred.user,
-                authProviders: [{
-                  providerId: normalizedProviderId,
-                  uid: socialProviderUid || newUserId,
-                  email,
-                  linkedAt: now,
-                  displayName: socialDisplayName || name,
-                  ...(socialPhotoURL && { photoURL: socialPhotoURL }),
-                }],
-                primaryAuthMethod: 'social',
-                _firebaseAuthPassword: tempPw,
-              };
+              const socialCred = await signUpWithSocialToken({ kind: provider as 'naver' | 'kakao', accessToken: socialAccessToken });
+              newUserId = socialCred.user.uid;
+              currentUser = socialCred.user;
+              logger.info('✅ 네이버/카카오 temp 활성화 - Firebase 세션 확보:', newUserId);
             } catch (authError: any) {
-              if (authError.code === 'auth/email-already-in-use') {
+              if (authError?.code === 'EMAIL_IN_USE' || authError?.status === 409) {
                 toast.error('이 이메일은 이미 사용 중입니다. 로그인 페이지로 이동합니다.');
+                router.push('/sign-in');
+                return;
+              }
+              if (authError?.status === 401) {
+                toast.error('소셜 인증이 만료되었습니다. 다시 로그인해주세요.');
+                signupStorage.clear();
                 router.push('/sign-in');
                 return;
               }
@@ -276,77 +288,18 @@ export default function SignUpDetails() {
           userCredential.primaryAuthMethod = 'password';
         }
 
-        // ✅ 기존 temp 문서 데이터 복사 (jobExperiences 등)
-        const tempData = { ...existingUser };
-        const oldTempUserId = existingUser.userId;
-
-        // ✅ 주소 좌표 생성
-        const geocodeUpdate = await updateGeocodeIfAddressChanged(
-          undefined, // 회원가입 시에는 이전 주소가 없음
-          data.address
-        );
-
-        // ✅ 새 Auth UID로 Firestore 문서 생성
-        await createUser({
-          name,
-          phoneNumber,
-          email: email.toLowerCase(),
-          password: '',
-          address: data.address,
-          addressDetail: data.addressDetail,
-          gender: data.gender,
-          age,
-          agreedPersonal: data.agreedPersonal,
-          referralPath: referralPathValue,
-          referrerName: data.referrerName ?? '',
-          selfIntroduction: tempData.selfIntroduction || '',
-          jobMotivation: tempData.jobMotivation || '',
-          feedback: tempData.feedback || '',
-          profileImage: tempData.profileImage || '',
-          status: 'active',
-          role: finalRole,
-          isEmailVerified: false,
-          jobExperiences: tempData.jobExperiences || [],
-          jobCodeIds: (tempData.jobExperiences || []).map((exp: { id: string }) => exp.id),
-          lastLoginAt: now,
-          university,
-          grade: gradeNum,
-          isOnLeave: isOnLeaveVal,
-          major1,
-          major2: major2 || '',
-          agreedTerms: true,
-          isPhoneVerified: true,
-          isProfileCompleted: false,
-          isTermsAgreed: true,
-          isPersonalAgreed: true,
-          isAddressVerified: true,
-          isProfileImageUploaded: false,
-          createdAt: tempData.createdAt || now,
-          updatedAt: now,
-          ...(socialSignUp && {
-            authProviders: userCredential.authProviders,
-            primaryAuthMethod: userCredential.primaryAuthMethod,
-            // 네이버/카카오 temp 활성화: 재로그인용 임시 비밀번호 저장
-            ...(userCredential._firebaseAuthPassword && {
-              _firebaseAuthPassword: userCredential._firebaseAuthPassword,
-            }),
-          }),
-          ...geocodeUpdate, // 좌표 정보 추가
-        }, newUserId);
-
-        // ✅ 주민등록번호 암호화 저장 (서버 API Route를 통해 처리)
-        await authenticatedPost('/api/user/save-sensitive', {
-          userId: newUserId,
-          rrnFront: data.rrnFront,
-          rrnLast: data.rrnLast,
+        // ✅ 서버가 temp 계정(캠프 배정 등)을 확인·이관하고 새 UID 문서를 만든다
+        const p0 = userCredential.authProviders?.[0] ?? {};
+        const result = await completeSignupViaApi({
+          kind: 'mentor',
+          tempUserId: existingUser.userId,
+          rollbackAuthOnFailure: !socialSignUp,
+          provider: { providerId: p0.providerId || 'password', providerUid: p0.uid, displayName: p0.displayName, photoURL: p0.photoURL },
+          profile: await buildProfile(),
         });
+        finalRole = (result.role === 'foreign' ? 'foreign' : 'mentor');
+        logger.info('✅ 가입 완료 (temp 이관):', { uid: newUserId, claimedTemp: result.claimedTemp });
 
-        // ✅ 기존 temp 문서 삭제
-        logger.info('🗑️ 기존 temp 문서 삭제:', oldTempUserId);
-        const { deleteDoc, doc } = await import('firebase/firestore');
-        const { db } = await import('@/lib/firebase');
-        await deleteDoc(doc(db, 'users', oldTempUserId));
-        
         // SessionStorage 정리
         signupStorage.clear();
         
@@ -375,7 +328,6 @@ export default function SignUpDetails() {
         let authProvidersData: any = undefined;
 
         // 🔥 소셜 가입과 일반 가입 분기 처리
-        let tempPasswordForSocial: string | undefined;
         if (socialSignUp) {
           logger.info('✅ 소셜 신규 가입 처리 시작:', { socialProvider, firebaseAuthUid });
           
@@ -408,22 +360,33 @@ export default function SignUpDetails() {
               primaryAuthMethod: 'social',
             };
           } else {
-            // 네이버/카카오: Firebase Auth 계정이 없으므로 임시 비밀번호로 생성
-            tempPasswordForSocial = `${email}_${Date.now()}_${Math.random().toString(36)}`;
-            
+            // 네이버/카카오: 서버가 access token 을 검증한 뒤 Auth 사용자 생성 + Custom Token 발급
+            if (!socialAccessToken || (provider !== 'naver' && provider !== 'kakao')) {
+              toast.error('소셜 인증 정보가 만료되었습니다. 다시 로그인해주세요.');
+              signupStorage.clear();
+              router.push('/sign-in');
+              setIsLoading(false);
+              return;
+            }
             try {
-              const userCredential = await signUp(email, tempPasswordForSocial);
-              newUserId = userCredential.user.uid;
-              logger.info('✅ 네이버/카카오 신규 가입 - Firebase Auth 계정 생성:', newUserId);
+              const socialCred = await signUpWithSocialToken({ kind: provider as 'naver' | 'kakao', accessToken: socialAccessToken });
+              newUserId = socialCred.user.uid;
+              logger.info('✅ 네이버/카카오 신규 가입 - Firebase 세션 확보:', newUserId);
             } catch (authError: any) {
-              if (authError.code === 'auth/email-already-in-use') {
+              if (authError?.code === 'EMAIL_IN_USE' || authError?.status === 409) {
                 toast.error('이 이메일은 이미 사용 중입니다. 로그인 페이지로 이동합니다.');
+                router.push('/sign-in');
+                return;
+              }
+              if (authError?.status === 401) {
+                toast.error('소셜 인증이 만료되었습니다. 다시 로그인해주세요.');
+                signupStorage.clear();
                 router.push('/sign-in');
                 return;
               }
               throw authError;
             }
-            
+
             authProvidersData = {
               authProviders: [{
                 providerId: normalizedProviderId,
@@ -434,8 +397,6 @@ export default function SignUpDetails() {
                 ...(socialPhotoURL && { photoURL: socialPhotoURL }),
               }],
               primaryAuthMethod: 'social',
-              // 네이버/카카오 전용: Firebase Auth 로그인용 시스템 생성 비밀번호
-              _firebaseAuthPassword: tempPasswordForSocial,
             };
           }
         } else {
@@ -461,67 +422,15 @@ export default function SignUpDetails() {
           };
         }
 
-        // Firestore에 사용자 정보 저장 (Auth UID를 Document ID로 사용)
-        await createUser({
-          name,
-          phoneNumber,
-          email: email.toLowerCase(),
-          password: '',  // 보안상 Firebase에만 저장
-          address: data.address,
-          addressDetail: data.addressDetail,
-          gender: data.gender,
-          age,
-          agreedPersonal: data.agreedPersonal,
-          referralPath: referralPathValue,
-          referrerName: data.referrerName ?? '',
-          profileImage: '',
-          role: 'mentor',
-          status: 'active',
-          isEmailVerified: false,
-          jobExperiences: [],
-          jobCodeIds: [],
-          selfIntroduction: '',
-          jobMotivation: '',
-          feedback: '',
-          lastLoginAt: now,
-          university,
-          grade: gradeNum,
-          isOnLeave: isOnLeaveVal,
-          major1,
-          major2: major2 || '',
-          agreedTerms: true,
-          isPhoneVerified: true,
-          isProfileCompleted: false,
-          isTermsAgreed: true,
-          isPersonalAgreed: true,
-          isAddressVerified: true,
-          isProfileImageUploaded: false,
-          createdAt: now,
-          updatedAt: now,
-          ...authProvidersData,
-        }, newUserId);  // ✅ Auth UID 전달
-
-        // ✅ 주민등록번호 암호화 저장 (서버 API Route를 통해 처리)
-        await authenticatedPost('/api/user/save-sensitive', {
-          userId: newUserId,
-          rrnFront: data.rrnFront,
-          rrnLast: data.rrnLast,
+        // 서버가 users 문서 생성 + 같은 이메일의 탈퇴 계정 정리 (신규 멘토는 mentor_temp → 관리자 검토 후 승격)
+        const p0 = authProvidersData?.authProviders?.[0] ?? {};
+        await completeSignupViaApi({
+          kind: 'mentor',
+          rollbackAuthOnFailure: !socialSignUp,
+          provider: { providerId: p0.providerId || 'password', providerUid: p0.uid, displayName: p0.displayName, photoURL: p0.photoURL },
+          profile: await buildProfile(),
         });
-
-        // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리
-        try {
-          const inactiveUser = await getUserByEmailIncludeInactive(email);
-          if (inactiveUser && inactiveUser.userId !== newUserId) {
-            const { updateDoc, doc } = await import('firebase/firestore');
-            const { db } = await import('@/lib/firebase');
-            await updateDoc(doc(db, 'users', inactiveUser.userId), {
-              email: `rejoined_${Date.now()}_${email}`,
-            });
-            logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
-          }
-        } catch (cleanupError) {
-          logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
-        }
+        logger.info('✅ 가입 완료 (신규):', newUserId);
 
         // SessionStorage 정리
         signupStorage.clear();
@@ -536,7 +445,9 @@ export default function SignUpDetails() {
       }
     } catch (error) {
       logger.error('회원가입 오류:', error);
-      toast.error('회원가입 중 오류가 발생했습니다.');
+      // 서버가 준 한국어 안내(전화번호 중복 등)는 그대로 보여 준다
+      const msg = String((error as Error)?.message || '');
+      toast.error(/[가-힣]/.test(msg) ? msg : '회원가입 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -638,14 +549,19 @@ export default function SignUpDetails() {
                   </div>
                   <span className="flex items-center text-gray-400 text-2xl">-</span>
                   <div className="flex-1">
-                    <FormInput
-                      type="password"
-                      maxLength={7}
-                      placeholder="뒤 7자리"
-                      error={errors.rrnLast?.message}
-                      showPasswordToggle={true}
-                      {...register('rrnLast')}
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        placeholder="0"
+                        className="w-14 px-3 py-3 border border-gray-300 rounded-lg shadow-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        {...register('rrnLast')}
+                      />
+                      <span className="text-gray-400 tracking-widest">●●●●●●</span>
+                    </div>
+                    {errors.rrnLast && <p className="mt-1 text-sm text-red-600">{errors.rrnLast.message}</p>}
+                    <p className="mt-1 text-xs text-gray-500">뒷자리 전체는 캠프 배정 후 입력합니다.</p>
                   </div>
                 </div>
               </div>
@@ -741,7 +657,7 @@ export default function SignUpDetails() {
                   />
                   <div className="ml-3">
                     <span className="text-sm font-medium text-gray-900">
-                      개인정보 수집 및 이용에 동의합니다 <span className="text-red-500">*</span>
+                      <a href="/terms-of-service" target="_blank" rel="noreferrer" className="text-blue-600 underline">이용약관</a> 및 <a href="/privacy-policy" target="_blank" rel="noreferrer" className="text-blue-600 underline">개인정보 수집·이용</a>에 동의합니다 <span className="text-red-500">*</span>
                     </span>
                     <p className="text-xs text-gray-600 mt-1">
                       회원가입을 위해 필요한 최소한의 개인정보를 수집하며, 관련 법령에 따라 안전하게 관리됩니다.

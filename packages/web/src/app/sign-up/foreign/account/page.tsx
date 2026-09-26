@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { getUserByEmail, getUserByEmailIncludeInactive, getUserByPhone } from '@/lib/firebaseService';
+import { getUserByEmail, getUserByPhone, signUpWithSocialToken, completeSignupViaApi } from '@/lib/firebaseService';
 import { auth } from '@/lib/firebase';
 import Layout from '@/components/common/Layout';
 import FormInput from '@/components/common/FormInput';
@@ -47,6 +47,8 @@ export default function ForeignSignUpStep2() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
+  // 약관·개인정보 동의 (이전에는 동의 화면 없이 true 로 저장됐음)
+  const [agreedConsent, setAgreedConsent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -99,6 +101,10 @@ export default function ForeignSignUpStep2() {
   }
 
   const onSubmit = async (data: Step2AnyFormValues) => {
+    if (!agreedConsent) {
+      toast.error('Please agree to the Terms of Service and Privacy Policy.');
+      return;
+    }
     setIsLoading(true);
     try {
       // 전화번호에 국가코드 추가
@@ -131,37 +137,49 @@ export default function ForeignSignUpStep2() {
       let isUpdatingExistingUser = false;
 
       // 소셜 로그인 케이스
-      let tempPasswordForSocial: string | undefined;
       if (socialSignUp && socialProvider) {
         logger.info('🔗 Social sign-up flow for foreign teacher');
         
         if (!currentUser) {
-          // 네이버/카카오는 Firebase Auth 계정이 없으므로 생성
-          logger.info('🔐 Creating Firebase Auth account for social sign-up (Naver/Kakao)');
-          const { createUserWithEmailAndPassword } = await import('firebase/auth');
+          // 네이버/카카오: 서버가 access token 을 검증한 뒤 Auth 사용자 생성 + Custom Token 발급
+          // (임시 비밀번호를 Firestore 에 저장하던 방식은 폐기)
+          logger.info('🔐 Social sign-up (Naver/Kakao): obtaining verified Firebase session');
           
           if (!resolvedEmail) {
             toast.error('Could not retrieve email from social account. Please try again.');
             setIsLoading(false);
             return;
           }
-          
-          // 임시 비밀번호 생성
-          tempPasswordForSocial = `${resolvedEmail}_${Date.now()}_${Math.random().toString(36)}`;
+
+          let stashed: { providerId?: string; accessToken?: string } | null = null;
+          try {
+            stashed = JSON.parse(sessionStorage.getItem('social_access_token') || 'null');
+          } catch { stashed = null; }
+          const proofKind = socialProvider === 'kakao' ? 'kakao' : 'naver';
+          if (!stashed?.accessToken) {
+            toast.error('Your social sign-in has expired. Please sign in again.');
+            setIsLoading(false);
+            router.push('/sign-in');
+            return;
+          }
           
           try {
-            const userCredential = await createUserWithEmailAndPassword(auth, resolvedEmail, tempPasswordForSocial);
-            userId = userCredential.user.uid;
-            logger.info('✅ Firebase Auth account created, UID:', userId);
+            const socialCred = await signUpWithSocialToken({ kind: proofKind, accessToken: stashed.accessToken });
+            userId = socialCred.user.uid;
+            logger.info('✅ Verified Firebase session obtained, UID:', userId);
           } catch (authError: any) {
-            if (authError.code === 'auth/email-already-in-use') {
-              logger.info('⚠️ Email already exists, trying to sign in...');
+            if (authError?.status === 409) {
               toast.error('This email is already in use. Please sign in instead.');
               setIsLoading(false);
               return;
-            } else {
-              throw authError;
             }
+            if (authError?.status === 401) {
+              toast.error('Your social sign-in has expired. Please sign in again.');
+              setIsLoading(false);
+              router.push('/sign-in');
+              return;
+            }
+            throw authError;
           }
         } else {
           userId = currentUser.uid;
@@ -247,126 +265,34 @@ export default function ForeignSignUpStep2() {
         return;
       }
 
-      const { doc, setDoc, Timestamp } = await import('firebase/firestore');
-      const { db } = await import('@/lib/firebase');
-
-      const userData = {
-        userId: userId,
-        id: userId,
-        name: fullName,
-        email: resolvedEmail.toLowerCase(),
-        phone: fullPhone,
-        phoneNumber: fullPhone,
-        password: '',
-        address: existingUserByPhone?.address || '',
-        addressDetail: existingUserByPhone?.addressDetail || '',
-        role: 'foreign',
-        jobExperiences: existingUserByPhone?.jobExperiences || [],
-        jobCodeIds: (existingUserByPhone?.jobExperiences || []).map((exp: { id: string }) => exp.id),
-        partTimeJobs: existingUserByPhone?.partTimeJobs || [],
-        createdAt: existingUserByPhone?.createdAt || Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        agreedTerms: true,
-        agreedPersonal: true,
-        profileImage: '',
-        status: 'active',
-        isEmailVerified: false,
-        isPhoneVerified: false,
-        isProfileCompleted: false,
-        isTermsAgreed: true,
-        isPersonalAgreed: true,
-        isAddressVerified: false,
-        isProfileImageUploaded: false,
-        jobMotivation: 'Foreign Teacher Application',
-        feedback: existingUserByPhone?.feedback || '',
-        ...(dateOfBirth && {
-          dateOfBirth,
-          age: calculateAgeFromDateOfBirth(dateOfBirth),
-        }),
-        foreignTeacher: {
-          firstName: firstName || '',
-          lastName: lastName || '',
-          middleName: middleName || '',
-          countryCode: countryCode || '',
-          cvUrl: '',
-          passportPhotoUrl: '',
-          foreignIdCardUrl: '',
-          applicationDate: Timestamp.now(),
+      // 서버가 users 문서 생성 + foreign_temp 계정(캠프 배정·서류) 이관 + 같은 이메일의 탈퇴 계정 정리를 한 번에 처리
+      const result = await completeSignupViaApi({
+        kind: 'foreign',
+        tempUserId: (isUpdatingExistingUser && existingUserByPhone?.userId) || tempUserId || undefined,
+        rollbackAuthOnFailure: !socialSignUp,
+        provider: socialSignUp && socialProvider
+          ? {
+              providerId: (socialProvider === 'naver' || socialProvider === 'kakao' ? socialProvider : `${socialProvider}.com`) as 'naver' | 'kakao' | 'google.com' | 'apple.com',
+              providerUid: socialProviderUid || userId,
+              ...(socialDisplayName && { displayName: socialDisplayName }),
+              ...(socialPhotoURL && { photoURL: socialPhotoURL }),
+            }
+          : { providerId: 'password' },
+        profile: {
+          name: fullName,
+          phoneNumber: fullPhone,
+          ...(dateOfBirth && { dateOfBirth, age: calculateAgeFromDateOfBirth(dateOfBirth) }),
+          foreignTeacher: { firstName: firstName || '', lastName: lastName || '', middleName: middleName || '', countryCode: countryCode || '' },
+          agreedPersonal: true,
         },
-        ...(socialSignUp && socialProvider && {
-          authProviders: [{
-            providerId: socialProvider === 'naver' || socialProvider === 'kakao'
-              ? socialProvider
-              : `${socialProvider}.com`,
-            uid: socialProviderUid || userId,
-            email: resolvedEmail,
-            linkedAt: Timestamp.now(),
-            ...(socialDisplayName && { displayName: socialDisplayName }),
-            ...(socialPhotoURL && { photoURL: socialPhotoURL }),
-          }],
-          primaryAuthMethod: 'social',
-          ...(tempPasswordForSocial && { _firebaseAuthPassword: tempPasswordForSocial }),
-        }),
-        ...(!socialSignUp && {
-          authProviders: [{
-            providerId: 'password',
-            uid: userId,
-            email: resolvedEmail,
-            linkedAt: Timestamp.now(),
-          }],
-          primaryAuthMethod: 'password',
-        }),
-      };
+      });
 
-      // Firestore는 undefined 값을 허용하지 않으므로 top-level undefined 필드 제거
-      const sanitizedUserData = Object.fromEntries(
-        Object.entries(userData).filter(([, v]) => v !== undefined)
+      toast.success(
+        result.claimedTemp
+          ? `Welcome back, ${fullName}!\n\nYour account has been activated.\nPlease upload your documents on My Page.`
+          : `Welcome, ${fullName}!\n\nYour account has been successfully created.\nPlease upload your documents on My Page.`,
+        { duration: 8000 }
       );
-
-      if (isUpdatingExistingUser && existingUserByPhone) {
-        const oldTempUserId = existingUserByPhone.userId;
-
-        logger.info('📝 Creating new Firestore document with Auth UID:', userId);
-        await setDoc(doc(db, 'users', userId), sanitizedUserData);
-        logger.info('✅ New Firestore document created');
-
-        if (oldTempUserId !== userId) {
-          logger.info('🗑️ Deleting old temp document:', oldTempUserId);
-          const { deleteDoc } = await import('firebase/firestore');
-          await deleteDoc(doc(db, 'users', oldTempUserId));
-          logger.info('✅ Old temp document deleted');
-        }
-
-        toast.success(
-          `Welcome back, ${fullName}!\n\nYour account has been activated.\nPlease upload your documents in Profile Edit.`,
-          { duration: 8000 }
-        );
-      } else {
-        logger.info('📝 Creating new Firestore user document');
-        await setDoc(doc(db, 'users', userId), sanitizedUserData);
-        logger.info('✅ Firestore user document created');
-
-        // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹 처리
-        // Auth 삭제 후 재가입하는 경우 기존 문서가 중복되지 않도록 정리
-        try {
-          const inactiveUser = await getUserByEmailIncludeInactive(resolvedEmail);
-          if (inactiveUser && inactiveUser.userId !== userId) {
-            const { updateDoc: updateOldDoc, doc: docRef } = await import('firebase/firestore');
-            await updateOldDoc(docRef(db, 'users', inactiveUser.userId), {
-              email: `rejoined_${Date.now()}_${resolvedEmail}`,
-            });
-            logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
-          }
-        } catch (cleanupError) {
-          // 정리 실패가 가입 전체를 막지 않도록 오류만 기록
-          logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
-        }
-
-        toast.success(
-          `Welcome, ${fullName}!\n\nYour account has been successfully created.\nPlease upload your documents in Profile Edit.`,
-          { duration: 8000 }
-        );
-      }
 
       // 소셜 회원가입 후 하드 네비게이션으로 AuthContext를 처음부터 재초기화
       // router.push는 SPA 전환이라 onAuthStateChanged가 이미 완료된 상태에서
@@ -505,6 +431,21 @@ export default function ForeignSignUpStep2() {
               </div>
 
               {/* 버튼 그룹 */}
+              <label className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-5 w-5 mt-0.5 flex-shrink-0"
+                  checked={agreedConsent}
+                  onChange={(e) => setAgreedConsent(e.target.checked)}
+                />
+                <span className="text-sm text-gray-800">
+                  I agree to the{' '}
+                  <a href="/terms-of-service" target="_blank" rel="noreferrer" className="text-blue-600 underline">Terms of Service</a>
+                  {' '}and the collection and use of my personal information under the{' '}
+                  <a href="/privacy-policy" target="_blank" rel="noreferrer" className="text-blue-600 underline">Privacy Policy</a>.
+                  <span className="text-red-500"> *</span>
+                </span>
+              </label>
               <div className="flex gap-3 pt-6">
                 <Button
                   type="button"

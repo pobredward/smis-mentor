@@ -17,5 +17,4 @@ node_modules
 #!include:.gitignore
 # lib/ 폴더는 배포에 필요하므로 제외하지 않음
 !lib/
-# 함수 런타임에 필요한 서비스 계정 파일은 배포에 포함
-!managesheet-export-*.json
+# (2026-09) ST 시트 동기화 CF 제거로 시트 서비스 계정 파일은 더 이상 배포 번들에 포함하지 않음

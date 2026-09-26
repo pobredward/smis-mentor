@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { logger } from '@smis-mentor/shared';
+import { logger, fillRecruitmentTemplate } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -674,10 +674,15 @@ export function InterviewManageScreen({
       setIsSendingSMS(true);
 
       // 변수 치환
-      let finalMessage = smsMessages[type];
-      if (selectedApplication.user?.name) {
-        finalMessage = finalMessage.replace(/{이름}/g, selectedApplication.user.name);
-      }
+      const sa = selectedApplication as any;
+      const finalMessage = fillRecruitmentTemplate(smsMessages[type], {
+        name: sa.user?.name || '',
+        jobBoardTitle: sa.jobBoardTitle || '',
+        interviewDate: sa.interviewDate?.toDate?.() ?? null,
+        interviewLink: sa.interviewBaseLink || '',
+        interviewDurationMin: sa.interviewBaseDuration || '',
+        interviewNotes: sa.interviewBaseNotes || '',
+      });
 
       const response = await sendCustomSMS(
         selectedApplication.user.phoneNumber,

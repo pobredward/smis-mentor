@@ -1,3 +1,5 @@
+import { getDocsByIds, queryWhereIn } from '../services/batchRead';
+import { collection, getDocs } from 'firebase/firestore';
 import React, { useState, useEffect, useCallback } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
@@ -147,20 +149,21 @@ export function JobBoardApplicantsScreen({
       const applicationsData = await getApplicationsByJobBoardId(db, jobBoardId);
 
       // 각 지원자의 상세 정보 로드
-      const applicationsWithUser = await Promise.all(
-        applicationsData.map(async (app: any) => {
-          try {
-            const userData = await getUserById(db, app.refUserId);
-            return {
-              ...app,
-              user: userData,
-            };
-          } catch (error) {
-            logger.error(`사용자 정보 로드 오류 (${app.refUserId}):`, error);
-            return app;
-          }
-        })
-      );
+      // 지원자 정보·지원 이력·공고를 묶어서 읽는다 (예전: 지원자마다 여러 번 읽음)
+      const userIds = applicationsData.map((app: any) => app.refUserId as string);
+      const [userMap, otherApps, boardsSnap] = await Promise.all([
+        getDocsByIds(db, 'users', userIds),
+        queryWhereIn(db, 'applicationHistories', 'refUserId', userIds),
+        getDocs(collection(db, 'jobBoards')),
+      ]);
+      const applicationsWithUser = applicationsData.map((app: any) => ({ ...app, user: userMap.get(app.refUserId) ?? app.user }));
+      const boardCode = new Map(boardsSnap.docs.map((d) => [d.id, d.data().jobCode as string | undefined]));
+      const camps: Record<string, string[]> = {};
+      for (const h of otherApps) {
+        const { refUserId, refJobBoardId } = h.data() as { refUserId: string; refJobBoardId: string };
+        const code = boardCode.get(refJobBoardId);
+        if (code) camps[refUserId] = [...new Set([...(camps[refUserId] ?? []), code])];
+      }
 
       // 최신순 정렬
       const sortedApplications = applicationsWithUser.sort((a: any, b: any) => {
@@ -172,12 +175,8 @@ export function JobBoardApplicantsScreen({
       setApplications(sortedApplications);
       setFilteredApplications(sortedApplications);
 
-      // 모든 지원자의 지원 장소 정보를 로드
-      await Promise.all(
-        sortedApplications.map(async (app: any) => {
-          await loadUserAppliedCamps(app.refUserId);
-        })
-      );
+      // 지원자들이 지원한 캠프 목록
+      setAppliedCampsMap((prev) => ({ ...prev, ...Object.fromEntries(userIds.map((id: string) => [id, camps[id] ?? []])) }));
     } catch (error) {
       logger.error('데이터 로드 오류:', error);
       Alert.alert('오류', '데이터를 불러오는 중 오류가 발생했습니다.');

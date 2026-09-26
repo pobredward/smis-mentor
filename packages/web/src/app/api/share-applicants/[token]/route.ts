@@ -132,9 +132,13 @@ export async function GET(
           };
         }
         
+        // 공유 링크는 비인증 접근 → 지원서도 화면에 필요한 필드만 (면접 피드백·면접 링크·메모 등 내부 정보 제외)
         return {
           id: appDoc.id,
-          ...appData,
+          applicationStatus: appData.applicationStatus ?? null,
+          interviewStatus: appData.interviewStatus ?? null,
+          finalStatus: appData.finalStatus ?? null,
+          applicationPath: appData.applicationPath ?? null,
           // Timestamp를 ISO 문자열로 변환
           applicationDate: appData.applicationDate?.toDate?.()?.toISOString() || null,
           interviewDate: appData.interviewDate?.toDate?.()?.toISOString() || null,

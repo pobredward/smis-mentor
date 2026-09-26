@@ -1,0 +1,20 @@
+# gitleaks 설정 — 기본 규칙 사용 + 오탐 제외
+title = "smis-mentor gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "공개 식별자·테스트 데이터"
+paths = [
+  '''package-lock\.json''',
+  '''.*\.lock$''',
+  '''functions/lib/.*''',
+]
+regexes = [
+  # Google OAuth Client ID / Firebase 공개 설정값은 비밀이 아님
+  '''[0-9]{12}-[a-z0-9]{32}\.apps\.googleusercontent\.com''',
+  '''AIza[0-9A-Za-z_-]{35}''',
+  # Sentry DSN(공개키)은 비밀이 아님
+  '''https://[0-9a-f]{32}@o[0-9]+\.ingest\.[a-z.]*sentry\.io/[0-9]+''',
+]

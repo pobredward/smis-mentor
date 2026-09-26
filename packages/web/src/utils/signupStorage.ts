@@ -21,6 +21,7 @@ export interface SignUpData {
   socialProviderUid?: string; // 소셜 제공자 고유 ID
   socialDisplayName?: string; // 소셜 로그인 표시 이름
   socialPhotoURL?: string;    // 소셜 로그인 프로필 이미지
+  socialAccessToken?: string; // 네이버/카카오 access token — 가입 시 서버(create-custom-token)가 재검증
 }
 
 const STORAGE_KEY = 'signup_data';

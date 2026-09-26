@@ -149,6 +149,43 @@ export function replaceTemplateVariables(
   return result;
 }
 
+/** 채용 문자 변수 치환에 필요한 값 */
+export interface RecruitmentTemplateContext {
+  name?: string;
+  jobBoardTitle?: string;
+  interviewDate?: Date | null;
+  interviewLink?: string;
+  interviewDurationMin?: number | string;
+  interviewNotes?: string;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * 채용 문자 템플릿의 모든 변수를 실제 값으로 치환한다.
+ * 값이 없는 변수는 그대로 남겨 두고, 발송 전에 findUnresolvedPlaceholders 로 막는다.
+ * (이전에는 {면접링크}·{면접소요시간}·{면접참고사항} 이 치환되지 않은 채 발송됐음)
+ */
+export function fillRecruitmentTemplate(template: string, ctx: RecruitmentTemplateContext): string {
+  const d = ctx.interviewDate ?? null;
+  const vars: Record<string, string> = {
+    이름: ctx.name ?? '',
+    채용공고명: ctx.jobBoardTitle ?? '',
+    면접일자: d ? `${d.getFullYear()}년 ${pad2(d.getMonth() + 1)}월 ${pad2(d.getDate())}일` : '',
+    면접시간: d ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : '',
+    면접링크: ctx.interviewLink ?? '',
+    면접소요시간: ctx.interviewDurationMin != null && ctx.interviewDurationMin !== '' ? String(ctx.interviewDurationMin) : '',
+    면접참고사항: ctx.interviewNotes ?? '',
+  };
+  return replaceTemplateVariables(template, vars);
+}
+
+/** 치환되지 않고 남은 {변수} 목록 (발송 차단용) */
+export function findUnresolvedPlaceholders(text: string): string[] {
+  const found = text.match(/\{[가-힣A-Za-z0-9_]{1,20}\}/g) ?? [];
+  return Array.from(new Set(found));
+}
+
 // 기본 템플릿 메시지 (템플릿이 없을 경우 사용)
 export const DEFAULT_SMS_TEMPLATES: Record<TemplateType, string> = {
   document_pass: '안녕하세요, {이름}님.\n서류 전형 합격을 축하드립니다.\n다음 면접 일정을 안내드리겠습니다.',

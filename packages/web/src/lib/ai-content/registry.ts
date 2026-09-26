@@ -94,17 +94,9 @@ export const PAGE_REGISTRY: PageMeta[] = [
   {
     path: '/profile',
     title: '내 프로필',
-    description: '로그인한 사용자의 프로필 — 기본 정보, 학력, 자기소개, 참여 캠프, 지원 이력.',
+    description: '로그인한 사용자의 프로필 — 기본 정보, 학력, 자기소개, 참여 캠프, 지원 이력. 섹션마다 제자리에서 수정.',
     access: 'auth',
     tags: ['프로필', '내 정보', '지원 이력'],
-  },
-  {
-    path: '/profile/edit',
-    title: '프로필 수정',
-    description: '프로필 정보 편집 폼.',
-    access: 'auth',
-    tags: ['프로필 편집'],
-    hasContent: false,
   },
   {
     path: '/profile/job-apply',

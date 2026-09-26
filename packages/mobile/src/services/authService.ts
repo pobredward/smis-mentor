@@ -21,7 +21,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../config/firebase';
 import { User } from '../types';
 import { getCache, setCache, CACHE_STORE, CACHE_TTL, removeCache } from './cacheUtils';
-import { logger } from '@smis-mentor/shared';
+import {
+  logger,
+  lookupUserViaApi,
+  isPermissionDenied,
+  requestCustomToken,
+  replaceTempUserViaApi,
+  type SocialProof,
+  type SocialUserData,
+} from '@smis-mentor/shared';
+
+/** 웹 API 베이스 URL (www 리디렉션 시 POST 손실 방지) */
+export const getApiBaseUrl = () =>
+  (process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smis-mentor.com').replace('https://www.', 'https://');
+
+/**
+ * 비로그인(또는 규칙에 막힌) 상태의 users 조회는 서버 API(/api/auth/lookup)로 폴백한다.
+ * Firestore 규칙에서 users 컬렉션의 비인증 list 가 제거되었기 때문.
+ */
+const lookupFallback = async (params: Parameters<typeof lookupUserViaApi>[1]): Promise<User | null> => {
+  const user = await lookupUserViaApi(getApiBaseUrl(), params);
+  return user as unknown as User | null;
+};
 
 const STORAGE_KEYS = {
   REMEMBER_ME: '@smis_remember_me',
@@ -88,9 +109,20 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
 
     // Firebase Auth는 항상 소문자로 정규화하므로, Firestore 조회도 소문자로 통일
     const normalizedEmail = email.toLowerCase();
+    if (!auth.currentUser) {
+      return lookupFallback({ by: 'email', email: normalizedEmail });
+    }
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('email', '==', normalizedEmail));
-    const querySnapshot = await getDocs(q);
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (queryError) {
+      if (isPermissionDenied(queryError)) {
+        return lookupFallback({ by: 'email', email: normalizedEmail });
+      }
+      throw queryError;
+    }
 
     if (querySnapshot.empty) {
       return null;
@@ -130,6 +162,9 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
 
 export const getUserByPhone = async (phone: string): Promise<User | null> => {
   try {
+    if (!auth.currentUser) {
+      return lookupFallback({ by: 'phone', phone });
+    }
     const usersRef = collection(db, 'users');
 
     // deleted, inactive 제외하고 첫 번째 활성 문서 반환
@@ -143,7 +178,15 @@ export const getUserByPhone = async (phone: string): Promise<User | null> => {
     };
 
     // phoneNumber 필드 우선 조회
-    const snap1 = await getDocs(query(usersRef, where('phoneNumber', '==', phone)));
+    let snap1;
+    try {
+      snap1 = await getDocs(query(usersRef, where('phoneNumber', '==', phone)));
+    } catch (queryError) {
+      if (isPermissionDenied(queryError)) {
+        return lookupFallback({ by: 'phone', phone });
+      }
+      throw queryError;
+    }
     if (!snap1.empty) {
       const result = pickActive(snap1.docs);
       if (result) return result;
@@ -227,41 +270,9 @@ export const getUserBySocialProvider = async (
   providerUid: string
 ): Promise<User | null> => {
   try {
-    logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
-
-    // active + temp 상태 모두 조회 (temp 계정에 소셜이 미리 연동된 케이스 포함)
-    const [activeSnapshot, tempSnapshot] = await Promise.all([
-      getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
-      getDocs(query(collection(db, 'users'), where('status', '==', 'temp'))),
-    ]);
-
-    const normalizedSearchId = providerId.replace('.com', '');
-
-    // active 우선, 그 다음 temp 순서로 반환
-    for (const snapshot of [activeSnapshot, tempSnapshot]) {
-      for (const doc of snapshot.docs) {
-        const userData = doc.data() as User;
-        const authProviders = userData.authProviders || [];
-
-        const matchedProvider = authProviders.find((p: any) => {
-          const normalizedStoredId = p.providerId.replace('.com', '');
-          return normalizedStoredId === normalizedSearchId && p.uid === providerUid;
-        });
-
-        if (matchedProvider) {
-          logger.info('✅ 소셜 제공자로 사용자 발견:', {
-            userId: userData.userId,
-            status: userData.status,
-            email: userData.email,
-            providerId: matchedProvider.providerId,
-          });
-          return { ...userData, userId: doc.id } as User;
-        }
-      }
-    }
-
-    logger.info('❌ 소셜 제공자로 사용자를 찾을 수 없음');
-    return null;
+    logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId });
+    // 전체 컬렉션을 내려받던 방식 → 서버(Admin SDK) 조회로 대체 (규칙상 비인증 list 불가)
+    return await lookupFallback({ by: 'social', providerId, providerUid });
   } catch (error) {
     logger.error('소셜 제공자로 사용자 조회 실패:', error);
     return null;
@@ -284,7 +295,16 @@ export const getUserById = async (userId: string): Promise<User | null> => {
     }
 
     // 캐시에 없는 경우 Firestore에서 조회
-    const userDoc = await getDoc(doc(db, 'users', userId));
+    let userDoc;
+    try {
+      userDoc = await getDoc(doc(db, 'users', userId));
+    } catch (readError) {
+      // 가입 이관 중 temp 문서는 본인 소유가 아니라 규칙에 막힘 → 서버 조회(temp 문서만 반환)
+      if (isPermissionDenied(readError)) {
+        return lookupFallback({ by: 'id', id: userId });
+      }
+      throw readError;
+    }
     if (!userDoc.exists()) {
       logger.warn('사용자를 찾을 수 없음:', userId);
       return null;
@@ -339,6 +359,9 @@ export const getUserByForeignName = async (
 ): Promise<User | null> => {
   try {
     if (!firstName || !lastName) return null;
+    if (!auth.currentUser) {
+      return lookupFallback({ by: 'foreignName', firstName, lastName });
+    }
 
     const q = query(
       collection(db, 'users'),
@@ -346,7 +369,15 @@ export const getUserByForeignName = async (
       where('foreignTeacher.lastName', '==', lastName)
     );
 
-    const snapshot = await getDocs(q);
+    let snapshot;
+    try {
+      snapshot = await getDocs(q);
+    } catch (queryError) {
+      if (isPermissionDenied(queryError)) {
+        return lookupFallback({ by: 'foreignName', firstName, lastName });
+      }
+      throw queryError;
+    }
     if (snapshot.empty) return null;
 
     const activeDocs = snapshot.docs.filter(d => d.data().status !== 'deleted');
@@ -397,20 +428,17 @@ export const updateUser = async (
 // Auth 관련 함수
 export const signIn = async (email: string, password: string) => {
   try {
-    // 회원가입 직후 로그인 문제 해결을 위해 지연 시간 증가
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
     const userCredential = await signInWithEmailAndPassword(
       auth,
       email,
       password
     );
 
-    // Firebase 인증 상태가 반영될 시간을 확보
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Firebase 인증 상태가 반영될 짧은 여유 (기존 800ms+300ms 인위적 지연 제거)
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // 로그인 성공 시 마지막 로그인 시간 업데이트
-    const userRecord = await getUserByEmail(email);
+    // 로그인 성공 시 마지막 로그인 시간 업데이트 (본인 문서 직접 읽기)
+    const userRecord = (await getUserById(userCredential.user.uid)) ?? (await getUserByEmail(email));
     if (userRecord) {
       // 탈퇴/삭제된 계정 차단
       if (userRecord.status === 'inactive') {
@@ -459,34 +487,51 @@ export const signUp = async (email: string, password: string) => {
 };
 
 /**
- * Custom Token으로 Firebase Auth 로그인
- * 웹 API Route(/api/auth/create-custom-token)를 통해 Custom Token 생성 후 로그인
- * Cloud Functions CORS/배포 문제를 우회하기 위해 Next.js API Route 방식으로 변경
+ * 소셜 데이터 → 서버 검증용 증명(proof)
+ *  - 네이버/카카오: 제공자 access token (SDK가 SocialUserData.accessToken 에 담아줌)
+ *  - 구글/애플   : 현재 Firebase 세션(signInWithCredential)의 ID token
  */
-export const signInWithCustomToken = async (userId: string, email: string, existingUid?: string) => {
-  try {
-    logger.info('🔑 Custom Token 생성 요청:', { userId, email });
-
-    // 웹 API Route를 통해 Custom Token 생성 (Cloud Functions 대체)
-    const apiBaseUrl = (process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smis-mentor.com')
-      .replace('https://www.', 'https://'); // www 리디렉션 시 POST 손실 방지
-    
-    const response = await fetch(`${apiBaseUrl}/api/auth/create-custom-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, email, existingUid }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error?.message || 'Custom Token 생성 실패');
+export const buildSocialProof = async (
+  socialData: Pick<SocialUserData, 'providerId' | 'accessToken'>
+): Promise<SocialProof> => {
+  if (socialData.providerId === 'naver' || socialData.providerId === 'kakao') {
+    if (!socialData.accessToken) {
+      throw new Error('소셜 인증 정보가 만료되었습니다. 다시 로그인해주세요.');
     }
+    return { kind: socialData.providerId, accessToken: socialData.accessToken };
+  }
+  return getFirebaseProof();
+};
 
-    const responseData = await response.json();
-    const { customToken } = responseData.result as { customToken: string; uid: string };
+/** 현재 Firebase 세션의 ID token 증명 (세션 복원, 구글/애플 세션) */
+export const getFirebaseProof = async (): Promise<SocialProof> => {
+  const current = auth.currentUser;
+  if (!current) {
+    throw new Error('인증 세션이 없습니다. 다시 로그인해주세요.');
+  }
+  return { kind: 'firebase', idToken: await current.getIdToken(true) };
+};
+
+/**
+ * Custom Token으로 Firebase Auth 로그인
+ * 서버(/api/auth/create-custom-token)가 proof 로 소유자를 검증한 뒤 users 문서 id 로 토큰을 발급한다.
+ */
+export const signInWithCustomToken = async (
+  userId: string,
+  proof: SocialProof,
+  options?: { deleteAuthUid?: { uid: string; idToken: string } }
+) => {
+  try {
+    logger.info('🔑 Custom Token 생성 요청:', { userId: userId.substring(0, 8) + '...', proof: proof.kind });
+
+    const { customToken } = await requestCustomToken(getApiBaseUrl(), {
+      mode: 'login',
+      userId,
+      proof,
+      ...(options?.deleteAuthUid && { deleteAuthUid: options.deleteAuthUid }),
+    });
     logger.info('✅ Custom Token 획득');
 
-    // Custom Token으로 Firebase Auth 로그인
     const { signInWithCustomToken: firebaseSignInWithCustomToken } = await import('firebase/auth');
     const userCredential = await firebaseSignInWithCustomToken(auth, customToken);
 
@@ -500,6 +545,38 @@ export const signInWithCustomToken = async (userId: string, email: string, exist
     logger.error('❌ Custom Token 로그인 실패:', error);
     throw error;
   }
+};
+
+/**
+ * 네이버/카카오 신규 가입용 Firebase 세션 확보
+ * 서버가 제공자 토큰을 검증한 뒤 Auth 사용자를 만들고 Custom Token 을 발급한다.
+ * (임시 비밀번호로 createUserWithEmailAndPassword 하던 방식 대체)
+ */
+export const signUpWithSocialToken = async (proof: SocialProof) => {
+  const { customToken, uid } = await requestCustomToken(getApiBaseUrl(), { mode: 'signup', proof });
+  const { signInWithCustomToken: firebaseSignInWithCustomToken } = await import('firebase/auth');
+  const userCredential = await firebaseSignInWithCustomToken(auth, customToken);
+  logger.info('✅ 소셜 가입용 Firebase 세션 확보:', { uid });
+  return userCredential;
+};
+
+/**
+ * 가입 완료 — users 문서 생성·temp 계정 이관·탈퇴 계정 정리를 서버(/api/auth/complete-signup)가 한 번에 처리.
+ * Auth 계정을 만든(또는 소셜로 로그인한) 직후에 호출한다.
+ */
+export const completeSignupViaApi = async (input: import('@smis-mentor/shared').CompleteSignupInput) => {
+  const { mobileAuthenticatedPost } = await import('./apiClient');
+  return mobileAuthenticatedPost<import('@smis-mentor/shared').CompleteSignupResult>(
+    '/api/auth/complete-signup',
+    input as unknown as Record<string, unknown>,
+  );
+};
+
+/** 가입 이관 완료 후 admin 선생성 temp 문서 정리 (서버가 본인 확인 후 삭제) */
+export const replaceTempUserDoc = async (tempUserId: string) => {
+  const current = auth.currentUser;
+  if (!current) throw new Error('로그인이 필요합니다.');
+  return replaceTempUserViaApi(getApiBaseUrl(), await current.getIdToken(), tempUserId);
 };
 
 export const sendVerificationEmail = async (user: FirebaseUser) => {
@@ -538,6 +615,17 @@ export const resetPassword = async (email: string) => {
 
 export const signOut = async () => {
   try {
+    // 이 기기의 푸시 토큰을 먼저 제거 (로그아웃 후에도 학생·환자 알림이 오는 문제 방지)
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      try {
+        const { registerPushTokenIfPermitted, removePushToken } = await import('./notificationService');
+        const token = await registerPushTokenIfPermitted();
+        if (token) await removePushToken(uid, token);
+      } catch (tokenError) {
+        logger.warn('⚠️ 로그아웃 전 푸시 토큰 제거 실패 (계속 진행):', tokenError);
+      }
+    }
     await firebaseSignOut(auth);
     await clearLoginRememberEmail();
   } catch (error) {

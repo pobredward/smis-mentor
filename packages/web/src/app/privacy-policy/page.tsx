@@ -5,6 +5,10 @@ export const metadata: Metadata = {
   description: 'SMIS Mentor 개인정보처리방침',
 };
 
+/** 개정 시 두 값만 바꾼다. 시행일은 공지일로부터 7일 이후 (제10조) */
+const LAST_UPDATED = '2026년 9월 26일';
+const EFFECTIVE_DATE = '2026년 10월 6일';
+
 export default function PrivacyPolicyPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
@@ -18,7 +22,7 @@ export default function PrivacyPolicyPage() {
               </svg>
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">개인정보처리방침</h1>
-            <p className="text-blue-100">최종 수정일: 2026년 6월 14일</p>
+            <p className="text-blue-100">최종 수정일: {LAST_UPDATED} · 시행일: {EFFECTIVE_DATE}</p>
           </div>
 
           {/* Content */}
@@ -34,6 +38,9 @@ export default function PrivacyPolicyPage() {
               <ul className="list-disc list-inside space-y-2 text-gray-700 ml-4">
                 <li>회원 가입 및 관리: 회원 자격 유지·관리, 본인확인, 불만처리 등 민원처리</li>
                 <li>서비스 제공: 멘토링 서비스 제공, 업무 관리, 알림 서비스 제공</li>
+                <li>캠프 운영: 급여 지급 및 원천징수 신고, 해외 송금, 항공권 발권·여행자보험 가입, 명찰·단체복 제작, 로밍 준비</li>
+                <li>안전 관리: 캠프 참가 학생의 병원 내원 등 응급 상황 대응, 스태프 위치 공유</li>
+                <li>커뮤니티 운영: 게시판 운영, 신고 처리 및 이용 제한</li>
                 <li>마케팅 및 광고: 신규 서비스 개발, 맞춤 서비스 제공, 이벤트 정보 제공</li>
               </ul>
             </section>
@@ -51,7 +58,7 @@ export default function PrivacyPolicyPage() {
                 <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg">
                   <h3 className="font-semibold text-gray-900 mb-2">필수 수집 항목</h3>
                   <p className="text-gray-700 text-sm leading-relaxed">
-                    • 이름, 이메일 주소, 전화번호, 역할(멘토/멘티)<br/>
+                    • 이름, 이메일 주소, 전화번호, 역할(멘토/원어민)<br/>
                     • 소셜 로그인 시: 소셜 계정 고유 ID, 프로필 정보
                   </p>
                 </div>
@@ -59,11 +66,37 @@ export default function PrivacyPolicyPage() {
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
                   <h3 className="font-semibold text-gray-900 mb-2">민감 정보 (별도 암호화 저장)</h3>
                   <p className="text-gray-700 text-sm leading-relaxed">
-                    • <strong>멘토 회원</strong>: 주민등록번호 앞자리(생년월일 6자리) 및 뒷자리(7자리)<br/>
-                    &nbsp;&nbsp;— 뒷자리는 AES-256-GCM 방식으로 암호화하여 저장하며, 서버에서만 복호화 가능<br/>
-                    &nbsp;&nbsp;— 수집 목적: 캠프 운영 시 본인 확인 및 나이 산출<br/>
+                    • <strong>멘토 회원</strong>: 가입 시 주민등록번호 앞자리(생년월일 6자리)와 성별 자리(1자리)<br/>
+                    &nbsp;&nbsp;— 수집 목적: 나이 산출 및 본인 확인<br/>
+                    • <strong>캠프에 배정된 멘토</strong>: 주민등록번호 뒷자리(7자리)<br/>
+                    &nbsp;&nbsp;— AES-256-GCM 방식으로 암호화하여 저장하며, 서버에서만 복호화 가능<br/>
+                    &nbsp;&nbsp;— 수집 목적: 급여 지급에 따른 원천징수 신고 등 관계 법령상 의무 이행<br/>
                     • <strong>원어민 회원</strong>: 생년월일(YYYY-MM-DD)<br/>
                     &nbsp;&nbsp;— 수집 목적: 나이 확인 및 운영 관리
+                  </p>
+                </div>
+
+                <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">캠프 배정 시 수집 항목 (캠프 코드가 부여된 멘토·원어민 교사)</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    • <strong>멘토</strong>: 영어 닉네임(명찰용), 급여 계좌(은행·계좌번호·예금주)<br/>
+                    • <strong>원어민 교사</strong>: 급여 계좌 — 계좌 개설 국가, 예금주 영문 성명, 은행명, 계좌번호 또는 IBAN, SWIFT/BIC 코드,
+                    국가별 은행 식별번호(ABA·Transit·BSB·Sort Code·IFSC 등), 은행 주소, 수취인 주소 및 전화번호<br/>
+                    &nbsp;&nbsp;— 해외 송금 시 송금 은행이 수취인 주소·전화번호를 요구하므로 함께 수집합니다.<br/>
+                    • <strong>해외 캠프 참가자</strong>: 여권상 영문 성명, 여권 번호, 여권 만료일, 단체티 사이즈, 휴대폰 모델명<br/>
+                    &nbsp;&nbsp;— 수집 목적: 항공권 발권, 여행자보험 가입, 단체복 준비, 해외 로밍 준비<br/>
+                    • 계좌번호·IBAN·여권 정보는 일반 회원 정보와 분리된 저장소에 보관하며, 계좌번호·IBAN은 암호화합니다.
+                    본인과 관리자만 조회할 수 있고, 관리자가 원문을 조회하면 그 기록이 남습니다.
+                  </p>
+                </div>
+
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">캠프 참가 학생 정보</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    회사는 캠프 운영을 위해 참가 학생의 명단(이름, 연락처, 주민등록번호 등)을 처리합니다.<br/>
+                    • 스태프 화면에는 주민등록번호 뒷자리를 가려서 표시합니다.<br/>
+                    • 원문은 관리자, 그리고 병원 내원 인솔자로 지정된 스태프에게만 해당 내원 기간 동안 표시되며, 조회할 때마다 기록이 남습니다.<br/>
+                    • 수집 목적: 병원 진료 접수, 보험 처리 등 학생 안전 관리
                   </p>
                 </div>
 
@@ -78,7 +111,9 @@ export default function PrivacyPolicyPage() {
                   <h3 className="font-semibold text-gray-900 mb-2">자동 수집 항목</h3>
                   <p className="text-gray-700 text-sm leading-relaxed">
                     • 서비스 이용 기록, 접속 로그, 쿠키, 접속 IP 정보, 기기 정보<br/>
-                    • 위치 공유 기능 이용 시: GPS 기반 위도·경도 좌표 (사용자가 직접 활성화한 경우에 한함)
+                    • 위치 공유 기능 이용 시: GPS 기반 위도·경도 좌표 (사용자가 직접 활성화한 경우에 한함)<br/>
+                    • 커뮤니티 이용 시: 게시글·댓글, 신고 및 차단 내역. 익명으로 작성한 글도 신고 처리와 법적 대응을 위해 작성자 계정은 내부적으로 기록되며, 다른 이용자에게는 공개되지 않습니다.<br/>
+                    • 개인정보 조회·변경 기록(감사 로그): 관리자의 개인정보 조회, 회원 정보 변경, 민감 정보 열람 시 처리자·시각·대상
                   </p>
                 </div>
               </div>
@@ -98,6 +133,9 @@ export default function PrivacyPolicyPage() {
                 <li>대금결제 및 재화 등의 공급에 관한 기록: 5년</li>
                 <li>소비자의 불만 또는 분쟁처리에 관한 기록: 3년</li>
                 <li>표시·광고에 관한 기록: 6개월</li>
+                <li>위치 기록: 마지막 갱신 후 14일이 지나면 자동 삭제</li>
+                <li>캠프 참가 정보(계좌·여권 등): 회원 탈퇴 시 파기. 단, 급여 지급·원천징수 관련 기록은 국세기본법 등 관계 법령이 정한 기간 동안 보관</li>
+                <li>개인정보 조회·변경 기록(감사 로그): 「개인정보의 안전성 확보조치 기준」에 따라 2년 이상 보관</li>
               </ul>
             </section>
 
@@ -110,8 +148,13 @@ export default function PrivacyPolicyPage() {
                 회사는 정보주체의 개인정보를 제1조(개인정보의 처리 목적)에서 명시한 범위 내에서만 처리하며, 정보주체의 동의, 법률의 특별한 규정 등 「개인정보 보호법」 제17조 및 제18조에 해당하는 경우에만 개인정보를 제3자에게 제공합니다.
               </p>
               <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg">
-                <p className="text-gray-700 font-medium">
-                  현재 회사는 이용자의 개인정보를 제3자에게 제공하지 않습니다.
+                <p className="text-gray-700 text-sm leading-relaxed">
+                  회사는 캠프 운영을 위해 필요한 경우에 한하여 아래와 같이 개인정보를 제공합니다.<br/><br/>
+                  • <strong>항공사·여행사</strong>: 해외 캠프 참가자의 여권상 영문 성명·여권 번호·여권 만료일·생년월일 — 항공권 발권 (캠프 종료 시까지)<br/>
+                  • <strong>보험사</strong>: 캠프 참가자의 성명·생년월일·여권 정보 — 여행자보험 가입 (보험 기간 종료 시까지)<br/>
+                  • <strong>의료기관</strong>: 캠프 참가 학생의 성명·주민등록번호 — 진료 접수 (진료 목적 달성 시까지)<br/>
+                  • <strong>송금 은행</strong>: 원어민 교사의 계좌 및 수취인 정보 — 급여 해외 송금 (송금 완료 시까지)<br/><br/>
+                  그 밖에는 정보주체의 동의 또는 법률의 특별한 규정이 있는 경우를 제외하고 제3자에게 제공하지 않습니다.
                 </p>
               </div>
             </section>
@@ -182,7 +225,9 @@ export default function PrivacyPolicyPage() {
                   • <strong>암호화 방식</strong>: AES-256-GCM (인증 암호화, 무결성 검증 포함)<br/>
                   • <strong>키 관리</strong>: 암호화 키는 서버 환경변수로만 보관하며, 클라이언트에 절대 노출되지 않습니다.<br/>
                   • <strong>처리 방식</strong>: 암호화·복호화는 서버(API Route)에서만 수행하며, 클라이언트는 암호화된 값에 접근할 수 없습니다.<br/>
-                  • <strong>접근 권한</strong>: 복호화된 원문은 관리자(admin) 권한 보유자만 조회 가능합니다.<br/>
+                  • <strong>접근 권한</strong>: 복호화된 원문은 관리자(admin) 권한 보유자만 조회 가능합니다. 캠프 참가 학생의 주민등록번호는 병원 내원 인솔자로 지정된 스태프도 해당 내원 기간 동안 조회할 수 있습니다.<br/>
+                  • <strong>조회 기록</strong>: 원문을 조회할 때마다 조회자·시각·대상이 감사 로그로 남습니다.<br/>
+                  • <strong>계좌번호·IBAN</strong>: 주민등록번호와 같은 방식으로 암호화하여 저장합니다.<br/>
                   • <strong>저장소</strong>: Firebase Firestore에 암호화된 값(`rrnLastEncrypted`)으로 저장되며, Firestore Security Rules에 의해 클라이언트의 직접 쓰기가 차단됩니다.
                 </p>
               </div>
@@ -255,8 +300,8 @@ export default function PrivacyPolicyPage() {
                   <h3 className="font-semibold text-gray-900 mb-2">공개 범위 및 보유 기간</h3>
                   <p className="text-gray-700 text-sm leading-relaxed">
                     수집된 위치 정보는 동일 캠프 코드를 보유한 스태프에게만 공개됩니다.
-                    위치 공유를 끄는 즉시 지도에서 제거되며, Firebase Firestore에서 공유 상태(isSharing)가
-                    비활성 처리됩니다. 위치 데이터는 서비스 목적 달성 후 지체 없이 파기됩니다.
+                    위치 공유를 끄는 즉시 지도에서 제거되며, 앱의 마이페이지 › 설정에서 '지금 위치 공유 끄기'로 모든 캠프의 위치 공유를 한 번에 끌 수 있습니다.
+                    위치 기록은 마지막 갱신 후 14일이 지나면 자동으로 삭제됩니다.
                   </p>
                 </div>
               </div>
@@ -270,6 +315,11 @@ export default function PrivacyPolicyPage() {
               <p className="text-gray-700 leading-relaxed">
                 이 개인정보처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
               </p>
+              <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4 mt-4 text-sm">
+                <li>시행일: {EFFECTIVE_DATE}</li>
+                <li>{EFFECTIVE_DATE} 개정: 캠프 배정 시 수집 항목(계좌·여권 등), 원어민 해외 송금 정보, 캠프 참가 학생 정보 처리, 제3자 제공, 위치 기록 자동 삭제, 커뮤니티 신고·익명글 처리, 감사 로그 보관 내용 추가</li>
+                <li>2026년 6월 14일: 이전 방침</li>
+              </ul>
             </section>
 
             {/* Contact Box */}

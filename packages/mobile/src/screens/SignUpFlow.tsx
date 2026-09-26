@@ -6,9 +6,8 @@ import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
 import { SignUpStep4Screen } from './SignUpStep4Screen';
 import type { SocialUserData, SignUpState } from '@smis-mentor/shared';
-import { signUp, updateUser, persistLoginRememberEmail, getUserById, getUserByEmailIncludeInactive } from '../services/authService';
-import { doc, setDoc, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { signUp, persistLoginRememberEmail, signUpWithSocialToken, completeSignupViaApi } from '../services/authService';
+import { ConsentCheckbox } from '../components/ConsentCheckbox';
 
 interface SignUpFlowProps {
   role: 'mentor' | 'foreign';
@@ -94,7 +93,7 @@ export function SignUpFlow({
 
       if (firebaseAuth.currentUser) {
         // Google/Apple: signInWithCredential로 로그인됨
-        // 네이버: signUp(임시 비번)으로 createUserWithEmailAndPassword 후 자동 로그인됨
+        // 네이버: 서버 검증 Custom Token 으로 Firebase 세션이 이미 생성되어 자동 로그인됨
         Alert.alert(
           '회원가입 완료',
           '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
@@ -176,7 +175,7 @@ export function SignUpFlow({
 
         if (firebaseAuth.currentUser) {
           // Google/Apple: signInWithCredential로 로그인됨
-          // 네이버: signUp(임시 비번)으로 createUserWithEmailAndPassword 후 자동 로그인됨
+          // 네이버: 서버 검증 Custom Token 으로 Firebase 세션이 이미 생성되어 자동 로그인됨
           logger.info('✅ 소셜 회원가입 완료 - Firebase Auth 로그인 확인됨');
           Alert.alert(
             '회원가입 완료',
@@ -226,370 +225,124 @@ export function SignUpFlow({
     }
   };
 
-  /**
-   * 소셜 회원가입 처리
-   */
-  const handleSocialSignUp = async (data: SignUpState) => {
-    const {
-      socialData, tempUserId, phone, name,
-      university, grade, isOnLeave, major1, major2, foreignTeacher,
-      address, addressDetail, rrnFront, rrnLast, gender,
-      referralPath, referrerName, otherReferralDetail, agreedPersonal, geocode,
-    } = data;
+  /** providerId 정규화: 네이버/카카오는 .com 없이, 구글/애플은 .com 포함 */
+  const toProviderId = (id: string) =>
+    (id === 'naver' || id === 'kakao' ? id : id.includes('.com') ? id : `${id}.com`) as 'naver' | 'kakao' | 'google.com' | 'apple.com';
 
-    if (!socialData) {
-      throw new Error('소셜 로그인 데이터가 없습니다');
+  /** 서버로 보낼 프로필 — role·캠프 배정 등 권한 필드는 서버가 정한다 */
+  const buildProfile = (data: SignUpState) => {
+    const geo = data.geocode && typeof data.geocode.lat === 'number' ? { geocode: { lat: data.geocode.lat, lng: data.geocode.lng } } : {};
+    if (role === 'foreign') {
+      const ft = data.foreignTeacher;
+      return {
+        name: data.name || [ft?.firstName, ft?.middleName, ft?.lastName].filter(Boolean).join(' '),
+        phoneNumber: data.phone,
+        foreignTeacher: { firstName: ft?.firstName ?? '', lastName: ft?.lastName ?? '', middleName: ft?.middleName ?? '', countryCode: ft?.countryCode ?? '' },
+        agreedPersonal: true,
+        ...(data.socialData?.photoURL && { profileImage: data.socialData.photoURL }),
+      };
     }
+    return {
+      name: data.name,
+      phoneNumber: data.phone,
+      university: data.university ?? '',
+      grade: data.grade,
+      isOnLeave: data.isOnLeave ?? null,
+      major1: data.major1 ?? '',
+      major2: data.major2 ?? '',
+      address: data.address ?? '',
+      addressDetail: data.addressDetail ?? '',
+      rrnFront: data.rrnFront ?? '',
+      rrnGenderDigit: (data.rrnLast ?? '').slice(0, 1),
+      gender: data.gender,
+      referralPath: data.referralPath ?? '',
+      referrerName: data.referrerName ?? '',
+      otherReferralDetail: data.otherReferralDetail ?? '',
+      agreedPersonal: data.agreedPersonal ?? false,
+      ...(data.socialData?.photoURL && { profileImage: data.socialData.photoURL }),
+      ...geo,
+    };
+  };
 
-    if (tempUserId) {
-      // temp 계정 활성화: 웹과 동일하게 새 Auth UID로 문서 생성 후 기존 temp 삭제
-      // (Firestore Rules: request.auth.uid == userId 조건 충족을 위해 새 문서 생성 필요)
-      logger.info('✅ temp 계정 활성화 시작 (새 UID 패턴):', tempUserId);
-
-      const { auth: firebaseAuth } = await import('../config/firebase');
-      const credential = (socialData as any)._credential;
-
-      if (credential) {
-        // Google/Apple: credential로 Firebase Auth 로그인
-        const { signInWithCredential } = await import('firebase/auth');
-        if (!firebaseAuth.currentUser) {
-          try {
-            const userCred = await signInWithCredential(firebaseAuth, credential);
-            logger.info('✅ Firebase Auth signInWithCredential 완료 (temp 활성화):', userCred.user.uid);
-          } catch (credError: any) {
-            logger.warn('⚠️ signInWithCredential 실패:', credError.message);
-          }
-        }
-      } else {
-        // 네이버: 임시 비밀번호로 Firebase Auth 계정 신규 생성 (웹과 동일)
-        logger.info('🔑 네이버 temp 활성화: 임시 비밀번호로 Firebase Auth 계정 생성');
-        if (!firebaseAuth.currentUser) {
-          try {
-            const tempPw = `${socialData.email}_${Date.now()}_${Math.random().toString(36)}`;
-            const userCred = await signUp(socialData.email, tempPw);
-            (socialData as any).firebaseAuthUid = userCred.user.uid;
-            logger.info('✅ 네이버 Firebase Auth 계정 생성 완료 (temp 활성화):', userCred.user.uid);
-          } catch (createError: any) {
-            if (createError.code === 'auth/email-already-in-use') {
-              logger.warn('⚠️ 네이버 temp 활성화: 이메일 이미 사용 중');
-              throw new Error('이미 가입된 이메일입니다. 로그인 화면에서 로그인해주세요.');
-            }
-            logger.error('❌ 네이버 Firebase Auth 계정 생성 실패 (temp 활성화):', createError.message);
-            throw new Error('Firebase 인증에 실패했습니다. 다시 시도해주세요.');
-          }
-        }
-      }
-
-      const newUserId = firebaseAuth.currentUser?.uid || socialData.firebaseAuthUid;
-      if (!newUserId) {
-        throw new Error('Firebase Auth 로그인이 필요합니다. 다시 시도해주세요.');
-      }
-
-      // 기존 temp 문서에서 필요한 정보 가져오기
-      const tempUserData = await getUserById(tempUserId);
-
-      // Apple 임시 이메일 처리: 기존 temp 계정 이메일 유지
-      let finalEmail = socialData.email;
-      if (socialData.email.includes('@privaterelay.appleid.com') && tempUserData?.email && !tempUserData.email.includes('@privaterelay.appleid.com')) {
-        finalEmail = tempUserData.email;
-        logger.info('✅ Apple 임시 이메일 → temp 계정 이메일 사용:', finalEmail);
-      }
-
-      // providerId 정규화
-      const normalizedProviderId = socialData.providerId === 'naver' || socialData.providerId === 'kakao'
-        ? socialData.providerId
-        : socialData.providerId.includes('.com')
-          ? socialData.providerId
-          : `${socialData.providerId}.com`;
-
-      // 새 Auth UID로 Firestore 문서 생성
-      // foreign 소셜 가입: role='foreign' + status='active' (일반 가입과 동일)
-      // mentor 소셜 가입: role='mentor_temp' + status='active' (학교 검토 후 승격)
-      await setDoc(doc(db, 'users', newUserId), {
-        userId: newUserId,
-        id: newUserId,
-        email: finalEmail,
-        name: tempUserData?.name || name,
-        phone: phone || tempUserData?.phone || '',
-        phoneNumber: phone || tempUserData?.phone || '',
-        // 역할별 전용 필드 분리 (undefined → Firestore 오류 방지)
-        ...(role !== 'foreign' && {
-          university: university ?? '',
-          grade: grade ?? 0,
-          isOnLeave: isOnLeave ?? null,
-          major1: major1 ?? '',
-          major2: major2 ?? '',
-          address: address ?? '',
-          addressDetail: addressDetail ?? '',
-          rrnFront: rrnFront ?? '',
-          rrnLast: rrnLast ?? '',
-          gender: gender ?? 'M',
-          referralPath: referralPath ?? '',
-          ...(referrerName && { referrerName }),
-          ...(otherReferralDetail && { otherReferralDetail }),
-          agreedPersonal: agreedPersonal ?? false,
-          ...(geocode && { geocode }),
-        }),
-        ...(role === 'foreign' && {
-          jobMotivation: 'Foreign Teacher Application',
-          foreignTeacher: {
-            firstName: foreignTeacher?.firstName ?? '',
-            lastName: foreignTeacher?.lastName ?? '',
-            middleName: foreignTeacher?.middleName ?? '',
-            countryCode: foreignTeacher?.countryCode ?? '',
-            cvUrl: (tempUserData as any)?.foreignTeacher?.cvUrl ?? '',
-            passportPhotoUrl: (tempUserData as any)?.foreignTeacher?.passportPhotoUrl ?? '',
-            foreignIdCardUrl: (tempUserData as any)?.foreignTeacher?.foreignIdCardUrl ?? '',
-            applicationDate: Timestamp.now(),
-          },
-        }),
-        role: role === 'foreign' ? 'foreign' : 'mentor_temp',
-        status: 'active',
-        agreedTerms: true,
-        agreedPersonal: agreedPersonal ?? true,
-        profileImage: socialData.photoURL || tempUserData?.profileImage || '',
-        selfIntroduction: (tempUserData as any)?.selfIntroduction || '',
-        feedback: (tempUserData as any)?.feedback || '',
-        jobExperiences: (tempUserData as any)?.jobExperiences || [],
-        authProviders: [
-          {
-            providerId: normalizedProviderId,
-            uid: socialData.providerUid,
-            email: finalEmail,
-            linkedAt: Timestamp.now(),
-            ...(socialData.name && { displayName: socialData.name }),
-            ...(socialData.photoURL && { photoURL: socialData.photoURL }),
-          },
-        ],
-        primaryAuthMethod: 'social',
-        createdAt: tempUserData?.createdAt || Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-
-      logger.info('✅ 새 Auth UID로 문서 생성 완료:', newUserId);
-
-      // 기존 temp 문서 삭제 (새 문서가 생성된 이후에 삭제)
-      if (newUserId !== tempUserId) {
-        await deleteDoc(doc(db, 'users', tempUserId));
-        logger.info('🗑️ 기존 temp 문서 삭제 완료:', tempUserId);
-      }
-
-      // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹
-      try {
-        const inactiveUser = await getUserByEmailIncludeInactive(finalEmail);
-        if (inactiveUser && inactiveUser.userId !== newUserId) {
-          await updateDoc(doc(db, 'users', inactiveUser.userId), {
-            email: `rejoined_${Date.now()}_${finalEmail}`,
-          });
-          logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
-        }
-      } catch (cleanupError) {
-        logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
-      }
-    } else {
-      // 완전히 새로운 소셜 계정 생성
-      logger.info('✅ 새 소셜 계정 생성');
-      
-      // ✅ Apple 임시 이메일로 신규 가입 불가
-      if (socialData.email.includes('@privaterelay.appleid.com')) {
-        throw new Error(
-          'Apple 재로그인 감지: Apple 설정에서 SMIS Mentor 앱 연동을 삭제한 후 다시 시도하세요.\n' +
-          '설정 > Apple ID > 암호 및 보안 > Apple로 로그인을 사용하는 앱'
-        );
-      }
-      
-      // Firebase Auth UID를 Firestore document ID로 사용 (일관성 보장)
-      const { auth: firebaseAuth } = await import('../config/firebase');
-      const credential = (socialData as any)._credential;
-
-      if (credential) {
-        // Google/Apple: credential로 Firebase Auth 로그인
-        const { signInWithCredential } = await import('firebase/auth');
-        if (!firebaseAuth.currentUser) {
-          try {
-            const userCred = await signInWithCredential(firebaseAuth, credential);
-            logger.info('✅ Firebase Auth signInWithCredential 완료 (회원가입 직전):', userCred.user.uid);
-          } catch (credError: any) {
-            logger.warn('⚠️ signInWithCredential 실패:', credError.message);
-          }
-        }
-      } else {
-        // 네이버 등 credential 없는 경우: 임시 비밀번호로 Firebase Auth 계정 신규 생성
-        // (웹과 동일한 방식: createUserWithEmailAndPassword → UID 확보 → setDoc)
-        logger.info('🔑 네이버 신규 가입: 임시 비밀번호로 Firebase Auth 계정 생성');
-        if (!firebaseAuth.currentUser) {
-          try {
-            const tempPw = `${socialData.email}_${Date.now()}_${Math.random().toString(36)}`;
-            const userCred = await signUp(socialData.email, tempPw);
-            (socialData as any).firebaseAuthUid = userCred.user.uid;
-            logger.info('✅ 네이버 Firebase Auth 계정 생성 완료:', userCred.user.uid);
-          } catch (createError: any) {
-            if (createError.code === 'auth/email-already-in-use') {
-              // 이미 Firebase Auth 계정이 있는 경우 → signIn으로 처리 불가
-              // Firestore에서 기존 계정 조회가 필요한 케이스 (재가입 시나리오)
-              logger.warn('⚠️ 네이버 가입: 이메일 이미 사용 중 (기존 Auth 계정 존재)');
-              throw new Error('이미 가입된 이메일입니다. 로그인 화면에서 로그인해주세요.');
-            }
-            logger.error('❌ 네이버 Firebase Auth 계정 생성 실패:', createError.message);
-            throw new Error('Firebase 인증에 실패했습니다. 다시 시도해주세요.');
-          }
-        }
-      }
-      
-      const currentFirebaseUser = firebaseAuth.currentUser;
-      const userId = currentFirebaseUser?.uid || socialData.firebaseAuthUid || socialData.providerUid;
-      
-      if (!userId) {
-        throw new Error('Firebase Auth 로그인이 필요합니다. 다시 시도해주세요.');
-      }
-      
-      logger.info('✅ 소셜 회원가입 userId 결정:', {
-        currentUserUid: currentFirebaseUser?.uid,
-        firebaseAuthUid: socialData.firebaseAuthUid,
-        providerUid: socialData.providerUid,
-        finalUserId: userId,
-      });
-      
-      // providerId 정규화: 네이버/카카오는 .com 없이, 구글/애플은 .com 포함
-      const normalizedProviderId = socialData.providerId === 'naver' || socialData.providerId === 'kakao'
-        ? socialData.providerId
-        : socialData.providerId.includes('.com') 
-          ? socialData.providerId 
-          : `${socialData.providerId}.com`;
-      
-      // foreign 소셜 가입: role='foreign' + status='active' (일반 가입과 동일)
-      // mentor 소셜 가입: role='mentor_temp' + status='active' (학교 검토 후 승격)
-      await setDoc(doc(db, 'users', userId), {
-        userId,
-        id: userId,
-        email: socialData.email.toLowerCase(),
-        name,
-        phone,
-        phoneNumber: phone,
-        // 역할별 전용 필드 분리 (undefined → Firestore 오류 방지)
-        ...(role !== 'foreign' && {
-          university: university ?? '',
-          grade: grade ?? 0,
-          isOnLeave: isOnLeave ?? null,
-          major1: major1 ?? '',
-          major2: major2 ?? '',
-          address: address ?? '',
-          addressDetail: addressDetail ?? '',
-          rrnFront: rrnFront ?? '',
-          rrnLast: rrnLast ?? '',
-          gender: gender ?? 'M',
-          referralPath: referralPath ?? '',
-          ...(referrerName && { referrerName }),
-          ...(otherReferralDetail && { otherReferralDetail }),
-          agreedPersonal: agreedPersonal ?? false,
-          ...(geocode && { geocode }),
-        }),
-        ...(role === 'foreign' && {
-          jobMotivation: 'Foreign Teacher Application',
-          foreignTeacher: {
-            firstName: foreignTeacher?.firstName ?? '',
-            lastName: foreignTeacher?.lastName ?? '',
-            middleName: foreignTeacher?.middleName ?? '',
-            countryCode: foreignTeacher?.countryCode ?? '',
-            cvUrl: '',
-            passportPhotoUrl: '',
-            foreignIdCardUrl: '',
-            applicationDate: Timestamp.now(),
-          },
-        }),
-        role: role === 'foreign' ? 'foreign' : 'mentor_temp',
-        status: 'active',
-        agreedTerms: true,
-        agreedPersonal: agreedPersonal ?? (role === 'foreign' ? true : false),
-        profileImage: socialData.photoURL || '',
-        authProviders: [
-          {
-            providerId: normalizedProviderId,
-            uid: socialData.providerUid,
-            email: socialData.email,
-            linkedAt: Timestamp.now(),
-            ...(socialData.name && { displayName: socialData.name }),
-            ...(socialData.photoURL && { photoURL: socialData.photoURL }),
-          },
-        ],
-        primaryAuthMethod: 'social',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-      
-      logger.info('✅ Firestore 사용자 문서 생성 완료:', userId);
-
-      // 탈퇴(inactive) 계정이 동일 이메일로 존재하면 이메일 마스킹
-      try {
-        const inactiveUser = await getUserByEmailIncludeInactive(socialData.email);
-        if (inactiveUser && inactiveUser.userId !== userId) {
-          await updateDoc(doc(db, 'users', inactiveUser.userId), {
-            email: `rejoined_${Date.now()}_${socialData.email}`,
-          });
-          logger.info('✅ 기존 탈퇴 계정 이메일 마스킹 완료:', inactiveUser.userId);
-        }
-      } catch (cleanupError) {
-        logger.warn('⚠️ 기존 탈퇴 계정 정리 실패 (가입은 완료됨):', cleanupError);
-      }
+  /**
+   * 소셜 가입: Firebase Auth 세션을 확보한다
+   * (Google/Apple: credential 로그인 / 네이버·카카오: 서버가 access token 을 검증한 뒤 Custom Token 발급)
+   */
+  const ensureSocialSession = async (socialData: SocialUserData) => {
+    const { auth: firebaseAuth } = await import('../config/firebase');
+    if (firebaseAuth.currentUser) return firebaseAuth.currentUser.uid;
+    const credential = (socialData as any)._credential;
+    if (credential) {
+      const { signInWithCredential } = await import('firebase/auth');
+      const userCred = await signInWithCredential(firebaseAuth, credential);
+      return userCred.user.uid;
+    }
+    if (!socialData.accessToken || (socialData.providerId !== 'naver' && socialData.providerId !== 'kakao')) {
+      throw new Error('소셜 인증 정보가 만료되었습니다. 다시 로그인해주세요.');
+    }
+    try {
+      const userCred = await signUpWithSocialToken({ kind: socialData.providerId, accessToken: socialData.accessToken });
+      return userCred.user.uid;
+    } catch (createError: any) {
+      if (createError?.status === 409) throw new Error('이미 가입된 이메일입니다. 로그인 화면에서 로그인해주세요.');
+      if (createError?.status === 401) throw new Error('소셜 인증이 만료되었습니다. 다시 로그인해주세요.');
+      logger.error('❌ 소셜 Firebase 세션 확보 실패:', createError?.message);
+      throw new Error('Firebase 인증에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
   /**
-   * 일반 회원가입 처리
+   * 소셜 회원가입 처리 — users 문서 생성·temp 이관·탈퇴 계정 정리는 서버가 한 번에 (웹과 동일)
    */
-  const handleNormalSignUp = async (data: SignUpState) => {
-    const {
-      email, password, phone, name,
-      university, grade, isOnLeave, major1, major2,
-      address, addressDetail, rrnFront, rrnLast, gender,
-      referralPath, referrerName, otherReferralDetail, agreedPersonal, geocode,
-    } = data;
+  const handleSocialSignUp = async (data: SignUpState) => {
+    const { socialData, tempUserId } = data;
+    if (!socialData) throw new Error('소셜 로그인 데이터가 없습니다');
 
-    if (!email || !password) {
-      throw new Error('이메일과 비밀번호가 필요합니다');
+    // Apple 비공개 릴레이 이메일로는 신규 가입 불가 (temp 계정 이관은 서버가 temp 이메일로 대체)
+    if (!tempUserId && socialData.email.includes('@privaterelay.appleid.com')) {
+      throw new Error(
+        'Apple 재로그인 감지: Apple 설정에서 SMIS Mentor 앱 연동을 삭제한 후 다시 시도하세요.\n' +
+        '설정 > Apple ID > 암호 및 보안 > Apple로 로그인을 사용하는 앱'
+      );
     }
 
-    // 1. Firebase Auth 계정 생성
-    const userCredential = await signUp(email, password);
-    const userId = userCredential.user.uid;
-
-    // 2. Firestore에 사용자 정보 저장
-    await setDoc(doc(db, 'users', userId), {
-      userId,
-      email: email.toLowerCase(),
-      name,
-      phone,
-      university,
-      grade,
-      isOnLeave,
-      major1,
-      major2,
-      address: address ?? '',
-      addressDetail: addressDetail ?? '',
-      rrnFront: rrnFront ?? '',
-      rrnLast: rrnLast ?? '',
-      gender: gender ?? 'M',
-      referralPath: referralPath ?? '',
-      ...(referrerName && { referrerName }),
-      ...(otherReferralDetail && { otherReferralDetail }),
-      agreedPersonal: agreedPersonal ?? false,
-      ...(geocode && { geocode }),
-      role: role === 'foreign' ? 'foreign' : 'mentor_temp',
-      status: 'active',
-      agreedTerms: true,
-      profileImage: '',
-      authProviders: [
-        {
-          providerId: 'password',
-          uid: userId,
-          email,
-          linkedAt: Timestamp.now(),
-        },
-      ],
-      primaryAuthMethod: 'email',
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
+    const uid = await ensureSocialSession(socialData);
+    const result = await completeSignupViaApi({
+      kind: role === 'foreign' ? 'foreign' : 'mentor',
+      tempUserId: tempUserId || undefined,
+      provider: {
+        providerId: toProviderId(socialData.providerId),
+        providerUid: socialData.providerUid,
+        ...(socialData.name && { displayName: socialData.name }),
+        ...(socialData.photoURL && { photoURL: socialData.photoURL }),
+      },
+      profile: buildProfile(data),
     });
+    logger.info('✅ 소셜 가입 완료:', { uid, role: result.role, claimedTemp: result.claimedTemp });
+  };
+
+  /**
+   * 일반 회원가입 처리 — 실패하면 서버가 방금 만든 Auth 계정을 지운다 (반쪽 계정 방지)
+   */
+  const handleNormalSignUp = async (data: SignUpState) => {
+    const { email, password } = data;
+    if (!email || !password) throw new Error('이메일과 비밀번호가 필요합니다');
+
+    const userCredential = await signUp(email, password);
+    try {
+      const result = await completeSignupViaApi({
+        kind: role === 'foreign' ? 'foreign' : 'mentor',
+        tempUserId: data.tempUserId || undefined,
+        rollbackAuthOnFailure: true,
+        provider: { providerId: 'password' },
+        profile: buildProfile(data),
+      });
+      logger.info('✅ 가입 완료:', { uid: userCredential.user.uid, role: result.role, claimedTemp: result.claimedTemp });
+    } catch (e) {
+      const { auth: firebaseAuth } = await import('../config/firebase');
+      await firebaseAuth.signOut().catch(() => undefined);
+      throw e;
+    }
   };
 
   if (isSubmitting) {
@@ -692,6 +445,7 @@ function ForeignAccountScreen({
   onComplete: () => void;
   onBack: () => void;
 }) {
+  const [agreedConsent, setAgreedConsent] = useState(false);
   const providerLabel =
     socialProvider === 'naver' ? 'Naver' :
     socialProvider === 'kakao' ? 'Kakao' :
@@ -739,12 +493,23 @@ function ForeignAccountScreen({
           </View>
         </View>
 
+        <ConsentCheckbox checked={agreedConsent} onChange={setAgreedConsent} english />
+
         {/* 버튼 */}
         <View style={foreignStyles.buttonRow}>
           <TouchableOpacity style={foreignStyles.backButton} onPress={onBack}>
             <Text style={foreignStyles.backButtonText}>Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={foreignStyles.completeButton} onPress={onComplete}>
+          <TouchableOpacity
+            style={[foreignStyles.completeButton, !agreedConsent && { opacity: 0.5 }]}
+            onPress={() => {
+              if (!agreedConsent) {
+                Alert.alert('Consent Required', 'Please agree to the Terms of Service and Privacy Policy.');
+                return;
+              }
+              onComplete();
+            }}
+          >
             <Text style={foreignStyles.completeButtonText}>Complete Registration</Text>
           </TouchableOpacity>
         </View>

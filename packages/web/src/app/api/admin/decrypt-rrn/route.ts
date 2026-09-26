@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 import { decryptRRN, isEncryptionConfigured, isPlaintextRRN } from '@/lib/encryption';
+import { writeAuditLog } from '@/lib/auditLog';
 
 /**
  * admin 전용 주민등록번호 복호화 API
@@ -66,6 +67,17 @@ export async function GET(request: NextRequest) {
     logger.info('✅ admin rrnLast 복호화 접근:', {
       adminId: authContext!.firebaseUid,
       targetUserId: userId,
+    });
+    // 감사 로그: 누가·언제·누구의 주민번호를 열람했는지 (값 자체는 남기지 않음)
+    await writeAuditLog({
+      action: 'RRN_DECRYPT',
+      category: 'PRIVACY',
+      performedBy: authContext!.firebaseUid,
+      performedByName: (authContext!.user as any)?.name,
+      targetUserId: userId,
+      targetLabel: typeof data.name === 'string' ? data.name : undefined,
+      metadata: { reason: searchParams.get('reason') || null, hadValue: !!rrnLast },
+      request,
     });
 
     return NextResponse.json({

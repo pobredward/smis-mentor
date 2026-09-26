@@ -134,9 +134,6 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
   };
 
   const applyZoom = (id: string, zoom: number) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:applyZoom',message:'applyZoom 호출됨',data:{id,zoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
 
     // iOS: zoom CSS 속성이 WebView 프레임 자체 크기를 바꾸므로 사용 금지
     // meta viewport initial-scale을 동적으로 변경하는 방식 사용
@@ -196,9 +193,6 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
     const defaultZoom = Platform.OS === 'android' ? 0.8 : 0.6;
     const initialZoom = zoomLevels[id] || defaultZoom;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:renderWebView',message:'renderWebView 호출됨',data:{id,visible,initialZoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     return (
       <WebView
         key={id}
@@ -207,9 +201,6 @@ export function WebViewCacheProvider({ children }: { children: ReactNode }) {
         style={[styles.webView, !visible && styles.hiddenWebView]}
         onLoadEnd={() => {
           setLoadingState(id, false);
-          // #region agent log
-          fetch('http://127.0.0.1:7295/ingest/3b359ebe-f39f-4e78-ab3d-8b524e10af90',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89b1c8'},body:JSON.stringify({sessionId:'89b1c8',location:'WebViewCacheContext.tsx:onLoadEnd',message:'onLoadEnd - applyZoom 예정',data:{id,initialZoom,platform:Platform.OS},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
           setTimeout(() => {
             applyZoom(id, initialZoom);
           }, 300);

@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const apiKey = process.env.CRON_SECRET;
 
-    if (apiKey && authHeader !== `Bearer ${apiKey}`) {
+    // fail-closed: CRON_SECRET 미설정 시에도 열리지 않도록
+    if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
       return NextResponse.json(
         { error: '인증되지 않은 요청입니다.' },
         { status: 401 }

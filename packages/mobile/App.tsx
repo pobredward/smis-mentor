@@ -13,6 +13,8 @@ import { QueryClientProvider } from './src/context/QueryClientProvider';
 import { CampTabProvider, useCampTab } from './src/context/CampTabContext';
 import { WebViewPreloader } from './src/components/WebViewPreloader';
 import { ForceUpdateModal } from './src/components/ForceUpdateModal';
+import { CampProfileGate } from './src/components/campProfile/CampProfileGate';
+import { EmailVerifyGate } from './src/components/auth/EmailVerifyGate';
 import { useAuth } from './src/context/AuthContext';
 import { useCampDataPrefetch } from './src/hooks/useCampDataPrefetch';
 import { useRecruitmentDataPrefetch } from './src/hooks/useRecruitmentDataPrefetch';
@@ -122,6 +124,9 @@ function AppContent() {
   return (
     <>
       <RootNavigator />
+      {/* 캠프 코드가 있는 멘토: 캠프 참가 정보 필수 입력 */}
+      <EmailVerifyGate />
+      <CampProfileGate />
       <StatusBar style="auto" />
       
       {/* 전역 WebView 프리로더 — 완료 후 언마운트해 Native 스레드 경합 해소 */}

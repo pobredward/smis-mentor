@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import SsnReveal from '@/components/common/SsnReveal';
 import { useRouter } from 'next/navigation';
 import Layout from '@/components/common/Layout';
 import {
@@ -122,7 +123,14 @@ function CampDetail({ campCode, student }: { campCode: string; student: STSheetS
         <InfoRow label="신상"
           value={`${student.name}${student.englishName ? ` | ${student.englishName}` : ''} | ${student.grade} | ${student.gender === 'M' ? '남' : '여'}`}
         />
-        <InfoRow label="주민등록번호" value={formatSSN(student.ssn)} />
+        {student.ssn && (
+          <div className="flex py-2 border-b border-gray-100">
+            <span className="flex-1 text-xs text-gray-500">주민등록번호</span>
+            <span className="flex-[2] text-xs text-gray-900 font-medium break-all">
+              <SsnReveal value={formatSSN(student.ssn)} campCode={campCode} sensitiveKey={student.studentId} label={student.name} canReveal />
+            </span>
+          </div>
+        )}
         <InfoRow label="도로명 주소" value={student.address} />
         <InfoRow label="세부 주소"   value={student.addressDetail} />
         {(student.departureRoute || student.arrivalRoute) && (
@@ -265,7 +273,12 @@ function FamilyCampDetail({ campCode, family, studentId }: {
           <FamilyInfoRow label="이메일" value={p.email} />
           <FamilyInfoRow label="여권이름" value={p.passportName} />
           <FamilyInfoRow label="여권번호" value={p.passportNumber} />
-          <FamilyInfoRow label="주민번호" value={formatSSN(p.ssn)} />
+          {p.ssn && (
+            <div className="flex items-start gap-1.5 text-xs text-gray-600">
+              <span className="text-gray-400 flex-shrink-0 min-w-[56px]">주민번호</span>
+              <SsnReveal value={formatSSN(p.ssn)} campCode={campCode} sensitiveKey={`${family.familyId}__${p.id}`} label={p.name} canReveal />
+            </div>
+          )}
         </FamilyInfoSection>
       ))}
 
@@ -278,7 +291,12 @@ function FamilyCampDetail({ campCode, family, studentId }: {
           <FamilyInfoRow label="여권번호"  value={thisStudent.passportNumber} />
           <FamilyInfoRow label="건강정보"  value={thisStudent.medication} />
           <FamilyInfoRow label="등록처"    value={thisStudent.registrationSource} />
-          <FamilyInfoRow label="주민번호" value={formatSSN(thisStudent.ssn)} />
+          {thisStudent.ssn && (
+            <div className="flex items-start gap-1.5 text-xs text-gray-600">
+              <span className="text-gray-400 flex-shrink-0 min-w-[56px]">주민번호</span>
+              <SsnReveal value={formatSSN(thisStudent.ssn)} campCode={campCode} sensitiveKey={`${family.familyId}__${thisStudent.id}`} label={thisStudent.name} canReveal />
+            </div>
+          )}
         </FamilyInfoSection>
       )}
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendSMS, PhoneNumber } from '@/lib/naverCloudSMS';
 import { getSMSTemplate, replaceTemplateVariables } from '@/lib/smsTemplateService';
 import { sendSMSSchema } from '@/lib/validationSchemas';
-import { logger } from '@smis-mentor/shared';
+import { logger, findUnresolvedPlaceholders } from '@smis-mentor/shared';
 import { getAuthenticatedUser } from '@/lib/authMiddleware';
 
 // CORS 허용 출처 (서비스 도메인만 허용)
@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-    const allowedRoles = ['admin', 'mentor', 'foreign'];
+    // 문자 발송은 채용·면접 관리(관리자 화면)에서만 사용 — 일반 멘토/원어민 계정의 임의 발송 차단
+    const allowedRoles = ['admin'];
     if (!allowedRoles.includes(authContext.user.role)) {
       return NextResponse.json(
         { success: false, message: 'SMS 발송 권한이 없습니다. (temp 계정 불가)' },
@@ -90,6 +91,15 @@ export async function POST(request: NextRequest) {
       messageContent = replaceTemplateVariables(content, allVariables);
     }
     
+    // 치환되지 않은 변수가 남아 있으면 발송하지 않는다 (지원자에게 "{면접링크}" 같은 문자가 가는 것 방지)
+    const unresolved = findUnresolvedPlaceholders(messageContent || '');
+    if (unresolved.length > 0) {
+      return NextResponse.json(
+        { success: false, message: `채워지지 않은 항목이 있습니다: ${unresolved.join(', ')} — 면접 일시·링크 등을 먼저 입력해주세요.` },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
     const result = await sendSMS({ 
       to: phoneNumber, 
       content: messageContent,

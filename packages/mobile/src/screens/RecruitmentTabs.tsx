@@ -33,6 +33,7 @@ import {
   ApplicationWithJobDetails,
   ReviewWithId,
 } from '../services/recruitmentService';
+import { recruitStatusBadge } from '@smis-mentor/shared';
 
 export function ApplicationStatusScreen() {
   const { userData, loading: authLoading } = useAuth();
@@ -93,72 +94,10 @@ export function ApplicationStatusScreen() {
     status: string | undefined,
     type: 'application' | 'interview' | 'final'
   ) => {
-    let badgeStyle: any = styles.badgeGray;
-    let label = '';
-
-    if (type === 'application') {
-      switch (status) {
-        case 'pending':
-          badgeStyle = styles.badgeYellow;
-          label = '검토중';
-          break;
-        case 'accepted':
-          badgeStyle = styles.badgeGreen;
-          label = '서류합격';
-          break;
-        case 'rejected':
-          badgeStyle = styles.badgeRed;
-          label = '서류불합격';
-          break;
-        default:
-          badgeStyle = styles.badgeGray;
-          label = '미정';
-      }
-    } else if (type === 'interview') {
-      switch (status) {
-        case 'pending':
-          badgeStyle = styles.badgeYellow;
-          label = '면접예정';
-          break;
-        case 'complete':
-          badgeStyle = styles.badgePurple;
-          label = '면접완료';
-          break;
-        case 'passed':
-          badgeStyle = styles.badgeGreen;
-          label = '면접합격';
-          break;
-        case 'failed':
-          badgeStyle = styles.badgeRed;
-          label = '면접불합격';
-          break;
-        case 'absent':
-          badgeStyle = styles.badgeRed;
-          label = '불참';
-          break;
-        default:
-          badgeStyle = styles.badgeGray;
-          label = '미정';
-      }
-    } else if (type === 'final') {
-      switch (status) {
-        case 'finalAccepted':
-          badgeStyle = styles.badgeGreen;
-          label = '최종합격';
-          break;
-        case 'finalRejected':
-          badgeStyle = styles.badgeRed;
-          label = '최종불합격';
-          break;
-        case 'finalAbsent':
-          badgeStyle = styles.badgeRed;
-          label = '불참';
-          break;
-        default:
-          badgeStyle = styles.badgeGray;
-          label = '미정';
-      }
-    }
+    // 라벨은 shared 한 곳에서 (웹·앱 공통)
+    const b = recruitStatusBadge(type, status);
+    const badgeStyle = ({ wait: styles.badgeYellow, info: styles.badgePurple, ok: styles.badgeGreen, bad: styles.badgeRed, muted: styles.badgeGray } as const)[b.tone];
+    const label = b.label;
 
     return (
       <View style={[styles.badge, badgeStyle]}>

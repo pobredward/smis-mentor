@@ -14,9 +14,9 @@ import { unlinkSocialProvider, getSocialProviderName } from '@smis-mentor/shared
 import toast from 'react-hot-toast';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { formatPhoneNumber } from '@smis-mentor/shared';
 import { useCampDataPrefetch } from '@/hooks/useCampDataPrefetch';
 import NotificationSettingsCard from '@/components/profile/NotificationSettingsCard';
+import { BasicInfoSection, CampProfileSection, RrnSection, AddressSection, EducationSection, ExperienceSection, IntroSection, ReferralSection } from '@/components/profile/ProfileSections';
 
 export default function ProfilePage() {
   const { userData, waitForAuthReady, refreshUserData, updateActiveJobCode } = useAuth();
@@ -308,6 +308,8 @@ export default function ProfilePage() {
     // ✅ 원래 사용자 정보 저장 (구글 팝업으로 세션 변경될 수 있음)
     const originalUserEmail = currentUser.email;
     const originalUserUid = currentUser.uid;
+    // 팝업 후 원래 계정으로 복원할 때 서버에 제출할 신원 증명 (원래 세션의 ID token)
+    const originalIdToken = await currentUser.getIdToken(true);
 
     setIsLinking(true);
     try {
@@ -349,22 +351,7 @@ export default function ProfilePage() {
           arrayUnionNaver
         );
 
-        // 비밀번호 없는 사용자 → _firebaseAuthPassword 생성
-        const hasPasswordProviderNaver = userData.authProviders?.some(
-          (p: any) => p.providerId === 'password'
-        );
-        if (!hasPasswordProviderNaver) {
-          const tempPassword = `${userData.email}_${Date.now()}_${Math.random().toString(36)}`;
-          try {
-            const { updatePassword } = await import('firebase/auth');
-            await updatePassword(currentUser, tempPassword);
-            const userRef = doc(db, 'users', userData.userId);
-            await updateDoc(userRef, { _firebaseAuthPassword: tempPassword });
-            console.log('✅ _firebaseAuthPassword 생성 완료');
-          } catch (passwordError: any) {
-            console.error('⚠️ _firebaseAuthPassword 생성 실패:', passwordError);
-          }
-        }
+        // (구 방식) 임시 비밀번호 생성·저장 제거 — 네이버 재로그인은 서버 검증 Custom Token 으로 처리
 
         toast.success('네이버 계정이 성공적으로 연동되었습니다.');
         await refreshUserData();
@@ -397,43 +384,24 @@ export default function ProfilePage() {
       if (currentUserAfterPopup?.uid !== originalUserUid) {
         console.log('⚠️ 팝업으로 세션 변경됨 → 원래 계정으로 복원 필요');
 
-        const hasPasswordProvider = userData.authProviders?.some(
-          (p: any) => p.providerId === 'password'
-        );
-        const firebaseAuthPassword = (userData as any)._firebaseAuthPassword;
-
         try {
-          if (hasPasswordProvider && firebaseAuthPassword) {
-            console.log('🔑 비밀번호로 재로그인');
-            await signIn(userData.email, firebaseAuthPassword);
-          } else {
-            console.log('🔑 Custom Token으로 재로그인 (서버에서 임시 계정 삭제 포함)');
-            await signInWithCustomTokenFromFunction(
-              userData.userId,
-              userData.email,
-              originalUserUid,
-              tempFirebaseUid ?? undefined // 서버에서 임시 계정 동시 삭제
-            );
-            tempFirebaseUid = null; // 이미 서버에서 삭제됨
+          console.log('🔑 Custom Token으로 재로그인 (원래 세션 증명 + 임시 계정 서버 삭제)');
+          // 임시 팝업 계정은 그 계정의 ID token 으로만 삭제 가능 (현재 세션이 임시 계정)
+          let tempIdToken: string | null = null;
+          if (tempFirebaseUid && currentUserAfterPopup?.uid === tempFirebaseUid) {
+            try { tempIdToken = await currentUserAfterPopup.getIdToken(); } catch { tempIdToken = null; }
           }
+          await signInWithCustomTokenFromFunction(
+            userData.userId,
+            { kind: 'firebase', idToken: originalIdToken },
+            tempFirebaseUid && tempIdToken
+              ? { deleteAuthUid: { uid: tempFirebaseUid, idToken: tempIdToken } }
+              : undefined
+          );
+          tempFirebaseUid = null; // 서버에서 정리됨(또는 정리 대상 없음)
           console.log('✅ 원래 계정으로 복원 완료');
         } catch (restoreError) {
           console.error('⚠️ 원래 계정 복원 실패 (무시하고 계속):', restoreError);
-        }
-      }
-
-      // 비밀번호로 복원한 경우 tempFirebaseUid가 아직 남아있을 수 있으므로 서버 삭제
-      if (tempFirebaseUid) {
-        try {
-          await fetch('/api/auth/delete-temp-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tempUid: tempFirebaseUid }),
-          });
-          console.log('✅ 임시 계정 서버 삭제 완료:', tempFirebaseUid);
-          tempFirebaseUid = null;
-        } catch (deleteErr) {
-          console.warn('⚠️ 임시 계정 삭제 실패 (무시):', deleteErr);
         }
       }
 
@@ -701,13 +669,15 @@ export default function ProfilePage() {
         if (socialProviderBeforeUnlink?.email && socialProviderBeforeUnlink.email !== userData.email) {
           console.log(`🗑️ Firebase Auth 고아 계정 삭제 시도 (${providerDisplayName}):`, socialProviderBeforeUnlink.email);
           
+          let restoreIdToken: string | null = null;
           try {
             // ⏳ 로딩 토스트
             toast.loading('Firebase Auth 계정 정리 중...', { id: 'delete-orphan' });
             
-            // 1. 현재 사용자 정보 저장
+            // 1. 현재 사용자 정보 저장 (+ 복원용 ID token)
             const originalUser = auth.currentUser;
             if (!originalUser) throw new Error('현재 사용자 없음');
+            restoreIdToken = await originalUser.getIdToken(true);
             
             // 2. 소셜 계정으로 임시 로그인
             const { signInWithPopup } = await import('firebase/auth');
@@ -748,13 +718,8 @@ export default function ProfilePage() {
               console.log('✅ Firebase Auth 고아 계정 삭제 완료:', tempUser.email);
             }
             
-            // 4. 원래 사용자로 다시 로그인
-            const firebaseAuthPassword = (userData as any)._firebaseAuthPassword;
-            if (firebaseAuthPassword) {
-              await signIn(userData.email, firebaseAuthPassword);
-            } else {
-              await signInWithCustomTokenFromFunction(userData.userId, userData.email, userData.userId);
-            }
+            // 4. 원래 사용자로 다시 로그인 (원래 세션의 ID token 을 증명으로 제출)
+            await signInWithCustomTokenFromFunction(userData.userId, { kind: 'firebase', idToken: restoreIdToken });
             console.log('✅ 원래 계정 복원:', userData.email);
             
             toast.dismiss('delete-orphan');
@@ -768,13 +733,11 @@ export default function ProfilePage() {
             toast.dismiss('delete-orphan');
             console.error(`⚠️ Firebase Auth 고아 계정 삭제 실패 (${providerDisplayName}):`, deleteError);
             
-            // 실패 시 원래 계정 복원 시도
+            // 실패 시 원래 계정 복원 시도 (원래 세션의 ID token 으로)
             try {
-              const firebaseAuthPassword = (userData as any)._firebaseAuthPassword;
-              if (firebaseAuthPassword) {
-                await signIn(userData.email, firebaseAuthPassword);
-              } else {
-                await signInWithCustomTokenFromFunction(userData.userId, userData.email, userData.userId);
+              if (auth.currentUser?.uid !== userData.userId) {
+                if (!restoreIdToken) throw new Error('복원용 세션 증명 없음');
+                await signInWithCustomTokenFromFunction(userData.userId, { kind: 'firebase', idToken: restoreIdToken });
               }
             } catch (restoreError) {
               console.error('⚠️ 원래 계정 복원 실패:', restoreError);
@@ -907,41 +870,12 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold">{isForeign ? 'My Profile' : '내 프로필'}</h1>
-          <Button
-            variant="primary"
-            onClick={() => router.push('/profile/edit')}
-            className="text-sm px-4 py-2"
-          >
-            {isForeign ? 'Edit' : '수정'}
-          </Button>
+        <div className="mb-4">
+          <h1 className="text-xl sm:text-2xl font-bold">{isForeign ? 'My Page' : '마이페이지'}</h1>
         </div>
 
-        {/* 프로필 카드 */}
-        <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-          <div className="px-4 sm:px-6 py-4">
-            <div className="flex flex-col sm:flex-row sm:items-center">
-              {userData.profileImage ? (
-                <img
-                  src={userData.profileImage}
-                  alt={userData.name}
-                  className="w-20 h-20 object-cover object-center rounded-md border border-gray-300 mb-4 sm:mb-0 sm:mr-4 mx-auto sm:mx-0"
-                  style={{ aspectRatio: '1 / 1' }}
-                />
-              ) : (
-                <div className="w-20 h-20 bg-blue-500 rounded-md flex items-center justify-center mb-4 sm:mb-0 sm:mr-4 mx-auto sm:mx-0">
-                  <span className="text-white text-2xl font-bold">{userData.name.charAt(0)}</span>
-                </div>
-              )}
-              <div className="text-center sm:text-left">
-                <h2 className="text-xl font-bold mb-1">{userData.name}</h2>
-                <p className="text-gray-600 mb-1">{userData.email}</p>
-                {userData.phoneNumber && <p className="text-gray-600">{formatPhoneNumber(userData.phoneNumber)}</p>}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* 기본 정보 (사진·이름·연락처) */}
+        <BasicInfoSection />
 
         {/* SMIS 캠프 참여 이력 */}
         <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
@@ -1165,70 +1099,11 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* 원어민 교사 정보 (Teacher Information + Personal Information 통합) */}
-        {isForeign && userData.foreignTeacher && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-            <div className="border-b px-4 sm:px-6 py-3">
-              <h2 className="text-lg font-semibold">Teacher Information</h2>
-            </div>
-            <div className="px-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">First Name</p>
-                  <p>{userData.foreignTeacher.firstName}</p>
-                </div>
-                {userData.foreignTeacher.middleName && (
-                  <div>
-                    <p className="text-sm text-gray-500">Middle Name</p>
-                    <p>{userData.foreignTeacher.middleName}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-sm text-gray-500">Last Name</p>
-                  <p>{userData.foreignTeacher.lastName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Country</p>
-                  <p>{userData.foreignTeacher.countryCode}</p>
-                </div>
-                {userData.age && (
-                  <div>
-                    <p className="text-sm text-gray-500">Age</p>
-                    <p>{userData.age} years old</p>
-                  </div>
-                )}
-                {userData.gender && (
-                  <div>
-                    <p className="text-sm text-gray-500">Gender</p>
-                    <p>{userData.gender === 'M' ? 'Male' : 'Female'}</p>
-                  </div>
-                )}
-                {userData.phoneNumber && (
-                  <div>
-                    <p className="text-sm text-gray-500">Phone Number</p>
-                    <p>{formatPhoneNumber(userData.phoneNumber)}</p>
-                  </div>
-                )}
-                {userData.address && (
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-500">Address</p>
-                    <p>{userData.address} {userData.addressDetail}</p>
-                  </div>
-                )}
-                {userData.foreignTeacher.applicationDate && (
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-500">Application Date</p>
-                    <p>
-                      {userData.foreignTeacher.applicationDate.toDate
-                        ? userData.foreignTeacher.applicationDate.toDate().toLocaleDateString('en-US')
-                        : new Date((userData.foreignTeacher.applicationDate as any).seconds * 1000).toLocaleDateString('en-US')}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 캠프 참가 정보 (캠프 코드가 있는 멘토·원어민) */}
+        <CampProfileSection />
+
+        {/* 원어민 주소 */}
+        {isForeign && <AddressSection />}
 
         {/* 원어민 제출 서류 (in-place 업로드) */}
         {isForeign && userData.foreignTeacher && (
@@ -1309,6 +1184,18 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* 멘토 — 섹션별 제자리 수정 */}
+        {!isForeign && (
+          <>
+            <RrnSection />
+            <AddressSection />
+            <EducationSection />
+            <ExperienceSection />
+            <IntroSection />
+            <ReferralSection />
+          </>
+        )}
+
         {/* 소셜 계정 연동 관리 */}
         {userData.authProviders && userData.authProviders.length > 0 ? (
           <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
@@ -1332,134 +1219,6 @@ export default function ProfilePage() {
               <p className="text-sm text-gray-500">
                 {isForeign ? 'No linked social accounts.' : '연동된 소셜 계정이 없습니다.'}
               </p>
-            </div>
-          </div>
-        )}
-
-        {/* 개인 정보 - 멘토만 표시 (원어민은 Teacher Information에 통합) */}
-        {!isForeign && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-            <div className="border-b px-4 sm:px-6 py-3">
-              <h2 className="text-lg font-semibold">개인 정보</h2>
-            </div>
-            <div className="px-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {userData.age && (
-                  <div>
-                    <p className="text-sm text-gray-500">나이</p>
-                    <p>{userData.age}세</p>
-                  </div>
-                )}
-                {userData.gender && (
-                  <div>
-                    <p className="text-sm text-gray-500">성별</p>
-                    <p>{userData.gender === 'M' ? '남성' : '여성'}</p>
-                  </div>
-                )}
-                {userData.phoneNumber && (
-                  <div>
-                    <p className="text-sm text-gray-500">연락처</p>
-                    <p>{formatPhoneNumber(userData.phoneNumber)}</p>
-                  </div>
-                )}
-                {userData.address && (
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-500">주소</p>
-                    <p>{userData.address} {userData.addressDetail}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 학교 정보 섹션 - 원어민은 숨기기 */}
-        {!isForeign && userData.university && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-            <div className="border-b px-4 sm:px-6 py-3">
-              <h2 className="text-lg font-semibold">학교 정보</h2>
-            </div>
-            <div className="px-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">학교</p>
-                  <p>{userData.university}</p>
-                </div>
-                {userData.grade && (
-                  <div>
-                    <p className="text-sm text-gray-500">학년</p>
-                    <p>
-                      {userData.grade === 6 ? '졸업생' : `${userData.grade}학년`}
-                      {userData.isOnLeave ? ' (휴학 중)' : ''}
-                    </p>
-                  </div>
-                )}
-                {userData.major1 && (
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-500">전공</p>
-                    <p>
-                      {userData.major1}
-                      {userData.major2 ? ` / ${userData.major2}` : ''}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 알바 & 멘토링 경력 섹션 - 원어민은 숨기기 */}
-        {!isForeign && userData.partTimeJobs && userData.partTimeJobs.length > 0 && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-            <div className="border-b px-4 sm:px-6 py-3">
-              <h2 className="text-lg font-semibold">알바 & 멘토링 경력</h2>
-            </div>
-            <div className="px-6 py-4">
-              <div className="space-y-4">
-                {userData.partTimeJobs.map((job, index) => (
-                  <div key={index} className="border rounded-md p-4">
-                    <div className="flex flex-col sm:flex-row sm:justify-between mb-2">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{job.companyName}</h3>
-                        <p className="text-sm text-blue-600">{job.position}</p>
-                      </div>
-                      <div className="text-sm text-gray-500 mt-1 sm:mt-0">{job.period}</div>
-                    </div>
-                    {job.description && (
-                      <div className="mt-2">
-                        <p className="text-sm text-gray-700">{job.description}</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 자기소개 & 지원동기 - 원어민은 숨기기 */}
-        {!isForeign && (userData.selfIntroduction || userData.jobMotivation) && (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
-            <div className="border-b px-4 sm:px-6 py-3">
-              <h2 className="text-lg font-semibold">자기소개 & 지원동기</h2>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              {userData.selfIntroduction && (
-                <div>
-                  <p className="text-sm text-gray-500 mb-2">자기소개</p>
-                  <p className="text-sm text-gray-900 leading-relaxed whitespace-pre-wrap">
-                    {userData.selfIntroduction}
-                  </p>
-                </div>
-              )}
-              {userData.jobMotivation && (
-                <div>
-                  <p className="text-sm text-gray-500 mb-2">지원동기</p>
-                  <p className="text-sm text-gray-900 leading-relaxed whitespace-pre-wrap">
-                    {userData.jobMotivation}
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         )}

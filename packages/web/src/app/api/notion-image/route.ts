@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { NotionAPI } from 'notion-client';
 import { getAdminStorage } from '@/lib/firebase-admin';
+import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 
 const notion = new NotionAPI();
 
@@ -19,6 +20,11 @@ interface NotionImageRequest {
  */
 export async function POST(req: NextRequest) {
   try {
+    // 캠프 페이지 편집(admin)에서만 사용 — 비인증 공개 업로드 엔드포인트가 되지 않도록 관리자 검증
+    const authContext = await getAuthenticatedUser(req);
+    const adminCheck = requireAdmin(authContext);
+    if (adminCheck) return adminCheck;
+
     const body = await req.json() as NotionImageRequest;
     const { blockId, spaceId, fileId, originalUrl } = body;
 

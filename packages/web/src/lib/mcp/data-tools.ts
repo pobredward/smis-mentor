@@ -765,7 +765,8 @@ async function crossChecks(
     if (mode === 'create' && str('refUserId') && str('evaluationStage')) {
       const dup = await db.collection('evaluations').where('refUserId', '==', merged.refUserId).where('evaluationStage', '==', merged.evaluationStage).get();
       const same = dup.docs.filter((d) => !merged.refJobBoardId || d.data()?.refJobBoardId === merged.refJobBoardId);
-      if (same.some((d) => d.data()?.aiDraft)) errors.push('같은 지원자·공고·단계의 AI 초안이 이미 있습니다. 관리자가 확정하거나 삭제한 뒤 다시 만드세요.');
+      const mine = same.filter((d) => d.data()?.evaluatorId === merged.evaluatorId);
+      if (mine.length) errors.push(`같은 지원자·공고·단계에 내가 쓴 평가가 이미 있습니다 (id: ${mine[0].id}) — 새로 만들지 말고 그 평가를 update 하세요.`);
       else if (same.length) warnings.push(`같은 지원자·단계의 기존 평가 ${same.length}건: ${same.map((d) => d.data()?.evaluatorName ?? '?').join(', ')}`);
     }
   }
@@ -806,7 +807,7 @@ async function prepareOp(db: Firestore, op: WriteOperation, index: number, viewe
     const before = snap.data() ?? {};
     result.before = previewOf(before, spec, viewer);
     result.summary = summaryOf('delete', before);
-    if (spec.name === 'evaluations' && before.aiDraft !== true) return fail('사람이 작성한 평가는 삭제할 수 없습니다 (AI 초안만 가능)');
+    if (spec.name === 'evaluations' && before.evaluatorId !== viewer.uid) return fail('다른 평가자가 쓴 평가는 삭제할 수 없습니다 (내가 쓴 평가만 가능)');
     result.ok = true;
     return { result, spec, id: op.id, before };
   }
@@ -842,18 +843,13 @@ async function prepareOp(db: Firestore, op: WriteOperation, index: number, viewe
   if (!snap.exists) return fail(`${spec.name}/${op.id} 문서가 없습니다`);
   const before = snap.data() ?? {};
   if (!errors.length && Object.keys(coerced).length === 0) errors.push('변경할 필드가 없습니다');
-  if (spec.name === 'evaluations' && before.aiDraft !== true) errors.push('사람이 작성한 평가는 수정할 수 없습니다 (AI 초안만 가능)');
+  if (spec.name === 'evaluations' && before.evaluatorId !== viewer.uid) errors.push('다른 평가자가 쓴 평가는 수정할 수 없습니다 (내가 쓴 평가만 가능)');
   await checkRefs(db, spec, coerced, errors, cache);
   const merged: Record<string, unknown> = { ...before, ...coerced };
   if (!errors.length) await crossChecks(db, spec, 'update', op.id, merged, errors, warnings);
   const payload: Record<string, unknown> = { ...coerced, ...serverFields(spec, 'update', viewer) };
   if (spec.name === 'evaluations') {
     if ('scores' in coerced) for (const k of ['scores', 'totalScore', 'maxTotalScore', 'percentage']) payload[k] = merged[k];
-    // 예전 표기 "이름 (AI 초안)" → "이름 (AI)"
-    if (typeof before.evaluatorName === 'string' && before.evaluatorName.endsWith(' (AI 초안)')) {
-      payload.evaluatorName = merged.evaluatorName = before.evaluatorName.replace(/ \(AI 초안\)$/, ' (AI)');
-      coerced.evaluatorName = payload.evaluatorName;
-    }
   }
   const beforeView = previewOf(before, spec, viewer) as Record<string, unknown>;
   const afterView = previewOf(merged, spec, viewer) as Record<string, unknown>;

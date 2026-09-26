@@ -23,6 +23,7 @@ import {
 import {
   visibleNotificationTypes,
   notificationMasterOn,
+  notificationMasterTogglePatch,
   NOTIFICATION_GROUP_LABELS,
   type NotificationKey,
   type NotificationType,
@@ -48,7 +49,65 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export function SettingsScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const { userData } = useAuth();
+  const { userData, refreshUserData, isSharingLocation, setIsSharingLocation } = useAuth();
+  // 위치 공유: 위치 탭이 보이지 않는 상황에서도 여기서 항상 끌 수 있어야 한다 (백그라운드 위치 정책)
+  const [bgLocationRunning, setBgLocationRunning] = useState(false);
+  const [stoppingLocation, setStoppingLocation] = useState(false);
+  useEffect(() => {
+    import('../services/locationSharingService')
+      .then(({ isBackgroundLocationRunning }) => isBackgroundLocationRunning())
+      .then(setBgLocationRunning)
+      .catch(() => undefined);
+  }, [isSharingLocation]);
+  const handleStopLocation = async () => {
+    if (!userData?.userId || stoppingLocation) return;
+    setStoppingLocation(true);
+    try {
+      const [{ forceStopAllLocationSharing }, { db }] = await Promise.all([
+        import('../services/locationSharingService'),
+        import('../config/firebase'),
+      ]);
+      await forceStopAllLocationSharing(db, userData.userId);
+      setIsSharingLocation(false);
+      setBgLocationRunning(false);
+      Alert.alert(isForeign ? 'Location sharing off' : '위치 공유 중지', isForeign ? 'Location sharing has been turned off on this device.' : '이 기기의 위치 공유를 껐습니다.');
+    } catch {
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to stop location sharing.' : '위치 공유를 끄지 못했습니다.');
+    } finally {
+      setStoppingLocation(false);
+    }
+  };
+  // 커뮤니티 차단 목록 (이름은 조회 가능한 경우만 표시)
+  const blockedUsers = userData?.blockedUsers ?? [];
+  const [blockedNames, setBlockedNames] = useState<Record<string, string>>({});
+  const [unblocking, setUnblocking] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (blockedUsers.length === 0) { setBlockedNames({}); return; }
+      const { getUserById } = await import('../services/authService');
+      const entries = await Promise.all(blockedUsers.map(async (uid) => {
+        try { const u = await getUserById(uid); return [uid, u?.name || ''] as const; } catch { return [uid, ''] as const; }
+      }));
+      if (!cancelled) setBlockedNames(Object.fromEntries(entries));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockedUsers.join(',')]);
+
+  const handleUnblock = async (uid: string) => {
+    if (!userData?.userId || unblocking) return;
+    setUnblocking(uid);
+    try {
+      const { unblockUser } = await import('../services/communityService');
+      await unblockUser(userData.userId, uid);
+      await refreshUserData();
+    } catch {
+      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to unblock.' : '차단 해제에 실패했습니다.');
+    } finally {
+      setUnblocking(null);
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<NotificationSettings>({});
@@ -99,18 +158,19 @@ export function SettingsScreen() {
   const handleToggleSetting = async (key: NotificationKey | 'generalNotifications') => {
     if (!userData?.userId || saving) return;
 
-    // 값이 없으면 '켜짐'이 기본 — 그 반대로 뒤집는다
-    const newValue = settings[key] === false;
-    const newSettings = { ...settings, [key]: newValue };
-    
-    setSettings(newSettings);
+    // 전체 스위치: 켤 때는 보이는 종류도 모두 켠다 / 종류별: 값이 없으면 '켜짐'이 기본 — 그 반대로 뒤집는다
+    const patch: Partial<NotificationSettings> = key === 'generalNotifications'
+      ? notificationMasterTogglePatch(settings, visibleTypes.flatMap(g => g.types.map(t => t.key)))
+      : { [key]: settings[key] === false };
+    const prev = settings;
+    setSettings({ ...settings, ...patch });
     setSaving(true);
 
     try {
-      await updateNotificationSettings(userData.userId, { [key]: newValue });
+      await updateNotificationSettings(userData.userId, patch);
     } catch (error) {
       logger.error('알림 설정 업데이트 실패:', error);
-      setSettings({ ...settings, [key]: !newValue });
+      setSettings(prev);
       Alert.alert(
         isForeign ? 'Error' : '오류',
         isForeign ? 'Failed to update notification settings.' : '알림 설정 변경에 실패했습니다.'
@@ -318,6 +378,55 @@ export function SettingsScreen() {
               {isForeign ? 'Notifications enabled' : '알림 허용됨'}
             </Text>
           </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.footerSection}>
+        <Text style={styles.footerTitle}>
+          {isForeign ? 'Location Sharing' : '위치 공유'}
+        </Text>
+        <Text style={styles.sectionDescription}>
+          {isSharingLocation || bgLocationRunning
+            ? (isForeign ? 'Your location is currently being shared with camp staff (including in the background).' : '현재 캠프 운영진에게 위치를 공유하고 있습니다 (백그라운드 포함).')
+            : (isForeign ? 'Location sharing is off.' : '위치 공유가 꺼져 있습니다.')}
+          {'\n'}
+          {isForeign ? 'Location records are automatically deleted 14 days after the last update.' : '위치 기록은 마지막 갱신 후 14일이 지나면 자동 삭제됩니다.'}
+        </Text>
+        <TouchableOpacity
+          style={styles.footerLink}
+          onPress={handleStopLocation}
+          disabled={stoppingLocation}
+          accessibilityRole="button"
+          accessibilityLabel={isForeign ? 'Turn off location sharing' : '위치 공유 끄기'}
+        >
+          <View style={styles.footerLinkContent}>
+            <Ionicons name="location-outline" size={20} color={isSharingLocation || bgLocationRunning ? '#dc2626' : '#6b7280'} />
+            <Text style={styles.footerLinkText}>{isForeign ? 'Turn off location sharing now' : '지금 위치 공유 끄기'}</Text>
+          </View>
+          {stoppingLocation ? <ActivityIndicator size="small" color="#6b7280" /> : <Ionicons name="chevron-forward" size={20} color="#9ca3af" />}
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.footerSection}>
+        <Text style={styles.footerTitle}>
+          {isForeign ? 'Blocked Users (Community)' : '차단한 사용자 (게시판)'}
+        </Text>
+        {blockedUsers.length === 0 ? (
+          <Text style={styles.sectionDescription}>
+            {isForeign ? 'No blocked users. You can block an author from a post menu.' : '차단한 사용자가 없습니다. 게시글 메뉴에서 작성자를 차단할 수 있습니다.'}
+          </Text>
+        ) : (
+          blockedUsers.map((uid) => (
+            <View key={uid} style={styles.footerLink}>
+              <View style={styles.footerLinkContent}>
+                <Ionicons name="ban-outline" size={20} color="#6b7280" />
+                <Text style={styles.footerLinkText}>{blockedNames[uid] || (isForeign ? 'User' : '사용자') + ` (${uid.slice(0, 6)}…)`}</Text>
+              </View>
+              <TouchableOpacity onPress={() => handleUnblock(uid)} disabled={unblocking === uid} accessibilityRole="button" accessibilityLabel={isForeign ? 'Unblock' : '차단 해제'}>
+                {unblocking === uid ? <ActivityIndicator size="small" color="#6b7280" /> : <Text style={{ color: '#2563eb', fontWeight: '600' }}>{isForeign ? 'Unblock' : '해제'}</Text>}
+              </TouchableOpacity>
+            </View>
+          ))
         )}
       </View>
 

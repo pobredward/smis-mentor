@@ -339,35 +339,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       try {
         logger.info('🔄 AuthContext: userData 새로고침 시작 -', currentUser.email || currentUser.uid);
         
-        // Apple 등 이메일 없는 소셜 로그인은 UID로 조회
-        const userRecord = currentUser.email
-          ? await getUserByEmail(currentUser.email)
-          : await getUserById(currentUser.uid);
+        // 본인 문서는 uid 로 직접 읽는다 (규칙: 소유자 get). 구버전(docId≠uid) 계정만 이메일로 폴백
+        await removeCache(CACHE_STORE.USERS, currentUser.uid); // 새로고침이므로 캐시 무시
+        const userRecord =
+          (await getUserById(currentUser.uid)) ??
+          (currentUser.email ? await getUserByEmail(currentUser.email) : null);
         
         if (userRecord) {
-          // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
-          if ((userRecord.role === 'mentor_temp' || userRecord.role === 'foreign_temp') && userRecord.status === 'temp') {
-            try {
-              logger.info('🔄 임시 사용자를 활성 상태로 업데이트 중:', userRecord.email);
-              
-              const { doc, updateDoc } = await import('firebase/firestore');
-              const newRole = userRecord.role === 'mentor_temp' ? 'mentor' : 'foreign';
-              
-              await updateDoc(doc(db, 'users', userRecord.userId), {
-                role: newRole,
-                status: 'active',
-                updatedAt: new Date()
-              });
-              
-              // 로컬 상태 업데이트
-              userRecord.role = newRole as any;
-              userRecord.status = 'active';
-              
-              logger.info('✅ 사용자 상태 업데이트 완료:', { role: newRole, status: 'active' });
-            } catch (error) {
-              logger.error('❌ 사용자 상태 업데이트 실패:', error);
-            }
-          }
+          // (예전: temp 문서를 로그인 시 클라이언트가 active 로 승격 — 권한 상승 경로라 제거. 가입 완료는 /api/auth/complete-signup 이 처리)
           
           // 활성 캠프 자동 선택
           const activeJobExpId = await ensureActiveJobExperience(db, userRecord as any);
@@ -462,31 +441,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               return;
             }
 
-            const userRecord = await getUserByEmail(user.email || '');
+            // 본인 문서는 uid 로 직접 읽고(소유자 get), 구버전(docId≠uid) 계정만 이메일 조회로 폴백
+            const userRecord = (await getUserById(user.uid)) ?? (await getUserByEmail(user.email || ''));
             if (userRecord) {
-              // mentor_temp나 foreign_temp 사용자를 자동으로 활성 상태로 업데이트
-              if ((userRecord.role === 'mentor_temp' || userRecord.role === 'foreign_temp') && userRecord.status === 'temp') {
-                try {
-                  logger.info('🔄 로그인 시 임시 사용자를 활성 상태로 업데이트 중:', userRecord.email);
-                  
-                  const { doc: firestoreDoc, updateDoc } = await import('firebase/firestore');
-                  const newRole = userRecord.role === 'mentor_temp' ? 'mentor' : 'foreign';
-                  
-                  await updateDoc(firestoreDoc(db, 'users', userRecord.userId), {
-                    role: newRole,
-                    status: 'active',
-                    updatedAt: new Date()
-                  });
-                  
-                  // 로컬 상태 업데이트
-                  userRecord.role = newRole as any;
-                  userRecord.status = 'active';
-                  
-                  logger.info('✅ 로그인 시 사용자 상태 업데이트 완료:', { role: newRole, status: 'active' });
-                } catch (error) {
-                  logger.error('❌ 로그인 시 사용자 상태 업데이트 실패:', error);
-                }
-              }
+              // (예전: temp 문서를 로그인 시 클라이언트가 active 로 승격 — 권한 상승 경로라 제거. 가입 완료는 /api/auth/complete-signup 이 처리)
               
               // 활성 캠프 자동 선택
               const activeJobExpId = await ensureActiveJobExperience(db, userRecord as any);

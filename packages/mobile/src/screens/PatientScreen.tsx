@@ -114,6 +114,9 @@ import type {
 import jobCodesService from '../services/jobCodesService';
 import { stSheetService } from '../services/stSheet';
 import { authenticatedFetch } from '../utils/apiClient';
+import { MyEscortPanel } from '../components/patient/MyEscortPanel';
+import { EscortSsn } from '../components/patient/EscortSsn';
+import { isActiveEscortVisit } from '@smis-mentor/shared';
 
 /**
  * 약 복용 기록 → 재고 정산 요청 (서버가 원장과 비교해 차이만 반영, 여러 번 호출해도 안전).
@@ -1008,6 +1011,7 @@ export function PatientScreen() {
           keyExtractor={(item) => item.key || 'nogroup'}
           ListHeaderComponent={() => (
             <View>
+              <MyEscortPanel records={records} myName={userData?.name} onOpen={(id) => setExpandedId(id)} />
               <TransportBoardMobile allRecords={records} />
             </View>
           )}
@@ -2882,6 +2886,7 @@ function HospitalTabMobile({ record, campUsers, allRecords, onUpdateVisits }: {
   allRecords: PatientRecord[];
   onUpdateVisits: (visits: HospitalVisitEntry[]) => void;
 }) {
+  const { userData: viewer } = useAuth();
   const visits = record.hospitalVisits ?? [];
   const [showForm, setShowForm] = useState(false);
   const [editingIdx, setEditingIdx] = useState(-1);
@@ -2932,6 +2937,12 @@ function HospitalTabMobile({ record, campUsers, allRecords, onUpdateVisits }: {
             {visit.departureTime && <Text style={{ fontSize: 11, color: '#374151' }}>출발: {visit.departureTime}</Text>}
             {visit.driver && <Text style={{ fontSize: 11, color: '#374151' }}>운전: {visit.driver}</Text>}
             {visit.escort && <Text style={{ fontSize: 11, color: '#374151' }}>인솔: {visit.escort}</Text>}
+            {(isActiveEscortVisit(visit, viewer?.name) || viewer?.role === 'admin') && visit.hospitalStatus !== '필요없음' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 11, color: '#374151' }}>주민번호:</Text>
+                <EscortSsn recordId={record.id} auto={isActiveEscortVisit(visit, viewer?.name)} />
+              </View>
+            )}
             {visit.hospitalName && <Text style={{ fontSize: 11, color: '#374151' }}>병원: {visit.hospitalName}</Text>}
             {visit.hospitalStatus === '내원예정' && (
               <TouchableOpacity

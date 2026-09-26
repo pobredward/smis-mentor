@@ -19,6 +19,7 @@ import {
   getCampPosts,
   getGroupPosts,
   getDevPosts,
+  filterBlockedPosts,
 } from '../services/communityService';
 import jobCodesService, { type JobCode } from '../services/jobCodesService';
 import { PostCard } from '../components/community/PostCard';
@@ -48,6 +49,9 @@ export function CommunityScreen({ navigation }: MainTabScreenProps<'Community'>)
 
   const isAdmin = userData?.role === 'admin';
   const activeJobCodeId = userData?.activeJobExperienceId ?? null;
+  // 차단 목록은 ref 로 들고 loadPosts 의 의존성을 늘리지 않는다
+  const blockedRef = useRef<string[]>(userData?.blockedUsers ?? []);
+  useEffect(() => { blockedRef.current = userData?.blockedUsers ?? []; }, [userData?.blockedUsers]);
 
   // 활성 캠프의 jobExperience 항목
   const activeExperience = useMemo(
@@ -172,9 +176,11 @@ export function CommunityScreen({ navigation }: MainTabScreenProps<'Community'>)
           page = await getDevPosts(userData?.userId ?? '', isAdmin, cursor);
         }
 
+        // 차단한 사용자의 글은 숨김 (렌더 시점의 최신 차단 목록 사용)
+        const visible = filterBlockedPosts(page.posts, blockedRef.current);
         setPostsByTab((prev) => ({
           ...prev,
-          [tab]: reset ? page.posts : [...prev[tab], ...page.posts],
+          [tab]: reset ? visible : [...prev[tab], ...visible],
         }));
         cursors.current[tab] = (page.lastVisible as QueryDocumentSnapshot | null);
         setHasMoreByTab((prev) => ({ ...prev, [tab]: page.hasMore }));

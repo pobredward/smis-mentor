@@ -54,6 +54,12 @@ service cloud.firestore {
     //   (클라이언트 SDK에서 where 조건 없는 전체 조회는 Rules 상 거부됨)
     // ──────────────────────────────────────────────────────────────
     match /users/{userId} {
+      // 캠프 참가 정보(여권·계좌 가림본 등) — 본인·관리자 읽기, 쓰기는 서버(/api/user/camp-profile)만
+      match /private/{docId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if false;
+      }
+
       allow get: if (
         // admin: 단건 직접 읽기 허용
         isAdmin() ||
@@ -68,35 +74,23 @@ service cloud.firestore {
         isAdmin() ||
         // 인증된 캠프 운영진: 팀원 목록 조회
         isCampStaff() ||
-        // 미인증 포함 모든 사용자: 로그인·가입 플로우의 중복 확인 및 계정 조회
-        // (where 조건 없는 전체 조회는 Firestore가 클라이언트 SDK 레벨에서 차단됨)
-        true
+        // 로그인한 본인: 자기 이메일로 조회 (where('email','==',token.email) 형태만 통과)
+        // 비로그인 조회(가입·로그인 중복 확인 등)는 /api/auth/lookup 이 Admin SDK로 대신한다.
+        (
+          isAuthenticated() &&
+          'email' in request.auth.token &&
+          resource.data.email == request.auth.token.email
+        )
       );
 
-      // 신규 가입 시 생성
-      // Case 1: temp 계정 선생성 (admin이 미리 만들어 둔 경우)
-      // Case 2: 가입 완료 시 active 계정 직접 생성 (Firebase Auth UID = userId)
+      // 생성: 관리자(temp 계정 선생성)만. 가입 완료는 서버(/api/auth/complete-signup)가 Admin SDK 로 만든다
+      // (클라이언트가 직접 만들면 role·jobExperiences 등 권한 필드를 스스로 넣을 수 있었다 — Phase 2 에서 차단)
       allow create: if (
-        // 필수 필드 존재 확인
-        request.resource.data.keys().hasAll(['name', 'email', 'role', 'status', 'agreedTerms', 'agreedPersonal']) &&
-        // 이름 길이 제한 (DoS 방지)
+        isAdmin() &&
+        !('_firebaseAuthPassword' in request.resource.data) &&
+        request.resource.data.keys().hasAll(['name', 'role', 'status']) &&
         request.resource.data.name is string &&
-        request.resource.data.name.size() <= 50 &&
-        // 이메일 길이 제한
-        request.resource.data.email is string &&
-        request.resource.data.email.size() <= 200 &&
-        // 허용 역할
-        request.resource.data.role in ['mentor_temp', 'foreign_temp', 'mentor', 'foreign'] &&
-        // 역할에 따른 status 일관성
-        // - admin이 미리 선생성한 temp 계정: *_temp + temp
-        // - 가입 완료 즉시 활성화: mentor_temp/foreign/mentor + active
-        //   (mentor_temp + active: 멘토는 가입 후 admin 승격 대기)
-        //   (foreign + active: 원어민은 가입 즉시 활성)
-        (
-          (request.resource.data.role in ['mentor_temp', 'foreign_temp'] && request.resource.data.status == 'temp') ||
-          (request.resource.data.role == 'mentor_temp' && request.resource.data.status == 'active') ||
-          (request.resource.data.role in ['mentor', 'foreign'] && request.resource.data.status == 'active')
-        )
+        request.resource.data.name.size() <= 50
       );
 
       // 수정 권한
@@ -112,8 +106,18 @@ service cloud.firestore {
           fieldUnchanged('deletedBy') &&
           // 암호화된 주민번호 뒷자리는 클라이언트에서 직접 쓰기 금지 (API Route만 허용)
           fieldUnchanged('rrnLastEncrypted') &&
-          (!('name' in request.resource.data) || request.resource.data.name.size() <= 50) &&
-          (!('email' in request.resource.data) || request.resource.data.email.size() <= 200)
+          // 평문 주민번호 뒷자리는 더 이상 쓰지 않는다 (서버가 암호화해 rrnLastEncrypted 로 저장)
+          fieldUnchanged('rrnLast') &&
+          // 캠프 배정·평가 요약·관리자 임시 캠프는 admin/서버만 변경
+          fieldUnchanged('jobExperiences') &&
+          fieldUnchanged('jobCodeIds') &&
+          fieldUnchanged('evaluationSummary') &&
+          fieldUnchanged('adminTempActiveCamp') &&
+          // 이메일은 Auth 와 동기화가 필요하므로 /api/user/change-email 로만 변경
+          fieldUnchanged('email') &&
+          // 평문 임시 비밀번호 저장 금지 (폐기됨)
+          !('_firebaseAuthPassword' in request.resource.data) &&
+          (!('name' in request.resource.data) || request.resource.data.name.size() <= 50)
         ) ||
         // 본인: 회원 탈퇴 (active → inactive 전환만 허용)
         // status: active → inactive 전환 + role/email/rrnLastEncrypted/deletedAt/deletedBy 변경 불가
@@ -126,41 +130,15 @@ service cloud.firestore {
           fieldUnchanged('email') &&
           fieldUnchanged('rrnLastEncrypted') &&
           fieldUnchanged('deletedAt') &&
-          fieldUnchanged('deletedBy')
-        ) ||
-        // 가입 완료 시 temp→active 승격 (Firebase Auth UID로 인증된 상태)
-        // role: *_temp → mentor/foreign, status: temp → active 변경 허용
-        (
-          isOwner(userId) &&
-          resource.data.status == 'temp' &&
-          request.resource.data.status == 'active' &&
-          resource.data.role in ['mentor_temp', 'foreign_temp'] &&
-          request.resource.data.role in ['mentor', 'foreign'] &&
-          fieldUnchanged('deletedAt') &&
           fieldUnchanged('deletedBy') &&
-          // 가입 완료 시에도 암호화 필드 직접 쓰기 금지
-          fieldUnchanged('rrnLastEncrypted') &&
-          (!('name' in request.resource.data) || request.resource.data.name.size() <= 50) &&
-          (!('email' in request.resource.data) || request.resource.data.email.size() <= 200)
+          fieldUnchanged('jobExperiences') &&
+          fieldUnchanged('jobCodeIds') &&
+          fieldUnchanged('evaluationSummary')
         )
       );
 
-      // 삭제: admin 또는 가입 플로우에서 본인이 소유한 temp 문서 삭제
-      // (소셜 가입 시 임시 문서를 새 UID 문서로 교체하는 과정)
-      // isOwner(userId): Auth UID = 문서 ID인 경우 (temp 활성화 직후)
-      // resource.data.userId == request.auth.uid: Firestore userId 필드 기준 본인 확인
-      allow delete: if (
-        isAdmin() ||
-        (
-          isAuthenticated() &&
-          resource.data.status == 'temp' &&
-          resource.data.role in ['mentor_temp', 'foreign_temp'] &&
-          (
-            isOwner(userId) ||
-            resource.data.userId == request.auth.uid
-          )
-        )
-      );
+      // 삭제: 관리자만 (temp 문서 정리는 가입 완료 서버 API 가 한다)
+      allow delete: if isAdmin();
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -201,7 +179,9 @@ service cloud.firestore {
         // 필수 필드
         request.resource.data.keys().hasAll(['refUserId', 'refJobBoardId', 'applicationStatus', 'createdAt', 'updatedAt']) &&
         // 최초 상태는 'pending'만 가능
-        request.resource.data.applicationStatus == 'pending'
+        request.resource.data.applicationStatus == 'pending' &&
+        // 모집 중인 공고에만 지원 가능 (마감된 공고 지원 차단)
+        get(/databases/$(database)/documents/jobBoards/$(request.resource.data.refJobBoardId)).data.status == 'active'
       );
       allow update: if (
         isAdmin() ||
@@ -343,6 +323,14 @@ service cloud.firestore {
     match /familySTSheetCache/{campCode} {
       allow read: if isCampStaff();
       allow write: if false;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // stSheetSensitive 컬렉션 (학생·가족 주민번호 원본)
+    // 클라이언트 접근 전면 차단 — 관리자도 /api/st/sensitive(감사 로그 기록)로만 조회
+    // ──────────────────────────────────────────────────────────────
+    match /stSheetSensitive/{campCode} {
+      allow read, write: if false;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -512,7 +500,7 @@ service cloud.firestore {
     // 역할: admin(전체), 인증 사용자(읽기)
     // ──────────────────────────────────────────────────────────────
     match /interviewSettings/{settingId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin(); // 면접 링크·일정·질문지 — 관리자 전용
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -585,7 +573,7 @@ service cloud.firestore {
     // 역할: admin(전체 CRUD), 인증 사용자(읽기)
     // ──────────────────────────────────────────────────────────────
     match /interviewDates/{dateId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin(); // 면접 링크·일정·질문지 — 관리자 전용
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -595,7 +583,7 @@ service cloud.firestore {
     // 역할: admin(전체 CRUD), 인증 사용자(읽기)
     // ──────────────────────────────────────────────────────────────
     match /interviewScripts/{scriptId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin(); // 면접 링크·일정·질문지 — 관리자 전용
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -617,8 +605,8 @@ service cloud.firestore {
     // 문서 ID: {campCode}_{userId} 복합 키
     // ──────────────────────────────────────────────────────────────
     match /userLocations/{locationId} {
-      // 로그인한 모든 사용자(temp 포함) 읽기 가능
-      allow read: if isAuthenticated();
+      // 캠프 운영진(admin/mentor/foreign)만 읽기 — 지원자·임시 계정은 위치 열람 불가
+      allow read: if isCampStaff();
       // 본인 문서만 생성/수정 가능
       allow create, update: if isAuthenticated()
         && request.resource.data.userId == request.auth.uid
@@ -744,10 +732,9 @@ service cloud.firestore {
           request.resource.data.content.size() <= 1000
         );
 
-        // 댓글 수정 / soft delete: 작성자 본인만, 핵심 필드 불변
+        // 댓글 수정 / soft delete: 작성자 본인, 또는 admin(신고 처리·삭제) — 핵심 필드 불변
         allow update: if (
-          isActiveUser() &&
-          resource.data.authorId == request.auth.uid &&
+          (isAdmin() || (isActiveUser() && resource.data.authorId == request.auth.uid)) &&
           fieldUnchanged('authorId') &&
           fieldUnchanged('parentId')
         );
@@ -758,6 +745,28 @@ service cloud.firestore {
           (isActiveUser() && resource.data.authorId == request.auth.uid)
         );
       }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // reports 컬렉션 (커뮤니티 신고) — 앱스토어 UGC 정책
+    // 작성: 로그인 사용자 본인 명의 / 열람·처리: admin
+    // ──────────────────────────────────────────────────────────────
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if (
+        isActiveUser() &&
+        request.resource.data.reporterId == request.auth.uid &&
+        request.resource.data.keys().hasAll(['targetType', 'postId', 'targetAuthorId', 'reporterId', 'reason', 'status', 'createdAt']) &&
+        request.resource.data.targetType in ['post', 'comment'] &&
+        request.resource.data.reason in ['spam', 'abuse', 'sexual', 'privacy', 'other'] &&
+        request.resource.data.status == 'open' &&
+        reportId == request.resource.data.targetType + '_' +
+          (request.resource.data.targetType == 'comment'
+            ? request.resource.data.postId + '_' + request.resource.data.commentId
+            : request.resource.data.postId) + '_' + request.auth.uid
+      );
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // ──────────────────────────────────────────────────────────────

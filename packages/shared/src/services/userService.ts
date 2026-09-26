@@ -26,6 +26,7 @@ export const deactivateUserMobile = async (userId: string, db: Firestore, auth: 
       status: 'inactive',
       name: `(탈퇴)${userData.name}`,
       originalEmail: userData.email, // 원본 이메일 저장
+      pushTokens: {}, // 탈퇴 후 알림 발송 방지
       deactivatedAt: now, // 탈퇴 일시 기록
       updatedAt: now
     });

@@ -110,6 +110,8 @@ export async function GET(request: NextRequest) {
       providerId: 'naver',
       providerUid: profile.id,
       ...(( profile.mobile || profile.mobile_e164) && { phoneNumber: profile.mobile || profile.mobile_e164 }),
+      // 서버(create-custom-token)가 네이버 프로필 API로 재검증할 때 사용하는 증명. 세션 스토리지에만 보관.
+      accessToken: tokenData.access_token,
     };
     
     // 4. 팝업 창에 메시지 전송 (Google과 동일한 방식)
@@ -127,8 +129,8 @@ export async function GET(request: NextRequest) {
             if (window.opener) {
               window.opener.postMessage({
                 type: 'NAVER_LOGIN_SUCCESS',
-                userData: ${JSON.stringify(userData)}
-              }, '${targetOrigin}');
+                userData: ${scriptJson(userData)}
+              }, ${scriptJson(targetOrigin)});
               setTimeout(() => window.close(), 500);
             } else {
               console.error('opener가 없습니다. 메인 페이지로 리다이렉트');
@@ -158,6 +160,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * 인라인 <script> 문자열에 안전하게 값을 삽입 (XSS 방지)
+ * JSON.stringify 후 </script>·U+2028/2029 를 이스케이프한다.
+ */
+function scriptJson(value: unknown): string {
+  return JSON.stringify(value ?? '')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 function createErrorResponse(errorMessage: string, targetOrigin?: string) {
   const resolvedOrigin = targetOrigin || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   
@@ -171,12 +185,12 @@ function createErrorResponse(errorMessage: string, targetOrigin?: string) {
       </head>
       <body>
         <script>
-          console.error('네이버 로그인 오류:', '${errorMessage}');
+          console.error('네이버 로그인 오류:', ${scriptJson(errorMessage)});
           if (window.opener) {
             window.opener.postMessage({
               type: 'NAVER_LOGIN_ERROR',
-              error: '${errorMessage}'
-            }, '${resolvedOrigin}');
+              error: ${scriptJson(errorMessage)}
+            }, ${scriptJson(resolvedOrigin)});
             setTimeout(() => window.close(), 500);
           } else {
             window.location.href = '/sign-in?error=callback_failed';

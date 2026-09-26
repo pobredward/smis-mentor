@@ -416,9 +416,9 @@ export default function CampPageEditor({
         toast.loading(`노션 이미지 ${imgCount}개 가져오는 중...`, { id: toastId });
 
         const uploadViaNotionApi = async (block: NotionImageBlock) => {
-          const res = await fetch('/api/notion-image', {
+          const { authenticatedFetch } = await import('@/lib/apiClient');
+          const res = await authenticatedFetch('/api/notion-image', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ blockId: block.blockId, spaceId: block.spaceId, fileId: block.fileId, originalUrl: block.originalSrc }),
           });
           const data = await res.json() as { url?: string; error?: string };
@@ -441,7 +441,13 @@ export default function CampPageEditor({
                   const formData = new FormData();
                   const ext = blob.type.split('/')[1]?.toLowerCase() || 'jpg';
                   formData.append('file', new File([blob], `notion_${Date.now()}.${ext}`, { type: blob.type }));
-                  const res = await fetch('/api/upload-from-url', { method: 'POST', body: formData });
+                  // multipart 업로드: Content-Type 은 브라우저가 boundary 와 함께 설정하도록 두고 인증 헤더만 추가
+                  const { getCurrentUserToken } = await import('@/lib/apiClient');
+                  const res = await fetch('/api/upload-from-url', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${await getCurrentUserToken()}` },
+                    body: formData,
+                  });
                   const data = await res.json() as { url?: string; error?: string };
                   if (!res.ok) throw new Error(data.error ?? '업로드 실패');
                   return { original: srcUrl, uploaded: data.url ?? null };

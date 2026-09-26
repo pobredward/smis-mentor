@@ -8,13 +8,13 @@ import {
   DEFAULT_SMS_TEMPLATES,
   TemplateType,
 } from '@smis-mentor/shared';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 
-// 환경 변수에서 웹 API URL 가져오기
-const WEB_API_URL = process.env.EXPO_PUBLIC_WEB_API_URL || 'http://localhost:3000';
+// 환경 변수에서 웹 API URL 가져오기 (www 리디렉션 시 POST 손실 방지)
+const WEB_API_URL = (process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smis-mentor.com').replace('https://www.', 'https://');
 
-// SMS API 클라이언트 인스턴스 생성
-const smsClient = new SMSApiClient(WEB_API_URL);
+// SMS API 클라이언트 인스턴스 생성 — 관리자 ID 토큰을 Authorization 헤더로 전달
+const smsClient = new SMSApiClient(WEB_API_URL, async () => (auth.currentUser ? auth.currentUser.getIdToken() : null));
 
 /**
  * SMS 전송 (기본)

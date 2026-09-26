@@ -1,6 +1,7 @@
 'use client';
 
 import { resolveActiveJobCodeId } from '@smis-mentor/shared';
+import SsnReveal from '@/components/common/SsnReveal';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { stSheetService, jobCodesService, CampCode, FamilyUnit } from '@/lib/stSheetService';
@@ -59,19 +60,26 @@ function Row({ label, value, wide }: { label: string; value?: string; wide?: boo
 interface FamilyCardProps {
   family: FamilyUnit;
   isAdmin: boolean;
+  campCode?: string | null;
 }
 
-function FamilyCard({ family, isAdmin }: FamilyCardProps) {
+/** 주민번호 행 — 캐시에는 가린 값만 있고, 관리자는 원본 보기(감사 로그) */
+function SsnRow({ value, campCode, sensitiveKey, label, isAdmin }: { value?: string; campCode?: string | null; sensitiveKey: string; label: string; isAdmin: boolean }) {
+  if (!value) return null;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] text-gray-400 uppercase tracking-wide">주민번호</span>
+      <span className="text-xs text-gray-800 break-words">
+        <SsnReveal value={value} campCode={campCode} sensitiveKey={sensitiveKey} label={label} canReveal={isAdmin} />
+      </span>
+    </div>
+  );
+}
+
+function FamilyCard({ family, isAdmin, campCode }: FamilyCardProps) {
   const [expanded, setExpanded] = useState(false);
   const style = FAMILY_TYPE_STYLE[family.familyType] ?? DEFAULT_STYLE;
 
-  const maskSSN = (ssn?: string) => {
-    if (!ssn) return undefined;
-    if (isAdmin) return ssn;
-    const parts = ssn.split('-');
-    if (parts.length !== 2) return ssn;
-    return `${parts[0]}-${parts[1][0]}${'*'.repeat(parts[1].length - 1)}`;
-  };
 
   // 부모 이름 전원
   const parentNames = family.parents.map(p => p.name).join(' · ');
@@ -140,7 +148,7 @@ function FamilyCard({ family, isAdmin }: FamilyCardProps) {
                 } />
                 <Row label="이메일"    value={parent.email} />
                 {/* 주민번호: 관리자는 전체, 그 외(멘토 · 원어민)는 뒷자리 첫 1자리까지 */}
-                <Row label="주민번호" value={maskSSN(parent.ssn)} />
+                <SsnRow value={parent.ssn} campCode={campCode ?? family.campCode} sensitiveKey={`${family.familyId}__${parent.id}`} label={parent.name} isAdmin={isAdmin} />
                 <Row label="여권이름"  value={parent.passportName} />
                 <Row label="여권번호"  value={parent.passportNumber} />
                 <Row label="여권만료"  value={parent.passportExpiry !== '0000.00.00' ? parent.passportExpiry : undefined} />
@@ -172,7 +180,7 @@ function FamilyCard({ family, isAdmin }: FamilyCardProps) {
                 <Row label="학생ID"   value={student.id} />
                 <Row label="부모연락처" value={student.parentPhone} />
                 <Row label="등록처"   value={student.registrationSource} />
-                <Row label="주민번호"  value={maskSSN(student.ssn)} />
+                <SsnRow value={student.ssn} campCode={campCode ?? family.campCode} sensitiveKey={`${family.familyId}__${student.id}`} label={student.name} isAdmin={isAdmin} />
                 <Row label="여권이름"  value={student.passportName} />
                 <Row label="여권번호"  value={student.passportNumber} />
                 <Row label="여권만료"  value={student.passportExpiry !== '0000.00.00' ? student.passportExpiry : undefined} />
@@ -365,7 +373,7 @@ export default function FamilyContent() {
                 </div>
                 {/* 카드 목록 */}
                 {list.map(family => (
-                  <FamilyCard key={family.familyId} family={family} isAdmin={isAdmin} />
+                  <FamilyCard key={family.familyId} family={family} isAdmin={isAdmin} campCode={campCode} />
                 ))}
               </div>
             );

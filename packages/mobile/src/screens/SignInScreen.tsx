@@ -250,9 +250,9 @@ export function SignInScreen({
                 }
               }
             } else {
-              // 네이버 등 credential 없는 경우: Custom Token 사용
-              const { signInWithCustomToken } = await import('../services/authService');
-              await signInWithCustomToken(result.user.userId, result.user.email);
+              // 네이버 등 credential 없는 경우: 소셜 증명(proof)으로 서버 검증 후 Custom Token 발급
+              const { signInWithCustomToken, buildSocialProof } = await import('../services/authService');
+              await signInWithCustomToken(result.user.userId, await buildSocialProof(socialUserData));
               logger.info('✅ Custom Token 로그인 완료');
             }
 
@@ -357,8 +357,9 @@ export function SignInScreen({
           });
 
           try {
-            const { signInWithCustomToken } = await import('../services/authService');
-            await signInWithCustomToken(result.user.userId, result.user.email);
+            // 네이버 access token 을 서버가 재검증한 뒤 Custom Token 발급
+            const { signInWithCustomToken, buildSocialProof } = await import('../services/authService');
+            await signInWithCustomToken(result.user.userId, await buildSocialProof(socialUserData));
             await persistLoginRememberEmail(result.user.email);
 
             logger.info('✅ Firebase Auth 로그인 완료');
@@ -472,8 +473,8 @@ export function SignInScreen({
                 }
               }
             } else {
-              const { signInWithCustomToken } = await import('../services/authService');
-              await signInWithCustomToken(result.user.userId, result.user.email);
+              const { signInWithCustomToken, buildSocialProof } = await import('../services/authService');
+              await signInWithCustomToken(result.user.userId, await buildSocialProof(socialUserData));
               logger.info('✅ Custom Token 로그인 완료');
             }
 
@@ -613,8 +614,8 @@ export function SignInScreen({
             // (handleSocialLogin에서 이미 LOGIN을 반환했어야 하지만, 방어 코드로 처리)
             setShowForeignPhoneModal(false);
             try {
-              const { signInWithCustomToken: signInCustom } = await import('../services/authService');
-              await signInCustom(existingUser.userId || (existingUser as any).id, existingUser.email);
+              const { signInWithCustomToken: signInCustom, buildSocialProof: buildProof } = await import('../services/authService');
+              await signInCustom(existingUser.userId || (existingUser as any).id, await buildProof(socialData));
               await persistLoginRememberEmail(existingUser.email);
               onSignInSuccess();
             } catch (loginError) {

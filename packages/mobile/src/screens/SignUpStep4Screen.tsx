@@ -1,3 +1,5 @@
+import { Linking } from 'react-native';
+import { TERMS_URL, PRIVACY_POLICY_URL } from '@smis-mentor/shared';
 import React, { useState, useEffect } from 'react';
 import { logger, updateGeocodeIfAddressChanged } from '@smis-mentor/shared';
 import {
@@ -105,7 +107,7 @@ export function SignUpStep4Screen({
 
   // 주민번호가 변경될 때마다 성별 자동 설정
   useEffect(() => {
-    if (rrnFront.length === 6 && rrnLast.length === 7) {
+    if (rrnFront.length === 6 && rrnLast.length === 1) {
       const detectedGender = getGenderFromRRN(rrnFront, rrnLast);
       if (detectedGender) {
         setGender(detectedGender);
@@ -137,8 +139,9 @@ export function SignUpStep4Screen({
       return;
     }
 
-    if (rrnLast.length !== 7) {
-      Alert.alert('입력 오류', '주민번호 뒷자리 7자리를 입력해주세요.');
+    // 가입 시에는 뒷자리 첫 숫자만 (뒷자리 전체는 캠프 배정 후 '캠프 참가 정보'에서 입력)
+    if (!/^[1-8]$/.test(rrnLast)) {
+      Alert.alert('입력 오류', '주민번호 뒷자리 첫 번째 숫자를 입력해주세요.');
       return;
     }
 
@@ -299,14 +302,14 @@ export function SignUpStep4Screen({
                 <Text style={styles.rrnDash}>-</Text>
                 <TextInput
                   style={[styles.input, styles.rrnInput]}
-                  placeholder="0000000"
+                  placeholder="0"
                   value={rrnLast}
-                  onChangeText={(text) => setRrnLast(text.replace(/\D/g, '').slice(0, 7))}
+                  onChangeText={(text) => setRrnLast(text.replace(/\D/g, '').slice(0, 1))}
                   keyboardType="numeric"
-                  maxLength={7}
-                  secureTextEntry
+                  maxLength={1}
                   editable={!isLoading}
                 />
+                <Text style={styles.rrnDash}>●●●●●●</Text>
               </View>
             </View>
 
@@ -348,7 +351,7 @@ export function SignUpStep4Screen({
                   }}
                 />
               </View>
-              {rrnFront.length === 6 && rrnLast.length === 7 && (
+              {rrnFront.length === 6 && rrnLast.length === 1 && (
                 <Text style={styles.helperText}>주민번호로 자동 설정됩니다</Text>
               )}
             </View>
@@ -432,7 +435,10 @@ export function SignUpStep4Screen({
                   {agreedPersonal && <Text style={styles.checkmark}>✓</Text>}
                 </View>
                 <Text style={styles.checkboxLabel}>
-                  개인정보 수집 및 이용에 동의합니다 (필수)
+                  이용약관 및 개인정보 수집·이용에 동의합니다 (필수){'\n'}
+                  <Text style={{ color: '#2563eb', textDecorationLine: 'underline' }} onPress={() => Linking.openURL(TERMS_URL)}>이용약관</Text>
+                  {'  '}
+                  <Text style={{ color: '#2563eb', textDecorationLine: 'underline' }} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>개인정보처리방침</Text>
                 </Text>
               </TouchableOpacity>
             </View>

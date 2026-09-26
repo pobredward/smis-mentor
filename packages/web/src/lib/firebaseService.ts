@@ -37,8 +37,25 @@ import {
 import { db, auth, storage, functions } from './firebase';
 import { User, JobCode, JobBoard, ApplicationHistory, JobExperience, JobBoardWithId, JobCodeWithId, ApplicationHistoryWithId, JobGroup, JobCodeWithGroup, Review, JobExperienceGroupRole } from '@/types';
 import { getCache, setCache, CACHE_STORE, CACHE_TTL, getCacheCollection, setCacheCollection, removeCache, clearCacheCollection } from './cacheUtils';
-import { logger } from '@smis-mentor/shared';
+import {
+  logger,
+  lookupUserViaApi,
+  isPermissionDenied,
+  requestCustomToken,
+  replaceTempUserViaApi,
+  type SocialProof,
+  type SocialUserData,
+} from '@smis-mentor/shared';
 import { authenticatedGet, authenticatedPost } from './apiClient';
+
+/**
+ * 비로그인(또는 규칙에 막힌) 상태의 users 조회는 서버 API(/api/auth/lookup)로 폴백한다.
+ * Firestore 규칙에서 users 컬렉션의 비인증 list 가 제거되었기 때문.
+ */
+const lookupFallback = async (params: Parameters<typeof lookupUserViaApi>[1]) => {
+  const user = await lookupUserViaApi('', params);
+  return user as User | null;
+};
 
 // User 관련 함수
 export const createUser = async (userData: Omit<User, 'userId' | 'id'>, userId?: string) => {
@@ -113,8 +130,20 @@ export const getUserByEmail = async (email: string) => {
 
     // Firebase Auth는 항상 소문자로 정규화하므로, Firestore 조회도 소문자로 통일
     const normalizedEmail = email.toLowerCase();
+    if (!auth.currentUser) {
+      // 비로그인(로그인·가입 화면): 서버 API 조회
+      return lookupFallback({ by: 'email', email: normalizedEmail });
+    }
     const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
-    const querySnapshot = await getDocs(q);
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (queryError) {
+      if (isPermissionDenied(queryError)) {
+        return lookupFallback({ by: 'email', email: normalizedEmail });
+      }
+      throw queryError;
+    }
     if (querySnapshot.empty) return null;
     
     // deleted, inactive 상태는 제외 (탈퇴/삭제된 계정)
@@ -178,42 +207,9 @@ export const getUserByEmailIncludeInactive = async (email: string) => {
 // authProviders에서 소셜 제공자로 사용자 조회
 export const getUserBySocialProvider = async (providerId: string, providerUid: string) => {
   try {
-    logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId, providerUid });
-    
-    // active + temp 상태 모두 조회 (temp 계정에 소셜이 미리 연동된 케이스 포함)
-    // deleted/inactive 제외
-    const [activeSnapshot, tempSnapshot] = await Promise.all([
-      getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
-      getDocs(query(collection(db, 'users'), where('status', '==', 'temp'))),
-    ]);
-    
-    const normalizedSearchId = providerId.replace('.com', '');
-    
-    // active 우선, 그 다음 temp 순서로 반환
-    for (const snapshot of [activeSnapshot, tempSnapshot]) {
-      for (const doc of snapshot.docs) {
-        const userData = doc.data() as User;
-        const authProviders = userData.authProviders || [];
-        
-        const matchedProvider = authProviders.find((p: any) => {
-          const normalizedStoredId = p.providerId.replace('.com', '');
-          return normalizedStoredId === normalizedSearchId && p.uid === providerUid;
-        });
-        
-        if (matchedProvider) {
-          logger.info('✅ 소셜 제공자로 사용자 발견:', {
-            userId: userData.userId,
-            email: userData.email,
-            status: userData.status,
-            providerId: matchedProvider.providerId,
-          });
-          return userData;
-        }
-      }
-    }
-    
-    logger.info('❌ 소셜 제공자로 사용자를 찾을 수 없음');
-    return null;
+    logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId });
+    // 전체 컬렉션을 내려받던 방식 → 서버(Admin SDK) 조회로 대체 (규칙상 비인증 list 불가)
+    return await lookupFallback({ by: 'social', providerId, providerUid });
   } catch (error) {
     logger.error('소셜 제공자로 사용자 조회 실패:', error);
     return null;
@@ -229,8 +225,18 @@ export const getUserByPhoneIncludeDeleted = async (phoneNumber: string) => {
       return null;
     }
 
+    // 비로그인(가입 화면)에서는 규칙상 users 목록을 못 읽으므로 서버 조회로
+    if (!auth.currentUser) {
+      return lookupFallback({ by: 'phone', phone: phoneNumber, includeDeleted: true });
+    }
     const q = query(collection(db, 'users'), where('phoneNumber', '==', phoneNumber));
-    const querySnapshot = await getDocs(q);
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (queryError) {
+      if (isPermissionDenied(queryError)) return lookupFallback({ by: 'phone', phone: phoneNumber, includeDeleted: true });
+      throw queryError;
+    }
     if (querySnapshot.empty) return null;
     
     // 우선순위: active > temp > inactive > deleted
@@ -273,8 +279,19 @@ export const getUserByPhone = async (phoneNumber: string) => {
       return null;
     }
 
+    if (!auth.currentUser) {
+      return lookupFallback({ by: 'phone', phone: phoneNumber });
+    }
     const q = query(collection(db, 'users'), where('phoneNumber', '==', phoneNumber));
-    const querySnapshot = await getDocs(q);
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (queryError) {
+      if (isPermissionDenied(queryError)) {
+        return lookupFallback({ by: 'phone', phone: phoneNumber });
+      }
+      throw queryError;
+    }
     if (querySnapshot.empty) return null;
     
     // deleted, inactive 상태는 제외 (탈퇴/삭제된 계정)
@@ -333,6 +350,9 @@ export const getUserByForeignName = async (firstName: string, lastName: string) 
       return null;
     }
 
+    if (!auth.currentUser) {
+      return lookupFallback({ by: 'foreignName', firstName, lastName });
+    }
     // foreignTeacher.firstName과 foreignTeacher.lastName으로 검색
     const q = query(
       collection(db, 'users'),
@@ -340,7 +360,15 @@ export const getUserByForeignName = async (firstName: string, lastName: string) 
       where('foreignTeacher.lastName', '==', lastName)
     );
     
-    const querySnapshot = await getDocs(q);
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (queryError) {
+      if (isPermissionDenied(queryError)) {
+        return lookupFallback({ by: 'foreignName', firstName, lastName });
+      }
+      throw queryError;
+    }
     if (querySnapshot.empty) return null;
     
     // deleted 상태가 아닌 사용자만 필터링
@@ -508,6 +536,7 @@ export const deactivateUser = async (userId: string) => {
       name: `(탈퇴)${userData.name}`,
       originalEmail: userData.email,
       profileImage: '',
+      pushTokens: {}, // 탈퇴 후 알림 발송 방지
       ...(isForeignUser && userData.foreignTeacher ? {
         foreignTeacher: {
           ...userData.foreignTeacher,
@@ -599,93 +628,25 @@ export const checkUserData = async (userId: string) => {
   }
 };
 
-export const reactivateUser = async (userId: string) => {
-  try {
-    // 1. Firestore에서 사용자 정보 조회
-    const userRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userRef);
-    
-    if (!userDoc.exists()) {
-      throw new Error('사용자를 찾을 수 없습니다.');
-    }
-    
-    const userData = userDoc.data() as User;
-    
-    // 1.1 삭제된 사용자인지 확인
-    if ((userData.status as any) !== 'deleted' && userData.status !== 'inactive') {
-      throw new Error('이미 활성화된 사용자입니다.');
-    }
-    
-    const now = Timestamp.now();
-    
-    // 2. 원본 정보 복원
-    const originalName = (userData as any).originalName || userData.name.replace(/^\(삭제됨\)\s*|\(탈퇴\)\s*/g, '');
-    const originalEmail = (userData as any).originalEmail || userData.email.replace(/^deleted_\d+_/g, '');
-    
-    if (!originalEmail || originalEmail.includes('deleted_')) {
-      throw new Error('복구할 이메일 정보를 찾을 수 없습니다.');
-    }
-    
-    logger.info(`✅ 사용자 복구 시작: ${originalName} (${originalEmail})`);
-    
-    // 3. Firebase Auth 계정 재생성 (삭제된 경우)
-    const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-2).toUpperCase() + '!';
-    
-    // 백업 현재 사용자
-    const currentUserBackup = auth.currentUser;
-    
-    try {
-      // 임시 로그아웃
-      if (currentUserBackup) {
-        logger.info('기존 로그인 상태 백업');
-        await firebaseSignOut(auth);
-      }
-      
-      // Auth 계정 생성 시도
-      try {
-        logger.info(`Firebase Auth 계정 재생성 시도: ${originalEmail}`);
-        await createUserWithEmailAndPassword(auth, originalEmail, tempPassword);
-        logger.info('✅ Firebase Auth 계정 생성 완료');
-        
-        // 비밀번호 재설정 이메일 전송
-        await sendPasswordResetEmail(auth, originalEmail);
-        logger.info('✅ 비밀번호 재설정 이메일 전송 완료');
-        
-      } catch (createError) {
-        if (createError instanceof FirebaseError && createError.code === 'auth/email-already-in-use') {
-          logger.info('⚠️ 이미 Firebase Auth 계정이 존재합니다 (정상 복구 가능)');
-          // 비밀번호 재설정 이메일만 전송
-          await sendPasswordResetEmail(auth, originalEmail);
-        } else {
-          logger.warn('⚠️ Firebase Auth 계정 생성 실패 (Firestore는 복구됨):', createError);
-        }
-      }
-      
-      // 로그아웃
-      await firebaseSignOut(auth);
-      
-    } catch (authError) {
-      logger.warn('⚠️ Firebase Auth 복구 중 오류 (Firestore는 복구 진행):', authError);
-    }
-    
-    // 4. Firestore 사용자 문서 복원
-    await updateDoc(userRef, {
-      status: 'active',
-      name: originalName,
-      email: originalEmail,
-      updatedAt: now,
-      // 삭제 관련 필드 제거
-      deletedAt: null,
-      deletedBy: null,
+/**
+ * 탈퇴·삭제 계정 복구 — 서버가 문서 복원 + Auth 계정 확인(없으면 같은 uid 로 재생성) + 비밀번호 재설정 메일 발송.
+ * - verify 가 있으면 본인 복구(가입 화면, 비로그인): 전화번호·이름이 일치해야 한다
+ * - 없으면 관리자 복구
+ * (예전에는 클라이언트가 Auth 계정을 만들다 관리자가 로그아웃되고, 본인 복구는 규칙에 막혀 실패했다)
+ */
+export const reactivateUser = async (userId: string, verify?: { phoneNumber: string; name: string }) => {
+  if (verify) {
+    const res = await fetch('/api/auth/reactivate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, phoneNumber: verify.phoneNumber, name: verify.name }),
     });
-    
-    logger.info('✅ 사용자 복구 완료');
-    
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || '계정 복구에 실패했습니다.');
     return true;
-  } catch (error) {
-    logger.error('❌ 사용자 재활성화 실패:', error);
-    throw error;
   }
+  await authenticatedPost('/api/admin/reactivate-user', { userId });
+  return true;
 };
 
 export const deleteUser = async (userId: string, deleteType: 'soft' | 'hard' = 'soft') => {
@@ -993,6 +954,16 @@ export const createApplication = async (applicationData: Omit<ApplicationHistory
     // doc()으로 ID를 미리 생성한 뒤 setDoc으로 한 번에 저장
     // (addDoc 후 updateDoc으로 applicationHistoryId를 세팅하면
     //  update 규칙에서 Permission Denied가 발생하므로 이 방식 사용)
+    // 중복 지원 방지 (모바일과 동일) — 취소한 지원서는 제외
+    const existing = await getDocs(query(
+      collection(db, 'applicationHistories'),
+      where('refUserId', '==', applicationData.refUserId),
+      where('refJobBoardId', '==', applicationData.refJobBoardId)
+    ));
+    if (existing.docs.some((d) => d.data().applicationStatus !== 'cancelled')) {
+      throw new Error('이미 지원하신 공고입니다.');
+    }
+
     const newDocRef = doc(collection(db, 'applicationHistories'));
     await setDoc(newDocRef, {
       ...applicationData,
@@ -1081,13 +1052,10 @@ export const cancelApplication = async (applicationId: string) => {
 // Auth 관련 함수
 export const signIn = async (email: string, password: string) => {
   try {
-    // 회원가입 직후 로그인 문제 해결을 위해 지연 시간 증가
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     
-    // Firebase 인증 상태가 반영될 시간을 확보
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Firebase 인증 상태(onAuthStateChanged)가 반영될 짧은 여유 (기존 800ms+300ms 인위적 지연 제거)
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     // 로그인 성공 시 마지막 로그인 시간 업데이트
     const userRecord = await getUserByEmail(email);
@@ -1160,49 +1128,83 @@ export const updateUserProfile = async (user: FirebaseUser, displayName?: string
   }
 };
 
+/**
+ * 소셜 데이터 → 서버 검증용 증명(proof)
+ *  - 네이버/카카오: 제공자 access token (콜백/SDK가 SocialUserData.accessToken 에 담아줌)
+ *  - 구글/애플   : 현재 Firebase 세션(팝업 로그인)의 ID token
+ */
+export const buildSocialProof = async (socialData: Pick<SocialUserData, 'providerId' | 'accessToken'>): Promise<SocialProof> => {
+  if (socialData.providerId === 'naver' || socialData.providerId === 'kakao') {
+    if (!socialData.accessToken) {
+      throw new Error('소셜 인증 정보가 만료되었습니다. 다시 로그인해주세요.');
+    }
+    return { kind: socialData.providerId, accessToken: socialData.accessToken };
+  }
+  return getFirebaseProof();
+};
+
+/** 현재 Firebase 세션의 ID token 증명 (세션 복원, 구글/애플 팝업 세션) */
+export const getFirebaseProof = async (): Promise<SocialProof> => {
+  const current = auth.currentUser;
+  if (!current) {
+    throw new Error('인증 세션이 없습니다. 다시 로그인해주세요.');
+  }
+  return { kind: 'firebase', idToken: await current.getIdToken(true) };
+};
+
+/**
+ * Custom Token 로그인
+ * @param userId  대상 users 문서 id (서버가 proof 와 대조해 소유자 여부를 검증)
+ * @param proof   소셜 신원 증명
+ * @param options.deleteAuthUid 팝업으로 생긴 임시 Auth 계정 정리 (그 계정의 ID token 필요)
+ */
 export const signInWithCustomTokenFromFunction = async (
   userId: string,
-  email: string,
-  existingUid?: string, // 기존 Firebase Auth UID (있으면 재사용)
-  deleteTempUid?: string // 서버에서 삭제할 임시 소셜 계정 UID
+  proof: SocialProof,
+  options?: { deleteAuthUid?: { uid: string; idToken: string } }
 ) => {
   try {
-    logger.info('🔑 Custom Token 생성 요청:', {
+    logger.info('🔑 Custom Token 생성 요청:', { userId: userId.substring(0, 8) + '...', proof: proof.kind });
+
+    const { customToken } = await requestCustomToken('', {
+      mode: 'login',
       userId,
-      email,
-      existingUid: existingUid ? `${existingUid.substring(0, 8)}...` : 'none',
-      deleteTempUid: deleteTempUid ? `${deleteTempUid.substring(0, 8)}...` : 'none',
-    });
-    
-    // Cloud Functions 대신 Next.js API Route 사용 (CORS 문제 없고 서비스 계정 불필요)
-    const response = await fetch('/api/auth/create-custom-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, email, existingUid, deleteTempUid }),
+      proof,
+      ...(options?.deleteAuthUid && { deleteAuthUid: options.deleteAuthUid }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error?.message || 'Custom Token 생성 실패');
-    }
-
-    const responseData = await response.json();
-    const { customToken } = responseData.result as { customToken: string; uid: string };
-    
-    // Custom Token으로 Firebase Auth 로그인
     const authModule = await import('firebase/auth');
     const userCredential = await authModule.signInWithCustomToken(auth, customToken);
-    
+
     logger.info('✅ Custom Token 로그인 성공:', {
       uid: userCredential.user.uid,
-      uidMatch: existingUid ? userCredential.user.uid === existingUid : 'N/A',
+      uidMatch: userCredential.user.uid === userId,
     });
-    
     return userCredential;
   } catch (error) {
     logger.error('Custom Token 로그인 실패:', error);
     throw error;
   }
+};
+
+/**
+ * 네이버/카카오 신규 가입용 Firebase 세션 확보
+ * 서버가 제공자 토큰을 검증한 뒤 Auth 사용자를 만들고 Custom Token 을 발급한다.
+ * (기존의 임시 비밀번호(createUserWithEmailAndPassword + _firebaseAuthPassword) 방식 대체)
+ */
+export const signUpWithSocialToken = async (proof: SocialProof) => {
+  const { customToken, uid } = await requestCustomToken('', { mode: 'signup', proof });
+  const authModule = await import('firebase/auth');
+  const userCredential = await authModule.signInWithCustomToken(auth, customToken);
+  logger.info('✅ 소셜 가입용 Firebase 세션 확보:', { uid });
+  return userCredential;
+};
+
+/** 가입 이관 완료 후 admin 선생성 temp 문서 정리 (서버가 본인 확인 후 삭제) */
+export const replaceTempUserDoc = async (tempUserId: string) => {
+  const current = auth.currentUser;
+  if (!current) throw new Error('로그인이 필요합니다.');
+  return replaceTempUserViaApi('', await current.getIdToken(), tempUserId);
 };
 
 export const signOut = async () => {
@@ -1948,23 +1950,13 @@ export const refreshCacheAfterUpdate = async (collection: string, id: string) =>
   }
 };
 
-// Firebase Functions의 verifyAuthFirestoreConsistency 호출
-export const verifyAuthFirestoreConsistency = async () => {
-  try {
-    const functionsModule = await import('firebase/functions');
-    const functions = functionsModule.getFunctions(undefined, 'asia-northeast3');
-    
-    // 개발 환경에서는 emulator 사용
-    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
-      functionsModule.connectFunctionsEmulator(functions, 'localhost', 5001);
-    }
-    
-    const verifyConsistency = functionsModule.httpsCallable(functions, 'verifyAuthFirestoreConsistency');
-    const result = await verifyConsistency({});
-    
-    return result.data;
-  } catch (error) {
-    logger.error('❌ 일관성 검증 실패:', error);
-    throw error;
-  }
+
+
+/**
+ * 가입 완료 — users 문서 생성·temp 계정 이관·탈퇴 계정 정리를 서버가 한 번에 처리
+ * (Auth 계정을 만든 직후, 그 계정으로 로그인된 상태에서 호출)
+ */
+export const completeSignupViaApi = async (input: import('@smis-mentor/shared').CompleteSignupInput) => {
+  const { authenticatedPost } = await import('./apiClient');
+  return authenticatedPost<import('@smis-mentor/shared').CompleteSignupResult>('/api/auth/complete-signup', input);
 };

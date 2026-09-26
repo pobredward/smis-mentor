@@ -4,6 +4,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   doc,
   deleteDoc,
   setDoc,
@@ -58,6 +59,12 @@ export const getJobBoardById = getJobBoard;
 
 export const createApplication = async (applicationData: any): Promise<string> => {
   try {
+    // 마감된 공고는 지원 불가 (규칙에서도 막는다 — 여기서는 알아보기 쉬운 안내를 위해 먼저 확인)
+    const boardSnap = await getDoc(doc(db, 'jobBoards', applicationData.refJobBoardId));
+    if (!boardSnap.exists() || boardSnap.data().status !== 'active') {
+      throw new Error('모집이 마감된 공고입니다.');
+    }
+
     // 중복 지원 확인
     const existingApplicationsQuery = query(
       collection(db, 'applicationHistories'),
@@ -67,7 +74,8 @@ export const createApplication = async (applicationData: any): Promise<string> =
     
     const existingApplications = await getDocs(existingApplicationsQuery);
     
-    if (!existingApplications.empty) {
+    // 취소한 지원서는 재지원 허용 (웹과 동일)
+    if (existingApplications.docs.some((d) => d.data().applicationStatus !== 'cancelled')) {
       throw new Error('이미 지원하신 공고입니다.');
     }
 

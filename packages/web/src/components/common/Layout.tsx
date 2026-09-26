@@ -1,5 +1,7 @@
 "use client";
 
+import CampProfileGate from '@/components/camp-profile/CampProfileGate';
+import EmailVerifyGate from '@/components/auth/EmailVerifyGate';
 import React, { ReactNode } from 'react';
 import Header from './Header';
 import Footer from './Footer';
@@ -92,6 +94,8 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
       </main>
       {!shouldHideFooter && <Footer />}
       <BottomNavigation />
+      <EmailVerifyGate />
+      <CampProfileGate />
     </div>
   );
 } 

@@ -4,7 +4,7 @@ import { logger } from '@smis-mentor/shared';
 /**
  * 현재 사용자의 ID Token을 가져옴 (Auth 초기화 대기)
  */
-async function getCurrentUserToken(): Promise<string> {
+export async function getCurrentUserToken(): Promise<string> {
   // 이미 currentUser가 있으면 바로 토큰 반환
   if (auth.currentUser) {
     return auth.currentUser.getIdToken();

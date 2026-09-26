@@ -4,6 +4,7 @@ import { logger } from '@smis-mentor/shared';
 import { useState } from 'react';
 import { updateCampLifeCriteria } from '@/scripts/updateCampLifeCriteria';
 import Button from '@/components/common/Button';
+import Layout from '@/components/common/Layout';
 
 export default function UpdateEvaluationCriteriaPage() {
   const [isUpdating, setIsUpdating] = useState(false);
@@ -27,6 +28,7 @@ export default function UpdateEvaluationCriteriaPage() {
   };
 
   return (
+    <Layout requireAuth requireAdmin>
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-8">
@@ -137,5 +139,6 @@ export default function UpdateEvaluationCriteriaPage() {
         </div>
       </div>
     </div>
+    </Layout>
   );
 }
