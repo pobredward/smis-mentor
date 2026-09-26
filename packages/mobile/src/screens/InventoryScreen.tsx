@@ -1424,7 +1424,6 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
     } catch (e) { console.error(e); Alert.alert(L('common.error'), e instanceof Error && e.message ? e.message : L('inventory.couldNotProcessPleaseCheck')); }
     finally { setBusy(false); }
   };
-  const approve = () => run(async () => { await approveSupplyRequests(db, [r.id], { uid: userId, name: userName }); notifySupply({ type: 'approved', requestId: r.id }); });
   // 예전 방식(구매 완료 후 따로 입고)으로 남은 요청만 — 이제는 구매 완료와 함께 바로 입고된다
   const canIntake = isAdmin && isCamp && !r.stockApplied && r.status === 'purchased' && r.items.some(l => l.itemId && !r.stocked?.[l.id]);
   const [intake, setIntake] = useState(false);
