@@ -44,8 +44,11 @@ export default function LinkedAccountsDisplay({
   }
 
   // authProviders를 LinkedAccount 형식으로 변환
+  // 예전 데이터의 'apple'·'naver.com' 표기를 정규화
+  const normalizeProviderId = (id: string): LinkedAccount['providerId'] =>
+    (id === 'apple' ? 'apple.com' : id === 'naver.com' ? 'naver' : id) as LinkedAccount['providerId'];
   const accounts: LinkedAccount[] = authProviders.map((provider) => ({
-    providerId: provider.providerId,
+    providerId: normalizeProviderId(provider.providerId),
     email: provider.email,
     linkedAt: provider.linkedAt?.toDate ? provider.linkedAt.toDate() : new Date(),
     displayName: provider.displayName,
@@ -75,11 +78,7 @@ export default function LinkedAccountsDisplay({
   // 연동된 제공자 ID 목록 (naver.com도 naver로 정규화)
   const linkedProviderIds = accounts
     .filter((acc) => acc.providerId !== 'password')
-    .map((acc) => {
-      // naver.com -> naver로 정규화
-      if (acc.providerId === 'naver.com') return 'naver';
-      return acc.providerId;
-    });
+    .map((acc) => acc.providerId);
 
   return (
     <div className="space-y-6">

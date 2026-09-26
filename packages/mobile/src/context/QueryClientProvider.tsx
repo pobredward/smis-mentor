@@ -60,9 +60,10 @@ export function QueryClientProvider({ children }: QueryClientProviderProps) {
             return persistKeys.includes(queryKey);
           },
         },
-        onSuccess: () => {
-          logger.info('✅ React Query 캐시 복원 완료');
-        },
+      }}
+      // (예전에는 persistOptions 안에 있어 호출되지 않았다)
+      onSuccess={() => {
+        logger.info('✅ React Query 캐시 복원 완료');
       }}
     >
       {children}

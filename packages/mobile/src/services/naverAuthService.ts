@@ -97,7 +97,7 @@ async function signInWithNativeSDK(NaverLogin: any): Promise<SocialUserData> {
 async function signInWithOAuth(): Promise<SocialUserData> {
   // Redirect URI (Expo Auth Proxy 사용)
   const redirectUri = makeRedirectUri({
-    useProxy: true,
+    // (useProxy 는 expo-auth-session 최신판에서 없어져 무시되던 옵션이라 뺐다)
     // 개발: https://auth.expo.io/@pobredward02/smis-mentor
     // 프로덕션: smismentor://redirect
   });
@@ -159,7 +159,7 @@ async function signInWithOAuth(): Promise<SocialUserData> {
     body: tokenParams.toString(),
   });
 
-  const tokenData = await tokenResponse.json();
+  const tokenData = (await tokenResponse.json()) as { access_token?: string; error_description?: string };
 
   if (!tokenData.access_token) {
     throw new Error(tokenData.error_description || '액세스 토큰을 가져올 수 없습니다');
@@ -175,13 +175,13 @@ async function signInWithOAuth(): Promise<SocialUserData> {
     },
   });
 
-  const userInfoData = await userInfoResponse.json();
+  const userInfoData = (await userInfoResponse.json()) as { resultcode?: string; response?: Record<string, string> };
 
   if (userInfoData.resultcode !== '00') {
     throw new Error('네이버 사용자 정보를 가져올 수 없습니다');
   }
 
-  const profile = userInfoData.response;
+  const profile = userInfoData.response ?? {};
 
   const socialData: SocialUserData = {
     email: profile.email || '',

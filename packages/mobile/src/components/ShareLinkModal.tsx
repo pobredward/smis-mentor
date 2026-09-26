@@ -94,11 +94,11 @@ export function ShareLinkModal({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(errorData.error || '링크 생성에 실패했습니다.');
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as { shareUrl: string; expiresAt: string };
       setGeneratedLink(data.shareUrl);
       setExpiresAt(data.expiresAt);
     } catch (error) {

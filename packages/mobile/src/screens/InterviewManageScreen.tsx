@@ -39,7 +39,7 @@ import EvaluationForm from '../components/EvaluationForm';
 import { getInterviewLinks, InterviewLinks } from '../services/interviewLinksService';
 import { sendCustomSMS } from '../services/smsService';
 import type { JobBoard, ApplicationHistory, User } from '@smis-mentor/shared';
-import { TemplateType, getSMSTemplateByTypeAndJobBoard, saveSMSTemplate, EvaluationStage } from '@smis-mentor/shared';
+import { TemplateType, getSMSTemplateByTypeAndJobBoard, saveSMSTemplate, updateSMSTemplate, EvaluationStage } from '@smis-mentor/shared';
 import { auth } from '../config/firebase';
 
 type JobBoardWithId = JobBoard & { id: string };
@@ -712,8 +712,19 @@ export function InterviewManageScreen({
     try {
       setIsSavingSMS(true);
 
+      // 웹과 같이: 같은 공고·종류 템플릿이 있으면 수정, 없으면 새로 저장
+      // (예전 코드는 인자 순서가 맞지 않아 내용 없는 문서만 새로 쌓였다)
       const jobBoardId = selectedApplication.refJobBoardId;
-      await saveSMSTemplate(db, type, smsMessages[type], jobBoardId);
+      const payload = {
+        title: `${type} 템플릿`,
+        content: smsMessages[type],
+        type,
+        refJobBoardId: jobBoardId,
+        createdBy: auth.currentUser?.uid || 'system',
+      };
+      const existing = await getSMSTemplateByTypeAndJobBoard(db, type, jobBoardId);
+      if (existing?.id) await updateSMSTemplate(db, existing.id, payload);
+      else await saveSMSTemplate(db, payload);
 
       Alert.alert('성공', '템플릿이 저장되었습니다.');
     } catch (error) {
@@ -1615,19 +1626,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
   },
   modalHeaderButtons: {
     flexDirection: 'row',

@@ -871,7 +871,8 @@ export function ApplicantDetailScreen({
                 open={documentOpen}
                 value={documentStatus}
                 items={documentItems}
-                setOpen={(open) => {
+                setOpen={(v) => {
+                  const open = typeof v === 'function' ? v(false) : v; // 라이브러리는 boolean 만 넘긴다
                   if (open) {
                     setInterviewOpen(false);
                     setFinalOpen(false);
@@ -926,7 +927,8 @@ export function ApplicantDetailScreen({
                 open={interviewOpen}
                 value={interviewStatus}
                 items={interviewItems}
-                setOpen={(open) => {
+                setOpen={(v) => {
+                  const open = typeof v === 'function' ? v(false) : v; // 라이브러리는 boolean 만 넘긴다
                   // 서류 합격이 아니면 드롭다운 열지 않음
                   if (open && !canChangeInterviewStatus(documentStatus as any)) {
                     const warning = getInterviewStatusChangeWarning(documentStatus as any);
@@ -1007,7 +1009,8 @@ export function ApplicantDetailScreen({
                 open={finalOpen}
                 value={finalStatus}
                 items={finalItems}
-                setOpen={(open) => {
+                setOpen={(v) => {
+                  const open = typeof v === 'function' ? v(false) : v; // 라이브러리는 boolean 만 넘긴다
                   // 면접 합격이 아니면 드롭다운 열지 않음
                   if (open && !canChangeFinalStatus(interviewStatus as any)) {
                     const warning = getFinalStatusChangeWarning(interviewStatus as any);

@@ -31,8 +31,9 @@ if (!SENTRY_DISABLED) {
         
         // 쿼리 파라미터에서 민감 정보 제거
         if (event.request.query_string) {
-          const queryString = event.request.query_string;
-          if (queryString.includes('token') || queryString.includes('key')) {
+          const q = event.request.query_string;
+          const queryString = typeof q === 'string' ? q : JSON.stringify(q);
+          if (/token|key/i.test(queryString)) {
             event.request.query_string = '[REDACTED]';
           }
         }

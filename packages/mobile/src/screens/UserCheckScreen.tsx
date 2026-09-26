@@ -47,6 +47,7 @@ interface UserWithGroupInfo {
   age?: number;
   rrnFront?: string;
   rrnLast?: string;
+  rrnLastEncrypted?: string;
   address?: string;
   addressDetail?: string;
   university?: string;

@@ -19,7 +19,8 @@ import { getAppConfig, updateAppConfig, DEFAULT_LOADING_QUOTES, logger } from '@
 import { useAuth } from '../context/AuthContext';
 
 export function AppConfigScreen({ navigation }: AdminStackScreenProps<'AppConfig'>) {
-  const { user } = useAuth();
+  // (예전 코드는 없는 필드 user 를 읽어 저장 버튼이 늘 '로그인 필요'로 막혔다)
+  const { currentUser: user } = useAuth();
   const [loadingQuotes, setLoadingQuotes] = useState<string[]>([]);
   const [iosMinVersion, setIosMinVersion] = useState('');
   const [androidMinVersion, setAndroidMinVersion] = useState('');

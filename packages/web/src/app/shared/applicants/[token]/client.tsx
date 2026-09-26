@@ -9,8 +9,12 @@ import Footer from '@/components/common/Footer';
 import Button from '@/components/common/Button';
 import { ApplicationHistory, User } from '@/types';
 
-type ApplicationWithUser = ApplicationHistory & {
+/** API 가 날짜를 ISO 문자열로 보낸다 */
+type ApplicationWithUser = Omit<ApplicationHistory, 'applicationDate' | 'interviewDate' | 'createdAt'> & {
   id: string;
+  applicationDate?: string | null;
+  interviewDate?: string | null;
+  createdAt?: string | null;
   user?: any | null; // Using any since API response might have profileImageUrl
 };
 

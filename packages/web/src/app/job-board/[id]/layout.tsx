@@ -18,7 +18,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     let campName = '';
     if (jobBoard.refJobCodeId) {
       const jobCode = await getJobCodeById(jobBoard.refJobCodeId);
-      campName = jobCode?.jobCodeName || '';
+      // (예전 코드는 없는 필드 jobCodeName 을 읽어 캠프 이름이 늘 비어 있었다)
+      campName = jobCode ? `${jobCode.generation} ${jobCode.name}`.trim() : '';
     }
 
     return {

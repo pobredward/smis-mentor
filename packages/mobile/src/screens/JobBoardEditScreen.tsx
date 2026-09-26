@@ -221,10 +221,10 @@ export function JobBoardEditScreen({
                 actions.alignRight,
               ]}
               iconMap={{
-                [actions.heading1]: ({ tintColor }) => (
+                [actions.heading1]: ({ tintColor }: { tintColor?: string }) => (
                   <Text style={{ color: tintColor, fontWeight: 'bold' }}>H1</Text>
                 ),
-                [actions.heading2]: ({ tintColor }) => (
+                [actions.heading2]: ({ tintColor }: { tintColor?: string }) => (
                   <Text style={{ color: tintColor, fontWeight: 'bold' }}>H2</Text>
                 ),
               }}
@@ -235,7 +235,7 @@ export function JobBoardEditScreen({
                 ref={richText}
                 onChange={(html) => setDescription(html)}
                 placeholder="공고 내용을 입력하세요"
-                androidHardwareAccelerationDisabled={true}
+                {...({ androidHardwareAccelerationDisabled: true } as object)}
                 style={styles.richEditor}
                 initialContentHTML={description}
                 useContainer={true}

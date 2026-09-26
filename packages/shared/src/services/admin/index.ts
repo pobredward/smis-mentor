@@ -14,38 +14,8 @@ import {
 import type { JobExperienceGroupRole } from '../../types/camp';
 import { logger } from '../../utils/logger';
 
-// Local types (not exported to avoid conflicts)
-interface JobCode {
-  generation: string;
-  code: string;
-  name: string;
-  eduDates: Timestamp[];
-  startDate: Timestamp;
-  endDate: Timestamp;
-  location: string;
-  korea: boolean;
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
-}
-
-interface JobCodeWithId extends JobCode {
-  id: string;
-}
-
-type JobGroup =
-  | 'junior'
-  | 'middle'
-  | 'senior'
-  | 'spring'
-  | 'summer'
-  | 'autumn'
-  | 'winter'
-  | 'common'
-  | 'manager'
-  | 'short1'
-  | 'short2'
-  | 'short3'
-  | 'short4';
+// 채용 코드 타입은 legacy 한 벌을 쓴다 (예전 로컬 사본은 createdAt 이 선택이라 web 타입과 어긋났음)
+import type { JobCode, JobCodeWithId, JobGroup, JobCodeWithGroup } from '../../types/legacy';
 
 // JobExperienceGroupRole은 shared에서 import하여 사용
 
@@ -64,7 +34,7 @@ interface User {
   phoneNumber: string;
   phone?: string;
   role: 'user' | 'mentor' | 'admin' | 'foreign' | 'foreign_temp' | 'mentor_temp';
-  status: 'active' | 'inactive' | 'temp';
+  status: 'active' | 'inactive' | 'temp' | 'deleted';
   jobExperiences?: JobExperienceItem[];
   address?: string;
   addressDetail?: string;
@@ -77,9 +47,6 @@ interface User {
   [key: string]: unknown;
 }
 
-interface JobCodeWithGroup extends JobCodeWithId {
-  group: JobGroup;
-}
 
 // ==================== 임시 사용자 생성 ====================
 export const createTempUser = async (

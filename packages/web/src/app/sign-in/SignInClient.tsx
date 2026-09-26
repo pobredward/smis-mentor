@@ -229,7 +229,7 @@ export function SignInClient() {
             toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
             try {
               const proof = await getFirebaseProof();
-              await signInWithCustomTokenFromFunction(result.user.userId, proof, {
+              await signInWithCustomTokenFromFunction(targetUserId!, proof, {
                 ...(currentUser && proof.kind === 'firebase' && {
                   deleteAuthUid: { uid: currentUser.uid, idToken: proof.idToken },
                 }),
@@ -404,7 +404,7 @@ export function SignInClient() {
       } else if (data.providerId === 'apple.com') {
         errorMessage = handleAppleAuthError(error);
       } else {
-        errorMessage = handleSocialAuthError(error);
+        errorMessage = handleSocialAuthError(error as Parameters<typeof handleSocialAuthError>[0]);
       }
       
       toast.error(errorMessage);
@@ -852,7 +852,7 @@ export function SignInClient() {
         existingUserEmail,
         password,
         socialData,
-        signIn,
+        async (email: string, pw: string) => { await signIn(email, pw); },
         getUserByEmail,
         getUserById,
         updateUser,

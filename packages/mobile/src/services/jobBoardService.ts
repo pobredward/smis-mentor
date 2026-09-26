@@ -11,26 +11,9 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-export interface JobBoard {
-  title: string;
-  description: string;
-  status: 'active' | 'closed';
-  generation: string;
-  korea: boolean;
-  jobCode: string;
-  refJobCodeId: string;
-  educationStartDate: Timestamp;
-  educationEndDate: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  interviewBaseLink?: string;
-  interviewBaseDuration?: number;
-  interviewBaseNotes?: string;
-}
-
-export interface JobBoardWithId extends JobBoard {
-  id: string;
-}
+/** 공고 타입 — shared 한 벌 (예전 모바일 사본에는 면접 일정 interviewDates 가 빠져 있었음) */
+export type { JobBoard, JobBoardWithId } from '@smis-mentor/shared';
+import type { JobBoardWithId } from '@smis-mentor/shared';
 
 export interface JobCodeWithId {
   id: string;

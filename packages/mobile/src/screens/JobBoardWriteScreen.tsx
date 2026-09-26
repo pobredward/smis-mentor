@@ -229,7 +229,7 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
       }
 
       // 면접 날짜 파싱 (간단한 형식)
-      let interviewDates = [];
+      let interviewDates: Array<{ start: Timestamp; end: Timestamp }> = [];
       if (interviewDatesInput.trim()) {
         const lines = interviewDatesInput.split('\n').filter((l) => l.trim());
         interviewDates = lines.map((line) => {
@@ -337,7 +337,8 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
                 open={generationDropdownOpen}
                 value={selectedGeneration}
                 items={generationItems}
-                setOpen={(open) => {
+                setOpen={(v) => {
+                  const open = typeof v === 'function' ? v(false) : v; // 라이브러리는 boolean 만 넘긴다
                   if (open) {
                     setJobCodeDropdownOpen(false);
                   }
@@ -374,7 +375,8 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
                     open={jobCodeDropdownOpen}
                     value={value}
                     items={jobCodeItems}
-                    setOpen={(open) => {
+                    setOpen={(v) => {
+                      const open = typeof v === 'function' ? v(false) : v; // 라이브러리는 boolean 만 넘긴다
                       if (open) {
                         setGenerationDropdownOpen(false);
                       }

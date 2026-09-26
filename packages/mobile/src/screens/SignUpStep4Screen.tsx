@@ -321,7 +321,7 @@ export function SignUpStep4Screen({
                   open={genderDropdownOpen}
                   value={gender || null}
                   items={genderItems}
-                  setOpen={handleGenderDropdownOpen}
+                  setOpen={(v) => handleGenderDropdownOpen(typeof v === 'function' ? v(genderDropdownOpen) : v)}
                   setValue={setGender}
                   setItems={setGenderItems}
                   placeholder="성별을 선택하세요"
@@ -364,7 +364,7 @@ export function SignUpStep4Screen({
                   open={referralDropdownOpen}
                   value={referralPath || null}
                   items={referralItems}
-                  setOpen={handleReferralDropdownOpen}
+                  setOpen={(v) => handleReferralDropdownOpen(typeof v === 'function' ? v(referralDropdownOpen) : v)}
                   setValue={setReferralPath}
                   setItems={setReferralItems}
                   placeholder="가입 경로를 선택하세요"

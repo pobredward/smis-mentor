@@ -391,7 +391,7 @@ export function UserManageDetailScreen({ route, navigation }: any) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(errorData.error || '사용자 삭제에 실패했습니다.');
       }
 
@@ -1136,9 +1136,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     gap: 4,
-  },
-  deleteButton: {
-    backgroundColor: '#FEE2E2',
   },
   deleteButtonText: {
     fontSize: 12,

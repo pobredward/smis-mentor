@@ -38,7 +38,7 @@ export async function mobileAuthenticatedPost<T = unknown>(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'API 요청 실패' }));
+    const error = (await response.json().catch(() => ({ error: 'API 요청 실패' }))) as { error?: string; message?: string };
     throw new Error(error.error || error.message || 'API 요청 실패');
   }
 

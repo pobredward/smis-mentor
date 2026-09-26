@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
   View,
@@ -31,6 +31,8 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabsParamList>
 >;
 
+const NO_BOARDS: JobBoardWithId[] = [];
+
 export function RecruitmentListScreen({ navigation }: Props) {
   const { userData } = useAuth();
   const [jobCodesMap, setJobCodesMap] = useState<{
@@ -41,11 +43,19 @@ export function RecruitmentListScreen({ navigation }: Props) {
   const isAdmin = userData?.role === 'admin';
 
   // React Query로 채용 공고 목록 가져오기 (프리페칭된 데이터 사용)
-  const { data: jobBoards = [], isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery<JobBoardWithId[]>({
     queryKey: recruitmentQueryKeys.jobBoards(),
     queryFn: getAllJobBoards,
     staleTime: 5 * 60 * 1000, // 5분
-    onSuccess: async (boards) => {
+  });
+  const jobBoards = data ?? NO_BOARDS;
+
+  // 공고의 캠프(jobCode) 정보 매핑 — React Query v5 는 useQuery 의 onSuccess 를 지원하지 않아
+  // 예전 코드에서는 이 매핑이 실행되지 않고 공고의 교육 날짜로만 표시됐다
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const boards: JobBoardWithId[] = data ?? [];
       // Job Codes 매핑
       const jobCodeIds = boards.map((board) => board.refJobCodeId);
       const uniqueJobCodeIds = [...new Set(jobCodeIds)];
@@ -62,9 +72,10 @@ export function RecruitmentListScreen({ navigation }: Props) {
         }
       }
 
-      setJobCodesMap(jobCodesData);
-    },
-  });
+      if (!cancelled) setJobCodesMap(jobCodesData);
+    })();
+    return () => { cancelled = true; };
+  }, [data]);
 
   const formatDate = (timestamp: Timestamp) => {
     const date = timestamp.toDate();

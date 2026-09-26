@@ -23,6 +23,8 @@ export interface SocialUserData {
   idToken?: string;
   accessToken?: string;
   phone?: string;
+  /** 제공자 표시 이름 (구글 등) */
+  displayName?: string;
   firebaseAuthUid?: string;  // Firebase Auth UID (네이버/카카오 Custom Token용)
 }
 

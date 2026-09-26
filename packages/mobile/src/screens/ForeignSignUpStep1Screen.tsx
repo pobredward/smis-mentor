@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import type { AlertButton } from 'react-native';
 import { getUserByPhone, getUserByPhoneIncludeInactive } from '../services/authService';
 import { getPhonePlaceholder } from '../utils/phoneUtils';
 import { PHONE_COUNTRY_CODES as countryCodes } from '@smis-mentor/shared';
@@ -247,7 +248,7 @@ export function ForeignSignUpStep1Screen({
     Alert.alert(
       'Select Country Code',
       '',
-      countryCodes.map((item) => ({
+      countryCodes.map((item): AlertButton => ({
         text: `${item.flag} ${item.code}`,
         onPress: () => setCountryCode(item.code),
       })).concat([{ text: 'Cancel', style: 'cancel' }])

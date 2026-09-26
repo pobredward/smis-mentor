@@ -699,9 +699,8 @@ export default function UserManage() {
             newActiveJobExperienceId: newActiveJobExpId,
           });
         } else {
-          await updateUser(selectedUser.userId, { 
-            activeJobExperienceId: null 
-          });
+          // Firestore 에는 null 로 저장 (필드 비우기)
+          await updateUser(selectedUser.userId, { activeJobExperienceId: null } as unknown as Partial<User>);
           logger.info('남은 캠프가 없어 활성 캠프를 null로 설정:', selectedUser.userId);
         }
       }

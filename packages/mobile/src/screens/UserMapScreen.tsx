@@ -52,7 +52,7 @@ const geocodeAddress = async (address: string): Promise<{ lat: number; lng: numb
       return null;
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as { documents?: Array<{ x: string; y: string }> };
     
     if (data.documents && data.documents.length > 0) {
       const result = data.documents[0];
@@ -166,7 +166,7 @@ export function UserMapScreen({ navigation }: AdminStackScreenProps<'UserMap'>) 
     setIsLoading(true);
     try {
       const fetchedUsers = await adminGetAllUsers(db);
-      setUsers(fetchedUsers);
+      setUsers(fetchedUsers as unknown as User[]);
     } catch (error) {
       logger.error('사용자 목록 로딩 실패:', error);
     } finally {

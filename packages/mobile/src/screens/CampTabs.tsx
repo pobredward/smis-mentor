@@ -43,16 +43,6 @@ type SectionDataWithLinks = SectionData & {
   templateSectionId?: string;
 };
 
-export function RoomScreen() {
-  return (
-    <View style={styles.container}>
-      <View style={styles.placeholderContainer}>
-        <Ionicons name="bed-outline" size={64} color="#cbd5e1" />
-        <Text style={styles.placeholderText}>방 화면 (추후 구현)</Text>
-      </View>
-    </View>
-  );
-}
 
 export function LessonScreen() {
   const { userData, loading: authLoading } = useAuth();

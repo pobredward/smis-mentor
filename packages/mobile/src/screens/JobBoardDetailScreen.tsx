@@ -251,7 +251,7 @@ export function JobBoardDetailScreen({
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>공고를 찾을 수 없습니다.</Text>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>돌아가기</Text>
         </TouchableOpacity>
       </View>

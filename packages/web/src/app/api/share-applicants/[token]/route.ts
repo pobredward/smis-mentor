@@ -48,7 +48,7 @@ export async function GET(
       id: shareTokenDoc.id,
       ...shareTokenData,
       expiresAt: shareTokenData.expiresAt.toDate(),
-    } as ShareToken & { id: string };
+    } as Omit<ShareToken, 'expiresAt'> & { id: string; expiresAt: Date };
 
     // 만료 확인
     const now = new Date();
