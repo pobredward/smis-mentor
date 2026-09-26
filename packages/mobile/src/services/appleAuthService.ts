@@ -114,17 +114,6 @@ export async function signInWithApple(): Promise<SocialUserData> {
   }
 }
 
-/**
- * 애플 로그아웃 (실제로는 credential 무효화가 필요 없음)
- */
-export async function signOutApple(): Promise<void> {
-  try {
-    logger.info('✅ 애플 로그아웃 완료');
-  } catch (error) {
-    logger.error('애플 로그아웃 실패:', error);
-    throw error;
-  }
-}
 
 /**
  * 애플 로그인 사용 가능 여부 확인

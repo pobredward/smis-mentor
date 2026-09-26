@@ -18,6 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Timestamp } from 'firebase/firestore';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../config/firebase';
 import {
@@ -3877,10 +3878,9 @@ function ParentContactSectionMobile({
 
   const copyToClipboard = async (text: string, idx: number) => {
     try {
-      const Clipboard = require('@react-native-clipboard/clipboard').default;
-      await Clipboard.setString(text);
+      // 예전에는 설치되지 않은 @react-native-clipboard 를 불러 늘 실패 → 알림창으로만 보였다
+      await Clipboard.setStringAsync(text);
     } catch {
-      // clipboard 없으면 Alert으로 대체
       Alert.alert('📋 복사할 내용', text, [{ text: '닫기' }]);
     }
     setCopiedIdx(idx);

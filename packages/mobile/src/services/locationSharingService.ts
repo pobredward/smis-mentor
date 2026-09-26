@@ -135,17 +135,6 @@ export const requestBackgroundLocationPermission =
     }
   };
 
-// 위치 권한을 요청하고 허용 수준을 반환
-// 1단계: 포그라운드 권한 요청 → 2단계: 백그라운드 권한 요청 (포그라운드 허용 후에만 가능)
-// disclosure 모달을 직접 제어하는 경우 requestForegroundLocationPermission /
-// requestBackgroundLocationPermission 을 개별 호출하세요.
-export const requestLocationPermission =
-  async (): Promise<LocationPermissionLevel> => {
-    const fgResult = await requestForegroundLocationPermission();
-    if (fgResult === 'denied') return 'denied';
-
-    return requestBackgroundLocationPermission();
-  };
 
 // 현재 위치 권한 상태 확인 (권한 요청 없이 확인만)
 export const getLocationPermissionStatus =

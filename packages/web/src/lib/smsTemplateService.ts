@@ -78,17 +78,6 @@ export async function getSMSTemplate(id: string) {
   }
 }
 
-// 템플릿 삭제
-export async function deleteSMSTemplate(id: string) {
-  try {
-    const templateRef = doc(db, 'smsTemplates', id);
-    await deleteDoc(templateRef);
-    return true;
-  } catch (error) {
-    logger.error('템플릿 삭제 오류:', error);
-    throw error;
-  }
-}
 
 // 타입과 공고 ID로 템플릿 조회
 export async function getSMSTemplateByTypeAndJobBoard(type: TemplateType, jobBoardId?: string) {
@@ -183,22 +172,6 @@ export async function getAllSMSTemplates() {
   }
 }
 
-// 특정 공고의 모든 템플릿 조회
-export async function getTemplatesByJobBoard(jobBoardId: string) {
-  try {
-    const templatesRef = collection(db, 'smsTemplates');
-    const q = query(templatesRef, where('refJobBoardId', '==', jobBoardId));
-    const querySnapshot = await getDocs(q);
-    
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as SMSTemplate[];
-  } catch (error) {
-    logger.error('공고별 템플릿 조회 오류:', error);
-    throw error;
-  }
-}
 
 // 템플릿 변수 치환 함수
 export function replaceTemplateVariables(template: string, variables: Record<string, string>) {
@@ -214,7 +187,7 @@ export function replaceTemplateVariables(template: string, variables: Record<str
 }
 
 // 특정 타입의 모든 템플릿 조회 (다른 공고 포함)
-export async function getTemplatesByType(type: TemplateType) {
+async function getTemplatesByType(type: TemplateType) {
   try {
     const templatesRef = collection(db, 'smsTemplates');
     const q = query(templatesRef, where('type', '==', type));

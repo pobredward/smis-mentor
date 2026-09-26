@@ -9,7 +9,7 @@ const NAVER_STATE_KEY = 'naver_oauth_state';
  * 네이버 로그인 URL 생성
  * state에 현재 origin을 포함해 콜백에서 postMessage target을 동적으로 결정
  */
-export function getNaverLoginUrl(): string {
+function getNaverLoginUrl(): string {
   // CSRF 방지를 위한 state 생성
   const randomState = Math.random().toString(36).substring(2, 15);
   
@@ -37,7 +37,7 @@ export function getNaverLoginUrl(): string {
 /**
  * 네이버 팝업 로그인
  */
-export async function signInWithNaverPopup(): Promise<SocialUserData> {
+async function signInWithNaverPopup(): Promise<SocialUserData> {
   return new Promise((resolve, reject) => {
     const width = 500;
     const height = 600;

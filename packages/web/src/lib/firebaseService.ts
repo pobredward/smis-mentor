@@ -59,7 +59,7 @@ const lookupFallback = async (params: Parameters<typeof lookupUserViaApi>[1]) =>
 };
 
 // User 관련 함수
-export const createUser = async (userData: Omit<User, 'userId' | 'id'>, userId?: string) => {
+const createUser = async (userData: Omit<User, 'userId' | 'id'>, userId?: string) => {
   const now = Timestamp.now();
 
   // Firestore는 undefined 값을 허용하지 않으므로 top-level undefined 필드 제거
@@ -323,26 +323,6 @@ export const deactivateUser = async (userId: string) => {
   }
 };
 
-// 삭제된 사용자만 조회
-export const getDeletedUsers = async () => {
-  try {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('status', '==', 'deleted'));
-    const querySnapshot = await getDocs(q);
-    
-    const users: User[] = [];
-    querySnapshot.forEach((doc) => {
-      users.push(doc.data() as User);
-    });
-    
-    logger.info(`✅ 삭제된 사용자 조회 완료: ${users.length}명`);
-    
-    return users;
-  } catch (error) {
-    logger.error('삭제된 사용자 조회 실패:', error);
-    throw error;
-  }
-};
 
 // 사용자 삭제 전 관련 데이터 확인
 export const checkUserData = async (userId: string) => {
@@ -759,9 +739,6 @@ export const getApplicationsByJobBoardId = async (jobBoardId: string) => {
   }
 };
 
-export const updateApplication = async (applicationId: string, applicationData: Partial<ApplicationHistory>) => {
-  return await updateDoc(doc(db, 'applicationHistories', applicationId), applicationData);
-};
 
 // 지원 취소 함수
 export const cancelApplication = async (applicationId: string) => {
@@ -817,15 +794,6 @@ export const signUp = async (email: string, password: string) => {
   }
 };
 
-export const sendVerificationEmail = async (user: FirebaseUser) => {
-  try {
-    await sendEmailVerification(user);
-    return true;
-  } catch (error) {
-    logger.error('이메일 인증 메일 발송 실패:', error);
-    throw error;
-  }
-};
 
 export const resetPassword = async (email: string) => {
   try {
@@ -851,15 +819,6 @@ export const resetPassword = async (email: string) => {
   }
 };
 
-export const updateUserProfile = async (user: FirebaseUser, displayName?: string, photoURL?: string) => {
-  try {
-    await updateProfile(user, { displayName, photoURL });
-    return true;
-  } catch (error) {
-    logger.error('사용자 프로필 업데이트 실패:', error);
-    throw error;
-  }
-};
 
 /**
  * 소셜 데이터 → 서버 검증용 증명(proof)
@@ -933,12 +892,6 @@ export const signUpWithSocialToken = async (proof: SocialProof) => {
   return userCredential;
 };
 
-/** 가입 이관 완료 후 admin 선생성 temp 문서 정리 (서버가 본인 확인 후 삭제) */
-export const replaceTempUserDoc = async (tempUserId: string) => {
-  const current = auth.currentUser;
-  if (!current) throw new Error('로그인이 필요합니다.');
-  return replaceTempUserViaApi('', await current.getIdToken(), tempUserId);
-};
 
 export const signOut = async () => {
   try {
@@ -1221,77 +1174,6 @@ export const deleteForeignDocUrl = async (
   }
 };
 
-// 임시 사용자 생성 함수
-export const createTempUser = async (
-  name: string,
-  phoneNumber: string,
-  jobExperienceIds: string[],
-  jobExperienceGroups: JobGroup[] = [],
-  jobExperienceGroupRoles: JobExperienceGroupRole[] = [],
-  jobExperienceClassCodes: (string | undefined)[] = []
-) => {
-  try {
-    // 동일한 이름과 전화번호를 가진 사용자가 있는지 확인
-    const usersRef = collection(db, 'users');
-    const q = query(
-      usersRef,
-      where('name', '==', name),
-      where('phoneNumber', '==', phoneNumber)
-    );
-    const querySnapshot = await getDocs(q);
-    
-    if (!querySnapshot.empty) {
-      // 이미 존재하는 사용자가 있으면 오류 반환
-      throw new Error('이미 등록된 유저입니다');
-    }
-    
-    // JobExperiences 객체 배열 생성
-    const jobExperiences = jobExperienceIds.map((id, index) => ({
-      id,
-      group: index < jobExperienceGroups.length ? jobExperienceGroups[index] : 'junior' as JobGroup,
-      groupRole: index < jobExperienceGroupRoles.length ? jobExperienceGroupRoles[index] : '담임',
-      classCode: index < jobExperienceClassCodes.length ? jobExperienceClassCodes[index] : undefined
-    }));
-    
-    const now = Timestamp.now();
-    
-    // Firestore에 임시 사용자 정보 저장
-    const userData: Omit<User, 'userId' | 'id'> = {
-      email: '',
-      name,
-      phoneNumber,
-      phone: phoneNumber,
-      role: 'mentor_temp',
-      jobExperiences,
-      jobCodeIds: jobExperiences.map((exp) => exp.id),
-      password: '',
-      address: '',
-      addressDetail: '',
-      agreedTerms: false,
-      agreedPersonal: false,
-      profileImage: '',
-      status: 'temp',
-      isEmailVerified: false,
-      isPhoneVerified: false,
-      isProfileCompleted: false,
-      isTermsAgreed: false,
-      isPersonalAgreed: false,
-      isAddressVerified: false,
-      isProfileImageUploaded: false,
-      jobMotivation: '',
-      feedback: '',
-      createdAt: now,
-      updatedAt: now
-    };
-    
-    await createUser(userData);
-    
-    return { success: true };
-  } catch (error) {
-    logger.error('임시 사용자 생성 오류:', error);
-    throw error;
-  }
-};
 
 // 모든 사용자 조회
 export const getAllUsers = async (includeDeleted: boolean = false) => {
@@ -1320,25 +1202,6 @@ export const getAllUsers = async (includeDeleted: boolean = false) => {
   }
 };
 
-// 특정 직무 코드에 해당하는 사용자 조회
-export const getUsersByJobCode = async (generation: string, code: string) => {
-  try {
-    const jobCodesRef = collection(db, 'jobCodes');
-    const codeQuery = query(
-      jobCodesRef,
-      where('generation', '==', generation),
-      where('code', '==', code)
-    );
-    const jobCodeSnapshot = await getDocs(codeQuery);
-
-    if (jobCodeSnapshot.empty) return [];
-
-    return getUsersByJobCodeId(jobCodeSnapshot.docs[0].id);
-  } catch (error) {
-    logger.error('직무 코드별 사용자 조회 실패:', error);
-    throw error;
-  }
-};
 
 // jobCodeId로 해당 캠프에 속한 사용자 조회 (array-contains 쿼리 — 서버 필터링)
 export const getUsersByJobCodeId = async (jobCodeId: string): Promise<User[]> => {
@@ -1482,41 +1345,7 @@ export const addUserJobCode = async (
   }
 };
 
-// 리뷰 관련 함수
-export const getReviews = async () => {
-  try {
-    const reviewsQuery = query(
-      collection(db, 'reviews'),
-      orderBy('createdAt', 'desc')
-    );
-    
-    const querySnapshot = await getDocs(reviewsQuery);
-    return querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-  } catch (error) {
-    logger.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
-    throw error;
-  }
-};
 
-export const getReviewById = async (reviewId: string) => {
-  try {
-    const reviewDoc = await getDoc(doc(db, 'reviews', reviewId));
-    if (reviewDoc.exists()) {
-      return {
-        id: reviewDoc.id,
-        ...reviewDoc.data(),
-      };
-    } else {
-      throw new Error('해당 리뷰를 찾을 수 없습니다.');
-    }
-  } catch (error) {
-    logger.error('리뷰를 가져오는 중 오류가 발생했습니다:', error);
-    throw error;
-  }
-};
 
 export const addReview = async (reviewData: Omit<Review, 'id' | 'createdAt' | 'updatedAt'>) => {
   try {
@@ -1561,27 +1390,6 @@ export const deleteReview = async (reviewId: string) => {
   }
 };
 
-export const getRecentReviews = async (limit: number = 3): Promise<Review[]> => {
-  try {
-    const reviewsQuery = query(
-      collection(db, 'reviews'),
-      orderBy('createdAt', 'desc'),
-      firestoreLimit(limit)
-    );
-    
-    const querySnapshot = await getDocs(reviewsQuery);
-    return querySnapshot.docs.map((doc) => {
-      const data = doc.data() as Omit<Review, 'id'>;
-      return {
-        ...data,
-        id: doc.id,
-      } as Review;
-    });
-  } catch (error) {
-    logger.error('최신 리뷰를 가져오는 중 오류가 발생했습니다:', error);
-    return [];
-  }
-};
 
 export const getBestReviews = async (limit: number = 3): Promise<Review[]> => {
   try {
@@ -1618,11 +1426,11 @@ export const getBestReviews = async (limit: number = 3): Promise<Review[]> => {
 };
 
 // 캐시 관리 유틸리티 함수
-export const clearUserCache = async (userId: string) => {
+const clearUserCache = async (userId: string) => {
   return await removeCache(CACHE_STORE.USERS, userId);
 };
 
-export const clearJobBoardCache = async (jobBoardId: string) => {
+const clearJobBoardCache = async (jobBoardId: string) => {
   // 특정 JobBoard 캐시 삭제
   const result = await removeCache(CACHE_STORE.JOB_BOARDS, jobBoardId);
   
@@ -1646,42 +1454,7 @@ export const clearJobCodesCache = async () => {
   return await clearCacheCollection(CACHE_STORE.JOB_CODES);
 };
 
-export const clearAllCaches = async () => {
-  try {
-    await Promise.all([
-      clearCacheCollection(CACHE_STORE.USERS),
-      clearCacheCollection(CACHE_STORE.JOB_BOARDS),
-      clearCacheCollection(CACHE_STORE.JOB_CODES),
-      clearCacheCollection(CACHE_STORE.APPLICATIONS),
-      clearCacheCollection(CACHE_STORE.REVIEWS)
-    ]);
-    
-    // localStorage 캐시도 함께 삭제
-    localStorage.removeItem('active_job_boards');
-    
-    return true;
-  } catch (error) {
-    logger.error('캐시 전체 삭제 실패:', error);
-    return false;
-  }
-};
 
-// 데이터 변경 시 관련 캐시를 초기화하는 유틸리티
-export const refreshCacheAfterUpdate = async (collection: string, id: string) => {
-  switch (collection) {
-    case 'users':
-      await clearUserCache(id);
-      break;
-    case 'jobBoards':
-      await clearJobBoardCache(id);
-      break;
-    case 'jobCodes':
-      await clearJobCodesCache();
-      break;
-    default:
-      break;
-  }
-};
 
 
 

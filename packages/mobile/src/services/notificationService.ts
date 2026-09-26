@@ -237,13 +237,7 @@ export async function scheduleTaskReminderNotification(
   return identifier;
 }
 
-export async function cancelScheduledNotification(identifier: string): Promise<void> {
-  await Notifications.cancelScheduledNotificationAsync(identifier);
-}
 
-export async function cancelAllScheduledNotifications(): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
-}
 
 export function addNotificationReceivedListener(
   callback: (notification: Notifications.Notification) => void

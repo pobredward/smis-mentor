@@ -12,7 +12,7 @@ import {
   writeBatch,
   type Firestore,
 } from 'firebase/firestore';
-import { v4 as uuidv4 } from 'uuid';
+import { newId as uuidv4 } from '../utils/id';
 import type {
   CampTimetable,
   TimetableBlock,

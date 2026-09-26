@@ -25,12 +25,7 @@
     "test": "TS_NODE_TRANSPILE_ONLY=1 node --require ts-node/register --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
-    "date-fns": "^4.1.0",
-    "firebase-admin": "^13.7.0",
-    "google-auth-library": "^9.6.3",
-    "googleapis": "^126.0.1",
-    "korean-holidays": "^1.0.0",
-    "zod": "^3.24.2"
+    "korean-holidays": "^1.0.0"
   },
   "peerDependencies": {
     "firebase": "^11.5.0"

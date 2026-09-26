@@ -17,3 +17,4 @@ export * from './escort';
 export * from './patient';
 export * from './rrn';
 export * from './text';
+export * from './id';

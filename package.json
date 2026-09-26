@@ -67,16 +67,15 @@
     "clean": "rm -rf node_modules packages/*/node_modules functions/node_modules"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.0.0",
+    "@eslint/js": "^9.39.4",
     "@types/node": "^20.11.19",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
     "firebase-admin": "^13.7.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.0.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.59.0"
   },
   "dependencies": {
     "metro-runtime": "^0.84.0",

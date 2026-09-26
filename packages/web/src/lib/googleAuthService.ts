@@ -20,7 +20,7 @@ googleProvider.setCustomParameters({
 /**
  * Google 팝업 로그인 수행
  */
-export async function signInWithGooglePopup(): Promise<SocialUserData> {
+async function signInWithGooglePopup(): Promise<SocialUserData> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);

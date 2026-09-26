@@ -15,24 +15,6 @@ async function uriToBlob(uri: string): Promise<Blob> {
   return blob;
 }
 
-/**
- * 프로필 이미지 업로드
- */
-export async function uploadForeignProfileImage(
-  userId: string,
-  uri: string
-): Promise<string> {
-  try {
-    const blob = await uriToBlob(uri);
-    const storageRef = ref(storage, `foreign-teachers/${userId}/profile.jpg`);
-    await uploadBytes(storageRef, blob);
-    const downloadURL = await getDownloadURL(storageRef);
-    return downloadURL;
-  } catch (error) {
-    logger.error('프로필 이미지 업로드 실패:', error);
-    throw new Error('프로필 이미지 업로드에 실패했습니다.');
-  }
-}
 
 /**
  * CV (PDF) 파일 업로드

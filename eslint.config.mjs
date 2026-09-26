@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
  * 처음 도입 단계라 기존 코드에 많은 규칙은 warn — 새 오류(error)만 CI 에서 막는다.
  */
 export const baseIgnores = {
-  ignores: ["**/dist/**", "**/lib/**", "**/build/**", "**/.next/**", "**/node_modules/**", "**/*.d.ts"],
+  ignores: ["**/dist/**", "lib/**", "**/build/**", "**/.next/**", "**/node_modules/**", "**/*.d.ts"],
 };
 
 export const relaxedRules = {

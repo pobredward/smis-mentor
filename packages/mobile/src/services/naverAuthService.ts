@@ -196,16 +196,4 @@ async function signInWithOAuth(): Promise<SocialUserData> {
   return socialData;
 }
 
-/**
- * 네이버 로그아웃
- */
-export async function signOutNaver(): Promise<void> {
-  try {
-    // OAuth 2.0 방식에서는 별도 로그아웃 불필요
-    logger.info('✅ 네이버 로그아웃 완료');
-  } catch (error) {
-    logger.error('네이버 로그아웃 실패:', error);
-    throw error;
-  }
-}
 

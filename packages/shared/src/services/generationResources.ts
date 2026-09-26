@@ -4,11 +4,12 @@
 import { type Firestore, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion } from 'firebase/firestore';
 import type { GenerationResources, ResourceLink, ResourceLinkRole } from '../types/camp';
 import { logger } from '../utils/logger';
+import { newId } from '../utils/id';
 
 export type LinkType = 'educationLinks' | 'scheduleLinks' | 'guideLinks';
 
 /** 링크 id — uuid 패키지 없이 (React Native 호환) */
-const newLinkId = (): string => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+const newLinkId = (): string => newId();
 
 export function createGenerationResourcesService(db: Firestore) {
   return {

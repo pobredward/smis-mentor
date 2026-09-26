@@ -13,7 +13,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { ApplicationHistory, Review } from '@shared/types';
+import type { ApplicationHistory, Review } from '@smis-mentor/shared';
 import { getJobBoardById as getJobBoard } from './jobBoardService';
 
 export type ApplicationWithJobDetails = ApplicationHistory & {

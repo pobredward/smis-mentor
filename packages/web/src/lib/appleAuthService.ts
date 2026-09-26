@@ -15,7 +15,7 @@ appleProvider.addScope('name');
 /**
  * Apple 팝업 로그인 수행
  */
-export async function signInWithApplePopup(): Promise<SocialUserData> {
+async function signInWithApplePopup(): Promise<SocialUserData> {
   try {
     const result = await signInWithPopup(auth, appleProvider);
     const credential = OAuthProvider.credentialFromResult(result);

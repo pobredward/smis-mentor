@@ -109,23 +109,6 @@ export async function removeCache(
   }
 }
 
-/**
- * 특정 스토어의 모든 캐시 제거
- */
-export async function clearCacheCollection(storeName: string): Promise<void> {
-  try {
-    const allKeys = await AsyncStorage.getAllKeys();
-    const prefix = `@cache:${storeName}:`;
-    const keysToRemove = allKeys.filter(key => key.startsWith(prefix));
-    
-    if (keysToRemove.length > 0) {
-      await AsyncStorage.multiRemove(keysToRemove);
-      logger.info(`🗑️ ${storeName} 캐시 전체 삭제:`, keysToRemove.length);
-    }
-  } catch (error) {
-    logger.error('캐시 컬렉션 삭제 실패:', error);
-  }
-}
 
 // ─── 연체 업무 숨김 관리 ─────────────────────────────────────────────────────
 
@@ -168,19 +151,3 @@ export async function clearHiddenOverdueTasks(): Promise<void> {
   }
 }
 
-/**
- * 모든 캐시 제거
- */
-export async function clearAllCache(): Promise<void> {
-  try {
-    const allKeys = await AsyncStorage.getAllKeys();
-    const cacheKeys = allKeys.filter(key => key.startsWith('@cache:'));
-    
-    if (cacheKeys.length > 0) {
-      await AsyncStorage.multiRemove(cacheKeys);
-      logger.info('🗑️ 전체 캐시 삭제:', cacheKeys.length);
-    }
-  } catch (error) {
-    logger.error('전체 캐시 삭제 실패:', error);
-  }
-}

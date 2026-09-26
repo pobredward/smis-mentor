@@ -19,7 +19,7 @@ const smsClient = new SMSApiClient(WEB_API_URL, async () => (auth.currentUser ? 
 /**
  * SMS 전송 (기본)
  */
-export const sendSMS = async (params: SendSMSParams): Promise<SendSMSResponse> => {
+const sendSMS = async (params: SendSMSParams): Promise<SendSMSResponse> => {
   return await smsClient.sendSMS(params);
 };
 
@@ -43,7 +43,7 @@ export const sendCustomSMS = async (
 /**
  * 템플릿 기반 SMS 전송
  */
-export const sendSMSWithTemplate = async (
+const sendSMSWithTemplate = async (
   phoneNumber: string,
   userName: string,
   templateType: TemplateType,
@@ -79,128 +79,9 @@ export const sendSMSWithTemplate = async (
   }
 };
 
-/**
- * 서류 합격 SMS 전송
- */
-export const sendDocumentPassSMS = async (
-  phoneNumber: string,
-  userName: string,
-  jobBoardId?: string,
-  variables?: Record<string, string>
-): Promise<SendSMSResponse> => {
-  return await sendSMSWithTemplate(
-    phoneNumber,
-    userName,
-    'document_pass',
-    jobBoardId,
-    variables
-  );
-};
 
-/**
- * 서류 불합격 SMS 전송
- */
-export const sendDocumentFailSMS = async (
-  phoneNumber: string,
-  userName: string,
-  jobBoardId?: string,
-  variables?: Record<string, string>
-): Promise<SendSMSResponse> => {
-  return await sendSMSWithTemplate(
-    phoneNumber,
-    userName,
-    'document_fail',
-    jobBoardId,
-    variables
-  );
-};
 
-/**
- * 면접 예정 SMS 전송
- */
-export const sendInterviewScheduleSMS = async (
-  phoneNumber: string,
-  userName: string,
-  jobBoardId?: string,
-  variables?: Record<string, string>
-): Promise<SendSMSResponse> => {
-  return await sendSMSWithTemplate(
-    phoneNumber,
-    userName,
-    'interview_scheduled',
-    jobBoardId,
-    variables
-  );
-};
 
-/**
- * 면접 합격 SMS 전송
- */
-export const sendInterviewPassSMS = async (
-  phoneNumber: string,
-  userName: string,
-  jobBoardId?: string,
-  variables?: Record<string, string>
-): Promise<SendSMSResponse> => {
-  return await sendSMSWithTemplate(
-    phoneNumber,
-    userName,
-    'interview_pass',
-    jobBoardId,
-    variables
-  );
-};
 
-/**
- * 면접 불합격 SMS 전송
- */
-export const sendInterviewFailSMS = async (
-  phoneNumber: string,
-  userName: string,
-  jobBoardId?: string,
-  variables?: Record<string, string>
-): Promise<SendSMSResponse> => {
-  return await sendSMSWithTemplate(
-    phoneNumber,
-    userName,
-    'interview_fail',
-    jobBoardId,
-    variables
-  );
-};
 
-/**
- * 최종 합격 SMS 전송
- */
-export const sendFinalPassSMS = async (
-  phoneNumber: string,
-  userName: string,
-  jobBoardId?: string,
-  variables?: Record<string, string>
-): Promise<SendSMSResponse> => {
-  return await sendSMSWithTemplate(
-    phoneNumber,
-    userName,
-    'final_pass',
-    jobBoardId,
-    variables
-  );
-};
 
-/**
- * 최종 불합격 SMS 전송
- */
-export const sendFinalFailSMS = async (
-  phoneNumber: string,
-  userName: string,
-  jobBoardId?: string,
-  variables?: Record<string, string>
-): Promise<SendSMSResponse> => {
-  return await sendSMSWithTemplate(
-    phoneNumber,
-    userName,
-    'final_fail',
-    jobBoardId,
-    variables
-  );
-};

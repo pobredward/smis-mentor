@@ -16,23 +16,7 @@ export const sendSMSSchema = z.object({
   }
 );
 
-export const createSMSTemplateSchema = z.object({
-  title: z.string().min(1, '제목은 필수입니다.'),
-  content: z.string().min(1, '내용은 필수입니다.'),
-  type: z.string() as z.ZodType<TemplateType>,
-});
 
-export const updateSMSTemplateSchema = z.object({
-  id: z.string().min(1, '템플릿 ID는 필수입니다.'),
-  title: z.string().optional(),
-  content: z.string().optional(),
-  type: z.string().optional(),
-}).refine(
-  (data) => data.title || data.content || data.type,
-  {
-    message: '업데이트할 필드가 최소 하나는 필요합니다.',
-  }
-);
 
 export const shareApplicantsSchema = z.object({
   jobBoardId: z.string().min(1, '캠프 공고 ID는 필수입니다.'),

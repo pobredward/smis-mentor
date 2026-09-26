@@ -15,6 +15,7 @@ import {
   serverTimestamp,
   writeBatch,
 } from 'firebase/firestore';
+import { newId } from '../utils/id';
 import type { LessonMaterialData, LessonMaterialTemplate, LessonMaterialTemplateSection, SectionData } from '../types/lessonMaterial';
 
 const LESSON_MATERIALS = 'lessonMaterials';
@@ -22,7 +23,7 @@ const SECTIONS = 'sections';
 const LESSON_MATERIAL_TEMPLATES = 'lessonMaterialTemplates';
 
 /** 템플릿 섹션 id — uuid 패키지 없이 (React Native 호환) */
-const newSectionId = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+const newSectionId = (): string => newId();
 
 export function createLessonMaterialService(db: Firestore) {
   // 대제목(lessonMaterial) CRUD

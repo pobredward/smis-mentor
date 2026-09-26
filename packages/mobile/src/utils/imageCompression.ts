@@ -34,12 +34,6 @@ export async function compressImage(
   }
 }
 
-/**
- * 파일 크기를 MB로 변환
- */
-export function bytesToMB(bytes: number): number {
-  return bytes / (1024 * 1024);
-}
 
 /**
  * URI에서 Blob 생성 (Firebase 업로드용)

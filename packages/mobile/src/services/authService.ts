@@ -67,7 +67,7 @@ export async function persistLoginRememberEmail(email: string): Promise<void> {
   ]);
 }
 
-export async function clearLoginRememberEmail(): Promise<void> {
+async function clearLoginRememberEmail(): Promise<void> {
   await Promise.all([
     AsyncStorage.removeItem(STORAGE_KEYS.REMEMBER_ME),
     AsyncStorage.removeItem(STORAGE_KEYS.SAVED_EMAIL),
@@ -302,7 +302,7 @@ export const buildSocialProof = async (
 };
 
 /** 현재 Firebase 세션의 ID token 증명 (세션 복원, 구글/애플 세션) */
-export const getFirebaseProof = async (): Promise<SocialProof> => {
+const getFirebaseProof = async (): Promise<SocialProof> => {
   const current = auth.currentUser;
   if (!current) {
     throw new Error('인증 세션이 없습니다. 다시 로그인해주세요.');
@@ -370,22 +370,7 @@ export const completeSignupViaApi = async (input: import('@smis-mentor/shared').
   );
 };
 
-/** 가입 이관 완료 후 admin 선생성 temp 문서 정리 (서버가 본인 확인 후 삭제) */
-export const replaceTempUserDoc = async (tempUserId: string) => {
-  const current = auth.currentUser;
-  if (!current) throw new Error('로그인이 필요합니다.');
-  return replaceTempUserViaApi(getApiBaseUrl(), await current.getIdToken(), tempUserId);
-};
 
-export const sendVerificationEmail = async (user: FirebaseUser) => {
-  try {
-    await sendEmailVerification(user);
-    return true;
-  } catch (error) {
-    logger.error('이메일 인증 메일 발송 실패:', error);
-    throw error;
-  }
-};
 
 export const resetPassword = async (email: string) => {
   try {
