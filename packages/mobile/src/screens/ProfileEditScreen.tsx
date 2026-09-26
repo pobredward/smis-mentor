@@ -35,18 +35,9 @@ import { compressImage, uriToBlob } from '../utils';
 import { DaumPostcode } from '../components/DaumPostcode';
 import { getPhonePlaceholder } from '../utils/phoneUtils';
 import Constants from 'expo-constants';
+import { PHONE_COUNTRY_CODES as countryCodes } from '@smis-mentor/shared';
 
 type ProfileEditNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProfileEdit'>;
-
-const countryCodes = [
-  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
-  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
-  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
-  { code: '+61', country: 'Australia', flag: '🇦🇺' },
-  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
-  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
-];
 
 // 멘토용 스키마
 const profileSchemaMentor = z.object({

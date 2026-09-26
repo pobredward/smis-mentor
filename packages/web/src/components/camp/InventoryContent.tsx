@@ -155,6 +155,7 @@ import type {
   MovementFilterKey,
   CampGroup,
 } from '@smis-mentor/shared';
+import { fmtHoldDate, supplyStatusLine } from '@smis-mentor/shared';
 
 type SubTab = 'stock' | 'request' | 'purchase' | 'movement' | 'lost' | 'manage';
 
@@ -1241,25 +1242,7 @@ function addDaysStr(n: number): string {
   const d = new Date(); d.setDate(d.getDate() + n);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-function fmtHoldDate(s?: string): string {
-  if (!s) return '';
-  const [, m, d] = s.split('-');
-  return `${Number(m)}/${Number(d)}`;
-}
 type SupplyBuyer = ReturnType<typeof supplyBuyerOf>;
-/** 목록·상세에 쓰는 상태 한 줄 설명 */
-function supplyStatusLine(r: SupplyRequest, buyer: SupplyBuyer): string {
-  if (r.status === 'onhold') return `⏸ 보류${r.holdUntil ? ` · ${fmtHoldDate(r.holdUntil)} 구매 예정` : ''}${r.statusNote ? ` · ${r.statusNote}` : ''}`;
-  if (r.status === 'rejected') return `반려${r.statusNote ? ` · ${r.statusNote}` : ''}`;
-  if (r.status === 'purchased') {
-    const base = `구매 완료${r.amount ? ` · ${fmtWon(r.amount)}` : ''}`;
-    if (r.forType === 'camp') return base + (r.stockApplied ? ' · 재고 입고됨' : needsStockIntake(r) ? ' · 📥 재고 입고 대기' : '');
-    const lines = supplySettleLines([r]);
-    return lines.length ? `${base} · 정산 ${lines.filter(l => l.settled).length}/${lines.length}` : base;
-  }
-  const done = supplyDoneCount(r);
-  return `${buyer ? `🛒 ${buyer.name}${buyer.isDefault ? '(기본)' : ''}` : '🛒 구매 담당 없음'}${done ? ` · ${done}/${r.items.length} 구매` : ''}`;
-}
 const settleVerb = (kind: SupplyLineSettleKind) => SUPPLY_SETTLE_LABELS[kind].verb;
 /** 관리자 지정 품목(쿠팡·학부모 청구) 표시 */
 function GuideTag({ line }: { line: Pick<SupplyRequestLine, 'channel' | 'parentBill'> }) {

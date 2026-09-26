@@ -27,6 +27,7 @@ import {
   isPermissionDenied,
   requestCustomToken,
   replaceTempUserViaApi,
+  createUserLookup,
   type SocialProof,
   type SocialUserData,
 } from '@smis-mentor/shared';
@@ -100,184 +101,23 @@ export async function getPersistedLoginRememberEmail(): Promise<{
   return { email: savedEmail };
 }
 
-// 사용자 조회
-export const getUserByEmail = async (email: string): Promise<User | null> => {
-  try {
-    if (!email || typeof email !== 'string') {
-      return null;
-    }
+// 로그인·가입 화면의 사용자 조회 — 구현은 shared (web 과 같은 코드)
+const userLookup = createUserLookup(db, auth, getApiBaseUrl);
+export const {
+  getUserByEmail,
+  getUserByEmailIncludeInactive,
+  getUserByPhone,
+  getUserByPhoneIncludeDeleted,
+  getUserByForeignName,
+  getUserBySocialProvider,
+} = userLookup;
+/** 탈퇴·삭제 포함 전화번호 조회 (예전 이름) */
+export const getUserByPhoneIncludeInactive = getUserByPhoneIncludeDeleted;
 
-    // Firebase Auth는 항상 소문자로 정규화하므로, Firestore 조회도 소문자로 통일
-    const normalizedEmail = email.toLowerCase();
-    if (!auth.currentUser) {
-      return lookupFallback({ by: 'email', email: normalizedEmail });
-    }
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', normalizedEmail));
-    let querySnapshot;
-    try {
-      querySnapshot = await getDocs(q);
-    } catch (queryError) {
-      if (isPermissionDenied(queryError)) {
-        return lookupFallback({ by: 'email', email: normalizedEmail });
-      }
-      throw queryError;
-    }
 
-    if (querySnapshot.empty) {
-      return null;
-    }
 
-    // deleted, inactive 상태 제외 (탈퇴/삭제된 계정)
-    // inactive = 본인 탈퇴, deleted = 관리자 삭제
-    const activeDocs = querySnapshot.docs.filter(
-      d => d.data().status !== 'deleted' && d.data().status !== 'inactive'
-    );
 
-    if (activeDocs.length === 0) {
-      return null;
-    }
 
-    // 여러 문서가 있을 경우 우선순위: active > temp
-    if (activeDocs.length > 1) {
-      logger.warn('⚠️ 동일한 이메일로 여러 사용자 발견 (deleted/inactive 제외):', {
-        email,
-        count: activeDocs.length,
-      });
-
-      const activeDoc = activeDocs.find(d => d.data().status === 'active');
-      if (activeDoc) return { ...activeDoc.data(), userId: activeDoc.id } as User;
-
-      const tempDoc = activeDocs.find(d => d.data().status === 'temp');
-      if (tempDoc) return { ...tempDoc.data(), userId: tempDoc.id } as User;
-    }
-
-    const first = activeDocs[0];
-    return { ...first.data(), userId: first.id } as User;
-  } catch (error) {
-    logger.error('사용자 조회 실패:', error);
-    throw error;
-  }
-};
-
-export const getUserByPhone = async (phone: string): Promise<User | null> => {
-  try {
-    if (!auth.currentUser) {
-      return lookupFallback({ by: 'phone', phone });
-    }
-    const usersRef = collection(db, 'users');
-
-    // deleted, inactive 제외하고 첫 번째 활성 문서 반환
-    const pickActive = (docs: Array<{ data: () => Record<string, unknown>; id: string }>) => {
-      const active = docs.filter(d => {
-        const s = d.data().status;
-        return s !== 'deleted' && s !== 'inactive';
-      });
-      if (active.length === 0) return null;
-      return { ...active[0].data(), userId: active[0].id } as User;
-    };
-
-    // phoneNumber 필드 우선 조회
-    let snap1;
-    try {
-      snap1 = await getDocs(query(usersRef, where('phoneNumber', '==', phone)));
-    } catch (queryError) {
-      if (isPermissionDenied(queryError)) {
-        return lookupFallback({ by: 'phone', phone });
-      }
-      throw queryError;
-    }
-    if (!snap1.empty) {
-      const result = pickActive(snap1.docs);
-      if (result) return result;
-    }
-
-    // phone 필드로 재시도 (하위 호환성)
-    const snap2 = await getDocs(query(usersRef, where('phone', '==', phone)));
-    if (!snap2.empty) {
-      const result = pickActive(snap2.docs);
-      if (result) return result;
-    }
-
-    return null;
-  } catch (error) {
-    logger.error('전화번호로 사용자 조회 실패:', error);
-    throw error;
-  }
-};
-
-// 탈퇴(inactive)/삭제(deleted) 포함 전화번호 조회 — 재가입 시 복구 흐름 안내용
-export const getUserByPhoneIncludeInactive = async (phone: string): Promise<User | null> => {
-  try {
-    const usersRef = collection(db, 'users');
-
-    const findFirst = (docs: Array<{ data: () => Record<string, unknown>; id: string }>) => {
-      if (docs.length === 0) return null;
-      // 우선순위: active > temp > inactive > deleted
-      const priority = (s: unknown) => ({ active: 1, temp: 2, inactive: 3, deleted: 4 }[s as string] ?? 99);
-      const sorted = [...docs].sort((a, b) => priority(a.data().status) - priority(b.data().status));
-      return { ...sorted[0].data(), userId: sorted[0].id } as User;
-    };
-
-    const snap1 = await getDocs(query(usersRef, where('phoneNumber', '==', phone)));
-    if (!snap1.empty) {
-      const result = findFirst(snap1.docs);
-      if (result) return result;
-    }
-
-    const snap2 = await getDocs(query(usersRef, where('phone', '==', phone)));
-    if (!snap2.empty) {
-      const result = findFirst(snap2.docs);
-      if (result) return result;
-    }
-
-    return null;
-  } catch (error) {
-    logger.error('전화번호로 탈퇴 포함 사용자 조회 실패:', error);
-    return null;
-  }
-};
-
-// 탈퇴(inactive)/삭제(deleted) 포함 이메일 조회 — 재가입 완료 후 기존 문서 마스킹용
-export const getUserByEmailIncludeInactive = async (email: string): Promise<User | null> => {
-  try {
-    if (!email || typeof email !== 'string') return null;
-
-    const normalizedEmail = email.toLowerCase();
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', normalizedEmail));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return null;
-
-    const inactiveDoc = snapshot.docs.find(d => {
-      const s = d.data().status;
-      return s === 'inactive' || s === 'deleted';
-    });
-
-    return inactiveDoc ? ({ ...inactiveDoc.data(), userId: inactiveDoc.id } as User) : null;
-  } catch (error) {
-    logger.error('이메일로 탈퇴 사용자 조회 실패:', error);
-    return null;
-  }
-};
-
-/**
- * authProviders에서 소셜 제공자로 사용자 조회
- * Multiple Email Policy 지원
- */
-export const getUserBySocialProvider = async (
-  providerId: string,
-  providerUid: string
-): Promise<User | null> => {
-  try {
-    logger.info('🔍 소셜 제공자로 사용자 검색:', { providerId });
-    // 전체 컬렉션을 내려받던 방식 → 서버(Admin SDK) 조회로 대체 (규칙상 비인증 list 불가)
-    return await lookupFallback({ by: 'social', providerId, providerUid });
-  } catch (error) {
-    logger.error('소셜 제공자로 사용자 조회 실패:', error);
-    return null;
-  }
-};
 
 export const getUserById = async (userId: string): Promise<User | null> => {
   try {
@@ -355,51 +195,6 @@ export const getUserJobCodesInfo = async (
   }
 };
 
-// 원어민 이름(First + Last)으로 사용자 조회
-export const getUserByForeignName = async (
-  firstName: string,
-  lastName: string
-): Promise<User | null> => {
-  try {
-    if (!firstName || !lastName) return null;
-    if (!auth.currentUser) {
-      return lookupFallback({ by: 'foreignName', firstName, lastName });
-    }
-
-    const q = query(
-      collection(db, 'users'),
-      where('foreignTeacher.firstName', '==', firstName),
-      where('foreignTeacher.lastName', '==', lastName)
-    );
-
-    let snapshot;
-    try {
-      snapshot = await getDocs(q);
-    } catch (queryError) {
-      if (isPermissionDenied(queryError)) {
-        return lookupFallback({ by: 'foreignName', firstName, lastName });
-      }
-      throw queryError;
-    }
-    if (snapshot.empty) return null;
-
-    const activeDocs = snapshot.docs.filter(d => d.data().status !== 'deleted');
-    if (activeDocs.length === 0) return null;
-
-    // 우선순위: active > temp > inactive
-    const sorted = activeDocs.sort((a, b) => {
-      const order = { active: 0, temp: 1, inactive: 2 };
-      const aOrder = order[(a.data().status as keyof typeof order)] ?? 3;
-      const bOrder = order[(b.data().status as keyof typeof order)] ?? 3;
-      return aOrder - bOrder;
-    });
-
-    return { ...sorted[0].data(), userId: sorted[0].id } as User;
-  } catch (error) {
-    logger.error('원어민 이름 조회 실패:', error);
-    return null;
-  }
-};
 
 // 사용자 업데이트
 export const updateUser = async (

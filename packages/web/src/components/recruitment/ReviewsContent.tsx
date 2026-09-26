@@ -8,22 +8,12 @@ import { Review } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { deleteReview, addReview, updateReview } from '@/lib/firebaseService';
 import Button from '@/components/common/Button';
+import { htmlToPlainText } from '@smis-mentor/shared';
 
 interface ReviewWithId extends Review {
   isOpen?: boolean;
 }
 
-// HTML을 일반 텍스트로 변환하는 함수
-const htmlToPlainText = (html: string): string => {
-  return html
-    .replace(/<p><br><\/p>/g, '\n')
-    .replace(/<p>/g, '')
-    .replace(/<\/p>/g, '\n')
-    .replace(/<br\s*\/?>/g, '\n')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/<[^>]+>/g, '')
-    .trim();
-};
 
 interface ReviewFormModalProps {
   review: ReviewWithId | null;

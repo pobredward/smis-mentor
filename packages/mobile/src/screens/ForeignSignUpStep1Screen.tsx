@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { getUserByPhone, getUserByPhoneIncludeInactive } from '../services/authService';
 import { getPhonePlaceholder } from '../utils/phoneUtils';
+import { PHONE_COUNTRY_CODES as countryCodes } from '@smis-mentor/shared';
 
 interface ForeignSignUpStep1ScreenProps {
   onNext: (data: {
@@ -26,16 +27,6 @@ interface ForeignSignUpStep1ScreenProps {
   }) => void;
   onBack: () => void;
 }
-
-const countryCodes = [
-  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
-  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
-  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
-  { code: '+61', country: 'Australia', flag: '🇦🇺' },
-  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
-  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
-];
 
 export function ForeignSignUpStep1Screen({
   onNext,

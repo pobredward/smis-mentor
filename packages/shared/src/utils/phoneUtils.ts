@@ -253,3 +253,28 @@ export function getPhonePlaceholder(countryCode: string): string {
   
   return placeholders[countryCode] || 'Enter phone number';
 }
+/** 원어민 전화번호 국가 선택 목록 (가입·프로필·본인 확인 화면 공용) */
+export const PHONE_COUNTRY_CODES: ReadonlyArray<{ code: string; country: string; flag: string }> = [
+  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
+  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
+  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
+  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
+  { code: '+61', country: 'Australia', flag: '🇦🇺' },
+  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
+  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
+];
+
+/** 저장된 전화번호를 국가번호 + 나머지로 나눔 (원어민만; 한국 번호는 앞 0 복원) */
+export function splitPhoneByCountry(phone: string | undefined, foreign: boolean): { cc: string; num: string } {
+  let cc = '+82';
+  let num = phone || '';
+  if (foreign && phone) {
+    const found = PHONE_COUNTRY_CODES.find((c) => phone.startsWith(c.code));
+    if (found) {
+      cc = found.code;
+      num = phone.substring(found.code.length);
+      if (cc === '+82' && num.length === 10 && !num.startsWith('0')) num = '0' + num;
+    }
+  }
+  return { cc, num };
+}

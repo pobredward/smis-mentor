@@ -26,21 +26,13 @@ import {
   logger,
   type CampProfileStatus,
 } from '@smis-mentor/shared';
+import { PHONE_COUNTRY_CODES, splitPhoneByCountry as splitPhone } from '@smis-mentor/shared';
+export { PHONE_COUNTRY_CODES };
 
 // ─── 공통 ───────────────────────────────────────────────────────────────────
 
 const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500';
 const errCls = 'border-red-500';
-
-export const PHONE_COUNTRY_CODES = [
-  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
-  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
-  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
-  { code: '+61', country: 'Australia', flag: '🇦🇺' },
-  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
-  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
-];
 
 const REFERRAL_PATHS = ['에브리타임', '학교 커뮤니티', '링커리어', '캠퍼스픽', '인스타그램', '페이스북', '구글/네이버 등 검색', '지인 소개', '기타'];
 
@@ -226,20 +218,6 @@ function ProfileImage() {
 }
 
 // ─── 기본 정보 (사진·이름·성별·이메일·연락처 / 원어민: 이름 3칸·생년월일) ────────
-
-function splitPhone(phone: string | undefined, foreign: boolean) {
-  let cc = '+82';
-  let num = phone || '';
-  if (foreign && phone) {
-    const found = PHONE_COUNTRY_CODES.find((c) => phone.startsWith(c.code));
-    if (found) {
-      cc = found.code;
-      num = phone.substring(found.code.length);
-      if (cc === '+82' && num.length === 10 && !num.startsWith('0')) num = '0' + num;
-    }
-  }
-  return { cc, num };
-}
 
 export function BasicInfoSection({ statusBadges }: { statusBadges?: ReactNode }) {
   const { userData } = useAuth();

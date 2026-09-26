@@ -12,16 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-const COUNTRY_CODES = [
-  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
-  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
-  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
-  { code: '+61', country: 'Australia', flag: '🇦🇺' },
-  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
-  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
-];
+import { PHONE_COUNTRY_CODES as COUNTRY_CODES } from '@smis-mentor/shared';
 
 interface ForeignPhoneInputModalProps {
   visible: boolean;

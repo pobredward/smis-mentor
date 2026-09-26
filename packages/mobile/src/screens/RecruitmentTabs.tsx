@@ -34,6 +34,7 @@ import {
   ReviewWithId,
 } from '../services/recruitmentService';
 import { recruitStatusBadge } from '@smis-mentor/shared';
+import { htmlToPlainText } from '@smis-mentor/shared';
 
 export function ApplicationStatusScreen() {
   const { userData, loading: authLoading } = useAuth();
@@ -264,17 +265,6 @@ interface ReviewFormModalProps {
   onClose: () => void;
 }
 
-// HTML을 일반 텍스트로 변환하는 함수
-const htmlToPlainText = (html: string): string => {
-  return html
-    .replace(/<p><br><\/p>/g, '\n')  // 빈 줄
-    .replace(/<p>/g, '')              // 시작 태그 제거
-    .replace(/<\/p>/g, '\n')          // 끝 태그를 줄바꿈으로
-    .replace(/<br\s*\/?>/g, '\n')     // br 태그를 줄바꿈으로
-    .replace(/&nbsp;/g, ' ')          // nbsp를 공백으로
-    .replace(/<[^>]+>/g, '')          // 나머지 HTML 태그 제거
-    .trim();
-};
 
 // 후기 콘텐츠 정규화 함수 (blockquote 제거 등)
 const normalizeReviewContent = (html: string): string => {

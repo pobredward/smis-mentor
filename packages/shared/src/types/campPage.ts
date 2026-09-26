@@ -150,3 +150,13 @@ export const DEFAULT_EMOJIS = [
   '🔝', '🔼', '🔽', '▶️', '◀️', '⏸️', '⏯️', '⏹️', '⏺️', '⏭️',
   '⏮️', '⏩', '⏪', '🔀', '🔁', '🔂',
 ] as const;
+
+/** 캠프 페이지 대상 라벨 (원어민 화면은 영어) */
+export function campPageRoleLabel(targetRole?: CampPageRole, english = false): string {
+  switch (targetRole) {
+    case 'mentor': return english ? 'Mentor' : '멘토';
+    case 'foreign': return english ? 'Foreign' : '원어민';
+    case 'expired': return english ? 'Expired' : '만료';
+    default: return english ? 'Common' : '공통';
+  }
+}

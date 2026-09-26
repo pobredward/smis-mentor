@@ -28,3 +28,4 @@ export * from './campTask';
 export * from './lessonMaterial';
 export * from './campDisplay';
 export * from './batchRead';
+export * from './userLookup';

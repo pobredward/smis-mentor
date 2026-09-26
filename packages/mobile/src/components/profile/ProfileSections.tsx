@@ -24,13 +24,10 @@ import { compressImage, uriToBlob } from '../../utils';
 import { getPhonePlaceholder } from '../../utils/phoneUtils';
 import { DaumPostcode } from '../DaumPostcode';
 import { fetchCampProfileStatus, CampProfileForm, type CampProfileApiStatus } from '../campProfile/CampProfileForm';
+import { PHONE_COUNTRY_CODES, splitPhoneByCountry as splitPhone } from '@smis-mentor/shared';
 
 // ─── 공통 ───────────────────────────────────────────────────────────────────
 
-const PHONE_COUNTRY_CODES = [
-  { code: '+82', flag: '🇰🇷' }, { code: '+1', flag: '🇺🇸' }, { code: '+44', flag: '🇬🇧' }, { code: '+353', flag: '🇮🇪' },
-  { code: '+61', flag: '🇦🇺' }, { code: '+64', flag: '🇳🇿' }, { code: '+27', flag: '🇿🇦' },
-];
 const REFERRAL_PATHS = ['에브리타임', '학교 커뮤니티', '링커리어', '캠퍼스픽', '인스타그램', '페이스북', '구글/네이버 등 검색', '지인 소개', '기타'];
 
 interface PartTimeJob { period: string; companyName: string; position: string; description?: string }
@@ -178,20 +175,6 @@ function ProfileImage() {
 }
 
 // ─── 기본 정보 ───────────────────────────────────────────────────────────────
-
-function splitPhone(phone: string | undefined, foreign: boolean) {
-  let cc = '+82';
-  let num = phone || '';
-  if (foreign && phone) {
-    const found = PHONE_COUNTRY_CODES.find((c) => phone.startsWith(c.code));
-    if (found) {
-      cc = found.code;
-      num = phone.substring(found.code.length);
-      if (cc === '+82' && num.length === 10 && !num.startsWith('0')) num = '0' + num;
-    }
-  }
-  return { cc, num };
-}
 
 export function BasicInfoSection({ statusBadges }: { statusBadges?: ReactNode }) {
   const { userData } = useAuth();

@@ -13,6 +13,7 @@ import type { DisplayItem, CampPageRole, CampPageCategory } from '@smis-mentor/s
 import { DEFAULT_EMOJIS } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
 import { campQueryKeys } from '@/hooks/useCampDataPrefetch';
+import { campPageRoleLabel as getRoleLabel, snippetAround } from '@smis-mentor/shared';
 
 interface CampContentListProps {
   category: CampPageCategory;
@@ -34,14 +35,6 @@ const getRoleBadgeColor = (targetRole?: CampPageRole): string => {
   }
 };
 
-const getRoleLabel = (targetRole?: CampPageRole): string => {
-  switch (targetRole) {
-    case 'mentor': return '멘토';
-    case 'foreign': return '원어민';
-    case 'expired': return '만료';
-    default: return '공통';
-  }
-};
 
 // category → campQueryKeys 매핑
 function getCategoryQueryKey(category: CampPageCategory, jobCodeId: string) {
@@ -623,21 +616,7 @@ function extractText(html: string): string {
 }
 
 function extractSnippet(html: string, query: string): string {
-  const text = extractText(html).replace(/\s+/g, ' ').trim();
-  if (!text) return '';
-
-  const lowerText = text.toLowerCase();
-  const lowerQuery = query.trim().toLowerCase();
-  const index = lowerText.indexOf(lowerQuery);
-
-  if (index === -1) {
-    return text.length > 120 ? text.slice(0, 120) + '...' : text;
-  }
-
-  const start = Math.max(0, index - 40);
-  const end = Math.min(text.length, index + lowerQuery.length + 90);
-  const snippet = text.slice(start, end);
-  return (start > 0 ? '...' : '') + snippet + (end < text.length ? '...' : '');
+  return snippetAround(extractText(html), query);
 }
 
 // ─────────────────────────────────────────────────────────

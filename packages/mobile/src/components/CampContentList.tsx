@@ -24,6 +24,7 @@ import type { DisplayItem, CampPageRole, CampPageCategory } from '@smis-mentor/s
 import { DEFAULT_EMOJIS } from '@smis-mentor/shared';
 import type { LinkType, ResourceLinkRole } from '../services/generationResourcesService';
 import { RootStackParamList } from '../navigation/types';
+import { campPageRoleLabel as getRoleLabel, snippetAround, htmlToSearchText as extractText } from '@smis-mentor/shared';
 
 interface CampContentListProps {
   category: CampPageCategory;
@@ -43,20 +44,6 @@ const getRoleBadgeColor = (targetRole?: CampPageRole) => {
   }
 };
 
-const getRoleLabel = (targetRole?: CampPageRole, isForeign?: boolean): string => {
-  if (isForeign) {
-    switch (targetRole) {
-      case 'mentor': return 'Mentor';
-      case 'foreign': return 'Foreign';
-      default: return 'Common';
-    }
-  }
-  switch (targetRole) {
-    case 'mentor': return '멘토';
-    case 'foreign': return '원어민';
-    default: return '공통';
-  }
-};
 
 export function CampContentList({ category, linkType, categoryTitle, isForeign }: CampContentListProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -643,35 +630,9 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
 // 검색 관련 헬퍼 함수
 // ─────────────────────────────────────────────────────────
 
-function extractText(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 function extractSnippet(html: string, query: string): string {
-  const text = extractText(html);
-  if (!text) return '';
-
-  const lowerText = text.toLowerCase();
-  const lowerQuery = query.trim().toLowerCase();
-  const index = lowerText.indexOf(lowerQuery);
-
-  if (index === -1) {
-    return text.length > 120 ? text.slice(0, 120) + '...' : text;
-  }
-
-  const start = Math.max(0, index - 40);
-  const end = Math.min(text.length, index + lowerQuery.length + 90);
-  const snippet = text.slice(start, end);
-  return (start > 0 ? '...' : '') + snippet + (end < text.length ? '...' : '');
+  return snippetAround(extractText(html), query);
 }
 
 // ─────────────────────────────────────────────────────────

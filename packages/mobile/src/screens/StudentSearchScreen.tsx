@@ -23,6 +23,7 @@ import {
   StudentHistoryResult,
 } from '../services/stSheet';
 import { STSheetStudent, FamilyUnit, toDriveImageUrl } from '@smis-mentor/shared';
+import { formatDateTimeKo as toDisplayDate } from '@smis-mentor/shared';
 
 const DEBOUNCE_MS = 200;
 const MIN_QUERY_LEN = 2;
@@ -35,17 +36,6 @@ function formatSSN(ssn: string | undefined | null): string | undefined {
 }
 
 // Firestore Timestamp / Date / string 모두 처리
-function toDisplayDate(val: unknown): string | null {
-  if (!val) return null;
-  const d = typeof val === 'object' && val !== null && typeof (val as { toDate?: unknown }).toDate === 'function'
-    ? (val as { toDate: () => Date }).toDate()
-    : new Date(val as string | number | Date);
-  if (isNaN(d.getTime())) return null;
-  const date = d.toLocaleDateString('ko-KR');
-  const time = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
-  return `${date} ${time}`;
-}
-
 // ─── 유틸 ────────────────────────────────────────────────────
 
 function campTypeBadgeColor(campCode: string): { bg: string; text: string } {

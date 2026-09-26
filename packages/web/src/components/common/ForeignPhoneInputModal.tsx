@@ -4,16 +4,7 @@ import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import Button from './Button';
 import FormInput from './FormInput';
-
-const countryCodes = [
-  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
-  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
-  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
-  { code: '+61', country: 'Australia', flag: '🇦🇺' },
-  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
-  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
-];
+import { PHONE_COUNTRY_CODES as countryCodes } from '@smis-mentor/shared';
 
 interface ForeignPhoneInputModalProps {
   isOpen: boolean;
