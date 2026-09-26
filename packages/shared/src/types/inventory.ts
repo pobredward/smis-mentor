@@ -610,8 +610,12 @@ export interface SupplyLineDone {
   at: Timestamp;
   by: string;
   byId: string;
-  /** 실제 금액 (원) */
+  /** 실제 금액 (원) — 수량 × 단가 */
   amount?: number;
+  /** 실제로 산 수량 (요청 단위). 요청보다 적게 사면 남은 수량은 새 줄로 요청에 남는다 */
+  quantity?: number;
+  /** 단가 (원) */
+  unitPrice?: number;
   /** 선생님 물품: 송금받을 곳 (예: "카카오뱅크 3333-01-1234567 신선웅") */
   payTo?: string;
 }

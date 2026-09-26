@@ -540,14 +540,16 @@ async function runMultiUseOp(
 }
 
 /**
- * 캠프 공용 요청 품목 구매 완료 + 바로 재고 입고 (한 트랜잭션)
+ * 요청 품목 구매 완료 (한 트랜잭션) — 모든 요청 종류
  * - 관리자 또는 구매 담당(요청별 지정 → 없으면 캠프 기본 담당), 관리자가 승인한 요청만
- * - 이미 입고된 줄은 다시 넣지 않는다 (stocked[lineId])
+ * - 요청보다 적게 샀으면(quantity < 요청 수량) 그 줄을 산 수량으로 줄이고, 남은 수량은 새 줄로 요청에 남긴다
+ *   → 요청은 '구매 중'으로 남아 구매 담당 목록에 그대로 보인다 (보류를 따로 누를 필요 없음)
+ * - 캠프 공용: 재고 품목 줄은 바로 재고 입고 (stocked[lineId] — 다시 입고되지 않게)
  */
-export async function completeCampSupplyLines(
+export async function completeSupplyLinesServer(
   uid: string,
-  input: { requestId: string; lines: Array<{ lineId: string; amount?: number; quantity?: number; groupId?: string }> }
-): Promise<{ stocked: number }> {
+  input: { requestId: string; lines: Array<{ lineId: string; quantity?: number; unitPrice?: number; amount?: number; payTo?: string; stockQty?: number; groupId?: string }> }
+): Promise<{ stocked: number; split: number }> {
   const db = getAdminFirestore();
   const requestId = String(input.requestId ?? '');
   if (!requestId || requestId.includes('/')) throw new StockOpError(400, '요청 정보가 필요합니다.');
@@ -558,11 +560,11 @@ export async function completeCampSupplyLines(
   const ref = db.doc(`supplyRequests/${requestId}`);
   const pre = (await ref.get()).data();
   if (!pre) throw new StockOpError(404, '요청이 삭제되었습니다.');
-  if (pre.forType !== 'camp') throw new StockOpError(400, '캠프 공용 요청이 아닙니다.');
   const settings = (await db.doc(`supplySettings/${pre.campCode}`).get()).data();
   const buyerUid: string | undefined = pre.buyerId || settings?.defaultBuyerId;
   if (user.role !== 'admin' && buyerUid !== uid) throw new StockOpError(403, '구매 담당만 완료할 수 있습니다.');
   if (!pre.approvedAt) throw new StockOpError(400, '관리자 승인 전인 요청입니다.');
+  const isCamp = pre.forType === 'camp';
   const groupIds = [...new Set(input.lines.map(l => l.groupId).filter((g): g is string => !!g && !g.includes('/')))];
   const groupSnaps = await Promise.all(groupIds.map(g => db.doc(`inventoryGroups/${g}`).get()));
   const groupName = new Map(groupSnaps.filter(g => g.data()?.campCode === pre.campCode).map(g => [g.id, String(g.data()?.name ?? '')]));
@@ -572,21 +574,40 @@ export async function completeCampSupplyLines(
     const r = snap.data();
     if (!r) throw new StockOpError(404, '요청이 삭제되었습니다.');
     if (r.status === 'rejected') throw new StockOpError(400, '반려된 요청입니다.');
+    if (!r.approvedAt) throw new StockOpError(400, '관리자 승인 전인 요청입니다.');
     const now = admin.firestore.Timestamp.now();
-    const items = (Array.isArray(r.items) ? r.items : []) as Array<{ id: string; itemId?: string; name: string; groupId?: string; groupName?: string }>;
+    type Line = { id: string; itemId?: string; name: string; quantity: number; unit?: string; groupId?: string; groupName?: string; [k: string]: unknown };
+    const items = (Array.isArray(r.items) ? r.items : []).map((l: Line) => ({ ...l })) as Line[];
     const done = { ...(r.done ?? {}) } as Record<string, { amount?: number }>;
     const stocked = { ...(r.stocked ?? {}) } as Record<string, unknown>;
     const update: Record<string, unknown> = { updatedAt: now };
     const perItem = new Map<string, Record<string, number>>();
     const moves: Array<Record<string, unknown>> = [];
-    input.lines.forEach(e => {
-      const line = items.find(l => l.id === e.lineId);
-      if (!line) return;
-      const amount = Number(e.amount) > 0 ? Math.round(Number(e.amount)) : undefined;
-      const d = { at: now, by: byName, byId: uid, ...(amount ? { amount } : {}) };
+    let split = 0;
+    input.lines.forEach((e, i) => {
+      const idx = items.findIndex(l => l.id === e.lineId);
+      if (idx < 0) return;
+      const line = items[idx];
+      if (done[line.id]) return; // 이미 완료된 줄
+      const want = Math.max(0, Math.round(Number(line.quantity) || 0));
+      const bought = e.quantity == null ? want : Math.max(0, Math.round(Number(e.quantity) || 0));
+      if (bought <= 0) return;
+      // 덜 샀으면: 이 줄 = 산 수량, 남은 수량은 새 줄로
+      if (bought < want) {
+        const rest = { ...line, id: `${line.id}-r${Date.now().toString(36)}${i}`, quantity: want - bought };
+        delete (rest as Record<string, unknown>).stockedQty;
+        items[idx] = { ...line, quantity: bought };
+        items.splice(idx + 1, 0, rest);
+        split++;
+      }
+      const unitPrice = Number(e.unitPrice) > 0 ? Math.round(Number(e.unitPrice)) : undefined;
+      const amount = Number(e.amount) > 0 ? Math.round(Number(e.amount)) : unitPrice ? unitPrice * bought : undefined;
+      const payTo = String(e.payTo ?? '').trim().slice(0, 200) || undefined;
+      const d = { at: now, by: byName, byId: uid, quantity: bought, ...(unitPrice ? { unitPrice } : {}), ...(amount ? { amount } : {}), ...(payTo ? { payTo } : {}) };
       done[line.id] = d;
       update[`done.${line.id}`] = d;
-      const qty = Math.max(0, Math.round(Number(e.quantity) || 0));
+      if (!isCamp) return;
+      const qty = Math.max(0, Math.round(Number(e.stockQty) || 0));
       const gid = e.groupId && groupName.has(e.groupId) ? e.groupId : line.groupId;
       if (!line.itemId || !gid || qty <= 0 || stocked[line.id]) return;
       const gname = groupName.get(gid) ?? line.groupName ?? '';
@@ -598,6 +619,7 @@ export async function completeCampSupplyLines(
       update[`stocked.${line.id}`] = st;
       moves.push({ campCode: r.campCode, itemId: line.itemId, itemName: line.name, groupId: gid, groupName: gname, delta: qty, reason: 'restock', refLabel: '구매 요청 입고 (캠프 공용)', at: now, by: byName, byId: uid });
     });
+    if (split > 0) update.items = items;
     perItem.forEach((groups, itemId) => {
       const stocks: Record<string, FirebaseFirestore.FieldValue> = {};
       Object.entries(groups).forEach(([g, n]) => { stocks[g] = adminFieldValue.increment(n); });
@@ -610,10 +632,10 @@ export async function completeCampSupplyLines(
       Object.assign(update, { status: 'purchased', handledBy: byName, handledAt: now, statusNote: null, holdUntil: null });
     }
     const stockLines = items.filter(l => l.itemId);
-    if (stockLines.length > 0 && stockLines.every(l => stocked[l.id])) {
+    if (isCamp && stockLines.length > 0 && stockLines.every(l => stocked[l.id])) {
       Object.assign(update, { stockApplied: true, stockAppliedAt: now, stockAppliedBy: byName });
     }
     tx.update(ref, update);
-    return { stocked: moves.length };
+    return { stocked: moves.length, split };
   });
 }

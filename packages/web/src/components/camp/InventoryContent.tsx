@@ -1648,62 +1648,84 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
   views: InventoryItemView[]; groups: InventoryGroup[]; onClose: () => void;
 }) {
   const lines = r.items.filter(l => lineIds.includes(l.id));
-  // 캠프 공용: 구매 완료와 함께 바로 입고 — 수량(요청 단위를 품목 단위로 환산)·그룹을 여기서 확인
   const isCamp = r.forType === 'camp';
-  const [stockQty, setStockQty] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, String(supplyLineStockQty(l, views.find(v => v.id === l.itemId)))])));
-  const [stockGroup, setStockGroup] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, l.groupId ?? groups[0]?.id ?? ''])));
-  const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, r.done?.[l.id]?.amount ? String(r.done[l.id].amount) : ''])));
+  const kind = supplySettleKind(r);
+  const num = (s: string) => parseInt((s || '').replace(/[^0-9]/g, ''), 10) || 0;
+  // 줄마다: 산 수량 × 단가 = 금액 (금액을 바로 적으면 단가를 거꾸로 계산)
+  type Row = { qty: string; price: string; amount: string; stockQty: string; stockEdited: boolean; group: string };
+  const itemOf = (l: SupplyRequestLine) => views.find(v => v.id === l.itemId);
+  const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(lines.map(l => [l.id, {
+    qty: String(l.quantity), price: '', amount: '',
+    stockQty: String(supplyLineStockQty(l, itemOf(l))), stockEdited: false, group: l.groupId ?? groups[0]?.id ?? '',
+  }])));
+  const setRow = (id: string, patch: Partial<Row>) => setRows(rs => {
+    const cur = { ...rs[id], ...patch };
+    const line = lines.find(l => l.id === id)!;
+    const q = num(cur.qty);
+    if ('qty' in patch || 'price' in patch) cur.amount = q && num(cur.price) ? String(q * num(cur.price)) : ('price' in patch && !cur.price ? '' : cur.amount);
+    if ('amount' in patch) cur.price = q && num(cur.amount) ? String(Math.round(num(cur.amount) / q)) : '';
+    if ('qty' in patch && !cur.stockEdited) cur.stockQty = String(supplyLineStockQty({ quantity: q, unit: line.unit }, itemOf(line)));
+    return { ...rs, [id]: cur };
+  });
+  const total = lines.reduce((a, l) => a + num(rows[l.id].amount), 0);
   const [payTo, setPayTo] = useState(() => readPayTo());
   const [busy, setBusy] = useState(false);
-  const num = (s: string) => parseInt((s || '').replace(/[^0-9]/g, ''), 10) || 0;
-  const total = lines.reduce((a, l) => a + num(amounts[l.id]), 0);
-  const kind = supplySettleKind(r);
+  void userId; void userName;
   const submit = async () => {
-    if (kind && lines.some(l => !num(amounts[l.id])) && !confirm(L('inventory.someItemsHaveNoAmount'))) return;
+    if (lines.some(l => !num(rows[l.id].qty))) { alert(L('inventory.enterTheQuantityBought')); return; }
+    if (kind && lines.some(l => !num(rows[l.id].amount)) && !confirm(L('inventory.someItemsHaveNoAmount'))) return;
     if (kind === 'transfer' && lines.some(l => !l.parentBill) && !payTo.trim() && !confirm(L('inventory.theAccountToReceiveThe'))) return;
     setBusy(true);
     try {
       if (kind === 'transfer' && payTo.trim()) savePayTo(payTo.trim());
-      if (isCamp) {
-        // 서버가 구매 완료 + 재고 입고를 한 번에 (알림도 서버에서)
-        await authenticatedPost('/api/inventory/supply-complete', {
-          requestId: r.id,
-          lines: lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), quantity: l.itemId && !r.stocked?.[l.id] ? num(stockQty[l.id]) : 0, groupId: stockGroup[l.id] || undefined })),
-        });
-      } else {
-        await completeSupplyLines(db, r.id, lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), payTo: kind === 'transfer' && !l.parentBill ? payTo : undefined })), { uid: userId, name: userName });
-        notifySupply({ type: 'lines_done', requestId: r.id, lineIds: lines.map(l => l.id) });
-      }
+      // 서버가 한 번에: 구매 완료 · 덜 산 수량은 새 줄로 · 캠프 공용 재고 입고 · 알림
+      await authenticatedPost('/api/inventory/supply-complete', { requestId: r.id, lines: lines.map(l => ({
+          lineId: l.id, quantity: num(rows[l.id].qty), unitPrice: num(rows[l.id].price) || undefined, amount: num(rows[l.id].amount) || undefined,
+          payTo: kind === 'transfer' && !l.parentBill ? payTo.trim() || undefined : undefined,
+          stockQty: isCamp && l.itemId && !r.stocked?.[l.id] ? num(rows[l.id].stockQty) : undefined,
+          groupId: isCamp ? rows[l.id].group || undefined : undefined,
+        })) });
       onClose();
     } catch (e) { console.error(e); alert(e instanceof Error && e.message ? e.message : L('inventory.couldNotMarkAsDone')); }
     finally { setBusy(false); }
   };
+  const inp = 'text-right text-sm border rounded-lg px-2 py-1 outline-none border-gray-200 focus:border-emerald-400';
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={onClose}>
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100">
           <h2 className="text-base font-bold text-gray-900">{L('inventory.purchased')} <span className="text-sm font-normal text-gray-500">{FOR_ICON[r.forType]} {supplyForLabel(r)}</span></h2>
-          <p className="text-[11px] text-gray-500 mt-0.5">{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.whenYouCompleteTheQuantities')}</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.campSuppliesGoIntoStock')}</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">{L('inventory.enterTheQuantityBoughtAnd')}</p>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
-          {lines.map(l => (
-            <div key={l.id} className="flex flex-wrap items-center gap-2">
-              <span className="flex-1 min-w-0 text-[13px] font-semibold text-gray-900 truncate">{l.name} <span className="font-normal text-gray-500">{l.quantity}{dataLabel(l.unit)}</span><GuideTag line={l} /></span>
-              <input inputMode="numeric" value={amounts[l.id]} onChange={e => setAmounts(a => ({ ...a, [l.id]: e.target.value.replace(/[^0-9]/g, '') }))} autoFocus={lines[0].id === l.id}
-                placeholder={L('patient.amount')} className={`w-24 text-right text-sm border rounded-lg px-2 py-1 outline-none ${kind && !num(amounts[l.id]) ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'}`} />
-              <span className="text-[11px] text-gray-400">{L('patient.krw')}</span>
-              {isCamp && (l.itemId && !r.stocked?.[l.id] ? (
-                <span className="basis-full flex items-center gap-1.5 pl-2 text-[11px] text-emerald-800">
-                  📥 {L('inventory.stockIn')}
-                  <input inputMode="numeric" value={stockQty[l.id]} onChange={e => setStockQty(q => ({ ...q, [l.id]: e.target.value.replace(/[^0-9]/g, '') }))} className="w-14 text-right border border-emerald-200 rounded px-1.5 py-0.5" />
-                  {dataLabel(views.find(v => v.id === l.itemId)?.unit ?? l.unit)}
-                  <select value={stockGroup[l.id]} onChange={e => setStockGroup(g => ({ ...g, [l.id]: e.target.value }))} className="border border-emerald-200 rounded px-1 py-0.5 bg-white">
-                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select>
-                </span>
-              ) : !l.itemId ? <span className="basis-full pl-2 text-[10px] text-gray-400">{L('inventory.notAStockItemNot')}</span> : null)}
-            </div>
-          ))}
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+          {lines.map(l => {
+            const row = rows[l.id];
+            const short = l.quantity - num(row.qty);
+            return (
+              <div key={l.id} className="space-y-1">
+                <p className="text-[13px] font-semibold text-gray-900 truncate">{l.name} <span className="font-normal text-gray-500">{L('inventory.requestedN', { v0: l.quantity, v1: dataLabel(l.unit) })}</span><GuideTag line={l} /></p>
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+                  <label className="flex items-center gap-1">{L('inventory.qty')}<input inputMode="numeric" value={row.qty} onChange={e => setRow(l.id, { qty: e.target.value.replace(/[^0-9]/g, '') })} className={`w-14 ${inp}`} />{dataLabel(l.unit)}</label>
+                  <span>×</span>
+                  <label className="flex items-center gap-1">{L('inventory.unitPrice')}<input inputMode="numeric" value={row.price} onChange={e => setRow(l.id, { price: e.target.value.replace(/[^0-9]/g, '') })} placeholder="0" className={`w-20 ${inp}`} /></label>
+                  <span>=</span>
+                  <label className="flex items-center gap-1">{L('patient.amount')}<input inputMode="numeric" value={row.amount} onChange={e => setRow(l.id, { amount: e.target.value.replace(/[^0-9]/g, '') })} placeholder="0" className={`w-24 ${inp} ${kind && !num(row.amount) ? 'border-yellow-300 bg-yellow-50' : ''}`} />{L('patient.krw')}</label>
+                </div>
+                {short > 0 && num(row.qty) > 0 && <p className="text-[10px] text-amber-700">{L('inventory.shortTheRestStaysOn', { v0: short, v1: dataLabel(l.unit) })}</p>}
+                {isCamp && (l.itemId && !r.stocked?.[l.id] ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-800">
+                    📥 {L('inventory.stockIn')}
+                    <input inputMode="numeric" value={row.stockQty} onChange={e => setRow(l.id, { stockQty: e.target.value.replace(/[^0-9]/g, ''), stockEdited: true })} className="w-14 text-right border border-emerald-200 rounded px-1.5 py-0.5" />
+                    {dataLabel(itemOf(l)?.unit ?? l.unit)}
+                    <select value={row.group} onChange={e => setRow(l.id, { group: e.target.value })} className="border border-emerald-200 rounded px-1 py-0.5 bg-white">
+                      {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                  </div>
+                ) : !l.itemId ? <p className="text-[10px] text-gray-400">{L('inventory.notAStockItemNot')}</p> : null)}
+              </div>
+            );
+          })}
           {lines.some(l => l.parentBill) && <p className="text-[10px] text-orange-700 bg-orange-50 rounded-lg px-2 py-1">{L('inventory.billParentsItemsAreBilled')}</p>}
           {kind === 'transfer' && lines.some(l => !l.parentBill) && (
             <div className="pt-1">

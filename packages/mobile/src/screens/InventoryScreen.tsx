@@ -1023,76 +1023,97 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
 }) {
   const lines = r.items.filter(l => lineIds.includes(l.id));
   const isCamp = r.forType === 'camp';
-  const [stockQty, setStockQty] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, String(supplyLineStockQty(l, views.find(v => v.id === l.itemId)))])));
-  const [stockGroup, setStockGroup] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, l.groupId ?? groups[0]?.id ?? ''])));
-  const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, r.done?.[l.id]?.amount ? String(r.done[l.id].amount) : ''])));
+  const kind = supplySettleKind(r);
+  const num = (s: string) => parseInt((s || '').replace(/[^0-9]/g, ''), 10) || 0;
+  // 줄마다: 산 수량 × 단가 = 금액 (금액을 바로 적으면 단가를 거꾸로 계산)
+  type Row = { qty: string; price: string; amount: string; stockQty: string; stockEdited: boolean; group: string };
+  const itemOf = (l: SupplyRequestLine) => views.find(v => v.id === l.itemId);
+  const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(lines.map(l => [l.id, {
+    qty: String(l.quantity), price: '', amount: '',
+    stockQty: String(supplyLineStockQty(l, itemOf(l))), stockEdited: false, group: l.groupId ?? groups[0]?.id ?? '',
+  }])));
+  const setRow = (id: string, patch: Partial<Row>) => setRows(rs => {
+    const cur = { ...rs[id], ...patch };
+    const line = lines.find(l => l.id === id)!;
+    const q = num(cur.qty);
+    if ('qty' in patch || 'price' in patch) cur.amount = q && num(cur.price) ? String(q * num(cur.price)) : ('price' in patch && !cur.price ? '' : cur.amount);
+    if ('amount' in patch) cur.price = q && num(cur.amount) ? String(Math.round(num(cur.amount) / q)) : '';
+    if ('qty' in patch && !cur.stockEdited) cur.stockQty = String(supplyLineStockQty({ quantity: q, unit: line.unit }, itemOf(line)));
+    return { ...rs, [id]: cur };
+  });
+  const total = lines.reduce((a, l) => a + num(rows[l.id].amount), 0);
   const [payTo, setPayTo] = useState('');
   useEffect(() => { AsyncStorage.getItem(PAYTO_KEY).then(v => { if (v) setPayTo(p => p || v); }).catch(() => {}); }, []);
   const [busy, setBusy] = useState(false);
-  const num = (s: string) => parseInt((s || '').replace(/[^0-9]/g, ''), 10) || 0;
-  const total = lines.reduce((a, l) => a + num(amounts[l.id]), 0);
-  const kind = supplySettleKind(r);
+  void userId; void userName;
   const doSubmit = async () => {
     setBusy(true);
     try {
       if (kind === 'transfer' && payTo.trim()) AsyncStorage.setItem(PAYTO_KEY, payTo.trim()).catch(() => {});
-      if (isCamp) {
-        const res = await authenticatedFetch('/api/inventory/supply-complete', { method: 'POST', body: JSON.stringify({
-          requestId: r.id,
-          lines: lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), quantity: l.itemId && !r.stocked?.[l.id] ? num(stockQty[l.id]) : 0, groupId: stockGroup[l.id] || undefined })),
-        }) });
-        if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || L('inventory.couldNotMarkAsDone'));
-      } else {
-        await completeSupplyLines(db, r.id, lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), payTo: kind === 'transfer' && !l.parentBill ? payTo : undefined })), { uid: userId, name: userName });
-        notifySupply({ type: 'lines_done', requestId: r.id, lineIds: lines.map(l => l.id) });
-      }
+      const res = await authenticatedFetch('/api/inventory/supply-complete', { method: 'POST', body: JSON.stringify({ requestId: r.id, lines: lines.map(l => ({
+          lineId: l.id, quantity: num(rows[l.id].qty), unitPrice: num(rows[l.id].price) || undefined, amount: num(rows[l.id].amount) || undefined,
+          payTo: kind === 'transfer' && !l.parentBill ? payTo.trim() || undefined : undefined,
+          stockQty: isCamp && l.itemId && !r.stocked?.[l.id] ? num(rows[l.id].stockQty) : undefined,
+          groupId: isCamp ? rows[l.id].group || undefined : undefined,
+        })) }) });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || L('inventory.couldNotMarkAsDone'));
       onClose();
     } catch (e) { console.error(e); Alert.alert(L('common.error'), e instanceof Error && e.message ? e.message : L('inventory.couldNotMarkAsDone')); }
     finally { setBusy(false); }
   };
   const submit = () => {
+    if (lines.some(l => !num(rows[l.id].qty))) { Alert.alert(L('patient.checkNeeded'), L('inventory.enterTheQuantityBought')); return; }
     const warn = [
-      kind && lines.some(l => !num(amounts[l.id])) ? L('inventory.someItemsHaveNoAmount2') : '',
+      kind && lines.some(l => !num(rows[l.id].amount)) ? L('inventory.someItemsHaveNoAmount2') : '',
       kind === 'transfer' && lines.some(l => !l.parentBill) && !payTo.trim() ? L('inventory.theAccountToReceiveThe2') : '',
     ].filter(Boolean);
     if (!warn.length) { doSubmit(); return; }
     Alert.alert(L('common.ok'), warn.join('\n'), [{ text: L('inventory.enter'), style: 'cancel' }, { text: L('inventory.completeAnyway'), onPress: doSubmit }]);
   };
+  const inp = [styles.input, { textAlign: 'right' as const, paddingVertical: 4 }];
   return (
     <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.modalCard}>
         <View style={styles.modalHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.modalTitle}>{L('inventory.purchased')} <Text style={{ fontSize: 12, fontWeight: '400', color: '#6b7280' }}>{FOR_ICON[r.forType]} {supplyForLabel(r)}</Text></Text>
-            <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.whenYouCompleteTheQuantities')}</Text>
+            <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.campSuppliesGoIntoStock')}</Text>
+            <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{L('inventory.enterTheQuantityBoughtAnd')}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
         </View>
-        <ScrollView contentContainerStyle={{ padding: 14, gap: 10 }} keyboardShouldPersistTaps="handled">
-          <View style={styles.listBox}>
-            {lines.map((l, i) => (
-              <View key={l.id} style={[styles.row, { flexWrap: 'wrap' }, i === lines.length - 1 && { borderBottomWidth: 0 }]}>
-                <Text style={[styles.rowName, { flex: 1 }]} numberOfLines={1}>{l.name} <Text style={styles.rowMeta}>{l.quantity}{dataLabel(l.unit)}</Text><GuideTagMobile line={l} /></Text>
-                <TextInput value={amounts[l.id]} keyboardType="number-pad" autoFocus={i === 0} onChangeText={v => setAmounts(a => ({ ...a, [l.id]: v.replace(/[^0-9]/g, '') }))}
-                  placeholder={L('patient.amount')} placeholderTextColor="#9ca3af"
-                  style={[styles.input, { width: 90, textAlign: 'right', paddingVertical: 5 }, kind && !num(amounts[l.id]) ? { borderColor: '#fcd34d', backgroundColor: '#fefce8' } : null]} />
-                <Text style={{ fontSize: 11, color: '#9ca3af' }}>{L('patient.krw')}</Text>
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }} keyboardShouldPersistTaps="handled">
+          {lines.map(l => {
+            const row = rows[l.id];
+            const short = l.quantity - num(row.qty);
+            return (
+              <View key={l.id} style={{ gap: 5, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb', paddingBottom: 10 }}>
+                <Text style={styles.rowName} numberOfLines={1}>{l.name} <Text style={styles.rowMeta}>{L('inventory.requestedN', { v0: l.quantity, v1: dataLabel(l.unit) })}</Text><GuideTagMobile line={l} /></Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('inventory.qty')}</Text>
+                  <TextInput value={row.qty} keyboardType="number-pad" onChangeText={v => setRow(l.id, { qty: v.replace(/[^0-9]/g, '') })} style={[...inp, { width: 48 }]} />
+                  <Text style={{ fontSize: 11, color: '#6b7280' }}>{dataLabel(l.unit)} ×</Text>
+                  <TextInput value={row.price} keyboardType="number-pad" placeholder={L('inventory.unitPrice')} placeholderTextColor="#9ca3af" onChangeText={v => setRow(l.id, { price: v.replace(/[^0-9]/g, '') })} style={[...inp, { flex: 1 }]} />
+                  <Text style={{ fontSize: 11, color: '#6b7280' }}>=</Text>
+                  <TextInput value={row.amount} keyboardType="number-pad" placeholder={L('patient.amount')} placeholderTextColor="#9ca3af" onChangeText={v => setRow(l.id, { amount: v.replace(/[^0-9]/g, '') })}
+                    style={[...inp, { flex: 1.2 }, kind && !num(row.amount) ? { borderColor: '#fcd34d', backgroundColor: '#fefce8' } : null]} />
+                </View>
+                {short > 0 && num(row.qty) > 0 ? <Text style={{ fontSize: 10, color: '#b45309' }}>{L('inventory.shortTheRestStaysOn', { v0: short, v1: dataLabel(l.unit) })}</Text> : null}
                 {isCamp && (l.itemId && !r.stocked?.[l.id] ? (
-                  <View style={{ flexBasis: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5, paddingLeft: 6 }}>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5 }}>
                     <Text style={{ fontSize: 11, color: '#065f46' }}>📥 {L('inventory.stockIn')}</Text>
-                    <TextInput value={stockQty[l.id]} keyboardType="number-pad" onChangeText={v => setStockQty(q => ({ ...q, [l.id]: v.replace(/[^0-9]/g, '') }))}
-                      style={[styles.input, { width: 56, textAlign: 'right', paddingVertical: 3 }]} />
-                    <Text style={{ fontSize: 11, color: '#065f46' }}>{dataLabel(views.find(v => v.id === l.itemId)?.unit ?? l.unit)}</Text>
+                    <TextInput value={row.stockQty} keyboardType="number-pad" onChangeText={v => setRow(l.id, { stockQty: v.replace(/[^0-9]/g, ''), stockEdited: true })} style={[...inp, { width: 56 }]} />
+                    <Text style={{ fontSize: 11, color: '#065f46' }}>{dataLabel(itemOf(l)?.unit ?? l.unit)}</Text>
                     {groups.map(g => (
-                      <TouchableOpacity key={g.id} onPress={() => setStockGroup(s => ({ ...s, [l.id]: g.id }))} style={[styles.miniChip, stockGroup[l.id] === g.id && { backgroundColor: '#d1fae5' }]}>
-                        <Text style={[styles.miniChipText, stockGroup[l.id] === g.id && { color: '#065f46' }]}>{g.name}</Text>
+                      <TouchableOpacity key={g.id} onPress={() => setRow(l.id, { group: g.id })} style={[styles.miniChip, row.group === g.id && { backgroundColor: '#d1fae5' }]}>
+                        <Text style={[styles.miniChipText, row.group === g.id && { color: '#065f46' }]}>{g.name}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-                ) : !l.itemId ? <Text style={{ flexBasis: '100%', fontSize: 10, color: '#9ca3af', paddingLeft: 6 }}>{L('inventory.notAStockItemNot')}</Text> : null)}
+                ) : !l.itemId ? <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.notAStockItemNot')}</Text> : null)}
               </View>
-            ))}
-          </View>
+            );
+          })}
           {lines.some(l => l.parentBill) && <Text style={{ fontSize: 10, color: '#c2410c', backgroundColor: '#fff7ed', borderRadius: 6, padding: 6 }}>{L('inventory.billParentsItemsAreBilled')}</Text>}
           {kind === 'transfer' && lines.some(l => !l.parentBill) && (
             <View>
