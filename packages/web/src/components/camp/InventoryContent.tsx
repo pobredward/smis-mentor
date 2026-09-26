@@ -124,7 +124,7 @@ import {
   INVENTORY_CATEGORIES,
   INVENTORY_SUBCATEGORIES,
   INVENTORY_UNITS,
-  DEFAULT_INVENTORY_ITEMS, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse } from '@smis-mentor/shared';
+  DEFAULT_INVENTORY_ITEMS, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse, supplyLineStockQty, setSupplyDecision, supplyDecisionOf, type SupplyDecision } from '@smis-mentor/shared';
 import type {
   InventoryItem,
   InventoryItemView,
@@ -1602,7 +1602,7 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
           }} />
       )}
       {completing && completingReq && (
-        <SupplyLineCompleteModal req={completingReq} lineIds={completing.lineIds} classMentor={mentorOf(completingReq)} userId={userId} userName={userName} onClose={() => setCompleting(null)} />
+        <SupplyLineCompleteModal req={completingReq} lineIds={completing.lineIds} classMentor={mentorOf(completingReq)} userId={userId} userName={userName} views={views} groups={groups} onClose={() => setCompleting(null)} />
       )}
     </div>
   );
@@ -1629,7 +1629,7 @@ function SupplyLinesCard({ req: r, canBuy, onOpen, onComplete, onUndo }: {
               {l.memo && !d && <p className="text-[10px] text-gray-500 truncate">{l.memo}</p>}
               {d && <p className="text-[10px] text-emerald-700 truncate">✓ {d.amount ? fmtWon(d.amount) : L('inventory.noAmount')} · {d.by}{d.payTo ? ` · ${d.payTo}` : ''}</p>}
             </div>
-            {canBuy && (d
+            {canBuy && !r.stocked?.[l.id] && (d
               ? <button onClick={() => onUndo(l.id)} className="text-[10px] text-gray-400 hover:underline shrink-0">{L('common.cancel')}</button>
               : <button onClick={() => onComplete([l.id])} className="shrink-0 px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">{L('task.done')}</button>)}
           </div>
@@ -1643,10 +1643,15 @@ function SupplyLinesCard({ req: r, canBuy, onOpen, onComplete, onUndo }: {
 }
 
 /** 품목 구매 완료 — 금액 + (선생님 물품) 송금받을 곳 */
-function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userName, onClose }: {
-  req: SupplyRequest; lineIds: string[]; classMentor: string; userId: string; userName: string; onClose: () => void;
+function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userName, views, groups, onClose }: {
+  req: SupplyRequest; lineIds: string[]; classMentor: string; userId: string; userName: string;
+  views: InventoryItemView[]; groups: InventoryGroup[]; onClose: () => void;
 }) {
   const lines = r.items.filter(l => lineIds.includes(l.id));
+  // 캠프 공용: 구매 완료와 함께 바로 입고 — 수량(요청 단위를 품목 단위로 환산)·그룹을 여기서 확인
+  const isCamp = r.forType === 'camp';
+  const [stockQty, setStockQty] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, String(supplyLineStockQty(l, views.find(v => v.id === l.itemId)))])));
+  const [stockGroup, setStockGroup] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, l.groupId ?? groups[0]?.id ?? ''])));
   const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, r.done?.[l.id]?.amount ? String(r.done[l.id].amount) : ''])));
   const [payTo, setPayTo] = useState(() => readPayTo());
   const [busy, setBusy] = useState(false);
@@ -1659,10 +1664,18 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
     setBusy(true);
     try {
       if (kind === 'transfer' && payTo.trim()) savePayTo(payTo.trim());
-      await completeSupplyLines(db, r.id, lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), payTo: kind === 'transfer' && !l.parentBill ? payTo : undefined })), { uid: userId, name: userName });
-      notifySupply({ type: 'lines_done', requestId: r.id, lineIds: lines.map(l => l.id) });
+      if (isCamp) {
+        // 서버가 구매 완료 + 재고 입고를 한 번에 (알림도 서버에서)
+        await authenticatedPost('/api/inventory/supply-complete', {
+          requestId: r.id,
+          lines: lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), quantity: l.itemId && !r.stocked?.[l.id] ? num(stockQty[l.id]) : 0, groupId: stockGroup[l.id] || undefined })),
+        });
+      } else {
+        await completeSupplyLines(db, r.id, lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), payTo: kind === 'transfer' && !l.parentBill ? payTo : undefined })), { uid: userId, name: userName });
+        notifySupply({ type: 'lines_done', requestId: r.id, lineIds: lines.map(l => l.id) });
+      }
       onClose();
-    } catch (e) { console.error(e); alert(L('inventory.couldNotMarkAsDone')); }
+    } catch (e) { console.error(e); alert(e instanceof Error && e.message ? e.message : L('inventory.couldNotMarkAsDone')); }
     finally { setBusy(false); }
   };
   return (
@@ -1670,15 +1683,25 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
       <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100">
           <h2 className="text-base font-bold text-gray-900">{L('inventory.purchased')} <span className="text-sm font-normal text-gray-500">{FOR_ICON[r.forType]} {supplyForLabel(r)}</span></h2>
-          <p className="text-[11px] text-gray-500 mt-0.5">{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.campSuppliesAnAdminRestocks')}</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.whenYouCompleteTheQuantities')}</p>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
           {lines.map(l => (
-            <div key={l.id} className="flex items-center gap-2">
+            <div key={l.id} className="flex flex-wrap items-center gap-2">
               <span className="flex-1 min-w-0 text-[13px] font-semibold text-gray-900 truncate">{l.name} <span className="font-normal text-gray-500">{l.quantity}{dataLabel(l.unit)}</span><GuideTag line={l} /></span>
               <input inputMode="numeric" value={amounts[l.id]} onChange={e => setAmounts(a => ({ ...a, [l.id]: e.target.value.replace(/[^0-9]/g, '') }))} autoFocus={lines[0].id === l.id}
                 placeholder={L('patient.amount')} className={`w-24 text-right text-sm border rounded-lg px-2 py-1 outline-none ${kind && !num(amounts[l.id]) ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'}`} />
               <span className="text-[11px] text-gray-400">{L('patient.krw')}</span>
+              {isCamp && (l.itemId && !r.stocked?.[l.id] ? (
+                <span className="basis-full flex items-center gap-1.5 pl-2 text-[11px] text-emerald-800">
+                  📥 {L('inventory.stockIn')}
+                  <input inputMode="numeric" value={stockQty[l.id]} onChange={e => setStockQty(q => ({ ...q, [l.id]: e.target.value.replace(/[^0-9]/g, '') }))} className="w-14 text-right border border-emerald-200 rounded px-1.5 py-0.5" />
+                  {dataLabel(views.find(v => v.id === l.itemId)?.unit ?? l.unit)}
+                  <select value={stockGroup[l.id]} onChange={e => setStockGroup(g => ({ ...g, [l.id]: e.target.value }))} className="border border-emerald-200 rounded px-1 py-0.5 bg-white">
+                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                </span>
+              ) : !l.itemId ? <span className="basis-full pl-2 text-[10px] text-gray-400">{L('inventory.notAStockItemNot')}</span> : null)}
             </div>
           ))}
           {lines.some(l => l.parentBill) && <p className="text-[10px] text-orange-700 bg-orange-50 rounded-lg px-2 py-1">{L('inventory.billParentsItemsAreBilled')}</p>}
@@ -1743,8 +1766,13 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
   const [forType, setForType] = useState<SupplyForType>(existing?.forType ?? prefill?.forType ?? 'student');
   // "나도 필요해요": 같은 품목 그대로 — 품목 검색·추가 없이 수량·단위만
   const metoo = !!prefill && !existing;
-  const [student, setStudent] = useState<{ id?: string; name: string; cls?: string; mentor?: string; code?: string } | null>(
-    existing?.studentName ? { id: existing.studentId, name: existing.studentName, cls: existing.studentClass, mentor: existing.classMentor, code: existing.studentClassCode } : null);
+  // 학생 여러 명 — 같은 물품으로 학생마다 요청 1건씩 (담임 용돈봉투 정산이 학생별이라서). 수정할 때는 1명
+  type PickedStudent = { id?: string; name: string; cls?: string; mentor?: string; code?: string };
+  const [picked, setPicked] = useState<PickedStudent[]>(
+    existing?.studentName ? [{ id: existing.studentId, name: existing.studentName, cls: existing.studentClass, mentor: existing.classMentor, code: existing.studentClassCode }] : []);
+  const student = picked[0] ?? null;
+  const setStudent = (s: PickedStudent | null) => setPicked(ps => !s ? [] : existing ? [s] : ps.some(p => (p.id ?? p.name) === (s.id ?? s.name)) ? ps : [...ps, s]);
+  const removeStudent = (s: PickedStudent) => setPicked(ps => ps.filter(p => p !== s));
   const [studentQuery, setStudentQuery] = useState('');
   const defaultGroup = groups[0];
   // "나도 필요해요": 같은 물품을 새 줄 ID로 복사 (수량은 1부터)
@@ -1790,8 +1818,15 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
       };
       if (existing) await updateSupplyRequest(db, existing.id, payload);
       else {
-        const id = await addSupplyRequest(db, { campCode, requesterId: userId, requesterName: userName, requesterGroup: userGroup || undefined, ...payload });
-        notifySupply({ type: 'request_created', requestId: id });
+        // 학생 여러 명이면 학생마다 따로 (학생 정보만 바꿔서)
+        const targets = forType === 'student' ? picked : [null];
+        for (const s of targets) {
+          const id = await addSupplyRequest(db, {
+            campCode, requesterId: userId, requesterName: userName, requesterGroup: userGroup || undefined, ...payload,
+            ...(s ? { studentId: s.id, studentName: s.name, studentClass: s.cls, classMentor: s.mentor, studentClassCode: s.code } : {}),
+          });
+          notifySupply({ type: 'request_created', requestId: id });
+        }
       }
       onClose();
     } catch (e) { console.error('구매 요청 저장 오류:', e); alert(L('inventory.couldNotSaveTheRequest')); }
@@ -1817,12 +1852,14 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
               <button type="button" onClick={() => setForType('camp')} className={seg(forType === 'camp')}>{L('inventory.campSupplies')}</button>
             </div>
             <p className="mt-1.5 text-[10px] text-gray-500">{forType === 'student' ? L('inventory.theHomeroomMentorSettlesIt') : forType === 'mentor' ? L('inventory.youTransferTheMoneyTo') : L('inventory.itemsUsedAsCampStock')}</p>
-            {forType === 'student' && (student ? (
-              <div className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2">
-                <span className="flex-1 text-sm font-bold text-blue-900">{student.name} <span className="font-normal text-blue-500 text-xs">{student.cls}{student.mentor ? L('inventory.homeroom', { v0: student.mentor }) : ''}</span></span>
-                <button onClick={() => setStudent(null)} className="text-xs text-gray-500">{L('patient.change')}</button>
+            {forType === 'student' && picked.map(s => (
+              <div key={s.id ?? s.name} className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2">
+                <span className="flex-1 text-sm font-bold text-blue-900">{s.name} <span className="font-normal text-blue-500 text-xs">{s.cls}{s.mentor ? L('inventory.homeroom', { v0: s.mentor }) : ''}</span></span>
+                <button onClick={() => removeStudent(s)} className="text-xs text-gray-400 hover:text-red-500">✕</button>
               </div>
-            ) : (
+            ))}
+            {forType === 'student' && !existing && <p className="mt-1 text-[10px] text-gray-400">{L('inventory.pickSeveralStudentsToFile')}</p>}
+            {forType === 'student' && (existing && student ? null : (
               <div className="relative mt-2">
                 <input value={studentQuery} onChange={e => setStudentQuery(e.target.value)} placeholder={L('inventory.searchStudentName')} className={inputCls} />
                 {studentQuery.trim() && (
@@ -1914,7 +1951,7 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
           </div>
         </div>
         <div className="px-5 py-4 border-t border-gray-100">
-          <button onClick={submit} disabled={busy} className="w-full py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? L('task.saving') : existing ? L('inventory.saveChanges') : L('inventory.submitRequest')}</button>
+          <button onClick={submit} disabled={busy} className="w-full py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? L('task.saving') : existing ? L('inventory.saveChanges') : forType === 'student' && picked.length > 1 ? L('inventory.submitForStudents', { v0: picked.length }) : L('inventory.submitRequest')}</button>
         </div>
       </div>
     </div>
@@ -1947,11 +1984,24 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
   const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
     run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); if (status === 'rejected' || status === 'onhold') notifySupply({ type: 'status', requestId: r.id }); setMode('none'); setReason(''); });
   const saveNote = () => run(async () => { await setSupplyRequestNote(db, r.id, note); });
+  const decision = supplyDecisionOf(r);
+  const decide = async (d: SupplyDecision, opts?: { note?: string; holdUntil?: string }) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await setSupplyDecision(db, r.id, d, { uid: userId, name: userName }, opts);
+      if (d === 'approved' && decision !== 'approved') notifySupply({ type: 'approved', requestId: r.id });
+      if (d === 'rejected' || d === 'onhold') notifySupply({ type: 'status', requestId: r.id });
+      setMode('none'); setReason('');
+    } catch (e) { console.error(e); alert(e instanceof Error && e.message ? e.message : L('inventory.couldNotProcessPleaseCheck')); }
+    finally { setBusy(false); }
+  };
   const approve = () => run(async () => { await approveSupplyRequests(db, [r.id], { uid: userId, name: userName }); notifySupply({ type: 'approved', requestId: r.id }); });
   // 캠프 공용 입고 (관리자)
-  const canIntake = isAdmin && isCamp && !r.stockApplied && r.status !== 'rejected';
+  // 예전 방식(구매 완료 후 따로 입고)으로 남은 요청만 — 이제는 구매 완료와 함께 바로 입고된다
+  const canIntake = isAdmin && isCamp && !r.stockApplied && r.status === 'purchased' && r.items.some(l => l.itemId && !r.stocked?.[l.id]);
   const [intake, setIntake] = useState(false);
-  const [intakeLines, setIntakeLines] = useState(() => r.items.filter(l => l.itemId).map(l => ({
+  const [intakeLines, setIntakeLines] = useState(() => r.items.filter(l => l.itemId && !r.stocked?.[l.id]).map(l => ({
     lineId: l.id, itemId: l.itemId!, itemName: l.name, groupId: l.groupId ?? groups[0]?.id ?? '', quantity: String(l.quantity),
   })));
   const doIntake = () => run(async () => {
@@ -2007,7 +2057,7 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
                     {d && lk && d.amount ? <p className={`text-[10px] ${st ? 'text-gray-400' : 'text-yellow-700'}`}>{st ? L('inventory.settled', { v0: st.by }) : L('inventory.pending', { v0: lk === 'envelope' ? L('inventory.envelopeSettlement') : lk === 'transfer' ? L('inventory.transferWord') : L('inventory.parentBillingWord') })}</p> : null}
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    {buyOk && r.status !== 'rejected' && !r.stockApplied && (d
+                    {buyOk && r.status !== 'rejected' && !r.stockApplied && !r.stocked?.[l.id] && (d
                       ? <button onClick={() => run(() => undoSupplyLine(db, r.id, l.id))} className="text-[10px] text-gray-400 hover:underline">{L('inventory.cancelPurchase')}</button>
                       : isOpen && <button onClick={() => onComplete([l.id])} className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">{L('task.done')}</button>)}
                     {d && lk && d.amount && canSettleLine ? (st
@@ -2075,13 +2125,22 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-2.5 space-y-2">
               <p className="text-[10px] font-bold text-indigo-700">{L('inventory.adminActions')}</p>
               {mode === 'none' ? (
-                isOpen ? (
-                  <div className="flex gap-1.5">
-                    {!approved && r.status === 'requested' && <button onClick={approve} disabled={busy} className="flex-1 py-1.5 text-[11px] font-bold text-white bg-indigo-600 rounded-lg disabled:opacity-40">{L('inventory.approve')}</button>}
-                    <button onClick={() => setMode('reject')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">{L('inventory.reject')}</button>
-                    {r.status === 'onhold'
-                      ? <button onClick={() => act('requested')} disabled={busy} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">{L('inventory.releaseHold')}</button>
-                      : <button onClick={() => setMode('hold')} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">{L('inventory.hold')}</button>}
+                decision ? (
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(['approved', 'pending', 'rejected', 'onhold'] as const).map(d => {
+                        // '미정'(검토 중)은 아무것도 고르지 않은 상태 — 강조하지 않는다
+                        const on = decision === d && d !== 'pending';
+                        const onCls = d === 'approved' ? 'bg-indigo-600 text-white border-indigo-600' : d === 'rejected' ? 'bg-gray-500 text-white border-gray-500' : 'bg-amber-500 text-white border-amber-500';
+                        return (
+                          <button key={d} disabled={busy} onClick={() => (d === 'rejected' || d === 'onhold') ? setMode(d === 'rejected' ? 'reject' : 'hold') : decide(d)}
+                            className={`py-1.5 text-[11px] font-semibold rounded-lg border disabled:opacity-40 ${on ? onCls : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>
+                            {d === 'approved' ? L('inventory.approve2') : d === 'pending' ? L('inventory.undecided') : d === 'rejected' ? L('inventory.reject') : L('inventory.hold2')}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-gray-400">{L('inventory.tapAnotherButtonToChange')}</p>
                   </div>
                 ) : !r.stockApplied ? (
                   <button onClick={() => act('requested')} disabled={busy} className="w-full py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">{L('inventory.backToInProgress')}</button>
@@ -2102,7 +2161,7 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
                   )}
                   <div className="flex gap-1.5">
                     <button onClick={() => setMode('none')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">{L('common.cancel')}</button>
-                    <button onClick={() => act(mode === 'reject' ? 'rejected' : 'onhold', { note: reason, holdUntil })} disabled={busy}
+                    <button onClick={() => decide(mode === 'reject' ? 'rejected' : 'onhold', { note: reason, holdUntil })} disabled={busy}
                       className={`flex-1 py-1.5 text-[11px] font-bold text-white rounded-lg ${mode === 'reject' ? 'bg-gray-500' : 'bg-amber-500'}`}>{mode === 'reject' ? L('inventory.reject') : L('inventory.onHold')}</button>
                   </div>
                 </div>

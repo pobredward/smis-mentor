@@ -537,6 +537,10 @@ export type SupplyForType = 'student' | 'mentor' | 'camp';
 
 /** 아직 끝나지 않은 요청 (요청 · 보류) */
 export const isSupplyOpen = (s: SupplyRequestStatus): boolean => s === 'requested' || s === 'onhold';
+/** 관리자 처리 — 승인 / 미정(검토 중) / 반려 / 보류. 구매 완료된 요청은 null */
+export type SupplyDecision = 'approved' | 'pending' | 'rejected' | 'onhold';
+export const supplyDecisionOf = (r: Pick<SupplyRequest, 'status' | 'approvedAt'>): SupplyDecision | null =>
+  r.status === 'purchased' ? null : r.status === 'rejected' ? 'rejected' : r.status === 'onhold' ? 'onhold' : r.approvedAt ? 'approved' : 'pending';
 /** 관리자가 승인했는가 */
 export const supplyApproved = (r: Pick<SupplyRequest, 'approvedAt'>): boolean => !!r.approvedAt;
 
@@ -663,7 +667,9 @@ export interface SupplyRequest {
   approvedById?: string;
   /** (구) 댓글 — 더 이상 쓰지 않음 */
   comments?: SupplyComment[];
-  /** 캠프 공용: 구매 후 재고에 입고 반영했는지 */
+  /** 캠프 공용: 품목(줄)별 재고 입고 기록 — 구매 완료와 동시에 입고 (다시 입고되지 않게) */
+  stocked?: Record<string, { quantity: number; groupId: string; groupName: string; at: Timestamp; by: string }>;
+  /** 캠프 공용: 구매 후 재고에 입고 반영했는지 (재고 품목 줄이 모두 입고되면 true) */
   stockApplied?: boolean;
   stockAppliedAt?: Timestamp;
   stockAppliedBy?: string;
@@ -783,8 +789,19 @@ export function studentClassCode(classNumber?: string): string {
 }
 
 /** 캠프 공용 요청인데 구매 완료 후 아직 재고 입고를 안 한 상태 */
-export const needsStockIntake = (r: Pick<SupplyRequest, 'forType' | 'status' | 'stockApplied' | 'items'>): boolean =>
-  r.forType === 'camp' && r.status === 'purchased' && !r.stockApplied && r.items.some(l => l.itemId && l.groupId);
+export const needsStockIntake = (r: Pick<SupplyRequest, 'forType' | 'status' | 'stockApplied' | 'items' | 'stocked'>): boolean =>
+  r.forType === 'camp' && r.status === 'purchased' && !r.stockApplied && r.items.some(l => l.itemId && l.groupId && !r.stocked?.[l.id]);
+
+/**
+ * 구매 완료 시 재고에 넣을 기본 수량 — 요청 단위가 품목 단위와 다르고 포장당 낱개 수가 있으면 환산
+ * (예: 요청 2박스, 품목 단위 '정', 포장당 10정 → 20)
+ */
+export function supplyLineStockQty(line: Pick<SupplyRequestLine, 'quantity' | 'unit'>, item?: Pick<InventoryItem, 'unit' | 'packSize'> | null): number {
+  const q = Math.max(0, Math.round(Number(line.quantity) || 0));
+  if (!item) return q;
+  if (line.unit && item.unit && line.unit !== item.unit && (item.packSize ?? 0) > 1) return q * (item.packSize as number);
+  return q;
+}
 
 /** 재고 부족분 중 아직 진행 중인 캠프 공용 요청에 들어가 있지 않은 것 */
 export function uncoveredPurchaseNeeds(needs: PurchaseNeed[], requests: SupplyRequest[]): PurchaseNeed[] {

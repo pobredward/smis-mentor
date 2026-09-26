@@ -264,9 +264,10 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
       if (!(amount > 0)) return total;
       // 정산할 사람
       const parentLines = lines.filter(l => l.parentBill);
-      if (parentLines.length || r.forType === 'camp') {
-        total += await send('supplyIntake', admins, msg(r.forType === 'camp' ? 'push.intakeCampTitle' : 'push.intakeParentTitle'),
-          (l) => `${forLabel(r, l)} · ${itemsLabel(r, l, ev.lineIds)} · ${won(amount, l)}${r.forType === 'camp' ? t(l, 'push.intakeCampSuffix') : ''}`, data, actorUid);
+      // 캠프 공용은 구매 완료와 함께 재고에 바로 들어가므로 관리자 입고 알림 없음 — 학부모 청구 품목만
+      if (parentLines.length && r.forType !== 'camp') {
+        total += await send('supplyIntake', admins, msg('push.intakeParentTitle'),
+          (l) => `${forLabel(r, l)} · ${itemsLabel(r, l, ev.lineIds)} · ${won(amount, l)}`, data, actorUid);
       }
       if (r.forType === 'student' && lines.some(l => !l.parentBill)) {
         // 담임: 요청 당시 담임 이름 → 없으면 반코드로 배정된 담임

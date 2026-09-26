@@ -80,3 +80,21 @@ describe('의약품 / 사용 사유 / 대표 사진', () => {
     setCurrentLocale('ko');
   });
 });
+
+describe('구매 완료 입고 수량 · 환자 위치 버튼', () => {
+  it('요청 단위가 박스이고 품목이 정이면 포장당 개수로 환산', async () => {
+    const { supplyLineStockQty } = await import('../src/types/inventory');
+    expect(supplyLineStockQty({ quantity: 2, unit: '박스' }, { unit: '정', packSize: 10 })).toBe(20);
+    expect(supplyLineStockQty({ quantity: 3, unit: '정' }, { unit: '정', packSize: 10 })).toBe(3);
+    expect(supplyLineStockQty({ quantity: 2, unit: '박스' }, { unit: '개' })).toBe(2);
+  });
+  it('숙소 탭의 환자방·교무실 → 버튼, 호수 순', async () => {
+    const { patientPlaceOptions, patientPlaceKind } = await import('../src/utils/patient');
+    const opts = patientPlaceOptions({ rooms: { '215': { purpose: '환자방', label: '여' }, '214': { purpose: '환자방', label: '남' }, '201': { purpose: '교무실' }, '301': { purpose: '학생방' } } });
+    expect(opts).toEqual(['환자방 214호 (남)', '환자방 215호 (여)', '교무실 201호']);
+    expect(patientPlaceKind('환자방 214호 (남)', opts)).toBe('option');
+    expect(patientPlaceKind('330호', opts)).toBe('room');
+    expect(patientPlaceKind('강당', opts)).toBe('etc');
+    expect(patientPlaceOptions(null)).toEqual([]);
+  });
+});

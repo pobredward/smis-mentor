@@ -82,7 +82,7 @@ import {
   FEVER_THRESHOLDS,
   classifyFever,
   isFeverLevel,
-  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, subscribeStaffMedicationUses, addStaffMedicationUse, updateStaffMedicationUse, deleteStaffMedicationUse } from '@smis-mentor/shared';
+  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, subscribeStaffMedicationUses, addStaffMedicationUse, updateStaffMedicationUse, deleteStaffMedicationUse, getCampLodging, patientPlaceOptions, patientPlaceKind } from '@smis-mentor/shared';
 import type {
   PatientRecord,
   PatientType,
@@ -198,9 +198,11 @@ interface PatientInventory {
   defaultGroupIdForClass: (classCode?: string) => string;
   dosesForStudent: (studentId?: string) => MedicationDose[];
   studentNote: (studentId?: string) => string | undefined;
+  /** 환자 위치 버튼 — 숙소 탭의 환자방·교무실 */
+  placeOptions: string[];
 }
 const PatientInventoryContext = createContext<PatientInventory>({
-  medicines: [], groups: [], defaultGroupIdForClass: () => '', dosesForStudent: () => [], studentNote: () => undefined,
+  medicines: [], groups: [], defaultGroupIdForClass: () => '', dosesForStudent: () => [], studentNote: () => undefined, placeOptions: [],
 });
 const usePatientInventory = () => useContext(PatientInventoryContext);
 
@@ -409,6 +411,12 @@ export function PatientScreen() {
     const unsubGroups = subscribeInventoryGroups(db, campCode, setInventoryGroups); // 캠프별 그룹
     return () => { unsubItems(); unsubStocks(); unsubGroups(); };
   }, [campCode]);
+  // 환자 위치 버튼: 숙소 탭에서 환자방·교무실로 정한 방
+  const [placeOptions, setPlaceOptions] = useState<string[]>([]);
+  useEffect(() => {
+    if (!campCode) return;
+    getCampLodging(db, campCode).then(l => setPlaceOptions(patientPlaceOptions(l))).catch(() => setPlaceOptions([]));
+  }, [campCode]);
   const patientInventory = useMemo<PatientInventory>(() => {
     const byCampGroup = new Map(
       inventoryGroups.filter(g => g.campGroupName).map(g => [g.campGroupName!.toLowerCase(), g.id] as const)
@@ -432,8 +440,9 @@ export function PatientScreen() {
         const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string }) | undefined;
         return st?.medication?.trim() || undefined;
       },
+      placeOptions,
     };
-  }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students]);
+  }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students, placeOptions]);
 
   // 현재 환자 / 완치 분리
   const activeRecords = useMemo(() =>
@@ -2078,6 +2087,37 @@ function StaffMedicationFormMobile({ campCode, jobCodeId, campUsers, existing, o
   );
 }
 
+
+/** 환자 위치 — 숙소 탭의 환자방·교무실 버튼 / 방(호수) / 기타(직접 입력) */
+function PatientPlacePickerMobile({ value, onChange, placeholder, compact }: { value: string; onChange: (v: string) => void; placeholder?: string; compact?: boolean }) {
+  const { placeOptions } = usePatientInventory();
+  const [kind, setKind] = useState(() => patientPlaceKind(value, placeOptions));
+  const roomNo = kind === 'room' ? value.replace(/호$/, '') : '';
+  const chip = (label: string, on: boolean, onPress: () => void) => (
+    <TouchableOpacity key={label} onPress={onPress} style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, borderWidth: 1, borderColor: on ? '#2563eb' : '#e5e7eb', backgroundColor: on ? '#2563eb' : '#fff' }}>
+      <Text style={{ fontSize: compact ? 11 : 12, fontWeight: '600', color: on ? '#fff' : '#4b5563' }}>{label}</Text>
+    </TouchableOpacity>
+  );
+  const inputStyle = [styles.formInput, compact ? { fontSize: 12, paddingVertical: 7 } : null];
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+        {placeOptions.map(o => chip(o, value === o, () => { setKind('option'); onChange(value === o ? '' : o); }))}
+        {chip(L('patient.roomEnterNo'), kind === 'room', () => { setKind('room'); onChange(''); })}
+        {chip(L('patient.otherType'), kind === 'etc', () => { setKind('etc'); onChange(''); })}
+      </View>
+      {kind === 'room' ? (
+        <TextInput value={roomNo} keyboardType="number-pad" autoFocus onChangeText={t => { const n = t.replace(/[^0-9]/g, ''); onChange(n ? `${n}호` : ''); }}
+          placeholder={L('patient.roomNoEG330')} placeholderTextColor="#9ca3af" style={inputStyle} />
+      ) : null}
+      {kind === 'etc' || (kind === 'none' && placeOptions.length === 0) ? (
+        <TextInput value={value} onChangeText={t => { setKind('etc'); onChange(t); }} placeholder={placeholder} placeholderTextColor="#9ca3af" style={inputStyle} />
+      ) : null}
+      {placeOptions.length === 0 ? <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('patient.setRoomsAsSickRoom')}</Text> : null}
+    </View>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.detailRow}>
@@ -2256,17 +2296,12 @@ function ProgressTabMobile({
                       );
                     })}
                   </View>
-                  <TextInput
-                    value={logLocation}
-                    onChangeText={setLogLocation}
+                  <PatientPlacePickerMobile compact value={logLocation} onChange={setLogLocation}
                     placeholder={
                       logLocationMode === '휴식' ? L('patient.eGRoom110Lounge2') :
                       logLocationMode === '격리' ? L('patient.eGIsolationRoom2142') :
                       L('patient.eGRoom330Sick')
-                    }
-                    placeholderTextColor="#9ca3af"
-                    style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]}
-                  />
+                    } />
                 </View>
                 <View>
                   <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.fever2')}</Text>
@@ -2598,7 +2633,7 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
             return (
               <TouchableOpacity key={g.id} onPress={() => onUpdate({ groupId: g.id, groupName: g.name })}
                 style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: on ? '#fef3c7' : '#f3f4f6', borderWidth: 1, borderColor: on ? '#f59e0b' : '#f3f4f6' }}>
-                <Text style={{ fontSize: 10, fontWeight: '600', color: on ? '#92400e' : '#6b7280' }}>{g.name}{item ? ` ${getGroupStock(item, g.id)}` : ''}</Text>
+                <Text style={{ fontSize: 10, fontWeight: '600', color: on ? '#92400e' : '#6b7280' }}>{g.name}{item ? ` (${getGroupStock(item, g.id)}${dataLabel(item.unit || '개')})` : ''}</Text>
               </TouchableOpacity>
             );
           })}
@@ -4426,16 +4461,14 @@ function QuickReportModalMobile({
               );
             })}
           </View>
-          <TextInput
+          <PatientPlacePickerMobile
             value={form.location}
-            onChangeText={v => setField('location', v)}
+            onChange={v => setField('location', v)}
             placeholder={
               form.locationMode === '휴식' ? L('patient.eGRoom110Lounge') :
               form.locationMode === '격리' ? L('patient.eGIsolationRoom214') :
               L('patient.eGAuditoriumGymClassroom')
             }
-            placeholderTextColor="#9ca3af"
-            style={styles.formInput}
           />
           <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>{L('patient.itMayNotBeTheir')}</Text>
         </View>

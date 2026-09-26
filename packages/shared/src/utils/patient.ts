@@ -3,6 +3,7 @@
  * 예전에는 두 화면에 각각 복사돼 있어 증상 가이드가 17개 / 18개로 어긋나 있었다.
  */
 import type { MedicationSchedule, MedicationTime } from '../types/camp';
+import type { CampLodging } from '../types/lodging';
 
 // ==================== 증상별 기본 처치 가이드 ====================
 
@@ -90,4 +91,27 @@ export function calcTotalDoses(sched: Pick<MedicationSchedule, 'startDate' | 'en
     ? Math.max(0, Math.ceil((totalDays - skipCount) * (sched.daysPerWeek / 7)))
     : Math.max(0, totalDays - skipCount);
   return effectiveDays * sched.times.length;
+}
+
+// ==================== 환자 위치 선택지 ====================
+
+/**
+ * 숙소 탭에서 용도를 '환자방'·'교무실'로 지정한 방 → 환자 위치 버튼 ("환자방 214호 (남)")
+ * 캠프마다 다른 호수를 관리자가 따로 적지 않아도 된다. 숙소 설정이 없으면 빈 목록.
+ */
+export function patientPlaceOptions(lodging: CampLodging | null | undefined): string[] {
+  const rooms = Object.entries(lodging?.rooms ?? {});
+  const pick = (purpose: string) => rooms
+    .filter(([, r]) => r?.purpose?.trim() === purpose)
+    .sort(([a], [b]) => a.localeCompare(b, 'ko', { numeric: true }))
+    .map(([num, r]) => `${purpose} ${num}호${r.label?.trim() ? ` (${r.label.trim()})` : ''}`);
+  return [...pick('환자방'), ...pick('교무실')];
+}
+/** 위치 값이 어떤 입력 방식인지 — 버튼 / 방 호수 / 직접 입력 */
+export function patientPlaceKind(value: string, options: string[]): 'option' | 'room' | 'etc' | 'none' {
+  const v = value.trim();
+  if (!v) return 'none';
+  if (options.includes(v)) return 'option';
+  if (/^\d{1,5}호$/.test(v)) return 'room';
+  return 'etc';
 }

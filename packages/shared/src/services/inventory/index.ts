@@ -978,6 +978,42 @@ export const setSupplyRequestNote = async (db: Firestore, requestId: string, not
   await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), { note: note.trim() || deleteField(), updatedAt: Timestamp.now() });
 };
 
+/**
+ * 관리자 처리 한 번에 — 승인 / 미정(되돌리기) / 반려 / 보류
+ * - 이미 산 품목이 있으면 미정·반려로 바꿀 수 없다 (구매 취소부터)
+ * - 보류는 승인을 유지한다 (나중에 살 것) · 반려·미정은 승인을 푼다
+ */
+export const setSupplyDecision = async (
+  db: Firestore,
+  requestId: string,
+  decision: 'approved' | 'pending' | 'rejected' | 'onhold',
+  by: { uid: string; name: string },
+  opts?: { note?: string; holdUntil?: string }
+): Promise<void> => {
+  await runTransaction(db, async tx => {
+    const ref = doc(db, SUPPLY_REQUESTS, requestId);
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('요청이 삭제되었습니다.');
+    const r = snap.data() as SupplyRequest;
+    if (r.status === 'purchased') throw new Error('이미 구매 완료된 요청입니다.');
+    const bought = Object.keys(r.done ?? {}).length > 0;
+    if (bought && (decision === 'pending' || decision === 'rejected')) throw new Error('이미 산 품목이 있어 바꿀 수 없어요. 구매 취소부터 해주세요.');
+    const now = Timestamp.now();
+    const clearApproval = { approvedAt: deleteField(), approvedBy: deleteField(), approvedById: deleteField() };
+    const base = { updatedAt: now };
+    if (decision === 'approved') {
+      tx.update(ref, { ...base, status: 'requested', statusNote: null, holdUntil: null, handledBy: null, handledAt: null,
+        approvedAt: r.approvedAt ?? now, approvedBy: r.approvedAt ? (r.approvedBy ?? by.name) : by.name, approvedById: r.approvedAt ? (r.approvedById ?? by.uid) : by.uid });
+    } else if (decision === 'pending') {
+      tx.update(ref, { ...base, ...clearApproval, status: 'requested', statusNote: null, holdUntil: null, handledBy: null, handledAt: null });
+    } else if (decision === 'rejected') {
+      tx.update(ref, { ...base, ...clearApproval, status: 'rejected', statusNote: opts?.note?.trim() || null, holdUntil: null, handledBy: by.name, handledAt: now });
+    } else {
+      tx.update(ref, { ...base, status: 'onhold', statusNote: opts?.note?.trim() || null, holdUntil: opts?.holdUntil || null, handledBy: by.name, handledAt: now });
+    }
+  });
+};
+
 /** 관리자 승인 — 승인해야 구매 담당 목록에 오른다 */
 export const approveSupplyRequests = async (
   db: Firestore,

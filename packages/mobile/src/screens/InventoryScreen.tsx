@@ -126,7 +126,7 @@ import {
   lostGroupManagers,
   MISSED_STATE_LABELS,
   INVENTORY_USAGE_ORDER,
-  suggestedUsages, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse } from '@smis-mentor/shared';
+  suggestedUsages, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse, supplyLineStockQty, setSupplyDecision, supplyDecisionOf, type SupplyDecision } from '@smis-mentor/shared';
 import { getUsersByJobCodeId } from '../services/userService';
 import type {
   CampCode,
@@ -925,7 +925,7 @@ function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId,
       </Modal>
       <Modal visible={!!completing && !!completingReq} transparent animationType="fade" onRequestClose={() => setCompleting(null)}>
         {completing && completingReq && (
-          <SupplyLineCompleteMobile req={completingReq} lineIds={completing.lineIds} classMentor={mentorOf(completingReq)} userId={userId} userName={userName} onClose={() => setCompleting(null)} />
+          <SupplyLineCompleteMobile req={completingReq} lineIds={completing.lineIds} classMentor={mentorOf(completingReq)} userId={userId} userName={userName} views={views} groups={groups} onClose={() => setCompleting(null)} />
         )}
       </Modal>
       <Modal visible={!!opened && !editing && !assigning && !completing} transparent animationType="fade" onRequestClose={() => setOpenId(null)}>
@@ -1001,7 +1001,7 @@ function SupplyLinesCardMobile({ req: r, canBuy, onOpen, onComplete, onUndo }: {
               {l.memo && !d ? <Text style={styles.rowGroups} numberOfLines={1}>{l.memo}</Text> : null}
               {d ? <Text style={[styles.rowGroups, { color: '#047857' }]} numberOfLines={1}>✓ {d.amount ? fmtWon(d.amount) : L('inventory.noAmount')} · {d.by}{d.payTo ? ` · ${d.payTo}` : ''}</Text> : null}
             </View>
-            {canBuy && (d
+            {canBuy && !r.stocked?.[l.id] && (d
               ? <TouchableOpacity onPress={() => onUndo(l.id)}><Text style={{ fontSize: 11, color: '#9ca3af' }}>{L('common.cancel')}</Text></TouchableOpacity>
               : <TouchableOpacity onPress={() => onComplete([l.id])} style={{ backgroundColor: '#059669', borderRadius: 6, paddingHorizontal: 11, paddingVertical: 6 }}><Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{L('task.done')}</Text></TouchableOpacity>)}
           </View>
@@ -1017,10 +1017,14 @@ function SupplyLinesCardMobile({ req: r, canBuy, onOpen, onComplete, onUndo }: {
 }
 
 /** 품목 구매 완료 — 금액 + (선생님 물품) 송금받을 곳 */
-function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userName, onClose }: {
-  req: SupplyRequest; lineIds: string[]; classMentor: string; userId: string; userName: string; onClose: () => void;
+function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userName, views, groups, onClose }: {
+  req: SupplyRequest; lineIds: string[]; classMentor: string; userId: string; userName: string;
+  views: InventoryItemView[]; groups: InventoryGroup[]; onClose: () => void;
 }) {
   const lines = r.items.filter(l => lineIds.includes(l.id));
+  const isCamp = r.forType === 'camp';
+  const [stockQty, setStockQty] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, String(supplyLineStockQty(l, views.find(v => v.id === l.itemId)))])));
+  const [stockGroup, setStockGroup] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, l.groupId ?? groups[0]?.id ?? ''])));
   const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries(lines.map(l => [l.id, r.done?.[l.id]?.amount ? String(r.done[l.id].amount) : ''])));
   const [payTo, setPayTo] = useState('');
   useEffect(() => { AsyncStorage.getItem(PAYTO_KEY).then(v => { if (v) setPayTo(p => p || v); }).catch(() => {}); }, []);
@@ -1032,16 +1036,24 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
     setBusy(true);
     try {
       if (kind === 'transfer' && payTo.trim()) AsyncStorage.setItem(PAYTO_KEY, payTo.trim()).catch(() => {});
-      await completeSupplyLines(db, r.id, lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), payTo: kind === 'transfer' && !l.parentBill ? payTo : undefined })), { uid: userId, name: userName });
-      notifySupply({ type: 'lines_done', requestId: r.id, lineIds: lines.map(l => l.id) });
+      if (isCamp) {
+        const res = await authenticatedFetch('/api/inventory/supply-complete', { method: 'POST', body: JSON.stringify({
+          requestId: r.id,
+          lines: lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), quantity: l.itemId && !r.stocked?.[l.id] ? num(stockQty[l.id]) : 0, groupId: stockGroup[l.id] || undefined })),
+        }) });
+        if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || L('inventory.couldNotMarkAsDone'));
+      } else {
+        await completeSupplyLines(db, r.id, lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), payTo: kind === 'transfer' && !l.parentBill ? payTo : undefined })), { uid: userId, name: userName });
+        notifySupply({ type: 'lines_done', requestId: r.id, lineIds: lines.map(l => l.id) });
+      }
       onClose();
-    } catch (e) { console.error(e); Alert.alert(L('common.error'), L('inventory.couldNotMarkAsDone')); }
+    } catch (e) { console.error(e); Alert.alert(L('common.error'), e instanceof Error && e.message ? e.message : L('inventory.couldNotMarkAsDone')); }
     finally { setBusy(false); }
   };
   const submit = () => {
     const warn = [
       kind && lines.some(l => !num(amounts[l.id])) ? L('inventory.someItemsHaveNoAmount2') : '',
-      kind === 'transfer' && lines.some(l => !l.parentBill) && !payTo.trim() ? '송금받을 계좌가 비어 있어요.' : '',
+      kind === 'transfer' && lines.some(l => !l.parentBill) && !payTo.trim() ? L('inventory.theAccountToReceiveThe2') : '',
     ].filter(Boolean);
     if (!warn.length) { doSubmit(); return; }
     Alert.alert(L('common.ok'), warn.join('\n'), [{ text: L('inventory.enter'), style: 'cancel' }, { text: L('inventory.completeAnyway'), onPress: doSubmit }]);
@@ -1052,19 +1064,32 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
         <View style={styles.modalHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.modalTitle}>{L('inventory.purchased')} <Text style={{ fontSize: 12, fontWeight: '400', color: '#6b7280' }}>{FOR_ICON[r.forType]} {supplyForLabel(r)}</Text></Text>
-            <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.campSuppliesAnAdminRestocks')}</Text>
+            <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.whenYouCompleteTheQuantities')}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={{ padding: 14, gap: 10 }} keyboardShouldPersistTaps="handled">
           <View style={styles.listBox}>
             {lines.map((l, i) => (
-              <View key={l.id} style={[styles.row, i === lines.length - 1 && { borderBottomWidth: 0 }]}>
+              <View key={l.id} style={[styles.row, { flexWrap: 'wrap' }, i === lines.length - 1 && { borderBottomWidth: 0 }]}>
                 <Text style={[styles.rowName, { flex: 1 }]} numberOfLines={1}>{l.name} <Text style={styles.rowMeta}>{l.quantity}{dataLabel(l.unit)}</Text><GuideTagMobile line={l} /></Text>
                 <TextInput value={amounts[l.id]} keyboardType="number-pad" autoFocus={i === 0} onChangeText={v => setAmounts(a => ({ ...a, [l.id]: v.replace(/[^0-9]/g, '') }))}
                   placeholder={L('patient.amount')} placeholderTextColor="#9ca3af"
                   style={[styles.input, { width: 90, textAlign: 'right', paddingVertical: 5 }, kind && !num(amounts[l.id]) ? { borderColor: '#fcd34d', backgroundColor: '#fefce8' } : null]} />
                 <Text style={{ fontSize: 11, color: '#9ca3af' }}>{L('patient.krw')}</Text>
+                {isCamp && (l.itemId && !r.stocked?.[l.id] ? (
+                  <View style={{ flexBasis: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5, paddingLeft: 6 }}>
+                    <Text style={{ fontSize: 11, color: '#065f46' }}>📥 {L('inventory.stockIn')}</Text>
+                    <TextInput value={stockQty[l.id]} keyboardType="number-pad" onChangeText={v => setStockQty(q => ({ ...q, [l.id]: v.replace(/[^0-9]/g, '') }))}
+                      style={[styles.input, { width: 56, textAlign: 'right', paddingVertical: 3 }]} />
+                    <Text style={{ fontSize: 11, color: '#065f46' }}>{dataLabel(views.find(v => v.id === l.itemId)?.unit ?? l.unit)}</Text>
+                    {groups.map(g => (
+                      <TouchableOpacity key={g.id} onPress={() => setStockGroup(s => ({ ...s, [l.id]: g.id }))} style={[styles.miniChip, stockGroup[l.id] === g.id && { backgroundColor: '#d1fae5' }]}>
+                        <Text style={[styles.miniChipText, stockGroup[l.id] === g.id && { color: '#065f46' }]}>{g.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : !l.itemId ? <Text style={{ flexBasis: '100%', fontSize: 10, color: '#9ca3af', paddingLeft: 6 }}>{L('inventory.notAStockItemNot')}</Text> : null)}
               </View>
             ))}
           </View>
@@ -1144,8 +1169,13 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
   // "나도 필요해요": 같은 품목 그대로 — 품목 검색·추가 없이 수량·단위만
   const metoo = !!prefill && !existing;
   const defaultGroup = groups[0];
-  const [student, setStudent] = useState<{ id?: string; name: string; cls?: string; mentor?: string; code?: string } | null>(
-    existing?.studentName ? { id: existing.studentId, name: existing.studentName, cls: existing.studentClass, mentor: existing.classMentor, code: existing.studentClassCode } : null);
+  // 학생 여러 명 — 같은 물품으로 학생마다 요청 1건씩 (담임 용돈봉투 정산이 학생별이라서). 수정할 때는 1명
+  type PickedStudent = { id?: string; name: string; cls?: string; mentor?: string; code?: string };
+  const [picked, setPicked] = useState<PickedStudent[]>(
+    existing?.studentName ? [{ id: existing.studentId, name: existing.studentName, cls: existing.studentClass, mentor: existing.classMentor, code: existing.studentClassCode }] : []);
+  const student = picked[0] ?? null;
+  const setStudent = (s: PickedStudent | null) => setPicked(ps => !s ? [] : existing ? [s] : ps.some(p => (p.id ?? p.name) === (s.id ?? s.name)) ? ps : [...ps, s]);
+  const removeStudent = (s: PickedStudent) => setPicked(ps => ps.filter(p => p !== s));
   const [studentQuery, setStudentQuery] = useState('');
   const [lines, setLines] = useState<SupplyRequestLine[]>(
     existing?.items ?? (prefill ? prefill.items.map(l => ({ ...l, id: newId(), quantity: 1, memo: undefined })) : []));
@@ -1194,8 +1224,15 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
       };
       if (existing) await updateSupplyRequest(db, existing.id, payload);
       else {
-        const id = await addSupplyRequest(db, { campCode, requesterId: userId, requesterName: userName, requesterGroup: userGroup || undefined, ...payload });
-        notifySupply({ type: 'request_created', requestId: id });
+        // 학생 여러 명이면 학생마다 따로 (학생 정보만 바꿔서)
+        const targets = forType === 'student' ? picked : [null];
+        for (const s of targets) {
+          const id = await addSupplyRequest(db, {
+            campCode, requesterId: userId, requesterName: userName, requesterGroup: userGroup || undefined, ...payload,
+            ...(s ? { studentId: s.id, studentName: s.name, studentClass: s.cls, classMentor: s.mentor, studentClassCode: s.code } : {}),
+          });
+          notifySupply({ type: 'request_created', requestId: id });
+        }
       }
       onClose();
     } catch (e) { console.error('구매 요청 저장 오류:', e); Alert.alert(L('common.error'), L('inventory.couldNotSaveTheRequest')); }
@@ -1221,12 +1258,14 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
               ))}
             </View>
             <Text style={{ fontSize: 10, color: '#6b7280', marginTop: 5 }}>{forType === 'student' ? L('inventory.theHomeroomMentorSettlesIt') : forType === 'mentor' ? L('inventory.youTransferTheMoneyTo') : L('inventory.itemsUsedAsCampStock')}</Text>
-            {forType === 'student' && (student ? (
-              <View style={[styles.pickedBox, { marginTop: 6 }]}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e3a8a', flex: 1 }}>{student.name}<Text style={{ fontWeight: '400', color: '#3b82f6' }}>  {student.cls}{student.mentor ? L('inventory.homeroom', { v0: student.mentor }) : ''}</Text></Text>
-                <TouchableOpacity onPress={() => setStudent(null)}><Text style={{ fontSize: 12, color: '#6b7280' }}>{L('patient.change')}</Text></TouchableOpacity>
+            {forType === 'student' && picked.map(s => (
+              <View key={s.id ?? s.name} style={[styles.pickedBox, { marginTop: 6 }]}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e3a8a', flex: 1 }}>{s.name}<Text style={{ fontWeight: '400', color: '#3b82f6' }}>  {s.cls}{s.mentor ? L('inventory.homeroom', { v0: s.mentor }) : ''}</Text></Text>
+                <TouchableOpacity onPress={() => removeStudent(s)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={16} color="#9ca3af" /></TouchableOpacity>
               </View>
-            ) : (
+            ))}
+            {forType === 'student' && !existing ? <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>{L('inventory.pickSeveralStudentsToFile')}</Text> : null}
+            {forType === 'student' && (existing && student ? null : (
               <View style={{ marginTop: 6, gap: 4 }}>
                 <TextInput value={studentQuery} onChangeText={setStudentQuery} placeholder={L('inventory.searchStudentName')} placeholderTextColor="#9ca3af" style={styles.input} />
                 {studentResults.map(s => (
@@ -1339,7 +1378,7 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
           </View>
 
           <TouchableOpacity onPress={submit} disabled={busy} style={[styles.btn, { backgroundColor: '#059669', paddingVertical: 12, opacity: busy ? 0.5 : 1 }]}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{busy ? L('task.saving') : existing ? L('inventory.saveChanges') : L('inventory.submitRequest')}</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{busy ? L('task.saving') : existing ? L('inventory.saveChanges') : forType === 'student' && picked.length > 1 ? L('inventory.submitForStudents', { v0: picked.length }) : L('inventory.submitRequest')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -1373,10 +1412,23 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
   const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
     run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); if (status === 'rejected' || status === 'onhold') notifySupply({ type: 'status', requestId: r.id }); setMode('none'); setReason(''); });
   const saveNote = () => run(async () => { await setSupplyRequestNote(db, r.id, note); });
+  const decision = supplyDecisionOf(r);
+  const decide = async (d: SupplyDecision, opts?: { note?: string; holdUntil?: string }) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await setSupplyDecision(db, r.id, d, { uid: userId, name: userName }, opts);
+      if (d === 'approved' && decision !== 'approved') notifySupply({ type: 'approved', requestId: r.id });
+      if (d === 'rejected' || d === 'onhold') notifySupply({ type: 'status', requestId: r.id });
+      setMode('none'); setReason('');
+    } catch (e) { console.error(e); Alert.alert(L('common.error'), e instanceof Error && e.message ? e.message : L('inventory.couldNotProcessPleaseCheck')); }
+    finally { setBusy(false); }
+  };
   const approve = () => run(async () => { await approveSupplyRequests(db, [r.id], { uid: userId, name: userName }); notifySupply({ type: 'approved', requestId: r.id }); });
-  const canIntake = isAdmin && isCamp && !r.stockApplied && r.status !== 'rejected';
+  // 예전 방식(구매 완료 후 따로 입고)으로 남은 요청만 — 이제는 구매 완료와 함께 바로 입고된다
+  const canIntake = isAdmin && isCamp && !r.stockApplied && r.status === 'purchased' && r.items.some(l => l.itemId && !r.stocked?.[l.id]);
   const [intake, setIntake] = useState(false);
-  const [intakeLines, setIntakeLines] = useState(() => r.items.filter(l => l.itemId).map(l => ({
+  const [intakeLines, setIntakeLines] = useState(() => r.items.filter(l => l.itemId && !r.stocked?.[l.id]).map(l => ({
     lineId: l.id, itemId: l.itemId!, itemName: l.name, groupId: l.groupId ?? groups[0]?.id ?? '', quantity: String(l.quantity),
   })));
   const doIntake = () => run(async () => {
@@ -1436,7 +1488,7 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
                     {d && lk && d.amount ? <Text style={[styles.rowGroups, { color: st ? '#9ca3af' : '#a16207' }]}>{st ? L('inventory.settled', { v0: st.by }) : L('inventory.pending', { v0: lk === 'envelope' ? L('inventory.envelopeSettlement') : lk === 'transfer' ? L('inventory.transferWord') : L('inventory.parentBillingWord') })}</Text> : null}
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 5 }}>
-                    {buyOk && r.status !== 'rejected' && !r.stockApplied && (d
+                    {buyOk && r.status !== 'rejected' && !r.stockApplied && !r.stocked?.[l.id] && (d
                       ? <TouchableOpacity onPress={() => run(() => undoSupplyLine(db, r.id, l.id))}><Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.cancelPurchase')}</Text></TouchableOpacity>
                       : isOpen ? <TouchableOpacity onPress={() => onComplete([l.id])} style={{ backgroundColor: '#059669', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{L('task.done')}</Text></TouchableOpacity> : null)}
                     {d && lk && d.amount && canSettleLine ? (st
@@ -1524,13 +1576,21 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
             <View style={{ borderWidth: 1, borderColor: '#e0e7ff', backgroundColor: '#f5f7ff', borderRadius: 10, padding: 9, gap: 7 }}>
               <Text style={{ fontSize: 10, fontWeight: '700', color: '#4338ca' }}>{L('inventory.adminActions')}</Text>
               {mode === 'none' ? (
-                isOpen ? (
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    {!approved && r.status === 'requested' && <TouchableOpacity onPress={approve} disabled={busy} style={[styles.btn, { backgroundColor: '#4f46e5', paddingVertical: 7 }]}><Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{L('inventory.approve')}</Text></TouchableOpacity>}
-                    <TouchableOpacity onPress={() => setMode('reject')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#6b7280' }}>{L('inventory.reject')}</Text></TouchableOpacity>
-                    {r.status === 'onhold'
-                      ? <TouchableOpacity onPress={() => act('requested')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fde68a', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#92400e' }}>{L('inventory.releaseHold')}</Text></TouchableOpacity>
-                      : <TouchableOpacity onPress={() => setMode('hold')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fde68a', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#92400e' }}>{L('inventory.hold')}</Text></TouchableOpacity>}
+                decision ? (
+                  <View style={{ gap: 4 }}>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {(['approved', 'pending', 'rejected', 'onhold'] as const).map(d => {
+                        const on = decision === d && d !== 'pending';
+                        const onBg = d === 'approved' ? '#4f46e5' : d === 'rejected' ? '#6b7280' : '#f59e0b';
+                        return (
+                          <TouchableOpacity key={d} disabled={busy} onPress={() => (d === 'rejected' || d === 'onhold') ? setMode(d === 'rejected' ? 'reject' : 'hold') : decide(d)}
+                            style={[styles.btn, { paddingVertical: 7, borderWidth: 1, borderColor: on ? onBg : '#e5e7eb', backgroundColor: on ? onBg : '#fff', opacity: busy ? 0.4 : 1 }]}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: on ? '#fff' : '#4b5563' }}>{d === 'approved' ? L('inventory.approve2') : d === 'pending' ? L('inventory.undecided') : d === 'rejected' ? L('inventory.reject') : L('inventory.hold2')}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.tapAnotherButtonToChange')}</Text>
                   </View>
                 ) : !r.stockApplied ? (
                   <TouchableOpacity onPress={() => act('requested')} disabled={busy} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 7, flex: 0 }]}><Text style={{ fontSize: 11, color: '#374151' }}>{L('inventory.backToInProgress')}</Text></TouchableOpacity>
@@ -1551,7 +1611,7 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
                   )}
                   <View style={{ flexDirection: 'row', gap: 6 }}>
                     <TouchableOpacity onPress={() => setMode('none')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#6b7280' }}>{L('common.cancel')}</Text></TouchableOpacity>
-                    <TouchableOpacity onPress={() => act(mode === 'reject' ? 'rejected' : 'onhold', { note: reason, holdUntil })} disabled={busy}
+                    <TouchableOpacity onPress={() => decide(mode === 'reject' ? 'rejected' : 'onhold', { note: reason, holdUntil })} disabled={busy}
                       style={[styles.btn, { backgroundColor: mode === 'reject' ? '#6b7280' : '#f59e0b', paddingVertical: 7 }]}>
                       <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{mode === 'reject' ? L('inventory.reject') : L('inventory.onHold')}</Text>
                     </TouchableOpacity>

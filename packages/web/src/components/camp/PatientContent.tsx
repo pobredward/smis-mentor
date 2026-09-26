@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
 import EscortSsn from '@/components/camp/patient/EscortSsn';
-import { isActiveEscortVisit, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, subscribeStaffMedicationUses, addStaffMedicationUse, updateStaffMedicationUse, deleteStaffMedicationUse } from '@smis-mentor/shared';
+import { isActiveEscortVisit, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, subscribeStaffMedicationUses, addStaffMedicationUse, updateStaffMedicationUse, deleteStaffMedicationUse, getCampLodging, patientPlaceOptions, patientPlaceKind } from '@smis-mentor/shared';
 import {
   SYMPTOM_GUIDES, getHospitalPresets, isKoreanStaff, ACTION_NOTE_PLACEHOLDER, ACTION_NOTE_EXAMPLE,
   makeMedTimeKey, schedActiveOn, isInDateRange, calcTotalDoses, todayDateKey as todayStr,
@@ -149,9 +149,11 @@ interface PatientInventory {
   dosesForStudent: (studentId?: string) => MedicationDose[];
   /** ST 시트 복용약·특이사항 */
   studentNote: (studentId?: string) => string | undefined;
+  /** 환자 위치 버튼 — 숙소 탭의 환자방·교무실 */
+  placeOptions: string[];
 }
 const PatientInventoryContext = createContext<PatientInventory>({
-  medicines: [], groups: [], defaultGroupIdForClass: () => '', dosesForStudent: () => [], studentNote: () => undefined,
+  medicines: [], groups: [], defaultGroupIdForClass: () => '', dosesForStudent: () => [], studentNote: () => undefined, placeOptions: [],
 });
 const usePatientInventory = () => useContext(PatientInventoryContext);
 
@@ -454,6 +456,12 @@ export default function PatientContent() {
     const unsubGroups = subscribeInventoryGroups(db, campCode, setInventoryGroups); // 캠프별 그룹
     return () => { unsubItems(); unsubStocks(); unsubGroups(); };
   }, [campCode]);
+  // 환자 위치 버튼: 숙소 탭에서 환자방·교무실로 정한 방
+  const [placeOptions, setPlaceOptions] = useState<string[]>([]);
+  useEffect(() => {
+    if (!campCode) return;
+    getCampLodging(db, campCode).then(l => setPlaceOptions(patientPlaceOptions(l))).catch(() => setPlaceOptions([]));
+  }, [campCode]);
   const patientInventory = useMemo<PatientInventory>(() => {
     const byCampGroup = new Map(
       inventoryGroups.filter(g => g.campGroupName).map(g => [g.campGroupName!.toLowerCase(), g.id] as const)
@@ -477,8 +485,9 @@ export default function PatientContent() {
         const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string }) | undefined;
         return st?.medication?.trim() || undefined;
       },
+      placeOptions,
     };
-  }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students]);
+  }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students, placeOptions]);
 
   // 현재 환자 (완치 제외) / 완치 환자 분리
   const activeRecords = useMemo(() =>
@@ -2061,13 +2070,12 @@ function ProgressTab({
                         </button>
                       ))}
                     </div>
-                    <input type="text" value={logLocation} onChange={e => setLogLocation(e.target.value)}
+                    <PatientPlacePicker compact value={logLocation} onChange={setLogLocation}
                       placeholder={
                         logLocationMode === '휴식' ? L('patient.eGRoom110Lounge2') :
                         logLocationMode === '격리' ? L('patient.eGIsolationRoom2142') :
                         L('patient.eGRoom330Sick')
-                      }
-                      className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
+                      } />
                   </div>
                 </FormRow>
                 <FormRow label={L('patient.fever2')}>
@@ -2439,7 +2447,7 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
                 }}
                 className={`${inputCls} w-28 ${d.groupId ? 'border-emerald-200' : 'border-amber-300 text-gray-400'}`}>
                 <option value="">{L('patient.selectGroup')}</option>
-                {groups.map(g => <option key={g.id} value={g.id}>{g.name}{item ? ` (${getGroupStock(item, g.id)})` : ''}</option>)}
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}{item ? ` (${getGroupStock(item, g.id)}${dataLabel(item.unit || '개')})` : ''}</option>)}
               </select>
               <button type="button" onClick={() => remove(idx)} className="text-gray-300 hover:text-red-500 px-1" title={L('common.delete')}>🗑️</button>
             </div>
@@ -6027,16 +6035,14 @@ function QuickReportModal({
                 );
               })}
             </div>
-            <input
-              type="text"
+            <PatientPlacePicker
               value={form.location}
-              onChange={e => setField('location', e.target.value)}
+              onChange={v => setField('location', v)}
               placeholder={
                 form.locationMode === '휴식' ? L('patient.eGRoom110Lounge') :
                 form.locationMode === '격리' ? L('patient.eGIsolationRoom214') :
                 L('patient.eGAuditoriumGymClassroom')
               }
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400"
             />
             <p className="text-[10px] text-gray-400 mt-1">{L('patient.itMayNotBeTheir')}</p>
           </div>
@@ -7156,6 +7162,35 @@ function StaffMedicationFormModal({ campCode, jobCodeId, campUsers, existing, on
           <button onClick={save} disabled={busy} className="w-full py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl disabled:opacity-40">{busy ? L('task.saving') : L('common.save')}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/** 환자 위치 — 숙소 탭의 환자방·교무실 버튼 / 방(호수) / 기타(직접 입력) */
+function PatientPlacePicker({ value, onChange, placeholder, compact }: { value: string; onChange: (v: string) => void; placeholder?: string; compact?: boolean }) {
+  const { placeOptions } = usePatientInventory();
+  const [kind, setKind] = useState(() => patientPlaceKind(value, placeOptions));
+  const roomNo = kind === 'room' ? value.replace(/호$/, '') : '';
+  const chip = (on: boolean) => `px-2 py-1 rounded-lg ${compact ? 'text-[11px]' : 'text-xs'} font-semibold border transition-colors ${on ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`;
+  const inputCls = `w-full ${compact ? 'text-[11px] px-2 py-1 rounded' : 'text-sm px-3 py-2.5 rounded-xl'} border border-gray-200 outline-none focus:border-blue-400 bg-white`;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap gap-1">
+        {placeOptions.map(o => (
+          <button key={o} type="button" onClick={() => { setKind('option'); onChange(value === o ? '' : o); }} className={chip(value === o)}>{o}</button>
+        ))}
+        <button type="button" onClick={() => { setKind('room'); onChange(''); }} className={chip(kind === 'room')}>{L('patient.roomEnterNo')}</button>
+        <button type="button" onClick={() => { setKind('etc'); onChange(''); }} className={chip(kind === 'etc')}>{L('patient.otherType')}</button>
+      </div>
+      {kind === 'room' && (
+        <input type="text" inputMode="numeric" value={roomNo} autoFocus onChange={e => { const n = e.target.value.replace(/[^0-9]/g, ''); onChange(n ? `${n}호` : ''); }}
+          placeholder={L('patient.roomNoEG330')} className={inputCls} />
+      )}
+      {(kind === 'etc' || (kind === 'none' && placeOptions.length === 0)) && (
+        <input type="text" value={value} onChange={e => { setKind('etc'); onChange(e.target.value); }} placeholder={placeholder} className={inputCls} />
+      )}
+      {placeOptions.length === 0 && <p className="text-[10px] text-gray-400">{L('patient.setRoomsAsSickRoom')}</p>}
     </div>
   );
 }
