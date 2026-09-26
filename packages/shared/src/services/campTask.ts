@@ -1,0 +1,491 @@
+/**
+ * 캠프 업무(campTasks) 조회·완료 처리 — web·mobile 공용. 각 앱은 자기 db·storage 로 한 번 만들어 쓴다.
+ * 생성·수정·삭제·독촉은 서버 API(taskApi) 가 표준 경로이고, 여기 있는 쓰기 함수는 예전 화면 호환용.
+ * 첨부 업로드는 플랫폼마다 달라(File vs uri) 각 앱에 남긴다.
+ */
+import {
+  type Firestore,
+  collection,
+  doc,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  getDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  Timestamp,
+  serverTimestamp,
+  writeBatch,
+  deleteField,
+} from 'firebase/firestore';
+import { type FirebaseStorage, ref, deleteObject } from 'firebase/storage';
+import type { Task, TaskAttachment, JobExperienceGroupRole, TaskCompletion } from '../types/camp';
+import { isTaskVisibleTo, type TaskViewer } from './taskService';
+import { logger } from '../utils/logger';
+
+export const CAMP_TASKS_COLLECTION = 'campTasks';
+
+// 유틸리티: 날짜 포맷팅
+export const formatTaskDate = (date: Timestamp): string => {
+  return date.toDate().toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+};
+
+// 유틸리티: 시간 포맷팅
+export const formatTaskTime = (time?: string): string | null => {
+  if (!time) return null;
+  
+  const [hours, minutes] = time.split(':');
+  const hour = parseInt(hours);
+  const ampm = hour >= 12 ? '오후' : '오전';
+  const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+  
+  return `${ampm} ${displayHour}:${minutes}`;
+};
+
+// 유틸리티: 소요 시간 표시
+export const formatTaskDuration = (duration?: { value: number; unit: 'minutes' | 'hours' }): string | null => {
+  if (!duration) return null;
+  const unitText = duration.unit === 'minutes' ? '분' : '시간';
+  return `${duration.value}${unitText}`;
+};
+
+export function createCampTaskService(db: Firestore, storage: FirebaseStorage) {
+  // Task 생성
+  const createTask = async (
+    campCode: string,
+    taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completions'>,
+    groupId?: string
+  ): Promise<string> => {
+    try {
+      // 날짜를 로컬 타임존의 자정으로 설정
+      const localDate = new Date(taskData.date.toDate());
+      localDate.setHours(0, 0, 0, 0);
+    
+      // undefined 값 필터링
+      const cleanedData: Record<string, any> = {
+        campCode,
+        date: Timestamp.fromDate(localDate),
+        completions: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (groupId) {
+        cleanedData.groupId = groupId;
+      }
+
+      // taskData의 각 필드를 확인하고 undefined가 아닌 값만 추가
+      Object.entries(taskData).forEach(([key, value]) => {
+        if (value !== undefined && key !== 'date') {
+          cleanedData[key] = value;
+        }
+      });
+
+      const docRef = await addDoc(collection(db, CAMP_TASKS_COLLECTION), cleanedData);
+
+      return docRef.id;
+    } catch (error) {
+      logger.error('업무 생성 오류:', error);
+      throw error;
+    }
+  };
+
+  // 캠프 코드별 업무 목록 가져오기
+  const getTasksByCampCode = async (campCode: string): Promise<Task[]> => {
+    try {
+      const tasksQuery = query(
+        collection(db, CAMP_TASKS_COLLECTION),
+        where('campCode', '==', campCode)
+      );
+
+      const snapshot = await getDocs(tasksQuery);
+      const tasks = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Task[];
+
+      // 클라이언트에서 날짜 및 시간으로 정렬
+      return tasks.sort((a, b) => {
+        // 먼저 날짜로 정렬
+        const dateA = a.date.toMillis();
+        const dateB = b.date.toMillis();
+      
+        if (dateA !== dateB) {
+          return dateA - dateB;
+        }
+      
+        // 같은 날짜면 시간으로 정렬
+        if (a.time && b.time) {
+          return a.time.localeCompare(b.time);
+        }
+      
+        // 시간이 있는 것이 우선
+        if (a.time && !b.time) return -1;
+        if (!a.time && b.time) return 1;
+      
+        // 둘 다 시간 없으면 생성일 오름차순
+        return a.createdAt.toMillis() - b.createdAt.toMillis();
+      });
+    } catch (error) {
+      logger.error('업무 목록 가져오기 오류:', error);
+      throw error;
+    }
+  };
+
+  // 특정 날짜의 업무 목록 가져오기 (날짜 범위 쿼리로 최적화)
+  const getTasksByDate = async (
+    campCode: string,
+    date: Date
+  ): Promise<Task[]> => {
+    try {
+      const dayStart = new Date(date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(date);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const q = query(
+        collection(db, CAMP_TASKS_COLLECTION),
+        where('campCode', '==', campCode),
+        where('date', '>=', Timestamp.fromDate(dayStart)),
+        where('date', '<=', Timestamp.fromDate(dayEnd)),
+        orderBy('date', 'asc')
+      );
+
+      const snapshot = await getDocs(q);
+      const tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Task[];
+
+      // 같은 날짜 내에서 시간 → createdAt 순 정렬
+      return tasks.sort((a, b) => {
+        if (a.time && b.time) return a.time.localeCompare(b.time);
+        if (a.time && !b.time) return -1;
+        if (!a.time && b.time) return 1;
+        return a.createdAt.toMillis() - b.createdAt.toMillis();
+      });
+    } catch (error) {
+      logger.error('날짜별 업무 가져오기 오류:', error);
+      throw error;
+    }
+  };
+
+  // 업무 상세 가져오기
+  const getTaskById = async (taskId: string): Promise<Task | null> => {
+    try {
+      const docRef = doc(db, CAMP_TASKS_COLLECTION, taskId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        return null;
+      }
+
+      return {
+        id: docSnap.id,
+        ...docSnap.data(),
+      } as Task;
+    } catch (error) {
+      logger.error('업무 상세 가져오기 오류:', error);
+      throw error;
+    }
+  };
+
+  // 업무 수정
+  const updateTask = async (
+    taskId: string,
+    updates: Partial<Omit<Task, 'id' | 'createdAt' | 'campCode'>>
+  ): Promise<void> => {
+    try {
+      const docRef = doc(db, CAMP_TASKS_COLLECTION, taskId);
+    
+      // null은 Firestore 필드 삭제(deleteField), undefined는 업데이트 제외
+      const cleanedUpdates: Record<string, any> = {};
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null) {
+          cleanedUpdates[key] = deleteField();
+        } else if (value !== undefined) {
+          cleanedUpdates[key] = value;
+        }
+      });
+    
+      await updateDoc(docRef, {
+        ...cleanedUpdates,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      logger.error('업무 수정 오류:', error);
+      throw error;
+    }
+  };
+
+  // 같은 groupId를 가진 업무 목록 조회
+  const getTasksByGroupId = async (groupId: string): Promise<Task[]> => {
+    try {
+      const groupQuery = query(
+        collection(db, CAMP_TASKS_COLLECTION),
+        where('groupId', '==', groupId)
+      );
+      const snapshot = await getDocs(groupQuery);
+      const tasks = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })) as Task[];
+
+      return tasks.sort((a, b) => a.date.toMillis() - b.date.toMillis());
+    } catch (error) {
+      logger.error('그룹 업무 목록 가져오기 오류:', error);
+      throw error;
+    }
+  };
+
+  // 그룹 업무 일괄 수정
+  // newDates가 없으면 내용만 일괄 업데이트, 있으면 기존 문서 삭제 후 새 날짜로 재생성
+  const updateTaskGroup = async (
+    campCode: string,
+    groupId: string,
+    updates: Partial<Omit<Task, 'id' | 'createdAt' | 'campCode' | 'date' | 'groupId' | 'completions'>>,
+    newDates?: Date[]
+  ): Promise<void> => {
+    try {
+      const groupTasks = await getTasksByGroupId(groupId);
+
+      if (!newDates) {
+        // 날짜 변경 없음: 모든 그룹 문서의 내용만 일괄 업데이트
+        const batch = writeBatch(db);
+        // null은 Firestore 필드 삭제(deleteField), undefined는 업데이트 제외
+        const cleanedUpdates: Record<string, any> = { updatedAt: serverTimestamp() };
+        Object.entries(updates).forEach(([key, value]) => {
+          if (value === null) {
+            cleanedUpdates[key] = deleteField();
+          } else if (value !== undefined) {
+            cleanedUpdates[key] = value;
+          }
+        });
+
+        groupTasks.forEach(task => {
+          batch.update(doc(db, CAMP_TASKS_COLLECTION, task.id), cleanedUpdates);
+        });
+
+        await batch.commit();
+      } else {
+        // 날짜 변경: 기존 그룹 문서 삭제 후 새 날짜로 재생성
+        const batch = writeBatch(db);
+
+        // 첨부파일이 있는 문서들의 Storage 파일 삭제 (병렬 처리)
+        await Promise.all(
+          groupTasks.map(async task => {
+            if (task.attachments) {
+              for (const attachment of task.attachments) {
+                if (attachment.type === 'image' || attachment.type === 'file') {
+                  try {
+                    const fileRef = ref(storage, attachment.url);
+                    await deleteObject(fileRef);
+                  } catch (err) {
+                    logger.warn('첨부파일 삭제 실패:', err);
+                  }
+                }
+              }
+            }
+            batch.delete(doc(db, CAMP_TASKS_COLLECTION, task.id));
+          })
+        );
+
+        await batch.commit();
+
+        // 기존 Task에서 공통 필드 추출 (첫 번째 문서 기준)
+        // null이 전달된 경우 해당 필드를 명시적으로 제거(새 문서에는 포함하지 않음)
+        const baseTask = groupTasks[0];
+        const resolvedTime = updates.time !== undefined
+          ? (updates.time === null ? undefined : updates.time)
+          : baseTask.time;
+        const resolvedDuration = updates.estimatedDuration !== undefined
+          ? (updates.estimatedDuration === null ? undefined : updates.estimatedDuration)
+          : baseTask.estimatedDuration;
+        const resolvedAttachments = updates.attachments !== undefined
+          ? (updates.attachments === null ? undefined : updates.attachments)
+          : baseTask.attachments;
+
+        const baseData: Record<string, any> = {
+          campCode,
+          title: updates.title ?? baseTask.title,
+          description: updates.description ?? baseTask.description,
+          targetRoles: updates.targetRoles ?? baseTask.targetRoles,
+          targetGroups: updates.targetGroups ?? baseTask.targetGroups,
+          groupId,
+          createdBy: baseTask.createdBy,
+        };
+
+        if (resolvedTime !== undefined) baseData.time = resolvedTime;
+        if (resolvedDuration !== undefined) baseData.estimatedDuration = resolvedDuration;
+        if (resolvedAttachments !== undefined) baseData.attachments = resolvedAttachments;
+
+        // 새 날짜들로 재생성
+        for (const date of newDates) {
+          const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+          const cleanedData: Record<string, any> = {
+            ...baseData,
+            date: Timestamp.fromDate(localDate),
+            completions: [],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+
+          await addDoc(collection(db, CAMP_TASKS_COLLECTION), cleanedData);
+        }
+      }
+    } catch (error) {
+      logger.error('그룹 업무 수정 오류:', error);
+      throw error;
+    }
+  };
+
+  // 업무 삭제
+  const deleteTask = async (taskId: string): Promise<void> => {
+    try {
+      // 첨부파일도 함께 삭제
+      const task = await getTaskById(taskId);
+      if (task?.attachments) {
+        for (const attachment of task.attachments) {
+          if (attachment.type === 'image' || attachment.type === 'file') {
+            try {
+              const fileRef = ref(storage, attachment.url);
+              await deleteObject(fileRef);
+            } catch (err) {
+              logger.warn('첨부파일 삭제 실패:', err);
+            }
+          }
+        }
+      }
+
+      const docRef = doc(db, CAMP_TASKS_COLLECTION, taskId);
+      await deleteDoc(docRef);
+    } catch (error) {
+      logger.error('업무 삭제 오류:', error);
+      throw error;
+    }
+  };
+
+  // 업무 완료 토글
+  const toggleTaskCompletion = async (
+    taskId: string,
+    userId: string,
+    userName: string,
+    userRole: JobExperienceGroupRole
+  ): Promise<void> => {
+    try {
+      const task = await getTaskById(taskId);
+      if (!task) {
+        throw new Error('업무를 찾을 수 없습니다.');
+      }
+
+      const isCompleted = task.completions.some(c => c.userId === userId);
+
+      if (isCompleted) {
+        // 완료 취소
+        await updateDoc(doc(db, CAMP_TASKS_COLLECTION, taskId), {
+          completions: task.completions.filter((c: TaskCompletion) => c.userId !== userId),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // 완료 처리
+        await updateDoc(doc(db, CAMP_TASKS_COLLECTION, taskId), {
+          completions: [
+            ...task.completions,
+            {
+              userId,
+              userName,
+              userRole,
+              completedAt: Timestamp.now(),
+            },
+          ],
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (error) {
+      logger.error('업무 완료 토글 오류:', error);
+      throw error;
+    }
+  };
+
+  // 월별 업무 목록을 날짜별 Map으로 가져오기 (YYYY-MM-DD → Task[])
+  // 월 시작/끝 범위 쿼리로 해당 월 데이터만 읽음
+  const getTasksInMonth = async (
+    campCode: string,
+    year: number,
+    month: number,
+    viewer: TaskViewer
+  ): Promise<Map<string, Task[]>> => {
+    try {
+      const monthStart = new Date(year, month, 1, 0, 0, 0, 0);
+      const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+      const q = query(
+        collection(db, CAMP_TASKS_COLLECTION),
+        where('campCode', '==', campCode),
+        where('date', '>=', Timestamp.fromDate(monthStart)),
+        where('date', '<=', Timestamp.fromDate(monthEnd)),
+        orderBy('date', 'asc')
+      );
+
+      const snapshot = await getDocs(q);
+      const taskMap = new Map<string, Task[]>();
+
+      snapshot.docs.forEach(d => {
+        const task = { id: d.id, ...d.data() } as Task;
+        const taskDate = new Date(task.date.toDate());
+
+        // 관리자가 아니면 내 그룹 대상 업무만 (부매니저는 그룹 업무 전체)
+        if (!isTaskVisibleTo(task, viewer)) return;
+
+        const y = taskDate.getFullYear();
+        const m = String(taskDate.getMonth() + 1).padStart(2, '0');
+        const day = String(taskDate.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${day}`;
+
+        const existing = taskMap.get(dateStr) ?? [];
+        existing.push(task);
+        taskMap.set(dateStr, existing);
+      });
+
+      return taskMap;
+    } catch (error) {
+      logger.error('월별 업무 목록 가져오기 오류:', error);
+      throw error;
+    }
+  };
+
+  // 월별 업무가 있는 날짜 가져오기 (현재 사용자의 역할에 해당하는 업무만 포함)
+  // getTasksInMonth와 동일한 범위 쿼리 사용 — 필요 시 getTasksInMonth 결과에서 파생 가능
+  const getTaskDatesInMonth = async (
+    campCode: string,
+    year: number,
+    month: number,
+    viewer: TaskViewer
+  ): Promise<Set<string>> => {
+    try {
+      const taskMap = await getTasksInMonth(campCode, year, month, viewer);
+      return new Set(taskMap.keys());
+    } catch (error) {
+      logger.error('월별 업무 날짜 가져오기 오류:', error);
+      throw error;
+    }
+  };
+
+  return {
+    createTask,
+    getTasksByCampCode,
+    getTasksByDate,
+    getTaskById,
+    updateTask,
+    getTasksByGroupId,
+    updateTaskGroup,
+    deleteTask,
+    toggleTaskCompletion,
+    getTasksInMonth,
+    getTaskDatesInMonth,
+  };
+}

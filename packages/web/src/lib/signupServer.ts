@@ -99,24 +99,36 @@ async function findTempAccount(kind: 'mentor' | 'foreign', profile: Record<strin
   const want = normalizePhoneForMatch(profile.phoneNumber);
   const roles = kind === 'foreign' ? ['foreign_temp'] : ['mentor_temp', 'admin'];
   const ft = profile.foreignTeacher as { firstName?: string; lastName?: string } | undefined;
+  const foreignIdentityMatches = (data: Record<string, any>) => {
+    const byName = !!ft && (
+      (normalizeNameForMatch(data.foreignTeacher?.firstName) === normalizeNameForMatch(ft.firstName)
+        && normalizeNameForMatch(data.foreignTeacher?.lastName) === normalizeNameForMatch(ft.lastName))
+      || normalizeNameForMatch(data.name) === normalizeNameForMatch(`${ft.firstName}${ft.lastName}`)
+      || normalizeNameForMatch(data.name) === normalizeNameForMatch(profile.name));
+    const byEmail = !!data.email && String(data.email).toLowerCase() === email;
+    return byName || byEmail;
+  };
   const matches = snap.docs
     .map((d) => ({ id: d.id, data: d.data() as Record<string, any> }))
     .filter(({ data }) => data.status === 'temp' && roles.includes(String(data.role)) && normalizePhoneForMatch(data.phoneNumber) === want)
-    .filter(({ data }) => {
-      if (kind === 'mentor') return normalizeNameForMatch(data.name) === normalizeNameForMatch(profile.name);
-      const byName = !!ft && (
-        (normalizeNameForMatch(data.foreignTeacher?.firstName) === normalizeNameForMatch(ft.firstName)
-          && normalizeNameForMatch(data.foreignTeacher?.lastName) === normalizeNameForMatch(ft.lastName))
-        || normalizeNameForMatch(data.name) === normalizeNameForMatch(`${ft.firstName}${ft.lastName}`)
-        || normalizeNameForMatch(data.name) === normalizeNameForMatch(profile.name));
-      const byEmail = !!data.email && String(data.email).toLowerCase() === email;
-      return byName || byEmail;
-    });
-  if (!matches.length) {
-    if (hint) logger.warn('⚠️ temp 계정 힌트가 전화번호·이름과 맞지 않아 무시:', { hint });
-    return null;
+    .filter(({ data }) => (kind === 'mentor' ? normalizeNameForMatch(data.name) === normalizeNameForMatch(profile.name) : foreignIdentityMatches(data)));
+  if (matches.length) return matches.find((m) => m.id === hint) ?? matches[0];
+
+  // 원어민: 해외 번호는 관리자가 적은 형식(공백·하이픈·국가번호 유무)이 제각각이라 위 조회로 못 찾을 수 있다.
+  // 화면에서 이름으로 찾은 temp 계정(hint)이 이름·이메일과 맞고, 전화번호 숫자 끝 7자리가 같으면 이어받는다.
+  // (이름만으로는 넘기지 않는다 — temp 계정에 여권 사진 등 서류 링크가 있어 전화번호 확인을 유지)
+  const digitsTail = (v: unknown) => String(v ?? '').replace(/\D/g, '').slice(-7);
+  const wantTail = digitsTail(profile.phoneNumber);
+  if (kind === 'foreign' && hint && wantTail.length === 7) {
+    const hintSnap = await db.collection('users').doc(hint).get();
+    const data = hintSnap.data() as Record<string, any> | undefined;
+    if (hintSnap.exists && data && data.status === 'temp' && roles.includes(String(data.role))
+      && digitsTail(data.phoneNumber || data.phone) === wantTail && foreignIdentityMatches(data)) {
+      return { id: hintSnap.id, data };
+    }
   }
-  return matches.find((m) => m.id === hint) ?? matches[0];
+  if (hint) logger.warn('⚠️ temp 계정 힌트가 전화번호·이름과 맞지 않아 무시:', { hint });
+  return null;
 }
 
 /** 같은 전화번호로 이미 가입된(active) 다른 계정이 있는가 */

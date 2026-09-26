@@ -1,5 +1,4 @@
 /**
-import { logger } from '@smis-mentor/shared';
  * 캠프 생활 평가 기준 업데이트 스크립트
  * 
  * 사용법:
@@ -7,6 +6,7 @@ import { logger } from '@smis-mentor/shared';
  * window.updateCampLifeCriteria()
  */
 
+import { logger } from '@smis-mentor/shared';
 import { db } from '@/lib/firebase';
 import { 
   collection, 

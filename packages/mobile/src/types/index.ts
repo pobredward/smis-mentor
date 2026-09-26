@@ -18,63 +18,9 @@ export interface PartTimeJob {
   description: string;
 }
 
-export interface User {
-  userId: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  status: UserStatus;
-  phone?: string;
-  phoneNumber?: string;
-  birth?: string;
-  age?: number;
-  dateOfBirth?: string;
-  address?: string;
-  addressDetail?: string;
-  profileImage?: string;
-  school?: string;
-  university?: string;
-  major?: string;
-  major1?: string;
-  major2?: string;
-  studentId?: string;
-  grade?: number;
-  isOnLeave?: boolean;
-  jobExperiences?: JobExperience[];
-  activeJobExperienceId?: string;
-  /** 커뮤니티에서 내가 차단한 사용자 uid 목록 */
-  blockedUsers?: string[];
-  rrnGenderDigit?: string;
-  englishNickname?: string;
-  /** 가입 시 동의한 약관·개인정보처리방침 버전 (CONSENT_VERSION) 과 시각 */
-  consentVersion?: string;
-  consentedAt?: any;
-  selfIntroduction?: string;
-  jobMotivation?: string;
-  partTimeJobs?: PartTimeJob[];
-  gender?: 'M' | 'F';
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  lastLoginAt?: Timestamp;
-  
-  // 원어민 교사 전용 정보
-  foreignTeacher?: {
-    firstName: string;
-    lastName: string;
-    middleName?: string;
-    countryCode: string;
-    cvUrl?: string;
-    passportPhotoUrl?: string;
-    foreignIdCardUrl?: string;
-    bankBookUrl?: string;
-    eslCertUrl?: string;
-    applicationDate?: Timestamp;
-  };
-  
-  // 소셜 로그인 관련 필드
-  authProviders?: AuthProvider[];
-  primaryAuthMethod?: AuthMethod;
-}
+/** 사용자 — shared 의 User 한 벌을 쓴다 (예전에는 mobile 전용 축소판이 따로 있었음) */
+import type { User } from '@smis-mentor/shared';
+export type { User };
 
 export interface AuthContextType {
   currentUser: any | null;

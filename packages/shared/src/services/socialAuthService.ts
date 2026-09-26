@@ -1,3 +1,4 @@
+import { normalizeNameForMatch } from '../utils/signup';
 import {
   GoogleAuthProvider,
   signInWithCredential,
@@ -231,7 +232,7 @@ export async function checkTempAccountByPhone(
           user,
           isActive: true,
           needsLink: true,
-          nameMatches: user.name === socialData.name,
+          nameMatches: normalizeNameForMatch(user.name) === normalizeNameForMatch(socialData.name),
         };
       }
       
@@ -265,7 +266,7 @@ export async function checkTempAccountByPhone(
         }
         
         // 이름도 확인하여 본인 계정인지 검증
-        const nameMatches = user.name === socialData.name;
+        const nameMatches = normalizeNameForMatch(user.name) === normalizeNameForMatch(socialData.name);
         if (!nameMatches) {
           logger.warn('⚠️ 이름이 일치하지 않음:', {
             dbName: user.name,
@@ -288,7 +289,7 @@ export async function checkTempAccountByPhone(
     }
 
     // temp 계정 발견
-    const nameMatches = user.name === socialData.name;
+    const nameMatches = normalizeNameForMatch(user.name) === normalizeNameForMatch(socialData.name);
     logger.info('🔍 이름 일치 여부:', {
       dbName: user.name,
       socialName: socialData.name,

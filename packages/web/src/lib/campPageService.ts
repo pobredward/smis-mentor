@@ -84,8 +84,3 @@ export async function getCampPagesByJobCodeId(jobCodeId: string): Promise<{
   }
 }
 
-// 이미지 업로드 (Firebase Storage)
-export async function uploadCampPageImage(file: File, jobCodeId: string): Promise<string> {
-  const { uploadImage } = await import('@/lib/firebaseService');
-  return uploadImage(file, `campPages/${jobCodeId}`);
-}

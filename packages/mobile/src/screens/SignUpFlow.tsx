@@ -298,8 +298,10 @@ export function SignUpFlow({
     const { socialData, tempUserId } = data;
     if (!socialData) throw new Error('소셜 로그인 데이터가 없습니다');
 
-    // Apple 비공개 릴레이 이메일로는 신규 가입 불가 (temp 계정 이관은 서버가 temp 이메일로 대체)
-    if (!tempUserId && socialData.email.includes('@privaterelay.appleid.com')) {
+    // Apple 재로그인(이메일 미제공)으로 앱이 임시로 만든 apple_<id>@privaterelay 주소로는 신규 가입 불가.
+    // 사용자가 '이메일 가리기'를 고른 진짜 릴레이 주소(임의 문자열@privaterelay)는 정상 가입 가능.
+    // (temp 계정 이관은 서버가 temp 이메일로 대체)
+    if (!tempUserId && /^apple_[^@]+@privaterelay\.appleid\.com$/i.test(socialData.email)) {
       throw new Error(
         'Apple 재로그인 감지: Apple 설정에서 SMIS Mentor 앱 연동을 삭제한 후 다시 시도하세요.\n' +
         '설정 > Apple ID > 암호 및 보안 > Apple로 로그인을 사용하는 앱'

@@ -323,14 +323,17 @@ export const getUserById = async (userId: string): Promise<User | null> => {
 };
 
 export const getUserJobCodesInfo = async (
-  jobExperiences: string[]
+  // users.jobExperiences 는 { id, group, ... } 객체 배열 — 예전 문자열 id 배열도 받는다
+  jobExperiences: Array<string | { id: string }>
 ): Promise<{ id: string; generation: string; code: string; name: string }[]> => {
   try {
     const jobCodesInfo: { id: string; generation: string; code: string; name: string }[] =
       [];
 
     for (const jobExperience of jobExperiences) {
-      const jobDocRef = doc(db, 'jobCodes', jobExperience);
+      const jobCodeId = typeof jobExperience === 'string' ? jobExperience : jobExperience?.id;
+      if (!jobCodeId) continue;
+      const jobDocRef = doc(db, 'jobCodes', jobCodeId);
       const jobDoc = await getDoc(jobDocRef);
 
       if (jobDoc.exists()) {

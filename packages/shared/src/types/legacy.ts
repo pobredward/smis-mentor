@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 import type { JobExperienceGroupRole } from './camp';
 import type { AuthProvider } from './auth';
+import type { UserRole } from './permission';
 import type { NotificationSettings } from './notification';
 
 export interface PartTimeJob {
@@ -22,7 +23,13 @@ export interface User {
   password: string;
   address: string;
   addressDetail: string;
-  role: 'user' | 'mentor' | 'admin' | 'foreign' | 'foreign_temp' | 'mentor_temp';
+  /** 지오코딩 정보 (위치 기반 기능용) */
+  geocode?: {
+    lat: number;
+    lng: number;
+    updatedAt: Timestamp;
+  };
+  role: UserRole;
   jobExperiences?: Array<{
     id: string,
     group: JobGroup,
@@ -58,6 +65,8 @@ export interface User {
   /** 명찰용 영어 닉네임 (캠프 참가 정보) */
   englishNickname?: string;
   rrnLast?: string;
+  /** 주민번호 뒷자리 암호문 (서버 AES-256-GCM) */
+  rrnLastEncrypted?: string;
   university?: string;
   grade?: number;
   isOnLeave?: boolean | null;

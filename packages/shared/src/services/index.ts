@@ -20,3 +20,8 @@ export * from './appConfigService';
 export * from './patient';
 export * from './inventory';
 export * from './esl';
+export * from './taskCategory';
+export * from './interviewLinks';
+export * from './generationResources';
+export * from './personalTask';
+export * from './campTask';

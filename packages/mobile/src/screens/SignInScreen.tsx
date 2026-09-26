@@ -706,13 +706,18 @@ export function SignInScreen({
     try {
       const { getUserJobCodesInfo } = await import('../services/authService');
       
+      // 이름 일치는 사용자가 입력한 이름으로 확인한다 (구글·애플 프로필 이름은 영문·닉네임일 수 있음 — 웹과 동일)
+      const probe = { ...socialData, name: data.name };
       const result = await checkTempAccountByPhone(
         data.phone,
-        socialData,
+        probe,
         getUserByPhone as (phone: string) => Promise<import('@smis-mentor/shared').User | null>,
         getUserJobCodesInfo
       );
       
+      // Apple 재로그인: 저장된 실제 이메일이 복원됐으면 이후 연동 단계에도 반영
+      if (probe.email !== socialData.email) setSocialData({ ...socialData, email: probe.email });
+
       if (result.found && result.user) {
         const user = result.user;
         
