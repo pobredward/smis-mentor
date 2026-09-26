@@ -126,7 +126,7 @@ import {
   lostGroupManagers,
   MISSED_STATE_LABELS,
   INVENTORY_USAGE_ORDER,
-  suggestedUsages, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse, supplyLineStockQty, setSupplyDecision, supplyDecisionOf, type SupplyDecision } from '@smis-mentor/shared';
+  suggestedUsages, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse, supplyLineStockQty, setSupplyDecision, supplyDecisionOf, type SupplyDecision, supplyLineGroups, supplyOpenLines, supplyLineOpen, supplyItemsSummary } from '@smis-mentor/shared';
 import { getUsersByJobCodeId } from '../services/userService';
 import type {
   CampCode,
@@ -239,7 +239,7 @@ export function InventoryScreen() {
     if (isAdmin) return requests.filter(r => r.status === 'requested' || needsStockIntake(r)).length + uncoveredPurchaseNeeds(needs, requests).length;
     const uid = userData?.userId;
     const buyLines = requests.filter(r => r.status === 'requested' && supplyBuyerOf(r, supplySettings)?.uid === uid)
-      .reduce((a, r) => a + r.items.length - supplyDoneCount(r), 0);
+      .reduce((a, r) => a + supplyOpenLines(r).length, 0);
     const settleTodo = supplySettleLines(requests).filter(sl => !sl.settled && sl.kind !== 'parent' && (sl.req.forType === 'student'
       ? !!userName && (sl.req.classMentor || students.find(st => st.studentId === sl.req.studentId)?.classMentor || '').trim() === userName.trim()
       : sl.req.requesterId === uid)).length;
@@ -658,8 +658,8 @@ function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId,
 
   const open = useMemo(() => requests.filter(r => isSupplyOpen(r.status)), [requests]);
   const mine = useMemo(() => requests.filter(r => r.requesterId === userId), [requests, userId]);
-  const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyApproved(r) && supplyBuyerOf(r, settings)?.uid === userId && !supplyAllDone(r)), [open, settings, userId]);
-  const myBuyLineCount = myBuys.reduce((a, r) => a + r.items.length - supplyDoneCount(r), 0);
+  const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyApproved(r) && supplyBuyerOf(r, settings)?.uid === userId && supplyOpenLines(r).length > 0), [open, settings, userId]);
+  const myBuyLineCount = myBuys.reduce((a, r) => a + supplyOpenLines(r).length, 0);
   const shopping = useMemo(() => supplyShoppingList(myBuys), [myBuys]);
   // 여러 요청에 걸쳐 같은 물품이 있으면 묶어서 (규격·단위가 다르면 따로 합산된다)
   const duplicated = useMemo(() => supplyShoppingList(open).filter(l => l.who.length >= 2), [open]);
@@ -962,7 +962,7 @@ const PROGRESS_COLOR: Record<string, { bg: string; fg: string }> = {
 function SupplyRowMobile({ req: r, buyer, isLast, onPress }: { req: SupplyRequest; buyer: SupplyBuyer; isLast: boolean; onPress: () => void }) {
   const pg = supplyProgress(r, !!buyer);
   const c = PROGRESS_COLOR[pg.key] ?? SUPPLY_STATUS_COLOR[r.status];
-  const what = r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${dataLabel(l.unit)}${l.groupName ? ` (${l.groupName})` : ''}`).join(', ');
+  const what = supplyItemsSummary(r, dataLabel);
   const status = supplyStatusLine(r, buyer);
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={[styles.row, isLast && { borderBottomWidth: 0 }, { alignItems: 'flex-start' }]}>
@@ -984,7 +984,9 @@ function SupplyRowMobile({ req: r, buyer, isLast, onPress }: { req: SupplyReques
 function SupplyLinesCardMobile({ req: r, canBuy, onOpen, onComplete, onUndo }: {
   req: SupplyRequest; canBuy: boolean; onOpen: () => void; onComplete: (lineIds: string[]) => void; onUndo: (lineId: string) => void;
 }) {
-  const undone = r.items.filter(l => !r.done?.[l.id]).map(l => l.id);
+  const undone = supplyOpenLines(r).map(l => l.id);
+  // 보류·취소된 잔여 줄은 구매 목록에서 뺀다
+  const shown = r.items.filter(l => !l.lineStatus);
   return (
     <View style={styles.listBox}>
       <TouchableOpacity onPress={onOpen} activeOpacity={0.6} style={[styles.row, { backgroundColor: '#f9fafb' }]}>
@@ -992,10 +994,10 @@ function SupplyLinesCardMobile({ req: r, canBuy, onOpen, onComplete, onUndo }: {
         <Text style={{ fontSize: 10, color: '#6b7280' }}>{supplyDoneCount(r)}/{r.items.length}</Text>
       </TouchableOpacity>
       {r.note ? <Text style={{ fontSize: 11, color: '#6b7280', paddingHorizontal: 10, paddingTop: 4 }}>📝 {r.note}</Text> : null}
-      {r.items.map((l, i) => {
+      {shown.map((l, i) => {
         const d = r.done?.[l.id];
         return (
-          <View key={l.id} style={[styles.row, i === r.items.length - 1 && undone.length <= 1 && { borderBottomWidth: 0 }]}>
+          <View key={l.id} style={[styles.row, i === shown.length - 1 && undone.length <= 1 && { borderBottomWidth: 0 }]}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[styles.rowName, d && { color: '#9ca3af', textDecorationLine: 'line-through', fontWeight: '400' }]} numberOfLines={1}>{l.name} {l.quantity}{dataLabel(l.unit)}{l.groupName ? ` → ${l.groupName}` : ''}<GuideTagMobile line={l} /></Text>
               {l.memo && !d ? <Text style={styles.rowGroups} numberOfLines={1}>{l.memo}</Text> : null}
@@ -1026,11 +1028,19 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
   const kind = supplySettleKind(r);
   const num = (s: string) => parseInt((s || '').replace(/[^0-9]/g, ''), 10) || 0;
   // 줄마다: 산 수량 × 단가 = 금액 (금액을 바로 적으면 단가를 거꾸로 계산)
-  type Row = { qty: string; price: string; amount: string; stockQty: string; stockEdited: boolean; group: string };
+  type Rest = '' | 'continue' | 'hold' | 'cancel';
+  type Row = { qty: string; price: string; amount: string; stockQty: string; stockEdited: boolean; group: string; rest: Rest; restNote: string };
+  const groupsOfReq = supplyLineGroups(r);
+  const groupOfLine = (l: SupplyRequestLine) => groupsOfReq.find(g => g.lines.some(x => x.id === l.id));
+  const rowState = (l: SupplyRequestLine) => {
+    const q = num(rows[l.id].qty);
+    return { q, over: q > l.quantity, short: q > 0 && q < l.quantity ? l.quantity - q : 0 };
+  };
   const itemOf = (l: SupplyRequestLine) => views.find(v => v.id === l.itemId);
   const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(lines.map(l => [l.id, {
     qty: String(l.quantity), price: '', amount: '',
     stockQty: String(supplyLineStockQty(l, itemOf(l))), stockEdited: false, group: l.groupId ?? groups[0]?.id ?? '',
+    rest: '' as Rest, restNote: '',
   }])));
   const setRow = (id: string, patch: Partial<Row>) => setRows(rs => {
     const cur = { ...rs[id], ...patch };
@@ -1055,6 +1065,8 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
           payTo: kind === 'transfer' && !l.parentBill ? payTo.trim() || undefined : undefined,
           stockQty: isCamp && l.itemId && !r.stocked?.[l.id] ? num(rows[l.id].stockQty) : undefined,
           groupId: isCamp ? rows[l.id].group || undefined : undefined,
+          rest: rowState(l).short ? rows[l.id].rest || undefined : undefined,
+          restNote: rowState(l).short ? rows[l.id].restNote.trim() || undefined : undefined,
         })) }) });
       if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || L('inventory.couldNotMarkAsDone'));
       onClose();
@@ -1063,6 +1075,8 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
   };
   const submit = () => {
     if (lines.some(l => !num(rows[l.id].qty))) { Alert.alert(L('patient.checkNeeded'), L('inventory.enterTheQuantityBought')); return; }
+    if (lines.some(l => rowState(l).over)) { Alert.alert(L('patient.checkNeeded'), L('inventory.youEnteredMoreThanThe')); return; }
+    if (lines.some(l => rowState(l).short > 0 && !rows[l.id].rest)) { Alert.alert(L('patient.checkNeeded'), L('inventory.chooseWhatToDoWith')); return; }
     const warn = [
       kind && lines.some(l => !num(rows[l.id].amount)) ? L('inventory.someItemsHaveNoAmount2') : '',
       kind === 'transfer' && lines.some(l => !l.parentBill) && !payTo.trim() ? L('inventory.theAccountToReceiveThe2') : '',
@@ -1085,7 +1099,6 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
         <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }} keyboardShouldPersistTaps="handled">
           {lines.map(l => {
             const row = rows[l.id];
-            const short = l.quantity - num(row.qty);
             return (
               <View key={l.id} style={{ gap: 5, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb', paddingBottom: 10 }}>
                 <Text style={styles.rowName} numberOfLines={1}>{l.name} <Text style={styles.rowMeta}>{L('inventory.requestedN', { v0: l.quantity, v1: dataLabel(l.unit) })}</Text><GuideTagMobile line={l} /></Text>
@@ -1098,7 +1111,29 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
                   <TextInput value={row.amount} keyboardType="number-pad" placeholder={L('patient.amount')} placeholderTextColor="#9ca3af" onChangeText={v => setRow(l.id, { amount: v.replace(/[^0-9]/g, '') })}
                     style={[...inp, { flex: 1.2 }, kind && !num(row.amount) ? { borderColor: '#fcd34d', backgroundColor: '#fefce8' } : null]} />
                 </View>
-                {short > 0 && num(row.qty) > 0 ? <Text style={{ fontSize: 10, color: '#b45309' }}>{L('inventory.shortTheRestStaysOn', { v0: short, v1: dataLabel(l.unit) })}</Text> : null}
+                {(() => {
+                  const g = groupOfLine(l); const st = rowState(l); const u = dataLabel(l.unit);
+                  const prevDone = g ? g.received : 0;
+                  return (
+                    <View style={{ backgroundColor: '#f9fafb', borderRadius: 8, padding: 7, gap: 5 }}>
+                      <Text style={{ fontSize: 10, color: '#4b5563' }}>{L('inventory.requestedEarlierNowLeft', { v0: `${g?.requested ?? l.quantity}${u}`, v1: `${prevDone}${u}`, v2: isCamp ? L('inventory.stocked') : L('inventory.bought'), v3: `${st.q}${u}`, v4: `${Math.max(0, l.quantity - st.q)}${u}` })}
+                        {isCamp && l.itemId && !r.stocked?.[l.id] && st.q > 0 ? <Text style={{ fontWeight: '700', color: '#047857' }}> · {L('inventory.text6', { v0: groups.find(x => x.id === row.group)?.name ?? '', v1: `${num(row.stockQty)}${dataLabel(itemOf(l)?.unit ?? l.unit)}` })}</Text> : null}</Text>
+                      {st.over ? <Text style={{ fontSize: 10, fontWeight: '700', color: '#dc2626' }}>{L('inventory.youEnteredMoreThanThe')}</Text> : null}
+                      {st.short > 0 ? (
+                        <View style={{ gap: 5 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>{L('inventory.whatShouldHappenToThe', { v0: `${st.short}${u}` })}</Text>
+                          {([['continue', L('inventory.keepBuying'), L('inventory.staysOnTheShoppingList')], ['hold', L('inventory.putOnHold'), L('inventory.removedFromTheListResume')], ['cancel', L('inventory.cancelTheRest'), L('inventory.noMoreNeeded')]] as const).map(([v, t, d]) => (
+                            <TouchableOpacity key={v} onPress={() => setRow(l.id, { rest: v })} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 6, borderColor: row.rest === v ? '#10b981' : '#e5e7eb', backgroundColor: row.rest === v ? '#ecfdf5' : '#fff' }}>
+                              <Ionicons name={row.rest === v ? 'radio-button-on' : 'radio-button-off'} size={16} color={row.rest === v ? '#059669' : '#9ca3af'} />
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827' }}>{t} <Text style={{ fontSize: 10, fontWeight: '400', color: '#6b7280' }}>{d}</Text></Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TextInput value={row.restNote} onChangeText={v => setRow(l.id, { restNote: v })} placeholder={L('inventory.noteOptionalWhy')} placeholderTextColor="#9ca3af" style={[styles.input, { fontSize: 11, paddingVertical: 5 }]} />
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })()}
                 {isCamp && (l.itemId && !r.stocked?.[l.id] ? (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5 }}>
                     <Text style={{ fontSize: 11, color: '#065f46' }}>📥 {L('inventory.stockIn')}</Text>
@@ -1123,8 +1158,8 @@ function SupplyLineCompleteMobile({ req: r, lineIds, classMentor, userId, userNa
             </View>
           )}
           <Text style={{ textAlign: 'right', fontSize: 12, color: '#4b5563' }}>{L('inventory.total')} <Text style={{ fontWeight: '800', color: '#111827' }}>{fmtWon(total)}</Text></Text>
-          <TouchableOpacity onPress={submit} disabled={busy} style={[styles.btn, { flex: 0, backgroundColor: '#059669', paddingVertical: 12, opacity: busy ? 0.5 : 1 }]}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{busy ? L('inventory.processing') : L('inventory.purchaseItems', { v0: lines.length })}</Text>
+          <TouchableOpacity onPress={submit} disabled={busy || lines.some(l => { const st = rowState(l); return !st.q || st.over || (st.short > 0 && !rows[l.id].rest); })} style={[styles.btn, { flex: 0, backgroundColor: '#059669', paddingVertical: 12, opacity: busy || lines.some(l => { const st = rowState(l); return !st.q || st.over || (st.short > 0 && !rows[l.id].rest); }) ? 0.5 : 1 }]}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{busy ? L('inventory.processing') : (lines.some(l => rowState(l).short > 0) ? L(isCamp ? 'inventory.partialStockIn' : 'inventory.partialPurchase') : L(isCamp ? 'inventory.completeStock' : 'inventory.markPurchased'))}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -1432,6 +1467,12 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
   };
   const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
     run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); if (status === 'rejected' || status === 'onhold') notifySupply({ type: 'status', requestId: r.id }); setMode('none'); setReason(''); });
+  // 잔여 줄 보류 · 구매 재개 · 남은 요청 취소 (서버)
+  const lineAct = (l: SupplyRequestLine, action: 'hold' | 'resume' | 'cancel') =>
+    run(async () => {
+      const res = await authenticatedFetch('/api/inventory/supply-line', { method: 'POST', body: JSON.stringify({ requestId: r.id, lineId: l.id, action }) });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || L('inventory.couldNotProcess'));
+    });
   const saveNote = () => run(async () => { await setSupplyRequestNote(db, r.id, note); });
   const decision = supplyDecisionOf(r);
   const decide = async (d: SupplyDecision, opts?: { note?: string; holdUntil?: string }) => {
@@ -1467,7 +1508,7 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
   const status = supplyStatusLine(r, buyer);
   const canSettle = isAdmin || settlerIsMe;
   const settleLines = supplySettleLines([r]);
-  const undoneIds = r.items.filter(l => !r.done?.[l.id]).map(l => l.id);
+  const undoneIds = supplyOpenLines(r).map(l => l.id);
   const HOLD_CHIPS: Array<[string, string]> = [[L('inventory.tomorrow'), addDaysStr(1)], [L('inventory.in3Days'), addDaysStr(3)], [L('inventory.in1Week'), addDaysStr(7)], [L('inventory.in2Weeks'), addDaysStr(14)], [L('data.tbd'), '']];
 
   return (
@@ -1492,6 +1533,9 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
               {isAdmin && <TouchableOpacity onPress={onAssign}><Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>{L('inventory.thisRequestOnly')} {r.buyerId ? L('patient.change') : L('inventory.someoneElse')}</Text></TouchableOpacity>}
             </View>
           )}
+          {supplyLineGroups(r).some(g => g.split) ? (
+            <Text style={{ fontSize: 11, color: '#374151', backgroundColor: '#fffbeb', borderRadius: 8, padding: 8 }}>{supplyLineGroups(r).filter(g => g.split).map(g => supplyItemsSummary({ ...r, items: g.lines }, dataLabel)).join(' / ')}</Text>
+          ) : null}
           <View style={styles.listBox}>
             {r.items.map((l, i) => {
               const d = r.done?.[l.id];
@@ -1505,12 +1549,22 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
                     <Text style={[styles.rowName, d && { color: '#6b7280' }]} numberOfLines={2}>{d ? '✓ ' : ''}{l.name} <Text style={{ color: '#b45309', fontWeight: '800' }}>{l.quantity}{dataLabel(l.unit)}</Text>{isCamp && l.groupName ? <Text style={{ fontSize: 11, fontWeight: '400', color: '#047857' }}>  → {l.groupName}</Text> : null}<GuideTagMobile line={l} /></Text>
                     {(l.memo || (isAdmin && stock)) ? <Text style={styles.rowGroups} numberOfLines={2}>{[l.memo, isAdmin && stock ? L('inventory.campStock3', { v0: stock.total, v1: dataLabel(stock.unit) }) : ''].filter(Boolean).join(' · ')}</Text> : null}
                     {d ? <Text selectable style={[styles.rowGroups, { color: '#047857' }]}>{d.amount ? fmtWon(d.amount) : L('inventory.noAmount')} · {d.by}{d.payTo ? `\n💸 ${d.payTo}` : ''}</Text> : null}
+                    {l.lineStatus ? <Text style={[styles.rowGroups, { fontWeight: '700', color: l.lineStatus === 'onhold' ? '#b45309' : '#9ca3af' }]}>{l.lineStatus === 'onhold' ? `⏸ ${L('inventory.restOnHold')}` : `✕ ${L('inventory.restCanceled')}`}{l.restNote ? ` · ${l.restNote}` : ''}</Text> : null}
+                    {!l.lineStatus && !d && l.restNote ? <Text style={styles.rowGroups}>📝 {l.restNote}</Text> : null}
                     {d && lk && d.amount ? <Text style={[styles.rowGroups, { color: st ? '#9ca3af' : '#a16207' }]}>{st ? L('inventory.settled', { v0: st.by }) : L('inventory.pending', { v0: lk === 'envelope' ? L('inventory.envelopeSettlement') : lk === 'transfer' ? L('inventory.transferWord') : L('inventory.parentBillingWord') })}</Text> : null}
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 5 }}>
-                    {buyOk && r.status !== 'rejected' && !r.stockApplied && !r.stocked?.[l.id] && (d
+                    {buyOk && r.status !== 'rejected' && !r.stockApplied && !r.stocked?.[l.id] && !l.lineStatus && (d
                       ? <TouchableOpacity onPress={() => run(() => undoSupplyLine(db, r.id, l.id))}><Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.cancelPurchase')}</Text></TouchableOpacity>
                       : isOpen ? <TouchableOpacity onPress={() => onComplete([l.id])} style={{ backgroundColor: '#059669', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{L('task.done')}</Text></TouchableOpacity> : null)}
+                    {(isAdmin || canBuy) && !d && l.originId && l.lineStatus !== 'canceled' && r.status !== 'rejected' ? (
+                      <View style={{ flexDirection: 'row', gap: 5 }}>
+                        {l.lineStatus === 'onhold'
+                          ? <TouchableOpacity onPress={() => lineAct(l, 'resume')} style={{ borderWidth: 1, borderColor: '#a7f3d0', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}><Text style={{ fontSize: 10, fontWeight: '700', color: '#047857' }}>{L('inventory.resumeBuying')}</Text></TouchableOpacity>
+                          : <TouchableOpacity onPress={() => lineAct(l, 'hold')} style={{ borderWidth: 1, borderColor: '#fde68a', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}><Text style={{ fontSize: 10, color: '#b45309' }}>{L('inventory.hold2')}</Text></TouchableOpacity>}
+                        <TouchableOpacity onPress={() => Alert.alert(L('common.cancel'), L('inventory.stopBuyingTheRemaining', { v0: `${l.name} ${l.quantity}${dataLabel(l.unit)}` }), [{ text: L('inventory.no'), style: 'cancel' }, { text: L('inventory.cancelIt'), style: 'destructive', onPress: () => lineAct(l, 'cancel') }])} style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}><Text style={{ fontSize: 10, color: '#6b7280' }}>{L('common.cancel')}</Text></TouchableOpacity>
+                      </View>
+                    ) : null}
                     {d && lk && d.amount && canSettleLine ? (st
                       ? (isAdmin || st.byId === userId) ? <TouchableOpacity onPress={() => run(() => settleSupplyLines(db, r.id, [l.id], null))}><Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.cancelSettlement')}</Text></TouchableOpacity> : null
                       : <TouchableOpacity onPress={() => run(async () => { await settleSupplyLines(db, r.id, [l.id], { uid: userId, name: userName }); notifySupply({ type: 'settled', requestId: r.id, lineIds: [l.id] }); })} style={{ backgroundColor: '#fef9c3', borderWidth: 1, borderColor: '#fde047', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>

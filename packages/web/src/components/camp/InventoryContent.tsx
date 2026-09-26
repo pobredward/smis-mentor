@@ -124,7 +124,7 @@ import {
   INVENTORY_CATEGORIES,
   INVENTORY_SUBCATEGORIES,
   INVENTORY_UNITS,
-  DEFAULT_INVENTORY_ITEMS, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse, supplyLineStockQty, setSupplyDecision, supplyDecisionOf, type SupplyDecision } from '@smis-mentor/shared';
+  DEFAULT_INVENTORY_ITEMS, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse, supplyLineStockQty, setSupplyDecision, supplyDecisionOf, type SupplyDecision, supplyLineGroups, supplyOpenLines, supplyLineOpen, supplyItemsSummary } from '@smis-mentor/shared';
 import type {
   InventoryItem,
   InventoryItemView,
@@ -262,7 +262,7 @@ export default function InventoryContent() {
     if (isAdmin) return requests.filter(r => r.status === 'requested' || needsStockIntake(r)).length + uncoveredPurchaseNeeds(needs, requests).length;
     const uid = userData?.userId;
     const buyLines = requests.filter(r => r.status === 'requested' && supplyBuyerOf(r, supplySettings)?.uid === uid)
-      .reduce((a, r) => a + r.items.length - supplyDoneCount(r), 0);
+      .reduce((a, r) => a + supplyOpenLines(r).length, 0);
     const settleTodo = supplySettleLines(requests).filter(sl => !sl.settled && sl.kind !== 'parent' && (sl.req.forType === 'student'
       ? !!userName && (sl.req.classMentor || students.find(st => st.studentId === sl.req.studentId)?.classMentor || '').trim() === userName.trim()
       : sl.req.requesterId === uid)).length;
@@ -1350,8 +1350,8 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
   const open = useMemo(() => requests.filter(r => isSupplyOpen(r.status)), [requests]);
   const mine = useMemo(() => requests.filter(r => r.requesterId === userId), [requests, userId]);
   // 내가 사 올 것 (관리자 포함, 담당이 나인 것만)
-  const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyApproved(r) && supplyBuyerOf(r, settings)?.uid === userId && !supplyAllDone(r)), [open, settings, userId]);
-  const myBuyLineCount = myBuys.reduce((a, r) => a + r.items.length - supplyDoneCount(r), 0);
+  const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyApproved(r) && supplyBuyerOf(r, settings)?.uid === userId && supplyOpenLines(r).length > 0), [open, settings, userId]);
+  const myBuyLineCount = myBuys.reduce((a, r) => a + supplyOpenLines(r).length, 0);
   const shopping = useMemo(() => supplyShoppingList(myBuys), [myBuys]);
   // 여러 요청에 걸쳐 같은 물품이 있으면 묶어서 (규격·단위가 다르면 따로 합산된다)
   const duplicated = useMemo(() => supplyShoppingList(open).filter(l => l.who.length >= 2), [open]);
@@ -1561,7 +1561,7 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
                   <span className="text-lg leading-none mt-0.5">{FOR_ICON[r.forType]}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-bold text-gray-900 truncate">{supplyForLabel(r)} <span className="text-[11px] font-normal text-gray-400">{r.requesterName} · {fmtDateTime(r.createdAt)}</span></p>
-                    <p className="text-[12px] text-gray-700 truncate">{r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${dataLabel(l.unit)}${l.groupName ? ` (${l.groupName})` : ''}`).join(', ')}</p>
+                    <p className="text-[12px] text-gray-700 truncate">{supplyItemsSummary(r, dataLabel)}</p>
                     <p className={`text-[10px] truncate ${r.status === 'onhold' ? 'text-amber-700' : r.status === 'requested' ? 'text-emerald-700' : 'text-gray-500'}`}>{status}</p>
                     {r.note && <p className="text-[10px] text-gray-500 truncate">📝 {r.note}</p>}
                   </div>
@@ -1612,7 +1612,9 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
 function SupplyLinesCard({ req: r, canBuy, onOpen, onComplete, onUndo }: {
   req: SupplyRequest; canBuy: boolean; onOpen: () => void; onComplete: (lineIds: string[]) => void; onUndo: (lineId: string) => void;
 }) {
-  const undone = r.items.filter(l => !r.done?.[l.id]).map(l => l.id);
+  const undone = supplyOpenLines(r).map(l => l.id);
+  // 보류·취소된 잔여 줄은 구매 목록에서 뺀다
+  const shown = r.items.filter(l => !l.lineStatus);
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <button onClick={onOpen} className="w-full text-left flex items-center gap-2 px-3 py-2 bg-gray-50">
@@ -1620,7 +1622,7 @@ function SupplyLinesCard({ req: r, canBuy, onOpen, onComplete, onUndo }: {
         <span className="text-[10px] text-gray-500">{supplyDoneCount(r)}/{r.items.length}</span>
       </button>
       {r.note && <p className="px-3 pt-1 text-[11px] text-gray-500">📝 {r.note}</p>}
-      {r.items.map(l => {
+      {shown.map(l => {
         const d = r.done?.[l.id];
         return (
           <div key={l.id} className="flex items-center gap-2 px-3 py-1.5 border-t border-gray-100">
@@ -1652,11 +1654,19 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
   const kind = supplySettleKind(r);
   const num = (s: string) => parseInt((s || '').replace(/[^0-9]/g, ''), 10) || 0;
   // 줄마다: 산 수량 × 단가 = 금액 (금액을 바로 적으면 단가를 거꾸로 계산)
-  type Row = { qty: string; price: string; amount: string; stockQty: string; stockEdited: boolean; group: string };
+  type Rest = '' | 'continue' | 'hold' | 'cancel';
+  type Row = { qty: string; price: string; amount: string; stockQty: string; stockEdited: boolean; group: string; rest: Rest; restNote: string };
+  const groupsOfReq = supplyLineGroups(r);
+  const groupOfLine = (l: SupplyRequestLine) => groupsOfReq.find(g => g.lines.some(x => x.id === l.id));
+  const rowState = (l: SupplyRequestLine) => {
+    const q = num(rows[l.id].qty);
+    return { q, over: q > l.quantity, short: q > 0 && q < l.quantity ? l.quantity - q : 0 };
+  };
   const itemOf = (l: SupplyRequestLine) => views.find(v => v.id === l.itemId);
   const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(lines.map(l => [l.id, {
     qty: String(l.quantity), price: '', amount: '',
     stockQty: String(supplyLineStockQty(l, itemOf(l))), stockEdited: false, group: l.groupId ?? groups[0]?.id ?? '',
+    rest: '' as Rest, restNote: '',
   }])));
   const setRow = (id: string, patch: Partial<Row>) => setRows(rs => {
     const cur = { ...rs[id], ...patch };
@@ -1673,6 +1683,8 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
   void userId; void userName;
   const submit = async () => {
     if (lines.some(l => !num(rows[l.id].qty))) { alert(L('inventory.enterTheQuantityBought')); return; }
+    if (lines.some(l => rowState(l).over)) { alert(L('inventory.youEnteredMoreThanThe')); return; }
+    if (lines.some(l => rowState(l).short > 0 && !rows[l.id].rest)) { alert(L('inventory.chooseWhatToDoWith')); return; }
     if (kind && lines.some(l => !num(rows[l.id].amount)) && !confirm(L('inventory.someItemsHaveNoAmount'))) return;
     if (kind === 'transfer' && lines.some(l => !l.parentBill) && !payTo.trim() && !confirm(L('inventory.theAccountToReceiveThe'))) return;
     setBusy(true);
@@ -1684,6 +1696,8 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
           payTo: kind === 'transfer' && !l.parentBill ? payTo.trim() || undefined : undefined,
           stockQty: isCamp && l.itemId && !r.stocked?.[l.id] ? num(rows[l.id].stockQty) : undefined,
           groupId: isCamp ? rows[l.id].group || undefined : undefined,
+          rest: rowState(l).short ? rows[l.id].rest || undefined : undefined,
+          restNote: rowState(l).short ? rows[l.id].restNote.trim() || undefined : undefined,
         })) });
       onClose();
     } catch (e) { console.error(e); alert(e instanceof Error && e.message ? e.message : L('inventory.couldNotMarkAsDone')); }
@@ -1701,7 +1715,6 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
           {lines.map(l => {
             const row = rows[l.id];
-            const short = l.quantity - num(row.qty);
             return (
               <div key={l.id} className="space-y-1">
                 <p className="text-[13px] font-semibold text-gray-900 truncate">{l.name} <span className="font-normal text-gray-500">{L('inventory.requestedN', { v0: l.quantity, v1: dataLabel(l.unit) })}</span><GuideTag line={l} /></p>
@@ -1712,7 +1725,31 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
                   <span>=</span>
                   <label className="flex items-center gap-1">{L('patient.amount')}<input inputMode="numeric" value={row.amount} onChange={e => setRow(l.id, { amount: e.target.value.replace(/[^0-9]/g, '') })} placeholder="0" className={`w-24 ${inp} ${kind && !num(row.amount) ? 'border-yellow-300 bg-yellow-50' : ''}`} />{L('patient.krw')}</label>
                 </div>
-                {short > 0 && num(row.qty) > 0 && <p className="text-[10px] text-amber-700">{L('inventory.shortTheRestStaysOn', { v0: short, v1: dataLabel(l.unit) })}</p>}
+                {(() => {
+                  const g = groupOfLine(l); const st = rowState(l); const u = dataLabel(l.unit);
+                  const prevDone = g ? g.received : 0;
+                  return (
+                    <div className="rounded-lg bg-gray-50 px-2 py-1.5 space-y-1">
+                      <p className="text-[10px] text-gray-600">{L('inventory.requestedEarlierNowLeft', { v0: `${g?.requested ?? l.quantity}${u}`, v1: `${prevDone}${u}`, v2: isCamp ? L('inventory.stocked') : L('inventory.bought'), v3: `${st.q}${u}`, v4: `${Math.max(0, l.quantity - st.q)}${u}` })}
+                        {isCamp && l.itemId && !r.stocked?.[l.id] && st.q > 0 ? <b className="text-emerald-700"> · {L('inventory.text6', { v0: groups.find(x => x.id === row.group)?.name ?? '', v1: `${num(row.stockQty)}${dataLabel(itemOf(l)?.unit ?? l.unit)}` })}</b> : null}</p>
+                      {st.over && <p className="text-[10px] font-semibold text-red-600">{L('inventory.youEnteredMoreThanThe')}</p>}
+                      {st.short > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-bold text-amber-800">{L('inventory.whatShouldHappenToThe', { v0: `${st.short}${u}` })}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {([['continue', L('inventory.keepBuying'), L('inventory.staysOnTheShoppingList')], ['hold', L('inventory.putOnHold'), L('inventory.removedFromTheListResume')], ['cancel', L('inventory.cancelTheRest'), L('inventory.noMoreNeeded')]] as const).map(([v, t, d]) => (
+                              <label key={v} className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] cursor-pointer ${row.rest === v ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-semibold' : 'border-gray-200 bg-white text-gray-600'}`} title={d}>
+                                <input type="radio" name={`rest-${l.id}`} checked={row.rest === v} onChange={() => setRow(l.id, { rest: v })} className="accent-emerald-600" />{t}
+                              </label>
+                            ))}
+                          </div>
+                          {row.rest && <p className="text-[10px] text-gray-500">{row.rest === 'continue' ? L('inventory.staysOnTheShoppingList') : row.rest === 'hold' ? L('inventory.removedFromTheListResume') : L('inventory.noMoreNeeded')}</p>}
+                          <input value={row.restNote} onChange={e => setRow(l.id, { restNote: e.target.value })} placeholder={L('inventory.noteOptionalWhy')} className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none bg-white" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {isCamp && (l.itemId && !r.stocked?.[l.id] ? (
                   <div className="flex items-center gap-1.5 text-[11px] text-emerald-800">
                     📥 {L('inventory.stockIn')}
@@ -1739,7 +1776,7 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
           <p className="text-right text-[12px] text-gray-600">{L('inventory.total')} <b className="text-gray-900">{fmtWon(total)}</b></p>
           <div className="flex gap-2">
             <button onClick={onClose} className="flex-1 py-2 text-xs text-gray-600 bg-gray-100 rounded-xl">{L('common.cancel')}</button>
-            <button onClick={submit} disabled={busy} className="flex-[2] py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{busy ? L('inventory.processing') : L('inventory.purchaseItems', { v0: lines.length })}</button>
+            <button onClick={submit} disabled={busy || lines.some(l => { const st = rowState(l); return !st.q || st.over || (st.short > 0 && !rows[l.id].rest); })} className="flex-[2] py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{busy ? L('inventory.processing') : (lines.some(l => rowState(l).short > 0) ? L(isCamp ? 'inventory.partialStockIn' : 'inventory.partialPurchase') : L(isCamp ? 'inventory.completeStock' : 'inventory.markPurchased'))}</button>
           </div>
         </div>
       </div>
@@ -2005,6 +2042,9 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
   };
   const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
     run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); if (status === 'rejected' || status === 'onhold') notifySupply({ type: 'status', requestId: r.id }); setMode('none'); setReason(''); });
+  // 잔여 줄 보류 · 구매 재개 · 남은 요청 취소 (서버)
+  const lineAct = (l: SupplyRequestLine, action: 'hold' | 'resume' | 'cancel') =>
+    run(async () => { await authenticatedPost('/api/inventory/supply-line', { requestId: r.id, lineId: l.id, action }); });
   const saveNote = () => run(async () => { await setSupplyRequestNote(db, r.id, note); });
   const decision = supplyDecisionOf(r);
   const decide = async (d: SupplyDecision, opts?: { note?: string; holdUntil?: string }) => {
@@ -2062,6 +2102,10 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
             </div>
           )}
           {/* 품목 (품목별 구매 완료 · 정산) */}
+          {/* 나눠 산 품목: 요청 · 입고 · 잔여 한눈에 */}
+          {supplyLineGroups(r).some(g => g.split) && (
+            <p className="text-[11px] text-gray-700 bg-amber-50 rounded-xl px-3 py-1.5">{supplyLineGroups(r).filter(g => g.split).map(g => supplyItemsSummary({ ...r, items: g.lines }, dataLabel)).join(' / ')}</p>
+          )}
           <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
             {r.items.map(l => {
               const d = r.done?.[l.id];
@@ -2075,12 +2119,23 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
                     <p className={`text-[13px] font-bold truncate ${d ? 'text-gray-500' : 'text-gray-900'}`}>{d ? '✓ ' : ''}{l.name} <span className="font-extrabold text-amber-700">{l.quantity}{dataLabel(l.unit)}</span>{isCamp && l.groupName ? <span className="text-[11px] font-normal text-emerald-700"> → {l.groupName}</span> : null}<GuideTag line={l} /></p>
                     {(l.memo || (isAdmin && stock)) && <p className="text-[10px] text-gray-500">{[l.memo, isAdmin && stock ? L('inventory.campStock3', { v0: stock.total, v1: dataLabel(stock.unit) }) : ''].filter(Boolean).join(' · ')}</p>}
                     {d && <p className="text-[10px] text-emerald-700">{d.amount ? fmtWon(d.amount) : L('inventory.noAmount')} · {d.by} · {fmtDateTime(d.at)}{d.payTo ? ` · 💸 ${d.payTo}` : ''}</p>}
+                    {l.lineStatus && <p className={`text-[10px] font-semibold ${l.lineStatus === 'onhold' ? 'text-amber-700' : 'text-gray-400'}`}>{l.lineStatus === 'onhold' ? `⏸ ${L('inventory.restOnHold')}` : `✕ ${L('inventory.restCanceled')}`}{l.restNote ? ` · ${l.restNote}` : ''}</p>}
+                    {!l.lineStatus && !d && l.restNote && <p className="text-[10px] text-gray-500">📝 {l.restNote}</p>}
                     {d && lk && d.amount ? <p className={`text-[10px] ${st ? 'text-gray-400' : 'text-yellow-700'}`}>{st ? L('inventory.settled', { v0: st.by }) : L('inventory.pending', { v0: lk === 'envelope' ? L('inventory.envelopeSettlement') : lk === 'transfer' ? L('inventory.transferWord') : L('inventory.parentBillingWord') })}</p> : null}
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    {buyOk && r.status !== 'rejected' && !r.stockApplied && !r.stocked?.[l.id] && (d
+                    {buyOk && r.status !== 'rejected' && !r.stockApplied && !r.stocked?.[l.id] && !l.lineStatus && (d
                       ? <button onClick={() => run(() => undoSupplyLine(db, r.id, l.id))} className="text-[10px] text-gray-400 hover:underline">{L('inventory.cancelPurchase')}</button>
                       : isOpen && <button onClick={() => onComplete([l.id])} className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">{L('task.done')}</button>)}
+                    {/* 부분 구매로 남은 줄: 보류 · 구매 재개 · 남은 요청 취소 (관리자·구매 담당) */}
+                    {(isAdmin || canBuy) && !d && l.originId && l.lineStatus !== 'canceled' && r.status !== 'rejected' && (
+                      <div className="flex gap-1">
+                        {l.lineStatus === 'onhold'
+                          ? <button onClick={() => lineAct(l, 'resume')} className="px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200 rounded">{L('inventory.resumeBuying')}</button>
+                          : <button onClick={() => lineAct(l, 'hold')} className="px-2 py-0.5 text-[10px] text-amber-700 border border-amber-200 rounded">{L('inventory.hold2')}</button>}
+                        <button onClick={() => { if (confirm(L('inventory.stopBuyingTheRemaining', { v0: `${l.name} ${l.quantity}${dataLabel(l.unit)}` }))) lineAct(l, 'cancel'); }} className="px-2 py-0.5 text-[10px] text-gray-500 border border-gray-200 rounded">{L('common.cancel')}</button>
+                      </div>
+                    )}
                     {d && lk && d.amount && canSettleLine ? (st
                       ? (isAdmin || st.byId === userId) && <button onClick={() => run(() => settleSupplyLines(db, r.id, [l.id], null))} className="text-[10px] text-gray-400 hover:underline">{L('inventory.cancelSettlement')}</button>
                       : <button onClick={() => run(async () => { await settleSupplyLines(db, r.id, [l.id], { uid: userId, name: userName }); notifySupply({ type: 'settled', requestId: r.id, lineIds: [l.id] }); })} className="px-2 py-0.5 text-[10px] font-bold text-yellow-900 bg-yellow-100 border border-yellow-300 rounded">{SUPPLY_SETTLE_LABELS[lk].icon} {lk === 'envelope' ? L('inventory.settle') : lk === 'transfer' ? L('push.howTransfer') : L('inventory.bill')} {L('task.done')}</button>) : null}
@@ -2089,8 +2144,8 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
               );
             })}
           </div>
-          {buyOk && isOpen && r.items.filter(l => !r.done?.[l.id]).length > 1 && (
-            <button onClick={() => onComplete(r.items.filter(l => !r.done?.[l.id]).map(l => l.id))} className="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl">{L('inventory.purchaseRemainingItemsAtOnce')}</button>
+          {buyOk && isOpen && supplyOpenLines(r).length > 1 && (
+            <button onClick={() => onComplete(supplyOpenLines(r).map(l => l.id))} className="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl">{L('inventory.purchaseRemainingItemsAtOnce')}</button>
           )}
           {settleLines.length > 0 && (
             <p className="text-[11px] text-gray-600 bg-yellow-50 rounded-xl px-3 py-2">

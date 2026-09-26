@@ -13,7 +13,7 @@ import { notifySupply } from '@/lib/supplyNotify';
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser(request);
   if (!auth) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  const body = (await request.json().catch(() => ({}))) as { requestId?: string; lines?: Array<{ lineId: string; quantity?: number; unitPrice?: number; amount?: number; payTo?: string; stockQty?: number; groupId?: string }> };
+  const body = (await request.json().catch(() => ({}))) as { requestId?: string; lines?: Array<{ lineId: string; quantity?: number; unitPrice?: number; amount?: number; payTo?: string; stockQty?: number; groupId?: string; rest?: 'continue' | 'hold' | 'cancel'; restNote?: string }> };
   const lines = Array.isArray(body.lines) ? body.lines.filter(l => l && typeof l.lineId === 'string').slice(0, 100) : [];
   if (!body.requestId || lines.length === 0) return NextResponse.json({ error: '요청 정보가 필요합니다.' }, { status: 400 });
   try {

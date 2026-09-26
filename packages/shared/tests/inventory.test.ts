@@ -98,3 +98,31 @@ describe('구매 완료 입고 수량 · 환자 위치 버튼', () => {
     expect(patientPlaceOptions(null)).toEqual([]);
   });
 });
+
+describe('부분 구매 · 잔여 줄', () => {
+  it('요청 3 중 2 구매 + 잔여 1 보류 → 묶음 계산, 구매 목록에서 빠짐, 부분 입고·잔여 보류', async () => {
+    const m = await import('../src/types/inventory');
+    const { setCurrentLocale } = await import('../src/i18n');
+    setCurrentLocale('ko');
+    const r = {
+      status: 'requested' as const, forType: 'camp' as const, approvedAt: ts,
+      items: [
+        { id: 'a', name: '부루펜', quantity: 2, unit: '통' },
+        { id: 'a-r1', name: '부루펜', quantity: 1, unit: '통', originId: 'a', lineStatus: 'onhold' as const },
+      ],
+      done: { a: { at: ts, by: 'b', byId: 'u', quantity: 2 } },
+    };
+    const g = m.supplyLineGroups(r)[0];
+    expect([g.requested, g.received, g.held, g.remaining]).toEqual([3, 2, 1, 0]);
+    expect(m.supplyOpenLines(r).length).toBe(0);
+    expect(m.supplyProgress(r).key).toBe('partialHold');
+    expect(m.supplyItemsSummary(r)).toBe('부루펜 요청 3통 · 입고 2통 · 보류 1통');
+    expect(m.supplyAllSettledLines(r)).toBe(false);
+    const canceled = { ...r, items: [r.items[0], { ...r.items[1], lineStatus: 'canceled' as const }] };
+    expect(m.supplyAllSettledLines(canceled)).toBe(true);
+    const cont = { ...r, items: [r.items[0], { ...r.items[1], lineStatus: undefined }] };
+    expect(m.supplyOpenLines(cont).map(l => l.id)).toEqual(['a-r1']);
+    expect(m.supplyShoppingList([cont]).map(s => s.total)).toEqual([1]);
+    expect(m.supplyShoppingList([r]).length).toBe(0);
+  });
+});

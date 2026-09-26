@@ -574,6 +574,12 @@ export interface SupplyRequestLine {
   channel?: string;
   /** 학부모님께 따로 청구 — 용돈봉투·송금 정산 대신 관리자가 청구 */
   parentBill?: boolean;
+  /** 부분 구매로 생긴 잔여 줄: 원래 줄 ID (같은 품목 묶음 — 요청·입고·잔여 수량 계산) */
+  originId?: string;
+  /** 잔여 줄 상태 — 'onhold' 보류(구매 목록에서 빠짐, 구매 재개 가능) · 'canceled' 남은 요청 취소 */
+  lineStatus?: 'onhold' | 'canceled';
+  /** 잔여 처리 메모 (부분 구매 때 남긴 이유) */
+  restNote?: string;
 }
 
 /**
@@ -720,6 +726,58 @@ export function supplyBuyerOf(r: Pick<SupplyRequest, 'buyerId' | 'buyerName'>, s
 export const supplyLineDone = (r: Pick<SupplyRequest, 'done'>, lineId: string): SupplyLineDone | undefined => r.done?.[lineId];
 export const supplyDoneCount = (r: Pick<SupplyRequest, 'done' | 'items'>): number => r.items.filter(l => r.done?.[l.id]).length;
 export const supplyAllDone = (r: Pick<SupplyRequest, 'done' | 'items'>): boolean => r.items.length > 0 && r.items.every(l => r.done?.[l.id]);
+/** 아직 사야 하는 줄 — 구매 전이고 보류·취소가 아닌 것 */
+export const supplyLineOpen = (r: Pick<SupplyRequest, 'done'>, l: Pick<SupplyRequestLine, 'id' | 'lineStatus'>): boolean => !r.done?.[l.id] && !l.lineStatus;
+export const supplyOpenLines = (r: Pick<SupplyRequest, 'done' | 'items'>): SupplyRequestLine[] => r.items.filter(l => supplyLineOpen(r, l));
+/** 모든 줄이 끝났는가 (구매 완료 또는 남은 요청 취소) — 보류 줄이 있으면 아님 */
+export const supplyAllSettledLines = (r: Pick<SupplyRequest, 'done' | 'items'>): boolean =>
+  r.items.length > 0 && r.items.every(l => r.done?.[l.id] || l.lineStatus === 'canceled');
+
+/** 같은 품목 묶음 (원래 줄 + 부분 구매로 생긴 잔여 줄) — 요청 · 입고(구매) · 잔여 · 보류 · 취소 수량 */
+export interface SupplyLineGroup {
+  rootId: string;
+  name: string;
+  unit: string;
+  lines: SupplyRequestLine[];
+  requested: number;
+  received: number;
+  remaining: number;
+  held: number;
+  canceled: number;
+  split: boolean;
+}
+export function supplyLineGroups(r: Pick<SupplyRequest, 'done' | 'items'>): SupplyLineGroup[] {
+  const map = new Map<string, SupplyLineGroup>();
+  r.items.forEach(l => {
+    const root = l.originId ?? l.id;
+    let g = map.get(root);
+    if (!g) { g = { rootId: root, name: l.name, unit: l.unit, lines: [], requested: 0, received: 0, remaining: 0, held: 0, canceled: 0, split: false }; map.set(root, g); }
+    g.lines.push(l);
+    g.requested += l.quantity;
+    const d = r.done?.[l.id];
+    if (d) g.received += d.quantity ?? l.quantity;
+    else if (l.lineStatus === 'canceled') g.canceled += l.quantity;
+    else if (l.lineStatus === 'onhold') g.held += l.quantity;
+    else g.remaining += l.quantity;
+  });
+  map.forEach(g => { g.split = g.lines.length > 1; });
+  return [...map.values()];
+}
+/** 목록 한 줄 — 나눠 산 품목은 "부루펜 요청 2통 · 입고 1통 · 잔여 1통(보류)" */
+export function supplyItemsSummary(r: Pick<SupplyRequest, 'done' | 'items' | 'forType'>, dataLabelFn: (v: string) => string = v => v): string {
+  return supplyLineGroups(r).map(g => {
+    const u = dataLabelFn(g.unit);
+    if (!g.split) {
+      const l = g.lines[0];
+      return `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${u}${l.groupName ? ` (${l.groupName})` : ''}`;
+    }
+    const parts = [L('inventory.grpRequested', { v0: g.requested, v1: u }), L(r.forType === 'camp' ? 'inventory.grpReceived' : 'inventory.grpBought', { v0: g.received, v1: u })];
+    if (g.remaining) parts.push(L('inventory.grpRemaining', { v0: g.remaining, v1: u }));
+    if (g.held) parts.push(L('inventory.grpHeld', { v0: g.held, v1: u }));
+    if (g.canceled) parts.push(L('inventory.grpCanceled', { v0: g.canceled, v1: u }));
+    return `${g.name} ${parts.join(' · ')}`;
+  }).join(', ');
+}
 export const supplyDoneTotal = (r: Pick<SupplyRequest, 'done'>): number => Object.values(r.done ?? {}).reduce((a, d) => a + (d.amount ?? 0), 0);
 
 /** 정산 방식: 학생 = 담임이 용돈봉투에서 / 선생님 = 본인 송금 / 캠프 공용 = 없음 */
@@ -840,7 +898,7 @@ export interface SupplyShoppingLine { key: string; itemId?: string; name: string
 export function supplyShoppingList(requests: SupplyRequest[]): SupplyShoppingLine[] {
   const map = new Map<string, SupplyShoppingLine>();
   requests.forEach(r => (r.items ?? []).forEach(l => {
-    if (r.done?.[l.id] || !l.name?.trim() || !(l.quantity > 0)) return;
+    if (!supplyLineOpen(r, l) || !l.name?.trim() || !(l.quantity > 0)) return;
     const unit = (l.unit || '개').trim();
     const key = `${l.itemId ?? `name:${l.name.trim()}`}|${unit}`;
     let line = map.get(key);
@@ -856,11 +914,12 @@ export function supplyShoppingList(requests: SupplyRequest[]): SupplyShoppingLin
  * 관리자 승인·품목별 완료·입고 반영 여부를 합쳐 "검토 중 → 승인 → 구매 중 → 입고 완료" 로 보여준다.
  * (기존 데이터를 바꾸지 않기 위해 status 값 자체는 그대로 둔다)
  */
-export type SupplyProgressKey = 'waiting' | 'approved' | 'buying' | 'bought' | 'received' | 'onhold' | 'rejected';
+export type SupplyProgressKey = 'waiting' | 'approved' | 'buying' | 'partialHold' | 'bought' | 'received' | 'onhold' | 'rejected';
 export const SUPPLY_PROGRESS: Record<SupplyProgressKey, { label: string; step: number }> = localizeLabels({
   waiting:  { label: '검토 중', step: 1 },
   approved: { label: '승인', step: 2 },
   buying:   { label: '구매 중', step: 3 },
+  partialHold: { label: '부분 입고 · 잔여 보류', step: 3 },
   bought:   { label: '구매 완료', step: 3 },
   received: { label: '입고 완료', step: 4 },
   onhold:   { label: '보류', step: 0 },
@@ -876,7 +935,8 @@ export function supplyProgress(
   else if (r.status === 'purchased') {
     // 캠프 공용은 실제 입고까지 해야 완료
     key = r.forType === 'camp' ? (r.stockApplied ? 'received' : 'bought') : 'received';
-  } else if (supplyDoneCount(r) > 0) key = 'buying';
+  } else if (supplyOpenLines(r).length === 0 && r.items.some(l => l.lineStatus === 'onhold')) key = 'partialHold';
+  else if (supplyDoneCount(r) > 0) key = 'buying';
   else if (supplyApproved(r)) key = 'approved';
   else key = 'waiting';
   return { key, ...SUPPLY_PROGRESS[key] };

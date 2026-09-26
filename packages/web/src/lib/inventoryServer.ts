@@ -548,7 +548,7 @@ async function runMultiUseOp(
  */
 export async function completeSupplyLinesServer(
   uid: string,
-  input: { requestId: string; lines: Array<{ lineId: string; quantity?: number; unitPrice?: number; amount?: number; payTo?: string; stockQty?: number; groupId?: string }> }
+  input: { requestId: string; lines: Array<{ lineId: string; quantity?: number; unitPrice?: number; amount?: number; payTo?: string; stockQty?: number; groupId?: string; rest?: 'continue' | 'hold' | 'cancel'; restNote?: string }> }
 ): Promise<{ stocked: number; split: number }> {
   const db = getAdminFirestore();
   const requestId = String(input.requestId ?? '');
@@ -576,7 +576,7 @@ export async function completeSupplyLinesServer(
     if (r.status === 'rejected') throw new StockOpError(400, '반려된 요청입니다.');
     if (!r.approvedAt) throw new StockOpError(400, '관리자 승인 전인 요청입니다.');
     const now = admin.firestore.Timestamp.now();
-    type Line = { id: string; itemId?: string; name: string; quantity: number; unit?: string; groupId?: string; groupName?: string; [k: string]: unknown };
+    type Line = { id: string; itemId?: string; name: string; quantity: number; unit?: string; groupId?: string; groupName?: string; originId?: string; lineStatus?: string; restNote?: string; [k: string]: unknown };
     const items = (Array.isArray(r.items) ? r.items : []).map((l: Line) => ({ ...l })) as Line[];
     const done = { ...(r.done ?? {}) } as Record<string, { amount?: number }>;
     const stocked = { ...(r.stocked ?? {}) } as Record<string, unknown>;
@@ -588,14 +588,19 @@ export async function completeSupplyLinesServer(
       const idx = items.findIndex(l => l.id === e.lineId);
       if (idx < 0) return;
       const line = items[idx];
-      if (done[line.id]) return; // 이미 완료된 줄
+      if (done[line.id] || line.lineStatus) return; // 이미 완료됐거나 보류·취소된 줄
       const want = Math.max(0, Math.round(Number(line.quantity) || 0));
       const bought = e.quantity == null ? want : Math.max(0, Math.round(Number(e.quantity) || 0));
       if (bought <= 0) return;
-      // 덜 샀으면: 이 줄 = 산 수량, 남은 수량은 새 줄로
+      if (bought > want) throw new StockOpError(400, `${line.name}: 남은 요청 수량(${want})보다 많이 입력했습니다.`);
+      // 덜 샀으면: 이 줄 = 산 수량, 남은 수량은 같은 요청 안의 잔여 줄로 (계속 구매 / 보류 / 남은 요청 취소)
       if (bought < want) {
-        const rest = { ...line, id: `${line.id}-r${Date.now().toString(36)}${i}`, quantity: want - bought };
-        delete (rest as Record<string, unknown>).stockedQty;
+        const how = e.rest === 'hold' ? 'onhold' : e.rest === 'cancel' ? 'canceled' : undefined;
+        const note = String(e.restNote ?? '').trim().slice(0, 300);
+        const rest: Line = { ...line, id: `${line.id}-r${Date.now().toString(36)}${i}`, quantity: want - bought, originId: line.originId ?? line.id };
+        delete rest.lineStatus; delete rest.restNote;
+        if (how) rest.lineStatus = how;
+        if (note) rest.restNote = note;
         items[idx] = { ...line, quantity: bought };
         items.splice(idx + 1, 0, rest);
         split++;
@@ -628,14 +633,66 @@ export async function completeSupplyLinesServer(
     moves.forEach(m => tx.set(db.collection('inventoryMovements').doc(), m));
     const total = Object.values(done).reduce((a, d) => a + (Number(d?.amount) || 0), 0);
     update.amount = total > 0 ? total : null;
-    if (items.length > 0 && items.every(l => done[l.id]) && r.status !== 'purchased') {
+    // 모든 줄이 구매 완료 또는 남은 요청 취소면 요청 끝 (보류 줄이 있으면 계속 진행 중)
+    if (items.length > 0 && items.every(l => done[l.id] || l.lineStatus === 'canceled') && r.status !== 'purchased') {
       Object.assign(update, { status: 'purchased', handledBy: byName, handledAt: now, statusNote: null, holdUntil: null });
     }
-    const stockLines = items.filter(l => l.itemId);
+    const stockLines = items.filter(l => l.itemId && l.lineStatus !== 'canceled');
     if (isCamp && stockLines.length > 0 && stockLines.every(l => stocked[l.id])) {
       Object.assign(update, { stockApplied: true, stockAppliedAt: now, stockAppliedBy: byName });
     }
     tx.update(ref, update);
     return { stocked: moves.length, split };
   });
+}
+
+/**
+ * 잔여 줄 상태 바꾸기 — 보류 / 구매 재개 / 남은 요청 취소 (관리자 또는 구매 담당)
+ * 이미 산 줄은 바꿀 수 없다. 취소로 모든 줄이 끝나면 요청을 구매 완료로 닫는다.
+ */
+export async function setSupplyLineStateServer(
+  uid: string,
+  input: { requestId: string; lineId: string; action: 'hold' | 'resume' | 'cancel'; note?: string }
+): Promise<{ ok: true }> {
+  const db = getAdminFirestore();
+  const requestId = String(input.requestId ?? '');
+  if (!requestId || requestId.includes('/')) throw new StockOpError(400, '요청 정보가 필요합니다.');
+  if (!['hold', 'resume', 'cancel'].includes(input.action)) throw new StockOpError(400, '알 수 없는 작업입니다.');
+  const user = (await db.doc(`users/${uid}`).get()).data() as { name?: string; role?: string } | undefined;
+  if (!user || !isCampStaffRole(user.role)) throw new StockOpError(403, '캠프 스태프만 사용할 수 있습니다.');
+  const byName = String(user.name ?? '').trim() || '이름 없음';
+  const ref = db.doc(`supplyRequests/${requestId}`);
+  const pre = (await ref.get()).data();
+  if (!pre) throw new StockOpError(404, '요청이 삭제되었습니다.');
+  const settings = (await db.doc(`supplySettings/${pre.campCode}`).get()).data();
+  const buyerUid: string | undefined = pre.buyerId || settings?.defaultBuyerId;
+  if (user.role !== 'admin' && buyerUid !== uid) throw new StockOpError(403, '관리자나 구매 담당만 바꿀 수 있습니다.');
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    const r = snap.data();
+    if (!r) throw new StockOpError(404, '요청이 삭제되었습니다.');
+    const items = (Array.isArray(r.items) ? r.items : []).map((l: Record<string, unknown>) => ({ ...l })) as Array<Record<string, unknown> & { id: string; itemId?: string; lineStatus?: string }>;
+    const line = items.find(l => l.id === input.lineId);
+    if (!line) throw new StockOpError(404, '품목을 찾을 수 없습니다.');
+    if (r.done?.[line.id]) throw new StockOpError(400, '이미 산 품목입니다.');
+    const now = admin.firestore.Timestamp.now();
+    const note = String(input.note ?? '').trim().slice(0, 300);
+    if (input.action === 'resume') { delete line.lineStatus; }
+    else line.lineStatus = input.action === 'hold' ? 'onhold' : 'canceled';
+    if (note) line.restNote = note;
+    line.lineStatusBy = byName; line.lineStatusAt = now;
+    const update: Record<string, unknown> = { items, updatedAt: now };
+    const done = (r.done ?? {}) as Record<string, unknown>;
+    if (items.every(l => done[l.id] || l.lineStatus === 'canceled')) {
+      if (r.status !== 'purchased') Object.assign(update, { status: 'purchased', handledBy: byName, handledAt: now, statusNote: null, holdUntil: null });
+      const stocked = (r.stocked ?? {}) as Record<string, unknown>;
+      const stockLines = items.filter(l => l.itemId && l.lineStatus !== 'canceled');
+      if (r.forType === 'camp' && stockLines.every(l => stocked[l.id])) Object.assign(update, { stockApplied: true, stockAppliedAt: now, stockAppliedBy: byName });
+    } else if (r.status === 'purchased') {
+      // 구매 재개로 다시 살 줄이 생기면 진행 중으로
+      Object.assign(update, { status: 'requested', stockApplied: false });
+    }
+    tx.update(ref, update);
+  });
+  return { ok: true };
 }
