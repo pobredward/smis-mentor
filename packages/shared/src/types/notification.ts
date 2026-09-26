@@ -78,9 +78,9 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   },
   {
     key: 'supplyRequest', group: 'supply',
-    label: '새 구매 요청', labelEn: 'New supply request',
-    desc: '내가 구매 담당이거나 담당이 없을 때 새 요청이 올라오면',
-    descEn: 'A new request when you are the buyer (or no buyer is set)',
+    label: '새 구매 요청 (승인 필요)', labelEn: 'New supply request (needs approval)',
+    desc: '새 물품 요청이 올라와 승인이 필요할 때 (관리자)',
+    descEn: 'A new request that needs your approval (admins)',
     visible: everyone,
   },
   {
@@ -93,15 +93,8 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   {
     key: 'supplyProgress', group: 'supply',
     label: '내 요청 진행', labelEn: 'My request updates',
-    desc: '내가 올린 요청이 구매 완료 · 반려 · 보류되었을 때',
-    descEn: 'When your request is purchased, rejected or put on hold',
-    visible: everyone,
-  },
-  {
-    key: 'supplyComment', group: 'supply',
-    label: '요청 댓글', labelEn: 'Request comments',
-    desc: '내 요청이나 내가 담당인 요청에 메모가 달렸을 때',
-    descEn: 'A comment on your request or one you handle',
+    desc: '내가 올린 요청이 승인 · 구매 완료 · 반려 · 보류되었을 때',
+    descEn: 'When your request is approved, purchased, rejected or put on hold',
     visible: everyone,
   },
   {

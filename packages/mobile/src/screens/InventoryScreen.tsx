@@ -55,8 +55,9 @@ import {
   supplyShoppingList,
   supplyBuyerCandidates,
   fmtWon,
-  addSupplyComment,
-  deleteSupplyComment,
+  setSupplyRequestNote,
+  approveSupplyRequests,
+  supplyApproved,
   deleteSupplyRequest,
   isSupplyOpen,
   supplyForLabel,
@@ -125,7 +126,7 @@ import {
   lostGroupManagers,
   MISSED_STATE_LABELS,
   INVENTORY_USAGE_ORDER,
-  suggestedUsages, dataLabel, L, isEnglishUI } from '@smis-mentor/shared';
+  suggestedUsages, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse } from '@smis-mentor/shared';
 import { getUsersByJobCodeId } from '../services/userService';
 import type {
   CampCode,
@@ -157,8 +158,7 @@ import type {
   LostNotifyTarget,
   NotifyUserLike,
   MovementFilterKey,
-  InventoryPackage,
-} from '@smis-mentor/shared';
+  InventoryPackage, InventoryConsumption } from '@smis-mentor/shared';
 import { fmtHoldDate, supplyStatusLine } from '@smis-mentor/shared';
 
 type SubTab = 'stock' | 'request' | 'purchase' | 'movement' | 'lost' | 'manage';
@@ -470,7 +470,7 @@ export function InventoryScreen() {
               <StockRowMobile view={v} groups={groups} focusGroupId={groupFilter} showStatus={perm.isStockManager}
                 isShort={shortItems.has(v.id)} isLast={index === section.data.length - 1}
                 onPress={() => { setQuickUseGroupId(undefined); setSelectedId(v.id); }}
-                onQuickUse={groupFilter && groupFilter in v.stocks ? () => { setQuickUseGroupId(groupFilter); setSelectedId(v.id); } : undefined} />
+                onQuickUse={groupFilter && groupFilter in v.stocks && !isMedicineItem(v) ? () => { setQuickUseGroupId(groupFilter); setSelectedId(v.id); } : undefined} />
             )}
           />
         </View>
@@ -525,7 +525,7 @@ const StockRowMobile = React.memo(function StockRowMobile({ view: v, groups, foc
 }) {
   const qty = focusGroupId ? getGroupStock(v, focusGroupId) : v.total;
   const min = focusGroupId ? getMinStock(v, focusGroupId) : 0;
-  const low = focusGroupId ? (qty < 0 || (min > 0 && qty < min)) : isShort;
+  const low = focusGroupId ? (qty < 0 || (min > 0 && getAvailableStock(v, focusGroupId) < min)) : isShort;
   // 일반 멘토에게는 부족 상태를 표시하지 않는다 (실사 필요한 음수만 빨갛게)
   const lowShown = showStatus ? low : qty < 0;
   const thumb = itemThumb(v);
@@ -658,7 +658,7 @@ function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId,
 
   const open = useMemo(() => requests.filter(r => isSupplyOpen(r.status)), [requests]);
   const mine = useMemo(() => requests.filter(r => r.requesterId === userId), [requests, userId]);
-  const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyBuyerOf(r, settings)?.uid === userId && !supplyAllDone(r)), [open, settings, userId]);
+  const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyApproved(r) && supplyBuyerOf(r, settings)?.uid === userId && !supplyAllDone(r)), [open, settings, userId]);
   const myBuyLineCount = myBuys.reduce((a, r) => a + r.items.length - supplyDoneCount(r), 0);
   const shopping = useMemo(() => supplyShoppingList(myBuys), [myBuys]);
   // 여러 요청에 걸쳐 같은 물품이 있으면 묶어서 (규격·단위가 다르면 따로 합산된다)
@@ -877,6 +877,17 @@ function SupplyRequestTabMobile({ deepLink, onDeepLinkDone, campCode, jobCodeId,
                 )}
               </View>
             )}
+            {filter === 'open' && isAdmin && (() => {
+              const pending = open.filter(r => r.status === 'requested' && !supplyApproved(r));
+              return pending.length > 1 ? (
+                <TouchableOpacity onPress={() => Alert.alert(L('inventory.approveAllUnderReview', { v0: pending.length }), L('inventory.approveAllRequestsUnderReview', { v0: pending.length }), [
+                  { text: L('common.cancel'), style: 'cancel' },
+                  { text: L('inventory.approve'), onPress: async () => { try { await approveSupplyRequests(db, pending.map(r => r.id), { uid: userId, name: userName }); pending.forEach(r => notifySupply({ type: 'approved', requestId: r.id })); } catch (e) { console.error(e); failAlert(); } } },
+                ])} style={[styles.btn, { backgroundColor: '#4f46e5', paddingVertical: 9 }]}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{L('inventory.approveAllUnderReview', { v0: pending.length })}</Text>
+                </TouchableOpacity>
+              ) : null;
+            })()}
             {filter === 'open' && <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.otherTeachersRequestsAreShown2')}</Text>}
             {sectionsOf(list, r => r).map(sec => (
               <View key={sec.key} style={{ gap: 4 }}>
@@ -953,7 +964,6 @@ function SupplyRowMobile({ req: r, buyer, isLast, onPress }: { req: SupplyReques
   const c = PROGRESS_COLOR[pg.key] ?? SUPPLY_STATUS_COLOR[r.status];
   const what = r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${dataLabel(l.unit)}${l.groupName ? ` (${l.groupName})` : ''}`).join(', ');
   const status = supplyStatusLine(r, buyer);
-  const last = r.comments?.[r.comments.length - 1];
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={[styles.row, isLast && { borderBottomWidth: 0 }, { alignItems: 'flex-start' }]}>
       <Text style={{ fontSize: 18, marginTop: 1 }}>{FOR_ICON[r.forType]}</Text>
@@ -961,7 +971,7 @@ function SupplyRowMobile({ req: r, buyer, isLast, onPress }: { req: SupplyReques
         <Text style={styles.rowName} numberOfLines={1}>{supplyForLabel(r)} <Text style={styles.rowMeta}>{r.requesterName} · {fmtDateTime(r.createdAt)}</Text></Text>
         <Text style={[styles.rowGroups, { color: '#374151' }]} numberOfLines={2}>{what || L('inventory.noItems2')}</Text>
         <Text style={[styles.rowGroups, { fontSize: 10, color: r.status === 'onhold' ? '#b45309' : r.status === 'requested' ? '#047857' : '#6b7280' }]} numberOfLines={1}>{status}</Text>
-        {last ? <Text style={[styles.rowGroups, { fontSize: 10 }]} numberOfLines={1}>💬 {r.comments!.length} · <Text style={{ fontWeight: '700', color: last.admin ? '#4338ca' : '#374151' }}>{last.name}</Text> {last.text}</Text> : null}
+        {r.note ? <Text style={[styles.rowGroups, { fontSize: 10 }]} numberOfLines={1}>📝 {r.note}</Text> : null}
       </View>
       <View style={{ backgroundColor: c.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
         <Text style={{ fontSize: 9, fontWeight: '700', color: c.fg }}>{pg.label}</Text>
@@ -1130,7 +1140,9 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
 }) {
   const [openGuide, setOpenGuide] = useState<string | null>(null);
   const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-  const [forType, setForType] = useState<SupplyForType>(existing?.forType ?? (prefill?.forType === 'camp' ? 'camp' : 'student'));
+  const [forType, setForType] = useState<SupplyForType>(existing?.forType ?? prefill?.forType ?? 'student');
+  // "나도 필요해요": 같은 품목 그대로 — 품목 검색·추가 없이 수량·단위만
+  const metoo = !!prefill && !existing;
   const defaultGroup = groups[0];
   const [student, setStudent] = useState<{ id?: string; name: string; cls?: string; mentor?: string; code?: string } | null>(
     existing?.studentName ? { id: existing.studentId, name: existing.studentName, cls: existing.studentClass, mentor: existing.classMentor, code: existing.studentClassCode } : null);
@@ -1140,7 +1152,6 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
   const [q, setQ] = useState('');
   const [note, setNote] = useState(existing?.note ?? '');
   const [busy, setBusy] = useState(false);
-  const UNITS = ['개', '박스', '통', '팩', '병', '세트'];
 
   const studentResults = useMemo(() => {
     const t = studentQuery.trim();
@@ -1195,7 +1206,7 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
     <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.modalCard}>
         <View style={styles.modalHeader}>
-          <Text style={[styles.modalTitle, { flex: 1 }]}>{existing ? L('inventory.editRequest') : prefill ? L('inventory.iNeedThisToo') : L('inventory.requestNeededItems')}</Text>
+          <Text style={[styles.modalTitle, { flex: 1 }]}>{existing ? L('inventory.editRequest') : metoo ? L('inventory.additionalRequest', { v0: lines.length > 1 ? L('inventory.andMore', { v0: lines[0].name, v1: lines.length - 1 }) : (lines[0]?.name ?? '') }) : L('inventory.requestNeededItems')}</Text>
           <TouchableOpacity onPress={onClose} style={{ padding: 4 }}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={{ padding: 14, gap: 14 }} keyboardShouldPersistTaps="handled">
@@ -1235,11 +1246,11 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
 
           <View style={{ gap: 6 }}>
             <Text style={styles.formLabel}>{L('inventory.whatDoYouNeed')} <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{lines.length}{L('inventory.itemsAddedTheBuyerDecides')}</Text></Text>
-            <View style={styles.searchBox}>
+            {!metoo && <View style={styles.searchBox}>
               <Ionicons name="search" size={14} color="#9ca3af" />
               <TextInput value={q} onChangeText={setQ} placeholder={L('inventory.searchItemsEGBandage')} placeholderTextColor="#9ca3af" style={styles.searchInput} />
               {q ? <TouchableOpacity onPress={() => setQ('')}><Ionicons name="close-circle" size={15} color="#cbd5e1" /></TouchableOpacity> : null}
-            </View>
+            </View>}
             {q.trim() !== '' && guideResults.length > 0 && (
               <View style={[styles.listBox, { borderColor: '#fdba74' }]}>
                 {guideResults.map((g, gi) => (
@@ -1296,13 +1307,13 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
                       <TouchableOpacity onPress={() => setLines(ls => ls.filter(x => x.id !== l.id))} style={{ paddingLeft: 2 }}><Ionicons name="trash-outline" size={16} color="#9ca3af" /></TouchableOpacity>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
-                      {[...new Set([l.unit, ...UNITS])].map(u => (
+                      {supplyUnitChoices(l.unit).map(u => (
                         <TouchableOpacity key={u} onPress={() => upd(l.id, { unit: u })} style={[styles.miniChip, l.unit === u && styles.miniChipAmber]}>
-                          <Text style={[styles.miniChipText, l.unit === u && { color: '#92400e' }]}>{u}</Text>
+                          <Text style={[styles.miniChipText, l.unit === u && { color: '#92400e' }]}>{dataLabel(u)}</Text>
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
-                    <TextInput value={l.memo ?? ''} onChangeText={v => upd(l.id, { memo: v || undefined })} placeholder={L('inventory.noteColorSizeEtc')} placeholderTextColor="#9ca3af" style={[styles.input, { paddingVertical: 4, fontSize: 11 }]} />
+                    {!metoo && <TextInput value={l.memo ?? ''} onChangeText={v => upd(l.id, { memo: v || undefined })} placeholder={L('inventory.noteColorSizeEtc')} placeholderTextColor="#9ca3af" style={[styles.input, { paddingVertical: 4, fontSize: 11 }]} />}
                     {forType === 'camp' && (l.itemId ? (
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4, alignItems: 'center' }}>
                         <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('inventory.restockGroup')}</Text>
@@ -1324,7 +1335,7 @@ function SupplyRequestFormMobile({ campCode, existing, prefill, groups, guides, 
 
           <View>
             <Text style={styles.formLabel}>{L('common.memo')} <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{L('patient.optional')}</Text></Text>
-            <TextInput value={note} onChangeText={setNote} multiline placeholder={L('inventory.eGNeededByTonight')} placeholderTextColor="#9ca3af" style={[styles.input, { minHeight: 44 }]} />
+            <TextInput value={note} onChangeText={setNote} multiline style={[styles.input, { minHeight: 44 }]} />
           </View>
 
           <TouchableOpacity onPress={submit} disabled={busy} style={[styles.btn, { backgroundColor: '#059669', paddingVertical: 12, opacity: busy ? 0.5 : 1 }]}>
@@ -1348,7 +1359,10 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
   const [mode, setMode] = useState<'none' | 'reject' | 'hold'>('none');
   const [reason, setReason] = useState('');
   const [holdUntil, setHoldUntil] = useState(addDaysStr(7));
-  const [comment, setComment] = useState('');
+  const [note, setNote] = useState(r.note ?? '');
+  const approved = supplyApproved(r);
+  const buyOk = canBuy && approved;
+  const canEditNote = isAdmin || (mine && isOpen);
   const [busy, setBusy] = useState(false);
   const c = SUPPLY_STATUS_COLOR[r.status];
   const run = async (fn: () => Promise<void>) => {
@@ -1358,7 +1372,8 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
   };
   const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
     run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); if (status === 'rejected' || status === 'onhold') notifySupply({ type: 'status', requestId: r.id }); setMode('none'); setReason(''); });
-  const send = () => run(async () => { await addSupplyComment(db, r.id, { uid: userId, name: userName, text: comment, admin: isAdmin }); notifySupply({ type: 'comment', requestId: r.id }); setComment(''); });
+  const saveNote = () => run(async () => { await setSupplyRequestNote(db, r.id, note); });
+  const approve = () => run(async () => { await approveSupplyRequests(db, [r.id], { uid: userId, name: userName }); notifySupply({ type: 'approved', requestId: r.id }); });
   const canIntake = isAdmin && isCamp && !r.stockApplied && r.status !== 'rejected';
   const [intake, setIntake] = useState(false);
   const [intakeLines, setIntakeLines] = useState(() => r.items.filter(l => l.itemId).map(l => ({
@@ -1421,7 +1436,7 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
                     {d && lk && d.amount ? <Text style={[styles.rowGroups, { color: st ? '#9ca3af' : '#a16207' }]}>{st ? L('inventory.settled', { v0: st.by }) : L('inventory.pending', { v0: lk === 'envelope' ? L('inventory.envelopeSettlement') : lk === 'transfer' ? L('inventory.transferWord') : L('inventory.parentBillingWord') })}</Text> : null}
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 5 }}>
-                    {canBuy && r.status !== 'rejected' && !r.stockApplied && (d
+                    {buyOk && r.status !== 'rejected' && !r.stockApplied && (d
                       ? <TouchableOpacity onPress={() => run(() => undoSupplyLine(db, r.id, l.id))}><Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.cancelPurchase')}</Text></TouchableOpacity>
                       : isOpen ? <TouchableOpacity onPress={() => onComplete([l.id])} style={{ backgroundColor: '#059669', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 }}><Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{L('task.done')}</Text></TouchableOpacity> : null)}
                     {d && lk && d.amount && canSettleLine ? (st
@@ -1434,7 +1449,7 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
               );
             })}
           </View>
-          {canBuy && isOpen && undoneIds.length > 1 && (
+          {buyOk && isOpen && undoneIds.length > 1 && (
             <TouchableOpacity onPress={() => onComplete(undoneIds)} style={[styles.btn, { flex: 0, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0' }]}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#047857' }}>{L('inventory.purchaseRemainingItemsAtOnce')}</Text>
             </TouchableOpacity>
@@ -1445,7 +1460,21 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
               {' '}{L('inventory.settle')} {settleLines.filter(s => s.settled).length}/{settleLines.length} {L('inventory.remainingAmount')} {fmtWon(settleLines.filter(s => !s.settled).reduce((a, s) => a + (s.done.amount ?? 0), 0))}
             </Text>
           )}
-          {r.note ? <Text style={{ fontSize: 12, color: '#374151', backgroundColor: '#f9fafb', borderRadius: 8, padding: 10 }}>📝 {r.note}</Text> : null}
+          <View style={{ gap: 4 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151' }}>{L('common.memo')}</Text>
+            {canEditNote ? (
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                <TextInput value={note} onChangeText={setNote} multiline style={[styles.input, { flex: 1, minHeight: 40 }]} />
+                {note.trim() !== (r.note ?? '').trim() && (
+                  <TouchableOpacity onPress={saveNote} disabled={busy} style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy ? 0.3 : 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{L('common.save')}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : <Text style={{ fontSize: 12, color: r.note ? '#374151' : '#9ca3af', backgroundColor: '#f9fafb', borderRadius: 8, padding: 10 }}>{r.note || L('inventory.noMemo')}</Text>}
+          </View>
+          {approved && r.approvedBy ? <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.approvedBy', { v0: r.approvedBy, v1: fmtDateTime(r.approvedAt) })}</Text>
+            : isOpen ? <Text style={{ fontSize: 10, color: '#4f46e5' }}>🔎 {L('inventory.goesToTheBuyerAfter')}</Text> : null}
           {(!isOpen || r.status === 'onhold') && (
             <Text style={{ fontSize: 11, color: r.status === 'onhold' ? '#92400e' : '#4b5563', backgroundColor: r.status === 'onhold' ? '#fffbeb' : '#f9fafb', borderRadius: 8, padding: 8 }}>
               {status}{r.handledBy ? ` · ${r.handledBy}` : ''} · {fmtDateTime(r.handledAt)}
@@ -1454,7 +1483,7 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
           {isOpen && (
             <View style={{ flexDirection: 'row', gap: 6 }}>
               {!mine && <TouchableOpacity onPress={onMetoo} style={[styles.btn, { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a' }]}><Text style={{ fontSize: 12, fontWeight: '700', color: '#92400e' }}>{L('inventory.iNeedThisToo')}</Text></TouchableOpacity>}
-              {mine && <TouchableOpacity onPress={onEdit} style={[styles.btn, { backgroundColor: '#f3f4f6' }]}><Text style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>{L('task.edit')}</Text></TouchableOpacity>}
+              {mine && (!approved || isAdmin) && <TouchableOpacity onPress={onEdit} style={[styles.btn, { backgroundColor: '#f3f4f6' }]}><Text style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>{L('task.edit')}</Text></TouchableOpacity>}
               {mine && !supplyDoneCount(r) && <TouchableOpacity onPress={remove} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fecaca' }]}><Text style={{ fontSize: 12, color: '#ef4444' }}>{L('inventory.cancelRequest')}</Text></TouchableOpacity>}
             </View>
           )}
@@ -1497,6 +1526,7 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
               {mode === 'none' ? (
                 isOpen ? (
                   <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {!approved && r.status === 'requested' && <TouchableOpacity onPress={approve} disabled={busy} style={[styles.btn, { backgroundColor: '#4f46e5', paddingVertical: 7 }]}><Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{L('inventory.approve')}</Text></TouchableOpacity>}
                     <TouchableOpacity onPress={() => setMode('reject')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#6b7280' }}>{L('inventory.reject')}</Text></TouchableOpacity>
                     {r.status === 'onhold'
                       ? <TouchableOpacity onPress={() => act('requested')} style={[styles.btn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#fde68a', paddingVertical: 7 }]}><Text style={{ fontSize: 11, color: '#92400e' }}>{L('inventory.releaseHold')}</Text></TouchableOpacity>
@@ -1531,27 +1561,6 @@ function SupplyRequestDetailMobile({ req: r, buyer, canBuy, settlerIsMe, campCod
             </View>
           )}
 
-          <View style={{ gap: 6 }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151' }}>{L('inventory.notesComments')} {r.comments?.length ? r.comments.length : ''}</Text>
-            {(r.comments ?? []).map(cm => (
-              <View key={cm.id} style={{ backgroundColor: cm.admin ? '#eef2ff' : '#f9fafb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: cm.admin ? '#4338ca' : '#1f2937' }}>{cm.name}</Text>
-                  {cm.admin && <Text style={{ fontSize: 9, fontWeight: '700', color: '#4338ca', backgroundColor: '#e0e7ff', borderRadius: 3, paddingHorizontal: 3 }}>{L('common.roleAdmin')}</Text>}
-                  <Text style={{ fontSize: 10, color: '#9ca3af', flex: 1 }}>{fmtDateTime(cm.at)}</Text>
-                  {isAdmin && <TouchableOpacity onPress={() => run(() => deleteSupplyComment(db, r.id, cm))}><Text style={{ fontSize: 10, color: '#cbd5e1' }}>{L('common.delete')}</Text></TouchableOpacity>}
-                </View>
-                <Text style={{ fontSize: 12, color: '#374151', marginTop: 1 }}>{cm.text}</Text>
-              </View>
-            ))}
-            <View style={{ flexDirection: 'row', gap: 6 }}>
-              <TextInput value={comment} onChangeText={setComment} placeholderTextColor="#9ca3af" style={[styles.input, { flex: 1 }]} multiline
-                placeholder={isAdmin ? L('inventory.eGCanTBuy') : L('inventory.eGOurClassNeeds')} />
-              <TouchableOpacity onPress={send} disabled={busy || !comment.trim()} style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingHorizontal: 12, justifyContent: 'center', opacity: busy || !comment.trim() ? 0.3 : 1 }}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{L('inventory.post')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -2000,6 +2009,7 @@ function ItemFormMobile({ item, preset, groups, campCode, defaultGroupId, perm, 
   const [spec, setSpec] = useState(item?.spec ?? '');
   const [unit, setUnit] = useState(item?.unit ?? '개');
   const [usage, setUsage] = useState<InventoryUsage>(item ? getItemUsage(item) : suggestedUsages(preset?.category ?? '의약품')[0]);
+  const [consumption, setConsumption] = useState<InventoryConsumption>(item?.consumption ?? 'single');
   const [minStock, setMinStock] = useState(item?.minStockDefault != null ? String(item.minStockDefault) : '');
   const [packSize, setPackSize] = useState(item?.packSize ? String(item.packSize) : '');
   const [ingredient, setIngredient] = useState(item?.ingredient ?? '');
@@ -2037,6 +2047,7 @@ function ItemFormMobile({ item, preset, groups, campCode, defaultGroupId, perm, 
       const data = {
         category, subCategory: subCategory.trim() || undefined, kind: kind.trim() || undefined, name: name.trim(),
         spec: spec.trim() || undefined, unit: unit || '개', usage, isActive,
+        consumption: isMed && consumption === 'multi' ? 'multi' as const : item?.consumption ? 'single' as const : undefined,
         description: description.trim() || undefined,
         packSize: packSize ? Math.max(1, parseInt(packSize, 10) || 1) : undefined,
         minStockDefault: minStock === '' ? undefined : Math.max(0, parseInt(minStock, 10) || 0),
@@ -2169,6 +2180,13 @@ function ItemFormMobile({ item, preset, groups, campCode, defaultGroupId, perm, 
                 <Chips values={usageList} value={usage} onPick={setUsage} label={u => INVENTORY_USAGE_LABELS[u]} />
                 <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.oralMedicineTopicalMedicineAnd2')}</Text>
               </View>
+              {isMed && (
+                <View style={{ gap: 5 }}>
+                  <Text style={styles.formLabel}>{L('inventory.howItIsUsed')}</Text>
+                  <Chips values={['single', 'multi'] as InventoryConsumption[]} value={consumption} onPick={setConsumption} label={c => c === 'single' ? L('inventory.singleUseDeductedEachTime') : L('inventory.multiUseEGOintment')} />
+                  <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.multiUseItemsOintmentsSprays')}</Text>
+                </View>
+              )}
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <View style={{ flex: 1.4 }}><Text style={styles.formLabel}>{L('inventory.specNotes')}</Text>
                   <TextInput value={spec} onChangeText={setSpec} placeholder={L('inventory.eGTablet500mg')} placeholderTextColor="#9ca3af" style={styles.input} /></View>
@@ -2231,9 +2249,19 @@ async function uploadItemMediaMobile(itemId: string, picked: PickedMedia[], by: 
 function ItemMediaSectionMobile({ item, canEdit, userName }: { item: InventoryItem; canEdit: boolean; userName: string }) {
   const [deleting, setDeleting] = useState<ItemMedia | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const media = item.media ?? [];
+  const media = orderedItemMedia(item);
+  const cover = itemCoverMedia(item);
   const [busy, setBusy] = useState(false);
   const [viewer, setViewer] = useState<ItemMedia | null>(null);
+  // 1:1 넘겨보기 (대표 사진부터) — 좌우 스와이프
+  const [boxW, setBoxW] = useState(0);
+  const [idx, setIdx] = useState(0);
+  const pagerRef = React.useRef<ScrollView>(null);
+  const pos = Math.min(idx, Math.max(0, media.length - 1));
+  const makeCover = async (m: ItemMedia) => {
+    try { await setItemCoverMedia(db, item.id, m.path); setIdx(0); pagerRef.current?.scrollTo({ x: 0, animated: false }); }
+    catch { Alert.alert(L('common.error'), L('profile.couldNotSave')); }
+  };
   const add = async (picked: PickedMedia[]) => {
     if (!picked.length) return;
     if (picked.some(p => (p.fileSize ?? 0) > 50 * 1024 * 1024)) Alert.alert(L('task.notice'), L('inventory.filesOver50mbAreSkipped'));
@@ -2244,44 +2272,53 @@ function ItemMediaSectionMobile({ item, canEdit, userName }: { item: InventoryIt
   };
   const remove = async (m: ItemMedia) => {
     setDeleteBusy(true);
-    try { await removeInventoryItemMedia(db, item.id, media, m.path); await deleteObject(storageRef(storage, m.path)).catch(() => {}); setDeleting(null); }
+    try { await removeInventoryItemMedia(db, item.id, item.media ?? [], m.path, item.coverMediaPath); await deleteObject(storageRef(storage, m.path)).catch(() => {}); setDeleting(null); setIdx(0); pagerRef.current?.scrollTo({ x: 0, animated: false }); }
     catch { Alert.alert(L('common.error'), L('inventory.couldNotDelete')); }
     finally { setDeleteBusy(false); }
   };
   const open = (m: ItemMedia) => { if (m.type === 'video') Linking.openURL(m.url); else setViewer(m); };
   return (
     <View style={{ gap: 6 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>{L('inventory.photosVideos')} <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{media.length || ''}</Text></Text>
-        {canEdit && (
-          <>
-            <TouchableOpacity disabled={busy} onPress={async () => add(await captureLostPhoto())} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, opacity: busy ? 0.4 : 1 }}>
-              <Ionicons name="camera-outline" size={15} color="#1d4ed8" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>{L('inventory.camera')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity disabled={busy} onPress={async () => add(await pickLostMedia())} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, opacity: busy ? 0.4 : 1 }}>
-              <Ionicons name="images-outline" size={15} color="#1d4ed8" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>{busy ? L('inventory.uploading') : L('inventory.album')}</Text>
-            </TouchableOpacity>
-          </>
+      <View onLayout={e => setBoxW(e.nativeEvent.layout.width)} style={{ width: '100%', aspectRatio: 1, borderRadius: 12, overflow: 'hidden', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb' }}>
+        {media.length === 0 ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 24 }}>
+            <Ionicons name="cube-outline" size={56} color="#d1d5db" />
+            <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>{canEdit ? L('inventory.noPhotosYetUploadPackage') : L('inventory.noPhotosRegisteredOnlyAdmins')}</Text>
+          </View>
+        ) : boxW > 0 ? (
+          <ScrollView ref={pagerRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={e => setIdx(Math.round(e.nativeEvent.contentOffset.x / boxW))}>
+            {media.map(m => (
+              <TouchableOpacity key={m.path} activeOpacity={0.9} onPress={() => open(m)} style={{ width: boxW, height: boxW, backgroundColor: m.type === 'video' ? '#111827' : '#f9fafb' }}>
+                {m.type === 'video'
+                  ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 }}><Ionicons name="play-circle" size={52} color="#fff" /><Text style={{ fontSize: 11, color: '#d1d5db' }}>{L('inventory.tapToPlayVideo')}</Text></View>
+                  : <Image source={{ uri: m.url }} style={{ width: '100%', height: '100%' }} contentFit="contain" />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        ) : null}
+        {media.length > 1 && <Text style={{ position: 'absolute', bottom: 6, right: 6, fontSize: 10, color: '#fff', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>{pos + 1} / {media.length}</Text>}
+        {media[pos] && media[pos] === cover && media.length > 1 ? <Text style={{ position: 'absolute', top: 6, left: 6, fontSize: 10, fontWeight: '700', color: '#fff', backgroundColor: '#f59e0b', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' }}>★ {L('inventory.cover')}</Text> : null}
+        {media[pos]?.by ? <Text style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 9, color: '#fff', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>{media[pos].by}</Text> : null}
+        {canEdit && media[pos] && (
+          <View style={{ position: 'absolute', top: 6, right: 6, flexDirection: 'row', gap: 6 }}>
+            {media[pos].type === 'image' && media[pos] !== cover && (
+              <TouchableOpacity onPress={() => makeCover(media[pos])} style={{ height: 26, paddingHorizontal: 8, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Ionicons name="star" size={11} color="#fff" /><Text style={{ fontSize: 11, color: '#fff' }}>{L('inventory.setAsCover')}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => setDeleting(media[pos])} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={[styles.thumbRemove, { position: 'relative', top: 0, right: 0, width: 26, height: 26, borderRadius: 13 }]}><Text style={{ color: '#fff', fontSize: 12 }}>✕</Text></TouchableOpacity>
+          </View>
         )}
       </View>
-      {media.length === 0 ? (
-        <Text style={{ fontSize: 11, color: '#9ca3af', backgroundColor: '#f9fafb', borderRadius: 8, padding: 10, textAlign: 'center' }}>
-          {canEdit ? L('inventory.noPhotosYetUploadPackage') : L('inventory.noPhotosRegisteredOnlyAdmins')}
-        </Text>
-      ) : (
-        <View style={{ gap: 8 }}>
-          {media.map(m => (
-            <TouchableOpacity key={m.path} onPress={() => open(m)} activeOpacity={0.9}
-              style={{ width: '100%', aspectRatio: m.type === 'video' ? 16 / 9 : 4 / 3, borderRadius: 10, overflow: 'hidden', backgroundColor: m.type === 'video' ? '#111827' : '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' }}>
-              {m.type === 'video'
-                ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 }}><Ionicons name="play-circle" size={44} color="#fff" /><Text style={{ fontSize: 11, color: '#d1d5db' }}>{L('inventory.tapToPlayVideo')}</Text></View>
-                : <Image source={{ uri: m.url }} style={{ width: '100%', height: '100%' }} contentFit="contain" />}
-              {m.by ? <Text style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 9, color: '#fff', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>{m.by}</Text> : null}
-              {canEdit && (
-                <TouchableOpacity onPress={() => setDeleting(m)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={[styles.thumbRemove, { width: 26, height: 26, borderRadius: 13, top: 6, right: 6 }]}><Text style={{ color: '#fff', fontSize: 12 }}>✕</Text></TouchableOpacity>
-              )}
-            </TouchableOpacity>
-          ))}
+      {canEdit && (
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 16 }}>
+          <TouchableOpacity disabled={busy} onPress={async () => add(await captureLostPhoto())} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, opacity: busy ? 0.4 : 1 }}>
+            <Ionicons name="camera-outline" size={15} color="#1d4ed8" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>{L('inventory.camera')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity disabled={busy} onPress={async () => add(await pickLostMedia())} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, opacity: busy ? 0.4 : 1 }}>
+            <Ionicons name="images-outline" size={15} color="#1d4ed8" /><Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>{busy ? L('inventory.uploading') : L('inventory.album')}</Text>
+          </TouchableOpacity>
         </View>
       )}
       <Modal visible={!!deleting} transparent animationType="fade" onRequestClose={() => !deleteBusy && setDeleting(null)}>
@@ -3164,6 +3201,42 @@ function normExpiry(raw: string): string | null {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
+/** 다회용 약: 미개봉 · 사용 중 · 거의 다 씀 + 개봉 / 거의 다 씀 / 다 씀 (캠프 스태프 누구나) */
+function MultiUseRowMobile({ view, groupId, campCode }: { view: InventoryItemView; groupId: string; campCode: string }) {
+  const [busy, setBusy] = useState(false);
+  const stock = getGroupStock(view, groupId);
+  const opened = getOpenedCount(view, groupId);
+  const nearly = getNearlyEmptyCount(view, groupId);
+  const exec = async (action: 'open' | 'nearly' | 'unnearly' | 'finish') => {
+    setBusy(true);
+    try { await stockOp({ op: 'multi', campCode, itemId: view.id, groupId, action }); }
+    catch (e) { Alert.alert(L('common.error'), e instanceof Error ? e.message : L('inventory.couldNotProcess')); }
+    finally { setBusy(false); }
+  };
+  const run = (action: 'open' | 'nearly' | 'unnearly' | 'finish') => {
+    if (busy) return;
+    if (action === 'finish') Alert.alert(L('inventory.usedUp'), L('inventory.markOneInUseAs', { v0: view.name }), [
+      { text: L('common.cancel'), style: 'cancel' },
+      { text: L('inventory.usedUp'), style: 'destructive', onPress: () => exec('finish') },
+    ]);
+    else exec(action);
+  };
+  const chip = (label: string, color: string, onPress: () => void) => (
+    <TouchableOpacity disabled={busy} onPress={onPress} style={{ borderWidth: 1, borderColor: color, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2, opacity: busy ? 0.4 : 1 }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color }}>{label}</Text>
+    </TouchableOpacity>
+  );
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+      <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('inventory.unopened', { v0: Math.max(0, stock - opened) })} · {L('inventory.inUse', { v0: opened })}{nearly > 0 ? <Text style={{ color: '#ea580c', fontWeight: '700' }}> · {L('inventory.nearlyEmpty', { v0: nearly })}</Text> : null}</Text>
+      {stock - opened > 0 ? chip(L('inventory.open'), '#047857', () => run('open')) : null}
+      {opened > nearly ? chip(L('inventory.nearlyEmpty2'), '#c2410c', () => run('nearly')) : null}
+      {nearly > 0 ? chip(L('inventory.unmarkNearlyEmpty'), '#6b7280', () => run('unnearly')) : null}
+      {opened > 0 ? chip(L('inventory.usedUp'), '#dc2626', () => run('finish')) : null}
+    </View>
+  );
+}
+
 function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userId, userName, initialUseGroupId, defaultGroupId, onRequest, onClose, onEditItem }: {
   view: InventoryItemView; groups: InventoryGroup[]; campCode: string; perm: InventoryPerm; userId: string; userName: string;
   /** 입고 · 조정 · 이동할 수 있는 그룹 (부매니저는 자기 그룹) */
@@ -3173,7 +3246,7 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
   onClose: () => void; onEditItem?: () => void;
 }) {
   const isAdmin = perm.canManageStock;
-  const isMedicine = ['oral', 'topical'].includes(getItemUsage(view));
+  const isMedicine = isMedicineItem(view);
   // 그룹 간 이동 — 일반 수량 조정과 헷갈리지 않도록 별도 화면
   const [transferFrom, setTransferFrom] = useState<string | null>(null);
   /** 바로 사용할 교무실 — 내 교무실 → 재고가 있는 첫 곳 */
@@ -3202,7 +3275,8 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
 
   const [showAllMoves, setShowAllMoves] = useState(false);
   const [mode, setMode] = useState<{ type: 'use' | 'restock' | 'adjust' | 'min'; groupId: string } | null>(
-    initialUseGroupId ? { type: 'use', groupId: initialUseGroupId } : null);
+    initialUseGroupId && !isMedicineItem(view) ? { type: 'use', groupId: initialUseGroupId } : null);
+  const [useReason, setUseReason] = useState('');
   const [qty, setQty] = useState(initialUseGroupId ? '1' : '');
   const [memo, setMemo] = useState('');
   const [busy, setBusy] = useState(false);
@@ -3218,7 +3292,10 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
       const base = { itemId: view.id, itemName: view.name, groupId: group.id, groupName: group.name };
       if (mode.type === 'use') {
         if (!(n > 0)) return;
-        await recordStockUse(db, campCode, { ...base, quantity: n, memo: memo.trim() || undefined }, { uid: userId, name: userName });
+        if (!useReason) { Alert.alert(L('inventory.pleaseChooseAReason')); return; }
+        if (useReason === USE_REASON_OTHER && !memo.trim()) { Alert.alert(L('inventory.pleaseDescribeTheReason')); return; }
+        const reason = useReason === USE_REASON_OTHER ? memo.trim() : useReason;
+        await recordStockUse(db, campCode, { ...base, quantity: n, memo: reason }, { uid: userId, name: userName });
         notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: group.id });
       } else if (mode.type === 'restock') {
         if (!(n > 0)) return;
@@ -3256,6 +3333,7 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ fontSize: 10, color: '#6b7280' }}>{dataLabel(view.category)}{view.subCategory ? ` · ${view.subCategory}` : ''}{view.kind ? ` · ${view.kind}` : ''}</Text>
             <Text style={styles.modalTitle}>{view.name} {view.spec ? <Text style={{ fontSize: 11, fontWeight: '400', color: '#9ca3af' }}>{view.spec}</Text> : null}</Text>
+            {isMultiUse(view) ? <Text style={{ fontSize: 10, color: '#c2410c' }}>♻ {L('inventory.multiUse')}</Text> : null}
           </View>
           <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
             <Text style={{ fontSize: 22, fontWeight: '800', color: '#047857', lineHeight: 26 }}>{view.total}<Text style={{ fontSize: 11, color: '#9ca3af' }}>{dataLabel(view.unit)}</Text></Text>
@@ -3265,6 +3343,7 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
         </View>
 
         <ScrollView contentContainerStyle={{ padding: 14, gap: 14 }} keyboardShouldPersistTaps="handled">
+          <ItemMediaSectionMobile item={view} canEdit={perm.canEditItemMedia} userName={userName} />
           {(view.description || view.dosageNote) ? (
             <View style={{ borderRadius: 10, borderWidth: 1, borderColor: '#d1fae5', backgroundColor: '#ecfdf5', padding: 10, gap: 2 }}>
               {view.dosageNote ? <Text style={{ fontSize: 11, color: '#065f46' }}>📋 {view.dosageNote}</Text> : null}
@@ -3283,7 +3362,7 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
                 {groups.map((g, i) => {
                   const n = getGroupStock(view, g.id);
                   const min = getMinStock(view, g.id);
-                  const low = min > 0 && n < min;
+                  const low = min > 0 && getAvailableStock(view, g.id) < min;
                   return (
                     <View key={g.id} style={{ paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: i > 0 ? 1 : 0, borderTopColor: '#f3f4f6', gap: 4 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -3291,7 +3370,7 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
                         <Text style={{ fontSize: 13, fontWeight: '800', color: low && perm.isStockManager ? '#dc2626' : '#1f2937' }}>{n}<Text style={{ fontSize: 10, color: '#9ca3af' }}>{dataLabel(view.unit)}</Text></Text>
                         {perm.isStockManager ? <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('inventory.min2')} {min}</Text> : null}
                         {perm.isStockManager ? (low
-                          ? <Text style={{ fontSize: 9, fontWeight: '700', color: '#dc2626', backgroundColor: '#fef2f2', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 }}>{L('inventory.low3')}{min - n}</Text>
+                          ? <Text style={{ fontSize: 9, fontWeight: '700', color: '#dc2626', backgroundColor: '#fef2f2', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 }}>{L('inventory.low3')}{min - getAvailableStock(view, g.id)}</Text>
                           : <Text style={{ fontSize: 9, color: '#9ca3af' }}>{L('data.feverNormal')}</Text>) : null}
                       </View>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
@@ -3308,10 +3387,11 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
                           );
                         })()}
                       </View>
+                      {isMultiUse(view) && g.id in view.stocks ? <MultiUseRowMobile view={view} groupId={g.id} campCode={campCode} /> : null}
                       {(managedGroupIds.has(g.id) || g.id in view.stocks) && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                          {g.id in view.stocks && (
-                            <TouchableOpacity onPress={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} style={{ backgroundColor: '#2563eb', borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 }}>
+                          {g.id in view.stocks && !isMedicine && (
+                            <TouchableOpacity onPress={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); setUseReason(''); }} style={{ backgroundColor: '#2563eb', borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 }}>
                               <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>{L('inventory.use4')}</Text>
                             </TouchableOpacity>
                           )}
@@ -3368,14 +3448,11 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
               )}
               {mode.type !== 'min' && (
                 <>
-                  {mode.type === 'use' && isMedicine && (
-                    <Text style={{ fontSize: 10, color: '#be123c', backgroundColor: '#fff1f2', borderRadius: 6, padding: 6 }}>{L('inventory.medicineGivenOrAppliedTo2')}</Text>
-                  )}
                   {mode.type === 'use' && (
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
                       {USE_REASONS.map(r => (
-                        <TouchableOpacity key={r} onPress={() => setMemo(memo === r ? '' : r)} style={[styles.miniChip, memo === r && { backgroundColor: '#2563eb' }]}>
-                          <Text style={[styles.miniChipText, memo === r && { color: '#fff' }]}>{dataLabel(r)}</Text>
+                        <TouchableOpacity key={r} onPress={() => setUseReason(useReason === r ? '' : r)} style={[styles.miniChip, useReason === r && { backgroundColor: '#2563eb' }]}>
+                          <Text style={[styles.miniChipText, useReason === r && { color: '#fff' }]}>{dataLabel(r)}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -3389,7 +3466,7 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
                       ))}
                     </View>
                   )}
-                  <TextInput value={memo} onChangeText={setMemo} placeholder={mode.type === 'use' ? L('inventory.whatWasItUsedFor2') : mode.type === 'restock' ? L('patient.noteOptional') : L('inventory.pickAboveOrTypeIt')} placeholderTextColor="#9ca3af" style={styles.input} />
+                  {(mode.type !== 'use' || useReason === USE_REASON_OTHER) && <TextInput value={memo} onChangeText={setMemo} placeholder={mode.type === 'use' ? L('inventory.reasonRequired') : mode.type === 'restock' ? L('patient.noteOptional') : L('inventory.pickAboveOrTypeIt')} placeholderTextColor="#9ca3af" style={styles.input} />}
                 </>
               )}
               <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -3424,17 +3501,20 @@ function ItemDetailMobile({ view, groups, campCode, perm, managedGroupIds, userI
             )}
           </View>
 
-          <ItemMediaSectionMobile item={view} canEdit={perm.canEditItemMedia} userName={userName} />
           <View style={{ height: 20 }} />
         </ScrollView>
 
         {/* 사용하기 · 필요한 물품 요청 — 누구나 */}
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
+          {isMedicine ? (
+            <Text style={{ flex: 1, alignSelf: 'center', fontSize: 11, color: '#be123c', backgroundColor: '#fff1f2', borderRadius: 8, padding: 8 }}>{L('inventory.logMedicineUseInThe')}</Text>
+          ) : (
           <TouchableOpacity disabled={!useGroupId}
-            onPress={() => { if (useGroupId) { setMode({ type: 'use', groupId: useGroupId }); setQty('1'); setMemo(''); } }}
+            onPress={() => { if (useGroupId) { setMode({ type: 'use', groupId: useGroupId }); setQty('1'); setMemo(''); setUseReason(''); } }}
             style={[styles.btn, { backgroundColor: useGroupId ? '#2563eb' : '#e5e7eb' }]}>
             <Text style={{ fontSize: 13, fontWeight: '800', color: useGroupId ? '#fff' : '#9ca3af' }}>{L('inventory.use2')}</Text>
           </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => onRequest(view, defaultGroupId)} style={[styles.btn, { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0' }]}>
             <Text style={{ fontSize: 13, fontWeight: '800', color: '#047857' }}>{L('inventory.requestNeededItems3')}</Text>
           </TouchableOpacity>

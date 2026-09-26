@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/authMiddleware';
 import { notifySupply, type SupplyNotifyEvent } from '@/lib/supplyNotify';
 
-const TYPES = ['request_created', 'buyer_assigned', 'default_buyer', 'lines_done', 'settled', 'status', 'comment', 'stock_low'];
+const TYPES = ['request_created', 'buyer_assigned', 'default_buyer', 'lines_done', 'settled', 'status', 'approved', 'stock_low'];
 const ok = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length < 200 && !v.includes('/');
 
 /**
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       ev = { type: b.type, requestId: String(b.requestId), lineIds: ids(b.lineIds) }; break;
     default:
       if (!ok(b.requestId)) return NextResponse.json({ error: 'requestId' }, { status: 400 });
-      ev = { type: b.type as 'request_created' | 'status' | 'comment', requestId: String(b.requestId) };
+      ev = { type: b.type as 'request_created' | 'status' | 'approved', requestId: String(b.requestId) };
   }
   try {
     const { sent, missed } = await notifySupply(ev, auth.firebaseUid);

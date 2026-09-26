@@ -491,6 +491,28 @@ export interface MedicationDose {
   progressLogAt?: number;
 }
 
+/**
+ * 선생님에게 쓴 약 — 환자 탭에서 기록 (학생 환자 기록과 별도, 가상의 학생 기록을 만들지 않는다)
+ * 재고 차감·복구는 학생 복용 기록과 같은 원장 방식 (inventoryDoseLedger/staff__{id})
+ */
+export interface StaffMedicationUse {
+  id: string;
+  campCode: string;
+  /** 약을 쓴 선생님 */
+  staffUserId: string;
+  staffName: string;
+  /** 그 선생님의 그룹 (기록 당시) */
+  staffGroup?: string;
+  /** 증상·사유 — 관리자가 선생님 건강 상태를 파악하도록 */
+  symptom: string;
+  note?: string;
+  doses: MedicationDose[];
+  recordedBy: string;
+  recordedById: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 /** 복용 기록 표시명: "모드코프(종합감기약)" */
 export function doseLabel(d: Pick<MedicationDose, 'itemName' | 'itemKind'>): string {
   return d.itemKind ? `${d.itemName}(${d.itemKind})` : d.itemName;

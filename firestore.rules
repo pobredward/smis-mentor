@@ -853,6 +853,20 @@ service cloud.firestore {
           resource.data.stocks.get(request.resource.data.lastUse.groupId, 0) - request.resource.data.lastUse.qty;
     }
 
+    // 선생님 약 사용 기록 (환자 탭) — 캠프 스태프 조회, 본인 명의로 기록, 수정·삭제는 기록자·관리자
+    // 재고 차감은 서버(/api/inventory/sync-dose, source=staff)가 원장으로 처리
+    match /staffMedicationUses/{useId} {
+      allow read: if isCampStaff();
+      allow create: if isCampStaff() &&
+        request.resource.data.recordedById == request.auth.uid &&
+        request.resource.data.campCode is string &&
+        request.resource.data.staffUserId is string &&
+        request.resource.data.doses is list;
+      allow update: if (isAdmin() || (isCampStaff() && resource.data.recordedById == request.auth.uid)) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['symptom', 'note', 'doses', 'updatedAt']);
+      allow delete: if isAdmin() || (isCampStaff() && resource.data.recordedById == request.auth.uid);
+    }
+
     // 약 복용 재고 원장 (서버 전용)
     match /inventoryDoseLedger/{recordId} {
       allow read: if isAdmin();
@@ -869,7 +883,9 @@ service cloud.firestore {
         request.resource.data.status == 'requested' &&
         request.resource.data.forType in ['student', 'mentor', 'camp'] &&
         request.resource.data.items is list &&
-        !('buyerId' in request.resource.data) && !('done' in request.resource.data) && !('settlements' in request.resource.data)
+        !('buyerId' in request.resource.data) && !('done' in request.resource.data) && !('settlements' in request.resource.data) &&
+        // 승인은 관리자만 — 새 요청은 '검토 중'으로 시작
+        !('approvedAt' in request.resource.data) && !('approvedBy' in request.resource.data) && !('approvedById' in request.resource.data)
       );
       function supplyOpen(s) { return s in ['requested', 'onhold']; }
       function supplyChanged() { return request.resource.data.diff(resource.data).affectedKeys(); }
@@ -882,14 +898,7 @@ service cloud.firestore {
           request.resource.data.forType in ['student', 'mentor', 'camp'] &&
           request.resource.data.items is list
         ) ||
-        // ② 누구나 — 댓글 1개 추가 (본인 이름으로)
-        (
-          supplyChanged().hasOnly(['comments', 'updatedAt']) &&
-          request.resource.data.comments is list &&
-          request.resource.data.comments.size() == resource.data.get('comments', []).size() + 1 &&
-          request.resource.data.comments[request.resource.data.comments.size() - 1].uid == request.auth.uid
-        ) ||
-        // ③ 구매 담당(요청별 지정, 없으면 캠프 기본 담당) — 품목별 구매 완료·취소 + 금액·송금 계좌
+        // ③ 구매 담당 — 관리자가 승인한 요청만(요청별 지정, 없으면 캠프 기본 담당) — 품목별 구매 완료·취소 + 금액·송금 계좌
         (
           (
             resource.data.get('buyerId', null) == request.auth.uid ||
@@ -899,6 +908,7 @@ service cloud.firestore {
           resource.data.status in ['requested', 'onhold', 'purchased'] &&
           request.resource.data.status in ['requested', 'onhold', 'purchased'] &&
           resource.data.get('stockApplied', false) != true &&
+          resource.data.get('approvedAt', null) != null &&
           supplyChanged().hasOnly(['done', 'status', 'handledBy', 'handledAt', 'statusNote', 'holdUntil', 'amount', 'updatedAt'])
         ) ||
         // ④ 정산 체크 — 학생: 담임이 봉투에서 빼서 전달 / 선생님: 본인 송금 (누가 누르는지는 앱에서 확인)

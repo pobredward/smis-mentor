@@ -3,7 +3,8 @@ import { getAuthenticatedUser } from '@/lib/authMiddleware';
 import { runStockOp, StockOpError, type StockOp } from '@/lib/inventoryServer';
 
 /**
- * POST /api/inventory/stock-op  { op: 'restock' | 'adjust' | 'transfer', ... }
+ * POST /api/inventory/stock-op  { op: 'restock' | 'adjust' | 'transfer' | 'multi', ... }
+ * multi = 다회용 약 개봉·거의 다 씀·다 씀 (캠프 스태프 누구나)
  * 부매니저의 자기 그룹 재고 입고 · 조정 · 이동 (이동은 양방향 — 한쪽이 내 그룹이면 된다).
  * 관리자도 쓸 수 있지만, 관리자 화면은 기존처럼 앱에서 바로 쓴다.
  */
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser(request);
   if (!auth) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   const body = (await request.json().catch(() => ({}))) as StockOp;
-  if (!['restock', 'adjust', 'transfer'].includes(String(body.op))) {
+  if (!['restock', 'adjust', 'transfer', 'multi'].includes(String(body.op))) {
     return NextResponse.json({ error: '알 수 없는 작업입니다.' }, { status: 400 });
   }
   try {

@@ -29,7 +29,6 @@ import type {
   InventoryMovementReason,
   SupplyRequest,
   SupplyRequestStatus,
-  SupplyComment,
   SupplySettings,
   SupplyLineDone,
   SupplyGuide,
@@ -174,8 +173,17 @@ export const addInventoryItemMedia = async (db: Firestore, itemId: string, media
   await updateDoc(doc(db, ITEMS, itemId), { media: arrayUnion(...media.map(m => stripUndefined({ ...m }))), updatedAt: Timestamp.now() });
 };
 /** 품목 사진·영상 삭제 (관리자) — Storage 파일은 호출한 쪽에서 지움 */
-export const removeInventoryItemMedia = async (db: Firestore, itemId: string, current: ItemMedia[], path: string): Promise<void> => {
-  await updateDoc(doc(db, ITEMS, itemId), { media: current.filter(m => m.path !== path), updatedAt: Timestamp.now() });
+export const removeInventoryItemMedia = async (db: Firestore, itemId: string, current: ItemMedia[], path: string, coverPath?: string): Promise<void> => {
+  // 대표 사진을 지우면 대표 지정을 풀어 다음 사진이 자동으로 대표가 된다
+  await updateDoc(doc(db, ITEMS, itemId), {
+    media: current.filter(m => m.path !== path),
+    ...(coverPath === path ? { coverMediaPath: deleteField() } : {}),
+    updatedAt: Timestamp.now(),
+  });
+};
+/** 대표 사진 지정 (관리자) */
+export const setItemCoverMedia = async (db: Firestore, itemId: string, path: string): Promise<void> => {
+  await updateDoc(doc(db, ITEMS, itemId), { coverMediaPath: path, updatedAt: Timestamp.now() });
 };
 
 export const updateInventoryItem = async (
@@ -693,7 +701,7 @@ export const subscribeSupplyRequests = (
         snap.docs
           .map(d => {
             const x = d.data();
-            return { id: d.id, ...x, items: Array.isArray(x.items) ? x.items : [], comments: Array.isArray(x.comments) ? x.comments : [] } as SupplyRequest;
+            return { id: d.id, ...x, items: Array.isArray(x.items) ? x.items : [] } as SupplyRequest;
           })
           .sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
       );
@@ -965,24 +973,21 @@ export const deleteSupplyGuide = async (db: Firestore, id: string): Promise<void
   await deleteDoc(doc(db, SUPPLY_GUIDES, id));
 };
 
-/** 메모·댓글 달기 (누구나) */
-export const addSupplyComment = async (
-  db: Firestore,
-  requestId: string,
-  c: { uid: string; name: string; text: string; admin?: boolean }
-): Promise<void> => {
-  const text = c.text.trim();
-  if (!text) return;
-  const comment: SupplyComment = stripUndefined({
-    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    uid: c.uid, name: c.name, text, at: Timestamp.now(), admin: c.admin || undefined,
-  });
-  await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), { comments: arrayUnion(comment), updatedAt: Timestamp.now() });
+/** 요청 메모 수정 (작성자: 진행 중일 때 / 관리자: 언제든) — 재고·입고 기록은 건드리지 않는다 */
+export const setSupplyRequestNote = async (db: Firestore, requestId: string, note: string): Promise<void> => {
+  await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), { note: note.trim() || deleteField(), updatedAt: Timestamp.now() });
 };
 
-/** 댓글 삭제 (관리자) */
-export const deleteSupplyComment = async (db: Firestore, requestId: string, comment: SupplyComment): Promise<void> => {
-  await updateDoc(doc(db, SUPPLY_REQUESTS, requestId), { comments: arrayRemove(comment), updatedAt: Timestamp.now() });
+/** 관리자 승인 — 승인해야 구매 담당 목록에 오른다 */
+export const approveSupplyRequests = async (
+  db: Firestore,
+  requestIds: string[],
+  by: { uid: string; name: string }
+): Promise<void> => {
+  const now = Timestamp.now();
+  const batch = writeBatch(db);
+  requestIds.forEach(id => batch.update(doc(db, SUPPLY_REQUESTS, id), { approvedAt: now, approvedBy: by.name, approvedById: by.uid, updatedAt: now }));
+  await batch.commit();
 };
 
 export const deleteSupplyRequest = async (db: Firestore, requestId: string): Promise<void> => {

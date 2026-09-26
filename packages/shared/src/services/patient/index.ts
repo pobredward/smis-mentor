@@ -29,6 +29,7 @@ import {
   ManagerActionType,
   ManagerActionResponse,
   MedicationDose,
+  StaffMedicationUse,
 } from '../../types/camp';
 import { logger } from '../../utils/logger';
 
@@ -747,4 +748,49 @@ export const updateReturnCriteriaChecks = async (
     returnCriteriaChecks: checks,
     updatedAt: Timestamp.now(),
   });
+};
+
+// ── 선생님 약 사용 (staffMedicationUses) ───────────────────────
+
+export const subscribeStaffMedicationUses = (
+  db: Firestore,
+  campCode: string,
+  onData: (list: StaffMedicationUse[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe =>
+  onSnapshot(
+    query(collection(db, 'staffMedicationUses'), where('campCode', '==', campCode)),
+    (snap) => onData((snap.docs.map(d => {
+      const data = d.data();
+      return { id: d.id, ...data, doses: normalizeArray(data.doses) } as StaffMedicationUse;
+    })).sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))),
+    (error) => { logger.error('선생님 약 사용 구독 오류:', error); onError?.(error); }
+  );
+
+export const addStaffMedicationUse = async (
+  db: Firestore,
+  data: Omit<StaffMedicationUse, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<string> => {
+  const now = Timestamp.now();
+  const clean: Record<string, unknown> = { ...data, doses: cleanDoses(data.doses), symptom: data.symptom.trim(), createdAt: now, updatedAt: now };
+  if (!data.note?.trim()) delete clean.note;
+  if (!data.staffGroup) delete clean.staffGroup;
+  const ref = await addDoc(collection(db, 'staffMedicationUses'), clean);
+  return ref.id;
+};
+
+export const updateStaffMedicationUse = async (
+  db: Firestore,
+  id: string,
+  updates: Partial<Pick<StaffMedicationUse, 'symptom' | 'note' | 'doses'>>
+): Promise<void> => {
+  const data: Record<string, unknown> = { updatedAt: Timestamp.now() };
+  if (updates.symptom !== undefined) data.symptom = updates.symptom.trim();
+  if (updates.note !== undefined) data.note = updates.note.trim();
+  if (updates.doses !== undefined) data.doses = cleanDoses(updates.doses);
+  await updateDoc(doc(db, 'staffMedicationUses', id), data);
+};
+
+export const deleteStaffMedicationUse = async (db: Firestore, id: string): Promise<void> => {
+  await deleteDoc(doc(db, 'staffMedicationUses', id));
 };

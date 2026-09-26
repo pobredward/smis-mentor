@@ -46,45 +46,67 @@ function validDoses(v: unknown): DoseLike[] {
   return toArray<DoseLike>(v).filter(d => d && d.id && d.itemId && d.groupId && Number(d.quantity) > 0);
 }
 
-/** @returns 재고 변동 건수 */
-export async function reconcileDoseLedger(recordId: string, fallbackCampCode?: string): Promise<number> {
+/** 원장 대상: 학생 환자 기록 / 선생님 약 사용 기록 */
+export type DoseSource = 'patient' | 'staff';
+
+/**
+ * @returns 재고 변동 건수
+ * 다회용 품목(consumption === 'multi')은 사용 기록만 남기고 차감하지 않는다 (0개 반영).
+ * 그 그룹에 개봉한 것이 없으면 이때 1개를 '개봉' 처리한다 — 실제 차감은 재고 화면의 '다 씀'.
+ */
+export async function reconcileDoseLedger(recordId: string, fallbackCampCode?: string, source: DoseSource = 'patient'): Promise<number> {
   const db = getAdminFirestore();
   return db.runTransaction(async (tx) => {
-    const recRef = db.doc(`patientRecords/${recordId}`);
-    const ledRef = db.doc(`inventoryDoseLedger/${recordId}`);
+    const recRef = db.doc(source === 'staff' ? `staffMedicationUses/${recordId}` : `patientRecords/${recordId}`);
+    const ledRef = db.doc(`inventoryDoseLedger/${source === 'staff' ? `staff__${recordId}` : recordId}`);
     const [recSnap, ledSnap] = await Promise.all([tx.get(recRef), tx.get(ledRef)]);
     if (!recSnap.exists && !ledSnap.exists) return 0;
     const rec = recSnap.data() ?? {};
     const led = ledSnap.data() ?? {};
     const campCode: string | undefined = rec.campCode ?? led.campCode ?? fallbackCampCode;
     if (!campCode) return 0;
-    const studentName: string = rec.studentName ?? led.studentName ?? '';
+    const personName: string = (source === 'staff' ? rec.staffName : rec.studentName) ?? led.studentName ?? '';
 
-    const current = recSnap.exists ? validDoses(rec.medicationDoses) : [];
+    const current = recSnap.exists ? validDoses(source === 'staff' ? rec.doses : rec.medicationDoses) : [];
     const applied: Applied = (led.applied ?? {}) as Applied;
     const now = admin.firestore.Timestamp.now();
 
+    // 다회용 여부 — 품목 문서 기준 (트랜잭션 안에서 읽기)
+    const itemIds = [...new Set([...current.map(d => d.itemId), ...Object.values(applied).map(p => p.itemId)])];
+    const itemSnaps = await Promise.all(itemIds.map(id => tx.get(db.doc(`inventoryItems/${id}`))));
+    const multi = new Set(itemSnaps.filter(sn => sn.data()?.consumption === 'multi').map(sn => sn.id));
+    /** 재고에 반영할 수량 — 다회용은 0 */
+    const eff = (d: { itemId: string; quantity: number }) => (multi.has(d.itemId) ? 0 : Number(d.quantity) || 0);
+    // 재고 문서 (다회용 자동 개봉 판단용)
+    const stockSnaps = await Promise.all(itemIds.filter(id => multi.has(id)).map(id => tx.get(db.doc(`inventoryStocks/${campCode}__${id}`))));
+    const stockOf = new Map(stockSnaps.map(sn => [sn.data()?.itemId as string, sn.data() ?? {}]));
+
     type Change = { itemId: string; itemName: string; groupId: string; groupName: string; delta: number; reason: string; doseId: string; label: string; by: string };
     const changes: Change[] = [];
-    const labelOf = (src?: string) =>
-      `${studentName}${src === 'progress' ? ' 경과보고' : src === 'initial' ? ' 최초보고' : ''}`.trim() || '약 복용';
+    const labelOf = (src?: string) => source === 'staff'
+      ? `${personName} 선생님`.trim()
+      : `${personName}${src === 'progress' ? ' 경과보고' : src === 'initial' ? ' 최초보고' : ''}`.trim() || '약 복용';
 
     const currentIds = new Set(current.map(d => d.id));
+    const toOpen = new Map<string, { itemId: string; itemName: string; groupId: string; groupName: string; by: string; doseId: string; label: string }>();
     current.forEach(n => {
       const p = applied[n.id];
       const by = n.givenBy || '자동';
+      const q = eff(n);
       if (!p) {
-        changes.push({ itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, delta: -n.quantity, reason: 'dose', doseId: n.id, label: labelOf(n.source), by });
+        changes.push({ itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, delta: -q, reason: 'dose', doseId: n.id, label: labelOf(n.source), by });
+        if (multi.has(n.itemId)) toOpen.set(`${n.itemId}|${n.groupId}`, { itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, by, doseId: n.id, label: labelOf(n.source) });
       } else if (p.itemId === n.itemId && p.groupId === n.groupId) {
-        const diff = n.quantity - p.quantity;
+        const diff = q - p.quantity;
         if (diff !== 0) changes.push({ itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, delta: -diff, reason: 'dose_adjust', doseId: n.id, label: labelOf(n.source), by });
       } else {
         changes.push({ itemId: p.itemId, itemName: p.itemName, groupId: p.groupId, groupName: p.groupName, delta: p.quantity, reason: 'dose_revert', doseId: n.id, label: labelOf(n.source), by });
-        changes.push({ itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, delta: -n.quantity, reason: 'dose', doseId: n.id, label: labelOf(n.source), by });
+        changes.push({ itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, delta: -q, reason: 'dose', doseId: n.id, label: labelOf(n.source), by });
       }
     });
     Object.entries(applied).forEach(([doseId, p]) => {
       if (currentIds.has(doseId)) return;
+      // 다회용(0개 반영)을 지운 경우엔 되돌릴 수량이 없다 — 기록만 남김
       changes.push({ itemId: p.itemId, itemName: p.itemName, groupId: p.groupId, groupName: p.groupName, delta: p.quantity, reason: 'dose_revert', doseId, label: labelOf(p.source), by: '자동' });
     });
     if (changes.length === 0 && current.length > 0 && ledSnap.exists) return 0;
@@ -102,10 +124,26 @@ export async function reconcileDoseLedger(recordId: string, fallbackCampCode?: s
       if (Object.keys(stocks).length === 0) return;
       tx.set(db.doc(`inventoryStocks/${campCode}__${itemId}`), { campCode, itemId, stocks, updatedAt: now }, { merge: true });
     });
+    // 다회용 자동 개봉 — 그 그룹에 사용 중인 것이 없고 재고가 있으면 1개 개봉
+    toOpen.forEach(o => {
+      const st = stockOf.get(o.itemId) ?? {};
+      const have = Number(st.stocks?.[o.groupId]) || 0;
+      const opened = Number(st.opened?.[o.groupId]) || 0;
+      if (opened > 0 || have <= 0) return;
+      tx.set(db.doc(`inventoryStocks/${campCode}__${o.itemId}`), { campCode, itemId: o.itemId, opened: { [o.groupId]: 1 }, updatedAt: now }, { merge: true });
+      tx.set(db.collection('inventoryMovements').doc(), {
+        campCode, itemId: o.itemId, itemName: o.itemName, groupId: o.groupId, groupName: o.groupName,
+        delta: 0, reason: 'open', refLabel: o.label, at: now, by: o.by,
+        ...(source === 'staff' ? { refStaffUseId: recordId } : { refPatientId: recordId }), refDoseId: o.doseId,
+      });
+    });
     changes.forEach(c => {
+      // 다회용 복용 수정처럼 수량 변화 없는 수정은 내역에 남기지 않는다 (새 사용 기록 0개는 남김)
+      if (c.delta === 0 && c.reason !== 'dose') return;
       tx.set(db.collection('inventoryMovements').doc(), {
         campCode, itemId: c.itemId, itemName: c.itemName, groupId: c.groupId, groupName: c.groupName,
-        delta: c.delta, reason: c.reason, refPatientId: recordId, refDoseId: c.doseId, refLabel: c.label,
+        delta: c.delta, reason: c.reason, refDoseId: c.doseId, refLabel: c.label,
+        ...(source === 'staff' ? { refStaffUseId: recordId } : { refPatientId: recordId }),
         at: now, by: c.by,
       });
     });
@@ -116,11 +154,11 @@ export async function reconcileDoseLedger(recordId: string, fallbackCampCode?: s
       const nextApplied: Applied = {};
       current.forEach(d => {
         nextApplied[d.id] = {
-          itemId: d.itemId, itemName: d.itemName, groupId: d.groupId, groupName: d.groupName, quantity: d.quantity,
+          itemId: d.itemId, itemName: d.itemName, groupId: d.groupId, groupName: d.groupName, quantity: eff(d),
           ...(d.itemKind ? { itemKind: d.itemKind } : {}), ...(d.source ? { source: d.source } : {}),
         };
       });
-      tx.set(ledRef, { campCode, studentName, applied: nextApplied, updatedAt: now });
+      tx.set(ledRef, { campCode, studentName: personName, source, applied: nextApplied, updatedAt: now });
     }
     return changes.length;
   });
@@ -322,7 +360,9 @@ export class StockOpError extends Error {
 export type StockOp =
   | { op: 'restock'; campCode: string; itemId: string; groupId: string; quantity: number; expiry?: string; memo?: string }
   | { op: 'adjust'; campCode: string; itemId: string; groupId: string; target: number; reason: string }
-  | { op: 'transfer'; campCode: string; itemId: string; fromGroupId: string; toGroupId: string; quantity: number; memo?: string };
+  | { op: 'transfer'; campCode: string; itemId: string; fromGroupId: string; toGroupId: string; quantity: number; memo?: string }
+  /** 다회용 약: 개봉 / 거의 다 씀 표시·해제 / 다 씀(1개 차감) — 캠프 스태프 누구나 */
+  | { op: 'multi'; campCode: string; itemId: string; groupId: string; action: 'open' | 'nearly' | 'unnearly' | 'finish' };
 
 export async function runStockOp(uid: string, input: StockOp): Promise<{ from?: number; to?: number; value?: number }> {
   const db = getAdminFirestore();
@@ -338,8 +378,9 @@ export async function runStockOp(uid: string, input: StockOp): Promise<{ from?: 
   const exp = user.jobExperiences?.find(e => jobCodes.docs.some(d => d.id === e.id));
   const isAdmin = user.role === 'admin';
   const isSub = !!exp?.groupRole && STOCK_MANAGER_GROUP_ROLES.includes(exp.groupRole);
-  if (!isAdmin && !isSub) throw new StockOpError(403, '관리자나 부매니저만 재고를 바꿀 수 있습니다.');
   const byName = String(user.name ?? '').trim() || '이름 없음';
+  if (input.op === 'multi') return runMultiUseOp(db, uid, byName, !!exp || isAdmin, input);
+  if (!isAdmin && !isSub) throw new StockOpError(403, '관리자나 부매니저만 재고를 바꿀 수 있습니다.');
 
   // 관련 그룹 읽기 + 캠프 확인
   const groupIds = input.op === 'transfer' ? [input.fromGroupId, input.toGroupId] : [input.groupId];
@@ -435,4 +476,65 @@ export async function runStockOp(uid: string, input: StockOp): Promise<{ from?: 
     notifySupply({ type: 'stock_low', campCode, itemId, groupId: from.id }, uid).catch(e => console.error('재고 부족 알림 오류:', e)),
   ]);
   return result;
+}
+
+/**
+ * 다회용 약 상태 바꾸기 (한 트랜잭션)
+ * - open: 미개봉 1개 → 사용 중 (수량 변화 없음)
+ * - nearly / unnearly: 사용 중인 것에 '거의 다 씀' 표시·해제 → 부족 판단에서 빠져 미리 사 오게 된다
+ * - finish: 사용 중인 1개를 다 씀 → 재고 1개 차감 (차감은 여기서만)
+ */
+async function runMultiUseOp(
+  db: FirebaseFirestore.Firestore, uid: string, byName: string, inCamp: boolean,
+  input: Extract<StockOp, { op: 'multi' }>
+): Promise<{ value?: number }> {
+  if (!inCamp) throw new StockOpError(403, '이 캠프 스태프만 사용할 수 있습니다.');
+  const { campCode, itemId, groupId, action } = input;
+  if (!['open', 'nearly', 'unnearly', 'finish'].includes(action)) throw new StockOpError(400, '알 수 없는 작업입니다.');
+  if (!groupId || groupId.includes('/')) throw new StockOpError(400, '그룹 정보가 필요합니다.');
+  const [groupSnap, itemSnap] = await Promise.all([db.doc(`inventoryGroups/${groupId}`).get(), db.doc(`inventoryItems/${itemId}`).get()]);
+  if (groupSnap.data()?.campCode !== campCode) throw new StockOpError(400, '이 캠프의 그룹이 아닙니다.');
+  if (itemSnap.data()?.consumption !== 'multi') throw new StockOpError(400, '여러 번 쓰는 약으로 지정된 품목이 아닙니다.');
+  const groupName = String(groupSnap.data()?.name ?? '');
+  const itemName = String(itemSnap.data()?.name ?? '');
+  const ref = db.doc(`inventoryStocks/${campCode}__${itemId}`);
+  const now = admin.firestore.Timestamp.now();
+  const value = await db.runTransaction(async tx => {
+    const d = (await tx.get(ref)).data() ?? {};
+    const stock = Number(d.stocks?.[groupId]) || 0;
+    const opened = Math.min(Number(d.opened?.[groupId]) || 0, Math.max(stock, 0));
+    const nearly = Math.min(Number(d.nearlyEmpty?.[groupId]) || 0, opened);
+    let next = { stock, opened, nearly };
+    if (action === 'open') {
+      if (stock - opened <= 0) throw new StockOpError(400, '개봉할 미개봉 재고가 없습니다.');
+      next = { ...next, opened: opened + 1 };
+    } else if (action === 'nearly') {
+      if (nearly >= opened) throw new StockOpError(400, '사용 중인 제품이 없습니다.');
+      next = { ...next, nearly: nearly + 1 };
+    } else if (action === 'unnearly') {
+      if (nearly <= 0) return stock;
+      next = { ...next, nearly: nearly - 1 };
+    } else {
+      if (opened <= 0) throw new StockOpError(400, '사용 중인 제품이 없습니다. 먼저 개봉해주세요.');
+      // 다 쓴 것은 '거의 다 씀' 표시된 것부터
+      next = { stock: stock - 1, opened: opened - 1, nearly: Math.max(0, Math.min(nearly - 1, opened - 1)) };
+    }
+    tx.set(ref, {
+      campCode, itemId,
+      ...(next.stock !== stock ? { stocks: { [groupId]: next.stock } } : {}),
+      opened: { [groupId]: next.opened }, nearlyEmpty: { [groupId]: next.nearly }, updatedAt: now,
+    }, { merge: true });
+    if (action !== 'unnearly') {
+      tx.set(db.collection('inventoryMovements').doc(), {
+        campCode, itemId, itemName, groupId, groupName,
+        delta: action === 'finish' ? -1 : 0, reason: action, at: now, by: byName, byId: uid,
+      });
+    }
+    return next.stock;
+  });
+  // '거의 다 씀'·'다 씀' 뒤에는 부족 알림 판단
+  if (action === 'nearly' || action === 'finish') {
+    await notifySupply({ type: 'stock_low', campCode, itemId, groupId }, uid).catch(e => console.error('재고 부족 알림 오류:', e));
+  }
+  return { value };
 }

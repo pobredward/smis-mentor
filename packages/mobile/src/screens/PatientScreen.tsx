@@ -82,7 +82,7 @@ import {
   FEVER_THRESHOLDS,
   classifyFever,
   isFeverLevel,
-  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels } from '@smis-mentor/shared';
+  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, subscribeStaffMedicationUses, addStaffMedicationUse, updateStaffMedicationUse, deleteStaffMedicationUse } from '@smis-mentor/shared';
 import type {
   PatientRecord,
   PatientType,
@@ -109,8 +109,7 @@ import type {
   InventoryStock,
   InventoryGroup,
   InventoryUsage,
-  FeverLevel,
-} from '@smis-mentor/shared';
+  FeverLevel, StaffMedicationUse } from '@smis-mentor/shared';
 import jobCodesService from '../services/jobCodesService';
 import { stSheetService } from '../services/stSheet';
 import { authenticatedFetch } from '../utils/apiClient';
@@ -352,7 +351,7 @@ export function PatientScreen() {
     return () => clearInterval(t);
   }, []);
   // 주 탭: 환자 현황 / 약복용명단
-  const [mainTab, setMainTab] = useState<'환자 현황' | '약복용명단'>('환자 현황');
+  const [mainTab, setMainTab] = useState<'환자 현황' | '약복용명단' | '선생님 약'>('환자 현황');
 
   const activeJobCodeId = useMemo(() => {
     const isAdmin = userData?.role === 'admin';
@@ -838,7 +837,7 @@ export function PatientScreen() {
       <View style={styles.header}>
         {/* ── 대탭: 환자 현황 / 약복용명단 — 최상단 */}
         <View style={styles.mainTabRow}>
-          {(['환자 현황', '약복용명단'] as const).map(tab => (
+          {(['환자 현황', '약복용명단', '선생님 약'] as const).map(tab => (
             <TouchableOpacity
               key={dataLabel(tab)}
               style={[styles.mainTab, mainTab === tab && styles.mainTabActive]}
@@ -881,7 +880,7 @@ export function PatientScreen() {
               <Text style={styles.quickReportBtnText}>{L('data.progFirstReport')}</Text>
             </TouchableOpacity>
           </View>
-        ) : (
+        ) : mainTab === '약복용명단' ? (
           <View style={styles.headerTop}>
             <View style={styles.headerLeft}>
               <Text style={styles.headerTitle}>{L('patient.medicationList')}</Text>
@@ -894,7 +893,7 @@ export function PatientScreen() {
               <Text style={styles.addBtnDisabledText}>{L('patient.addToList')}</Text>
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
       </View>
 
       {/* 검색 (환자 현황 탭만) */}
@@ -923,6 +922,8 @@ export function PatientScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#ef4444" />
         </View>
+      ) : mainTab === '선생님 약' ? (
+        <StaffMedicationSectionMobile campCode={campCode} jobCodeId={activeJobCodeId} campUsers={campUsers} />
       ) : mainTab === '약복용명단' ? (
         <MedicationListView
           records={medicationRecords}
@@ -1948,6 +1949,135 @@ function PatientCard({
 }
 
 // 상세 행
+
+// ==================== 👩‍🏫 선생님 약 사용 ====================
+function syncStaffDoseStock(id: string, campCode?: string | null) {
+  authenticatedFetch('/api/inventory/sync-dose', { method: 'POST', body: JSON.stringify({ recordId: id, campCode: campCode ?? undefined, source: 'staff' }) })
+    .catch(e => console.warn('재고 정산 요청 실패 (다음 저장 때 다시 맞춰짐):', e));
+}
+
+function StaffMedicationSectionMobile({ campCode, jobCodeId, campUsers }: { campCode: string | null; jobCodeId?: string; campUsers: User[] }) {
+  const { userData } = useAuth();
+  const [list, setList] = useState<StaffMedicationUse[]>([]);
+  const [editing, setEditing] = useState<StaffMedicationUse | 'new' | null>(null);
+  useEffect(() => (campCode ? subscribeStaffMedicationUses(db, campCode, setList) : undefined), [campCode]);
+  const isAdmin = userData?.role === 'admin';
+  const canEdit = (u: StaffMedicationUse) => isAdmin || u.recordedById === userData?.userId;
+  const remove = (u: StaffMedicationUse) => Alert.alert(L('common.delete'), L('patient.deleteThisRecordTheQuantity'), [
+    { text: L('common.cancel'), style: 'cancel' },
+    { text: L('common.delete'), style: 'destructive', onPress: async () => {
+      try { await deleteStaffMedicationUse(db, u.id); syncStaffDoseStock(u.id, u.campCode); }
+      catch { Alert.alert(L('common.error'), L('inventory.couldNotDelete')); }
+    } },
+  ]);
+  return (
+    <ScrollView contentContainerStyle={{ padding: 12, gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827' }}>{L('patient.staffMedicationUse')}</Text>
+          <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{L('patient.logMedicineGivenToStaff')}</Text>
+        </View>
+        <TouchableOpacity disabled={!campCode} onPress={() => setEditing('new')} style={{ backgroundColor: '#ef4444', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, opacity: campCode ? 1 : 0.4 }}>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{L('patient.log')}</Text>
+        </TouchableOpacity>
+      </View>
+      {list.length === 0 ? <Text style={{ textAlign: 'center', color: '#9ca3af', paddingVertical: 30 }}>{L('patient.noRecordsYet')}</Text> : list.map(u => (
+        <View key={u.id} style={{ backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', padding: 10, gap: 3 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#111827' }} numberOfLines={1}>{u.staffName} <Text style={{ fontSize: 11, fontWeight: '400', color: '#9ca3af' }}>{u.staffGroup ?? ''} · {formatDate(u.createdAt)} {formatTime(u.createdAt)}</Text></Text>
+            {canEdit(u) && <TouchableOpacity onPress={() => setEditing(u)}><Text style={{ fontSize: 11, color: '#6b7280' }}>{L('task.edit')}</Text></TouchableOpacity>}
+            {canEdit(u) && <TouchableOpacity onPress={() => remove(u)}><Text style={{ fontSize: 11, color: '#f87171' }}>{L('common.delete')}</Text></TouchableOpacity>}
+          </View>
+          <Text style={{ fontSize: 12, color: '#374151' }}>🤒 {u.symptom}</Text>
+          {u.doses.map(d => <Text key={d.id} style={{ fontSize: 11, color: '#065f46' }}>💊 {doseLabel(d)} {d.quantity}{dataLabel(d.unit ?? '개')} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</Text>)}
+          {u.note ? <Text style={{ fontSize: 11, color: '#6b7280' }}>📝 {u.note}</Text> : null}
+          <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('patient.loggedBy', { v0: u.recordedBy })}</Text>
+        </View>
+      ))}
+      <Modal visible={!!editing && !!campCode} animationType="fade" transparent onRequestClose={() => setEditing(null)}>
+        {editing && campCode ? (
+          <StaffMedicationFormMobile campCode={campCode} jobCodeId={jobCodeId} campUsers={campUsers} existing={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />
+        ) : null}
+      </Modal>
+    </ScrollView>
+  );
+}
+
+function StaffMedicationFormMobile({ campCode, jobCodeId, campUsers, existing, onClose }: {
+  campCode: string; jobCodeId?: string; campUsers: User[]; existing?: StaffMedicationUse; onClose: () => void;
+}) {
+  const { userData } = useAuth();
+  const { medicines, groups } = usePatientInventory();
+  const me = userData?.userId ?? '';
+  const [who, setWho] = useState(existing?.staffUserId ?? me);
+  const [q, setQ] = useState('');
+  const [symptom, setSymptom] = useState(existing?.symptom ?? '');
+  const [note, setNote] = useState(existing?.note ?? '');
+  const [doses, setDoses] = useState<MedicationDose[]>(existing?.doses ?? []);
+  const [busy, setBusy] = useState(false);
+  const groupOf = (u?: User) => u?.jobExperiences?.find(e => e.id === jobCodeId)?.group;
+  const target = campUsers.find(u => u.userId === who);
+  const whoName = target?.name ?? (who === me ? userData?.name : existing?.staffName) ?? '';
+  const results = q.trim() ? campUsers.filter(u => u.name?.includes(q.trim())).slice(0, 6) : [];
+  const defaultGroupId = useMemo(() => {
+    const g = groupOf(target ?? (userData as unknown as User | undefined));
+    return g ? groups.find(x => x.campGroupName?.toLowerCase() === String(g).toLowerCase())?.id : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [who, groups]);
+  const save = async () => {
+    if (!symptom.trim()) { Alert.alert(L('patient.checkNeeded'), L('patient.pleaseEnterTheSymptoms')); return; }
+    if (doses.length === 0) { Alert.alert(L('patient.checkNeeded'), L('patient.addAtLeastOneMedicine')); return; }
+    if (doses.some(d => !d.itemId || !d.groupId)) { Alert.alert(L('patient.checkNeeded'), L('patient.selectBothAMedicineAnd')); return; }
+    setBusy(true);
+    try {
+      let id = existing?.id;
+      if (existing) await updateStaffMedicationUse(db, existing.id, { symptom, note, doses });
+      else id = await addStaffMedicationUse(db, {
+        campCode, staffUserId: who, staffName: whoName, staffGroup: groupOf(target) || undefined,
+        symptom, note, doses, recordedBy: userData?.name ?? '', recordedById: me,
+      });
+      if (id) syncStaffDoseStock(id, campCode);
+      onClose();
+    } catch (e) { console.error('선생님 약 사용 저장 오류:', e); Alert.alert(L('common.error'), L('profile.couldNotSave')); }
+    finally { setBusy(false); }
+  };
+  const input = { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#111827', backgroundColor: '#fff' } as const;
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 }}>
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, maxHeight: '88%', overflow: 'hidden' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }}>
+          <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: '#111827' }}>{existing ? L('patient.editStaffMedicationUse') : L('patient.logStaffMedicationUse')}</Text>
+          <TouchableOpacity onPress={onClose}><Ionicons name="close" size={22} color="#9ca3af" /></TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }} keyboardShouldPersistTaps="handled">
+          <View style={{ gap: 5 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>{L('patient.staffMember')}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1e3a8a', backgroundColor: '#eff6ff', borderRadius: 8, padding: 8 }}>{whoName}{groupOf(target) ? `  · ${groupOf(target)}` : ''}</Text>
+            {!existing && <TextInput value={q} onChangeText={setQ} placeholder={L('patient.searchName')} placeholderTextColor="#9ca3af" style={input} />}
+            {results.map(u => (
+              <TouchableOpacity key={u.userId} onPress={() => { setWho(u.userId); setQ(''); }} style={{ paddingHorizontal: 10, paddingVertical: 7, borderRadius: 6, backgroundColor: '#f9fafb' }}>
+                <Text style={{ fontSize: 12, color: '#111827' }}>{u.name} <Text style={{ fontSize: 10, color: '#9ca3af' }}>{groupOf(u) ?? ''}</Text></Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={{ gap: 5 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>{L('patient.symptomsReason')}</Text>
+            <TextInput value={symptom} onChangeText={setSymptom} placeholder={L('patient.eGHeadacheMosquitoBite')} placeholderTextColor="#9ca3af" style={input} />
+          </View>
+          <MedicationDoseEditorMobile doses={doses} onChange={setDoses} medicines={medicines} groups={groups} givenBy={userData?.name ?? ''} defaultGroupId={defaultGroupId} />
+          <View style={{ gap: 5 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>{L('task.note')} <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{L('patient.optional')}</Text></Text>
+            <TextInput value={note} onChangeText={setNote} multiline style={[input, { minHeight: 44 }]} />
+          </View>
+          <TouchableOpacity onPress={save} disabled={busy} style={{ backgroundColor: '#ef4444', borderRadius: 10, paddingVertical: 12, alignItems: 'center', opacity: busy ? 0.5 : 1 }}>
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{busy ? L('task.saving') : L('common.save')}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.detailRow}>
@@ -2483,11 +2613,12 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
           {w.level === 'warn' ? '⚠️ ' : 'ℹ️ '}{w.message}
         </Text>
       ))}
+      {item && isMultiUse(item) ? <Text style={{ fontSize: 10, color: '#c2410c', fontWeight: '600' }}>{L('patient.multiUseOnlyTheUse')}</Text> : null}
       {item?.dosageNote ? <Text style={{ fontSize: 10, color: '#065f46' }}>📋 {item.dosageNote}</Text> : null}
       {item?.description ? <Text style={{ fontSize: 10, color: '#4b5563' }}>ℹ️ {item.description}</Text> : null}
       {item && d.groupId ? (
-        <Text style={{ fontSize: 10, color: groupStock - d.quantity < 0 ? '#dc2626' : '#6b7280', fontWeight: groupStock - d.quantity < 0 ? '600' : '400' }}>
-          {L('nav.inventory')} {d.groupName} {groupStock}{d.unit ?? L('patient.pcs')} {L('patient.total2')} {total}{d.unit ?? L('patient.pcs')}{groupStock - d.quantity < 0 ? L('patient.shortOnRecordCanSave') : ''}
+        <Text style={{ fontSize: 10, color: groupStock - (isMultiUse(item) ? 0 : d.quantity) < 0 ? '#dc2626' : '#6b7280', fontWeight: groupStock - (isMultiUse(item) ? 0 : d.quantity) < 0 ? '600' : '400' }}>
+          {L('nav.inventory')} {d.groupName} {groupStock}{d.unit ?? L('patient.pcs')} {L('patient.total2')} {total}{d.unit ?? L('patient.pcs')}{groupStock - (isMultiUse(item) ? 0 : d.quantity) < 0 ? L('patient.shortOnRecordCanSave') : ''}
         </Text>
       ) : null}
     </View>

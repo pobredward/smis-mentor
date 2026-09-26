@@ -5,12 +5,12 @@ import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
 import EscortSsn from '@/components/camp/patient/EscortSsn';
-import { isActiveEscortVisit, L, dataLabel, isEnglishUI, localizeLabels } from '@smis-mentor/shared';
+import { isActiveEscortVisit, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, subscribeStaffMedicationUses, addStaffMedicationUse, updateStaffMedicationUse, deleteStaffMedicationUse } from '@smis-mentor/shared';
 import {
   SYMPTOM_GUIDES, getHospitalPresets, isKoreanStaff, ACTION_NOTE_PLACEHOLDER, ACTION_NOTE_EXAMPLE,
   makeMedTimeKey, schedActiveOn, isInDateRange, calcTotalDoses, todayDateKey as todayStr,
 } from '@smis-mentor/shared';
-import type { SymptomGuide } from '@smis-mentor/shared';
+import type { SymptomGuide, StaffMedicationUse } from '@smis-mentor/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -381,7 +381,7 @@ export default function PatientContent() {
   const [campEndDate, setCampEndDate] = useState<string>('');  // "2026-08-14"
   const [campGroups, setCampGroups] = useState<CampGroup[]>([]); // 그룹-반 매핑
   // 주 탭: 환자 현황 / 약복용명단
-  const [mainTab, setMainTab] = useState<'환자 현황' | '약복용명단'>('환자 현황');
+  const [mainTab, setMainTab] = useState<'환자 현황' | '약복용명단' | '선생님 약'>('환자 현황');
   // 내 유닛/반 필터
   const [myFilter, setMyFilter] = useState<'전체' | '내유닛' | '내반'>('전체');
   const activeJobCodeId = useMemo(() => {
@@ -1003,7 +1003,7 @@ export default function PatientContent() {
 
         {/* ── 대탭: 환자 현황 / 약복용명단 ── 제목보다 위에 위치 */}
         <div className="flex border-b border-gray-100 -mx-4 px-4">
-          {(['환자 현황', '약복용명단'] as const).map(tab => (
+          {(['환자 현황', '약복용명단', '선생님 약'] as const).map(tab => (
             <button
               key={dataLabel(tab)}
               onClick={() => setMainTab(tab)}
@@ -1054,7 +1054,7 @@ export default function PatientContent() {
               {L('data.progFirstReport')}
             </button>
           </div>
-        ) : (
+        ) : mainTab === '약복용명단' ? (
           <div className="flex items-center justify-between py-3">
             <div>
               <h1 className="text-lg font-semibold text-gray-900">{L('patient.medicationList')}</h1>
@@ -1073,7 +1073,7 @@ export default function PatientContent() {
               {L('patient.addToList')}
             </button>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* 내가 인솔할 학생 (내원 인솔자로 지정된 경우) */}
@@ -1116,6 +1116,8 @@ export default function PatientContent() {
           <div className="flex items-center justify-center py-20">
             <div className="w-6 h-6 border-4 border-red-400 border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : mainTab === '선생님 약' ? (
+          <StaffMedicationSection campCode={campCode} jobCodeId={activeJobCodeId} campUsers={campUsers} />
         ) : mainTab === '약복용명단' ? (
           /* ── 약복용명단 탭 ── */
           <MedicationListView
@@ -2450,11 +2452,12 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
               </p>
             ))}
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+              {item && isMultiUse(item) && <span className="text-orange-700 font-semibold">{L('patient.multiUseOnlyTheUse')}</span>}
               {item?.dosageNote && <span className="text-emerald-800">📋 {item.dosageNote}</span>}
               {item?.description && <span className="text-gray-600">ℹ️ {item.description}</span>}
               {item && d.groupId && (
-                <span className={groupStock - d.quantity < 0 ? 'text-red-600 font-semibold' : 'text-gray-500'}>
-                  {L('nav.inventory')} {d.groupName} {groupStock}{d.unit ?? L('patient.pcs')} {L('patient.total2')} {total}{d.unit ?? L('patient.pcs')}{groupStock - d.quantity < 0 ? L('patient.shortOnRecordCanStill') : ''}
+                <span className={groupStock - (isMultiUse(item) ? 0 : d.quantity) < 0 ? 'text-red-600 font-semibold' : 'text-gray-500'}>
+                  {L('nav.inventory')} {d.groupName} {groupStock}{d.unit ?? L('patient.pcs')} {L('patient.total2')} {total}{d.unit ?? L('patient.pcs')}{groupStock - (isMultiUse(item) ? 0 : d.quantity) < 0 ? L('patient.shortOnRecordCanStill') : ''}
                 </span>
               )}
             </div>
@@ -7029,6 +7032,133 @@ function PatientFormModal({
 // ==================== 공통 ====================
 
 const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-100 bg-white';
+
+
+// ==================== 👩‍🏫 선생님 약 사용 ====================
+// 학생 환자 기록과 별도 컬렉션(staffMedicationUses). 재고 차감은 학생과 같은 원장 방식(source=staff).
+
+function syncStaffDoseStock(id: string, campCode?: string | null) {
+  authenticatedPost('/api/inventory/sync-dose', { recordId: id, campCode: campCode ?? undefined, source: 'staff' })
+    .catch(e => console.warn('재고 정산 요청 실패 (다음 저장 때 다시 맞춰짐):', e));
+}
+
+function StaffMedicationSection({ campCode, jobCodeId, campUsers }: { campCode: string | null; jobCodeId?: string; campUsers: User[] }) {
+  const { userData } = useAuth();
+  const [list, setList] = useState<StaffMedicationUse[]>([]);
+  const [editing, setEditing] = useState<StaffMedicationUse | 'new' | null>(null);
+  useEffect(() => (campCode ? subscribeStaffMedicationUses(db, campCode, setList) : undefined), [campCode]);
+  const isAdmin = userData?.role === 'admin';
+  const canEdit = (u: StaffMedicationUse) => isAdmin || u.recordedById === userData?.userId;
+  const remove = async (u: StaffMedicationUse) => {
+    if (!confirm(L('patient.deleteThisRecordTheQuantity'))) return;
+    try { await deleteStaffMedicationUse(db, u.id); syncStaffDoseStock(u.id, u.campCode); }
+    catch (e) { console.error(e); alert(L('inventory.couldNotDelete')); }
+  };
+  return (
+    <div className="p-3 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold text-gray-900">{L('patient.staffMedicationUse')}</h2>
+          <p className="text-[11px] text-gray-500 mt-0.5">{L('patient.logMedicineGivenToStaff')}</p>
+        </div>
+        <button onClick={() => setEditing('new')} disabled={!campCode} className="shrink-0 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-lg disabled:opacity-40">{L('patient.log')}</button>
+      </div>
+      {list.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-10">{L('patient.noRecordsYet')}</p>
+      ) : list.map(u => (
+        <div key={u.id} className="bg-white rounded-xl border border-gray-200 px-3 py-2.5 space-y-1">
+          <div className="flex items-center gap-2">
+            <p className="flex-1 min-w-0 text-sm font-bold text-gray-900 truncate">{u.staffName} <span className="text-[11px] font-normal text-gray-400">{u.staffGroup ?? ''} · {formatDate(u.createdAt)}</span></p>
+            {canEdit(u) && (
+              <>
+                <button onClick={() => setEditing(u)} className="text-[11px] text-gray-500 hover:underline">{L('task.edit')}</button>
+                <button onClick={() => remove(u)} className="text-[11px] text-red-400 hover:underline">{L('common.delete')}</button>
+              </>
+            )}
+          </div>
+          <p className="text-[12px] text-gray-700">🤒 {u.symptom}</p>
+          {u.doses.map(d => (
+            <p key={d.id} className="text-[11px] text-emerald-800">💊 {doseLabel(d)} {d.quantity}{dataLabel(d.unit ?? '개')} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</p>
+          ))}
+          {u.note && <p className="text-[11px] text-gray-500">📝 {u.note}</p>}
+          <p className="text-[10px] text-gray-400">{L('patient.loggedBy', { v0: u.recordedBy })}</p>
+        </div>
+      ))}
+      {editing && campCode && (
+        <StaffMedicationFormModal campCode={campCode} jobCodeId={jobCodeId} campUsers={campUsers} existing={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />
+      )}
+    </div>
+  );
+}
+
+function StaffMedicationFormModal({ campCode, jobCodeId, campUsers, existing, onClose }: {
+  campCode: string; jobCodeId?: string; campUsers: User[]; existing?: StaffMedicationUse; onClose: () => void;
+}) {
+  const { userData } = useAuth();
+  const { medicines, groups } = usePatientInventory();
+  const me = userData?.userId ?? '';
+  const staff = useMemo(() => [...campUsers].filter(u => u.name).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [campUsers]);
+  const [who, setWho] = useState(existing?.staffUserId ?? me);
+  const [symptom, setSymptom] = useState(existing?.symptom ?? '');
+  const [note, setNote] = useState(existing?.note ?? '');
+  const [doses, setDoses] = useState<MedicationDose[]>(existing?.doses ?? []);
+  const [busy, setBusy] = useState(false);
+  const groupOf = (u?: User) => u?.jobExperiences?.find(e => e.id === jobCodeId)?.group;
+  const myGroupId = useMemo(() => {
+    const g = groupOf(campUsers.find(u => u.userId === who) ?? (userData as unknown as User | undefined));
+    return g ? groups.find(x => x.campGroupName?.toLowerCase() === String(g).toLowerCase())?.id : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [who, groups, campUsers]);
+  const save = async () => {
+    if (!symptom.trim()) { alert(L('patient.pleaseEnterTheSymptoms')); return; }
+    if (doses.length === 0) { alert(L('patient.addAtLeastOneMedicine')); return; }
+    if (doses.some(d => !d.itemId || !d.groupId)) { alert(L('patient.selectBothAMedicineAnd')); return; }
+    const target = campUsers.find(u => u.userId === who);
+    setBusy(true);
+    try {
+      let id = existing?.id;
+      if (existing) await updateStaffMedicationUse(db, existing.id, { symptom, note, doses });
+      else id = await addStaffMedicationUse(db, {
+        campCode, staffUserId: who, staffName: target?.name ?? userData?.name ?? '', staffGroup: groupOf(target) || undefined,
+        symptom, note, doses, recordedBy: userData?.name ?? '', recordedById: me,
+      });
+      if (id) syncStaffDoseStock(id, campCode);
+      onClose();
+    } catch (e) { console.error('선생님 약 사용 저장 오류:', e); alert(L('profile.couldNotSave')); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">{existing ? L('patient.editStaffMedicationUse') : L('patient.logStaffMedicationUse')}</h2>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1">{L('patient.staffMember')}</p>
+            <select value={who} onChange={e => setWho(e.target.value)} disabled={!!existing} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:bg-gray-50">
+              {!staff.some(u => u.userId === me) && <option value={me}>{userData?.name}</option>}
+              {staff.map(u => <option key={u.userId} value={u.userId}>{u.name}{groupOf(u) ? ` · ${groupOf(u)}` : ''}</option>)}
+            </select>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1">{L('patient.symptomsReason')}</p>
+            <input value={symptom} onChange={e => setSymptom(e.target.value)} placeholder={L('patient.eGHeadacheMosquitoBite')} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-red-300" />
+          </div>
+          <MedicationDoseEditor doses={doses} onChange={setDoses} medicines={medicines} groups={groups} givenBy={userData?.name ?? ''} defaultGroupId={myGroupId} />
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-1">{L('task.note')} <span className="font-normal text-gray-400">{L('patient.optional')}</span></p>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none resize-none" />
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-gray-100">
+          <button onClick={save} disabled={busy} className="w-full py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl disabled:opacity-40">{busy ? L('task.saving') : L('common.save')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (

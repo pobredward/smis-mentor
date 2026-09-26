@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { FiBox, FiSearch, FiPlus, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCamera, FiImage, FiVideo, FiShoppingCart, FiList, FiChevronRight, FiRepeat } from 'react-icons/fi';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { FiBox, FiSearch, FiPlus, FiSettings, FiPackage, FiX, FiCopy, FiClipboard, FiCamera, FiImage, FiVideo, FiShoppingCart, FiList, FiChevronRight, FiRepeat, FiChevronLeft, FiStar } from 'react-icons/fi';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -89,8 +89,9 @@ import {
   supplyShoppingList,
   supplyBuyerCandidates,
   fmtWon,
-  addSupplyComment,
-  deleteSupplyComment,
+  setSupplyRequestNote,
+  approveSupplyRequests,
+  supplyApproved,
   deleteSupplyRequest,
   isSupplyOpen,
   supplyForLabel,
@@ -123,7 +124,7 @@ import {
   INVENTORY_CATEGORIES,
   INVENTORY_SUBCATEGORIES,
   INVENTORY_UNITS,
-  DEFAULT_INVENTORY_ITEMS, dataLabel, L, isEnglishUI } from '@smis-mentor/shared';
+  DEFAULT_INVENTORY_ITEMS, dataLabel, L, isEnglishUI, supplyUnitChoices, isMedicineItem, USE_REASON_OTHER, orderedItemMedia, itemCoverMedia, setItemCoverMedia, getAvailableStock, getOpenedCount, getNearlyEmptyCount, isMultiUse } from '@smis-mentor/shared';
 import type {
   InventoryItem,
   InventoryItemView,
@@ -152,8 +153,7 @@ import type {
   LostNotifyTarget,
   NotifyUserLike,
   MovementFilterKey,
-  CampGroup,
-} from '@smis-mentor/shared';
+  CampGroup, InventoryConsumption } from '@smis-mentor/shared';
 import { fmtHoldDate, supplyStatusLine } from '@smis-mentor/shared';
 
 type SubTab = 'stock' | 'request' | 'purchase' | 'movement' | 'lost' | 'manage';
@@ -543,7 +543,7 @@ function StockTab({ campCode, views, groups, needs, perm, userName, myGroupId, o
                 <ItemRow key={v.id} view={v} groupId={groupFilter === '전체' ? undefined : groupFilter}
                   showStatus={perm.isStockManager} isShort={shortIds.has(v.id)}
                   onClick={() => onSelect(v.id)}
-                  onQuickUse={groupFilter !== '전체' && groupFilter in v.stocks ? () => onQuickUse(v.id, groupFilter) : undefined} />
+                  onQuickUse={groupFilter !== '전체' && groupFilter in v.stocks && !isMedicineItem(v) ? () => onQuickUse(v.id, groupFilter) : undefined} />
               ))}
             </div>
           </div>
@@ -567,7 +567,7 @@ function ItemRow({ view, groupId, showStatus, isShort, onClick, onQuickUse }: {
 }) {
   const qty = groupId ? getGroupStock(view, groupId) : view.total;
   const min = groupId ? getMinStock(view, groupId) : 0;
-  const low = groupId ? (qty < 0 || (min > 0 && qty < min)) : isShort;
+  const low = groupId ? (qty < 0 || (min > 0 && getAvailableStock(view, groupId) < min)) : isShort;
   // 일반 멘토에게는 부족 상태를 표시하지 않는다 (수량이 음수인 실사 필요만 빨갛게)
   const lowShown = showStatus ? low : qty < 0;
   const thumb = itemThumb(view);
@@ -634,9 +634,20 @@ async function uploadItemMedia(itemId: string, files: File[], by: string): Promi
 function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; canEdit: boolean; userName: string }) {
   const [deleting, setDeleting] = useState<ItemMedia | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const media = item.media ?? [];
+  const media = orderedItemMedia(item);
+  const cover = itemCoverMedia(item);
   const [busy, setBusy] = useState(false);
   const [viewing, setViewing] = useState<ItemMedia | null>(null);
+  // 넘겨보기 (대표 사진부터) — 모바일은 좌우 스와이프, 데스크톱은 화살표
+  const [idx, setIdx] = useState(0);
+  const cur = media.length ? media[Math.min(idx, media.length - 1)] : undefined;
+  const pos = cur ? media.indexOf(cur) : 0;
+  const go = (d: number) => setIdx((pos + d + media.length) % media.length);
+  const touchX = useRef<number | null>(null);
+  const makeCover = async (m: ItemMedia) => {
+    try { await setItemCoverMedia(db, item.id, m.path); setIdx(0); }
+    catch (e) { console.error(e); alert(L('profile.couldNotSave')); }
+  };
   const add = async (files: File[]) => {
     if (!files.length) return;
     if (files.some(f => f.size > 50 * 1024 * 1024)) alert(L('inventory.filesOver50mbAreSkipped'));
@@ -647,38 +658,48 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
   };
   const remove = async (m: ItemMedia) => {
     setDeleteBusy(true);
-    try { await removeInventoryItemMedia(db, item.id, media, m.path); await deleteObject(storageRef(storage, m.path)).catch(() => {}); setDeleting(null); }
+    try { await removeInventoryItemMedia(db, item.id, item.media ?? [], m.path, item.coverMediaPath); await deleteObject(storageRef(storage, m.path)).catch(() => {}); setDeleting(null); setIdx(0); }
     catch (e) { console.error(e); alert(L('inventory.couldNotDelete')); }
     finally { setDeleteBusy(false); }
   };
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <p className="text-sm font-bold text-gray-700">{L('inventory.photosVideos')} <span className="font-normal text-gray-400">{media.length || ''}</span></p>
-        {canEdit && (
-          <label className={`flex items-center gap-1 text-[13px] font-semibold cursor-pointer ${busy ? 'text-gray-400' : 'text-blue-700 hover:underline'}`}>
-            <FiCamera className="w-3.5 h-3.5" />{busy ? L('inventory.uploading') : L('task.add')}
-            <input type="file" accept="image/*,video/*" multiple disabled={busy} className="hidden" onChange={e => { add(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
-          </label>
+    <div className="space-y-1.5">
+      {/* 1:1 미디어 — 대표 사진부터 넘겨보기 */}
+      <div className="relative w-full max-w-sm mx-auto aspect-square rounded-xl overflow-hidden bg-gray-50 border border-gray-200 select-none"
+        onTouchStart={e => { touchX.current = e.touches[0].clientX; }}
+        onTouchEnd={e => { if (touchX.current == null || media.length < 2) return; const dx = e.changedTouches[0].clientX - touchX.current; touchX.current = null; if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1); }}>
+        {!cur ? (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-gray-300 px-6 text-center">
+            <FiPackage className="w-16 h-16" />
+            <p className="text-[12px] text-gray-400">{canEdit ? L('inventory.noPhotosYetUploadPackage') : L('inventory.noPhotosRegisteredOnlyAdmins')}</p>
+          </div>
+        ) : cur.type === 'video'
+          ? <video key={cur.path} src={cur.url} className="w-full h-full object-contain bg-black" controls playsInline preload="metadata" />
+          : <img key={cur.path} src={cur.url} alt="" className="w-full h-full object-contain cursor-zoom-in" onClick={() => setViewing(cur)} />}
+        {media.length > 1 && (
+          <>
+            <button onClick={() => go(-1)} aria-label={L('common.previous')} className="absolute left-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"><FiChevronLeft /></button>
+            <button onClick={() => go(1)} aria-label={L('common.next')} className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"><FiChevronRight /></button>
+            <span className="absolute bottom-1.5 right-1.5 text-[11px] px-1.5 py-0.5 rounded bg-black/50 text-white pointer-events-none">{pos + 1} / {media.length}</span>
+          </>
+        )}
+        {cur && cur === cover && media.length > 1 && <span className="absolute top-1.5 left-1.5 text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-white font-bold pointer-events-none">★ {L('inventory.cover')}</span>}
+        {cur?.by && <span className="absolute bottom-1.5 left-1.5 text-[11px] px-1.5 py-0.5 rounded bg-black/50 text-white pointer-events-none">{cur.by}</span>}
+        {canEdit && cur && (
+          <div className="absolute top-1.5 right-1.5 flex gap-1">
+            {cur.type === 'image' && cur !== cover && (
+              <button onClick={() => makeCover(cur)} className="h-6 px-2 rounded-full bg-black/60 text-white text-[11px] flex items-center gap-1 hover:bg-amber-500"><FiStar className="w-3 h-3" />{L('inventory.setAsCover')}</button>
+            )}
+            <button onClick={() => setDeleting(cur)} title={L('common.delete')} className="w-6 h-6 rounded-full bg-black/60 text-white text-[13px] flex items-center justify-center hover:bg-red-600">✕</button>
+          </div>
         )}
       </div>
-      {media.length === 0 ? (
-        <p className="text-[13px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">
-          {canEdit ? L('inventory.noPhotosYetUploadPackage') : L('inventory.noPhotosRegisteredOnlyAdmins')}
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {media.map(m => (
-            <div key={m.path} className="relative w-full rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
-              {m.type === 'video'
-                ? <video src={m.url} className="w-full max-h-[420px] bg-black" controls playsInline preload="metadata" />
-                : <img src={m.url} alt="" className="w-full max-h-[420px] object-contain bg-gray-50 cursor-zoom-in" loading="lazy" onClick={() => setViewing(m)} />}
-              {m.by && <span className="absolute bottom-1.5 left-1.5 text-[11px] px-1.5 py-0.5 rounded bg-black/50 text-white pointer-events-none">{m.by}</span>}
-              {canEdit && (
-                <button onClick={() => setDeleting(m)} title={L('common.delete')} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-[13px] flex items-center justify-center hover:bg-red-600">✕</button>
-              )}
-            </div>
-          ))}
+      {canEdit && (
+        <div className="flex justify-center">
+          <label className={`flex items-center gap-1 text-[13px] font-semibold cursor-pointer ${busy ? 'text-gray-400' : 'text-blue-700 hover:underline'}`}>
+            <FiCamera className="w-3.5 h-3.5" />{busy ? L('inventory.uploading') : `${L('inventory.photosVideos')} ${L('task.add')}`}
+            <input type="file" accept="image/*,video/*" multiple disabled={busy} className="hidden" onChange={e => { add(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
+          </label>
         </div>
       )}
       {deleting && (
@@ -716,6 +737,32 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
   );
 }
 
+/** 다회용 약: 미개봉 · 사용 중 · 거의 다 씀 + 개봉 / 거의 다 씀 / 다 씀 (캠프 스태프 누구나) */
+function MultiUseRow({ view, groupId, campCode }: { view: InventoryItemView; groupId: string; campCode: string }) {
+  const [busy, setBusy] = useState(false);
+  const stock = getGroupStock(view, groupId);
+  const opened = getOpenedCount(view, groupId);
+  const nearly = getNearlyEmptyCount(view, groupId);
+  const run = async (action: 'open' | 'nearly' | 'unnearly' | 'finish') => {
+    if (busy) return;
+    if (action === 'finish' && !confirm(L('inventory.markOneInUseAs', { v0: view.name }))) return;
+    setBusy(true);
+    try { await authenticatedPost('/api/inventory/stock-op', { op: 'multi', campCode, itemId: view.id, groupId, action }); }
+    catch (e) { alert(e instanceof Error && e.message ? e.message : L('inventory.anErrorOccurredWhileProcessing')); }
+    finally { setBusy(false); }
+  };
+  const btn = 'text-[11px] font-semibold px-1.5 py-0.5 rounded border disabled:opacity-40';
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      <span className="text-[11px] text-gray-500">{L('inventory.unopened', { v0: Math.max(0, stock - opened) })} · {L('inventory.inUse', { v0: opened })}{nearly > 0 ? <b className="text-orange-600"> · {L('inventory.nearlyEmpty', { v0: nearly })}</b> : null}</span>
+      {stock - opened > 0 && <button disabled={busy} onClick={() => run('open')} className={`${btn} text-emerald-700 border-emerald-200`}>{L('inventory.open')}</button>}
+      {opened > nearly && <button disabled={busy} onClick={() => run('nearly')} className={`${btn} text-orange-700 border-orange-200`}>{L('inventory.nearlyEmpty2')}</button>}
+      {nearly > 0 && <button disabled={busy} onClick={() => run('unnearly')} className={`${btn} text-gray-500 border-gray-200`}>{L('inventory.unmarkNearlyEmpty')}</button>}
+      {opened > 0 && <button disabled={busy} onClick={() => run('finish')} className={`${btn} text-red-600 border-red-200`}>{L('inventory.usedUp')}</button>}
+    </div>
+  );
+}
+
 // ==================== 품목 상세 (그룹별 수량 · 입고 · 조정 · 이력) ====================
 
 function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId, userName, initialUseGroupId, defaultGroupId, onRequest, onClose }: {
@@ -736,14 +783,15 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
   useEffect(() => subscribeInventoryMovements(db, campCode, view.id, setMovements), [campCode, view.id]);
 
   const [mode, setMode] = useState<{ type: 'use' | 'restock' | 'adjust' | 'min'; groupId: string } | null>(
-    initialUseGroupId ? { type: 'use', groupId: initialUseGroupId } : null);
+    initialUseGroupId && !isMedicineItem(view) ? { type: 'use', groupId: initialUseGroupId } : null);
+  const [useReason, setUseReason] = useState('');
   const [qty, setQty] = useState(initialUseGroupId ? '1' : '');
   const [memo, setMemo] = useState('');
   const [busy, setBusy] = useState(false);
   const [editItem, setEditItem] = useState(false);
   // 그룹 간 이동 — 일반 수량 조정과 헷갈리지 않도록 별도 화면
   const [transferFrom, setTransferFrom] = useState<string | null>(null);
-  const isMedicine = ['oral', 'topical'].includes(getItemUsage(view));
+  const isMedicine = isMedicineItem(view);
   // 그룹별 유효기간(관리자) · 세부 위치(누구나)
   const [meta, setMeta] = useState<{ groupId: string; kind: 'location' | 'expiry'; value: string } | null>(null);
   const [restockExpiry, setRestockExpiry] = useState('');
@@ -773,7 +821,10 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
       const base = { itemId: view.id, itemName: view.name, groupId: group.id, groupName: group.name };
       if (mode.type === 'use') {
         if (n <= 0) return;
-        await recordStockUse(db, campCode, { ...base, quantity: n, memo: memo.trim() || undefined }, { uid: userId, name: userName });
+        if (!useReason) { alert(L('inventory.pleaseChooseAReason')); return; }
+        if (useReason === USE_REASON_OTHER && !memo.trim()) { alert(L('inventory.pleaseDescribeTheReason')); return; }
+        const reason = useReason === USE_REASON_OTHER ? memo.trim() : useReason;
+        await recordStockUse(db, campCode, { ...base, quantity: n, memo: reason }, { uid: userId, name: userName });
         notifySupply({ type: 'stock_low', campCode, itemId: view.id, groupId: group.id });
       } else if (mode.type === 'restock') {
         if (n <= 0) return;
@@ -810,15 +861,16 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
   };
 
   return (
-    // 데스크톱은 오른쪽 사이드 패널, 모바일은 바텀시트
-    <div className="fixed inset-0 bg-black/60 flex items-end justify-center sm:items-stretch sm:justify-end z-50" onClick={onClose}>
-      <div className="bg-white w-full sm:w-[560px] lg:w-[680px] sm:max-w-full rounded-t-2xl sm:rounded-none shadow-2xl flex flex-col max-h-[92vh] sm:max-h-none sm:h-full" onClick={e => e.stopPropagation()}>
+    // 데스크톱·모바일 모두 화면 중앙 (학생 명단 상세와 같은 방식) — 내용이 길면 안에서 스크롤
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[calc(100dvh-2rem)] sm:max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className={`text-[12px] px-1.5 py-0.5 rounded border ${CATEGORY_STYLE[view.category] ?? CATEGORY_STYLE.기타}`}>{dataLabel(view.category)}{view.subCategory ? ` · ${view.subCategory}` : ''}</span>
               {view.kind && <span className="text-[12px] text-gray-500">{view.kind}</span>}
+              {isMultiUse(view) && <span className="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">♻ {L('inventory.multiUse')}</span>}
               {view.isActive === false && <span className="text-[11px] px-1 rounded bg-gray-100 text-gray-500">{L('inventory.inactive')}</span>}
             </div>
             <h2 className="text-lg font-bold text-gray-900 mt-1">{view.name} {view.spec && <span className="text-sm font-normal text-gray-400">{view.spec}</span>}</h2>
@@ -833,6 +885,7 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <ItemMediaSection item={view} canEdit={perm.canEditItemMedia} userName={userName} />
           {/* 사용 방법 · 주의사항 */}
           {(view.description || view.dosageNote) && (
             <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 px-3 py-2 space-y-0.5">
@@ -865,7 +918,7 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
                     {groups.map(g => {
                       const n = getGroupStock(view, g.id);
                       const min = getMinStock(view, g.id);
-                      const low = min > 0 && n < min;
+                      const low = min > 0 && getAvailableStock(view, g.id) < min;
                       const isOverride = view.minStocks?.[g.id] != null;
                       return (
                         <tr key={g.id} className="border-t border-gray-100">
@@ -882,18 +935,19 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
                                   className={`text-[12px] px-1 rounded ${st === 'expired' ? 'bg-red-100 text-red-700 font-bold' : st === 'soon' ? 'bg-amber-100 text-amber-800 font-bold' : 'text-gray-500'}`}>⏳ {fmtExpiry(ex)}{st === 'expired' ? L('inventory.past') : st === 'soon' ? L('inventory.soon') : ''}</button>;
                               })()}
                             </div>
+                            {isMultiUse(view) && g.id in view.stocks && <MultiUseRow view={view} groupId={g.id} campCode={campCode} />}
                           </td>
                           <td className={`text-right px-2 py-2 font-bold ${low && perm.isStockManager ? 'text-red-600' : 'text-gray-800'}`}>{n}</td>
                           {perm.isStockManager && <td className="text-right px-2 py-2 text-gray-500">{min}{isOverride && <span className="text-[11px] text-amber-600 ml-0.5">*</span>}</td>}
                           {perm.isStockManager && (
                             <td className="px-2 py-2">
-                              {low ? <span className="text-[12px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{L('inventory.low2')}{min - n})</span>
+                              {low ? <span className="text-[12px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{L('inventory.low2')}{min - getAvailableStock(view, g.id)})</span>
                                 : <span className="text-[12px] text-gray-400">{L('data.feverNormal')}</span>}
                             </td>
                           )}
                           <td className="px-2 py-2 text-right whitespace-nowrap">
-                            {g.id in view.stocks && (
-                              <button onClick={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} className="text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md px-2 py-1 mr-2">{L('inventory.use4')}</button>
+                            {g.id in view.stocks && !isMedicine && (
+                              <button onClick={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); setUseReason(''); }} className="text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md px-2 py-1 mr-2">{L('inventory.use4')}</button>
                             )}
                             {managedGroupIds.has(g.id) && (
                               <>
@@ -961,14 +1015,11 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
               </div>
               {mode.type !== 'min' && (
                 <>
-                {mode.type === 'use' && isMedicine && (
-                  <p className="text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">{L('inventory.medicineGivenOrAppliedTo')} <b>{L('inventory.patientTab')}</b>{L('inventory.isDeductedAutomaticallyWhenYou')}</p>
-                )}
                 {mode.type === 'use' && (
                   <div className="flex flex-wrap gap-1">
                     {USE_REASONS.map(r => (
-                      <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
-                        className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{dataLabel(r)}</button>
+                      <button key={r} type="button" onClick={() => setUseReason(useReason === r ? '' : r)}
+                        className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${useReason === r ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{dataLabel(r)}</button>
                     ))}
                   </div>
                 )}
@@ -980,9 +1031,9 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
                     ))}
                   </div>
                 )}
-                <input value={memo} onChange={e => setMemo(e.target.value)}
-                  placeholder={mode.type === 'use' ? L('inventory.whatWasItUsedFor') : mode.type === 'restock' ? L('inventory.noteOptionalEGBought2') : L('inventory.pickAboveOrTypeIt')}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
+                {(mode.type !== 'use' || useReason === USE_REASON_OTHER) && <input value={memo} onChange={e => setMemo(e.target.value)}
+                  placeholder={mode.type === 'use' ? L('inventory.reasonRequired') : mode.type === 'restock' ? L('inventory.noteOptionalEGBought2') : L('inventory.pickAboveOrTypeIt')}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />}
                 </>
               )}
               <div className="flex gap-2">
@@ -1021,17 +1072,20 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
             )}
           </div>
 
-          <ItemMediaSection item={view} canEdit={perm.canEditItemMedia} userName={userName} />
         </div>
 
         {/* 사용하기 · 필요한 물품 요청 — 누구나 */}
         <div className="px-5 py-3 border-t border-gray-100 flex gap-2">
+          {isMedicine ? (
+            <p className="flex-1 self-center text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{L('inventory.logMedicineUseInThe')}</p>
+          ) : (
           <button
-            onClick={() => { if (useGroupId) { setMode({ type: 'use', groupId: useGroupId }); setQty('1'); setMemo(''); } }}
+            onClick={() => { if (useGroupId) { setMode({ type: 'use', groupId: useGroupId }); setQty('1'); setMemo(''); setUseReason(''); } }}
             disabled={!useGroupId}
             className="flex-1 py-3 text-base font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:bg-gray-200 disabled:text-gray-400">
             {L('inventory.use2')}
           </button>
+          )}
           <button onClick={() => onRequest(view, defaultGroupId)}
             className="flex-1 py-3 text-base font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl">
             {L('inventory.requestNeededItems3')}
@@ -1296,7 +1350,7 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
   const open = useMemo(() => requests.filter(r => isSupplyOpen(r.status)), [requests]);
   const mine = useMemo(() => requests.filter(r => r.requesterId === userId), [requests, userId]);
   // 내가 사 올 것 (관리자 포함, 담당이 나인 것만)
-  const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyBuyerOf(r, settings)?.uid === userId && !supplyAllDone(r)), [open, settings, userId]);
+  const myBuys = useMemo(() => open.filter(r => r.status === 'requested' && supplyApproved(r) && supplyBuyerOf(r, settings)?.uid === userId && !supplyAllDone(r)), [open, settings, userId]);
   const myBuyLineCount = myBuys.reduce((a, r) => a + r.items.length - supplyDoneCount(r), 0);
   const shopping = useMemo(() => supplyShoppingList(myBuys), [myBuys]);
   // 여러 요청에 걸쳐 같은 물품이 있으면 묶어서 (규격·단위가 다르면 따로 합산된다)
@@ -1488,13 +1542,19 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
               )}
             </div>
           )}
+          {filter === 'open' && isAdmin && (() => {
+            const pending = open.filter(r => r.status === 'requested' && !supplyApproved(r));
+            return pending.length > 1 ? (
+              <button onClick={async () => { if (!confirm(L('inventory.approveAllRequestsUnderReview', { v0: pending.length }))) return; try { await approveSupplyRequests(db, pending.map(r => r.id), { uid: userId, name: userName }); pending.forEach(r => notifySupply({ type: 'approved', requestId: r.id })); } catch (e) { console.error(e); alert(L('inventory.couldNotProcessPleaseCheck')); } }}
+                className="w-full py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl">{L('inventory.approveAllUnderReview', { v0: pending.length })}</button>
+            ) : null;
+          })()}
           {filter === 'open' && <p className="text-[10px] text-gray-400">{L('inventory.otherTeachersRequestsAreShown')} <b>{L('inventory.iNeedThisToo2')}</b>{L('inventory.text2')}</p>}
           {sectionsOf(list, r => r).map(sec => (
           <div key={sec.key} className="space-y-1">
           <SectionHeader label={sec.label} count={sec.items.length} />
           <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
             {sec.items.map(r => {
-              const last = r.comments?.[r.comments.length - 1];
               const status = supplyStatusLine(r, buyerOf(r));
               return (
                 <button key={r.id} onClick={() => setOpenId(r.id)} className="w-full text-left flex items-start gap-2.5 px-3 py-2 hover:bg-gray-50">
@@ -1503,7 +1563,7 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
                     <p className="text-[13px] font-bold text-gray-900 truncate">{supplyForLabel(r)} <span className="text-[11px] font-normal text-gray-400">{r.requesterName} · {fmtDateTime(r.createdAt)}</span></p>
                     <p className="text-[12px] text-gray-700 truncate">{r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${dataLabel(l.unit)}${l.groupName ? ` (${l.groupName})` : ''}`).join(', ')}</p>
                     <p className={`text-[10px] truncate ${r.status === 'onhold' ? 'text-amber-700' : r.status === 'requested' ? 'text-emerald-700' : 'text-gray-500'}`}>{status}</p>
-                    {last && <p className="text-[10px] text-gray-500 truncate">💬 {r.comments!.length} · <b className={last.admin ? 'text-indigo-700' : ''}>{last.name}</b> {last.text}</p>}
+                    {r.note && <p className="text-[10px] text-gray-500 truncate">📝 {r.note}</p>}
                   </div>
                   {(() => { const pg = supplyProgress(r, !!buyerOf(r)); return (
                     <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${PROGRESS_STYLE[pg.key] ?? SUPPLY_STATUS_STYLE[r.status]}`}>{pg.label}</span>
@@ -1680,7 +1740,9 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
 }) {
   const [openGuide, setOpenGuide] = useState<string | null>(null);
   const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-  const [forType, setForType] = useState<SupplyForType>(existing?.forType ?? (prefill?.forType === 'camp' ? 'camp' : 'student'));
+  const [forType, setForType] = useState<SupplyForType>(existing?.forType ?? prefill?.forType ?? 'student');
+  // "나도 필요해요": 같은 품목 그대로 — 품목 검색·추가 없이 수량·단위만
+  const metoo = !!prefill && !existing;
   const [student, setStudent] = useState<{ id?: string; name: string; cls?: string; mentor?: string; code?: string } | null>(
     existing?.studentName ? { id: existing.studentId, name: existing.studentName, cls: existing.studentClass, mentor: existing.classMentor, code: existing.studentClassCode } : null);
   const [studentQuery, setStudentQuery] = useState('');
@@ -1691,7 +1753,6 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
   const [q, setQ] = useState('');
   const [note, setNote] = useState(existing?.note ?? '');
   const [busy, setBusy] = useState(false);
-  const UNITS = ['개', '박스', '통', '팩', '병', '세트'];
   const studentResults = useMemo(() => { const t = studentQuery.trim(); return t ? students.filter(s => s.name.includes(t)).slice(0, 6) : []; }, [students, studentQuery]);
   const results = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -1743,7 +1804,7 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>
       <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">{existing ? L('inventory.editRequest') : prefill ? L('inventory.iNeedThisToo') : L('inventory.requestNeededItems')}</h2>
+          <h2 className="text-base font-bold text-gray-900">{existing ? L('inventory.editRequest') : metoo ? L('inventory.additionalRequest', { v0: lines.length > 1 ? L('inventory.andMore', { v0: lines[0].name, v1: lines.length - 1 }) : (lines[0]?.name ?? '') }) : L('inventory.requestNeededItems')}</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
@@ -1781,7 +1842,7 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
           </div>
           <div className="space-y-2">
             <p className="text-xs font-bold text-gray-800">{L('inventory.whatDoYouNeed')} <span className="font-normal text-gray-400">{lines.length}{L('inventory.itemsAddedTheBuyerDecides')}</span></p>
-            <div className="relative">
+            {!metoo && <div className="relative">
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ(''); }} placeholder={L('inventory.searchItemsEGBandage')} className={`${inputCls} pl-9`} />
               {q.trim() && (
@@ -1814,7 +1875,7 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
                   <button type="button" onClick={() => { setLines(ls => [...ls, { id: newId(), name: q.trim(), quantity: 1, unit: '개' }]); setQ(''); }} className="w-full text-left px-3 py-1.5 text-[12px] text-gray-600 bg-gray-50 hover:bg-gray-100"><b>"{q.trim()}"</b> {L('inventory.addManually')}</button>
                 </div>
               )}
-            </div>
+            </div>}
             {lines.length > 0 && (
               <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
                 {lines.map(l => (
@@ -1828,10 +1889,10 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
                       <button type="button" onClick={() => setLines(ls => ls.filter(x => x.id !== l.id))} className="text-gray-300 hover:text-red-500 px-1">🗑️</button>
                     </div>
                     <div className="flex gap-1 flex-wrap">
-                      {[...new Set([l.unit, ...UNITS])].map(u => (
-                        <button key={u} type="button" onClick={() => upd(l.id, { unit: u })} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${l.unit === u ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'}`}>{u}</button>
+                      {supplyUnitChoices(l.unit).map(u => (
+                        <button key={u} type="button" onClick={() => upd(l.id, { unit: u })} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${l.unit === u ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'}`}>{dataLabel(u)}</button>
                       ))}
-                      <input value={l.memo ?? ''} onChange={e => upd(l.id, { memo: e.target.value || undefined })} placeholder={L('inventory.noteColorSizeEtc')} className="flex-1 min-w-[120px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none" />
+                      {!metoo && <input value={l.memo ?? ''} onChange={e => upd(l.id, { memo: e.target.value || undefined })} placeholder={L('inventory.noteColorSizeEtc')} className="flex-1 min-w-[120px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none" />}
                     </div>
                     {forType === 'camp' && (l.itemId ? (
                       <div className="flex items-center gap-1 flex-wrap">
@@ -1849,7 +1910,7 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
           </div>
           <div>
             <p className="text-xs font-bold text-gray-800 mb-1">{L('common.memo')} <span className="font-normal text-gray-400">{L('patient.optional')}</span></p>
-            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder={L('inventory.eGNeededByTonight')} className={`${inputCls} resize-none`} />
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} className={`${inputCls} resize-none`} />
           </div>
         </div>
         <div className="px-5 py-4 border-t border-gray-100">
@@ -1872,7 +1933,11 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
   const [mode, setMode] = useState<'none' | 'reject' | 'hold'>('none');
   const [reason, setReason] = useState('');
   const [holdUntil, setHoldUntil] = useState(addDaysStr(7));
-  const [comment, setComment] = useState('');
+  const [note, setNote] = useState(r.note ?? '');
+  const approved = supplyApproved(r);
+  const buyOk = canBuy && approved;
+  // 메모: 작성자는 진행 중일 때, 관리자는 언제든 (재고·입고 기록은 바뀌지 않음)
+  const canEditNote = isAdmin || (mine && isOpen);
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<void>) => {
     if (busy) return;
@@ -1881,7 +1946,8 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
   };
   const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
     run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); if (status === 'rejected' || status === 'onhold') notifySupply({ type: 'status', requestId: r.id }); setMode('none'); setReason(''); });
-  const send = () => run(async () => { await addSupplyComment(db, r.id, { uid: userId, name: userName, text: comment, admin: isAdmin }); notifySupply({ type: 'comment', requestId: r.id }); setComment(''); });
+  const saveNote = () => run(async () => { await setSupplyRequestNote(db, r.id, note); });
+  const approve = () => run(async () => { await approveSupplyRequests(db, [r.id], { uid: userId, name: userName }); notifySupply({ type: 'approved', requestId: r.id }); });
   // 캠프 공용 입고 (관리자)
   const canIntake = isAdmin && isCamp && !r.stockApplied && r.status !== 'rejected';
   const [intake, setIntake] = useState(false);
@@ -1941,7 +2007,7 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
                     {d && lk && d.amount ? <p className={`text-[10px] ${st ? 'text-gray-400' : 'text-yellow-700'}`}>{st ? L('inventory.settled', { v0: st.by }) : L('inventory.pending', { v0: lk === 'envelope' ? L('inventory.envelopeSettlement') : lk === 'transfer' ? L('inventory.transferWord') : L('inventory.parentBillingWord') })}</p> : null}
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    {canBuy && r.status !== 'rejected' && !r.stockApplied && (d
+                    {buyOk && r.status !== 'rejected' && !r.stockApplied && (d
                       ? <button onClick={() => run(() => undoSupplyLine(db, r.id, l.id))} className="text-[10px] text-gray-400 hover:underline">{L('inventory.cancelPurchase')}</button>
                       : isOpen && <button onClick={() => onComplete([l.id])} className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">{L('task.done')}</button>)}
                     {d && lk && d.amount && canSettleLine ? (st
@@ -1952,7 +2018,7 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
               );
             })}
           </div>
-          {canBuy && isOpen && r.items.filter(l => !r.done?.[l.id]).length > 1 && (
+          {buyOk && isOpen && r.items.filter(l => !r.done?.[l.id]).length > 1 && (
             <button onClick={() => onComplete(r.items.filter(l => !r.done?.[l.id]).map(l => l.id))} className="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl">{L('inventory.purchaseRemainingItemsAtOnce')}</button>
           )}
           {settleLines.length > 0 && (
@@ -1961,13 +2027,23 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
               {' '}{L('inventory.settle')} {settleLines.filter(s => s.settled).length}/{settleLines.length} {L('inventory.remainingAmount')} {fmtWon(settleLines.filter(s => !s.settled).reduce((a, s) => a + (s.done.amount ?? 0), 0))}
             </p>
           )}
-          {r.note && <p className="text-[12px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2">📝 {r.note}</p>}
+          {/* 메모 */}
+          <div className="space-y-1">
+            <p className="text-[11px] font-bold text-gray-700">{L('common.memo')}</p>
+            {canEditNote ? (
+              <div className="flex gap-1.5">
+                <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} className="flex-1 text-[12px] border border-gray-200 rounded-xl px-3 py-1.5 outline-none focus:border-emerald-400 resize-none" />
+                {note.trim() !== (r.note ?? '').trim() && <button onClick={saveNote} disabled={busy} className="px-3 text-[12px] font-bold text-white bg-gray-800 rounded-xl disabled:opacity-30">{L('common.save')}</button>}
+              </div>
+            ) : <p className="text-[12px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap">{r.note || <span className="text-gray-400">{L('inventory.noMemo')}</span>}</p>}
+          </div>
+          {approved && r.approvedBy ? <p className="text-[10px] text-gray-400">{L('inventory.approvedBy', { v0: r.approvedBy, v1: fmtDateTime(r.approvedAt) })}</p> : isOpen ? <p className="text-[10px] text-indigo-600">🔎 {L('inventory.goesToTheBuyerAfter')}</p> : null}
           {(!isOpen || r.status === 'onhold') && (
             <p className={`text-[11px] rounded-xl px-3 py-2 ${r.status === 'onhold' ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-600'}`}>{status}{r.handledBy ? ` · ${r.handledBy}` : ''} · {fmtDateTime(r.handledAt)}</p>
           )}
           <div className="flex gap-2">
             {isOpen && !mine && <button onClick={onMetoo} className="flex-1 py-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">{L('inventory.iNeedThisToo')}</button>}
-            {mine && isOpen && <button onClick={onEdit} className="flex-1 py-2 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl">{L('task.edit')}</button>}
+            {mine && isOpen && (!approved || isAdmin) && <button onClick={onEdit} className="flex-1 py-2 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl">{L('task.edit')}</button>}
             {mine && isOpen && !supplyDoneCount(r) && <button onClick={() => { if (confirm(L('inventory.cancelThisRequest'))) run(async () => { await deleteSupplyRequest(db, r.id); onClose(); }); }} className="flex-1 py-2 text-xs text-red-500 border border-red-200 rounded-xl">{L('inventory.cancelRequest')}</button>}
           </div>
 
@@ -2001,6 +2077,7 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
               {mode === 'none' ? (
                 isOpen ? (
                   <div className="flex gap-1.5">
+                    {!approved && r.status === 'requested' && <button onClick={approve} disabled={busy} className="flex-1 py-1.5 text-[11px] font-bold text-white bg-indigo-600 rounded-lg disabled:opacity-40">{L('inventory.approve')}</button>}
                     <button onClick={() => setMode('reject')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">{L('inventory.reject')}</button>
                     {r.status === 'onhold'
                       ? <button onClick={() => act('requested')} disabled={busy} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">{L('inventory.releaseHold')}</button>
@@ -2033,26 +2110,6 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
             </div>
           )}
 
-          {/* 메모·댓글 */}
-          <div className="space-y-1.5">
-            <p className="text-[11px] font-bold text-gray-700">{L('inventory.notesComments')} {r.comments?.length ? r.comments.length : ''}</p>
-            {(r.comments ?? []).map(c => (
-              <div key={c.id} className={`rounded-xl px-3 py-1.5 ${c.admin ? 'bg-indigo-50' : 'bg-gray-50'}`}>
-                <div className="flex items-center gap-1.5">
-                  <b className={`text-[11px] ${c.admin ? 'text-indigo-700' : 'text-gray-800'}`}>{c.name}</b>
-                  {c.admin && <span className="text-[9px] px-1 rounded bg-indigo-100 text-indigo-700 font-bold">{L('common.roleAdmin')}</span>}
-                  <span className="text-[10px] text-gray-400">{fmtDateTime(c.at)}</span>
-                  {isAdmin && <button onClick={() => run(() => deleteSupplyComment(db, r.id, c))} className="ml-auto text-[10px] text-gray-300 hover:text-red-500">{L('common.delete')}</button>}
-                </div>
-                <p className="text-[12px] text-gray-700 whitespace-pre-wrap">{c.text}</p>
-              </div>
-            ))}
-            <div className="flex gap-1.5">
-              <input value={comment} onChange={e => setComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && comment.trim()) send(); }}
-                placeholder={isAdmin ? L('inventory.eGCanTBuy') : L('inventory.eGOurClassNeeds')} className="flex-1 text-[12px] border border-gray-200 rounded-xl px-3 py-1.5 outline-none focus:border-emerald-400" />
-              <button onClick={send} disabled={busy || !comment.trim()} className="px-3 text-[12px] font-bold text-white bg-gray-800 rounded-xl disabled:opacity-30">{L('inventory.post')}</button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -3292,6 +3349,8 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
   const [minStockDefault, setMinStockDefault] = useState(item?.minStockDefault != null ? String(item.minStockDefault) : '');
   const [isActive, setIsActive] = useState(item?.isActive !== false);
   const [usage, setUsage] = useState<InventoryUsage>(item ? getItemUsage(item) : (preset?.category ?? '의약품') === '의약품' ? 'oral' : 'operational');
+  // 다회용 여부는 관리자가 직접 고른다 (기존 품목은 자동으로 바꾸지 않음)
+  const [consumption, setConsumption] = useState<InventoryConsumption>(item?.consumption ?? 'single');
   const [ingredient, setIngredient] = useState(item?.ingredient ?? '');
   const [intervalHours, setIntervalHours] = useState(item?.intervalHours != null ? String(item.intervalHours) : '');
   const [maxPerDay, setMaxPerDay] = useState(item?.maxPerDay != null ? String(item.maxPerDay) : '');
@@ -3334,6 +3393,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
         minStockDefault: minStockDefault === '' ? undefined : Math.max(0, parseInt(minStockDefault, 10) || 0),
         isActive,
         usage,
+        consumption: isMed && consumption === 'multi' ? 'multi' as const : item?.consumption ? 'single' as const : undefined,
         ingredient: ingredient.trim() || undefined,
         intervalHours: intervalHours === '' ? undefined : Math.max(0, parseFloat(intervalHours) || 0),
         maxPerDay: maxPerDay === '' ? undefined : Math.max(0, parseInt(maxPerDay, 10) || 0),
@@ -3487,6 +3547,19 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
                 </div>
                 <p className="text-[12px] text-gray-400 mt-1">{L('inventory.oralMedicineTopicalMedicineAnd')}</p>
               </div>
+
+              {isMed && (
+                <div>
+                  <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.howItIsUsed')}</p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(['single', 'multi'] as const).map(c => (
+                      <button key={c} type="button" onClick={() => setConsumption(c)}
+                        className={`px-2.5 py-1 rounded-full text-[13px] font-semibold border ${consumption === c ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{c === 'single' ? L('inventory.singleUseDeductedEachTime') : L('inventory.multiUseEGOintment')}</button>
+                    ))}
+                  </div>
+                  <p className="text-[12px] text-gray-400 mt-1">{L('inventory.multiUseItemsOintmentsSprays')}</p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>

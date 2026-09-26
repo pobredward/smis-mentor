@@ -58,7 +58,7 @@ export type SupplyNotifyEvent =
   | { type: 'lines_done'; requestId: string; lineIds: string[] }
   | { type: 'settled'; requestId: string; lineIds: string[] }
   | { type: 'status'; requestId: string }
-  | { type: 'comment'; requestId: string }
+  | { type: 'approved'; requestId: string }
   | { type: 'stock_low'; campCode: string; itemId: string; groupId: string };
 
 const won = (n: number | undefined, lang: Locale) => t(lang, 'push.won', { n: (n ?? 0).toLocaleString(lang === 'en' ? 'en-US' : 'ko-KR') });
@@ -167,7 +167,11 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
       db.doc(`inventoryItems/${ev.itemId}`).get(),
       db.doc(`inventoryGroups/${ev.groupId}`).get(),
     ]);
-    const n = Number(st.data()?.stocks?.[ev.groupId] ?? 0);
+    const raw = Number(st.data()?.stocks?.[ev.groupId] ?? 0);
+    // 다회용: '거의 다 씀' 표시된 것은 없는 것으로 보고 판단 (미리 사 오도록)
+    const nearly = it.data()?.consumption === 'multi'
+      ? Math.min(Number(st.data()?.nearlyEmpty?.[ev.groupId] ?? 0), Number(st.data()?.opened?.[ev.groupId] ?? 0)) : 0;
+    const n = raw - Math.max(0, nearly);
     const min = Number(st.data()?.minStocks?.[ev.groupId] ?? it.data()?.minStockDefault ?? 0);
     if (!(min > 0 && n < min)) return 0;
     const users = await campUsers(ev.campCode);
@@ -224,19 +228,20 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
 
   switch (ev.type) {
     case 'request_created': {
-      const targets = buyerUid ? byId(buyerUid) : admins;
-      return send('supplyRequest', targets, msg('push.requestCreatedTitle', (l) => ({ for: forLabel(r, l) })), (l) => `${itemsLabel(r, l)} — ${r.requesterName ?? ''}`, { ...data, view: 'buy' }, actorUid);
+      // 새 요청은 관리자 승인부터 — 구매 담당에게는 승인된 뒤에 알린다
+      return send('supplyRequest', admins, msg('push.reviewTitle', (l) => ({ for: forLabel(r, l) })), (l) => `${itemsLabel(r, l)} — ${r.requesterName ?? ''}`, data, actorUid);
+    }
+    case 'approved': {
+      if (!r.approvedAt || r.status !== 'requested') return 0;
+      let total = await send('supplyProgress', byId(r.requesterId), msg('push.approvedTitle'), (l) => `${forLabel(r, l)} · ${itemsLabel(r, l)}`, data, actorUid);
+      if (buyerUid) total += await send('supplyBuyer', byId(buyerUid), msg('push.approvedBuyerTitle'), (l) => `${forLabel(r, l)} · ${itemsLabel(r, l)} — ${r.requesterName ?? ''}`, { ...data, view: 'buy' }, actorUid);
+      return total;
     }
     case 'status': {
       if (r.status !== 'rejected' && r.status !== 'onhold') return 0;
       const title = msg(r.status === 'rejected' ? 'push.rejectedTitle' : 'push.onholdTitle');
       const note = r.statusNote ? ` · ${r.statusNote}` : '';
       return send('supplyProgress', byId(r.requesterId), title, (l) => `${forLabel(r, l)} · ${itemsLabel(r, l)}${note}`, data, actorUid);
-    }
-    case 'comment': {
-      const last = (r.comments ?? []).slice(-1)[0];
-      if (!last) return 0;
-      return send('supplyComment', [...byId(r.requesterId), ...byId(buyerUid)], msg('push.commentTitle', (l) => ({ name: last.name, for: forLabel(r, l) })), String(last.text).slice(0, 120), data, actorUid);
     }
     case 'settled': {
       const done = (r.done ?? {}) as Record<string, { byId?: string; amount?: number }>;
