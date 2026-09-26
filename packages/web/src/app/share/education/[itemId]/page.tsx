@@ -69,46 +69,46 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function ShareEducationPage({ params }: PageProps) {
   const { itemId } = await params;
   
+  let page: Awaited<ReturnType<typeof getCampPage>> = null;
   try {
-    const page = await getCampPage(itemId);
+    page = await getCampPage(itemId);
+  } catch (error) {
+    console.error('페이지 로드 실패:', error);
+  }
 
-    // 페이지가 없거나 교육 카테고리가 아닌 경우
-    if (!page || page.category !== 'education') {
-      notFound();
-    }
+  // 페이지가 없거나 교육 카테고리가 아닌 경우 (조회 실패 포함)
+  if (!page || page.category !== 'education') {
+    notFound();
+  }
 
-    return (
-      <div className="min-h-screen bg-gray-50">
-        {/* 헤더 */}
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-          <div className="max-w-5xl mx-auto px-4 py-4">
-            <div className="flex items-center gap-4">
-              <span className="text-2xl">
-                {page.emoji || '📄'}
-              </span>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">{page.title}</h1>
-                <p className="text-sm text-gray-500 mt-1">SMIS Mentor 교육 자료</p>
-              </div>
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* 헤더 */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-4">
+          <div className="flex items-center gap-4">
+            <span className="text-2xl">
+              {page.emoji || '📄'}
+            </span>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">{page.title}</h1>
+              <p className="text-sm text-gray-500 mt-1">SMIS Mentor 교육 자료</p>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* 본문 */}
-        <div className="max-w-5xl mx-auto md:px-4 md:py-6">
-          <div className="bg-white md:rounded-lg md:shadow-sm">
-            <SharePageViewer content={page.content || '<p>내용이 없습니다.</p>'} />
-          </div>
-        </div>
-
-        {/* 푸터 */}
-        <div className="max-w-5xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
-          <p>이 자료는 SMIS Mentor에서 제공됩니다.</p>
+      {/* 본문 */}
+      <div className="max-w-5xl mx-auto md:px-4 md:py-6">
+        <div className="bg-white md:rounded-lg md:shadow-sm">
+          <SharePageViewer content={page.content || '<p>내용이 없습니다.</p>'} />
         </div>
       </div>
-    );
-  } catch (error) {
-    console.error('페이지 로드 실패:', error);
-    notFound();
-  }
+
+      {/* 푸터 */}
+      <div className="max-w-5xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
+        <p>이 자료는 SMIS Mentor에서 제공됩니다.</p>
+      </div>
+    </div>
+  );
 }

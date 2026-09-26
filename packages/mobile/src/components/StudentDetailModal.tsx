@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   },
   studentName: {
     fontSize: 16,
-    fontWeight: '700' as '700',
+    fontWeight: '700' as const,
     color: '#1e293b',
   },
   pageIndicator: {
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
   closeButtonText: {
     fontSize: 22,
     color: '#64748b',
-    fontWeight: '400' as '400',
+    fontWeight: '400' as const,
   },
   page: {
     width: CARD_WIDTH,
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
     color: '#1e293b',
     marginBottom: 6,
   },
@@ -671,7 +671,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: '#1e293b',
-    fontWeight: '500' as '500',
+    fontWeight: '500' as const,
   },
   valuePlaceholder: {
     color: '#cbd5e1',
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
   editBtnSaveText: {
     fontSize: 12,
     color: '#ffffff',
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   editBtnCancelText: {
     fontSize: 12,
@@ -730,7 +730,7 @@ const styles = StyleSheet.create({
   editIconText: {
     fontSize: 11,
     color: '#3b82f6',
-    fontWeight: '500' as '500',
+    fontWeight: '500' as const,
   },
   dotsContainer: {
     flexDirection: 'row',

@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
-import type { Task, TaskAttachment, JobExperienceGroupRole } from '../../../shared/src/types/camp';
+import type { Task, TaskAttachment, JobExperienceGroupRole } from '@smis-mentor/shared';
 
 const TASKS_COLLECTION = 'campTasks';
 

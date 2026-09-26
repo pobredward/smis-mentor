@@ -1,13 +1,3 @@
 import { baseConfig } from "../../eslint.config.mjs";
 
-export default [
-  ...baseConfig,
-  {
-    files: ["src/**/*.ts"],
-    languageOptions: {
-      parserOptions: {
-        project: "./tsconfig.json",
-      },
-    },
-  },
-];
+export default [...baseConfig];

@@ -20,8 +20,9 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "lint": "eslint src/**/*.ts",
-    "type-check": "tsc --noEmit"
+    "lint": "eslint src",
+    "type-check": "tsc --noEmit",
+    "test": "TS_NODE_TRANSPILE_ONLY=1 node --require ts-node/register --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "date-fns": "^4.1.0",

@@ -30,8 +30,8 @@ import { getApplicationsByUserId } from '../services/recruitmentService';
 import { getCampHomeMessage, updateCampHomeMessage, taskViewerOf, isTaskAssignedTo } from '@smis-mentor/shared';
 import { getJobBoardById } from '../services/jobBoardService';
 import { db } from '../config/firebase';
-import type { Task, PersonalTask } from '../../../shared/src/types/camp';
-import type { ApplicationHistory } from '../../../shared/src/types';
+import type { Task, PersonalTask } from '@smis-mentor/shared';
+import type { ApplicationHistory } from '@smis-mentor/shared';
 
 // JobBoard 정보를 포함한 지원 내역 타입
 interface ApplicationWithJobBoard extends ApplicationHistory {

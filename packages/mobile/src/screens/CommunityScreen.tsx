@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { CommunityPost, CommunityPostScope } from '@smis-mentor/shared';
-import { getGroupLabel } from '../../../shared/src/types/camp';
+import { getGroupLabel } from '@smis-mentor/shared';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import {
   getAllPosts,

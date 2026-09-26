@@ -1,5 +1,4 @@
 // 서비스 통합 export
-// export * from './googleSheets'; // Node.js 전용 - React Native에서 사용 불가
 export * from './firebase';
 export * from './stSheet';
 export * from './fieldConfig';

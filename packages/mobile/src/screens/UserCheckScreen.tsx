@@ -17,7 +17,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../config/firebase';
 import { adminGetAllJobCodes, adminGetUsersByJobCode, getGenerationCodes, filterMaterialsByGeneration, filterSectionsWithLinks } from '@smis-mentor/shared';
-import { getGroupLabel } from '../../../shared/src/types/camp';
+import { getGroupLabel } from '@smis-mentor/shared';
 import { AdminStackScreenProps } from '../navigation/types';
 import { getLessonMaterials, getSections, getLessonMaterialTemplates, LessonMaterialData, SectionData, LessonMaterialTemplate } from '../services/lessonMaterialService';
 

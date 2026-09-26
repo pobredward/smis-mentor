@@ -32,7 +32,7 @@ import {
   LEGACY_GROUP_REVERSE_MAP,
   getGroupLabel,
   JobExperienceGroupRole,
-} from '../../../shared/src/types/camp';
+} from '@smis-mentor/shared';
 import EvaluationStageCards from '../components/EvaluationStageCards';
 import EvaluationForm from '../components/EvaluationForm';
 

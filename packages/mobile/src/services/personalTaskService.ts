@@ -15,7 +15,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
-import type { PersonalTask } from '../../../shared/src/types/camp';
+import type { PersonalTask } from '@smis-mentor/shared';
 
 const PERSONAL_TASKS_COLLECTION = 'personalTasks';
 

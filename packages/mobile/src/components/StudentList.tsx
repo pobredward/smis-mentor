@@ -1060,7 +1060,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
     color: '#1e293b',
   },
   headerActions: {
@@ -1098,7 +1098,7 @@ const styles = StyleSheet.create({
   searchCloseText: {
     fontSize: 16,
     color: '#64748b',
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   searchResultHeader: {
     paddingHorizontal: 16,
@@ -1110,7 +1110,7 @@ const styles = StyleSheet.create({
   searchResultText: {
     fontSize: 14,
     color: '#475569',
-    fontWeight: '500' as '500',
+    fontWeight: '500' as const,
   },
   syncButton: {
     backgroundColor: '#3b82f6', // 블루
@@ -1178,7 +1178,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 16,
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
     color: '#1e293b',
   },
   modalProgress: {
@@ -1201,7 +1201,7 @@ const styles = StyleSheet.create({
   },
   bulkPreviewTitle: {
     fontSize: 16,
-    fontWeight: '700' as '700',
+    fontWeight: '700' as const,
     color: '#1e293b',
     marginBottom: 4,
   },
@@ -1223,7 +1223,7 @@ const styles = StyleSheet.create({
   },
   bulkPreviewName: {
     fontSize: 13,
-    fontWeight: '500' as '500',
+    fontWeight: '500' as const,
     color: '#1e293b',
   },
   bulkPreviewPhone: {
@@ -1249,7 +1249,7 @@ const styles = StyleSheet.create({
   },
   bulkPreviewCancelText: {
     fontSize: 14,
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
     color: '#64748b',
   },
   bulkPreviewConfirm: {
@@ -1261,7 +1261,7 @@ const styles = StyleSheet.create({
   },
   bulkPreviewConfirmText: {
     fontSize: 14,
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
     color: '#fff',
   },
   syncButtonDisabled: {
@@ -1270,7 +1270,7 @@ const styles = StyleSheet.create({
   syncButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   toggleButton: {
     paddingHorizontal: 12,
@@ -1291,7 +1291,7 @@ const styles = StyleSheet.create({
   toggleButtonText: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   warningBanner: {
     flexDirection: 'row',
@@ -1310,7 +1310,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   warningBold: {
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   filterContainer: {
     backgroundColor: '#ffffff',
@@ -1358,12 +1358,12 @@ const styles = StyleSheet.create({
   filterChipText: {
     fontSize: 12,
     color: '#64748b',
-    fontWeight: '500' as '500',
+    fontWeight: '500' as const,
   },
   filterChipSubText: {
     fontSize: 9,
     color: '#94a3b8',
-    fontWeight: '400' as '400',
+    fontWeight: '400' as const,
     marginTop: 2,
   },
   filterChipSubTextActive: {
@@ -1371,7 +1371,7 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: '#fff',
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   genderLabel: {
     paddingHorizontal: 6,
@@ -1427,14 +1427,14 @@ const styles = StyleSheet.create({
   },
   roomHeader: {
     fontSize: 15,
-    fontWeight: '700' as '700',
+    fontWeight: '700' as const,
     color: '#1e293b',
     marginBottom: 8,
     marginLeft: 2,
   },
   roomHeaderSmall: {
     fontSize: 14,
-    fontWeight: '700' as '700',
+    fontWeight: '700' as const,
     color: '#1e293b',
     marginBottom: 6,
     marginLeft: 2,
@@ -1513,7 +1513,7 @@ const styles = StyleSheet.create({
   },
   studentName: {
     fontSize: 14,
-    fontWeight: '700' as '700',
+    fontWeight: '700' as const,
     color: '#1e293b',
     marginBottom: 2,
   },
@@ -1526,17 +1526,17 @@ const styles = StyleSheet.create({
   classNumber: {
     fontSize: 10,
     color: '#3b82f6',
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   classNumberBlack: {
     fontSize: 10,
     color: '#1e293b',
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   studentNumber: {
     fontSize: 13,
     color: '#64748b',
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
   studentInfo: {
     flexDirection: 'row',
@@ -1575,7 +1575,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#3b82f6',
     marginTop: 4,
-    fontWeight: '500' as '500',
+    fontWeight: '500' as const,
   },
   emptyContainer: {
     alignItems: 'center',

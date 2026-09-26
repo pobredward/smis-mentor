@@ -21,7 +21,7 @@ import {
   MENTOR_GROUP_ROLES,
   FOREIGN_GROUP_ROLES,
   LEGACY_GROUP_REVERSE_MAP 
-} from '../../../shared/src/types/camp';
+} from '@smis-mentor/shared';
 
 type JobExperienceInput = {
   generation: string;

@@ -18,7 +18,7 @@ import { AdminStackScreenProps } from '../navigation/types';
 import { db } from '../config/firebase';
 import { adminGetAllUsers, adminGetUserJobCodesInfo } from '@smis-mentor/shared';
 import type { User, JobCodeWithGroup } from '@smis-mentor/shared';
-import { getGroupLabel } from '../../../shared/src/types/camp';
+import { getGroupLabel } from '@smis-mentor/shared';
 import EvaluationStageCards from '../components/EvaluationStageCards';
 
 interface UserWithCoords extends User {

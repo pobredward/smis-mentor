@@ -31,7 +31,7 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { getUsersByJobCodeId } from '../services/userService';
-import type { Task, JobExperienceGroupRole, User } from '../../../shared/src/types';
+import type { Task, JobExperienceGroupRole, User } from '@smis-mentor/shared';
 import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName } from '@smis-mentor/shared';
 import {
   getTaskById,

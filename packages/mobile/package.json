@@ -33,7 +33,7 @@
     "update": "eas update",
     "update:preview": "eas update --branch preview",
     "update:production": "eas update --branch production",
-    "lint": "expo lint",
+    "lint": "eslint src App.tsx",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

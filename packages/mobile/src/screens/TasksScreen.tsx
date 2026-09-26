@@ -69,7 +69,7 @@ import {
 import { getTaskCategories, createTaskCategory, updateTaskCategory, deleteTaskCategory } from '../services/taskCategoryService';
 import { getUserJobCodesInfo } from '../services/authService';
 import { getUsersByJobCodeId } from '../services/userService';
-import type { Task, JobExperienceGroupRole, TaskAttachment, User, PersonalTask, TaskCategory } from '../../../shared/src/types';
+import type { Task, JobExperienceGroupRole, TaskAttachment, User, PersonalTask, TaskCategory } from '@smis-mentor/shared';
 import { getTaskTargetUsers, getTaskCompletionStatus, getUserNames, isKoreanHoliday, getKoreanHolidaySet } from '@smis-mentor/shared';
 import {
   MENTOR_GROUP_ROLES,
@@ -78,7 +78,7 @@ import {
   type JobExperienceGroup,
   type MentorGroupRole,
   type ForeignGroupRole,
-} from '../../../shared/src/types/camp';
+} from '@smis-mentor/shared';
 
 interface JobCodeWithGroup {
   generation: string;

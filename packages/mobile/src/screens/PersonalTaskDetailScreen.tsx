@@ -19,7 +19,7 @@ import { db } from '../config/firebase';
 import { deletePersonalTask, deletePersonalTaskGroup, togglePersonalTaskCompletion } from '../services/personalTaskService';
 import { getTaskCategories } from '../services/taskCategoryService';
 import { formatTime, formatDuration } from '../services/taskService';
-import type { PersonalTask, TaskCategory } from '../../../shared/src/types';
+import type { PersonalTask, TaskCategory } from '@smis-mentor/shared';
 import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 

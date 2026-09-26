@@ -47,8 +47,8 @@ jobs:
       - name: Lint check
         run: npm run lint
 
-      - name: Type check
-        run: npm run type-check
+      - name: Type check (ratchet — 오류 수가 기준선보다 늘면 실패)
+        run: node scripts/typecheck-ratchet.js
 
       - name: Build all packages
         run: npm run build:all

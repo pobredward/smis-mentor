@@ -138,7 +138,7 @@ const cardStyles = StyleSheet.create({
   },
   name: {
     fontSize: 11,
-    fontWeight: '700' as '700',
+    fontWeight: '700' as const,
     textAlign: 'center',
   },
   nameBlue: {
@@ -159,6 +159,6 @@ const cardStyles = StyleSheet.create({
   },
   rosterText: {
     color: '#16a34a',
-    fontWeight: '600' as '600',
+    fontWeight: '600' as const,
   },
 });
