@@ -1742,6 +1742,7 @@ export const ko = {
     student: "① 대상 *",
     studentInfo: "학생 정보",
     studentInfo2: "⚠️ 학생 정보 —",
+    studentMedAllergy: "⚠️ 학생 복용약 · 알레르기 정보 —",
     studentsIMEscorting: "🚑 내가 인솔할 학생",
     studentsOnMedication: "총 {{v0}}명 복용 중",
     studentsOnMedicationWillAppear: "약복용 환자를 등록하면 여기에 표시됩니다.",

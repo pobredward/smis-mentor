@@ -1744,6 +1744,7 @@ export const en: Messages = {
     student: "① Student *",
     studentInfo: "Student info",
     studentInfo2: "⚠️ Student info —",
+    studentMedAllergy: "⚠️ Student medication · allergy info —",
     studentsIMEscorting: "🚑 Students I'm escorting",
     studentsOnMedication: "{{v0}} students on medication",
     studentsOnMedicationWillAppear: "Students on medication will appear here once registered.",

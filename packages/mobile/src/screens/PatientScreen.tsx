@@ -427,10 +427,10 @@ export function PatientScreen() {
       },
       dosesForStudent: (studentId) =>
         studentId ? records.filter(r => r.studentId === studentId).flatMap(r => r.medicationDoses ?? []) : [],
+      // ST 시트 '복용약 & 알레르기' 칸만 — '특이사항' 칸은 캠프마다 행정 메모(통화·용돈 체크 등)로 써서 제외
       studentNote: (studentId) => {
-        const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string; notes?: string }) | undefined;
-        const parts = [st?.medication && `복용약 ${st.medication}`, st?.notes && `특이사항 ${st.notes}`].filter(Boolean);
-        return parts.length ? parts.join(' · ') : undefined;
+        const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string }) | undefined;
+        return st?.medication?.trim() || undefined;
       },
     };
   }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students]);
@@ -2489,7 +2489,7 @@ function MedicationDoseEditorMobile({ doses, onChange, medicines, groups, givenB
       </View>
 
       {studentNote ? (
-        <Text style={{ fontSize: 10, color: '#be123c', backgroundColor: '#fff1f2', borderRadius: 6, padding: 6 }}>{L('patient.studentInfo2')} {studentNote}</Text>
+        <Text style={{ fontSize: 10, color: '#be123c', backgroundColor: '#fff1f2', borderRadius: 6, padding: 6 }}>{L('patient.studentMedAllergy')} {studentNote}</Text>
       ) : null}
 
       {!canAdd && (

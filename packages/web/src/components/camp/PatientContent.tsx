@@ -472,10 +472,10 @@ export default function PatientContent() {
       },
       dosesForStudent: (studentId) =>
         studentId ? records.filter(r => r.studentId === studentId).flatMap(r => r.medicationDoses ?? []) : [],
+      // ST 시트 '복용약 & 알레르기' 칸만 — '특이사항' 칸은 캠프마다 행정 메모(통화·용돈 체크 등)로 써서 제외
       studentNote: (studentId) => {
-        const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string; notes?: string }) | undefined;
-        const parts = [st?.medication && L('patient.medication3', { v0: st.medication }), st?.notes && L('patient.notes2', { v0: st.notes })].filter(Boolean);
-        return parts.length ? parts.join(' · ') : undefined;
+        const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string }) | undefined;
+        return st?.medication?.trim() || undefined;
       },
     };
   }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students]);
@@ -2397,7 +2397,7 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
       </div>
 
       {studentNote && (
-        <p className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1.5">{L('patient.studentInfo2')} {studentNote}</p>
+        <p className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1.5">{L('patient.studentMedAllergy')} {studentNote}</p>
       )}
 
       {!canAdd && (
