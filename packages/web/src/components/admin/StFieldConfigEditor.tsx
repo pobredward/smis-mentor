@@ -8,6 +8,7 @@ import type {
   FieldPermission,
   FieldType,
 } from '@smis-mentor/shared';
+import { L, sectionTabOf, SECTION_TAB_OPTIONS, STUDENT_TAB_LABEL_KEYS, type SectionTabId } from '@smis-mentor/shared';
 
 interface Props {
   config: STSheetFieldConfig;
@@ -91,6 +92,12 @@ export default function StFieldConfigEditor({ config, availableHeaders, onSave, 
   const handleToggleSectionVisible = useCallback((sectionId: string) => {
     setSections((prev) =>
       prev.map((s) => (s.id === sectionId ? { ...s, isVisible: !s.isVisible } : s)),
+    );
+  }, []);
+
+  const handleSectionTabChange = useCallback((sectionId: string, tab: SectionTabId) => {
+    setSections((prev) =>
+      prev.map((s) => (s.id === sectionId ? { ...s, tab } : s)),
     );
   }, []);
 
@@ -260,6 +267,19 @@ export default function StFieldConfigEditor({ config, availableHeaders, onSave, 
                   className="flex-1 text-sm font-semibold text-gray-800 border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1"
                 />
               )}
+
+              <label className="flex items-center gap-1 text-xs text-gray-500" title="학생 상세 모달에서 이 섹션이 들어갈 탭">
+                탭
+                <select
+                  value={sectionTabOf(section)}
+                  onChange={(e) => handleSectionTabChange(section.id, e.target.value as SectionTabId)}
+                  className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-white text-gray-700"
+                >
+                  {SECTION_TAB_OPTIONS.map((t) => (
+                    <option key={t} value={t}>{L(STUDENT_TAB_LABEL_KEYS[t])}</option>
+                  ))}
+                </select>
+              </label>
 
               <button
                 onClick={() => handleToggleSectionVisible(section.id)}

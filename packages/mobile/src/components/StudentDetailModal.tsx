@@ -1,35 +1,31 @@
-'use client';
-import { resolveActiveJobCodeId } from '@smis-mentor/shared';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { logger, toDriveImageUrl, getFieldConfig, getFieldValue, getFixedFieldValue, getDefaultFieldConfig, type STSheetFieldConfig, type FieldItemConfig } from '@smis-mentor/shared';
+/**
+ * 학생 상세 모달 (mobile) — 반/방/입소/퇴소/숙소 명단 공용.
+ * 전체 화면 + 상단 요약 헤더 + 가로 스크롤 탭. 좌우 스와이프(또는 ‹ ›)로 이전/다음 학생.
+ * 탭 구성·표시 판단은 shared/utils/studentModal 과 같아 web 과 동일하다.
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  Modal,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Dimensions,
-  TextInput,
-  Alert,
-  ActivityIndicator,
+  View, Text, Modal, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, TextInput,
+  Alert, ActivityIndicator, Linking, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { STSheetStudent, CampType } from '@smis-mentor/shared';
+import {
+  L, dataLabel, logger, resolveActiveJobCodeId, toDriveImageUrl, getFieldConfig, getFieldValue, getFixedFieldValue,
+  getDefaultFieldConfig, getStudentPatientRecords, studentTabsFor, sectionsForTab, visibleDynamicFields,
+  hasMedicationInfo, isOpenPatientRecord, placementSummary, guardianContacts, dialablePhone, STUDENT_TAB_LABEL_KEYS,
+  type STSheetFieldConfig, type FieldSectionConfig, type FieldItemConfig, type PatientRecord, type StudentTabId, type MessageKey,
+  type STSheetStudent, type CampType,
+} from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
 import { requestContactsPermission, getContactsPermissionStatus, saveSingleParentContact } from '../services';
 import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosureModal';
 import { authenticatedFetch } from '../utils/apiClient';
 import { db } from '../config/firebase';
-import { L } from '@smis-mentor/shared';
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_HEIGHT = SCREEN_HEIGHT * 0.78;
-const CARD_WIDTH = SCREEN_WIDTH * 0.9;
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ─── 편집 권한 ────────────────────────────────────────────────────────────────
 type EditPermission = 'readonly' | 'all' | 'mentor';
 
 function canEditField(permission: EditPermission, role: string): boolean {
@@ -40,25 +36,25 @@ function canEditField(permission: EditPermission, role: string): boolean {
   return false;
 }
 
-// ─── 공통 행 컴포넌트 ─────────────────────────────────────────────────────────
-const InfoRow = React.memo(({ label, value }: { label: string; value?: string | null }) => {
-  if (!value) return null;
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value} numberOfLines={0}>{value}</Text>
-    </View>
-  );
-});
+const SECTION_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  campInfo: 'flag-outline', basicInfo: 'person-outline', guardianInfo: 'people-outline', detail: 'document-text-outline',
+  placement: 'bar-chart-outline', counsel: 'chatbubbles-outline', survey: 'clipboard-outline',
+};
 
-// 편집 가능한 행 컴포넌트 (FieldItemConfig 기반)
+// 모달을 다시 열어도 마지막으로 보던 탭을 유지
+const tabMemory: { current: StudentTabId } = { current: 'basic' };
+
+type EditingField = { key: string; value: string } | null;
+
+// ─── 편집 가능한 행 ─────────────────────────────────────────────
 interface EditableRowProps {
   fieldKey: string;
   label: string;
   isMultiline: boolean;
   maxScore?: number;
   value: string;
-  editingField: { key: string; value: string } | null;
+  highlight?: boolean;
+  editingField: EditingField;
   fieldSaving: boolean;
   canEdit: boolean;
   onStartEdit: (key: string, currentValue: string) => void;
@@ -68,62 +64,44 @@ interface EditableRowProps {
 }
 
 const EditableRow = React.memo(({
-  fieldKey, label, isMultiline, maxScore, value,
-  editingField, fieldSaving, canEdit,
-  onStartEdit, onChange, onSave, onCancel,
+  fieldKey, label, isMultiline, maxScore, value, highlight,
+  editingField, fieldSaving, canEdit, onStartEdit, onChange, onSave, onCancel,
 }: EditableRowProps) => {
   const isThisEditing = editingField?.key === fieldKey;
   const isSavingThis = isThisEditing && fieldSaving;
-  const displayValue = value
-    ? (maxScore != null && maxScore > 0 ? `${value} / ${maxScore}` : value)
-    : '';
+  const displayValue = value ? (maxScore != null && maxScore > 0 ? `${value} / ${maxScore}` : value) : '';
 
   if (isThisEditing) {
     return (
-      <View style={styles.editableRowColumn}>
+      <View style={styles.rowColumn}>
         <Text style={styles.label}>{label}</Text>
-        <View style={styles.editContainer}>
-          <TextInput
-            style={[styles.editInput, isMultiline && styles.editInputMultiline]}
-            value={editingField!.value}
-            onChangeText={onChange}
-            multiline={isMultiline}
-            numberOfLines={isMultiline ? 3 : 1}
-            autoFocus
-            placeholder={L('common.enterDetails')}
-            placeholderTextColor="#cbd5e1"
-          />
-          <View style={styles.editButtons}>
-            <TouchableOpacity
-              onPress={onSave}
-              disabled={isSavingThis}
-              style={[styles.editBtn, styles.editBtnSave]}
-              accessibilityRole="button"
-            >
-              {isSavingThis
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.editBtnSaveText}>{L('common.save')}</Text>
-              }
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={onCancel}
-              disabled={isSavingThis}
-              style={[styles.editBtn, styles.editBtnCancel]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.editBtnCancelText}>{L('common.cancel')}</Text>
-            </TouchableOpacity>
-          </View>
+        <TextInput
+          style={[styles.editInput, isMultiline && styles.editInputMultiline]}
+          value={editingField!.value}
+          onChangeText={onChange}
+          multiline={isMultiline}
+          numberOfLines={isMultiline ? 3 : 1}
+          autoFocus
+          placeholder={L('common.enterDetails')}
+          placeholderTextColor="#cbd5e1"
+        />
+        <View style={styles.editButtons}>
+          <TouchableOpacity onPress={onSave} disabled={isSavingThis} style={[styles.editBtn, styles.editBtnSave]} accessibilityRole="button">
+            {isSavingThis ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.editBtnSaveText}>{L('common.save')}</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onCancel} disabled={isSavingThis} style={[styles.editBtn, styles.editBtnCancel]} accessibilityRole="button">
+            <Text style={styles.editBtnCancelText}>{L('common.cancel')}</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.infoRow}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.valueContainer}>
-        <Text style={[styles.value, !displayValue && styles.valuePlaceholder]} numberOfLines={0}>
+    <View style={[styles.row, highlight && styles.rowHighlight]}>
+      <Text style={[styles.label, highlight && styles.labelHighlight]}>{label}</Text>
+      <View style={styles.valueWrap}>
+        <Text style={[styles.value, !displayValue && styles.valuePlaceholder, highlight && styles.valueHighlight]}>
           {displayValue || '-'}
         </Text>
         {canEdit && !editingField && (
@@ -142,7 +120,7 @@ const EditableRow = React.memo(({
   );
 });
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// ─── Props ─────────────────────────────────────────────────────
 interface StudentDetailModalProps {
   visible: boolean;
   students: STSheetStudent[];
@@ -153,77 +131,79 @@ interface StudentDetailModalProps {
 }
 
 export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
-  visible,
-  students,
-  initialIndex,
-  onClose,
-  campType,
-  campCode,
+  visible, students, initialIndex, onClose, campType, campCode,
 }) => {
   const { userData } = useAuth();
-  const isAdmin = userData?.role === 'admin';
-  const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
-  const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);
-  const groupRole = activeJobExp?.groupRole;
+  const role = userData?.role ?? '';
+  const isAdmin = role === 'admin';
+  const isForeign = role === 'foreign' || role === 'foreign_temp';
+  const activeJobCodeId = resolveActiveJobCodeId(userData);
+  const groupRole = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId)?.groupRole;
 
-  const translateY = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0)).current;
-  const scrollViewRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlatList<STSheetStudent>>(null);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [tab, setTab] = useState<StudentTabId>(() => tabMemory.current);
+  useEffect(() => { tabMemory.current = tab; }, [tab]);
 
-  const [editingField, setEditingField] = useState<{ key: string; value: string } | null>(null);
+  const [editingField, setEditingField] = useState<EditingField>(null);
   const [fieldSaving, setFieldSaving] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, Record<string, unknown>>>({});
-  // 동적 필드 설정 — 기본값으로 초기화하여 로드 전에도 기본 섹션이 표시되게 함
   const [fieldConfig, setFieldConfig] = useState<STSheetFieldConfig>(() => getDefaultFieldConfig(campType));
+  const [recordsById, setRecordsById] = useState<Record<string, PatientRecord[]>>({});
 
   const [showContactsDisclosure, setShowContactsDisclosure] = useState(false);
   const pendingStudentRef = useRef<STSheetStudent | null>(null);
 
   useEffect(() => {
-    if (visible) {
-      setCurrentIndex(initialIndex);
-      setEditingField(null);
-      Animated.parallel([
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 160, friction: 14 }),
-        Animated.spring(translateY, { toValue: 1, useNativeDriver: true, tension: 160, friction: 14 }),
-      ]).start();
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ x: initialIndex * CARD_WIDTH, animated: false });
-      }, 0);
-      // campType 기준 동적 필드 설정 로드 — 우선 기본값으로, Firestore 로드 완료 후 교체
-      setFieldConfig(getDefaultFieldConfig(campType));
-      getFieldConfig(db, campType).then(setFieldConfig).catch((err) => {
-        logger.warn('[StudentDetailModal] fieldConfig 로드 실패, 기본값 사용:', err?.message);
-      });
-    } else {
-      Animated.parallel([
-        Animated.timing(scale, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 0, duration: 200, useNativeDriver: true }),
-      ]).start();
-    }
+    if (!visible) return;
+    setCurrentIndex(initialIndex);
+    setEditingField(null);
+    setFieldConfig(getDefaultFieldConfig(campType));
+    getFieldConfig(db, campType).then(setFieldConfig).catch((err) => {
+      logger.warn('[StudentDetailModal] fieldConfig 로드 실패, 기본값 사용:', err?.message);
+    });
   }, [visible, initialIndex, campType]);
 
-  const handleScroll = (event: any) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / CARD_WIDTH);
-    if (index !== currentIndex && index >= 0 && index < students.length) {
-      setCurrentIndex(index);
-      setEditingField(null); // 페이지 전환 시 편집 취소
-    }
-  };
+  const merge = useCallback((s: STSheetStudent): STSheetStudent => {
+    const o = overrides[s.studentId];
+    if (!o) return s;
+    return {
+      ...s,
+      ...(o as Partial<STSheetStudent>),
+      displayFields: { ...(s.displayFields ?? {}), ...((o.displayFields as Record<string, string> | undefined) ?? {}) },
+    };
+  }, [overrides]);
 
-  // 편집 시작
-  const handleStartEdit = useCallback((fieldKey: string, currentValue: string) => {
-    setEditingField({ key: fieldKey, value: currentValue });
-  }, []);
+  const base = students[currentIndex] ?? students[0];
+  const student = useMemo(() => (base ? merge(base) : undefined), [base, merge]);
 
-  // 편집 취소
-  const handleCancelEdit = useCallback(() => {
+  // 보건 기록 (현재 학생)
+  useEffect(() => {
+    if (!visible || !campCode || !base) return;
+    const id = base.studentId;
+    getStudentPatientRecords(db, campCode, id)
+      .then(r => setRecordsById(prev => ({ ...prev, [id]: r })))
+      .catch(e => { logger.warn('[StudentDetailModal] 보건 기록 조회 실패', e); setRecordsById(prev => ({ ...prev, [id]: [] })); });
+  }, [visible, campCode, base]);
+
+  const tabs = useMemo(() => (student ? studentTabsFor(student, campType, fieldConfig) : []), [student, campType, fieldConfig]);
+  const activeTab: StudentTabId = tabs.includes(tab) ? tab : 'basic';
+
+  const goTo = useCallback((idx: number) => {
+    if (idx < 0 || idx >= students.length) return;
     setEditingField(null);
-  }, []);
+    setCurrentIndex(idx);
+    listRef.current?.scrollToIndex({ index: idx, animated: true });
+  }, [students.length]);
 
-  // fieldConfig에서 해당 필드 정보 조회
+  const onMomentumEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    if (idx !== currentIndex && idx >= 0 && idx < students.length) {
+      setCurrentIndex(idx);
+      setEditingField(null);
+    }
+  }, [currentIndex, students.length]);
+
   const findFieldInConfig = useCallback((key: string): FieldItemConfig | null => {
     for (const section of fieldConfig.sections) {
       const field = section.fields.find(f => f.fieldKey === key);
@@ -232,20 +212,16 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     return null;
   }, [fieldConfig]);
 
-  // 저장
   const handleSaveField = useCallback(async () => {
-    if (!editingField || !campCode) return;
-    const student = students[currentIndex];
-    if (!student) return;
-
+    if (!editingField || !campCode || !base) return;
     setFieldSaving(true);
     try {
       const response = await authenticatedFetch('/api/st/update-placement', {
         method: 'POST',
         body: JSON.stringify({
           campCode,
-          studentId: student.studentId,
-          rowNumber: student.rowNumber,
+          studentId: base.studentId,
+          rowNumber: base.rowNumber,
           fields: { [editingField.key]: editingField.value },
         }),
       });
@@ -254,35 +230,23 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         logger.error('저장 API 응답 오류:', { status: response.status, error: err.error });
         throw new Error(err.error || L('students.saveFailed', { v0: response.status }));
       }
-
-      // 레거시 필드는 최상위에, 동적 필드는 displayFields 하위에 저장
       const fieldInfo = findFieldInConfig(editingField.key);
       const isLegacy = fieldInfo?.isLegacy ?? true;
       const sheetHeader = fieldInfo?.sheetHeader ?? editingField.key;
-
       setOverrides(prev => {
-        const existing = prev[student.studentId] ?? {};
-        if (isLegacy) {
-          return { ...prev, [student.studentId]: { ...existing, [editingField.key]: editingField.value } };
-        }
+        const existing = prev[base.studentId] ?? {};
+        if (isLegacy) return { ...prev, [base.studentId]: { ...existing, [editingField.key]: editingField.value } };
         const prevDisplay = (existing.displayFields as Record<string, string> | undefined) ?? {};
-        return {
-          ...prev,
-          [student.studentId]: {
-            ...existing,
-            displayFields: { ...prevDisplay, [sheetHeader]: editingField.value },
-          },
-        };
+        return { ...prev, [base.studentId]: { ...existing, displayFields: { ...prevDisplay, [sheetHeader]: editingField.value } } };
       });
       setEditingField(null);
     } catch (e: unknown) {
       logger.error('모바일 학생 카드 저장 실패:', e);
-      const message = e instanceof Error ? e.message : L('common.failedToSavePleaseTry');
-      Alert.alert(L('common.saveFailed'), message);
+      Alert.alert(L('common.saveFailed'), e instanceof Error ? e.message : L('common.failedToSavePleaseTry'));
     } finally {
       setFieldSaving(false);
     }
-  }, [editingField, campCode, students, currentIndex, findFieldInConfig]);
+  }, [editingField, campCode, base, findFieldInConfig]);
 
   const handleSaveParentContact = useCallback(async (s: STSheetStudent) => {
     if (!s.parentPhone) return;
@@ -310,10 +274,17 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     pendingStudentRef.current = null;
   }, []);
 
-  if (students.length === 0) return null;
+  if (students.length === 0 || !student) return null;
 
-  const student = students[currentIndex] ?? students[0];
-  const userRole = userData?.role ?? '';
+  const fixedOpts = { isAdmin, isForeign, groupRole };
+  const photoUrl = toDriveImageUrl(student.profilePhoto);
+  const classLine = getFixedFieldValue(student, 'classInfo', campType, fixedOpts);
+  const unitLine = getFixedFieldValue(student, 'unitInfo', campType, fixedOpts);
+  const medAlert = hasMedicationInfo(student) ? student.medication!.trim() : null;
+  const records = recordsById[student.studentId] ?? null;
+  const openCount = (records ?? []).filter(isOpenPatientRecord).length;
+
+  const selectTab = (t: StudentTabId) => { setTab(t); setEditingField(null); };
 
   return (
     <>
@@ -322,449 +293,445 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         onAccept={handleContactsDisclosureAccept}
         onDeny={handleContactsDisclosureDeny}
       />
-      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-        <View style={styles.backdrop}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-
-          <Animated.View style={[styles.cardContainer, { transform: [{ scale }], opacity: translateY }]}>
-            {/* 헤더 */}
-            <View style={styles.header}>
-              <View style={styles.headerCenter}>
-                <Text style={styles.studentName}>{student.name}</Text>
-                <Text style={styles.pageIndicator}>{currentIndex + 1} / {students.length}</Text>
-              </View>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <Text style={styles.closeButtonText}>✕</Text>
+      <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+        <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+          {/* 상단 바 */}
+          <View style={styles.topBar}>
+            <TouchableOpacity onPress={onClose} style={styles.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={L('common.close')}>
+              <Ionicons name="chevron-down" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.topTitle}>{L('studentModal.studentDetails')}</Text>
+            <View style={styles.navRow}>
+              <TouchableOpacity onPress={() => goTo(currentIndex - 1)} disabled={currentIndex === 0} style={styles.iconBtn} accessibilityLabel={L('studentModal.prevStudent')}>
+                <Ionicons name="chevron-back" size={20} color={currentIndex === 0 ? '#d1d5db' : '#374151'} />
+              </TouchableOpacity>
+              <Text style={styles.pageText}>{currentIndex + 1} / {students.length}</Text>
+              <TouchableOpacity onPress={() => goTo(currentIndex + 1)} disabled={currentIndex >= students.length - 1} style={styles.iconBtn} accessibilityLabel={L('studentModal.nextStudent')}>
+                <Ionicons name="chevron-forward" size={20} color={currentIndex >= students.length - 1 ? '#d1d5db' : '#374151'} />
               </TouchableOpacity>
             </View>
+          </View>
 
-            {/* 가로 스와이프 */}
-            <ScrollView
-              ref={scrollViewRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              bounces={false}
-              snapToInterval={CARD_WIDTH}
-              decelerationRate="fast"
-            >
-              {students.map((s, idx) => {
-                const studentOverrides = overrides[s.studentId] ?? {};
-                const merged: STSheetStudent = {
-                  ...s,
-                  ...(studentOverrides as Partial<STSheetStudent>),
-                  displayFields: {
-                    ...(s.displayFields ?? {}),
-                    ...(studentOverrides as Record<string, unknown>).displayFields as Record<string, string> | undefined,
-                  },
-                };
-                return (
-                  <View key={s.studentId} style={styles.page}>
-                    <StudentCard
-                      student={merged}
-                      campType={campType}
-                      isAdmin={isAdmin}
-                      groupRole={groupRole}
-                      userRole={userRole}
-                      fieldConfig={fieldConfig}
-                      editingField={idx === currentIndex ? editingField : null}
-                      fieldSaving={fieldSaving}
-                      onSaveContact={handleSaveParentContact}
-                      onStartEdit={handleStartEdit}
-                      onChangeEdit={(value) => setEditingField(prev => prev ? { ...prev, value } : null)}
-                      onSaveField={handleSaveField}
-                      onCancelEdit={handleCancelEdit}
-                    />
-                  </View>
-                );
-              })}
+          {/* 요약 헤더 */}
+          <View style={styles.header}>
+            <View style={[styles.photo, { backgroundColor: student.gender === 'M' ? '#dbeafe' : '#fef9c3' }]}>
+              {photoUrl ? (
+                <Image source={photoUrl} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} cachePolicy="memory-disk" />
+              ) : (
+                <Ionicons name="person" size={44} color={student.gender === 'M' ? '#93c5fd' : '#fcd34d'} />
+              )}
+            </View>
+            <View style={styles.headerInfo}>
+              <Text style={styles.name} numberOfLines={1}>
+                {student.name}{student.englishName ? <Text style={styles.englishName}>  {student.englishName}</Text> : null}
+              </Text>
+              <View style={styles.chips}>
+                {!!student.grade && <Text style={[styles.chip, styles.chipBlue]}>{student.grade}</Text>}
+                <Text style={[styles.chip, student.gender === 'M' ? styles.chipSky : styles.chipPink]}>
+                  {student.gender === 'M' ? L('students.m') : L('students.f')}
+                </Text>
+                {!!student.studentId && <Text style={[styles.chip, styles.chipGray]}>{student.studentId}</Text>}
+              </View>
+              {!!classLine && <Text style={styles.metaLine} numberOfLines={1}>{classLine}</Text>}
+              {!!unitLine && <Text style={styles.metaLine} numberOfLines={1}>{unitLine}</Text>}
+            </View>
+          </View>
+
+          {(medAlert || openCount > 0) && (
+            <View style={styles.alerts}>
+              {!!medAlert && (
+                <TouchableOpacity style={styles.alertRed} onPress={() => selectTab('health')} activeOpacity={0.8}>
+                  <Text style={styles.alertRedTitle}>⚠️ {L('studentModal.medicationAlert')}</Text>
+                  <Text style={styles.alertRedBody} numberOfLines={2}>{medAlert}</Text>
+                </TouchableOpacity>
+              )}
+              {openCount > 0 && (
+                <TouchableOpacity style={styles.alertAmber} onPress={() => selectTab('health')} activeOpacity={0.8}>
+                  <Text style={styles.alertAmberText}>🩹 {L('studentModal.patientOpen', { v0: openCount })}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* 탭 바 */}
+          <View style={styles.tabBar}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBarContent}>
+              {tabs.map(t => (
+                <TouchableOpacity key={t} onPress={() => selectTab(t)} style={[styles.tabItem, activeTab === t && styles.tabItemActive]}>
+                  <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>{L(STUDENT_TAB_LABEL_KEYS[t])}</Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
+          </View>
 
-            {/* 페이지 인디케이터 */}
-            {students.length > 1 && (
-              <View style={styles.dotsContainer}>
-                {students.map((s, idx) => (
-                  <View key={s.studentId} style={[styles.dot, idx === currentIndex && styles.dotActive]} />
-                ))}
+          {/* 학생별 페이지 (좌우 스와이프) */}
+          <FlatList
+            ref={listRef}
+            data={students}
+            keyExtractor={(s, i) => s.studentId || String(i)}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={Math.min(initialIndex, Math.max(0, students.length - 1))}
+            getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+            onMomentumScrollEnd={onMomentumEnd}
+            keyboardShouldPersistTaps="handled"
+            windowSize={3}
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
+            extraData={{ activeTab, currentIndex, editingField, fieldSaving, overrides, recordsById, fieldConfig }}
+            renderItem={({ item, index }) => (
+              <View style={{ width: SCREEN_WIDTH, flex: 1 }}>
+                {Math.abs(index - currentIndex) > 1 ? null : (
+                  <ScrollView style={styles.page} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
+                    <TabBody
+                      student={merge(item)}
+                      tab={activeTab}
+                      campType={campType}
+                      config={fieldConfig}
+                      role={role}
+                      fixedOpts={fixedOpts}
+                      records={index === currentIndex ? records : null}
+                      editingField={index === currentIndex ? editingField : null}
+                      fieldSaving={fieldSaving}
+                      onStartEdit={(key, value) => setEditingField({ key, value })}
+                      onChangeEdit={(value) => setEditingField(prev => (prev ? { ...prev, value } : null))}
+                      onSaveField={handleSaveField}
+                      onCancelEdit={() => setEditingField(null)}
+                      onSaveContact={handleSaveParentContact}
+                    />
+                  </ScrollView>
+                )}
               </View>
             )}
-          </Animated.View>
-        </View>
+          />
+        </SafeAreaView>
       </Modal>
     </>
   );
 };
 
-// ─── StudentCard ──────────────────────────────────────────────────────────────
-interface StudentCardProps {
+// ─── 탭 내용 ───────────────────────────────────────────────────
+interface TabBodyProps {
   student: STSheetStudent;
+  tab: StudentTabId;
   campType: CampType;
-  isAdmin: boolean;
-  groupRole?: string;
-  userRole: string;
-  fieldConfig: STSheetFieldConfig;
-  editingField: { key: string; value: string } | null;
+  config: STSheetFieldConfig;
+  role: string;
+  fixedOpts: { isAdmin: boolean; isForeign: boolean; groupRole?: string };
+  records: PatientRecord[] | null;
+  editingField: EditingField;
   fieldSaving: boolean;
-  onSaveContact: (s: STSheetStudent) => void;
   onStartEdit: (key: string, value: string) => void;
   onChangeEdit: (value: string) => void;
   onSaveField: () => void;
   onCancelEdit: () => void;
+  onSaveContact: (s: STSheetStudent) => void;
 }
 
-const StudentCard = React.memo(({
-  student: s, campType, isAdmin, groupRole, userRole,
-  fieldConfig, editingField, fieldSaving,
-  onSaveContact, onStartEdit, onChangeEdit, onSaveField, onCancelEdit,
-}: StudentCardProps) => {
-  const profilePhotoUrl = toDriveImageUrl(s.profilePhoto);
+function TabBody(props: TabBodyProps) {
+  const { student: s, tab, campType, config, role, fixedOpts, records } = props;
 
-  return (
-    <ScrollView style={styles.cardScrollView} showsVerticalScrollIndicator bounces={false} indicatorStyle="black">
-      {/* 프로필 사진 */}
-      <View style={styles.profilePhotoContainer}>
-        {profilePhotoUrl ? (
-          <Image source={profilePhotoUrl} style={styles.profilePhoto} contentFit="cover" transition={0} cachePolicy="memory-disk" />
-        ) : (
-          <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
-            <Ionicons name="person" size={120} color={s.gender === 'M' ? '#93c5fd' : '#fcd34d'} />
+  const renderSection = (section: FieldSectionConfig) => {
+    const header = (
+      <View style={styles.cardHeader}>
+        <Ionicons name={SECTION_ICON[section.id] ?? 'document-outline'} size={16} color="#4f46e5" />
+        <Text style={styles.cardTitle}>{dataLabel(section.label)}</Text>
+      </View>
+    );
+
+    if (section.isFixed) {
+      const rows = section.fields
+        .filter(f => f.isVisible)
+        .sort((a, b) => a.order - b.order)
+        .map(f => ({
+          key: f.fieldKey,
+          label: f.label,
+          value: f.isLegacy
+            ? getFixedFieldValue(s, f.fieldKey, campType, fixedOpts)
+            : (getFieldValue(s, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: false }) || null),
+        }))
+        .filter(r => r.value !== null);
+      if (rows.length === 0) return null;
+      return (
+        <View key={section.id} style={styles.card}>
+          {header}
+          {rows.map(r => (
+            <View key={r.key} style={styles.row}>
+              <Text style={styles.label}>{dataLabel(r.label)}</Text>
+              <Text style={[styles.value, styles.valueFlex]}>{r.value}</Text>
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+    const fields = visibleDynamicFields(s, section);
+    if (fields.length === 0) return null;
+
+    if (section.id === 'survey') {
+      return (
+        <View key={section.id} style={styles.card}>
+          {header}
+          <View style={styles.tileGrid}>
+            {fields.map(f => (
+              <View key={f.fieldKey} style={styles.tile}>
+                <Text style={styles.tileLabel}>{dataLabel(f.label)}</Text>
+                <Text style={styles.tileValue}>{getFieldValue(s, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: f.isLegacy }) || '-'}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View key={section.id} style={styles.card}>
+        {header}
+        {fields.map(field => (
+          <EditableRow
+            key={field.fieldKey}
+            fieldKey={field.fieldKey}
+            label={dataLabel(field.label)}
+            isMultiline={field.fieldType === 'text'}
+            maxScore={field.maxScore}
+            value={getFieldValue(s, { fieldKey: field.fieldKey, sheetHeader: field.sheetHeader, isLegacy: field.isLegacy })}
+            highlight={field.fieldKey === 'medication' && hasMedicationInfo(s)}
+            editingField={props.editingField}
+            fieldSaving={props.fieldSaving}
+            canEdit={canEditField(field.permission as EditPermission, role) && field.isEditable}
+            onStartEdit={props.onStartEdit}
+            onChange={props.onChangeEdit}
+            onSave={props.onSaveField}
+            onCancel={props.onCancelEdit}
+          />
+        ))}
+      </View>
+    );
+  };
+
+  const sections = (t: StudentTabId) => sectionsForTab(config, t).map(renderSection);
+
+  const comingSoon = (icon: keyof typeof Ionicons.glyphMap, bodyKey: MessageKey) => (
+    <View style={styles.soon}>
+      <Ionicons name={icon} size={32} color="#9ca3af" />
+      <Text style={styles.soonTitle}>{L('studentModal.comingSoon')}</Text>
+      <Text style={styles.soonBody}>{L(bodyKey)}</Text>
+    </View>
+  );
+
+  if (tab === 'allowance') return comingSoon('wallet-outline', 'studentModal.allowanceSoon');
+  if (tab === 'devices') return comingSoon('phone-portrait-outline', 'studentModal.devicesSoon');
+
+  if (tab === 'health') {
+    const contacts = guardianContacts(s);
+    return (
+      <>
+        {contacts.length > 0 && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="call-outline" size={16} color="#4f46e5" />
+              <Text style={styles.cardTitle}>{L('studentModal.quickContact')}</Text>
+              {!!s.parentPhone && (
+                <TouchableOpacity onPress={() => props.onSaveContact(s)} style={styles.saveContactBtn}
+                  accessibilityLabel={L('students.saveParentContacts')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="person-add-outline" size={15} color="#10b981" />
+                </TouchableOpacity>
+              )}
+            </View>
+            {contacts.map(c => (
+              <View key={c.role} style={styles.contactRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.contactRole}>{c.role === 'primary' ? L('studentModal.primaryGuardian') : L('studentModal.otherGuardian')}</Text>
+                  <Text style={styles.contactText}>{c.name ? `${c.name} · ` : ''}{c.phone}</Text>
+                </View>
+                <TouchableOpacity style={[styles.contactBtn, styles.contactCall]} onPress={() => Linking.openURL(`tel:${dialablePhone(c.phone)}`)}>
+                  <Ionicons name="call" size={14} color="#047857" />
+                  <Text style={styles.contactCallText}>{L('studentModal.call')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.contactBtn, styles.contactSms]} onPress={() => Linking.openURL(`sms:${dialablePhone(c.phone)}`)}>
+                  <Ionicons name="chatbubble" size={14} color="#1d4ed8" />
+                  <Text style={styles.contactSmsText}>{L('studentModal.sms')}</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
         )}
-      </View>
-
-      <View style={styles.cardContent}>
-        {/* 고정 섹션 (캠프 정보 / 기본 정보 / 보호자 정보) + 동적 섹션 — fieldConfig 기반 통합 렌더링 */}
-        {fieldConfig.sections
-          .filter(sec => sec.isVisible)
-          .sort((a, b) => a.order - b.order)
-          .map(section => {
-            if (section.isFixed) {
-              // ── 고정 섹션: 복합 필드 값을 직접 계산하여 표시 ──
-              const visibleFields = section.fields
-                .filter(f => f.isVisible)
-                .sort((a, b) => a.order - b.order);
-              const rows = visibleFields
-                .map(f => ({
-                  label: f.label,
-                  fieldKey: f.fieldKey,
-                  // isLegacy: true → 복합 필드 전용 getFixedFieldValue (shared)
-                  // isLegacy: false → 관리자가 추가한 신규 필드, 일반 getFieldValue 사용
-                  value: f.isLegacy
-                    ? getFixedFieldValue(s, f.fieldKey, campType, { isAdmin, groupRole })
-                    : (getFieldValue(s, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: false }) || null),
-                }))
-                .filter(r => r.value !== null);
-              if (rows.length === 0) return null;
-
-              // 보호자 정보 섹션은 연락처 저장 버튼을 특별히 추가
-              const isGuardianSection = section.id === 'guardianInfo';
-
+        {sections('health')}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="medkit-outline" size={16} color="#4f46e5" />
+            <Text style={styles.cardTitle}>{L('studentModal.patientHistory')}</Text>
+          </View>
+          {records === null ? (
+            <ActivityIndicator style={{ marginVertical: 16 }} color="#3b82f6" />
+          ) : records.length === 0 ? (
+            <Text style={styles.emptyText}>{L('studentModal.noPatientRecords')}</Text>
+          ) : (
+            records.map(r => {
+              const d = r.visitDate?.toDate?.();
+              const open = isOpenPatientRecord(r);
+              const visits = (r.hospitalVisits ?? []).length;
               return (
-                <View key={section.id} style={styles.section}>
-                  {isGuardianSection ? (
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionTitle}>{section.label}</Text>
-                      {s.parentPhone && (
-                        <TouchableOpacity
-                          onPress={() => onSaveContact(s)}
-                          style={styles.saveContactBtn}
-                          accessibilityLabel={L('students.saveParentContacts')}
-                          accessibilityRole="button"
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Ionicons name="person-add-outline" size={15} color="#10b981" />
-                        </TouchableOpacity>
-                      )}
+                <View key={r.id} style={styles.recordRow}>
+                  <Text style={styles.recordDate}>{d ? `${d.getMonth() + 1}/${d.getDate()}` : '-'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.recordTop}>
+                      <Text style={styles.recordSymptom}>{r.symptom || '-'}</Text>
+                      <Text style={[styles.smallChip, open ? styles.smallChipAmber : styles.smallChipGreen]}>{dataLabel(r.progressStatus)}</Text>
+                      {(r.types ?? []).map(t => <Text key={t} style={[styles.smallChip, styles.smallChipGray]}>{dataLabel(t)}</Text>)}
                     </View>
-                  ) : (
-                    <Text style={styles.sectionTitle}>{section.label}</Text>
-                  )}
-                  {rows.map(r => (
-                    <InfoRow key={r.fieldKey} label={r.label} value={r.value} />
-                  ))}
+                    {(!!r.treatment || visits > 0) && (
+                      <Text style={styles.recordSub}>
+                        {r.treatment}{r.treatment && visits > 0 ? ' · ' : ''}{visits > 0 ? L('studentModal.hospitalVisits', { v0: visits }) : ''}
+                      </Text>
+                    )}
+                  </View>
                 </View>
               );
-            }
+            })
+          )}
+        </View>
+      </>
+    );
+  }
 
-            // ── 동적 섹션 — 기존 렌더링 로직 ──
-            // readonly + 비편집 필드는 값이 없으면 숨김 (설문조사 등)
-            const visibleFields = section.fields
-              .filter(f => f.isVisible)
-              .sort((a, b) => a.order - b.order)
-              .filter(f => {
-                if (!f.isEditable && f.permission === 'readonly') {
-                  return !!getFieldValue(s, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: f.isLegacy });
-                }
-                return true;
-              });
-            // 표시할 필드가 없으면 섹션 자체 숨김
-            if (visibleFields.length === 0) return null;
-            return (
-              <View key={section.id} style={styles.section}>
-                <Text style={styles.sectionTitle}>{section.label}</Text>
-                {visibleFields.map(field => {
-                  const canEdit = canEditField(field.permission as EditPermission, userRole) && field.isEditable;
-                  const rawValue = getFieldValue(s, {
-                    fieldKey: field.fieldKey,
-                    sheetHeader: field.sheetHeader,
-                    isLegacy: field.isLegacy,
-                  });
-                  const isMultiline = field.fieldType === 'text';
-                  return (
-                    <EditableRow
-                      key={field.fieldKey}
-                      fieldKey={field.fieldKey}
-                      label={field.label}
-                      isMultiline={isMultiline}
-                      maxScore={field.maxScore}
-                      value={rawValue}
-                      editingField={editingField}
-                      fieldSaving={fieldSaving}
-                      canEdit={canEdit}
-                      onStartEdit={onStartEdit}
-                      onChange={onChangeEdit}
-                      onSave={onSaveField}
-                      onCancel={onCancelEdit}
-                    />
-                  );
-                })}
-              </View>
-            );
-          })}
+  if (tab === 'study') {
+    const rows = placementSummary(s);
+    const showProgress = rows.length > 0 && rows.some(r => r.final !== null);
+    return (
+      <>
+        {showProgress && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="trending-up-outline" size={16} color="#4f46e5" />
+              <Text style={styles.cardTitle}>{L('studentModal.levelProgress')}</Text>
+            </View>
+            <View style={styles.scoreRow}>
+              {rows.map(r => {
+                const diff = r.entry !== null && r.final !== null ? r.final - r.entry : null;
+                return (
+                  <View key={r.skill} style={styles.scoreBox}>
+                    <Text style={styles.tileLabel}>{r.skill}</Text>
+                    <Text style={styles.scoreMain}>{r.entry ?? '-'} → {r.final ?? '-'}</Text>
+                    {diff !== null && (
+                      <Text style={[styles.scoreDiff, { color: diff > 0 ? '#059669' : diff < 0 ? '#dc2626' : '#9ca3af' }]}>
+                        {diff > 0 ? `+${diff}` : diff}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+        {sections('study')}
+      </>
+    );
+  }
 
-      </View>
-    </ScrollView>
-  );
-});
+  const blocks = sections(tab === 'survey' ? 'survey' : 'basic');
+  if (blocks.every(b => b === null)) return <Text style={styles.emptyText}>{L('studentModal.nothingToShow')}</Text>;
+  return <>{blocks}</>;
+}
 
-// ─── 스타일 ───────────────────────────────────────────────────────────────────
+// ─── 스타일 ────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardContainer: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
-    position: 'relative',
-    minHeight: 48,
-  },
-  headerCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  studentName: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: '#1e293b',
-  },
-  pageIndicator: {
-    fontSize: 11,
-    color: '#64748b',
-    marginTop: 1,
-  },
-  closeButton: {
-    position: 'absolute',
-    right: 16,
-    top: 16,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  closeButtonText: {
-    fontSize: 22,
-    color: '#64748b',
-    fontWeight: '400' as const,
-  },
-  page: {
-    width: CARD_WIDTH,
-  },
-  cardScrollView: {
-    flex: 1,
-  },
-  profilePhotoContainer: {
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: '#ffffff',
-  },
-  profilePhoto: {
-    width: 280,
-    height: 280,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  profilePhotoPlaceholder: {
-    backgroundColor: '#e2e8f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 20,
-  },
-  section: {
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#1e293b',
-    marginBottom: 6,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  editableRowColumn: {
-    flexDirection: 'column',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  label: {
-    flex: 1,
-    fontSize: 12,
-    color: '#64748b',
-  },
-  valueContainer: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-  },
-  value: {
-    flex: 1,
-    fontSize: 12,
-    color: '#1e293b',
-    fontWeight: '500' as const,
-  },
-  valuePlaceholder: {
-    color: '#cbd5e1',
-  },
-  editContainer: {
-    marginTop: 4,
-    gap: 6,
-  },
-  editInput: {
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 12,
-    color: '#1e293b',
-    backgroundColor: '#f8fafc',
-  },
-  editInputMultiline: {
-    minHeight: 64,
-    textAlignVertical: 'top',
-  },
-  editButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  editBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 6,
-    minWidth: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editBtnSave: {
-    backgroundColor: '#3b82f6',
-  },
-  editBtnCancel: {
-    backgroundColor: '#f1f5f9',
-  },
-  editBtnSaveText: {
-    fontSize: 12,
-    color: '#ffffff',
-    fontWeight: '600' as const,
-  },
-  editBtnCancelText: {
-    fontSize: 12,
-    color: '#64748b',
-  },
-  editIconBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: '#eff6ff',
-  },
-  editIconText: {
-    fontSize: 11,
-    color: '#3b82f6',
-    fontWeight: '500' as const,
-  },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    backgroundColor: '#ffffff',
-    flexWrap: 'wrap',
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#cbd5e1',
-    marginHorizontal: 2,
-    marginVertical: 2,
-  },
-  dotActive: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#3b82f6',
-  },
-  saveContactBtn: {
-    width: 28,
-    height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 6,
-    borderRadius: 6,
-    backgroundColor: '#f0fdf4',
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-  },
+  screen: { flex: 1, backgroundColor: '#ffffff' },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 4 },
+  topTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  navRow: { flexDirection: 'row', alignItems: 'center' },
+  pageText: { fontSize: 12, color: '#6b7280', minWidth: 44, textAlign: 'center', fontVariant: ['tabular-nums'] },
+
+  header: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 },
+  photo: { width: 84, height: 84, borderRadius: 16, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e5e7eb' },
+  headerInfo: { flex: 1, minWidth: 0, justifyContent: 'center' },
+  name: { fontSize: 20, fontWeight: '800', color: '#111827' },
+  englishName: { fontSize: 14, fontWeight: '400', color: '#6b7280' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  chip: { fontSize: 11, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
+  chipBlue: { backgroundColor: '#eff6ff', color: '#1d4ed8' },
+  chipSky: { backgroundColor: '#f0f9ff', color: '#0369a1' },
+  chipPink: { backgroundColor: '#fdf2f8', color: '#be185d' },
+  chipGray: { backgroundColor: '#f3f4f6', color: '#4b5563' },
+  metaLine: { fontSize: 12, color: '#4b5563', marginTop: 4 },
+
+  alerts: { paddingHorizontal: 16, paddingBottom: 10, gap: 6 },
+  alertRed: { backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  alertRedTitle: { fontSize: 12, fontWeight: '700', color: '#b91c1c' },
+  alertRedBody: { fontSize: 12, color: '#991b1b', marginTop: 2 },
+  alertAmber: { backgroundColor: '#fffbeb', borderColor: '#fde68a', borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  alertAmberText: { fontSize: 12, fontWeight: '700', color: '#92400e' },
+
+  tabBar: { borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  tabBarContent: { paddingHorizontal: 8 },
+  tabItem: { paddingHorizontal: 12, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabItemActive: { borderBottomColor: '#2563eb' },
+  tabText: { fontSize: 14, color: '#6b7280' },
+  tabTextActive: { color: '#2563eb', fontWeight: '700' },
+
+  page: { flex: 1, backgroundColor: '#f8fafc' },
+  pageContent: { padding: 12, gap: 10, paddingBottom: 32 },
+
+  card: { backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', paddingHorizontal: 14, paddingBottom: 6 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  cardTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: '#111827' },
+
+  row: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', gap: 8 },
+  rowHighlight: { backgroundColor: '#fef2f2', marginHorizontal: -14, paddingHorizontal: 14 },
+  rowColumn: { paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', gap: 6 },
+  label: { width: 96, fontSize: 12, color: '#6b7280' },
+  labelHighlight: { color: '#b91c1c', fontWeight: '700' },
+  valueWrap: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  value: { flex: 1, fontSize: 13, color: '#111827', fontWeight: '500' },
+  valueFlex: { flex: 1 },
+  valueHighlight: { color: '#991b1b' },
+  valuePlaceholder: { color: '#cbd5e1' },
+
+  editInput: { borderWidth: 1, borderColor: '#60a5fa', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#111827' },
+  editInputMultiline: { minHeight: 72, textAlignVertical: 'top' },
+  editButtons: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
+  editBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, minWidth: 56, alignItems: 'center' },
+  editBtnSave: { backgroundColor: '#2563eb' },
+  editBtnCancel: { backgroundColor: '#f3f4f6' },
+  editBtnSaveText: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
+  editBtnCancelText: { color: '#4b5563', fontSize: 13, fontWeight: '600' },
+  editIconBtn: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: '#eff6ff' },
+  editIconText: { fontSize: 11, color: '#2563eb', fontWeight: '600' },
+
+  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 10 },
+  tile: { width: '48%', flexGrow: 1, backgroundColor: '#f9fafb', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  tileLabel: { fontSize: 11, color: '#6b7280' },
+  tileValue: { fontSize: 14, fontWeight: '700', color: '#111827', marginTop: 2 },
+
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  contactRole: { fontSize: 11, color: '#6b7280' },
+  contactText: { fontSize: 13, color: '#111827', fontWeight: '500', marginTop: 1 },
+  contactBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10 },
+  contactCall: { backgroundColor: '#ecfdf5' },
+  contactSms: { backgroundColor: '#eff6ff' },
+  contactCallText: { fontSize: 12, fontWeight: '600', color: '#047857' },
+  contactSmsText: { fontSize: 12, fontWeight: '600', color: '#1d4ed8' },
+  saveContactBtn: { padding: 4, borderRadius: 8, backgroundColor: '#ecfdf5' },
+
+  recordRow: { flexDirection: 'row', gap: 10, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  recordDate: { width: 40, fontSize: 12, color: '#6b7280', paddingTop: 1 },
+  recordTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
+  recordSymptom: { fontSize: 13, fontWeight: '600', color: '#111827' },
+  recordSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  smallChip: { fontSize: 10, fontWeight: '600', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
+  smallChipAmber: { backgroundColor: '#fef3c7', color: '#92400e' },
+  smallChipGreen: { backgroundColor: '#ecfdf5', color: '#047857' },
+  smallChipGray: { backgroundColor: '#f3f4f6', color: '#4b5563' },
+
+  scoreRow: { flexDirection: 'row', gap: 8, paddingVertical: 10 },
+  scoreBox: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 10, alignItems: 'center', paddingVertical: 8 },
+  scoreMain: { fontSize: 14, fontWeight: '700', color: '#111827', marginTop: 2 },
+  scoreDiff: { fontSize: 11, fontWeight: '700', marginTop: 1 },
+
+  emptyText: { fontSize: 12, color: '#9ca3af', textAlign: 'center', paddingVertical: 16 },
+  soon: { alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: '#d1d5db', paddingVertical: 40, paddingHorizontal: 24 },
+  soonTitle: { fontSize: 15, fontWeight: '700', color: '#1f2937', marginTop: 8 },
+  soonBody: { fontSize: 12, color: '#6b7280', marginTop: 4, textAlign: 'center' },
 });

@@ -9,6 +9,7 @@ import {
   arrayUnion,
   arrayRemove,
   onSnapshot,
+  getDocs,
   Timestamp,
   Firestore,
   Unsubscribe,
@@ -131,6 +132,32 @@ export const subscribePatientRecords = (
       logger.error('환자 기록 구독 오류:', error);
       onError?.(error);
     }
+  );
+};
+
+/** 한 학생의 보건 기록 (학생 상세 모달용, 최신순) */
+export const getStudentPatientRecords = async (
+  db: Firestore,
+  campCode: string,
+  studentId: string,
+): Promise<PatientRecord[]> => {
+  if (!campCode || !studentId) return [];
+  const snap = await getDocs(query(
+    collection(db, 'patientRecords'),
+    where('campCode', '==', campCode),
+    where('studentId', '==', studentId),
+  ));
+  return (snap.docs.map(d => {
+    const data = d.data();
+    return {
+      id: d.id,
+      ...data,
+      hospitalVisits: normalizeArray(data.hospitalVisits),
+      types: normalizeArray(data.types),
+      progressLogs: normalizeArray(data.progressLogs),
+    };
+  }) as PatientRecord[]).sort(
+    (a, b) => (b.visitDate?.toMillis?.() ?? 0) - (a.visitDate?.toMillis?.() ?? 0)
   );
 };
 

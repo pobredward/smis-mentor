@@ -15,6 +15,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getDefaultFieldConfig,
+  L,
+  sectionTabOf,
+  SECTION_TAB_OPTIONS,
+  STUDENT_TAB_LABEL_KEYS,
   type CampType,
   type STSheetFieldConfig,
   type FieldSectionConfig,
@@ -202,6 +206,15 @@ export function StFieldConfigScreen({ navigation }: AdminStackScreenProps<'StFie
     setSections(prev =>
       prev.map(s => s.id === sectionId ? { ...s, isVisible: !s.isVisible } : s),
     );
+  }, []);
+
+  // 학생 상세 모달에서 이 섹션이 들어갈 탭 — 누를 때마다 다음 탭으로
+  const handleCycleSectionTab = useCallback((sectionId: string) => {
+    setSections(prev => prev.map(s => {
+      if (s.id !== sectionId) return s;
+      const cur = SECTION_TAB_OPTIONS.indexOf(sectionTabOf(s));
+      return { ...s, tab: SECTION_TAB_OPTIONS[(cur + 1) % SECTION_TAB_OPTIONS.length] };
+    }));
   }, []);
 
   const handleSectionLabelChange = useCallback((sectionId: string, label: string) => {
@@ -467,6 +480,15 @@ export function StFieldConfigScreen({ navigation }: AdminStackScreenProps<'StFie
                     placeholder="섹션 이름"
                     placeholderTextColor="#9ca3af"
                   />
+                  <TouchableOpacity
+                    onPress={() => handleCycleSectionTab(section.id)}
+                    style={[styles.visibleBadge, { backgroundColor: '#eff6ff' }]}
+                    accessibilityLabel="학생 모달 탭 변경"
+                  >
+                    <Text style={[styles.visibleBadgeText, { color: '#1d4ed8' }]}>
+                      {L(STUDENT_TAB_LABEL_KEYS[sectionTabOf(section)])}
+                    </Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => handleToggleSectionVisible(section.id)}
                     style={[styles.visibleBadge, section.isVisible ? styles.visibleBadgeOn : styles.visibleBadgeOff]}

@@ -34,6 +34,8 @@ export interface FieldSectionConfig {
   order: number;
   isVisible: boolean;
   isFixed?: boolean;
+  /** 학생 모달에서 이 섹션이 들어갈 탭 (없으면 섹션 id 기준 기본 탭 — utils/studentModal 참고) */
+  tab?: 'basic' | 'health' | 'study' | 'survey';
   fields: FieldItemConfig[];
 }
 

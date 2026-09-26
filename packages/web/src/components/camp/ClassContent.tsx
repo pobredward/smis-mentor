@@ -1,22 +1,13 @@
 'use client';
 import { resolveActiveJobCodeId } from '@smis-mentor/shared';
-import { logger, toDriveImageUrl, getFieldValue, getFixedFieldValue, getDefaultFieldConfig, type STSheetFieldConfig } from '@smis-mentor/shared';
+import { logger, toDriveImageUrl, type STSheetFieldConfig } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { stSheetService, jobCodesService, placementOverrideService, STSheetStudent, CampCode, CampType } from '@/lib/stSheetService';
-import { authenticatedPost, authenticatedGet } from '@/lib/apiClient';
+import StudentDetailModal from './StudentDetailModal';
+import { stSheetService, jobCodesService, STSheetStudent, CampCode, CampType } from '@/lib/stSheetService';
+import { authenticatedGet } from '@/lib/apiClient';
 import { L, isEnglishUI } from '@smis-mentor/shared';
-
-type EditPermission = 'readonly' | 'all' | 'mentor';
-
-function canEditField(permission: EditPermission, role: string): boolean {
-  if (permission === 'readonly') return false;
-  if (role === 'admin') return true;
-  if (permission === 'all') return true;
-  if (permission === 'mentor') return role === 'mentor' || role === 'mentor_temp';
-  return false;
-}
 
 export default function ClassContent() {
   const { userData } = useAuth();
@@ -35,84 +26,14 @@ export default function ClassContent() {
   // 동적 필드 설정
   const [fieldConfig, setFieldConfig] = useState<STSheetFieldConfig | null>(null);
 
-  // 편집 상태: isLegacy false면 displayFields에 저장
-  const [editingField, setEditingField] = useState<{
-    key: string; value: string; sheetHeader: string; isLegacy: boolean;
-  } | null>(null);
-  const [fieldSaving, setFieldSaving] = useState(false);
 
   const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
   const isAdmin = userData?.role === 'admin';
-  const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
-  const activeJobExp = userData?.jobExperiences?.find(exp => exp.id === activeJobCodeId);
-  const groupRole = activeJobExp?.groupRole;
 
-  // ESC 키로 모달 닫기
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedStudent(null);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+  const handleSelectStudent = useCallback((student: STSheetStudent) => {
+    setSelectedStudent(student);
   }, []);
 
-  const handleSelectStudent = useCallback(async (student: STSheetStudent) => {
-    if (!campCode) return;
-    const override = await placementOverrideService.getOverride(campCode, student.studentId);
-    setSelectedStudent(placementOverrideService.mergeOverride(student, override));
-    setEditingField(null);
-  }, [campCode]);
-
-  // 특정 필드 편집 시작
-  const handleStartFieldEdit = useCallback(
-    (fieldKey: string, sheetHeader: string, isLegacy: boolean) => {
-      if (!selectedStudent) return;
-      const value = getFieldValue(selectedStudent, { fieldKey, sheetHeader, isLegacy });
-      setEditingField({ key: fieldKey, value, sheetHeader, isLegacy });
-    },
-    [selectedStudent],
-  );
-
-  // 편집 취소
-  const handleCancelFieldEdit = useCallback(() => {
-    setEditingField(null);
-  }, []);
-
-  // 단일 필드 저장
-  const handleSaveField = useCallback(async () => {
-    if (!selectedStudent || !campCode || !editingField) return;
-    setFieldSaving(true);
-    try {
-      await authenticatedPost('/api/st/update-placement', {
-        campCode,
-        studentId: selectedStudent.studentId,
-        rowNumber: selectedStudent.rowNumber,
-        fields: { [editingField.key]: editingField.value },
-      });
-      // 화면 즉시 반영
-      setSelectedStudent(prev => {
-        if (!prev) return null;
-        if (editingField.isLegacy) {
-          const updated = { ...prev } as unknown as Record<string, unknown>;
-          updated[editingField.key] = editingField.value || undefined;
-          return updated as unknown as STSheetStudent;
-        }
-        return {
-          ...prev,
-          displayFields: {
-            ...(prev.displayFields ?? {}),
-            [editingField.sheetHeader]: editingField.value,
-          },
-        };
-      });
-      setEditingField(null);
-    } catch (e) {
-      logger.error('학생 카드 저장 실패:', e);
-      alert(L('common.failedToSavePleaseTry'));
-    } finally {
-      setFieldSaving(false);
-    }
-  }, [selectedStudent, campCode, editingField]);
 
   useEffect(() => {
     const loadCampCode = async () => {
@@ -546,256 +467,14 @@ export default function ClassContent() {
 
       {/* 학생 상세 모달 */}
       {selectedStudent && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setSelectedStudent(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-h-[85vh] flex flex-col md:max-w-4xl md:flex-row md:max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
-
-            {/* 데스크탑: 왼쪽 사진 패널 (고정) */}
-            <div className="hidden md:flex md:flex-col md:items-center md:justify-start md:w-96 md:flex-shrink-0 md:p-6 md:border-r md:border-gray-200 md:bg-gray-50 md:rounded-l-2xl">
-              {(() => {
-                const profilePhotoUrl = toDriveImageUrl(selectedStudent.profilePhoto);
-                logger.info('🖼️ [ClassContent] 학생 정보:', {
-                  name: selectedStudent.name,
-                  studentId: selectedStudent.studentId,
-                  profilePhoto: selectedStudent.profilePhoto,
-                  convertedUrl: profilePhotoUrl,
-                  profilePhotoType: typeof selectedStudent.profilePhoto,
-                  profilePhotoLength: selectedStudent.profilePhoto?.length,
-                  hasProfilePhoto: !!selectedStudent.profilePhoto
-                });
-                return (
-                  <>
-                    {profilePhotoUrl ? (
-                      <img
-                        src={profilePhotoUrl}
-                        alt={L('common.sProfile', { v0: selectedStudent.name })}
-                        className="w-full aspect-square rounded-2xl object-cover border border-gray-200 mb-4"
-                        onLoad={() => {
-                          logger.info('✅ [ClassContent] 프로필사진 로드 성공:', selectedStudent.name, profilePhotoUrl);
-                        }}
-                        onError={(e) => {
-                          const imgElement = e.currentTarget as HTMLImageElement;
-                          logger.error('❌ [ClassContent] 프로필사진 로드 실패:', {
-                            name: selectedStudent.name,
-                            originalUrl: selectedStudent.profilePhoto,
-                            convertedUrl: profilePhotoUrl,
-                            naturalWidth: imgElement.naturalWidth,
-                            naturalHeight: imgElement.naturalHeight,
-                            complete: imgElement.complete,
-                            error: e,
-                          });
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                        }}
-                      />
-                    ) : null}
-                    <div
-                      className={`w-full aspect-square rounded-2xl border border-gray-200 flex items-center justify-center mb-4 ${profilePhotoUrl ? 'hidden' : ''}`}
-                      style={{ backgroundColor: selectedStudent.gender === 'M' ? '#dbeafe' : '#fef9c3' }}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                        className="w-1/2 h-1/2"
-                        style={{ color: selectedStudent.gender === 'M' ? '#93c5fd' : '#fcd34d' }}
-                      >
-                        <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <h3 className="text-lg font-bold text-gray-900 text-center">{selectedStudent.name}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{selectedStudent.englishName || ''}</p>
-                  </>
-                );
-              })()}
-            </div>
-
-            {/* 오른쪽(데스크탑) / 전체(모바일) 콘텐츠 영역 */}
-            <div className="flex flex-col flex-1 min-w-0 overflow-hidden rounded-2xl md:rounded-l-none">
-              {/* 헤더 - 이름 + 닫기 버튼 */}
-              <div className="flex items-center justify-center px-6 py-3 border-b border-gray-200 relative flex-shrink-0">
-                <h3 className="text-xl font-bold text-gray-900">{selectedStudent.name}</h3>
-                <button
-                  onClick={() => setSelectedStudent(null)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* 내용 스크롤 영역 */}
-              <div className="flex-1 overflow-y-auto px-6 py-4">
-                {/* 모바일: 사진을 스크롤 영역 최상단에 표시 */}
-                <div className="md:hidden">
-                  {(() => {
-                    const profilePhotoUrl = toDriveImageUrl(selectedStudent.profilePhoto);
-                    return (
-                      <div className="flex justify-center mb-4">
-                        {profilePhotoUrl ? (
-                          <img
-                            src={profilePhotoUrl}
-                            alt={L('common.sProfile', { v0: selectedStudent.name })}
-                            className="w-80 h-80 rounded-2xl object-cover border border-gray-200"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                            }}
-                          />
-                        ) : null}
-                        <div
-                          className={`w-80 h-80 rounded-2xl border border-gray-200 flex items-center justify-center ${profilePhotoUrl ? 'hidden' : ''}`}
-                          style={{ backgroundColor: selectedStudent.gender === 'M' ? '#dbeafe' : '#fef9c3' }}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                            className="w-24 h-24"
-                            style={{ color: selectedStudent.gender === 'M' ? '#93c5fd' : '#fcd34d' }}
-                          >
-                            <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              {/* 고정 섹션 (캠프 정보 / 기본 정보 / 보호자 정보) + 동적 섹션 — fieldConfig 기반 통합 렌더링 */}
-              {(fieldConfig ?? getDefaultFieldConfig(campType ?? 'EJ')).sections
-                .filter(sec => sec.isVisible)
-                .sort((a, b) => a.order - b.order)
-                .map(section => {
-                  // ── 고정 섹션: 복합 필드 값을 직접 계산하여 표시 ──
-                  if (section.isFixed) {
-                    const visibleFields = section.fields
-                      .filter(f => f.isVisible)
-                      .sort((a, b) => a.order - b.order);
-                    const rows = visibleFields
-                      .map(f => ({
-                        label: f.label,
-                        // isLegacy: true → 복합 필드 전용 getFixedFieldValue
-                        // isLegacy: false → 관리자가 추가한 신규 필드, 일반 getFieldValue 사용
-                        value: f.isLegacy
-                          ? getFixedFieldValue(selectedStudent!, f.fieldKey, campType ?? 'EJ', { isForeign, isAdmin, groupRole })
-                          : (getFieldValue(selectedStudent!, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: false }) || null),
-                      }))
-                      .filter(r => r.value !== null);
-                    if (rows.length === 0) return null;
-                    return (
-                      <div key={section.id} className="mb-5">
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3">{section.label}</h4>
-                        <div className="space-y-2">
-                          {rows.map(r => (
-                            <div key={r.label} className="flex py-2 border-b border-gray-100">
-                              <span className="flex-1 text-xs text-gray-500">{r.label}</span>
-                              <span className="flex-[2] text-xs text-gray-900 font-medium">{r.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // ── 동적 섹션 — 기존 렌더링 로직 ──
-                  const userRole = userData?.role ?? '';
-                  // readonly + 비편집 필드는 값이 없으면 숨김 (설문조사 등)
-                  const visibleFields = section.fields
-                    .filter(f => f.isVisible)
-                    .sort((a, b) => a.order - b.order)
-                    .filter(f => {
-                      if (!f.isEditable && f.permission === 'readonly') {
-                        return !!getFieldValue(selectedStudent!, { fieldKey: f.fieldKey, sheetHeader: f.sheetHeader, isLegacy: f.isLegacy });
-                      }
-                      return true;
-                    });
-                  // 표시할 필드가 없으면 섹션 자체 숨김
-                  if (visibleFields.length === 0) return null;
-                  return (
-                    <div key={section.id} className="mb-5">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">{section.label}</h4>
-                      <div className="space-y-1">
-                        {visibleFields.map(field => {
-                          const canEdit = canEditField(field.permission as EditPermission, userRole) && field.isEditable;
-                          const isThisEditing = editingField?.key === field.fieldKey;
-                          const isSavingThis = isThisEditing && fieldSaving;
-                          const rawValue = getFieldValue(selectedStudent!, {
-                            fieldKey: field.fieldKey,
-                            sheetHeader: field.sheetHeader,
-                            isLegacy: field.isLegacy,
-                          });
-                          const displayValue = rawValue
-                            ? (field.fieldType === 'score' && field.maxScore ? `${rawValue} / ${field.maxScore}` : rawValue)
-                            : '-';
-                          const isTextArea = field.fieldType === 'text' && !field.maxScore;
-
-                          return (
-                            <div
-                              key={field.fieldKey}
-                              className={`flex ${isTextArea ? 'items-start' : 'items-center'} py-1.5 border-b border-gray-100 gap-2`}
-                            >
-                              <span className="w-28 shrink-0 text-xs text-gray-500 pt-0.5">{field.label}</span>
-                              {isThisEditing ? (
-                                <>
-                                  {isTextArea ? (
-                                    <textarea
-                                      autoFocus
-                                      rows={3}
-                                      value={editingField.value}
-                                      onChange={e => setEditingField(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                      onKeyDown={e => { if (e.key === 'Escape') handleCancelFieldEdit(); }}
-                                      className="flex-1 text-xs text-gray-900 border border-blue-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
-                                      placeholder={L('common.enterDetails')}
-                                    />
-                                  ) : (
-                                    <input
-                                      type="text"
-                                      autoFocus
-                                      value={editingField.value}
-                                      onChange={e => setEditingField(prev => prev ? { ...prev, value: e.target.value } : null)}
-                                      onKeyDown={e => { if (e.key === 'Enter') handleSaveField(); if (e.key === 'Escape') handleCancelFieldEdit(); }}
-                                      className="flex-1 text-xs text-gray-900 border border-blue-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                      placeholder="-"
-                                    />
-                                  )}
-                                  <div className={`flex ${isTextArea ? 'flex-col' : ''} gap-1 shrink-0`}>
-                                    <button onClick={handleSaveField} disabled={isSavingThis} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">
-                                      {isSavingThis ? '…' : L('common.save')}
-                                    </button>
-                                    <button onClick={handleCancelFieldEdit} disabled={isSavingThis} className="text-xs text-gray-500 px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-50">
-                                      {L('common.cancel')}
-                                    </button>
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <span className={`flex-1 text-xs text-gray-900 font-medium ${isTextArea ? 'whitespace-pre-wrap break-words' : ''}`}>
-                                    {displayValue !== '-' ? displayValue : <span className="text-gray-300">-</span>}
-                                  </span>
-                                  {canEdit && !editingField && (
-                                    <button
-                                      onClick={() => handleStartFieldEdit(field.fieldKey, field.sheetHeader, field.isLegacy)}
-                                      className="text-xs text-blue-500 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 shrink-0 transition-colors"
-                                    >
-                                      {L('task.edit')}
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-
-              </div>
-
-              {/* 닫기 버튼 */}
-              <div className="px-6 py-4 border-t border-gray-200 flex-shrink-0">
-                <button
-                  onClick={() => setSelectedStudent(null)}
-                  className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-                >
-                  {L('common.close')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <StudentDetailModal
+          students={displayStudents}
+          initialStudentId={selectedStudent.studentId}
+          onClose={() => setSelectedStudent(null)}
+          campCode={campCode}
+          campType={campType}
+          fieldConfig={fieldConfig}
+        />
       )}
     </div>
   );
